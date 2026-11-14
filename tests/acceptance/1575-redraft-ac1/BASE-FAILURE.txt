@@ -8,7 +8,7 @@ Result: INCONCLUSIVE (skipped, neither a pass nor a fail). This run doesn't coun
 
 $ npx vitest run --root tests/acceptance/1575-redraft-ac1 --no-file-parallelism --testTimeout=900000 --reporter=verbose --disable-console-intercept
 
- RUN  v5.0.5 /Users/taofeng/doneright-1575-blind/tests/acceptance/1575-redraft-ac1
+ RUN  v5.0.5 ~/doneright-1575-blind/tests/acceptance/1575-redraft-ac1
 
 #1575.1adcfe64 INCONCLUSIVE
   live reader's frame delay beside the cold reader, p95 per run (ms): 919.7, 10682.0, 2404.9, 2718.4, 2236.6 against 50

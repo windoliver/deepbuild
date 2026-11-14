@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -8,9 +9,9 @@ import { readFacts } from '@deepbuild/adapters';
 
 import { AskRefused } from '@deepbuild/asks';
 
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
-import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { type Connection, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 
 import { readJson } from './claude-settings.js';
 import { statKey } from './agent-files.js';
@@ -173,7 +174,7 @@ export const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 
-export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+export { isObj };
 
 /** A verdict as the hub records and returns it: the gate's, or its opposite in #1334's planted misjudging build. */
 export const misjudged = <V extends { outcome: string }>(v: V, plant: Plant | undefined): V => (plant === 'judges-claims-wrongly' ? { ...v, outcome: v.outcome === 'PASS' ? 'FAIL' : 'PASS' } : v);
@@ -310,6 +311,28 @@ export function readsLogged(record: RecordStore, file: string): RecordStore {
         return bound(...args);
       };
     },
+  });
+}
+
+/**
+ * The write an append runs inside (#1577): its receipt, until an event carrying it out takes it, the last position it
+ * reached, and what it does as it ends (spending its signature's once-only ID).
+ */
+export interface Write { receipt?: Receipt; effects: readonly string[]; carried: boolean; done: boolean; last: number; after: (() => void)[] }
+export const writing = new AsyncLocalStorage<Write>();
+
+/** The record whose appends inside a write carry its receipt, on the first event that carries the write out. */
+export function receipting(record: RecordStore): RecordStore {
+  return withAppend(record, async (connection, input, given) => {
+    const w = writing.getStore();
+    const live = w && !w.done ? w : undefined;
+    const receipt = given ?? (live?.receipt && !live.carried && live.effects.includes(input.kind) ? live.receipt : undefined);
+    const appended = await record.append(connection, input, receipt);
+    if (live) {
+      if (receipt && !given && !appended.existing) live.carried = true;
+      live.last = Math.max(live.last, appended.log_pos);
+    }
+    return appended;
   });
 }
 

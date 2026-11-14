@@ -1,0 +1,74 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1633-reopened-review-thread-3bc754
+
+ ❯ packages/hub/test/reopened-items.test.ts (5 tests | 1 failed | 4 skipped) 72950ms
+   ❯ #1633 review rounds: a reopened review note and its ask (5)
+     × that note's accept ask, once it passed its deadline unanswered, is not raised again while the note stays open 72576ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > that note's accept ask, once it passed its deadline unanswered, is not raised again while the note stays open
+AssertionError: nothing changed about the open note, so the same question never reaches you twice: expected [ { v: 1, …(10) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "data": {
++       "deadline": 1794175634600,
++       "default": "keep",
++       "fallback": "you",
++       "key": "c44e10527998b865cb268ffedf8d3fff08fde4318ace7b00f5f153e048dce59f",
++       "kind": "exception",
++       "options": [
++         {
++           "decision": "none",
++           "id": "accept",
++           "label": "Accept it: close it without a fix",
++         },
++         {
++           "decision": "none",
++           "id": "keep",
++           "label": "Keep it open",
++         },
++       ],
++       "owner": "you",
++       "pinned_to": {
++         "kind": "commit",
++         "ref": "fc821a124bb981f8c1f3ab6a08c069f975857a96",
++       },
++       "provisional": false,
++       "question": "Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”",
++       "recommended": "keep",
++     },
++     "evidence": [],
++     "id": "01M6YK58J8WG5GNV1MCY49C9Q9",
++     "kind": "ask.created",
++     "log_pos": 159,
++     "scope": "you",
++     "ts": 1794175574600,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ packages/hub/test/reopened-items.test.ts:134:140
+    132|       defaulted = await lastPos(hub);
+    133|     }, '1m');
+    134|     expect(asksForT(stops.at(-1)!.events, defaulted), 'nothing changed…
+       |                                                                                                                                            ^
+    135|   }, 900_000);
+    136| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  14:05:08
+   Duration  73.08s (tests 100%)
+

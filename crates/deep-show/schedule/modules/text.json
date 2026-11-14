@@ -3,6 +3,38 @@
   "phases": {
     "items": [
       {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
@@ -10,7 +42,8 @@
           "core.fields",
           "refs",
           "reading",
-          "view(locale)"
+          "view(locale)",
+          "text.copy"
         ],
         "writes": [
           "text.counter"
@@ -67,5 +100,9 @@
       }
     ]
   },
-  "contributions": {}
+  "contributions": {
+    "core.fields": [
+      "text.columns"
+    ]
+  }
 }

@@ -90,7 +90,11 @@ pub fn mcp(
             }
             Value::Object(fields) => {
                 for (key, item) in fields {
-                    let at = if at.is_empty() { key.clone() } else { format!("{at}.{key}") };
+                    let at = if at.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{at}.{key}")
+                    };
                     strings(item, at, out);
                 }
             }
@@ -111,7 +115,9 @@ pub fn mcp(
         Some(listed) => found.retain(|(arg, _)| {
             listed.iter().any(|name| {
                 arg == name
-                    || arg.strip_prefix(name.as_str()).is_some_and(|rest| rest.starts_with(['[', '.']))
+                    || arg
+                        .strip_prefix(name.as_str())
+                        .is_some_and(|rest| rest.starts_with(['[', '.']))
             })
         }),
         None => found.retain(|(_, text)| !text.is_empty() && !text.contains(char::is_whitespace)),
@@ -148,7 +154,11 @@ fn path_args(server: &str, tool: &str, cwd: Option<&Path>, home: &Path) -> Optio
 /// The config Claude Code loads `server` from in `cwd`, and its scope: your local config, the repo's .mcp.json when you
 /// approved it there, else your user config.
 fn source(server: &str, cwd: &Path, home: &Path) -> Option<(&'static str, Value)> {
-    let read = |file: PathBuf| fs::read_to_string(file).ok().and_then(|text| parse(&text).ok());
+    let read = |file: PathBuf| {
+        fs::read_to_string(file)
+            .ok()
+            .and_then(|text| parse(&text).ok())
+    };
     let entry = |config: &Value| match member(member(config, "mcpServers")?, server)? {
         found @ Value::Object(_) => Some(found.clone()),
         _ => None,
@@ -164,7 +174,11 @@ fn source(server: &str, cwd: &Path, home: &Path) -> Option<(&'static str, Value)
         member(p, "enableAllProjectMcpServers") == Some(&Value::Bool(true))
             || matches!(member(p, "enabledMcpjsonServers"), Some(Value::Array(a)) if a.contains(&Value::String(server.into())))
     });
-    if let Some(shared) = read(cwd.join(".mcp.json")).filter(|_| approved).as_ref().and_then(entry) {
+    if let Some(shared) = read(cwd.join(".mcp.json"))
+        .filter(|_| approved)
+        .as_ref()
+        .and_then(entry)
+    {
         return Some(("project", shared));
     }
     user.as_ref().and_then(entry).map(|mine| ("user", mine))

@@ -1,0 +1,97 @@
+{
+  "id": "verbs.flash",
+  "version": "1.0",
+  "title": "Flash",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An emphasis: `lines` short rays grow out from each target's center and fade by the end of its window, while it lifts.",
+  "inputs": {
+    "lines": {
+      "type": "integer",
+      "default": 12,
+      "min": 1,
+      "max": 64,
+      "about": "how many rays burst out"
+    },
+    "radius": {
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "about": "how far the rays reach; three quarters of its larger side when 0"
+    }
+  },
+  "let": {
+    "r": "radius > 0 ? radius : max(w, h) * 0.75"
+  },
+  "steps": {
+    "ray": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "lines",
+        "as": "j"
+      },
+      "params": {
+        "box": [
+          "r * 0.5",
+          -1.5,
+          "r * 0.5",
+          3
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "cx",
+          "cy",
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          "360 * j / lines"
+        ]
+      }
+    },
+    "out": {
+      "op": "cue",
+      "params": {
+        "on": "ray",
+        "from": {
+          "at/scale": [
+            0,
+            1,
+            1
+          ]
+        },
+        "until": 0.5
+      }
+    },
+    "off": {
+      "op": "cue",
+      "params": {
+        "on": "ray",
+        "set": {
+          "adjust/opacity": 0
+        },
+        "at": 0.5
+      }
+    },
+    "lift": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/brightness": {
+            "pulse": {
+              "amount": 0.3
+            }
+          }
+        }
+      }
+    }
+  }
+}

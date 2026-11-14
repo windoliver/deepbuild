@@ -30,6 +30,9 @@ serde_json = "1"
 skrifa = { version = "0.44", default-features = false, features = ["std"] }
 # Issue #140: the fonts seam's backend names itself as the platform seams name every backend.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
+# Issue #2144: the slant's tan through the canvas core's one ops module on pinned libm (technical
+# design: Seeded and replayable); deep-canvas-seams already builds on it.
+deep-canvas = { path = "../deep-canvas" }
 
 [features]
 # Issue #140: the same fonts backend at its next version and nothing else, for the test that a

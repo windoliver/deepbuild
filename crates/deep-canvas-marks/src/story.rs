@@ -487,10 +487,7 @@ fn emphasis(rows: &mut Rows, spec: &Map<String, Value>, path: &str) -> Result<()
 type Listed<'a> = (&'a str, &'a Map<String, Value>, String);
 
 /// The transforms of a mark set's `params`, in order.
-pub fn listed<'a>(
-    params: &'a Map<String, Value>,
-    path: &str,
-) -> Result<Vec<Listed<'a>>, Refused> {
+pub fn listed<'a>(params: &'a Map<String, Value>, path: &str) -> Result<Vec<Listed<'a>>, Refused> {
     let Some(list) = params.get("transforms") else {
         return Ok(Vec::new());
     };

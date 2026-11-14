@@ -296,7 +296,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
         let size = crate::snapshot::px([panel[2] * scale, panel[3] * scale]);
         // A document a session holds draws from it at `t` (its tables and vectors inlined, #1162).
         let session_drawn = if hub.shown(doc).is_none() {
-            hub.live_drawn(doc, t)
+            hub.window_drawn(doc, &panel_id, t)
         } else {
             None
         };

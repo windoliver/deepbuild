@@ -1,0 +1,19 @@
+{
+  "id": "verbs.by_letter_twin",
+  "version": "1.0",
+  "title": "By letter, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of by_letter: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "letters": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        }
+      }
+    }
+  }
+}

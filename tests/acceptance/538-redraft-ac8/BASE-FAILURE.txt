@@ -1,0 +1,39 @@
+#538 AC8 blind redraft at the base, e06eed295 (origin/main 53c0e72a3, the first suite fdfdeeae2 and its lanes line),
+before any implementation. Run once on 2026-11-13 on an arm64 Mac (Mac17,10, macOS build 26B8119, 18 cores, on AC
+power; one-minute load 145 at the start and 161 at the end, so the timings would read INCONCLUSIVE here), with deep-show
+and deep-gpu built by the file (`cargo build --locked --bin deep-show`, `--bin deep-gpu`, the default sets),
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, toolchain 1.99.1 from rustup, and #544's assembler built into
+target/acceptance-538-wat:
+
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:/opt/homebrew/opt/rustup/bin:$PATH \
+    CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    npx vitest run tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts --testTimeout=600000
+
+1 test, 1 failed, in 78 s (81 s with the file's setup). It fails at an assertion in its own file,
+ac8-budgets.test.ts:403, the list of what parts 1 to 3 found missing: no crash, no timeout, no build failure, no missing
+fixture. `npx tsc --noEmit -p tests/acceptance/538-redraft-ac8` exits 0. The file was not rerun.
+
+The ten lines of the failure, each the first frame that shows its kind:
+
+  the still document's frame 1: compares (frames with timings, README: Surfaces) is not a list: undefined
+  the still 3D scene's frame 1: upload_ms (view3d with timings, README: Surfaces) is undefined
+  heap's frame 1: compares (frames with timings, README: Surfaces) is not a list: undefined
+  the layer's frame 0, a new reader,: remaps[].ms (frames with timings, README: Surfaces) is not a number of ms: undefined
+  goods, 5000 keys in en, fr, de, every one fitting is not presented: refused, [{"code":"bad_doc","path":"items/ware/params/text","ids":["ware"]}]
+  goods with de key 4999 too long for its box is not refused at check naming 4999 and de, so the fit check isn't shown to read every key of every locale: refused, [{"code":"bad_doc","path":"items/ware/params/text"}]
+  the swarm's frame 1: upload_ms.swarm (view3d with timings, README: Surfaces) is not a number of ms: undefined
+  the field's frame 1: upload_ms.field (view3d with timings, README: Surfaces) is not a number of ms: undefined
+  benchmarks/budgets.json has no task canvas-game-state for the perf lane and the budget window to compare with the merge base
+  scripts/lanes.mjs doesn't run tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts as a timed file
+
+The debug build's readings were all null (no field to read). Not reached: the timing gate and the release runs.
+
+What holds at the base, since no line names it: the still 2D document (with its localized caption) and the bare one
+are presented and no frame after the first runs more operators than the bare one's or remaps a row; the still 3D
+scene's frames after the first write no instance record, build no mesh and upload no element; heap (this file's
+heap1mib) and its 262,144-row reader are presented and the reader remaps one row on each of frames 1 to 19, so each step
+ran; the layer remaps one row on frames 1 to 39 and 9,216 on frame 0 and on each of the five seeks; the swarm (this
+file's spawn) uploads exactly 1,000 slots on each of frames 1 to 29; the field (this file's flipfog) draws another
+picture on each of frames 1 to 29. So every guard of what the timings would measure already holds on the base's real
+components, and the failure is the missing timing fields, keyed copy (goods is refused at items/ware/params/text, its
+twin too, so the fit check can't run), the budgets task and the lanes line.

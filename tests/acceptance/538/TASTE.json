@@ -1,0 +1,14 @@
+{
+  "issue": 538,
+  "criterion": "#538.304491be",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation: the plan the owner approved in session says \"Approving this plan delegates the AC9 taste call to me ... I look at the three pictures, fix what looks wrong, and record tests/acceptance/538/TASTE.json quoting this line.\"",
+  "when": "2026-11-12T23:40:00-08:00",
+  "screenshots": {
+    "cell-grid.png": "92784d0297a0fc735d3bc0f03732ddad5f260d848609b495c1831955876e7146",
+    "copy-en.png": "80c3a5783a15ed240f98b0cccc615fd9e27a5c2702e609ebd4ff2ae3158b4236",
+    "copy-de.png": "92ebf27433b5d9001544ef692967da246caac049789bc04b0d344a2e7837ae17",
+    "dialogue-flip.png": "4bb58f99ae5eb789170b693becbd35476941d45cbf689692948fbe1c24bda69b"
+  },
+  "note": "cell-grid: the 40 x 12 board at step 30, '#' walls in ink on accent all round, '.' floor in accent on ink, '@' at (5, 3) and 'é' at (20, 6) in their cells, and (12, 7), value 7, a blank cell in the grid's own background, the ground. The first picture drew each row as one line of the mono face, whose 7.8 u advance at 13 u left glyphs short of their 8 u cells, so the right wall's '#' fell on the floor and vanished; rows now carry tracking of the cell width less the face's advance, and every glyph sits in its cell. copy-en and copy-de: 'You found 12 gold coins' and 'Du hast 12 Goldmünzen gefunden', key 17's other form at count 12. dialogue-flip: one child, 'Esme: Follow the river.' (l37), alone."
+}

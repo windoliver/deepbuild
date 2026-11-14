@@ -214,7 +214,8 @@ impl PixelHash {
             copied,
             U::STORAGE | U::COPY_DST | U::COPY_SRC,
         );
-        let copy_back = keep.then(|| buffer("pixel hash copy back", copied, U::COPY_DST | U::MAP_READ));
+        let copy_back =
+            keep.then(|| buffer("pixel hash copy back", copied, U::COPY_DST | U::MAP_READ));
         let sums_back = buffer("pixel hash sums back", 16, U::COPY_DST | U::MAP_READ);
         let groups = count.div_ceil(GROUP).clamp(1, MOST_GROUPS);
         let mut params = vec![

@@ -613,10 +613,18 @@ fn wrap_name(v: Option<&Value>) -> &'static str {
 /// each texture).
 const READ: [&str; 2] = ["KHR_materials_emissive_strength", "KHR_materials_unlit"];
 
-/// #428's planted `drops_dispersion`: the import leaves KHR_materials_dispersion in `dropped`
-/// and draws dispersion 0. Set only by `deep-gpu --planted`.
-pub static DROPS_DISPERSION: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+/// #428's planted `drops_dispersion`, reachable only through `deep-gpu --planted`: the import
+/// leaves KHR_materials_dispersion in `dropped`, and its materials draw dispersion 0
+/// ([`crate::scene::Scene::plant_drops_dispersion`]).
+pub fn drop_dispersion(im: &mut Imported) {
+    for (i, m) in im.materials.iter_mut().enumerate() {
+        if let Some(p) = m.params.as_object_mut() {
+            if p.remove("dispersion").is_some() {
+                im.dropped.push((i, "KHR_materials_dispersion".into()));
+            }
+        }
+    }
+}
 
 /// The lobe extensions whose factors the import maps to their fields (#428); a texture inside
 /// one is still listed in `dropped`.
@@ -669,9 +677,7 @@ fn lobe_params(m: &Value, p: &mut Value) {
         }
         p["absorption"] = json!({"thickness": f(e, "thicknessFactor", 0.0), "attenuation": att});
     }
-    if has("KHR_materials_dispersion")
-        && !DROPS_DISPERSION.load(std::sync::atomic::Ordering::Relaxed)
-    {
+    if has("KHR_materials_dispersion") {
         p["dispersion"] = json!(f("KHR_materials_dispersion", "dispersion", 0.0));
     }
     if has("KHR_materials_iridescence") {
@@ -903,9 +909,7 @@ pub fn import(
             if READ.contains(&name.as_str()) {
                 continue;
             }
-            let planted = name == "KHR_materials_dispersion"
-                && DROPS_DISPERSION.load(std::sync::atomic::Ordering::Relaxed);
-            if !LOBES.contains(&name.as_str()) || planted {
+            if !LOBES.contains(&name.as_str()) {
                 dropped.push((i, name.clone()));
             }
             for (k, v) in body.as_object().into_iter().flatten() {

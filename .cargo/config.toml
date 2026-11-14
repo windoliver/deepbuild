@@ -27,6 +27,11 @@ accesskit_macos = { path = "vendor/accesskit_macos" }
 # from crates.io, whose shown window ran the request-frame callback every vsync; a tick that neither
 # drew nor was asked again stops the link, and `schedule_frame` and the frame waker start it.
 gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
+# Issue #503: our own Vorbis decoder decodes within -90 dBFS of FFmpeg's decode on macOS.
+# vendor/symphonia-codec-vorbis is symphonia-codec-vorbis 0.6.1 from crates.io whose inverse coupling
+# takes a magnitude of +0.0 down the positive branch, as FFmpeg's arm64 decode does, marked
+# "DeepBuild patch".
+symphonia-codec-vorbis = { path = "vendor/symphonia-codec-vorbis" }
 
 # Issue #358: the panel host's JIT switch (technical design: Decided, "Where agent-built panels run").
 # vendor/quickjs-jit-runtime is that crate at the commit gpui-shell pins with `deny_native_code` added,

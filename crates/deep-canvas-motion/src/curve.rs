@@ -37,11 +37,17 @@ pub enum Interp {
     /// Handles computed at check from the neighboring keys (Channel and key: auto tangents),
     /// each `smoothness` of the span long; with `clamp`, a local extreme is flat and no handle
     /// passes the next key's value, so no span overshoots its keys.
-    Auto { clamp: bool, smoothness: f64 },
+    Auto {
+        clamp: bool,
+        smoothness: f64,
+    },
     /// A cubic Hermite through the neighboring keys.
     CatmullRom,
     /// `quantize(n, jump)`: n steps across the segment, on exact flicks.
-    Quantize { n: u32, jump: Jump },
+    Quantize {
+        n: u32,
+        jump: Jump,
+    },
 }
 
 /// Where a quantized step lands, as CSS `steps()` defines (Channel and key: quantize jump).
@@ -204,7 +210,11 @@ impl Curve {
                 .map(|c| [tangents[i][c] * span, tangents[i + 1][c] * span])
                 .collect();
         }
-        Curve { keys, before, after }
+        Curve {
+            keys,
+            before,
+            after,
+        }
     }
 
     /// The index of the key that owns `t`: the last at or before it, or `None` before the first.
@@ -266,7 +276,10 @@ impl Curve {
     /// difference over one flick either side, of the closed-form value.
     pub fn rate_into(&self, t: i64, out: &mut [f64]) {
         out.fill(0.0);
-        let Some((a, b)) = self.owner(t).and_then(|i| Some((&self.keys[i], self.keys.get(i + 1)?))) else {
+        let Some((a, b)) = self
+            .owner(t)
+            .and_then(|i| Some((&self.keys[i], self.keys.get(i + 1)?)))
+        else {
             return;
         };
         match a.interp {
@@ -293,9 +306,11 @@ impl Curve {
                     if t - h >= a.t && t + h < b.t {
                         (values(t + h)[c] - values(t - h)[c]) / (2.0 * dt)
                     } else if t + 2 * h < b.t {
-                        (4.0 * values(t + h)[c] - 3.0 * values(t)[c] - values(t + 2 * h)[c]) / (2.0 * dt)
+                        (4.0 * values(t + h)[c] - 3.0 * values(t)[c] - values(t + 2 * h)[c])
+                            / (2.0 * dt)
                     } else if t - 2 * h >= a.t {
-                        (3.0 * values(t)[c] - 4.0 * values(t - h)[c] + values(t - 2 * h)[c]) / (2.0 * dt)
+                        (3.0 * values(t)[c] - 4.0 * values(t - h)[c] + values(t - 2 * h)[c])
+                            / (2.0 * dt)
                     } else {
                         0.0
                     }
@@ -330,14 +345,18 @@ impl Curve {
         if n < 2 {
             return out;
         }
-        let (a, b) = (&self.keys[if start { 0 } else { n - 2 }], &self.keys[if start { 1 } else { n - 1 }]);
+        let (a, b) = (
+            &self.keys[if start { 0 } else { n - 2 }],
+            &self.keys[if start { 1 } else { n - 1 }],
+        );
         let span = (b.t - a.t) as f64;
         for (c, o) in out.iter_mut().enumerate().take(a.value.len()) {
             *o = match a.interp {
                 Interp::Hold => 0.0,
-                Interp::Auto { .. } | Interp::CatmullRom => {
-                    a.slopes.get(c).map_or(0.0, |s| s[usize::from(!start)] / span)
-                }
+                Interp::Auto { .. } | Interp::CatmullRom => a
+                    .slopes
+                    .get(c)
+                    .map_or(0.0, |s| s[usize::from(!start)] / span),
                 _ => (b.value[c] - a.value[c]) / span,
             };
         }
@@ -482,7 +501,11 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
                 let d = vb - va;
                 let v = va + bernstein(0.0, ma * s, d - mb * s, d, solved.s);
                 // Clamped handles keep the curve between its keys; rounding may not pass them.
-                *o = if clamp { v.clamp(va.min(vb), va.max(vb)) } else { v };
+                *o = if clamp {
+                    v.clamp(va.min(vb), va.max(vb))
+                } else {
+                    v
+                };
             }
             solved.steps
         }

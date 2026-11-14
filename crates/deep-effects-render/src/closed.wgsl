@@ -576,7 +576,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let e = gid.x + uu(0u, 1u);
     let count = uu(0u, 2u);
     if (e >= count) { return; }
-    let base = e * 8u;
+    // #450: a ribbon's row j lands j × count rows on (word 29.1).
+    let base = (e + uu(29u, 1u)) * 8u;
     let t = uf(0u, 0u);
     var b: Birth;
     if (uu(20u, 3u) != 0u) { b = burst_slot(e, t); } else { b = rate_slot(e); }
@@ -587,8 +588,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (!b.ok) { return; }
     let h = b.h;
     let life = mix(uf(2u, 1u), uf(2u, 2u), draw(h, 1u));
-    let age = b.age;
-    if (age >= life) { return; }
+    if (b.age >= life) { return; }
+    // #450: a ribbon's row evaluates the particle back along its length (word 29.0), never
+    // before its birth.
+    let age = max(b.age - uf(29u, 0u), 0.0);
     let r5 = draw(h, 5u);
     let r6 = draw(h, 6u);
     let r7 = draw(h, 7u);
@@ -605,7 +608,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var push = b.push;
     if (shape == 8u) {
         tri = surf_pick(h);
-        let born = t - age;
+        let born = t - b.age;
         birth = surf_point(tri, sw, born);
         push = surf_normal(tri, born) * uf(21u, 0u);
         var w0 = born - uf(28u, 0u);

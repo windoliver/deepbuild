@@ -1,12 +1,11 @@
 
 import { readFileSync } from 'node:fs';
-import { parse as parseYaml } from 'yaml';
 import type { CheckResult } from '@deepbuild/conformance';
 import { canvasClaim, docCheckOf, docResult, revisionLine, shownResult, worst, type DocCheck, type DocSpec, type Revision } from './doc-checks.js';
 
 import { join } from 'node:path';
 
-import { type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, type JsonValue } from '@deepbuild/contracts';
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 
 import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
@@ -23,8 +22,8 @@ import { refuse, ulid } from './wire.js';
 
 import type { Session, CallContext } from './session-types.js';
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface HubCanvasOptions {
+  doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
   record: () => RecordStore; store: () => EvidenceStore; libraries: () => Libraries | undefined;
   sessions: () => ReadonlyMap<string, Session>;
@@ -153,6 +152,10 @@ export class HubCanvas {
       if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
       return this.canvasCall({ ...call, rev, session: as.session });
     }
+    // A diagnostic mode of the current revision is a render-back too: the session's own (#411).
+    if (typeof call.mode === 'string' && !('document' in call) && !('patch' in call) && !('session' in as && as.session)) {
+      return { outcome: 'refused', code: 'no_session', mode: call.mode, issues: [], snapshots: [], drawn: [] };
+    }
     if (isObj(call.document)) {
       const held = await this.preparePackAssets(call.document);
       if (held) return held;
@@ -220,6 +223,16 @@ export class HubCanvas {
     const modules = isObj(requires.modules) ? requires.modules : {};
     const needs = 'scene3d' in modules ? requires : { ...requires, modules: { ...modules, scene3d: '^1' } };
     return { call: { ...call, document: { ...doc, requires: needs, items } }, assets };
+  }
+
+  /**
+   * deep_query (#411, #1725): a revision's evaluated rows, its summary or the why behind a value, read by the session
+   * the call binds to, as deep_show binds; bound to none, the canvas core answers no_session.
+   */
+  async query(session: string | null, args: Obj): Promise<Obj> {
+    const call: Obj = { call: 'deep_query', session };
+    for (const [k, v] of Object.entries(args)) if (v !== null && v !== undefined) call[k] = v;
+    return this.canvasCall(call);
   }
 
   /**
@@ -298,8 +311,7 @@ export class HubCanvas {
 
   /** The document checks a worktree's spec names (#1723). */
   docChecksOf(worktree: string): Map<string, DocCheck> {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => { const d = docCheckOf(c); return d ? [[name, d] as const] : []; }));
   }

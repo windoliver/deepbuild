@@ -1,0 +1,2146 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "The rope bridge",
+  "description": "A heavy ball rolls down into a rope bridge and across it: 15 planks on 32 ball joints hung between two posts, carried by two soft ropes pinned at the posts and held by every other plank, live on the physics module's soft bodies (#524).",
+  "size": [
+    1280,
+    720
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "6s",
+    "frame_rate": [
+      60,
+      1
+    ]
+  },
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "worlds": {
+    "lab": {
+      "kind": "physics.world@1",
+      "dimensions": 3,
+      "step_rate": 120,
+      "substeps": 4,
+      "gravity": [
+        0,
+        -9.81,
+        0
+      ],
+      "seed": 5241,
+      "mode": "dynamic",
+      "capacity": {
+        "bodies": 24,
+        "shapes": 24,
+        "joints": 32,
+        "contacts": 512,
+        "particles": 32
+      },
+      "backend": {
+        "name": "rapier3d",
+        "version": "=0.36.1"
+      },
+      "checkpoint": {
+        "every": 60
+      },
+      "collision_groups": [
+        "deck",
+        "ropes"
+      ],
+      "contact_materials": {
+        "ground": {
+          "friction": 0.8,
+          "restitution": 0
+        },
+        "wood": {
+          "friction": 0.7,
+          "restitution": 0,
+          "density": 600
+        },
+        "rubber": {
+          "friction": 0.9,
+          "restitution": 0
+        },
+        "rope": {
+          "friction": 0.6,
+          "restitution": 0
+        }
+      },
+      "shapes": {
+        "ground": {
+          "kind": "plane",
+          "normal": [
+            0,
+            1,
+            0
+          ]
+        },
+        "plank": {
+          "kind": "box",
+          "half": [
+            0.18,
+            0.025,
+            0.45
+          ]
+        },
+        "post": {
+          "kind": "box",
+          "half": [
+            0.1,
+            0.6,
+            0.6
+          ]
+        },
+        "ball": {
+          "kind": "sphere",
+          "radius": 0.22
+        }
+      },
+      "bodies": {
+        "ground": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "ground",
+              "contact_material": "ground",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ]
+        },
+        "post_west": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "post",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -2.9,
+              1.7999999999999998,
+              0
+            ]
+          }
+        },
+        "post_east": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "post",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              2.9,
+              1.7999999999999998,
+              0
+            ]
+          }
+        },
+        "plank_00": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -2.632149,
+              2.291317,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -32.923015
+            ]
+          }
+        },
+        "plank_01": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -2.289461,
+              2.085603,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -29.029198
+            ]
+          }
+        },
+        "plank_02": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -1.933138,
+              1.904643,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -24.818653
+            ]
+          }
+        },
+        "plank_03": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -1.564131,
+              1.751339,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -20.30212
+            ]
+          }
+        },
+        "plank_04": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -1.183947,
+              1.628509,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -15.506957
+            ]
+          }
+        },
+        "plank_05": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -0.794688,
+              1.538691,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -10.479287
+            ]
+          }
+        },
+        "plank_06": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -0.399009,
+              1.483916,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -5.283739
+            ]
+          }
+        },
+        "plank_07": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              -0.0,
+              1.465505,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              0.0
+            ]
+          }
+        },
+        "plank_08": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              0.399009,
+              1.483916,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              5.283739
+            ]
+          }
+        },
+        "plank_09": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              0.794688,
+              1.538691,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              10.479287
+            ]
+          }
+        },
+        "plank_10": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              1.183947,
+              1.628509,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              15.506957
+            ]
+          }
+        },
+        "plank_11": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              1.564131,
+              1.751339,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              20.30212
+            ]
+          }
+        },
+        "plank_12": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              1.933138,
+              1.904643,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              24.818653
+            ]
+          }
+        },
+        "plank_13": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              2.289461,
+              2.085603,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              29.029198
+            ]
+          }
+        },
+        "plank_14": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "plank",
+              "contact_material": "wood",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "pose": {
+            "pos": [
+              2.632149,
+              2.291317,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              32.923015
+            ]
+          }
+        },
+        "ball": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "ball",
+              "contact_material": "rubber",
+              "member": [
+                "deck"
+              ],
+              "collides": [
+                "deck"
+              ]
+            }
+          ],
+          "mass": 12,
+          "pose": {
+            "pos": [
+              -2.497902,
+              2.498649,
+              0
+            ]
+          },
+          "velocity": {
+            "linear": [
+              0.6,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "joints": {
+        "west_north": {
+          "kind": "ball",
+          "a": "post_west",
+          "b": "plank_00",
+          "frame_a": {
+            "anchor": [
+              0.1,
+              0.6,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_00_north": {
+          "kind": "ball",
+          "a": "plank_00",
+          "b": "plank_01",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_01_north": {
+          "kind": "ball",
+          "a": "plank_01",
+          "b": "plank_02",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_02_north": {
+          "kind": "ball",
+          "a": "plank_02",
+          "b": "plank_03",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_03_north": {
+          "kind": "ball",
+          "a": "plank_03",
+          "b": "plank_04",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_04_north": {
+          "kind": "ball",
+          "a": "plank_04",
+          "b": "plank_05",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_05_north": {
+          "kind": "ball",
+          "a": "plank_05",
+          "b": "plank_06",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_06_north": {
+          "kind": "ball",
+          "a": "plank_06",
+          "b": "plank_07",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_07_north": {
+          "kind": "ball",
+          "a": "plank_07",
+          "b": "plank_08",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_08_north": {
+          "kind": "ball",
+          "a": "plank_08",
+          "b": "plank_09",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_09_north": {
+          "kind": "ball",
+          "a": "plank_09",
+          "b": "plank_10",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_10_north": {
+          "kind": "ball",
+          "a": "plank_10",
+          "b": "plank_11",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_11_north": {
+          "kind": "ball",
+          "a": "plank_11",
+          "b": "plank_12",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_12_north": {
+          "kind": "ball",
+          "a": "plank_12",
+          "b": "plank_13",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "deck_13_north": {
+          "kind": "ball",
+          "a": "plank_13",
+          "b": "plank_14",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              0.4
+            ]
+          }
+        },
+        "east_north": {
+          "kind": "ball",
+          "a": "plank_14",
+          "b": "post_east",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.1,
+              0.6,
+              0.4
+            ]
+          }
+        },
+        "west_south": {
+          "kind": "ball",
+          "a": "post_west",
+          "b": "plank_00",
+          "frame_a": {
+            "anchor": [
+              0.1,
+              0.6,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_00_south": {
+          "kind": "ball",
+          "a": "plank_00",
+          "b": "plank_01",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_01_south": {
+          "kind": "ball",
+          "a": "plank_01",
+          "b": "plank_02",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_02_south": {
+          "kind": "ball",
+          "a": "plank_02",
+          "b": "plank_03",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_03_south": {
+          "kind": "ball",
+          "a": "plank_03",
+          "b": "plank_04",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_04_south": {
+          "kind": "ball",
+          "a": "plank_04",
+          "b": "plank_05",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_05_south": {
+          "kind": "ball",
+          "a": "plank_05",
+          "b": "plank_06",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_06_south": {
+          "kind": "ball",
+          "a": "plank_06",
+          "b": "plank_07",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_07_south": {
+          "kind": "ball",
+          "a": "plank_07",
+          "b": "plank_08",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_08_south": {
+          "kind": "ball",
+          "a": "plank_08",
+          "b": "plank_09",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_09_south": {
+          "kind": "ball",
+          "a": "plank_09",
+          "b": "plank_10",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_10_south": {
+          "kind": "ball",
+          "a": "plank_10",
+          "b": "plank_11",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_11_south": {
+          "kind": "ball",
+          "a": "plank_11",
+          "b": "plank_12",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_12_south": {
+          "kind": "ball",
+          "a": "plank_12",
+          "b": "plank_13",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "deck_13_south": {
+          "kind": "ball",
+          "a": "plank_13",
+          "b": "plank_14",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.2,
+              0,
+              -0.4
+            ]
+          }
+        },
+        "east_south": {
+          "kind": "ball",
+          "a": "plank_14",
+          "b": "post_east",
+          "frame_a": {
+            "anchor": [
+              0.2,
+              0,
+              -0.4
+            ]
+          },
+          "frame_b": {
+            "anchor": [
+              -0.1,
+              0.6,
+              -0.4
+            ]
+          }
+        }
+      },
+      "soft": {
+        "rope_north": {
+          "kind": "soft@1",
+          "shape": "rope",
+          "positions": [
+            [
+              -2.7999999999999994,
+              2.4,
+              0.45
+            ],
+            [
+              -2.289461,
+              2.085603,
+              0.45
+            ],
+            [
+              -1.564131,
+              1.751339,
+              0.45
+            ],
+            [
+              -0.794688,
+              1.538691,
+              0.45
+            ],
+            [
+              -0.0,
+              1.465505,
+              0.45
+            ],
+            [
+              0.794688,
+              1.538691,
+              0.45
+            ],
+            [
+              1.564131,
+              1.751339,
+              0.45
+            ],
+            [
+              2.289461,
+              2.085603,
+              0.45
+            ],
+            [
+              2.7999999999999994,
+              2.4,
+              0.45
+            ]
+          ],
+          "edges": "chain",
+          "masses": {
+            "default": 0.2
+          },
+          "pins": [
+            "0",
+            "8"
+          ],
+          "pinned_to": {
+            "1": "plank_01",
+            "2": "plank_03",
+            "3": "plank_05",
+            "4": "plank_07",
+            "5": "plank_09",
+            "6": "plank_11",
+            "7": "plank_13"
+          },
+          "stretch": {
+            "hz": 60,
+            "damping_ratio": 1
+          },
+          "bend": {
+            "hz": 1,
+            "damping_ratio": 1
+          },
+          "damping": 0.5,
+          "particle_radius": 0.03,
+          "contact_material": "rope",
+          "collision_group": "ropes"
+        },
+        "rope_south": {
+          "kind": "soft@1",
+          "shape": "rope",
+          "positions": [
+            [
+              -2.7999999999999994,
+              2.4,
+              -0.45
+            ],
+            [
+              -2.289461,
+              2.085603,
+              -0.45
+            ],
+            [
+              -1.564131,
+              1.751339,
+              -0.45
+            ],
+            [
+              -0.794688,
+              1.538691,
+              -0.45
+            ],
+            [
+              -0.0,
+              1.465505,
+              -0.45
+            ],
+            [
+              0.794688,
+              1.538691,
+              -0.45
+            ],
+            [
+              1.564131,
+              1.751339,
+              -0.45
+            ],
+            [
+              2.289461,
+              2.085603,
+              -0.45
+            ],
+            [
+              2.7999999999999994,
+              2.4,
+              -0.45
+            ]
+          ],
+          "edges": "chain",
+          "masses": {
+            "default": 0.2
+          },
+          "pins": [
+            "0",
+            "8"
+          ],
+          "pinned_to": {
+            "1": "plank_01",
+            "2": "plank_03",
+            "3": "plank_05",
+            "4": "plank_07",
+            "5": "plank_09",
+            "6": "plank_11",
+            "7": "plank_13"
+          },
+          "stretch": {
+            "hz": 60,
+            "damping_ratio": 1
+          },
+          "bend": {
+            "hz": 1,
+            "damping_ratio": 1
+          },
+          "damping": 0.5,
+          "particle_radius": 0.03,
+          "contact_material": "rope",
+          "collision_group": "ropes"
+        }
+      },
+      "outputs": {
+        "plank_00": {
+          "from": "plank_00",
+          "read": "pose",
+          "to": "items/plank_00/at"
+        },
+        "plank_01": {
+          "from": "plank_01",
+          "read": "pose",
+          "to": "items/plank_01/at"
+        },
+        "plank_02": {
+          "from": "plank_02",
+          "read": "pose",
+          "to": "items/plank_02/at"
+        },
+        "plank_03": {
+          "from": "plank_03",
+          "read": "pose",
+          "to": "items/plank_03/at"
+        },
+        "plank_04": {
+          "from": "plank_04",
+          "read": "pose",
+          "to": "items/plank_04/at"
+        },
+        "plank_05": {
+          "from": "plank_05",
+          "read": "pose",
+          "to": "items/plank_05/at"
+        },
+        "plank_06": {
+          "from": "plank_06",
+          "read": "pose",
+          "to": "items/plank_06/at"
+        },
+        "plank_07": {
+          "from": "plank_07",
+          "read": "pose",
+          "to": "items/plank_07/at"
+        },
+        "plank_08": {
+          "from": "plank_08",
+          "read": "pose",
+          "to": "items/plank_08/at"
+        },
+        "plank_09": {
+          "from": "plank_09",
+          "read": "pose",
+          "to": "items/plank_09/at"
+        },
+        "plank_10": {
+          "from": "plank_10",
+          "read": "pose",
+          "to": "items/plank_10/at"
+        },
+        "plank_11": {
+          "from": "plank_11",
+          "read": "pose",
+          "to": "items/plank_11/at"
+        },
+        "plank_12": {
+          "from": "plank_12",
+          "read": "pose",
+          "to": "items/plank_12/at"
+        },
+        "plank_13": {
+          "from": "plank_13",
+          "read": "pose",
+          "to": "items/plank_13/at"
+        },
+        "plank_14": {
+          "from": "plank_14",
+          "read": "pose",
+          "to": "items/plank_14/at"
+        },
+        "rope_north": {
+          "from": "rope_north",
+          "read": "particle_positions",
+          "to": {
+            "skin": {
+              "item": "auto",
+              "material": "hemp"
+            }
+          }
+        },
+        "rope_south": {
+          "from": "rope_south",
+          "read": "particle_positions",
+          "to": {
+            "skin": {
+              "item": "auto",
+              "material": "hemp"
+            }
+          }
+        },
+        "ball": {
+          "from": "ball",
+          "read": "pose",
+          "to": "items/ball/at"
+        }
+      }
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "name": "Cam",
+      "order": "a000",
+      "kind": "camera@1",
+      "params": {
+        "projection": "perspective",
+        "fov": 45,
+        "near": 0.1,
+        "far": 200,
+        "position": [
+          3.5,
+          3.6,
+          7.5
+        ],
+        "target": [
+          0,
+          1.8,
+          0
+        ]
+      }
+    },
+    "sky": {
+      "id": "sky",
+      "name": "Sky",
+      "order": "a001",
+      "kind": "sky@1",
+      "params": {
+        "top": [
+          0.15,
+          0.3,
+          0.75,
+          1
+        ],
+        "low": [
+          0.6,
+          0.7,
+          0.85,
+          1
+        ],
+        "ambient_top": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "ambient_low": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      }
+    },
+    "sun": {
+      "id": "sun",
+      "name": "Sun",
+      "order": "a002",
+      "kind": "light.sun@1",
+      "params": {
+        "illuminance": 3,
+        "color": [
+          1,
+          1,
+          1
+        ],
+        "shadow": true
+      },
+      "at": {
+        "rot": [
+          -40,
+          30,
+          0
+        ]
+      }
+    },
+    "grass": {
+      "id": "grass",
+      "name": "Grass",
+      "order": "a003",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.32,
+          0.42,
+          0.26,
+          1
+        ],
+        "roughness": 0.95,
+        "metallic": 0
+      }
+    },
+    "timber": {
+      "id": "timber",
+      "name": "Timber",
+      "order": "a004",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.55,
+          0.36,
+          0.2,
+          1
+        ],
+        "roughness": 0.7,
+        "metallic": 0
+      }
+    },
+    "stone": {
+      "id": "stone",
+      "name": "Stone",
+      "order": "a005",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.52,
+          0.52,
+          0.55,
+          1
+        ],
+        "roughness": 0.9,
+        "metallic": 0
+      }
+    },
+    "rubber": {
+      "id": "rubber",
+      "name": "Rubber",
+      "order": "a006",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.8,
+          0.18,
+          0.12,
+          1
+        ],
+        "roughness": 0.5,
+        "metallic": 0
+      }
+    },
+    "hemp": {
+      "id": "hemp",
+      "name": "Hemp",
+      "order": "a007",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.78,
+          0.66,
+          0.42,
+          1
+        ],
+        "roughness": 0.9,
+        "metallic": 0
+      }
+    },
+    "flag_red": {
+      "id": "flag_red",
+      "name": "Flag red",
+      "order": "a008",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.75,
+          0.1,
+          0.12,
+          1
+        ],
+        "roughness": 0.8,
+        "metallic": 0
+      }
+    },
+    "brass": {
+      "id": "brass",
+      "name": "Brass",
+      "order": "a009",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.78,
+          0.62,
+          0.3,
+          1
+        ],
+        "roughness": 0.4,
+        "metallic": 0
+      }
+    },
+    "net": {
+      "id": "net",
+      "name": "Net",
+      "order": "a010",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.9,
+          0.9,
+          0.92,
+          1
+        ],
+        "roughness": 0.8,
+        "metallic": 0
+      }
+    },
+    "ground": {
+      "id": "ground",
+      "name": "Ground",
+      "order": "a011",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          14,
+          0.02,
+          8
+        ]
+      },
+      "at": {
+        "pos": [
+          0,
+          -0.01,
+          0
+        ]
+      },
+      "material": "grass"
+    },
+    "post_west": {
+      "id": "post_west",
+      "name": "Post west",
+      "order": "a012",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.2,
+          1.2,
+          1.2
+        ]
+      },
+      "at": {
+        "pos": [
+          -2.9,
+          1.7999999999999998,
+          0
+        ]
+      },
+      "material": "stone"
+    },
+    "post_east": {
+      "id": "post_east",
+      "name": "Post east",
+      "order": "a013",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.2,
+          1.2,
+          1.2
+        ]
+      },
+      "at": {
+        "pos": [
+          2.9,
+          1.7999999999999998,
+          0
+        ]
+      },
+      "material": "stone"
+    },
+    "plank_00": {
+      "id": "plank_00",
+      "name": "Plank 00",
+      "order": "a014",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -2.632149,
+          2.291317,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -32.923015
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_01": {
+      "id": "plank_01",
+      "name": "Plank 01",
+      "order": "a015",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -2.289461,
+          2.085603,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -29.029198
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_02": {
+      "id": "plank_02",
+      "name": "Plank 02",
+      "order": "a016",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -1.933138,
+          1.904643,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -24.818653
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_03": {
+      "id": "plank_03",
+      "name": "Plank 03",
+      "order": "a017",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -1.564131,
+          1.751339,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -20.30212
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_04": {
+      "id": "plank_04",
+      "name": "Plank 04",
+      "order": "a018",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -1.183947,
+          1.628509,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -15.506957
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_05": {
+      "id": "plank_05",
+      "name": "Plank 05",
+      "order": "a019",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -0.794688,
+          1.538691,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -10.479287
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_06": {
+      "id": "plank_06",
+      "name": "Plank 06",
+      "order": "a020",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -0.399009,
+          1.483916,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -5.283739
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_07": {
+      "id": "plank_07",
+      "name": "Plank 07",
+      "order": "a021",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          -0.0,
+          1.465505,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          0.0
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_08": {
+      "id": "plank_08",
+      "name": "Plank 08",
+      "order": "a022",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          0.399009,
+          1.483916,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          5.283739
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_09": {
+      "id": "plank_09",
+      "name": "Plank 09",
+      "order": "a023",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          0.794688,
+          1.538691,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          10.479287
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_10": {
+      "id": "plank_10",
+      "name": "Plank 10",
+      "order": "a024",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          1.183947,
+          1.628509,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          15.506957
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_11": {
+      "id": "plank_11",
+      "name": "Plank 11",
+      "order": "a025",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          1.564131,
+          1.751339,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          20.30212
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_12": {
+      "id": "plank_12",
+      "name": "Plank 12",
+      "order": "a026",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          1.933138,
+          1.904643,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          24.818653
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_13": {
+      "id": "plank_13",
+      "name": "Plank 13",
+      "order": "a027",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          2.289461,
+          2.085603,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          29.029198
+        ]
+      },
+      "material": "timber"
+    },
+    "plank_14": {
+      "id": "plank_14",
+      "name": "Plank 14",
+      "order": "a028",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.36,
+          0.05,
+          0.9
+        ]
+      },
+      "at": {
+        "pos": [
+          2.632149,
+          2.291317,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          32.923015
+        ]
+      },
+      "material": "timber"
+    },
+    "ball": {
+      "id": "ball",
+      "name": "Ball",
+      "order": "a029",
+      "kind": "mark.sphere@1",
+      "params": {
+        "size": [
+          0.44,
+          0.44,
+          0.44
+        ]
+      },
+      "material": "rubber"
+    }
+  }
+}

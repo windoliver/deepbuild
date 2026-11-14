@@ -1,0 +1,34 @@
+Base checkout ede4b367 (~/deepbuild/.claude/worktrees/base-1632), built; this folder copied into its tests/acceptance/1632/ with the suite's helpers.ts, fixtures/ and README.md.
+Command: PATH=~/.local/bin:$PATH npx vitest run tests/acceptance/1632/redraft-ac2 --silent=false   (--silent=false only so the per-call lines print for a passing test)
+Exit: 0
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/base-1632
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH19R9P317M5NPMPXQ0ZQA, stamped by B: refused unbound: Session baec3d5e-26a2-471b-8656-ab36d4adff06 has ended; this deep mcp acts for no session now.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH19R9P317M5NPMPXQ0ZQA, with no PreToolUse: refused unbound: Session baec3d5e-26a2-471b-8656-ab36d4adff06 has ended; this deep mcp acts for no session now.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_status: ok {"session":null,"gates":{"watch_only":false,"reason":null},"claims":[]}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's own deep_ask: refused unbound: Session baec3d5e-26a2-471b-8656-ab36d4adff06 has ended; this deep mcp acts for no session now.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_claim: refused unbound: Session baec3d5e-26a2-471b-8656-ab36d4adff06 has ended; this deep mcp acts for no session now.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_open_item: refused unbound: Session baec3d5e-26a2-471b-8656-ab36d4adff06 has ended; this deep mcp acts for no session now.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH19R9P317M5NPMPXQ0ZQA again, stamped by B: refused unbound: Session baec3d5e-26a2-471b-8656-ab36d4adff06 has ended; this deep mcp acts for no session now.
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:29:05
+   Duration  3.81s (tests 97%, import 2%, transform 2%)
+

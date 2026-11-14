@@ -1,0 +1,14 @@
+{
+  "issue": 539,
+  "criterion": "#539.95971461",
+  "verdict": "looks_right",
+  "who": "Claude (the implementing session), on the owner's delegation in the plan approved in this session: \"Criterion 6 taste call: approving this plan delegates that call to me, as on #535 and #537.\"",
+  "when": "2026-11-13T07:22:22.322Z",
+  "screenshots": {
+    "grid-pick.png": "2b199930b9e33ed4e934fa5f631f85c5ec5c7178da461f17c7eb0541519566f9",
+    "grid-focus.png": "3c8f9c1ffe30a2b8799d26eacab0c94caf769fdef3d60024be0d3fc6159d94b8",
+    "grid-hover.png": "17a58f54f52fc62177a50d30a761e22c448e0977bf8dc792f4e67af3cf24f49f",
+    "pick-focus-hover.apng": "f373ef915c0d4480a8f791ceac234b27ff6786b702a2f5581145a5a1da36b9d5"
+  },
+  "note": "Focus: a one-unit accent outline, never a fill, on (3, 2) after Tab, Right three times and Down twice. Pick: (7, 3) lit gold by the rules item from the step after the click, the outline still on (3, 2). Hover: the accent ghost on (9, 6) under the pointer. The board draws from the panel's top left, as the window draws every 2D panel."
+}

@@ -13,7 +13,7 @@ import { connect, type Socket } from 'node:net';
 import { dirname, isAbsolute, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { ulid } from '@deepbuild/record';
-import { HELPER, type Supervisor } from '@deepbuild/supervisor';
+import { HELPER, processAlive, type Supervisor } from '@deepbuild/supervisor';
 
 /** The terminal host protocol this build speaks, and its hosts state when the hub connects. */
 export const TERMINAL_PROTOCOL = 2;
@@ -158,14 +158,6 @@ function whole(buf: Buffer): number {
     return length > back ? buf.length - back : buf.length;
   }
   return buf.length;
-}
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as { code?: string }).code === 'EPERM';
-  }
 }
 function frame(type: string, body: Buffer = Buffer.alloc(0)): Buffer {
   const head = Buffer.alloc(5);
@@ -432,7 +424,7 @@ export class Terminals {
       if (code !== 'ENOENT' && code !== 'ECONNREFUSED') throw e;
     }
     // No socket, or nobody at it: a host from before #989 if its program runs, else the session ended.
-    const before989 = !link && alive(t.pid);
+    const before989 = !link && processAlive(t.pid) === true;
     if (link && link.protocol === this.options.protocol) {
       const s = JSON.parse((await this.call(terminal, 'S')).toString('utf8')) as Screen;
       return { terminal, cols: s.cols, rows: s.rows, screen: s.screen, scrollback: s.scrollback, cursor: s.cursor, input: true, notice: null, ended: false };

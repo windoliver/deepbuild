@@ -4,7 +4,7 @@
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { ADAPTERS, factsAdapter, readFacts, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
-import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
+import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
@@ -29,7 +29,6 @@ const CODEX_COMMAND = /^\/(compact|review|init|new|clear|undo|diff|status|model|
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
-const isObj = (v: unknown): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** Whether a kind's event must name the session it is about. */
@@ -256,7 +255,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if (request.stage) meta.stage = request.stage;
   if (request.heavy) meta.heavy = request.heavy;
   const fields: NonNullable<HookMeta['fields']> = {};
-  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
+  for (const key of ['prompt_id', 'prompt', 'error', 'agent_id', 'source', 'last_assistant_message', 'turn_id', 'file_path', 'model'] as const) if (str(payload[key])) fields[key] = str(payload[key]);
   // The agent's own title for the session (#2018), on one line, scrubbed as a prompt's text is.
   const titled = scrub(str(payload.session_title)).split(/\r?\n/)[0]!.trim();
   if (titled) fields.session_title = titled.slice(0, 512);
@@ -274,7 +273,9 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     }
   }
   const tool = str(payload.tool_name);
-  if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
+  // deep setup names the server deepbuild in Claude Code's settings and deep in Codex's and pi's (#1632).
+  const own = /^mcp__(?:deep|deepbuild)__(.+)$/.exec(tool)?.[1];
+  if (event === 'PreToolUse' && own) meta.stamp = { tool: own, digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
   if (plant === 'actor-from-payload' && typeof payload.actor === 'string') meta.payloadActor = payload.actor;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);

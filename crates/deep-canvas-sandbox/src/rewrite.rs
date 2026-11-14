@@ -191,11 +191,13 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
                         mutable.push(i as u32);
                     }
                 }
-                re.parse_global_section(&mut globals, s.clone()).map_err(err)?;
+                re.parse_global_section(&mut globals, s.clone())
+                    .map_err(err)?;
                 last = order(6);
             }
             Payload::ExportSection(s) => {
-                re.parse_export_section(&mut exports, s.clone()).map_err(err)?;
+                re.parse_export_section(&mut exports, s.clone())
+                    .map_err(err)?;
                 last = order(7);
             }
             Payload::StartSection { func, .. } => {
@@ -307,9 +309,19 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
     // A block type for each function body's wrapper: a type of its own when it returns several.
     let mut type_section = TypeSection::new();
     for t in &types {
-        let params = t.params().iter().map(|v| re.val_type(*v)).collect::<Result<Vec<_>, _>>();
-        let results = t.results().iter().map(|v| re.val_type(*v)).collect::<Result<Vec<_>, _>>();
-        type_section.ty().function(params.map_err(err)?, results.map_err(err)?);
+        let params = t
+            .params()
+            .iter()
+            .map(|v| re.val_type(*v))
+            .collect::<Result<Vec<_>, _>>();
+        let results = t
+            .results()
+            .iter()
+            .map(|v| re.val_type(*v))
+            .collect::<Result<Vec<_>, _>>();
+        type_section
+            .ty()
+            .function(params.map_err(err)?, results.map_err(err)?);
     }
     let mut code = CodeSection::new();
     let mut tags = Vec::new();
@@ -546,7 +558,9 @@ pub struct Entry {
 /// sections after it moved by, is taken off an offset past it.
 pub fn sized(bytes: &[u8], pages: u64) -> Result<(Vec<u8>, i64), String> {
     for payload in Parser::new(0).parse_all(bytes) {
-        let Payload::MemorySection(m) = payload.map_err(err)? else { continue };
+        let Payload::MemorySection(m) = payload.map_err(err)? else {
+            continue;
+        };
         let range = m.range();
         let range = range.start as usize..range.end as usize;
         let start = range.start - header_len(bytes, range.start);
@@ -583,7 +597,9 @@ fn header_len(bytes: &[u8], contents: usize) -> usize {
 pub fn offsets(bytes: &[u8]) -> Vec<Entry> {
     let mut out = Vec::new();
     for payload in Parser::new(0).parse_all(bytes) {
-        let Ok(Payload::CustomSection(c)) = payload else { continue };
+        let Ok(Payload::CustomSection(c)) = payload else {
+            continue;
+        };
         if c.name() != OFFSETS {
             continue;
         }
@@ -638,7 +654,12 @@ fn section(payload: &Payload<'_>, bytes: &[u8], last: &mut u8) -> (u8, usize, u8
     let (id, range) = payload.as_section().expect("a section");
     let o = if id == 0 { *last } else { order(id) };
     *last = o;
-    (o, range.start as usize, id, bytes[range.start as usize..range.end as usize].to_vec())
+    (
+        o,
+        range.start as usize,
+        id,
+        bytes[range.start as usize..range.end as usize].to_vec(),
+    )
 }
 
 struct Counters {
@@ -773,7 +794,8 @@ impl Body<'_> {
     ) -> Result<(Function, Vec<Tag>), String> {
         let declared: u32 = self.locals.iter().map(|(n, _)| n).sum();
         let scratch = params + declared;
-        let (a, b, n, f32_tmp, f64_tmp) = (scratch, scratch + 1, scratch + 2, scratch + 3, scratch + 4);
+        let (a, b, n, f32_tmp, f64_tmp) =
+            (scratch, scratch + 1, scratch + 2, scratch + 3, scratch + 4);
         let i64_tmp = scratch + 5;
         let mut locals = self.locals.clone();
         locals.extend([(3, ValType::I32), (1, ValType::F32), (1, ValType::F64)]);
@@ -788,7 +810,11 @@ impl Body<'_> {
             check: 0,
             checks: 0,
         };
-        let overhead = if faults.no_call_overhead { 0 } else { CALL_OVERHEAD };
+        let overhead = if faults.no_call_overhead {
+            0
+        } else {
+            CALL_OVERHEAD
+        };
         let frame = (SLOT * (params + declared + self.height) + overhead) as i32;
         let raise = |e: &mut Emit, kind: i32| {
             e.i(I::If(BlockType::Empty));

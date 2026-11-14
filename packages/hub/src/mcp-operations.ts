@@ -1,11 +1,11 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import type { AnswerDeliveryPort, StopJudgingPort, SessionStatePort, HubControlPort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 
 import { Numbers } from './numbers.js';
 
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 
 import { AskRefused, duration, type Asks } from '@deepbuild/asks';
 
@@ -15,7 +15,6 @@ import { type ExtensionHost } from '@deepbuild/extension-host';
 import { RecordError, type Connection, type RecordStore } from '@deepbuild/record';
 
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
-import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, relations, words } from './claude-settings.js';
 
 import { codexRelations } from './codex-settings.js';
@@ -54,6 +53,7 @@ import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused 
 
 export interface McpOperationsOptions {
   settings: CoreOptions;
+  doneSpec(cwd: string): unknown;
   services: {
     readonly sessionStarts: Starts;
     readonly hosts: Hosts;
@@ -73,7 +73,7 @@ export interface McpOperationsOptions {
   control: () => Pick<HubControlPort, "attach" | "job">;
   state: () => Pick<SessionStatePort, "live" | "rows" | "sessions">;
   judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession">;
-  delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "waitingFor">;
+  delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "answers" | "binds">;
   events: Pick<HubEvents, "connection" | "appendReading" | "append">;
 kernel: Pick<HubRuntime, "blocked" | "stopping">;
 schedule: Pick<HookSchedule, "replaying" | "queue" | "askingNow" | "wakeable">;
@@ -115,11 +115,12 @@ export class McpOperations {
       await (this.options.schedule.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.options.schedule.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'deep_job' && tool !== 'find_actions'));
+      const session = await this.options.schedule.queue(async () => this.bind(tool, sent, await this.rebound(context), !['deep_status', 'deep_search', 'deep_show', 'deep_query', 'deep_kinds', 'deep_job', 'find_actions'].includes(tool)));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args));
+        case 'deep_query': return await this.options.services.canvasSide.query(session ?? null, args);
         case 'deep_kinds': return await this.options.services.canvasSide.kinds(args);
         case 'deep_job': return await this.options.control().job(args, context.call);
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
@@ -150,6 +151,29 @@ export class McpOperations {
     return new Refused(out as Refusal);
   }
 
+  /** Whether a paseo plugin's token ever named this session (#55): a deep mcp bound by it is bound by no process. */
+  private byToken(session: string): boolean {
+    return [...this.options.delivery().binds.values()].includes(session);
+  }
+  /**
+   * A deep mcp whose session `/clear` rotated in its own process (#1632): another session of the same process, by PID and
+   * start time, is live on its thread, which only a rotation joins it to. Its start says so whether the old ID's
+   * SessionEnd came yet or was recorded unverified. Two live on one thread in one process bind no call to either but by
+   * its stamp. Its calls then bind one by one by their own stamps, as an unbound
+   * connection's do, so each acts for the new ID and none for the old. A session that ended with no successor in its
+   * process keeps its binding, and its calls are refused naming it.
+   */
+  private async rebound(context: CallContext): Promise<CallContext> {
+    const { session: id, parent } = context;
+    if (!id || !parent || this.byToken(id)) return context;
+    const sessions = this.options.state().sessions;
+    const was = sessions.get(id);
+    // Forgotten past ENDED_KEPT (#824): the record keeps its thread.
+    const [row] = was ? [] : (await this.options.services.raw(`SELECT thread_id FROM sessions WHERE id = ?`, [id])) as { thread_id: string | null }[];
+    const thread = was ? was.thread : row?.thread_id ?? id;
+    const rotated = [...sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
+    return rotated ? { ...context, session: null } : context;
+  }
   /**
    * The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call,
    * by its tool and the digest of its arguments as sent. A call more than one unspent stamp matches binds to none.
@@ -158,9 +182,12 @@ export class McpOperations {
   private bind(tool: string, args: Obj, context: CallContext, required: boolean): string | undefined {
     const live = (id: string) => { const s = this.options.state().sessions.get(id); return s && !s.ended ? s : undefined; };
     if (context.session) {
-      if (live(context.session)) return context.session;
+      const own = live(context.session);
+      // A session resumed in another process since its deep mcp's hello is that process's now (#1632).
+      const elsewhere = own && context.parent && !this.byToken(own.id) && (own.pid !== context.parent.pid || own.start !== context.parent.start);
+      if (own && !elsewhere) return context.session;
       if (!required) return undefined;
-      throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+      throw refuse('unbound', '/params/tool', elsewhere ? `Session ${context.session} runs in another process now; this deep mcp acts for no session.` : `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
     }
     const parent = context.parent;
     const digest = sha256Hex(canonicalize(args as JsonValue));
@@ -254,7 +281,12 @@ export class McpOperations {
     return { ...result, report: reported ? report : null };
   }
 
-  /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
+  /**
+   * deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its
+   * contradictions, and where it starts (#2197): the checks its repo's spec names, its own open asks, each with its
+   * state, its default and its deadline as deep_wait names them, and the open items it recorded. The planted wrong
+   * program lists every session's asks.
+   */
   private async status(session: string | undefined): Promise<Obj> {
     const gates = { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null };
     if (!session) return { session: null, gates, claims: [] };
@@ -282,9 +314,15 @@ export class McpOperations {
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
     }
+    const whose = this.options.settings.plant === 'status-lists-every-ask' ? '' : ' AND session_id = ?';
+    const asks = ((await this.options.services.record.raw(`SELECT id, status, default_option, deadline FROM asks WHERE status IN ('open', 'later')${whose} ORDER BY created, id`, whose ? [session] : [])) as { id: string; status: string; default_option: string | null; deadline: number }[])
+      .map((a) => ({ ask: `ask:${a.id}`, state: a.status, default: a.default_option === null ? null : JSON.parse(a.default_option) as unknown, deadline: a.deadline }));
+    const open_items = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND (task_ref, text) IN
+      (SELECT json_extract(data, '$.task_ref'), json_extract(data, '$.text') FROM events WHERE session_id = ? AND kind = 'open_item.opened') ORDER BY opened, text`, [session])) as { text: string }[];
+    const reply = { session, gates, claims, checks: this.checkNames(this.options.state().sessions.get(session)!.cwd), asks, open_items };
     // An agent's deep_status is its own session's (#1463): the planted wrong program leaks every session's asks into it.
-    if (this.options.settings.plant === 'status-row-leak') return { session, gates, claims, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
-    return { session, gates, claims };
+    if (this.options.settings.plant === 'status-row-leak') return { ...reply, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
+    return reply;
   }
 
   /**
@@ -303,7 +341,7 @@ export class McpOperations {
     // its saver's personal scope. The planted wrong program reads every decision.
     const person = project?.person && project.person !== OWNER && this.options.settings.plant !== 'search-decisions-unfiltered';
     return search({
-      query, index: await this.wikiIndex(), raw: (q, params) => this.options.services.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
+      query, index: await this.wikiIndex(), raw: this.options.services.raw, worktree, session: everyone ? { everyone: true } : session, covers,
       ...(person ? { decides: (scope: string) => scope !== 'all' && scopes.has(scope) } : {}),
       trustsIndex: this.options.settings.plant === 'trusts-index',
       readings: (q) => this.options.services.numbers.search(q, everyone ? { everyone: true } : session),
@@ -322,7 +360,7 @@ export class McpOperations {
       const by = new Set((await this.options.services.record.touched(file, worktree)).map((t) => t.session));
       sessions = sessions.filter((id) => by.has(id));
     }
-    return { sessions, messages: (terms, ids) => this.options.services.record.findMessages(terms, ids), about: (ids) => aboutSessions((sql, params) => this.options.services.record.raw(sql, params), ids) };
+    return { sessions, messages: (terms, ids) => this.options.services.record.findMessages(terms, ids), about: (ids) => aboutSessions(this.options.services.raw, ids) };
   }
 
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
@@ -346,8 +384,7 @@ export class McpOperations {
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
   checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }> {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
@@ -355,8 +392,12 @@ export class McpOperations {
     }));
   }
 
+  private checkNames(worktree: string): string[] {
+    return [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
+  }
+
   private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
+    const names = this.checkNames(worktree);
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -411,8 +452,9 @@ export class McpOperations {
     const subject = this.options.settings.plant === 'repeat-reaches-you' ? undefined
       : kind === 'choice' && typeof about.point === 'string' ? { point: about.point }
       : kind === 'taste' && typeof about.screen === 'string' && typeof about.element === 'string' ? { screen: about.screen, element: about.element } : undefined;
-    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84).
-    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined;
+    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84); in a session a
+    // work run started, the issue waits on you instead and gives up its slot (#1332).
+    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined && !(await this.options.services.sessionStarts.inWorkRun(session));
     const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {
@@ -566,7 +608,7 @@ export class McpOperations {
     if (live && unseenTools(this.options.state().sessions.get(session)?.agent)) live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
     const task = sql(String(args.task_ref));
-    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
+    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
       AND a.session_id IN (SELECT session_id FROM events WHERE kind = 'session.end')`), 'next_prompt'));
     return { session, claim: `claim:${id}`, event: id, ...(answers ? { answers } : {}) };
   }

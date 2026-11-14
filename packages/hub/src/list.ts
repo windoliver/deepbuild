@@ -30,7 +30,12 @@ export const SECTION: Record<string, number> = {
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);
 
 /** `at` as a clock time in your time zone: 16:40. */
-const clock = (at: number): string => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+const clock = (at: number): string => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 /**
  * When `at` comes, as the app's notification says it (crates/deep-app/src/notify.rs: clock_time): "at 16:40" today,
  * "tomorrow at 16:40", else "on Wed 11 Nov at 16:40".
@@ -42,7 +47,7 @@ export function when(at: number, now = Date.now()): string {
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (day(at) === tomorrow.toDateString()) return `tomorrow at ${clock(at)}`;
   const d = new Date(at);
-  return `on ${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })} at ${clock(at)}`;
+  return `on ${WEEKDAYS[d.getDay()] ?? 'Invalid Date'} ${d.getDate()} ${MONTHS[d.getMonth()] ?? 'Invalid Date'} at ${clock(at)}`;
 }
 
 /** The rows as the planted wrong programs read them; as they are otherwise. */

@@ -103,7 +103,14 @@ impl Viewer {
 
     /// One key at host time `host`. `paused` is the film time the transport is paused at, or
     /// `None` while it plays. `None` back: the viewer leaves the key to the app.
-    pub fn key(&mut self, key: &str, mods: Mods, host: i64, paused: Option<i64>, film: &Film) -> Option<Change> {
+    pub fn key(
+        &mut self,
+        key: &str,
+        mods: Mods,
+        host: i64,
+        paused: Option<i64>,
+        film: &Film,
+    ) -> Option<Change> {
         if mods.cmd {
             return None;
         }
@@ -141,8 +148,18 @@ impl Viewer {
                 return Some(Change::Keys(self.keys));
             }
             // A section starts on its marker's frame; the next one is strictly after this frame.
-            "ArrowLeft" if mods.alt => film.sections.iter().map(|&m| snap(m)).filter(|&s| s < now).max()?,
-            "ArrowRight" if mods.alt => film.sections.iter().map(|&m| snap(m)).filter(|&s| s > now).min()?,
+            "ArrowLeft" if mods.alt => film
+                .sections
+                .iter()
+                .map(|&m| snap(m))
+                .filter(|&s| s < now)
+                .max()?,
+            "ArrowRight" if mods.alt => film
+                .sections
+                .iter()
+                .map(|&m| snap(m))
+                .filter(|&s| s > now)
+                .min()?,
             "ArrowLeft" => now - 5 * second,
             "ArrowRight" => now + 5 * second,
             "j" => now - 10 * second,
@@ -189,8 +206,14 @@ mod tests {
     /// One frame at 30000/1001 fps.
     const FRAME: i64 = 23_543_520;
     const START: i64 = 1_000;
-    const NONE: Mods = Mods { alt: false, cmd: false };
-    const ALT: Mods = Mods { alt: true, cmd: false };
+    const NONE: Mods = Mods {
+        alt: false,
+        cmd: false,
+    };
+    const ALT: Mods = Mods {
+        alt: true,
+        cmd: false,
+    };
 
     /// Frame `k`'s time in a film of 601 frames.
     fn at(k: i64) -> i64 {
@@ -198,7 +221,12 @@ mod tests {
     }
 
     fn film(sections: &[i64]) -> Film<'_> {
-        Film { start: START, span: 601 * FRAME, frame: FRAME, sections }
+        Film {
+            start: START,
+            span: 601 * FRAME,
+            frame: FRAME,
+            sections,
+        }
     }
 
     /// The seek `key` gives a fresh viewer paused at `paused`.
@@ -220,16 +248,31 @@ mod tests {
     #[test]
     fn a_pause_and_a_seek_land_on_a_film_frame() {
         let mut v = Viewer::new();
-        assert_eq!(v.key("k", NONE, 50, Some(at(100)), &film(&[])), Some(Change::Play));
+        assert_eq!(
+            v.key("k", NONE, 50, Some(at(100)), &film(&[])),
+            Some(Change::Play)
+        );
         let host = 50 + 2 * FRAME + FRAME / 2;
         assert_eq!(v.position(host), at(102) + FRAME / 2);
-        assert_eq!(v.key(" ", NONE, host, None, &film(&[])), Some(Change::Pause(at(102))));
+        assert_eq!(
+            v.key(" ", NONE, host, None, &film(&[])),
+            Some(Change::Pause(at(102)))
+        );
         // A seek while playing moves the anchor: play goes on from the frame it landed on.
-        assert_eq!(v.key("ArrowRight", NONE, host, None, &film(&[])), Some(Change::Seek(at(251))));
+        assert_eq!(
+            v.key("ArrowRight", NONE, host, None, &film(&[])),
+            Some(Change::Seek(at(251)))
+        );
         assert_eq!(v.position(host + 3 * FRAME), at(254));
         // 5 s is 149.85 frames at 30000/1001 and 10 s is 299.7: each floors to a frame.
-        assert_eq!(seek("ArrowRight", NONE, at(0), &[]), Some(Change::Seek(at(149))));
-        assert_eq!(seek("ArrowLeft", NONE, at(0), &[]), Some(Change::Seek(at(0))));
+        assert_eq!(
+            seek("ArrowRight", NONE, at(0), &[]),
+            Some(Change::Seek(at(149)))
+        );
+        assert_eq!(
+            seek("ArrowLeft", NONE, at(0), &[]),
+            Some(Change::Seek(at(0)))
+        );
         assert_eq!(seek("l", NONE, at(0), &[]), Some(Change::Seek(at(299))));
         assert_eq!(seek("j", NONE, at(600), &[]), Some(Change::Seek(at(300))));
         assert_eq!(seek("l", NONE, at(600), &[]), Some(Change::Seek(at(600))));
@@ -248,18 +291,33 @@ mod tests {
     #[test]
     fn a_section_key_lands_on_the_marker_s_first_frame_strictly_past_this_one() {
         let sections = [at(0), at(200) + FRAME / 3, at(400)];
-        assert_eq!(seek("ArrowRight", ALT, at(100), &sections), Some(Change::Seek(at(200))));
-        assert_eq!(seek("ArrowRight", ALT, at(200), &sections), Some(Change::Seek(at(400))));
+        assert_eq!(
+            seek("ArrowRight", ALT, at(100), &sections),
+            Some(Change::Seek(at(200)))
+        );
+        assert_eq!(
+            seek("ArrowRight", ALT, at(200), &sections),
+            Some(Change::Seek(at(400)))
+        );
         assert_eq!(seek("ArrowRight", ALT, at(400), &sections), None);
-        assert_eq!(seek("ArrowLeft", ALT, at(250), &sections), Some(Change::Seek(at(200))));
-        assert_eq!(seek("ArrowLeft", ALT, at(200), &sections), Some(Change::Seek(at(0))));
+        assert_eq!(
+            seek("ArrowLeft", ALT, at(250), &sections),
+            Some(Change::Seek(at(200)))
+        );
+        assert_eq!(
+            seek("ArrowLeft", ALT, at(200), &sections),
+            Some(Change::Seek(at(0)))
+        );
         assert_eq!(seek("ArrowLeft", ALT, at(0), &sections), None);
     }
 
     #[test]
     fn a_key_with_cmd_held_or_outside_the_table_is_left_to_the_app() {
         let mut v = Viewer::new();
-        let cmd = Mods { alt: false, cmd: true };
+        let cmd = Mods {
+            alt: false,
+            cmd: true,
+        };
         assert_eq!(v.key("k", cmd, 0, Some(at(3)), &film(&[])), None);
         assert_eq!(v.key("m", cmd, 0, Some(at(3)), &film(&[])), None);
         assert!(!v.muted);
@@ -306,21 +364,44 @@ mod tests {
 
     #[test]
     fn the_table_holds_each_of_the_issue_s_keys_once_and_every_entry_is_taken() {
-        let mut listed: Vec<(String, &str)> = [" ", "k", "ArrowLeft", "ArrowRight", "j", "l", ",", ".", "Home", "End"]
-            .iter()
-            .chain(&["m", "ArrowUp", "ArrowDown", "f", "?"])
-            .map(|k| (k.to_string(), ""))
-            .collect();
+        let mut listed: Vec<(String, &str)> = [
+            " ",
+            "k",
+            "ArrowLeft",
+            "ArrowRight",
+            "j",
+            "l",
+            ",",
+            ".",
+            "Home",
+            "End",
+        ]
+        .iter()
+        .chain(&["m", "ArrowUp", "ArrowDown", "f", "?"])
+        .map(|k| (k.to_string(), ""))
+        .collect();
         listed.extend((0..10).map(|d| (d.to_string(), "")));
-        listed.extend([("ArrowLeft".to_string(), "alt"), ("ArrowRight".to_string(), "alt")]);
+        listed.extend([
+            ("ArrowLeft".to_string(), "alt"),
+            ("ArrowRight".to_string(), "alt"),
+        ]);
         assert_eq!(KEYS.len(), listed.len());
         let sections = [at(0), at(400)];
         for (key, modifier) in listed {
-            let rows: Vec<_> = KEYS.iter().filter(|k| k.0 == key && k.1 == modifier).collect();
+            let rows: Vec<_> = KEYS
+                .iter()
+                .filter(|k| k.0 == key && k.1 == modifier)
+                .collect();
             assert_eq!(rows.len(), 1, "{modifier} {key:?}");
             assert_eq!(rows[0].2, key == "," || key == ".", "{key:?}");
-            let mods = Mods { alt: modifier == "alt", cmd: false };
-            assert!(seek(&key, mods, at(100), &sections).is_some(), "{modifier} {key:?}");
+            let mods = Mods {
+                alt: modifier == "alt",
+                cmd: false,
+            };
+            assert!(
+                seek(&key, mods, at(100), &sections).is_some(),
+                "{modifier} {key:?}"
+            );
         }
     }
 }

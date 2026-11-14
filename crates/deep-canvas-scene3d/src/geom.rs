@@ -71,7 +71,10 @@ pub enum EdgeKind {
     Quads,
     Cage,
     /// The edges sharper than `angle` degrees, and with `border` those of one face (#1640).
-    Crease { angle: f64, border: bool },
+    Crease {
+        angle: f64,
+        border: bool,
+    },
 }
 
 impl EdgeKind {
@@ -471,7 +474,8 @@ impl Mesh {
             .iter()
             .map(|p| {
                 let next = ids.len() as u32;
-                *ids.entry(p.map(|x| (x / 1e-6).round() as i64)).or_insert(next)
+                *ids.entry(p.map(|x| (x / 1e-6).round() as i64))
+                    .or_insert(next)
             })
             .collect()
     }
@@ -555,7 +559,10 @@ impl Mesh {
         let key = h.finish().0;
         let made = MADE.get_or_init(Default::default);
         let cached = planted != Some("edges_derive_every_frame");
-        if let Some(set) = cached.then(|| made.lock().ok()?.get(&key).cloned()).flatten() {
+        if let Some(set) = cached
+            .then(|| made.lock().ok()?.get(&key).cloned())
+            .flatten()
+        {
             return (set, false);
         }
         let set = Arc::new(self.creases(angle, border, below));

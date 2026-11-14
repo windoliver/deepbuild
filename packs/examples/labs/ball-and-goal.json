@@ -1,0 +1,697 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "Ball and goal",
+  "description": "A ball bounces down three ramps, each lower and further on, into a goal (#524).",
+  "size": [
+    1280,
+    720
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "6s",
+    "frame_rate": [
+      60,
+      1
+    ]
+  },
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "worlds": {
+    "lab": {
+      "kind": "physics.world@1",
+      "dimensions": 3,
+      "step_rate": 120,
+      "substeps": 4,
+      "gravity": [
+        0,
+        -9.81,
+        0
+      ],
+      "seed": 5243,
+      "mode": "dynamic",
+      "capacity": {
+        "bodies": 12,
+        "shapes": 12,
+        "joints": 0,
+        "contacts": 64,
+        "particles": 0
+      },
+      "backend": {
+        "name": "rapier3d",
+        "version": "=0.36.1"
+      },
+      "checkpoint": {
+        "every": 60
+      },
+      "combine": {
+        "restitution": "min"
+      },
+      "contact_materials": {
+        "ground": {
+          "friction": 0.8,
+          "restitution": 0.4
+        },
+        "wood": {
+          "friction": 0.5,
+          "restitution": 0.5
+        },
+        "rubber": {
+          "friction": 0.7,
+          "restitution": 0.7
+        },
+        "net": {
+          "friction": 0.9,
+          "restitution": 0
+        }
+      },
+      "shapes": {
+        "ground": {
+          "kind": "plane",
+          "normal": [
+            0,
+            1,
+            0
+          ]
+        },
+        "ramp": {
+          "kind": "box",
+          "half": [
+            1.2,
+            0.05,
+            0.6
+          ]
+        },
+        "ball": {
+          "kind": "sphere",
+          "radius": 0.11
+        },
+        "goal_back": {
+          "kind": "box",
+          "half": [
+            0.05,
+            0.6,
+            0.9
+          ]
+        },
+        "goal_top": {
+          "kind": "box",
+          "half": [
+            0.5,
+            0.05,
+            0.9
+          ]
+        },
+        "goal_north": {
+          "kind": "box",
+          "half": [
+            0.5,
+            0.6,
+            0.05
+          ]
+        },
+        "goal_south": {
+          "kind": "box",
+          "half": [
+            0.5,
+            0.6,
+            0.05
+          ]
+        }
+      },
+      "bodies": {
+        "ground": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "ground",
+              "contact_material": "ground"
+            }
+          ]
+        },
+        "ramp_0": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "ramp",
+              "contact_material": "wood"
+            }
+          ],
+          "pose": {
+            "pos": [
+              -3.4,
+              3.0,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -16
+            ]
+          }
+        },
+        "ramp_1": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "ramp",
+              "contact_material": "wood"
+            }
+          ],
+          "pose": {
+            "pos": [
+              -1.1,
+              1.95,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -16
+            ]
+          }
+        },
+        "ramp_2": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "ramp",
+              "contact_material": "wood"
+            }
+          ],
+          "pose": {
+            "pos": [
+              1.2,
+              0.9,
+              0
+            ],
+            "rot": [
+              0,
+              0,
+              -16
+            ]
+          }
+        },
+        "goal_back": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "goal_back",
+              "contact_material": "net"
+            }
+          ],
+          "pose": {
+            "pos": [
+              4.2,
+              0.6,
+              0
+            ]
+          }
+        },
+        "goal_top": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "goal_top",
+              "contact_material": "net"
+            }
+          ],
+          "pose": {
+            "pos": [
+              3.7,
+              1.2,
+              0
+            ]
+          }
+        },
+        "goal_north": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "goal_north",
+              "contact_material": "net"
+            }
+          ],
+          "pose": {
+            "pos": [
+              3.7,
+              0.6,
+              0.85
+            ]
+          }
+        },
+        "goal_south": {
+          "kind": "static",
+          "shapes": [
+            {
+              "shape": "goal_south",
+              "contact_material": "net"
+            }
+          ],
+          "pose": {
+            "pos": [
+              3.7,
+              0.6,
+              -0.85
+            ]
+          }
+        },
+        "ball": {
+          "kind": "dynamic",
+          "shapes": [
+            {
+              "shape": "ball",
+              "contact_material": "rubber"
+            }
+          ],
+          "mass": 0.45,
+          "pose": {
+            "pos": [
+              -4.3,
+              3.75,
+              0
+            ]
+          },
+          "velocity": {
+            "linear": [
+              1.2,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "outputs": {
+        "ball": {
+          "from": "ball",
+          "read": "pose",
+          "to": "items/ball/at"
+        }
+      }
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "name": "Cam",
+      "order": "a000",
+      "kind": "camera@1",
+      "params": {
+        "projection": "perspective",
+        "fov": 45,
+        "near": 0.1,
+        "far": 200,
+        "position": [
+          0,
+          2.6,
+          10
+        ],
+        "target": [
+          0,
+          1.7,
+          0
+        ]
+      }
+    },
+    "sky": {
+      "id": "sky",
+      "name": "Sky",
+      "order": "a001",
+      "kind": "sky@1",
+      "params": {
+        "top": [
+          0.15,
+          0.3,
+          0.75,
+          1
+        ],
+        "low": [
+          0.6,
+          0.7,
+          0.85,
+          1
+        ],
+        "ambient_top": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "ambient_low": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      }
+    },
+    "sun": {
+      "id": "sun",
+      "name": "Sun",
+      "order": "a002",
+      "kind": "light.sun@1",
+      "params": {
+        "illuminance": 3,
+        "color": [
+          1,
+          1,
+          1
+        ],
+        "shadow": true
+      },
+      "at": {
+        "rot": [
+          -40,
+          30,
+          0
+        ]
+      }
+    },
+    "grass": {
+      "id": "grass",
+      "name": "Grass",
+      "order": "a003",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.32,
+          0.42,
+          0.26,
+          1
+        ],
+        "roughness": 0.95,
+        "metallic": 0
+      }
+    },
+    "timber": {
+      "id": "timber",
+      "name": "Timber",
+      "order": "a004",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.55,
+          0.36,
+          0.2,
+          1
+        ],
+        "roughness": 0.7,
+        "metallic": 0
+      }
+    },
+    "stone": {
+      "id": "stone",
+      "name": "Stone",
+      "order": "a005",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.52,
+          0.52,
+          0.55,
+          1
+        ],
+        "roughness": 0.9,
+        "metallic": 0
+      }
+    },
+    "rubber": {
+      "id": "rubber",
+      "name": "Rubber",
+      "order": "a006",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.8,
+          0.18,
+          0.12,
+          1
+        ],
+        "roughness": 0.5,
+        "metallic": 0
+      }
+    },
+    "hemp": {
+      "id": "hemp",
+      "name": "Hemp",
+      "order": "a007",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.78,
+          0.66,
+          0.42,
+          1
+        ],
+        "roughness": 0.9,
+        "metallic": 0
+      }
+    },
+    "flag_red": {
+      "id": "flag_red",
+      "name": "Flag red",
+      "order": "a008",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.75,
+          0.1,
+          0.12,
+          1
+        ],
+        "roughness": 0.8,
+        "metallic": 0
+      }
+    },
+    "brass": {
+      "id": "brass",
+      "name": "Brass",
+      "order": "a009",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.78,
+          0.62,
+          0.3,
+          1
+        ],
+        "roughness": 0.4,
+        "metallic": 0
+      }
+    },
+    "net": {
+      "id": "net",
+      "name": "Net",
+      "order": "a010",
+      "kind": "material@1",
+      "params": {
+        "base_color": [
+          0.9,
+          0.9,
+          0.92,
+          1
+        ],
+        "roughness": 0.8,
+        "metallic": 0
+      }
+    },
+    "ground": {
+      "id": "ground",
+      "name": "Ground",
+      "order": "a011",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          14,
+          0.02,
+          6
+        ]
+      },
+      "at": {
+        "pos": [
+          0,
+          -0.01,
+          0
+        ]
+      },
+      "material": "grass"
+    },
+    "ramp_0": {
+      "id": "ramp_0",
+      "name": "Ramp 0",
+      "order": "a012",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          2.4,
+          0.1,
+          1.2
+        ]
+      },
+      "at": {
+        "pos": [
+          -3.4,
+          3.0,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -16
+        ]
+      },
+      "material": "timber"
+    },
+    "ramp_1": {
+      "id": "ramp_1",
+      "name": "Ramp 1",
+      "order": "a013",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          2.4,
+          0.1,
+          1.2
+        ]
+      },
+      "at": {
+        "pos": [
+          -1.1,
+          1.95,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -16
+        ]
+      },
+      "material": "timber"
+    },
+    "ramp_2": {
+      "id": "ramp_2",
+      "name": "Ramp 2",
+      "order": "a014",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          2.4,
+          0.1,
+          1.2
+        ]
+      },
+      "at": {
+        "pos": [
+          1.2,
+          0.9,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          -16
+        ]
+      },
+      "material": "timber"
+    },
+    "goal_back": {
+      "id": "goal_back",
+      "name": "Goal back",
+      "order": "a015",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          0.1,
+          1.2,
+          1.8
+        ]
+      },
+      "at": {
+        "pos": [
+          4.2,
+          0.6,
+          0
+        ]
+      },
+      "material": "net"
+    },
+    "goal_top": {
+      "id": "goal_top",
+      "name": "Goal top",
+      "order": "a016",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          1.0,
+          0.1,
+          1.8
+        ]
+      },
+      "at": {
+        "pos": [
+          3.7,
+          1.2,
+          0
+        ]
+      },
+      "material": "net"
+    },
+    "goal_north": {
+      "id": "goal_north",
+      "name": "Goal north",
+      "order": "a017",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          1.0,
+          1.2,
+          0.1
+        ]
+      },
+      "at": {
+        "pos": [
+          3.7,
+          0.6,
+          0.85
+        ]
+      },
+      "material": "net"
+    },
+    "goal_south": {
+      "id": "goal_south",
+      "name": "Goal south",
+      "order": "a018",
+      "kind": "mark.box@1",
+      "params": {
+        "size": [
+          1.0,
+          1.2,
+          0.1
+        ]
+      },
+      "at": {
+        "pos": [
+          3.7,
+          0.6,
+          -0.85
+        ]
+      },
+      "material": "net"
+    },
+    "ball": {
+      "id": "ball",
+      "name": "Ball",
+      "order": "a019",
+      "kind": "mark.sphere@1",
+      "params": {
+        "size": [
+          0.22,
+          0.22,
+          0.22
+        ]
+      },
+      "material": "rubber"
+    }
+  }
+}

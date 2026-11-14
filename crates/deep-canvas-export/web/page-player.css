@@ -1,0 +1,21 @@
+/* DeepBuild's playable page player (#169): the still scales to the page's width; each target is a
+   button over its box, placed in the frame's own units (margins resolve against the width). */
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 16px; background: Canvas; color: CanvasText; }
+main { max-width: 1280px; margin: 0 auto; }
+.doc { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.frame { position: relative; flex: 0 0 100%; line-height: 0; }
+.still, .clip { width: 100%; height: auto; display: block; }
+.clip { position: absolute; inset: 0; height: 100%; }
+.clip[hidden] { display: none; }
+.target { position: absolute; top: 0; padding: 0; margin: 0; background: transparent; border: 2px solid transparent; border-radius: 4px; cursor: pointer; }
+.target:hover, .target:focus-visible { border-color: Highlight; outline: none; }
+.box { position: absolute; border: 1px dashed GrayText; pointer-events: none; }
+.control { font: inherit; }
+div.control { display: inline-flex; gap: 4px; }
+.doc button:not(.target) { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid GrayText; background: ButtonFace; color: ButtonText; cursor: pointer; }
+.doc button[aria-pressed="true"], .doc button[aria-checked="true"], .doc button[aria-selected="true"] { background: Highlight; color: HighlightText; }
+.node { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.sliders { display: flex; gap: 12px; margin-top: 8px; }
+.bound { margin: 12px 0 0; padding: 0; list-style: none; }
+.announce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

@@ -1,0 +1,15 @@
+Fri Nov 13 23:17:33 UTC 2026
+15:17  up  1:26, 11 users, load averages: 91.24 79.66 90.22
+ProductName:		macOS
+ProductVersion:		27.2
+BuildVersion:		26B8119
+Apple M5 Max
+18
+68719476736
+v24.22.2
+cargo 1.99.1 (5f94df478 2026-08-27)
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+commit 0915f38735c3146af29e3f88a4378e54c30ecc47
+base f6d811c7947dea9d28bb64de8759dca02c1fa27c
+throttle grant build
+swapped on the before side: scripts/lanes.mjs scripts/affected.mjs scripts/proof-runs.mjs tests/acceptance/374/helpers.ts tests/acceptance/375/helpers.ts

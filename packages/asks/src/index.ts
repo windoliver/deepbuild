@@ -358,7 +358,12 @@ const TYPED_KINDS = new Set(['taste', 'choice', 'exception', 'definition']);
 const CORE = { writer: 'core' } as const;
 /** Writers that speak for an agent: none of them closes an ask. */
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
-const PAGE = 1000;
+/**
+ * The events the core reads from the log at a time. A page lives until its last event is applied, and one the hub's
+ * threads can't hold in their young generation is promoted whole: at 1,000 a month's log grew the heap by tens of MB
+ * of garbage at each start.
+ */
+const PAGE = 100;
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */

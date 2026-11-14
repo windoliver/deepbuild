@@ -21,12 +21,12 @@ import { parse } from 'yaml';
 import { DISK_FLOOR, freeBytes } from './disk.js';
 import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 /** One entry of `environment.products`. */
 interface Product { name: string; path: string; key: string[]; key_values: string[]; build: string }
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 /** A path inside the checkout: relative, with no `..` or empty segment. */
 const inside = (p: string): boolean => !p.startsWith('/') && p.split('/').every((s) => s !== '' && s !== '..' && s !== '.');

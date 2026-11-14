@@ -19,6 +19,14 @@
 //! presented in the window and read back from it, and `ground` that frame's pixel (4, 4).
 //! `--planted stops_at_request` stops the clock at the request and reads the window before the
 //! swap, so its ground is the old look's.
+//!
+//! #462: `looks` names the looks the document's shots and regions take, by name; the call's
+//! `look` stays the document's. A frame in a shot draws the shot's look, and a region of that
+//! shot whose mask (a rect or circle item, its shape in page u) is in view draws its look over
+//! what the mask holds: each look draws the whole frame into its own target and one composite
+//! pass mixes them into the slot by coverage that sums to one (`regions.rs`). The check refuses
+//! a frame outside every transition window where three looks would draw, naming its shot and
+//! time, before any frame draws.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -29,13 +37,15 @@ use deep_canvas_marks::drawn::{self, View};
 use deep_canvas_marks::look::{self, Distance};
 use deep_canvas_marks::scene::{self, Drawn, Palette, Record, Rgb, Type};
 use deep_canvas_motion::eval;
+use deep_canvas_motion::motif::Motifs;
 use deep_canvas_motion::program::{Program, State};
 use deep_gpu::ring::Mark as RingMark;
 use serde_json::{json, Map, Value};
 
 use crate::drawn::Page;
 use crate::groups::Clock;
-use crate::marks2d::{close2, drawn_type, open2, packs_of, page_of, show, Frame2, Marks2};
+use crate::marks2d::{close2, drawn_type, open2, packs_of, page_of, show, Frame2, Marks2, Mix2};
+use crate::regions::{Seen, Timeline, Volume};
 use crate::view3d::{png, write_named};
 use crate::{frames, parity, refused, App, Planted};
 
@@ -77,9 +87,74 @@ fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, T
     Ok((resolved.light, ty))
 }
 
-/// The film's marks at `t` in a look, by writer layer, its ground, its camera, its lamps and its
-/// evaluated items.
-type Marked = (Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>, Vec<Lamp>, Map<String, Value>);
+/// The film's marks at `t` in a look, by writer layer, its ground, its camera, its lamps, its
+/// evaluated items and (#462) its masks' volumes in page u, at their evaluated poses.
+type Marked = (
+    Vec<Vec<Arc<Drawn>>>,
+    Rgb,
+    Option<View>,
+    Vec<Lamp>,
+    Map<String, Value>,
+    BTreeMap<String, Volume>,
+);
+
+/// How a 2D frame through `view` sees its page (#462).
+fn seen_of(view: Option<&View>, size: [u32; 2]) -> Seen {
+    let (s, offset) = view.copied().unwrap_or(View::NONE).to_world();
+    Seen::Page {
+        k: 1.0 / s,
+        offset,
+        size,
+    }
+}
+
+/// A look a film draws: its palette and type, definition, indexed tables, motifs and paper.
+#[derive(Clone, Copy)]
+struct Drawing<'a> {
+    look: &'a (Palette, Type),
+    def: &'a Value,
+    ix: &'a Option<deep_canvas_marks::print::Indexed>,
+    motifs: Option<&'a Motifs>,
+    page: Option<&'a Arc<Page>>,
+}
+
+/// #462: a look the document's shots and regions name, as the film draws it.
+struct Named2 {
+    look: (Palette, Type),
+    def: Value,
+    ix: Option<deep_canvas_marks::print::Indexed>,
+    motifs: Option<Motifs>,
+    page: Option<Arc<Page>>,
+}
+
+/// The film's own look as it draws it.
+fn own<'a>(
+    look: &'a (Palette, Type),
+    def: &'a Value,
+    ix: &'a Option<deep_canvas_marks::print::Indexed>,
+    motifs: &'a Option<Motifs>,
+    page: &'a Option<Arc<Page>>,
+) -> Drawing<'a> {
+    Drawing {
+        look,
+        def,
+        ix,
+        motifs: motifs.as_ref(),
+        page: page.as_ref(),
+    }
+}
+
+impl Named2 {
+    fn drawing(&self) -> Drawing<'_> {
+        Drawing {
+            look: &self.look,
+            def: &self.def,
+            ix: &self.ix,
+            motifs: self.motifs.as_ref(),
+            page: self.page.as_ref(),
+        }
+    }
+}
 
 fn marks_at(
     doc: &Map<String, Value>,
@@ -88,11 +163,20 @@ fn marks_at(
     t: i64,
     (palette, ty): &(Palette, Type),
     snap: Option<f64>,
+    motifs: Option<(&Motifs, bool)>,
 ) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
+    // #462: the masks at their evaluated poses, before any look moves them.
+    let volumes = crate::regions::volumes_2d(&items);
+    // #462: the look's motifs move the evaluated items a scene binds, never the document.
+    if let Some((m, reduced)) = motifs {
+        m.apply(&mut items, t, reduced);
+    }
     let lamps = match &ty.drawn {
-        Some(look) => drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?,
+        Some(look) => {
+            drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?
+        }
         None => Vec::new(),
     };
     let mut view = drawn::view_of(doc, &mut items);
@@ -124,7 +208,7 @@ fn marks_at(
         .iter()
         .map(|l| l.marks.iter().cloned().collect())
         .collect();
-    Ok((layers, frame.ground, view, lamps, items))
+    Ok((layers, frame.ground, view, lamps, items, volumes))
 }
 
 fn hex(c: &image::Rgba<u8>) -> String {
@@ -159,7 +243,12 @@ fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Resul
             let bytes = (hash || keep).then(|| view.read(drawn.slot)).flatten();
             let pixels = bytes.as_ref().filter(|_| hash).map(|b| frames::hex(b));
             let kept = bytes.filter(|_| keep);
-            Ok((encode.as_secs_f64() * 1e3, gpu.as_secs_f64() * 1e3, pixels, kept))
+            Ok((
+                encode.as_secs_f64() * 1e3,
+                gpu.as_secs_f64() * 1e3,
+                pixels,
+                kept,
+            ))
         })
         .map_err(|e| refused("render_failed", e))
 }
@@ -215,7 +304,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         .iter()
         .find(|t| !["final", "linear", "indices"].contains(t))
     {
-        return Err(bad(&format!("targets are final, linear and indices; {t} isn't one")));
+        return Err(bad(&format!(
+            "targets are final, linear and indices; {t} isn't one"
+        )));
     }
     let wants_linear = targets.contains(&"linear");
     let wants_indices = targets.contains(&"indices");
@@ -228,12 +319,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             .as_u64()
             .filter(|f| *f > 0 && *f < count)
             .ok_or_else(|| bad("an event names a frame after the first, within the film"))?;
-        events.push((frame, (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?)));
+        events.push((
+            frame,
+            (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?),
+        ));
     }
     events.sort_by_key(|(f, _)| *f);
     let mut events = events.into_iter().peekable();
     let mut look = look_of(app, &call["look"], &doc)?;
     let mut def = def_of(&call["look"])?;
+    // #462: the document's revision hash as the film opened it, and the document it holds.
+    let opened_hash = revision(&doc)?;
+    let mut held = doc.clone();
     let capture: Vec<u64> = call["capture"]
         .as_array()
         .into_iter()
@@ -246,6 +343,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
 
     // Compiled once: no look enters the motion program.
     let program = Program::compile(&doc).map_err(|r| refused(r.code, r.path))?;
+    // #462: each look's motifs bound through the document's slots, refused at check.
+    let motifs_of =
+        |def: &Value| Motifs::compile(def, &doc, &program).map_err(|r| refused(r.code, r.path));
+    let mut motifs = motifs_of(&def)?;
+    for (_, (_, d)) in events.clone() {
+        motifs_of(&d)?;
+    }
+    let writes_document = app.planted == Some(Planted::MotifsWriteDocument);
     let mut state = program.state();
     let at = |n: u64| n as i64 * FLICKS_PER_SECOND / fps;
     let roles = |look: &(Palette, Type)| -> Arc<BTreeMap<String, [f64; 3]>> {
@@ -312,14 +417,52 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
         })
     };
-    let snap = |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
-    let (first, ground, view, lamps, items) =
-        marks_at(&doc, &program, &mut state, at(from), &look, snap(&ix))?;
-    let first_print = printing_at(from, &def, &look, &items, view.as_ref(), ground)?;
-    let first_index = index_frame(&ix, &first, &items);
+    let snap =
+        |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
+    // #462: the looks the document's shots and regions name, and its timeline of them, checked
+    // before any frame draws.
+    let mut named: BTreeMap<String, Named2> = BTreeMap::new();
+    for (name, v) in call["looks"].as_object().into_iter().flatten() {
+        let (l, d) = (look_of(app, v, &doc)?, def_of(v)?);
+        named.insert(
+            name.clone(),
+            Named2 {
+                ix: indexed(&d, &l)?,
+                motifs: motifs_of(&d)?,
+                look: l,
+                def: d,
+                page: None,
+            },
+        );
+    }
+    let timeline = Timeline::of(&Value::Object(doc.clone()), |n| {
+        named.get(n).map(|x| &x.def)
+    })?;
+    if let Some(tl) = &timeline {
+        let mut st = program.state();
+        tl.check(|t| {
+            program.evaluate(t, eval::Validity::Full, &mut st);
+            let mut items = eval::items(&doc, &program, &st);
+            let volumes = crate::regions::volumes_2d(&items);
+            let view = drawn::view_of(&doc, &mut items);
+            Ok((seen_of(view.as_ref(), size), volumes))
+        })?;
+    }
+    let independent = app.planted == Some(Planted::RegionSidesClipIndependently);
+    let (_, ground, view, ..) = marks_at(
+        &doc,
+        &program,
+        &mut state,
+        at(from),
+        &look,
+        snap(&ix),
+        motifs.as_ref().map(|m| (m, reduced_motion)),
+    )?;
     // The paper's fields hold still; only where the pixels land moves with the camera.
     let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
-    let first_page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
+    for n in named.values_mut() {
+        n.page = page_of(&n.look.1, view.as_ref(), &doc, &roles(&n.look), call)?;
+    }
 
     app.window(size)?;
     {
@@ -337,8 +480,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let baseline = frames::baseline_ns(app);
     let packs = Arc::new(packs_of(call)?);
-    let frame2 = |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>, print, indexed| {
-        Arc::new(Frame2 {
+    let frame2 =
+        |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>, print, indexed| Frame2 {
             indexed,
             layers,
             clock: Clock::of(&doc, at(n)),
@@ -347,13 +490,68 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             packs: packs.clone(),
             page,
             print,
-        })
-    };
-    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, first_page, first_print, first_index)));
+            mix: None,
+        };
+    // The frame at `n`: drawn in its first side's look (`own`, the film's, outside every shot),
+    // with each other look it mixes (#462) drawn as a frame of its own; its ground and its
+    // evaluated items.
+    let mut build =
+        |n: u64, own: Drawing<'_>| -> Result<(Frame2, Rgb, Map<String, Value>), Value> {
+            let t = at(n);
+            let sides = timeline.as_ref().map(|tl| tl.sides(t));
+            let pick = |key: Option<&str>| key.map_or(own, |l| named[l].drawing());
+            type One = (
+                Frame2,
+                Rgb,
+                Map<String, Value>,
+                Option<View>,
+                BTreeMap<String, Volume>,
+            );
+            let mut one = |d: Drawing<'_>| -> Result<One, Value> {
+                let (drawn, ground, view, lamps, items, volumes) = marks_at(
+                    &doc,
+                    &program,
+                    &mut state,
+                    t,
+                    d.look,
+                    snap(d.ix),
+                    d.motifs.map(|m| (m, reduced_motion)),
+                )?;
+                let print = printing_at(n, d.def, d.look, &items, view.as_ref(), ground)?;
+                let index = index_frame(d.ix, &drawn, &items);
+                let page = d
+                    .page
+                    .map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
+                let frame = frame2(drawn, n, d.look, page, print, index);
+                Ok((frame, ground, items, view, volumes))
+            };
+            let (mut frame, ground, items, view, volumes) =
+                one(pick(sides.as_ref().and_then(|s| s[0].look)))?;
+            if let (Some(tl), Some(sides)) = (&timeline, &sides) {
+                let seen = seen_of(view.as_ref(), size);
+                let mix = crate::regions::mix(tl, sides, &seen, &volumes, t, independent)?;
+                if mix.keys.len() > 1 {
+                    let mut frames = Vec::new();
+                    for key in &mix.keys[1..] {
+                        frames.push(Arc::new(one(pick(key.as_deref()))?.0));
+                    }
+                    frame.mix = Some(Arc::new(Mix2 { frames, mix }));
+                }
+            }
+            Ok((frame, ground, items))
+        };
+    let (first, ..) = build(from, own(&look, &def, &ix, &motifs, &page))?;
+    let marks: Marks2 = Arc::new(Mutex::new(Arc::new(first)));
     let encoded: Encoded = Arc::new(Mutex::new(None));
     let taps = crate::print2d::Taps::default();
     *taps.want_linear.lock().unwrap_or_else(|e| e.into_inner()) = wants_linear;
-    let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()), taps.clone())?;
+    let (ui, error) = open2(
+        app,
+        marks.clone(),
+        size,
+        Some(encoded.clone()),
+        taps.clone(),
+    )?;
     app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
     ui.record(false);
     ui.take_record();
@@ -382,15 +580,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 (look, def) = next;
                 ix = indexed(&def, &look)?;
+                motifs = motifs_of(&def)?;
             }
             let started = Instant::now();
-            let (drawn, ground, view, lamps, items) =
-                marks_at(&doc, &program, &mut state, at(n), &look, snap(&ix))?;
-            let print = printing_at(n, &def, &look, &items, view.as_ref(), ground)?;
-            let index = index_frame(&ix, &drawn, &items);
-            let page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
-            *marks.lock().unwrap_or_else(|e| e.into_inner()) =
-                frame2(drawn, n, &look, page, print, index);
+            let (frame, ground, items) = build(n, own(&look, &def, &ix, &motifs, &page))?;
+            // #462's planted twin writes each moved item's evaluated place into the document.
+            if writes_document && motifs.is_some() {
+                write_places(&mut held, &items);
+            }
+            *marks.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(frame);
             {
                 let win = app.window.as_ref().expect("opened");
                 let mut p = win.paint.borrow_mut();
@@ -467,7 +665,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     ui.record(false);
     close2(app, &ui);
     played?;
-    let mut reply = json!({"size": size, "frames": listed, "switches": switches});
+    let mut reply = json!({"size": size, "frames": listed, "switches": switches,
+        "document": {"opened": opened_hash, "played": revision(&held)?}});
     if let Some(ix) = &ix {
         let palette: Vec<&str> = ix.palette.iter().map(|(r, _)| r.as_str()).collect();
         reply["indexed"] = json!({"operator": crate::indexed::OPERATOR,
@@ -481,6 +680,25 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         reply["export"] = movie.finish()?;
     }
     Ok(reply)
+}
+
+/// The canvas core's revision hash of a document (`deep-canvas canonical`'s `sha256`).
+fn revision(doc: &Map<String, Value>) -> Result<String, Value> {
+    deep_canvas::document::canonical(&Value::Object(doc.clone()))
+        .map(|c| c.sha256)
+        .map_err(|e| refused("out_of_range", e.path))
+}
+
+/// The planted wrong program's write: each item's evaluated `at` copied into the document.
+fn write_places(doc: &mut Map<String, Value>, items: &Map<String, Value>) {
+    for (id, item) in items {
+        if let (Some(at), Some(Value::Object(own))) = (
+            item.get("at"),
+            doc.get_mut("items").and_then(|i| i.get_mut(id)),
+        ) {
+            own.insert("at".into(), at.clone());
+        }
+    }
 }
 
 /// A captured frame's linear target, `<sha256>.f32`: the print finish's, read back, or the
@@ -506,7 +724,8 @@ fn linear_of(
             .0
             .iter()
             .flat_map(|p| {
-                let lin = |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
+                let lin =
+                    |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
                 [lin(p[0]), lin(p[1]), lin(p[2]), 1.0]
             })
             .flat_map(f32::to_le_bytes)
@@ -517,9 +736,17 @@ fn linear_of(
 
 /// A captured frame's index target as the operator wrote it, `<sha256>.u16`.
 fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<String, Value> {
-    let written = taps.indices.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let written = taps
+        .indices
+        .buffer
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
     let Some((buffer, size)) = written else {
-        return Err(refused("no_read_back", "the frame's index target wasn't written"));
+        return Err(refused(
+            "no_read_back",
+            "the frame's index target wasn't written",
+        ));
     };
     let bytes = app
         .worker
@@ -537,10 +764,18 @@ fn picture(bytes: &[u8], size: [u32; 2], ground: Rgb, black: bool) -> Vec<u8> {
     for p in bytes.as_chunks::<4>().0 {
         let under = |c: u8| u32::from(c) * (255 - u32::from(p[3]));
         let over = |s: u8, g: u8| (u32::from(s) + (under(g) + 127) / 255).min(255) as u8;
-        out.extend_from_slice(&[over(p[2], ground[0]), over(p[1], ground[1]), over(p[0], ground[2]), 255]);
+        out.extend_from_slice(&[
+            over(p[2], ground[0]),
+            over(p[1], ground[1]),
+            over(p[0], ground[2]),
+            255,
+        ]);
     }
     if black {
-        out.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[..3].fill(0));
+        out.as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .for_each(|p| p[..3].fill(0));
     }
     out
 }

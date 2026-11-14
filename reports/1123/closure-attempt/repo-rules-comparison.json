@@ -1,0 +1,10 @@
+{
+  "beforeExit": "1",
+  "afterExit": "1",
+  "beforeFindings": 24,
+  "afterFindings": 24,
+  "identical": true,
+  "beforeOnly": [],
+  "afterOnly": [],
+  "note": "Same source and tests commit; only runner tooling overlay differs. Both real repo-rules processes ran; this is matching failure evidence, not a pass."
+}

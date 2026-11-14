@@ -98,6 +98,7 @@ impl Hub<'_> {
         let run = stack::Run {
             planted: self.scenario.module_planted.clone(),
             outlines: self.startup.sealed.outlines.clone(),
+            fills: self.startup.sealed.fills.clone(),
             ..Default::default()
         };
         let built = match build::built(&doc, &r.item, item, &run, 0.0) {

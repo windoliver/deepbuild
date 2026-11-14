@@ -187,6 +187,21 @@ impl Hub<'_> {
                     Source::Pluck { preset, overrides } => {
                         json!({"pluck": {"preset": preset, "overrides": overrides}})
                     }
+                    // #204: a pack's preset goes to the tool as its graph and derived tail.
+                    Source::Synth { preset } if score::pack_preset(preset) => {
+                        match super::synth::preset_json(doc, preset) {
+                            Ok(graph) => {
+                                let tail =
+                                    deep_canvas_media::synth::preset::Preset::compile(&graph)
+                                        .map(|p| deep_canvas_media::synth::check::tail(&p, false))
+                                        .unwrap_or(0.0);
+                                json!({"synth": {"preset": preset, "graph": graph, "tail": tail}})
+                            }
+                            Err(e) => {
+                                return json!({"outcome": "refused", "code": e["code"], "issues": [e]})
+                            }
+                        }
+                    }
                     Source::Synth { preset } => json!({"synth": {"preset": preset}}),
                     Source::Sampled { .. } => {
                         let Some((library, m, preset)) = preset_of(&libraries, inst) else {

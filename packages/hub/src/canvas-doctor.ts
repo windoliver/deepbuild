@@ -12,9 +12,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Item } from './doctor.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('../fixtures/canvas-doctor.json', import.meta.url));
 const AGENT = 'deepbuild';

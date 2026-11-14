@@ -1,0 +1,9 @@
+# node scripts/affected.mjs --list <the eight changed files>: what it selects. Of it, only the ten files in existing-tests.txt and the three in after.txt were run.
+parallel vitest: 332 files
+alone vitest: 630 files
+timed vitest: 68 files
+slow vitest: 31 files
+parallel node: 11 files
+parallel cargo test: deep-app
+SKIP (by hand): 62 files
+WIDE lines: 0

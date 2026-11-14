@@ -1,0 +1,1368 @@
+{
+  "issue": 1906,
+  "base": "81a5a9b2f63f09c4e9c6777b4ce174541ab6a300",
+  "head": "040e6aa6f2543c28ab82e9ae5a7e6da2c08df89b",
+  "node": "v24.22.2",
+  "platform": "darwin",
+  "arch": "arm64",
+  "scope": "Changed-behavior regression comparison, not a whole-repository or timing PASS",
+  "lineCounts": {
+    "core": {
+      "base": 2641,
+      "work": 2639
+    },
+    "host": {
+      "base": 3225,
+      "work": 3201
+    }
+  },
+  "matched": {
+    "files": 52,
+    "passPass": 358,
+    "skipSkip": 1,
+    "changedOutcomes": 0,
+    "notPassed": [
+      {
+        "file": "packages/extension-host/test/sources.test.ts",
+        "test": "#364 secrets on the trusted path › the Secret Service store keeps, reads and deletes a value in the Secret Service",
+        "state": "SKIP on both; Linux Secret Service not exercised on macOS"
+      }
+    ],
+    "cases": [
+      {
+        "file": "packages/contracts/test/contracts.test.ts",
+        "testSha256": "7693b4ff5954858797d30d42bc6b610beb40577a7d49875cb959ebffa2a16552",
+        "base": {
+          "pass": 48,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 48,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "9e24b811b9bc65040ae9572f43dc9d0a2f0c39b2d850323d42974cbe4cf82408",
+        "workReportSha256": "09d518ad9d2f8eb311a026de2047fd5f682f8dbf416d205c6e70bedf2e8d1799"
+      },
+      {
+        "file": "packages/contracts/test/envelope.test.ts",
+        "testSha256": "21ac941497cb63ec26ff945841681831451c2952ce4c2594725a0ece30eab19f",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "21053b972eeceb67c3a442f6a5ade5b0fa0ae6a18772a45186d5360bce6812ae",
+        "workReportSha256": "29f474973e19c2f834c57db2c6f8e0d3ab003593af4b2e14228ac2303c733e8b"
+      },
+      {
+        "file": "packages/hub/test/answers.test.ts",
+        "testSha256": "e7d1e4f5387ce57db310cc5f44a4607715bfef591ccc1d8c1a932852e3bb6309",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "e3f0b901fa4c18f94b48d7a7f35d96f92b11e3dad50769b8fd3a73abe720bb58",
+        "workReportSha256": "c4b02d977127a33113783b4bc9360d466e2b8ec115d3c81ca643b60f0b783ec1"
+      },
+      {
+        "file": "packages/hub/test/answer-after-restart.test.ts",
+        "testSha256": "f2e374c3a52e7eb898bad9faaaceeaf46bf25379dab9857e2050150068fed021",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "001b02fea4c9b43888118fba1ea7a7322c2f08b3ba251b30ed993259df8ba48e",
+        "workReportSha256": "d8d62e8fe8b6006a6a5c1ecc28f55b9a62ad95ce5f1241be80a2b76b086be24d"
+      },
+      {
+        "file": "packages/hub/test/threads.test.ts",
+        "testSha256": "45f3fa5f720415435da2b19f69be7f0cec78b5885b9a9825b45599c80f72fad8",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "98c28d360f4cd69eba005171f7d9895ab38116a54deba63a59a8360973699281",
+        "workReportSha256": "ad1ca48ce5cd414d73209d2c4d9b30da09f2c758d5bc29521adb3eb095315ee8"
+      },
+      {
+        "file": "packages/hub/test/session-states.test.ts",
+        "testSha256": "34860b46a4c7d7f01aaa012a3cd8cc970501478e91196d80d249b75b58d3d88b",
+        "base": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "406bf389c617f81bd6cf3277d87d38bdadb15196a61d6491bc55a93adc125b15",
+        "workReportSha256": "4e7a612662538a36c056c4eadc6ff9f1b484b00c168766b72dedd5d4cdccd734"
+      },
+      {
+        "file": "packages/hub/test/numbers.test.ts",
+        "testSha256": "89b8a536033d9ef662aa3061e13c693bffa051aa6f91e97f76f9ba48ff452855",
+        "base": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "66cf18ad9c0055d0df086c78773673a07954810bbb38a4c03f5d93ca95f1a8db",
+        "workReportSha256": "c74f0a3d5e2bb8822d87d982fcfb88a97df30c15851a83b673ee163072904d1c"
+      },
+      {
+        "file": "packages/hub/test/past-sessions.test.ts",
+        "testSha256": "d8dbba63555c1d57be56119313a78845545529c52c22e7228d0be4e441ad5258",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "fe5e01cbb3605d67a1585cde3f2422b348d832bf919bb2277beb0e1656b23ad8",
+        "workReportSha256": "40c52341d44ae6034c4fd5d1595c76e570f7315ffed8d4843efbaa68ea167eac"
+      },
+      {
+        "file": "packages/hub/test/gone-watch.test.ts",
+        "testSha256": "b72f6a6db754d8a5e8ae2f52370a66b54cde599525f3f49971c7b3c5a90842e3",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "5c71cf5e98e716afb1242e03e8a96db1a26006f6e24c5f85d8aaaa362d4fc574",
+        "workReportSha256": "40881f122532f05fdd2f1ebad50763df11d01a1655d0db2b834e0d4cf2afbdc1"
+      },
+      {
+        "file": "packages/hub/test/scope.test.ts",
+        "testSha256": "713fd7cc3f278f5c9c6c02febd7e0bad0773cc82622d509bb5ab3f6a6bd80cdd",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "95164f9c4588bf678769d6a1fd6b0c25786eb0ef4976eeee6b7d3a398b77e606",
+        "workReportSha256": "66113262e6d0e84bc301e517fba6da2be7109332d125e8d11b6cab17ca115b4d"
+      },
+      {
+        "file": "packages/hub/test/relations.test.ts",
+        "testSha256": "381a983c7f715be597ee643cf40d1548464035a3fc1a60237c11b683700e2f53",
+        "base": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "45896d9d2f29fc62a89fdc10ba0c15ba42f340a31da20df9f7041fcd8413d2be",
+        "workReportSha256": "f4e0e0b2ec651cae960ad8770813073c5a65b1b8979e4df1357e953dd0b32b9e"
+      },
+      {
+        "file": "packages/hub/test/forge.test.ts",
+        "testSha256": "dab85c9572ea18f20947a4ab80a673ed7eb66a6f9a94c0a049f05cd36d0c2668",
+        "base": {
+          "pass": 11,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 11,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "b7c313dbb2d18dc2cc7f52d741da24a96944661a03a9c025b03d07d62c420f18",
+        "workReportSha256": "3af3f129cff8e3970b3575b43baa658c584c7ce427b2ceace577f008c7b2fd12"
+      },
+      {
+        "file": "packages/hub/test/github-source.test.ts",
+        "testSha256": "24ae24bb2ae984b85781de6db2ce2bdfdb2e02bd9a63e262d9dbae1f0319eb3c",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "cbf48277440dc384497e8fb43589ec4726b143df699057d36c3ec8187fa3bef5",
+        "workReportSha256": "9514e8b393aabb32986324783f5dc5fbcc33417b934652cdd1c45eee71f60fc8"
+      },
+      {
+        "file": "packages/hub/test/hook-parent.test.ts",
+        "testSha256": "467bffb91d964da0cfff87055f13a161cf8b56a44cfc763cbb8fa3e1c7c57f90",
+        "base": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "b26c8017c91a3de1e256f45e05ca79a4778935f7affd16ae6f3982bfdd5b1f4d",
+        "workReportSha256": "791ee144a08084c831fe53c9149ca862108b4b1c3557d1dd04a59c6a3b42c3f4"
+      },
+      {
+        "file": "packages/hub/test/codex-files.test.ts",
+        "testSha256": "a7dd6018125d9b3b80f321cf5304f45a3b5169841b8073ccc7c84ee8d7db50ae",
+        "base": {
+          "pass": 24,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 24,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "6c911b7becb0c1c5bb5110392205148539e14182ec74b04e2cb1cbb73b2032e6",
+        "workReportSha256": "6d8c2f8d7d6a9e540f47efc8d4eb827ecf20221ffb37e78fc493d700fb62bda3"
+      },
+      {
+        "file": "packages/hub/test/hook-programs.test.ts",
+        "testSha256": "c27e0a8f951a2808c35fc4d3d50e545d2b9a2fe0d64c9c0fac0b5c1e2bc1643f",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "46b7604c83825ca938458f762066a48ca812e133b7c296685898cfb024a08926",
+        "workReportSha256": "8c764f98714fba3c794115111e610fa853ed98c842256492715e2c138627f400"
+      },
+      {
+        "file": "packages/hub/test/hosts.test.ts",
+        "testSha256": "ec9d93b55a7b1542cd77429ef4b4f7c2d3922035cbbefb858f28d194d8c94991",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "f13862595bfd52672b8cd9b8e8d912cb661e4dc3f83e305e773ed65353982d8c",
+        "workReportSha256": "86e924c882557a075b64a79c2bb6efd1f3b91b2432970f030e0deb038ca59a6b"
+      },
+      {
+        "file": "packages/hub/test/install.test.ts",
+        "testSha256": "a0dd9c4220b2addca20f7a5eb85d3620ef9fefb2ee3982fdfe5158da7f98f21f",
+        "base": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "3484132e9978768f6c632ac76444d122535b04fa11578cb53cb8a0e5b121c697",
+        "workReportSha256": "824626f6197de2da1a91e8deb24e82353c431330eeae90d4d90111a65e99bc1a"
+      },
+      {
+        "file": "packages/hub/test/staging.test.ts",
+        "testSha256": "dda5ef3723fe076425863df68aa633c8063a9bdd7ceb8d4167157f33b7ecdf87",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "1a0b719a1f36b260fbc8192b2d19a37b2eb10e1fd61d8e044aabdacd50c1ad49",
+        "workReportSha256": "f9007889e143032777cc480c8d091f1f4a5d129f8828e535c71e00c48f1202e4"
+      },
+      {
+        "file": "packages/hub/test/leftover.test.ts",
+        "testSha256": "c1e30ac07302c652f88fa60137364c53893d296bb72f9d5ff2f3e9468468a571",
+        "base": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "55ba18f26314294f58b7d360bd93702937a5a8f4cbba73091253cbb2ee6325ae",
+        "workReportSha256": "89c19dd0513fc315e0b250dbfe71bdeeba1db8cc58038bb690dd7ca2a54b4283"
+      },
+      {
+        "file": "packages/hub/test/stack-provider.test.ts",
+        "testSha256": "355060c66e91d45a4ae446358b666bfaa18a8c71c17f89b9bc29070d9999425d",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "50d25236b82704b9a143710500ae62c30d2a772501d0a3af8467959b0cb5f606",
+        "workReportSha256": "fe960ecc488f28b208b02bb0ab3dc54e842ba3aee2acd48e19473b13f055ca7e"
+      },
+      {
+        "file": "packages/hub/test/teardowns.test.ts",
+        "testSha256": "44d2b22e4e73a4bdd11ed0781b69dbbf887f9f69bd265a0555461df6b7216ab8",
+        "base": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "67c321f29f36f0333715ab38f4fb188a5a4e7da7a88228a2ca4ab4566083ed46",
+        "workReportSha256": "a8a5634d168978103a9133a2d42270aa39c2d3f7c7cd9d7fef901b2b06e4bbf0"
+      },
+      {
+        "file": "packages/hub/test/mods.test.ts",
+        "testSha256": "f85cc8b9ddb77cecf5d384f788d82dfccc6c1ca0d40c6efeffecb4fa53490b9c",
+        "base": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "c41779f595776d85673ebb353b2556d03752d7ad1d8761926df0c01dd333b5b9",
+        "workReportSha256": "a6cdb81ddff454404c744a253db9d920f7c1a88ba0a139f5fba745bb446f709a"
+      },
+      {
+        "file": "packages/hub/test/tools.test.ts",
+        "testSha256": "e65fd3c01a42fa1315c021430f697bebfdc5c4bf51594090525f99ecff91e07a",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "d0d040ecd89955a987fccc1c746071be9a37d7bf387679afcd6a548edffbe509",
+        "workReportSha256": "a28498efce1903017bff604b79abc47e7e301148f30cc54b82e02d27eda3de11"
+      },
+      {
+        "file": "packages/hub/test/gate-queue.test.ts",
+        "testSha256": "d7213f3b857be5c1cf8a3b340462a361c918155832050243f5ba462f52fe338d",
+        "base": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "3ed5e50d58b447d543945063f8404a3597a194414bc9e0666df01b6b7efb55d6",
+        "workReportSha256": "ebe9784df2c828bbe92830a2e81b986e73333602f765912f085ca1ce02795ae1"
+      },
+      {
+        "file": "packages/hub/test/codes.test.ts",
+        "testSha256": "e798682efcca740642a9172a08250fbf8dad885d6b814399fde700f5399eb6f7",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "726eebda319f2d0580c968007316a4f3fd77efb3da52551471a7a5a0d49be501",
+        "workReportSha256": "c9e45da75544130ebeda38a76ddbe90a242695521b2693f910337efc0f64676d"
+      },
+      {
+        "file": "packages/hub/test/parsers.test.ts",
+        "testSha256": "c465d14f0116bd1c5d3a79f7ddd2adf21db90906e1a169d447bd6e116929883d",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "598252508a8c63f7c343730ad73a42575f1af8a9bddd481edd2f8c6084dd32a7",
+        "workReportSha256": "d18a62194ce118e2cf1feb664ed767d1a6c84f44d7c2369e1076a24a91a9d055"
+      },
+      {
+        "file": "packages/hub/test/start-ps.test.ts",
+        "testSha256": "8b71713503de512d01ed58654fedfe6334dd85469e3d7fb3cf60ee3b2f80ae82",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "a2d2c19f289c46cc178b2f23756f32a856e11cd47cfa0714ec0d0b9e80603b13",
+        "workReportSha256": "e52f2d4e6c348d32748c9554deb667bb6ef05f45154ed0f3f05b18bd8306bf72"
+      },
+      {
+        "file": "packages/hub/test/startup-memory.test.ts",
+        "testSha256": "853153b7a214ca064e626969fb5bb3995e4b2ddad1097f4a269b79704a722b77",
+        "base": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "251c36ddb88a69206e1fca3ac79841ed44273def80c1ed4e8a1b57dacc6f25a4",
+        "workReportSha256": "fa2b44d43c0b151b75c8be8bc163962da85a0c4ce146138bf5b371da1191c920"
+      },
+      {
+        "file": "packages/env-local/src/index.test.ts",
+        "testSha256": "054e9db2c95291e8db45b464f7b054cdcb60afcee67a6117cd2b9bf74378ae0c",
+        "base": {
+          "pass": 45,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 45,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "d3dbac0e73f2021bb1bd5c8ec4e69914bd13b075bfeb2eaee5d389b1d9e734de",
+        "workReportSha256": "2ea785e323efff09e579b507b149cfe03468406c0e68e781a947c6b42f8509ad"
+      },
+      {
+        "file": "packages/extension-host/test/host.test.ts",
+        "testSha256": "8270b9746327b5aa1eb84b67847f58f0a1d00466baac8b48fb99153625b39828",
+        "base": {
+          "pass": 65,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 65,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "ef8d7a26817674a28788c58733003a9650d2c6acda968b6298beccd15c1e76cf",
+        "workReportSha256": "a2eed3864e0a25d17ef93f0b4ccd5747352342d5422cd176b836c90f89db42a5"
+      },
+      {
+        "file": "packages/extension-host/test/sources.test.ts",
+        "testSha256": "ffad1580c0edc855057bf28f53264a1398f15271440bc88734e8e2d4a2f25324",
+        "base": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 1
+        },
+        "work": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 1
+        },
+        "baseReportSha256": "0ef389d41af83459f59d657d5aad5864c706bbdc2be84c818442b83d59a3123a",
+        "workReportSha256": "7c7402789b18d18b793ae38d66461e63a24d68a557dba505ae4dd992f63a3314"
+      },
+      {
+        "file": "packages/extension-host/test/asset-probe.test.ts",
+        "testSha256": "ba86e8e9c16364bf968e47599074d2fe22a7fe17ca0958033b7be93fc060a5e0",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "8ba65cbad8d9db3ba0ef1702d4209a945d88a18ae8adc5068402ca0afb9a0ba6",
+        "workReportSha256": "3f35c112e0f69c5922f7ebc7fc8fc0acdd73ff74e5eed9aed9e3a77ef157157f"
+      },
+      {
+        "file": "packages/extension-host/test/asset-range.test.ts",
+        "testSha256": "95ec2565291042494b50e1829dc95a7f31e1b08da8fb4547f5f9d54660b5fe54",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "8dd1928099f16641a90b7edf060fa9355d32a81a4c54b88bf95311df997a6fd1",
+        "workReportSha256": "b3126e1c4337b94552b8262dae1a35f1fa114277c19364e9891e60210402e901"
+      },
+      {
+        "file": "packages/extension-host/test/asset-quota.test.ts",
+        "testSha256": "eb1098a915a53d165198396e420289d0058475943ac0123c4d4a3585da91233d",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "b5190bcdb97181ecdcc6f1808b999e70ebe790909f4b62524b15edba0c6364d3",
+        "workReportSha256": "1cfa7c61e9c7b63c9327a1f8f20d50795de6879d7d35b296612cf6b3cfd6ba1d"
+      },
+      {
+        "file": "tests/supervisor-process-errors.test.mjs",
+        "testSha256": "7b977d93dca648ee2daa4665c4fc4fee55177af071b04a1be2bfc6c5423af230",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "7211a7e4b4bc69bdd36e64af565f65faa8f3ef392d1c855068cb24a50ef4fecd",
+        "workReportSha256": "dc7bc13a423586153270818c346d4810e0251d8c2842360a10dc67a6d3b5cce1"
+      },
+      {
+        "file": "tests/supervisor-process-readings.test.mjs",
+        "testSha256": "8b54e637d2e87d40109025f4991c6dd4732410c146aaa133722974c345ee8c41",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "0f7deb5ce8cc534cb45c18e3aa1c97f690cfc4c94f437cf4d31b16af54e030c2",
+        "workReportSha256": "2c868b585e3b89c28f60ac3d2177f002bbad0608f72674468ae59102782fc85b"
+      },
+      {
+        "file": "tests/acceptance/139/prices.test.ts",
+        "testSha256": "e4f55dcc8c8f2ab3eb10da8fe39dc8d6b75f5db1238c6189ea5354da704ef360",
+        "base": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "3eeb2a4a57b7bccae1b41c71ce771261bd8ee5cea1440afc22b91d2e347873cf",
+        "workReportSha256": "b813708bc9d8caf90635c0ee444436e0c1d6741961fd550c492577b486879d66"
+      },
+      {
+        "file": "tests/acceptance/1731/search.test.ts",
+        "testSha256": "2ca99d60613aa95f156a7172a8c360edd4bdeffd7eb26410fd40f77dd0f2a32e",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "6cd2d99f54093a1246d3a8e0040896e2739fcc03b8a97c9a78c6c9a54f0def09",
+        "workReportSha256": "7fb7ac1296c5754233d743de963da0320d54377143805d44533025b4b237d8b6"
+      },
+      {
+        "file": "tests/acceptance/1731/fetch.test.ts",
+        "testSha256": "86cfb125a6e84d57aad3ef9ad4e774e2f7aafda8a86f64766adc5b248ec7774c",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "6223ca4b764a4da8adc5fb587d50d484349acd60ecbb2f34f7be45c0316184f8",
+        "workReportSha256": "65ab062e2a784d655263c22ad433855bcff96796314d189ddb8428b3080b294a"
+      },
+      {
+        "file": "tests/acceptance/1731/off.test.ts",
+        "testSha256": "fea3b91834e0bb0aad7fbf8e97e860c1050d236df4adb8c2d2bc352ce0e12e7c",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "52fa74642f79bbc62ed5efcad3d58c9fdca0d5b7b2650d6befe856a6a99c24b4",
+        "workReportSha256": "67562472c63e495fef9a3024964a46cb4f73f6a3722688ee60b799d03d6cfcff"
+      },
+      {
+        "file": "tests/acceptance/1731/offline.test.ts",
+        "testSha256": "dfb17f94eddfc0334ef69eb51b45a9c17845a5831ed212989dc12fccadbd297c",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "a144232ee30b5fb15e83fc2b46af32dbba20613defc2b6bf4f028b478136986c",
+        "workReportSha256": "f204a3c89ef5b6a373dfc5f31b31b4045ae99fcd5dfec1d20273fb00485b0759"
+      },
+      {
+        "file": "tests/acceptance/1731/unknown.test.ts",
+        "testSha256": "11097d62551ad02c3ee848d853632fd41fb53d43a70e767a1c6bf2c511579c0f",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "992ae9ad44a20c3e45f0c5f72107ddcfcd153538b32eafdd8cef4ecd748c98ff",
+        "workReportSha256": "0bcff2a0a4f7d79ea92e390439debedb17a077966d88c9f0e192d898954a0416"
+      },
+      {
+        "file": "tests/acceptance/989/version.test.ts",
+        "testSha256": "558004c5226a102c1ab1a90fc88288a2e26e23d66639f3c29ab9d939ce0ac7f2",
+        "base": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "a9b5087527ebe21b8a53ee66c469c6ffd82994bbc2cedc5fc44e4db80251a1d0",
+        "workReportSha256": "191b2b77c42609c8492c85725ad0640010bb92c8c35f2aa2b4e361487f7847c2"
+      },
+      {
+        "file": "tests/acceptance/323/todos.test.ts",
+        "testSha256": "8bce37cdb4d172b38e8a9453076cae6975ee7a59632aaf35a029972d301229f3",
+        "base": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "ae3956786aca18df62068e8414f3f63c655fb7875d345e32cd9db4e3ab8cd08a",
+        "workReportSha256": "bfdfad7644bc6d4be33d3faa5ee6671e4b378ab3c3eed0c8aa1fba9e5a8939c7"
+      },
+      {
+        "file": "tests/acceptance/331/child.test.ts",
+        "testSha256": "cfe1cb699024c85f172530eaaf75be68c31d76de520a15b10adb80cc240c30ce",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "2c3f9633ac4cd4cd959836ebe5edc80656865fdaf8acd0bac471970c258493f9",
+        "workReportSha256": "6446180472c7b20b6052a28ff1a91227efd8bf79e203cf244a6132e8a5611f43"
+      },
+      {
+        "file": "tests/acceptance/65/routes.test.ts",
+        "testSha256": "96164ce902c0932c4bafee9f35ecd4a4d8d3b5fb7653cb0629c132e62f816295",
+        "base": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "9e2b5c36262a73b9d525f3adc7c73fc8f97143156f180bc459d03efb3331f8ce",
+        "workReportSha256": "84feae3579f3a70cf29834e8ccb9fed8db968e7074b41a2fe1ac574dca025b38"
+      },
+      {
+        "file": "packages/asks/test/timing.test.ts",
+        "testSha256": "9161c5d2d949e91d1951285e108640c552374a2c73883eeaa3c690f0943f6507",
+        "base": {
+          "pass": 36,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 36,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "49cba21a5c1418f3ed4ce3588e474e1530c08961d0bcf5abc8ae6f883ce35dc6",
+        "workReportSha256": "4b78cd6be88a167134eb5e0118c9127f3c4e4460f4e174dd349a79c5a4eb416f"
+      },
+      {
+        "file": "packages/hub/test/products-start.test.ts",
+        "testSha256": "92df4f8da8a89694d0844292babd455388bd04dad801ffc673916bc3c5dae2fa",
+        "base": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "227897159dfbd47ae33c193e6800f68f78a228b9ed19aacd1bd76f76cbb622ed",
+        "workReportSha256": "73458f662d32649fd0b1286efb68ede6f4d467eb330451ec4c28647ad2d00579"
+      },
+      {
+        "file": "packages/hub/test/reading.test.ts",
+        "testSha256": "7788e98e32e70b842f0afed6752eaf7bc9f984aa1e44d58886ce65da5d6e4131",
+        "base": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "568467604534a8e92d7f419803ea10d8228555929b85eda8c838f83b655ce855",
+        "workReportSha256": "2a2bfcdfd3207e604f6303fb3cfcb9facb56c106493476fc0d7efabe4c784669"
+      },
+      {
+        "file": "tests/acceptance/2070/binding.test.ts",
+        "testSha256": "c0655c22f3a0dc722f6d7c8056c1d236d317c6176af420a7564ebf37116529a6",
+        "base": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "0f85b7904b8371c0e40f09a5808e7139a40e2ddf999ecddf7fd952b93084f255",
+        "workReportSha256": "abb1f733e9515449297f4cb08f803fe75726557709bab0616f055a7c029847c9"
+      },
+      {
+        "file": "tests/acceptance/1687/ac3-redraft/loader-boundary.test.ts",
+        "testSha256": "f10a57af98e6adbad9f75a87eaa4d7a9004dbccac3d7b547f0bbd816d9a14f88",
+        "base": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "work": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        "baseReportSha256": "0ccb1cea235fff3a33191a8106531f1abd03b14a8bbb8cf508a5cbfe725f5676",
+        "workReportSha256": "7ceba87dcfe7d480fbae87dbc0d8cb08ecbe8a795c66d36b8d69f34404f33b2e"
+      }
+    ]
+  },
+  "acceptance": {
+    "base": {
+      "tests/acceptance/1906/ownership/forks.test.ts": {
+        "pass": 0,
+        "fail": 3,
+        "skip": 0
+      },
+      "tests/acceptance/1906/exit/children-at-exit.test.ts": {
+        "pass": 0,
+        "fail": 4,
+        "skip": 0
+      },
+      "tests/acceptance/1906/children.test.ts": {
+        "pass": 1,
+        "fail": 2,
+        "skip": 0
+      },
+      "tests/acceptance/1906/exit/sync-children-at-exit.test.ts": {
+        "pass": 0,
+        "fail": 4,
+        "skip": 0
+      },
+      "tests/acceptance/1906/sources.test.ts": {
+        "pass": 0,
+        "fail": 5,
+        "skip": 0
+      }
+    },
+    "work": {
+      "tests/acceptance/1906/children.test.ts": {
+        "pass": 3,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/duration-fold.test.ts": {
+        "pass": 5,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/extension-host/test/fetch-fold.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/extension-host/test/update-default.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/extension-host/test/update-close.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/done-reader-fold.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "tests/acceptance/1906/exit/children-at-exit.test.ts": {
+        "pass": 4,
+        "fail": 0,
+        "skip": 0
+      },
+      "tests/acceptance/1906/sources.test.ts": {
+        "pass": 5,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/extension-host/test/liveness.test.ts": {
+        "pass": 5,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/contracts/test/object-guard.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/env-local/test/listener.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/channel-link-write.test.ts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "tests/acceptance/1906/ownership/forks.test.ts": {
+        "pass": 3,
+        "fail": 0,
+        "skip": 0
+      },
+      "tests/acceptance/1906/exit/sync-children-at-exit.test.ts": {
+        "pass": 4,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-arguments.test.mjs": {
+        "pass": 2,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-failed-spawn.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-native-parity.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-node-modes.test.mjs": {
+        "pass": 3,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-option-coercion.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-sync-edge-parity.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-sync-missing.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-sync.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      },
+      "packages/hub/test/children-table.test.mjs": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    "properties": {
+      "seed": 1906,
+      "casesPerProperty": 1000,
+      "async": "PASS on work; expected missing-ownership failure on base",
+      "sync": "PASS on work; expected missing-ownership failure on base"
+    }
+  },
+  "builds": {
+    "baseWorkspace": "PASS",
+    "workWorkspace": "All packages pass: first full attempt had only hub/cli merge errors; corrected hub+cli build passes, other workspace results retained",
+    "baseHookShow": "PASS exact build",
+    "workHookShow": "PASS exact build",
+    "acceptanceTs": [
+      "exit PASS",
+      "ownership PASS"
+    ]
+  },
+  "lintComparison": {
+    "affectedVerdict": "FAIL affected: 166 new, 11 already failing on main, 0 inconclusive or blocked, 0 listed skips, 48 passed, in 123 s at load 5",
+    "reportedNew": 166,
+    "exactKeysOnPinnedBase": 165,
+    "unmatched": [
+      "canvas-closures commands share a log filename; the interleaved failure key differs, but unchanged base also fails Map projections drift"
+    ],
+    "wide": [],
+    "inconclusive": []
+  },
+  "loaderReview": {
+    "verdict": "PASS after independent provenance review; unchanged assertions and rejection oracles pass",
+    "beforeMaintenance": {
+      "base": { "pass": 19, "fail": 2 },
+      "work": { "pass": 19, "fail": 2 }
+    },
+    "maintenance": {
+      "commit": "5909a30a1172a5cb8a3d37d1fd7ff09b3a857eba",
+      "reviewedCodeHead": "040e6aa6f2543c28ab82e9ae5a7e6da2c08df89b",
+      "receipt": "tests/acceptance/1687/ac3-redraft/ISSUE-1906-PROVENANCE-REVIEW.md",
+      "receiptSha256": "ffe0b45e17ea66715e7498e4cfac6324c45067fe73a6c28ee9b4b99e7985a2f6",
+      "metadataSha256Before": "917a1da658d2c36c66abbaea708e0278776dbfcf4f3d7ab4df3492f3d8f45d00",
+      "metadataSha256After": "8b8534e38c2d4766e2b4aa1a8394d9fe3714425fe7e472ae359a4eafdbeb8876",
+      "changedValues": "Six current input digests and two Host scope digests, independently reviewed against exact historical blobs",
+      "preserved": "Base evidence, nine loader expressions, origin/boundary/proof fields, caller inventories, checker, graph and all test assertions",
+      "independentRun": { "pass": 29, "fail": 0, "skip": 0 },
+      "independentTapSha256": "80264ba7932d6c2d0f7761e93f2b556e9c1134775512f4fd37e1f73365eb8cc8",
+      "integrationAffected": { "testsPassed": 10, "testsFailed": 0, "testsSkipped": 0, "verdict": "FAIL on inherited repository lint findings; no WIDE or INCONCLUSIVE lines" },
+      "signedApproval": "No signature or approval tag created; not a merge authorization",
+      "editGuard": {
+        "state": "PASS",
+        "exit": 0,
+        "commitsChecked": 22,
+        "message": "no guarded edit lacks its own approved proposal",
+        "logSha256": "16b6e832322b53b034048ecd57ae380051419db73d323cc44049a9bf29de90f5"
+      }
+    },
+    "additionalReview": "Host whole-class/file identity changed, but independent review confirmed unchanged loader and placement semantics",
+    "methodIdentity": [
+      {
+        "method": "start",
+        "baseSha256": "b3c45b1ea662204c35bacb99d8e7ef27c4db0c9ab8469f8174d8632723a82cbf",
+        "workSha256": "b3c45b1ea662204c35bacb99d8e7ef27c4db0c9ab8469f8174d8632723a82cbf",
+        "equal": true
+      },
+      {
+        "method": "runTests",
+        "baseSha256": "b081fff65398efe4f5258b0a580fefa1682fb6883f6c6648eb8a9324c4ede390",
+        "workSha256": "b081fff65398efe4f5258b0a580fefa1682fb6883f6c6648eb8a9324c4ede390",
+        "equal": true
+      },
+      {
+        "method": "hubBound",
+        "baseSha256": "2c2992e187aefac546debb10b7255c11a0039e831bcd9910e13f04a6112ca30b",
+        "workSha256": "2c2992e187aefac546debb10b7255c11a0039e831bcd9910e13f04a6112ca30b",
+        "equal": true
+      },
+      {
+        "method": "sandboxed",
+        "baseSha256": "f3b648eeb5d020931ee597ba74998e67ace2d6af1872807bc56f1600235a2893",
+        "workSha256": "f3b648eeb5d020931ee597ba74998e67ace2d6af1872807bc56f1600235a2893",
+        "equal": true
+      },
+      {
+        "method": "load",
+        "baseSha256": "b2a6098efe161e3fe322af337b72e10d432c694b0daccdc70cd995bf2e83e15f",
+        "workSha256": "b2a6098efe161e3fe322af337b72e10d432c694b0daccdc70cd995bf2e83e15f",
+        "equal": true
+      },
+      {
+        "method": "check",
+        "baseSha256": "e90b46478a3d9583b54020973f5daaba6363c4be5a9690cb78626f8397cf786f",
+        "workSha256": "e90b46478a3d9583b54020973f5daaba6363c4be5a9690cb78626f8397cf786f",
+        "equal": true
+      }
+    ],
+    "realLoaderBoundary": "3/3 pass on base and work, included above; reused alongside independent provenance maintenance and unchanged rejection tests"
+  },
+  "sourceFiles": [
+    {
+      "file": "packages/asks/package.json",
+      "sha256": "8846334fb8f1fcf5c6376b2d2072c20a07ca1505696b208a6f315380813d265d"
+    },
+    {
+      "file": "packages/contracts/src/index.ts",
+      "sha256": "1508a65697f9b3d2707d93c2baf4cf616bfc2083984e11d77577969aed58f9af"
+    },
+    {
+      "file": "packages/contracts/src/json.ts",
+      "sha256": "0f31445ef0ae75b1c2b4bbcb54cf8e430a2c09b77e475acc21be5cf2ab0e09e6"
+    },
+    {
+      "file": "packages/env-local/src/stack.ts",
+      "sha256": "fed747c406ac6574c8d48fe4caa885343c60254affd07775515b3a8b012b480c"
+    },
+    {
+      "file": "packages/extension-host/src/host.ts",
+      "sha256": "922bf5d9cf76598e6bcee91cbe86ce77b27f623b83f55f37ca31ea77e2f1ee16"
+    },
+    {
+      "file": "packages/extension-host/src/sources.ts",
+      "sha256": "dde5f46a747e59c73da61d18d2d57dc6d6fb9b42896d9be52a8e673a33f128ce"
+    },
+    {
+      "file": "packages/extension-host/src/terminals.ts",
+      "sha256": "e53f05fd13e03af14999be6655f0d35fac407eb48401b42debfeb07c7ad0da29"
+    },
+    {
+      "file": "packages/hub/src/acceptance.ts",
+      "sha256": "070fddde259e5e281fd6374da31a10fa7c02599acf29419043a11edacae08e43"
+    },
+    {
+      "file": "packages/hub/src/agents.ts",
+      "sha256": "24cbdc0b24369b149765c3d955b55b7b9090ebf920b5da55e27318419d075bd7"
+    },
+    {
+      "file": "packages/hub/src/answer-delivery.ts",
+      "sha256": "fe412ebd16d12a1283f18e924509b1a0110617851c2623a4990aceeacc203e2a"
+    },
+    {
+      "file": "packages/hub/src/ask-tasks.ts",
+      "sha256": "4e35a6f48acef3f2219e6dc9159691ac43e359caada0daf323ce8cc83f865663"
+    },
+    {
+      "file": "packages/hub/src/canvas-doctor.ts",
+      "sha256": "485e03b05c18b8e555b17b88b210009be06040e07eb250745ee62f5544e79823"
+    },
+    {
+      "file": "packages/hub/src/canvas.ts",
+      "sha256": "655f238f88c5db12cfd88654960449ddbb4691b2c185a79e236e2772f9d3f703"
+    },
+    {
+      "file": "packages/hub/src/channels.ts",
+      "sha256": "eefebc9e65463fc7089ef150ae817cd24bc70b39d515ff900f07acae413517e1"
+    },
+    {
+      "file": "packages/hub/src/children-worker.ts",
+      "sha256": "0b02c2b30c40c364c0d446cdb02c1972b456b851f49a42ac0826c6c4d6d89ddb"
+    },
+    {
+      "file": "packages/hub/src/children.ts",
+      "sha256": "87194f9efff372dc302c86ce7013a356fe0ee8e303f6e83e409c59ceffe603d6"
+    },
+    {
+      "file": "packages/hub/src/claude-settings.ts",
+      "sha256": "c4a593b62615fcc0e2fda86f8a7aedb5d8636a348496f48fe99657c395b543d3"
+    },
+    {
+      "file": "packages/hub/src/codex-loops.ts",
+      "sha256": "0938add14f1049b3458845d09f78a0d1e107e224ca9d907739cf0ad48c8cb93a"
+    },
+    {
+      "file": "packages/hub/src/codex-settings.ts",
+      "sha256": "e73e9e2ad9695e2858ba74e4244ff8a9a0d6711cd3625db5eddf980b53381571"
+    },
+    {
+      "file": "packages/hub/src/core-worker.ts",
+      "sha256": "c2074e871da6d1a59b22eb204b33c9e4ccee85cfaceee31918de7a0e4e58df8f"
+    },
+    {
+      "file": "packages/hub/src/core.ts",
+      "sha256": "2a23276598237497848f9e0f5e273b6ac6864b4c0b24a403454d7e2c32db59cf"
+    },
+    {
+      "file": "packages/hub/src/doc-checks.ts",
+      "sha256": "ce63143245257a67f35b9a1b2fa24039977f539f8a57b63582e66a1deecad6ee"
+    },
+    {
+      "file": "packages/hub/src/doctor.ts",
+      "sha256": "3c47a68ebf95ce98421998f9ef7361f57e7710358958f99cb3985ce82c5ba3f2"
+    },
+    {
+      "file": "packages/hub/src/drive.ts",
+      "sha256": "ea39e8181fba905554332f66c3403928db1fe7e3c312cdc569eab7c4b587c901"
+    },
+    {
+      "file": "packages/hub/src/evidence-access.ts",
+      "sha256": "299730780253c3652086f22026c271b44771aeab013816a5053eff698156077f"
+    },
+    {
+      "file": "packages/hub/src/forge.ts",
+      "sha256": "d89c3de4e6205a421d450a787dd980a0bec40f9d9a4315b9ae0a93f6bfc358e8"
+    },
+    {
+      "file": "packages/hub/src/gate-command.ts",
+      "sha256": "c43537780b87f90b5ab285d421b334759f46a5b3104b08b51badc9369ebcc995"
+    },
+    {
+      "file": "packages/hub/src/github-source.ts",
+      "sha256": "49505ddba887aa05a49971b86d0c64edc1920b05c9129e9e867e1114b91bfcf4"
+    },
+    {
+      "file": "packages/hub/src/guards.ts",
+      "sha256": "bdaf6933ec997b22a6c64190ed5b165d2d375890422256df28c0b4b73aa99fc7"
+    },
+    {
+      "file": "packages/hub/src/heavy.ts",
+      "sha256": "907627949a4cb4b056c3814c2dd84d612b3995b0f974da815201ca9fa0424c03"
+    },
+    {
+      "file": "packages/hub/src/hookmap.ts",
+      "sha256": "10f195d811346dfbd25d5a8bb8ea713e89b8a4b9697664b266a79d0ca40cef49"
+    },
+    {
+      "file": "packages/hub/src/hosts.ts",
+      "sha256": "a2cfb4c6e335935e3f74ff0f794eab37d77eea94c90b8eb2ccddf96970cc8833"
+    },
+    {
+      "file": "packages/hub/src/hub-canvas.ts",
+      "sha256": "bc53756ec231f446c26cc312bef2245d6013333226e750e6a0c4e60aaf3f011d"
+    },
+    {
+      "file": "packages/hub/src/hub-control.ts",
+      "sha256": "c7979584969f880403601c9694b044cc583f40267cbca2ea1a00b851600c67f1"
+    },
+    {
+      "file": "packages/hub/src/hub-ports.ts",
+      "sha256": "c61a5f4bff7c690aab14c49c2e257cac6008bab53c6e86064dc1212ca5995df8"
+    },
+    {
+      "file": "packages/hub/src/hub-readings.ts",
+      "sha256": "1192201afdc82139975e46172eadb0f353530a35abfa83cb7cd0febf39ed6429"
+    },
+    {
+      "file": "packages/hub/src/hub-shared.ts",
+      "sha256": "91b31e757a8520a60dc188aa7c5a146775c52dab502080fe29717fd360d11167"
+    },
+    {
+      "file": "packages/hub/src/jobs.ts",
+      "sha256": "f4fe3137c913091c7271e34807ed75032e20e1895cb23b7ad8d5a76ffef182e8"
+    },
+    {
+      "file": "packages/hub/src/landing.ts",
+      "sha256": "7fcdb1d751548291f4b21d39f3a51c466f3c28319f5e8699ba34ebfba873e5ef"
+    },
+    {
+      "file": "packages/hub/src/libraries.ts",
+      "sha256": "48386b6cdb14dbae47dcc450f02aa6b325dc06d18c814a20accc74cf3ae56c89"
+    },
+    {
+      "file": "packages/hub/src/mcp-operations.ts",
+      "sha256": "33546717dab6947bc4307cc115a3c70ba0c380c92381413e317339b1d6460c78"
+    },
+    {
+      "file": "packages/hub/src/mcp-servers.ts",
+      "sha256": "b2652228562b703e0939d47e8e9afb73a8ba65459054b130474a4687012a9b28"
+    },
+    {
+      "file": "packages/hub/src/mods.ts",
+      "sha256": "8d48b1ba4d8921585a8e15f1e4d01b8b6d17732219e2e9332f5eeb4ecb5fc4a3"
+    },
+    {
+      "file": "packages/hub/src/open-items.ts",
+      "sha256": "d658fa75fe71e08f7aba0813351b57008c62495b5b3e1e77878411a2bbb86c52"
+    },
+    {
+      "file": "packages/hub/src/packs.ts",
+      "sha256": "ba13848493de237a0ee58d9cdb1921518e8aa9dfa2f486a1d9e5d1b72f8de712"
+    },
+    {
+      "file": "packages/hub/src/products.ts",
+      "sha256": "828b7d01bfa6b7274b9f8f023768ea4d9e91f7737eb82d6733568167aeced682"
+    },
+    {
+      "file": "packages/hub/src/release.ts",
+      "sha256": "2ef50d87f6135cc0523514f92790482de00c6e6980a9894e8c4b269b16f3eb5b"
+    },
+    {
+      "file": "packages/hub/src/runs.ts",
+      "sha256": "d6a3e26ca4351d9a8f9b503e55c20226fa44254a2eeef6fc79efcf32d62c53d6"
+    },
+    {
+      "file": "packages/hub/src/scope.ts",
+      "sha256": "bda5f475d853dfeff340df5f8cb573ae6d78da161fb8cf09ef71f6d80330cd66"
+    },
+    {
+      "file": "packages/hub/src/server.ts",
+      "sha256": "06b818ac6f947df7d69e7c348f50ad4cec1b4bbf6bebfcc76490f5f54192e36c"
+    },
+    {
+      "file": "packages/hub/src/session-facts.ts",
+      "sha256": "9dcb8088f1ce39478efa0e9f969d2ffd8c4533a0e8dd1996c78c9f295c061031"
+    },
+    {
+      "file": "packages/hub/src/session-memory.ts",
+      "sha256": "1dba7cb745da988c017b3975795a44834fd2e9ad1a1644a88e112c1f5d12113b"
+    },
+    {
+      "file": "packages/hub/src/session-state.ts",
+      "sha256": "54f67295e3b08fe0e08ac149edbce4a3a2d34ab124016dcd2eaccba6f0d4f73a"
+    },
+    {
+      "file": "packages/hub/src/setup.ts",
+      "sha256": "6d841be267ae3c5fbc503081a7e430ee5f961c97202fb4a14e26db23afe9cfd1"
+    },
+    {
+      "file": "packages/hub/src/shell.ts",
+      "sha256": "dc827e53fb987f062f3aff0568abef4f66342db240879b1a9a439b740c30e1bd"
+    },
+    {
+      "file": "packages/hub/src/stacks.ts",
+      "sha256": "9b40a968ba0b5046ee8e2b1ac762b040626480d9d74bb3007704403500328e31"
+    },
+    {
+      "file": "packages/hub/src/staging.ts",
+      "sha256": "a36dabc456a059280d43cbd7985dc180f1be495502f535325970e7f7264e0d2c"
+    },
+    {
+      "file": "packages/hub/src/starts.ts",
+      "sha256": "d8c8ffb65545fe1304273f7ec672ac6903a99104cc12702d807b2a6b368b9539"
+    },
+    {
+      "file": "packages/hub/src/stop-judging.ts",
+      "sha256": "2b97832a2455477c64ff02a80adfe0e48db95feef542fa9592986f89a0b5eeda"
+    },
+    {
+      "file": "packages/hub/src/stop-reply.ts",
+      "sha256": "c1883c7b14892571311158bbc0090000b151b564667fb590588f5bd91e2525e7"
+    },
+    {
+      "file": "packages/hub/src/teardowns.ts",
+      "sha256": "075b61730104a5d97c586f06216cb361bd76b6baf3fe95b4d6a7a1f64a7a58d7"
+    },
+    {
+      "file": "packages/hub/src/tools.ts",
+      "sha256": "59d152e0a78e335d450e67fd00b3d6209cc42a96eb3940327908881601ae9dc9"
+    },
+    {
+      "file": "packages/hub/src/vfs.ts",
+      "sha256": "cd538ce062d87e20a79f2020e99f9da42b6845b264b2abb3e7ad4d5802bac194"
+    },
+    {
+      "file": "packages/supervisor/src/index.ts",
+      "sha256": "88270b24e9e3171c9665083b13fb3a8011bdd7f00551dc6f6fcf3240c0b49922"
+    },
+    {
+      "file": "packages/supervisor/src/procs.ts",
+      "sha256": "98c68fbcaa0d76adb19c4c9d550aa7a93b59a34085cebb9a1ddd33c6b2ba268d"
+    }
+  ]
+}

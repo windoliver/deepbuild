@@ -327,6 +327,7 @@ mod tests {
             plants: Default::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         builders::build(kind, &params, &ctx).unwrap()
     }

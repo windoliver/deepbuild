@@ -177,7 +177,8 @@ pub enum Time {
         /// The offset after `+` or `-`, if any.
         offset: Option<Span>,
     },
-    /// `@line.word:text#k`: the k-th match of a word in a narration line, after the speech bake.
+    /// `@line.word:text#k`: the k-th match of a word in a narration line, after the speech bake;
+    /// `@line.word:text#k.end` its end (#509).
     Word {
         /// The narration line.
         line: Id,
@@ -185,6 +186,8 @@ pub enum Time {
         text: String,
         /// The match number after `#`, from 1.
         k: Option<u64>,
+        /// True for `.end`.
+        end: bool,
         /// The offset after `+` or `-`, if any.
         offset: Option<Span>,
     },
@@ -252,6 +255,10 @@ impl Time {
                 .strip_suffix(".word")
                 .ok_or_else(|| "a word anchor is `@<line>.word:<text>[#<k>]`".to_string())?;
             let line = Id::parse(line).map_err(|r| r.what)?;
+            let (tail, end) = match tail.strip_suffix(".end") {
+                Some(tail) => (tail, true),
+                None => (tail, false),
+            };
             let (text, k) = match tail.split_once('#') {
                 Some((text, k)) => {
                     let k = parse_positive(k)
@@ -272,6 +279,7 @@ impl Time {
                 line,
                 text: text.to_string(),
                 k,
+                end,
                 offset,
             });
         }
@@ -298,11 +306,13 @@ impl Time {
                 line,
                 text,
                 k,
+                end,
                 offset,
             } => format!(
-                "@{}.word:{text}{}{}",
+                "@{}.word:{text}{}{}{}",
                 line.as_str(),
                 k.map(|k| format!("#{k}")).unwrap_or_default(),
+                if *end { ".end" } else { "" },
                 print_offset(offset)
             ),
         }
@@ -330,7 +340,41 @@ impl Time {
                         .ok_or_else(|| refuse(CODE, format!("`{}`: overflows", self.print()))),
                 }
             }
-            Time::Word { .. } => Err(unresolved("a word anchor resolves only with a speech bake")),
+            // #509: a word marker the speech bake placed, in the context's markers by its name.
+            Time::Word {
+                line,
+                text,
+                k,
+                end,
+                offset,
+            } => {
+                let prefix = format!("{}.word:{text}#", line.as_str());
+                let found: Vec<&(i64, i64)> = match k {
+                    Some(k) => ctx
+                        .markers
+                        .get(&format!("{prefix}{k}"))
+                        .into_iter()
+                        .collect(),
+                    None => ctx
+                        .markers
+                        .iter()
+                        .filter(|(n, _)| n.starts_with(&prefix))
+                        .map(|(_, v)| v)
+                        .collect(),
+                };
+                let [(start, stop)] = found.as_slice() else {
+                    return Err(unresolved(
+                        "a word anchor resolves only with a speech bake, and once without `#k`",
+                    ));
+                };
+                let base = if *end { *stop } else { *start };
+                match offset {
+                    None => Ok(base),
+                    Some(span) => base
+                        .checked_add(span.resolve(ctx)?)
+                        .ok_or_else(|| refuse(CODE, format!("`{}`: overflows", self.print()))),
+                }
+            }
         }
     }
 }

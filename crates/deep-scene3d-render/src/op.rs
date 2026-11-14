@@ -110,7 +110,13 @@ impl MatOp {
 
     /// Makes its glass pipeline, or its share pipeline with `share`, unless it has it; whether
     /// it made one.
-    pub fn make(&mut self, d: &deep_gpu::counted::Wgpu, samples: u32, forward_z: bool, share: bool) -> bool {
+    pub fn make(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        samples: u32,
+        forward_z: bool,
+        share: bool,
+    ) -> bool {
         if share && self.share.is_none() {
             self.share = Some(crate::sss::share_pipeline(
                 d,
@@ -271,7 +277,8 @@ fn answering(scene: &str, c: &check::Checked, binding: u32) -> Result<String, St
 /// fixed hash, as [`seed`] keys a solid, with no document seed, so a light keeps its hash in
 /// every document.
 pub(crate) fn light_hash(id: &str) -> u32 {
-    id.bytes().fold(interp::hash1(0), |h, b| interp::hash1(h ^ u32::from(b)))
+    id.bytes()
+        .fold(interp::hash1(0), |h, b| interp::hash1(h ^ u32::from(b)))
 }
 
 /// Checks and compiles `op` into the renderer's solid pipeline: `scene` is scene3d.wgsl, `groups`
@@ -444,13 +451,11 @@ pub(crate) fn compile(
         return Err(format!("the device rejects its pipeline: {e}"));
     }
     let values = interp::inputs(&checked, &BTreeMap::new(), &BTreeMap::new());
-    let buffer = d.create_buffer_init(
-        &wgpu::util::BufferInitDescriptor {
-            label: Some("scene3d material operator inputs"),
-            contents: &emit::input_bytes(&checked, &values),
-            usage: wgpu::BufferUsages::UNIFORM,
-        },
-    );
+    let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("scene3d material operator inputs"),
+        contents: &emit::input_bytes(&checked, &values),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
     let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("scene3d material operator"),
         mag_filter: wgpu::FilterMode::Linear,

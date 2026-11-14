@@ -1,0 +1,83 @@
+# #1577's acceptance suite on the base: main at f6d811c7 (the merge base), built here with
+#   npm ci --no-audit --no-fund && npm run build --workspaces
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease cargo build --locked -p deep-hook   (the hub won't start without it)
+# Run: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --testTimeout=600000 --no-file-parallelism --root tests/acceptance/1577
+# Result: 8 failed (8), 5 files failed (5). Exit 1. Every test ran once; notes.test.ts ran once more after its cleanup
+# learned to retry removing a temp folder a hub's git was still writing to (an ENOTEMPTY in afterEach, not a test result);
+# both of its runs failed the same way. The machine's 1-minute load was about 270 throughout.
+#
+# Per test, why it fails at the base: the first failing assertion, its message as the run printed it (IDs vary per run).
+#
+# AC1 #1577.7967d9e6 (answers.test.ts): FAIL, naming the refusal. The base's ask.answer takes no `request`: the cut reply
+#   was refused at /params/request ("an answer has no field request"), and the retry of the very frame was refused for its
+#   spent once:
+#   AssertionError: the retry of ask:01M7BHSG2FS8ZJZM5JCQG6YD9Z's answer with the request ID 52HY1XDBAH858Q5R9801E5670Q must
+#   return the first result; the hub refused it: {"code":"credential","retryable":false,"remediation":"ask:01M7BHSG2FS8ZJZM5JCQG6YD9Z
+#   stays open: the signature's once doesn't hold (its once-only ID hIk8l4q0YOaNTCAhtiiKQecn was spent already, so it counts
+#   once). Sign it again with a device you paired, for ask.answer on this hub, over exactly the params it sends.","path":
+#   "/params/signature/signed/once","actual":"hIk8l4q0YOaNTCAhtiiKQecn","evidence":[]}; the reply that was cut: {"v":1,"id":
+#   "ask.answer#1","error":{"code":"type","retryable":false,"remediation":"an answer has no field request","path":
+#   "/params/request","actual":"","evidence":[]}}: expected { code: 'credential', …(5) } to be undefined
+#   (The issue expects the base to fail on the closed-ask refusal that writes answer.refused. It can't get that far: the
+#   base refuses the request ID itself, so the first answer never counts, though its once is spent. Read in the base's
+#   human-answers.ts, not run: an answer that counted, sent again, meets the closed-ask path before the signature check,
+#   which refuses it naming the first answer and records answer.refused.)
+#
+# AC2 #1577.7ab8071a (answers.test.ts): FAIL at its setup, for the missing surface: the first answer with a request ID
+#   doesn't count.
+#   AssertionError: ask:01M7BHSHJAC5MC81M6YVF945TJ's first answer, sqlite from this Mac's DeepBuild app with the request ID
+#   WSJ2BWMB0J4FM6J7KZDF56VCTA, must count: the hub replied {"code":"type","retryable":false,"remediation":"an answer has no
+#   field request","path":"/params/request","actual":"","evidence":[]}: expected { Object (code, retryable, ...) } to be undefined
+#
+# AC3 #1577.f0851143 (answers.test.ts): FAIL at its setup, for the missing surface, as AC2.
+#   AssertionError: ask:01M7BHSJQ4H79HPPEHRSCDWM6D's first answer, sqlite from this Mac's DeepBuild app with the request ID
+#   FMTRCRR3HC0TH8KTTEV356T2JM, must count: the hub replied {"code":"type","retryable":false,"remediation":"an answer has no
+#   field request","path":"/params/request","actual":"","evidence":[]}: expected { Object (code, retryable, ...) } to be undefined
+#
+# AC4 #1577.1cb11a67 (notes.test.ts): FAIL, as the issue says: the base loses the note. It took the note, was killed by its
+#   PID, and the session's next prompt after the restart carried nothing.
+#   AssertionError: the note "Keep the old flag working too (b140732c)" (request 4EQCW9D2HJM93RKH9KZQ9WX7RA) must reach the
+#   session at its next prompt after the restart: the hub said it had it, then was killed before delivering it; the prompt's
+#   reply was {"v":1,"ack":"01M7BHSRTPNK0VTMZ47GERWH6F","hold_until_ms":1794610359080}
+#   {"v":1,"exit":0,"stdout":"","stderr":""}: expected '{"v":1,"ack":"01M7BHSRTPNK0VTMZ47GERW…' to contain 'Keep the old flag working too (b14073…'
+#
+# AC5 #1577.75136933 (notes.test.ts): FAIL, as the issue says: the base delivers the note twice.
+#   AssertionError: the note "Use the staging bucket, not prod (ff5e2450)" (request YZBNQN3ZBPQXD2TWKABBAR5AWK) must reach the
+#   agent once; it reached it 2 times, the second prompt's reply: {"v":1,"ack":"01M7BHST55NS77DN545QZKFM7Q","hold_until_ms":1794610360438}
+#   {"v":1,"exit":0,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":
+#   \"DeepBuild delivers your words, sent from the app:\\n(request YZBNQN3ZBPQXD2TWKABBAR5AWK) Use the staging bucket, not
+#   prod (ff5e2450)\\n\\nDeepBuild: this session is outside any repo, so this task's home is the workspace at
+#   /private/tmp/dh1577-L0eFVQ/h/.deepbuild/workspaces/usethestagingbucketnotprodff5e24-5c9028a5. Keep what you build there,
+#   as code where you can; your work there is committed for you at each stop.\"}}","stderr":""}: expected 2 to be 1 // Object.is equality
+#
+# AC6 #1577.0e40df84 (positions.test.ts): FAIL, for the missing surface: no write's reply carries a log position, and the
+#   answer with a request ID is refused. Every setup step held at the base (a decision saved, a default, an offer made,
+#   a staging made).
+#   AssertionError: each write must return the log position it landed at, and a read there must show it:
+#   the answer to ask:01M7BHS9CG7EVCHBJD78ZZK0X1 was refused: {"code":"type","retryable":false,"remediation":"an answer has no field request","path":"/params/request","actual":"","evidence":[]}
+#   the undo of ask:01M7BHS9CZMR6GP9V2X1Y6GXBC's default's reply carries no log position: {"ask":"ask:01M7BHS9CZMR6GP9V2X1Y6GXBC","deadline":1794610763754}
+#   the overrule of decision:01M7BHSAF78Z09MYZZJXNY7XNX's reply carries no log position: {"overruled":"decision:01M7BHSAF78Z09MYZZJXNY7XNX"}
+#   saving offer:01M7BJ0PDMPA5WMRWCPC99487Z's reply carries no log position: {"offer":"offer:01M7BJ0PDMPA5WMRWCPC99487Z","ask":"ask:01M7BJ0PTD0YYFJA1NTEG64YSD","decision":"decision:01M7BJ0PTSHGGF335319JN05QG","scope":"session:f14693a204db457ca57ab39bf9b59611"}
+#   the run start's reply carries no log position: {"run":"run:01M7BJ0PV00TS04C8QEDVZXRFT"}
+#   the undo of staged:01M7BJ0PVMP0Q1YA95WRTR0734's reply carries no log position: {"staged":"staged:01M7BJ0PVMP0Q1YA95WRTR0734","folders":["/private/tmp/dh1577-vOFO4w/cache"],"files":[]}
+#   the note's reply carries no log position: {"session":"f14693a2-04db-457c-a57a-b39bf9b59611","request":"93WWTHPX8WTJEZNE619KNXSSV4"}: expected [ …(7) ] to deeply equal []
+#
+# AC7 #1577.a6b9b799 (crash.test.ts): FAIL, for the missing surface: the base refuses the answer's request ID before it
+#   reaches the commit, so the seam never fires and the hub keeps running. (The same probe showed the seam itself at the
+#   base: an answer without a request ID killed the hub with SIGKILL before its ask.answered, the record held none after the
+#   restart, and the same frame sent again was refused for its spent once, which is the "nothing held" this criterion forbids.)
+#   AssertionError: the hub must kill itself at DEEP_HUB_TEST_CRASH=before:ask.answered, after reading
+#   ask:01M7BHSTJF74EJZAPER2T5ZGCW's answer with the request ID 152NGYD6SQABGQEMG4A7FRYC3R and before its commit; it kept
+#   running and answered {"v":1,"id":"ask.answer#1","error":{"code":"type","retryable":false,"remediation":"an answer has no
+#   field request","path":"/params/request","actual":"","evidence":[]}}: expected undefined to be 'SIGKILL' // Object.is equality
+#
+# AC8 #1577.0d3ede71 (views.test.ts): FAIL, for the missing surface: the base refuses the stale undo only because the ask
+#   isn't defaulted any more, at /params/ask, naming neither the view nor the answer after it. The setup held: the phone's
+#   undo and approval counted after the app's view.
+#   AssertionError: the refusal must name the view the undo was made from, at /params/view: {"code":"not_found","retryable":
+#   false,"remediation":"ask:01M7BHSM11JP3D76P4CJS1432P didn't take its default (it's answered), so there's nothing to
+#   undo.","path":"/params/ask","actual":"ask:01M7BHSM11JP3D76P4CJS1432P","evidence":[]}: expected '/params/ask' to be
+#   '/params/view' // Object.is equality
+#
+# Not run: the twins pending-across-restart and applies-stale-undo (they need the implementation's plant names), and any
+# implementation.

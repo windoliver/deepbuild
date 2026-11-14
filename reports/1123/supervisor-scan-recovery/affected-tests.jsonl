@@ -1,0 +1,20 @@
+{"type":"start","file":"tests/proof-binaries-bay-live.test.mjs","name":"reclaim waits for the actual binary supervisor and its group before replacing the bay","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-bay-live.test.mjs","name":"reclaim waits for the actual binary supervisor and its group before replacing the bay","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-lease-loss.test.mjs","name":"SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-lease-loss.test.mjs","name":"SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-malformed-scan.test.mjs","name":"malformed ppid scan cannot certify a binary build","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-malformed-scan.test.mjs","name":"malformed ppid scan cannot certify a binary build","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-malformed-scan.test.mjs","name":"malformed pgid scan cannot certify a binary build","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-malformed-scan.test.mjs","name":"malformed pgid scan cannot certify a binary build","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-scan.test.mjs","name":"a failed process scan cannot turn a build with a live descendant into a successful result","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-scan.test.mjs","name":"a failed process scan cannot turn a build with a live descendant into a successful result","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-supervisor-safety.test.mjs","name":"failed process scan returns BLOCKED promptly and kills its recorded worker instead of relying on caller timeout","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-supervisor-safety.test.mjs","name":"failed process scan returns BLOCKED promptly and kills its recorded worker instead of relying on caller timeout","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-supervisor-safety.test.mjs","name":"a supplied owner that is not an ancestor cannot authorize a detached build","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-supervisor-safety.test.mjs","name":"a supplied owner that is not an ancestor cannot authorize a detached build","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-supervisor.test.mjs","name":"killing the recorded supervisor wrapper cannot strand Cargo","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-supervisor.test.mjs","name":"killing the recorded supervisor wrapper cannot strand Cargo","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-supervisor.test.mjs","name":"successful build leader cannot leave a writer behind","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-supervisor.test.mjs","name":"successful build leader cannot leave a writer behind","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"tests/proof-binaries-timeout.test.mjs","name":"a spawn timeout through real lease returns nonzero and leaves no compiler descendants","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"tests/proof-binaries-timeout.test.mjs","name":"a spawn timeout through real lease returns nonzero and leaves no compiler descendants","nesting":0,"suite":false,"skip":false,"todo":false}

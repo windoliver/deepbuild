@@ -32,10 +32,13 @@ pub const SLOT_ALONE: &str = "instancer_addresses_by_slot";
 /// logic columns), and its part poses.
 pub(crate) fn params(mut params: Vec<P>) -> Vec<P> {
     let parts = "{node → yaw | pitch | rot: column} ≤ 8";
-    for (name, ty) in [
-        ("live", "bool column"),
-        ("gen", "u32 column"),
-        ("parts", parts),
+    // The forms its readers take (#1973): each reads an array; a part, by one axis or bare.
+    let column = "{array: <logic>.<name>, as, part, range}";
+    let posed = "{node → {array: <logic>.<name>, as, part, range} | {yaw, pitch, rot}} ≤ 8";
+    for (name, ty, form) in [
+        ("live", "bool column", column),
+        ("gen", "u32 column", column),
+        ("parts", parts, posed),
     ] {
         params.push(P {
             name,
@@ -46,6 +49,7 @@ pub(crate) fn params(mut params: Vec<P>) -> Vec<P> {
             max: None,
             class: "geometry",
             sweep: (Value::Null, Value::Null),
+            form: Some(form),
         });
     }
     params

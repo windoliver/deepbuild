@@ -361,6 +361,18 @@ impl Tempo {
         candidates.into_iter().min_by_key(|&b| (b.abs_diff(t), b))
     }
 
+    /// #507: the length in flicks of the bar `t` falls in, so a hold there lasts whole bars.
+    pub fn bar_len(&self, t: i64) -> Option<i64> {
+        let s = &self.sections[self.sections.iter().rposition(|s| s.at() <= t).unwrap_or(0)];
+        let per_bar = s.per_bar as f64;
+        let first = (s.beats_at(t) / per_bar).floor() * per_bar;
+        let (a, b) = (
+            s.offset(first, self.f32_seconds)?,
+            s.offset(first + per_bar, self.f32_seconds)?,
+        );
+        Some(flick(s.start + b)? - flick(s.start + a)?)
+    }
+
     /// The nearest bar:beat at or before `t`, for a literal no beat lands on.
     pub fn beat_before(&self, t: i64) -> Option<String> {
         let s = self.sections.iter().rev().find(|s| s.at() <= t)?;

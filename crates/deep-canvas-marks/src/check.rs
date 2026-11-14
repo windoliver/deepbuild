@@ -425,8 +425,7 @@ fn distance_issue(look: &Look, min: Option<f64>) -> Option<Issue> {
 }
 
 /// Each text's graphemes no face can draw in a theme's type (#417): its font's, then the look's
-/// fallback faces in order. (Keyed copy, whose every key in every locale this would read, lands
-/// with the logic module.)
+/// fallback faces in order.
 fn glyph_issues(items: &Map<String, Value>, ty: &Type, issues: &mut Vec<Issue>) {
     thread_local! {
         static SHAPER: std::cell::RefCell<deep_text::Shaper> =
@@ -674,5 +673,7 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     if look.dark_type != look.light_type {
         glyph_issues(items, &look.dark_type, &mut issues);
     }
+    // #538: keyed copy's every key, in every locale, at its arguments' widest.
+    crate::copy::fit_issues(doc, &look.light_type, &mut issues);
     issues
 }

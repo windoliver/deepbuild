@@ -6,12 +6,14 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync 
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf, underTemp } from './paths.js';
+import { onPath } from './setup-steps.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
 const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
+const STEP_MS = 10;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
 type Obj = Record<string, unknown>;
@@ -65,7 +67,7 @@ async function waitForHub(path: string): Promise<boolean> {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline) {
     if (await answers(path)) return true;
-    await new Promise((done) => setTimeout(done, 100));
+    await new Promise((done) => setTimeout(done, STEP_MS));
   }
   return false;
 }
@@ -161,6 +163,10 @@ function launch(file: string): string | undefined {
     return r.status === 0 ? undefined : `${launcher} exited ${r.status}: ${r.stderr}`;
   }
   if (process.platform === 'darwin') {
+    // A job outlives the run that loaded it and holds the one label every home shares, so a home under a temp folder
+    // (a test's, a throwaway run's) is never loaded into the real launchd (#2203). A launchctl that is itself under a
+    // temp folder is a test's stand-in, and loads as before.
+    if (underTemp(homedir()) && !underTemp(onPath('launchctl') ?? '')) return `a temp home gets no login service: ${homedir()} is under a temp folder, and its hub would hold ${LABEL}, the one label every home shares, after that folder is gone; run a dev hub there with deep hub start --root <folder>`;
     const domain = `gui/${process.getuid!()}`;
     const loaded = run('launchctl', ['bootstrap', domain, file]);
     if (loaded.status === 0) return undefined;
@@ -253,7 +259,7 @@ export async function stopHub(options: { root: string }): Promise<number> {
     return 3;
   }
   const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, 100));
+  while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
   return 0;
 }
 
@@ -272,5 +278,5 @@ export async function stopIfRunning(root: string): Promise<void> {
   if (!(await answers(at.socket))) return;
   try { await control(at.socket, at.token, 'hub.stop'); } catch { return; }
   const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline && (await answers(at.socket))) await new Promise((done) => setTimeout(done, 100));
+  while (Date.now() < deadline && (await answers(at.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
 }

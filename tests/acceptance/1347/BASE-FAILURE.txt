@@ -1,0 +1,146 @@
+# Base f6d811c79 (origin/main, 2026-11-13), run once at a 1-minute load near 80:
+#   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1347 --no-file-parallelism --testTimeout=600000
+# exit 1: 4 files, 5 tests, 5 failed, 0 passed, in 4.3 s. Each fails at its own assertion in its own test file, on the
+# first new step: `deep workspace task <id> <title> --criterion <text>` exits 2 with #67's `deep workspace` usage, so no
+# task enters a workspace's record and no run starts. Each world (hub, #67's workspace, played agents, and the
+# unreachable forge or, for AC5, the played forge with its fixture repo) set up on the base first.
+#
+# AC1 run.test.ts:51      exit 2: no task in a workspace's record, so no workspace run to the end; no plant workspace-calls-forge
+# AC2 run.test.ts:76      exit 2 (the same run as AC1): no workspace run, so no order on finished tasks and no next attempt
+# AC3 verdict.test.ts:13  exit 2: no workspace task finishes, so no task verdict on a workspace commit to go stale on a drift
+# AC4 back.test.ts:21     exit 2: no finished tasks to go back from (and `deep workspace revert <id>` with no commit prints usage)
+# AC5 move.test.ts:16     exit 2: no open tasks to file (and `deep workspace move` refuses a folder that holds something)
+#
+# Found on the base with a throwaway probe (deleted; not part of this suite), in the same world: `deep work "work
+# through #1 with Claude Code, one at a time" --repo <workspace folder>` raises #1330's approval there, and once it is
+# answered yes the run's pass fails each time on "No such remote 'origin'" and starts nothing. In 150 s with that run
+# approved, the hub made no connection to the unreachable forge's address. `deep workspace revert <id>` exits 2 with
+# the usage; `deep workspace move <id> <folder that holds something>` exits 1: "already holds something; a workspace
+# takes an empty folder".
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1347
+
+ ❯ run.test.ts (2 tests | 2 failed) 783ms
+   × AC1 #1347.7361f8e4 A fixture workspace with 6 tasks and 7 blocked-by links runs to the end with no forge configured. A planted run that calls a forge fails, naming the call 678ms
+   × AC2 #1347.b6ca1fd3 No task starts before its blockers finish, and a killed session continues as a next attempt, as on a repo 0ms
+ ❯ verdict.test.ts (1 test | 1 failed) 760ms
+   × AC3 #1347.8994a8fa A task's verdict names its commit and its state digests. When a source drifts, the verdict goes stale and only the checks reading it run again 655ms
+ ❯ back.test.ts (1 test | 1 failed) 722ms
+   × AC4 #1347.841043a4 Going back one step restores the last version byte for byte 618ms
+ ❯ move.test.ts (1 test | 1 failed) 1372ms
+   × AC5 #1347.8f5ee69e Moving the workspace to a fixture repo files each open task once, with its links 1258ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  back.test.ts > AC4 #1347.841043a4 Going back one step restores the last version byte for byte
+AssertionError: each task enters the workspace with `deep workspace task`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`deep workspace task Tripplan1b1506fd \"Book the flights\" --criterion \"The flights are booked\"` enters the task and prints {\"task\": <its number>}: exit 2, stdout \"\", stderr \"Usage: deep workspace new <topic> [--folder <path>]\\n       deep workspace move <id> <folder>\\n       deep workspace revert <id> <commit>\\n       deep workspace diff <id>\\n       deep workspace drift <id>\\n\"",
++ ]
+
+ ❯ back.test.ts:21:89
+     19|     { title: 'Book the hotel', criteria: ['The hotel is booked'], bloc…
+     20|   ]);
+     21|   expect(entered.failures, 'each task enters the workspace with `deep …
+       |                                                                                         ^
+     22|   const [one, two] = entered.tasks as [Task, Task];
+     23|   const prepared = await w.prepare({ files: KEPT, plan: { [two.n]: { l…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  move.test.ts > AC5 #1347.8f5ee69e Moving the workspace to a fixture repo files each open task once, with its links
+AssertionError: each task enters the workspace with `deep workspace task`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`deep workspace task Shoplaunch680b4dc9 \"Pick the shop name\" --criterion \"The shop has a name\"` enters the task and prints {\"task\": <its number>}: exit 2, stdout \"\", stderr \"Usage: deep workspace new <topic> [--folder <path>]\\n       deep workspace move <id> <folder>\\n       deep workspace revert <id> <commit>\\n       deep workspace diff <id>\\n       deep workspace drift <id>\\n\"",
++ ]
+
+ ❯ move.test.ts:16:89
+     14|     { title: 'Announce the launch', criteria: ['The launch is announce…
+     15|   ]);
+     16|   expect(entered.failures, 'each task enters the workspace with `deep …
+       |                                                                                         ^
+     17|   const [done, ...open] = entered.tasks as [Task, Task, Task, Task];
+     18|   const prepared = await w.prepare();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  run.test.ts > AC1 #1347.7361f8e4 A fixture workspace with 6 tasks and 7 blocked-by links runs to the end with no forge configured. A planted run that calls a forge fails, naming the call
+AssertionError: each task enters the workspace with `deep workspace task`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`deep workspace task Clientreport9615c3a8 \"Write part 1 of the client report\" --criterion \"Part 1 of the client report is written\"` enters the task and prints {\"task\": <its number>}: exit 2, stdout \"\", stderr \"Usage: deep workspace new <topic> [--folder <path>]\\n       deep workspace move <id> <folder>\\n       deep workspace revert <id> <commit>\\n       deep workspace diff <id>\\n       deep workspace drift <id>\\n\"",
++ ]
+
+ ❯ run.test.ts:51:89
+     49| test(named(1), async () => {
+     50|   const { w, entered, missing, asked } = await (shared ??= scene());
+     51|   expect(entered.failures, 'each task enters the workspace with `deep …
+       |                                                                                         ^
+     52|   // The tasks live in the record, each an item with work.item@1's fie…
+     53|   expect(missing, "each task is a record item with work.item@1's sourc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  run.test.ts > AC2 #1347.b6ca1fd3 No task starts before its blockers finish, and a killed session continues as a next attempt, as on a repo
+AssertionError: each task enters the workspace with `deep workspace task`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`deep workspace task Clientreport9615c3a8 \"Write part 1 of the client report\" --criterion \"Part 1 of the client report is written\"` enters the task and prints {\"task\": <its number>}: exit 2, stdout \"\", stderr \"Usage: deep workspace new <topic> [--folder <path>]\\n       deep workspace move <id> <folder>\\n       deep workspace revert <id> <commit>\\n       deep workspace diff <id>\\n       deep workspace drift <id>\\n\"",
++ ]
+
+ ❯ run.test.ts:76:89
+     74| test(named(2), async () => {
+     75|   const { w, entered, asked, hung } = await (shared ??= scene());
+     76|   expect(entered.failures, 'each task enters the workspace with `deep …
+       |                                                                                         ^
+     77|   expect(asked?.code, `the run's approval: ${asked ? `exit ${asked.cod…
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  verdict.test.ts > AC3 #1347.8994a8fa A task's verdict names its commit and its state digests. When a source drifts, the verdict goes stale and only the checks reading it run again
+AssertionError: each task enters the workspace with `deep workspace task`: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`deep workspace task Webfleete9f45357 \"Keep both web hosts serving\" --criterion \"web-1 serves on port 80 and web-2 serves TLS\"` enters the task and prints {\"task\": <its number>}: exit 2, stdout \"\", stderr \"Usage: deep workspace new <topic> [--folder <path>]\\n       deep workspace move <id> <folder>\\n       deep workspace revert <id> <commit>\\n       deep workspace diff <id>\\n       deep workspace drift <id>\\n\"",
++ ]
+
+ ❯ verdict.test.ts:13:89
+     11|     { title: "Keep web-2's certificate current", criteria: ["web-2's c…
+     12|   ]);
+     13|   expect(entered.failures, 'each task enters the workspace with `deep …
+       |                                                                                         ^
+     14|   const [one, two] = entered.tasks as [Task, Task];
+     15|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  5 failed (5)
+   Start at  14:43:22
+   Duration  4.29s (tests 91%, import 6%, transform 2%)
+

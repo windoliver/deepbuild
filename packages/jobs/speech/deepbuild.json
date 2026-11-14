@@ -1,0 +1,42 @@
+{
+  "id": "deepbuild/speech",
+  "version": "1.0.0",
+  "digest": "d1:a77b1a7ba5f5239f04cee30673d6365f76a40fe04dbaba651e68a149a198b244",
+  "checks": [
+    "speech.audio",
+    "narration.transcript_record"
+  ],
+  "jobs": [
+    "speech",
+    "narration.transcript"
+  ],
+  "job_tools": [
+    {
+      "kind": "speech",
+      "tool": "kokoro@0.9.4",
+      "host": "127.0.0.1:8720"
+    },
+    {
+      "kind": "speech",
+      "tool": "platform-say@1.0.0",
+      "host": "127.0.0.1:8720"
+    },
+    {
+      "kind": "speech",
+      "tool": "azure-speech@1.0.0",
+      "host": "127.0.0.1:8720"
+    },
+    {
+      "kind": "narration.transcript",
+      "tool": "whisper-cpp@1.9.5",
+      "host": "127.0.0.1:8720"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerCheck",
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

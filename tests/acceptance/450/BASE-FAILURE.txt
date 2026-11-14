@@ -1,0 +1,277 @@
+The #450 suite run once at base commit 53c0e72a3 ("Merge pull request #2356 …"; no implementation of #450), on macOS
+arm64 (rustc 1.99.1, Node 24.22.2, vitest 5.0.5), with `PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/450 --testTimeout=600000
+--no-file-parallelism` through scripts/lease, which ran it unleased here (the checkout's path redacted to `<checkout>`; the base's deep-gpu was built
+just before, so each file's own cargo build was a no-op). Every test fails at the missing surface: the `trail` call
+(an unknown call), `view3d`'s `trails` field (absent), the planted name (refused), the ribbon hash (the base hashes the
+heads alone, after the storm's guards hold), and the taste call (INCONCLUSIVE, no TASTE.json). After this run, the thrown ball's document without its trail
+took the same title as the one with it (helpers.ts: throwDoc); no test reached that document at the base.
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/450 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/450
+
+ ❯ ac4-whole-trail.test.ts (5 tests | 5 failed) 10578ms
+   ❯ AC4 #450.0ef4f21f a whole trail of a point on a rolling wheel, baked at 60 Hz (5)
+     × AC4 #450.0ef4f21f (bake) the bake holds a sample every 1/60 s over the 4 s, each within 1e-9 m of r(θ − sin θ, 1 − cos θ) 2414ms
+     × AC4 #450.0ef4f21f (1.37 s) at t = 1.37 s it draws the samples at k ÷ 60 s for k = 0 to 82 and a last segment ending exactly at the point 359ms
+     × AC4 #450.0ef4f21f (seek) frames 30, 82, 137 and 200, each sought in a fresh process, have the played frames' evaluated-data hashes 3689ms
+     × AC4 #450.0ef4f21f (24 and 60 fps) the polylines at 24 and at 60 fps are identical at every shared time 2076ms
+     × AC4 #450.0ef4f21f (planted) a trail that appends a point per drawn frame differs between 24 and 60 fps and fails 31ms
+ ❯ ac3-since-traces.test.ts (3 tests | 3 failed) 13312ms
+   ❯ AC3 #450.b4182e2c an item thrown from three cues with window: since {on: markers.cue} draws its last three traces (3)
+     × AC3 #450.b4182e2c at t = 6 s it draws three traces peaking 1.27, 2.55 and 3.82 m above their starts within 0.05 m, each ending at the next start 4409ms
+     × AC3 #450.b4182e2c a fourth cue at 6 s drops the 30° trace: at 7.5 s the traces start at 2, 4 and 6 s 1159ms
+     × AC3 #450.b4182e2c frames 20, 55, 100 and 144, each sought in a fresh process, draw the played frames' pixels, traces and all 4176ms
+ ❯ ac1-ribbon-columns.test.ts (1 test | 1 failed) 7143ms
+   ❯ AC1 #450.bb75390f a particles item's instance columns, with bursts, bounces, turbulence and ribbon trails on, sought equal played by evaluated-data hash (1)
+     × AC1 #450.bb75390f frames 20, 61, 90 and 140 sought in fresh processes give the played frames' evaluated-data hashes, which cover each live row's ribbon 4511ms
+stdout | taste.test.ts > AC5 #450.1ac5b5e5 the screenshots and recordings, and the one taste call on them > AC5 #450.1ac5b5e5 the run writes the thrown item's three traces, the rolling wheel's trail, and recordings of the traces at 24 and 60 fps, from the canvas's own frames, and the recorded call on exactly those says they look right
+AC5 #450.1ac5b5e5: written from this run's frames:
+  target/acceptance/450/three-traces.png  05875fa4a7206d9ebd99414fddbd2c8aa1101b1dcaa9074eeae80f631a594be1
+  target/acceptance/450/wheel-trail.png  faef0e0dfdd0749efc879c2e75f4125e286006820498d829fc3b9d31e97be46e
+  target/acceptance/450/traces-24fps.apng  ffc1307d398b35e7d39187d63e068007b959e8d5c05ed72f2569f6d8a691968f
+  target/acceptance/450/traces-60fps.apng  17640e6c5927a8e5a44fd8f30f862812546acc17ab99be97858f420a22cf86c8
+
+ ❯ taste.test.ts (1 test | 1 failed) 6884ms
+   ❯ AC5 #450.1ac5b5e5 the screenshots and recordings, and the one taste call on them (1)
+     × AC5 #450.1ac5b5e5 the run writes the thrown item's three traces, the rolling wheel's trail, and recordings of the traces at 24 and 60 fps, from the canvas's own frames, and the recorded call on exactly those says they look right 5670ms
+ ❯ ac2-trail-seek.test.ts (1 test | 1 failed) 5259ms
+   ❯ AC2 #450.28ba84de a trail sought to any time equals the played one by evaluated-data hash (1)
+     × AC2 #450.28ba84de the rim's span trail at frames 17, 41, 77 and 113, each sought in a fresh process, has the played frame's hash 3844ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-ribbon-columns.test.ts > AC1 #450.bb75390f a particles item's instance columns, with bursts, bounces, turbulence and ribbon trails on, sought equal played by evaluated-data hash > AC1 #450.bb75390f frames 20, 61, 90 and 140 sought in fresh processes give the played frames' evaluated-data hashes, which cover each live row's ribbon
+AssertionError: frame 90's hash is the SHA-256 of each live row's ribbon of CPU f64 positions at 1.5 s and 1 to 8 steps of 0.025 s before (README: view3d's particles): expected '9f2db33d8046046f11d4bcabb4c1163ae8852…' to be 'b2f1a393127115085c6fe47ab1f6d0bbb93cd…' // Object.is equality
+
+Expected: "b2f1a393127115085c6fe47ab1f6d0bbb93cddeec9b80e2bf5e3c5342a0de1a9"
+Received: "9f2db33d8046046f11d4bcabb4c1163ae8852187c4730b4c2bff12bd3557d746"
+
+ ❯ ac1-ribbon-columns.test.ts:83:196
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  ac2-trail-seek.test.ts > AC2 #450.28ba84de a trail sought to any time equals the played one by evaluated-data hash > AC2 #450.28ba84de the rim's span trail at frames 17, 41, 77 and 113, each sought in a fresh process, has the played frame's hash
+AssertionError: the wheel, played: frame 0: trails (README: view3d's trails field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:159:15
+ ❯ trailFrames helpers.ts:155:50
+ ❯ ac2-trail-seek.test.ts:46:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  ac3-since-traces.test.ts > AC3 #450.b4182e2c an item thrown from three cues with window: since {on: markers.cue} draws its last three traces > AC3 #450.b4182e2c at t = 6 s it draws three traces peaking 1.27, 2.55 and 3.82 m above their starts within 0.05 m, each ending at the next start
+AssertionError: the three throws, frame 144: frame 144: trails (README: view3d's trails field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:159:15
+ ❯ trailFrames helpers.ts:155:50
+ ❯ sought ac3-since-traces.test.ts:33:13
+ ❯ ac3-since-traces.test.ts:68:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  ac3-since-traces.test.ts > AC3 #450.b4182e2c an item thrown from three cues with window: since {on: markers.cue} draws its last three traces > AC3 #450.b4182e2c a fourth cue at 6 s drops the 30° trace: at 7.5 s the traces start at 2, 4 and 6 s
+AssertionError: the four throws, frame 180: frame 180: trails (README: view3d's trails field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:159:15
+ ❯ trailFrames helpers.ts:155:50
+ ❯ sought ac3-since-traces.test.ts:33:13
+ ❯ ac3-since-traces.test.ts:76:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  ac3-since-traces.test.ts > AC3 #450.b4182e2c an item thrown from three cues with window: since {on: markers.cue} draws its last three traces > AC3 #450.b4182e2c frames 20, 55, 100 and 144, each sought in a fresh process, draw the played frames' pixels, traces and all
+AssertionError: the three throws, played: frame 0: trails (README: view3d's trails field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:159:15
+ ❯ trailFrames helpers.ts:155:50
+ ❯ ac3-since-traces.test.ts:90:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  ac4-whole-trail.test.ts > AC4 #450.0ef4f21f a whole trail of a point on a rolling wheel, baked at 60 Hz > AC4 #450.0ef4f21f (bake) the bake holds a sample every 1/60 s over the 4 s, each within 1e-9 m of r(θ − sin θ, 1 − cos θ)
+AssertionError: the whole trail: the trail call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ bakesOf helpers.ts:213:139
+    211| /** A `trail` reply whose check passed: outcome checked, no error issu…
+    212| export function bakesOf(reply: JsonObject, what: string): Map<string, …
+    213|   expect(reply['code'], `${what}: the trail call answers (README: The …
+       |                                                                                                                                           ^
+    214|   expect(reply['outcome'], `${what}: the check passes, got ${show(repl…
+    215|   const errors = arr(reply['issues'] ?? [], `${what}: issues`).filter(…
+ ❯ ac4-whole-trail.test.ts:59:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  ac4-whole-trail.test.ts > AC4 #450.0ef4f21f a whole trail of a point on a rolling wheel, baked at 60 Hz > AC4 #450.0ef4f21f (1.37 s) at t = 1.37 s it draws the samples at k ÷ 60 s for k = 0 to 82 and a last segment ending exactly at the point
+AssertionError: the whole trail: the trail call answers (README: The surface under test) rather than refusing the call: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ bakesOf helpers.ts:213:139
+    211| /** A `trail` reply whose check passed: outcome checked, no error issu…
+    212| export function bakesOf(reply: JsonObject, what: string): Map<string, …
+    213|   expect(reply['code'], `${what}: the trail call answers (README: The …
+       |                                                                                                                                           ^
+    214|   expect(reply['outcome'], `${what}: the check passes, got ${show(repl…
+    215|   const errors = arr(reply['issues'] ?? [], `${what}: issues`).filter(…
+ ❯ ac4-whole-trail.test.ts:78:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  ac4-whole-trail.test.ts > AC4 #450.0ef4f21f a whole trail of a point on a rolling wheel, baked at 60 Hz > AC4 #450.0ef4f21f (seek) frames 30, 82, 137 and 200, each sought in a fresh process, have the played frames' evaluated-data hashes
+AssertionError: the wheel at 60 fps: frame 0: trails (README: view3d's trails field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:159:15
+ ❯ trailFrames helpers.ts:155:50
+ ❯ played ac4-whole-trail.test.ts:35:25
+ ❯ ac4-whole-trail.test.ts:101:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  ac4-whole-trail.test.ts > AC4 #450.0ef4f21f a whole trail of a point on a rolling wheel, baked at 60 Hz > AC4 #450.0ef4f21f (24 and 60 fps) the polylines at 24 and at 60 fps are identical at every shared time
+AssertionError: the wheel at 24 fps: frame 0: trails (README: view3d's trails field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ helpers.ts:159:15
+ ❯ trailFrames helpers.ts:155:50
+ ❯ played ac4-whole-trail.test.ts:35:25
+ ❯ ac4-whole-trail.test.ts:122:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  ac4-whole-trail.test.ts > AC4 #450.0ef4f21f a whole trail of a point on a rolling wheel, baked at 60 Hz > AC4 #450.0ef4f21f (planted) a trail that appends a point per drawn frame differs between 24 and 60 fps and fails
+AssertionError: deep-gpu run --planted trail_appends_per_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:31:10
+ ❯ played ac4-whole-trail.test.ts:34:21
+ ❯ ac4-whole-trail.test.ts:128:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  taste.test.ts > AC5 #450.1ac5b5e5 the screenshots and recordings, and the one taste call on them > AC5 #450.1ac5b5e5 the run writes the thrown item's three traces, the rolling wheel's trail, and recordings of the traces at 24 and 60 fps, from the canvas's own frames, and the recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/450/three-traces.png  05875fa4a7206d9ebd99414fddbd2c8aa1101b1dcaa9074eeae80f631a594be1
+  target/acceptance/450/wheel-trail.png  faef0e0dfdd0749efc879c2e75f4125e286006820498d829fc3b9d31e97be46e
+  target/acceptance/450/traces-24fps.apng  ffc1307d398b35e7d39187d63e068007b959e8d5c05ed72f2569f6d8a691968f
+  target/acceptance/450/traces-60fps.apng  17640e6c5927a8e5a44fd8f30f862812546acc17ab99be97858f420a22cf86c8
+and record the answer in tests/acceptance/450/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive ../449/helpers.ts:90:17
+     88| /** A test that can't be judged here fails with this, never passes. */
+     89| export function inconclusive(reason: string): never {
+     90|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     91| }
+     92| /** A host or tool this machine lacks: the test fails with this messag…
+ ❯ taste.test.ts:60:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  11 failed (11)
+   Start at  22:01:46
+   Duration  44.47s (tests 99%)
+

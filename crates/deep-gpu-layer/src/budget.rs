@@ -438,7 +438,6 @@ pub(crate) fn measure(
                 0,
             )
             .map_err(|r| refused(r.code, r.path))?;
-            timer.resolve(&mut encoder);
             let cpu = began.elapsed().as_secs_f64() * 1e3;
             device.queue.submit([encoder.finish()]);
             let lose = stub
@@ -449,6 +448,7 @@ pub(crate) fn measure(
                 false
             } else {
                 memory::drain(&device);
+                timer.resolve_after(&device);
                 timer.read(&device)
             };
             let lost = device.is_lost();

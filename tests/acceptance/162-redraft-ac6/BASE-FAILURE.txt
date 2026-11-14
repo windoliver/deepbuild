@@ -1,0 +1,65 @@
+Blind redraft of #162 AC6 (#162.bc95e877), run at the base commit 53c0e72a3c36cfd5b2d8e34006770c67d0be4be6 with only
+this folder added, on macOS arm64, Node v24.22.2, rustc 1.99.1 (the pinned toolchain), November 13, 2026.
+
+Both documents are presented at the base (`deep show` answers "presented"), and the twist fixture's own checks pass
+(its output path changes at frames 13 to 36 and nowhere else, each change well past 0.01 u). Both tests then fail
+for the reason the criterion expects at a base with no Lottie export: the export call is refused with
+`unknown_target`, since export.target@1 has no `lottie` entry, so no file is written.
+
+The checkout's path is written as <checkout> below; nothing else is changed.
+
+$ export PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/162-redraft-ac6 repeater-twist.test.ts --testTimeout=600000
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/162-redraft-ac6
+
+ ❯ repeater-twist.test.ts (2 tests | 2 failed) 2980ms
+   ❯ AC6 #162.bc95e877 a repeater's copies and a twist's output path in the Lottie export (2)
+     × AC6 #162.bc95e877 a repeater with 3.5 copies exports as four groups, the last at half its opacity 1691ms
+     × AC6 #162.bc95e877 a document with a twist exports its output path keyed at each export frame where it changes 113ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  repeater-twist.test.ts > AC6 #162.bc95e877 a repeater's copies and a twist's output path in the Lottie export > AC6 #162.bc95e877 a repeater with 3.5 copies exports as four groups, the last at half its opacity
+AssertionError: the repeater film (Tiles)'s Lottie export is exported: {"code":"unknown_target","target":"lottie","codec":"lottie","outcome":"refused","core":"core@0.0.0","set_digest":"9ee47c18c9c5ddb86e16e4382ebb19c99ee171bc9a99541907ed977c675db91b"}: expected 'refused' to be 'exported' // Object.is equality
+
+Expected: "exported"
+Received: "refused"
+
+ ❯ exportedFile helpers.ts:132:67
+    130| /** A delivered export: `{outcome: "exported", receipt}` and a JSON fi…
+    131| export function exportedFile(reply: JsonObject, out: string, what: str…
+    132|   expect(reply['outcome'], `${what} is exported: ${show(reply)}`).toBe…
+       |                                                                   ^
+    133|   obj(reply['receipt'], `${what}: receipt`);
+    134|   expect(existsSync(out), `${what}: the export wrote ${out}`).toBe(tru…
+ ❯ exported repeater-twist.test.ts:39:19
+ ❯ repeater-twist.test.ts:45:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  repeater-twist.test.ts > AC6 #162.bc95e877 a repeater's copies and a twist's output path in the Lottie export > AC6 #162.bc95e877 a document with a twist exports its output path keyed at each export frame where it changes
+AssertionError: the twist film (Plate)'s Lottie export is exported: {"code":"unknown_target","target":"lottie","codec":"lottie","outcome":"refused","core":"core@0.0.0","set_digest":"9ee47c18c9c5ddb86e16e4382ebb19c99ee171bc9a99541907ed977c675db91b"}: expected 'refused' to be 'exported' // Object.is equality
+
+Expected: "exported"
+Received: "refused"
+
+ ❯ exportedFile helpers.ts:132:67
+    130| /** A delivered export: `{outcome: "exported", receipt}` and a JSON fi…
+    131| export function exportedFile(reply: JsonObject, out: string, what: str…
+    132|   expect(reply['outcome'], `${what} is exported: ${show(reply)}`).toBe…
+       |                                                                   ^
+    133|   obj(reply['receipt'], `${what}: receipt`);
+    134|   expect(existsSync(out), `${what}: the export wrote ${out}`).toBe(tru…
+ ❯ exported repeater-twist.test.ts:39:19
+ ❯ repeater-twist.test.ts:53:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  00:36:25
+   Duration  3.11s (tests 98%, transform 1%)
+
+exit 1

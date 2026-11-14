@@ -1,0 +1,13 @@
+#540 Oracle lane at the base, 9b77cd2cd (Merge pull request #2438), on 2026-11-13, an arm64 Mac (Mac17,10, 18 cores,
+one-minute load between 130 and 330 while this was written).
+
+Neither file was run at the base: both drive the point control, which the base doesn't have. Its `control@1` holds nine
+kinds (crates/deep-canvas-input/src/session.rs, `KINDS`), and `control_of` refuses `kind: "point"` as `out_of_range` at
+`controls/aim/kind`, so `deep_show` refuses every document here and each file would stop at `presented(...)`, before its
+first assertion on a ray or a hit. The upstream cases have no answer at the base to compare.
+
+Checked instead: `npx tsc --noEmit -p tests/acceptance/540-oracle` exits 0, and the lane's expected numbers were computed
+with ../540/geometry.ts in a scratch script: the orthographic rays at (200, 100), (0, 0) and (400, 200) start at
+(0, 0, −0.5), (−5, 2.5, −0.5) and (5, −2.5, −0.5) along (0, 0, −1); the perspective rays with fov 2 atan(2√3) run along
+(0, 0, −1), (−0.866025, 0.433013, −0.25) and (0.866025, −0.433013, −0.25), upstream's normalize(∓√3, ±√3 ÷ 2, −0.5);
+the top-left ray meets y = 1 at (−2, 1, −0.577350) and y = −1 only behind the eye, the bottom-right ray the reverse.

@@ -1,0 +1,14 @@
+✖ named helper imports do not build unused binary exports (2535.696792ms)
+✖ named helper imports build only their used binary (1940.189208ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4569.173167
+✖ failing tests:
+✖ named helper imports do not build unused binary exports (2535.696792ms)
+  AssertionError [ERR_ASSERTION]: exit 1
+✖ named helper imports build only their used binary (1940.189208ms)
+  AssertionError [ERR_ASSERTION]: exit 1

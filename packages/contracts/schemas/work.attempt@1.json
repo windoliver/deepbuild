@@ -1,0 +1,206 @@
+{
+  "title": "work.attempt@1",
+  "description": "An attempt on a work run's issue (#1332; design: Attempt and plan) started or ended: its number, its session's start, the agent and model, its worktree and branch, why it went to that agent, and how it ended, from the closed set. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "work.attempt"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "ask": {
+          "type": "string",
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The run's approval: the start.approve ask it was raised as."
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "started",
+            "ended"
+          ],
+          "description": "started, or ended with its cause.",
+          "x-closure": {
+            "closed": "an attempt's two steps",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The issue."
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The attempt's number on its issue, from 1."
+        },
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The session's start (#1330)."
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The agent."
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The model, where the record names it."
+        },
+        "worktree": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "started: the worktree it works in."
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "started: its branch."
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "started: why it went first and to this agent."
+        },
+        "cause": {
+          "type": "string",
+          "enum": [
+            "none",
+            "PASS",
+            "landed with the budget window open",
+            "gave up its slot",
+            "replaced by you",
+            "sent back past its rounds",
+            "stalled",
+            "context full",
+            "plan window or spend cap",
+            "crashed or interrupted"
+          ],
+          "description": "ended: how it ended, from the closed set Attempt and plan names, or landed with only the budget window's requirement open, or gave up its slot when its issue waited on a person (neither is replaced); none when it started.",
+          "x-closure": {
+            "closed": "the causes Attempt and plan names, the two a work run adds, or none",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "ended: its verdict line."
+        }
+      },
+      "required": [
+        "ask",
+        "step",
+        "issue",
+        "attempt",
+        "run",
+        "agent",
+        "model",
+        "worktree",
+        "branch",
+        "reason",
+        "cause",
+        "verdict"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
