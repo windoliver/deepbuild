@@ -1,0 +1,25 @@
+✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (6626.499291ms)
+ℹ BAY claim {"index":1,"role":"base","use":"before","bay":"<fixture-home>/deepbuild-bays/1/base","base":"d936fee605422d95fbe792c5203cca72038f1bc2","tree":"707863f99e30e233f7a8c027ceb4f4488adc54dd","bundle":null,"untracked":null,"overlay":{"files":1,"hash":"3f692a5c2dc7db819066fab05321c55195d486ef260c2505a62841cf8fb59b0c"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":72,"deleted":0,"crates":["deep-hook"]}
+BAY claim {"index":1,"role":"change","use":"before","bay":"<fixture-home>/deepbuild-bays/1/change","tree":"7189ab4a93ccf2ee6d712a0bcbf1332bc345bec7","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":73,"deleted":0,"crates":["deep-hook"]}
+PASS before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: failed on the merge base at its assertion
+BAY release {"index":1,"role":"base","bay":"<fixture-home>/deepbuild-bays/1/base","status":null,"targetBytes":1060857,"touched":0}
+BAY release {"index":1,"role":"change","bay":"<fixture-home>/deepbuild-bays/1/change","status":null,"targetBytes":1060907,"touched":0}
+proof: wall time 5.0 s
+
+✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (7382.345292ms)
+✔ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (7795.697417ms)
+ℹ FAIL affected: 376 new, 0 already failing on main, 4 inconclusive or blocked, 0 listed skips, 3 passed, in 3 s at load 105; logs in <scratch>/tmp/deep-affected-qbfRAX
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (218.52825ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (222.326291ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (222.364542ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+✔ runLanes builds no Rust for a JS-only consumer (891.763ms)
+✔ runLanes builds only the binary selected consumers and helpers read (1715.372208ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25244.8885
