@@ -150,6 +150,18 @@ impl Refusal {
 /// The status rule a Lottie can't keep: a document with a status binding, an entry in
 /// `status_bindings` or an item's own `status` field, is refused.
 pub fn status_refusal(doc: &Map<String, Value>) -> Option<Refusal> {
+    status_binding(doc, "lottie.status_binding", "a Lottie", "Lottie")
+}
+
+/// A document's first status binding, refused under `code` by a target that can't keep the
+/// status rule (#162's Lottie, #169's playable page): `who` can't keep it, so it isn't
+/// exported `to` the target.
+pub fn status_binding(
+    doc: &Map<String, Value>,
+    code: &'static str,
+    who: &str,
+    to: &str,
+) -> Option<Refusal> {
     if let Some((id, b)) = doc
         .get("status_bindings")
         .and_then(Value::as_object)
@@ -161,9 +173,9 @@ pub fn status_refusal(doc: &Map<String, Value>) -> Option<Refusal> {
             .and_then(|t| t.split('/').next())
             .unwrap_or(target);
         return Some(Refusal {
-            code: "lottie.status_binding",
+            code,
             path: format!("status_bindings/{id}"),
-            what: format!("status binding {id} binds item {item}: a Lottie can't keep the status rule, so a document with a status binding isn't exported to Lottie"),
+            what: format!("status binding {id} binds item {item}: {who} can't keep the status rule, so a document with a status binding isn't exported to {to}"),
         });
     }
     let items = doc.get("items").and_then(Value::as_object)?;
@@ -171,9 +183,9 @@ pub fn status_refusal(doc: &Map<String, Value>) -> Option<Refusal> {
         .iter()
         .find(|(_, i)| i.pointer("/params/status").is_some_and(|s| !s.is_null()))?;
     Some(Refusal {
-        code: "lottie.status_binding",
+        code,
         path: format!("items/{id}/params/status"),
-        what: format!("item {id}'s status field binds a status: a Lottie can't keep the status rule, so a document with a status binding isn't exported to Lottie"),
+        what: format!("item {id}'s status field binds a status: {who} can't keep the status rule, so a document with a status binding isn't exported to {to}"),
     })
 }
 

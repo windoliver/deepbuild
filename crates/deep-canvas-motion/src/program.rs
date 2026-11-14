@@ -2203,7 +2203,14 @@ impl Program {
             .quantize
             .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
         let p = self.path.at(t);
-        let timeline = crate::eval::valid_until(&self.motion, p, shown, validity, counts);
+        let timeline = crate::eval::valid_until(
+            &self.motion,
+            &self.channel_follows,
+            p,
+            shown,
+            validity,
+            counts,
+        );
         // Under the look's steps a change shows only on the next step.
         let timeline = match self.quantize {
             Some(rate) => timeline.map(|n| n.max(crate::eval::next_grid(doc_t, rate) + p - doc_t)),

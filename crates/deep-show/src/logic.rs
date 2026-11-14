@@ -13,6 +13,9 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
+/// #548's planted deep_query: its region map lays the reads out by name, not in declaration order.
+pub(crate) const MAP_READS_BY_NAME: &str = "region_map_reads_by_name";
+
 /// A refusal of the logic module as the revision's issue, on the item it names.
 fn refused(r: Value) -> Issue {
     let item = r
@@ -237,22 +240,9 @@ impl Hub<'_> {
     /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
     /// each program read from the evidence store; none when it has no logic item.
     pub(crate) fn logic_piece(&self, form: &Value) -> Result<Option<Piece>, Box<Issue>> {
-        let items: Map<String, Value> = form
-            .get("items")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-            .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-            .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
-            .collect();
-        if items.is_empty() {
+        let Some(piece) = piece_json(form) else {
             return Ok(None);
-        }
-        let piece = json!({
-            "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
-            "controls": form.get("controls").cloned().unwrap_or(json!({})),
-            "items": items,
-        });
+        };
         let root = &self.scenario.evidence;
         let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| {
             crate::evidence::read(root, sha)
@@ -260,6 +250,86 @@ impl Hub<'_> {
         .map_err(|r| refused(r.0))?;
         Ok(Some(piece))
     }
+
+    /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
+    /// (and to the last step asked): its region map with its layout digest, each asked step's
+    /// arrays as that step left them and the fuel it used, and its trap, null when none.
+    pub(crate) fn logic_read(&self, form: &Value, items: &[String], steps: &[i64], track: &[Value]) -> Value {
+        let piece = match self.logic_piece(form) {
+            Ok(Some(p)) => Rc::new(p),
+            Ok(None) => return json!({"code": "no_logic"}),
+            Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
+        };
+        let Some(entries) = track.iter().filter(|e| e.get("present").is_none()).map(Entry::parse).collect::<Option<Vec<_>>>() else {
+            return json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"});
+        };
+        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span")).unwrap_or(0).max(0);
+        let count = piece
+            .items
+            .iter()
+            .map(|i| (span + i.step - 1) / i.step.max(1))
+            .chain(steps.iter().map(|k| k + 1))
+            .max()
+            .unwrap_or(0);
+        let mut rec = Record::default();
+        let mut world = match World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) {
+            Ok(w) => w,
+            Err(e) => return e,
+        };
+        world.run(count, &mut rec, &mut |_, _| {});
+        // The planted map lays the reads out by name (#548's region_map_reads_by_name).
+        let planted = self.scenario.module_planted.as_deref() == Some(MAP_READS_BY_NAME);
+        let by_name = planted
+            .then(|| {
+                let p = deep_logic::Planted { map_reads_by_name: true, ..Default::default() };
+                deep_logic::piece::region_maps(&piece_json(form)?, &p).ok()
+            })
+            .flatten();
+        let mut out = Map::new();
+        for id in items {
+            let Some(i) = piece.items.iter().position(|x| &x.id == id) else {
+                return json!({"code": "ref_unresolved", "item": id});
+            };
+            let region_map = match &by_name {
+                Some(maps) => maps.iter().find(|(m, _, _)| m == id).map_or(Value::Null, |(_, l, _)| l.to_json()),
+                None => piece.items[i].layout.to_json(),
+            };
+            let prefix = format!("{id}.");
+            let fuel = rec.fuel.get(&i);
+            let read: Vec<Value> = steps
+                .iter()
+                .map(|k| {
+                    let arrays: Map<String, Value> = rec.arrays_at(&piece, *k).into_iter().filter(|(n, _)| n.starts_with(&prefix)).collect();
+                    let f = fuel.and_then(|f| f.iter().find(|(s, _)| s == k)).map(|(_, f)| *f);
+                    json!({"step": k, "arrays": arrays, "fuel": f})
+                })
+                .collect();
+            let trap = rec.traps.iter().find(|t| t["item"] == json!(id)).cloned().unwrap_or(Value::Null);
+            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap}));
+        }
+        json!({"logic": out})
+    }
+}
+
+/// `form`'s logic items as one piece, as the logic module checks one: its seed, controls and
+/// items; none when it has no logic item.
+pub(crate) fn piece_json(form: &Value) -> Option<Value> {
+    let items: Map<String, Value> = form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
+        .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
+        .collect();
+    if items.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
+        "controls": form.get("controls").cloned().unwrap_or(json!({})),
+        "items": items,
+    }))
 }
 
 /// #538: each array a text's lookup or a group's flip names, resolved through the core's view:

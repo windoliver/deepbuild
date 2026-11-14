@@ -12,6 +12,7 @@ use serde_json::{json, Map, Value};
 use super::check::{check, migrate_item};
 use super::order::key_between;
 use super::packs::{self, Packs, Resolved};
+use super::patch_schema::{self, ENVELOPE};
 use super::requires::write_required_kinds;
 use super::shape::DocShape;
 use super::{kind_text, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS};
@@ -20,9 +21,6 @@ use crate::canon::{revision_hash, sha256_hex};
 use crate::grammar::{HandleId, Id, Path, Section};
 use crate::kinds::{lookup, registry, Lookup};
 
-/// A patch's fields (canvas primitives: Patch). `base` is carried, not checked against a
-/// revision here.
-const PATCH_KEYS: &[&str] = &["patch", "doc", "base", "reason", "ops"];
 /// A patch's optional field the core reads at admission: `coalesce_key`, a string (Admission and
 /// latch: a coalesce key keeps only the latest value).
 const COALESCE_KEY: &str = "coalesce_key";
@@ -533,27 +531,44 @@ fn patch_ops<'a>(at: &str, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
         ))
     };
     let Some(envelope) = patch.as_object() else {
-        return Err(Box::new(Issue::envelope(
-            "out_of_range",
-            at.to_string(),
-            patch.clone(),
-            "a patch is an object",
-        )));
+        // A bare op list is the usual slip: the fix names the envelope the ops go in (#1972).
+        let fields: Vec<String> = ENVELOPE
+            .iter()
+            .filter(|f| !f.optional)
+            .map(|f| format!("\"{}\": <{}>", f.name, f.takes))
+            .collect();
+        let optional: Vec<&str> = ENVELOPE
+            .iter()
+            .filter(|f| f.optional)
+            .map(|f| f.name)
+            .collect();
+        return Err(Box::new(Issue {
+            fix: format!(
+                "Send the ops inside a patch's envelope, {{{}}}, adding {} as needed.",
+                fields.join(", "),
+                optional.join(" or ")
+            ),
+            ..Issue::envelope(
+                "out_of_range",
+                at.to_string(),
+                patch.clone(),
+                "a patch is an object, not a bare list of ops",
+            )
+        }));
     };
-    let known = |k: &String| PATCH_KEYS.contains(&k.as_str()) || k == COALESCE_KEY || k == DRY_RUN;
-    if let Some(key) = envelope.keys().find(|k| !known(k)) {
-        return Err(refuse(
-            "unknown_field",
-            key,
-            "not a field of a patch (patch, doc, base, reason, ops, coalesce_key, dry_run)",
-        ));
+    if let Some(key) = envelope
+        .keys()
+        .find(|k| !ENVELOPE.iter().any(|f| f.name == k.as_str()))
+    {
+        let what = format!("not a field of a patch ({})", patch_schema::names(ENVELOPE));
+        return Err(refuse("unknown_field", key, &what));
     }
     if envelope.get(DRY_RUN).is_some_and(|d| !d.is_boolean()) {
         return Err(refuse("out_of_range", DRY_RUN, "not a bool"));
     }
-    for field in PATCH_KEYS {
-        if !envelope.contains_key(*field) {
-            return Err(refuse("out_of_range", field, "required, and absent"));
+    for field in ENVELOPE.iter().filter(|f| !f.optional) {
+        if !envelope.contains_key(field.name) {
+            return Err(refuse("out_of_range", field.name, "required, and absent"));
         }
     }
     match envelope["patch"].as_str().map(HandleId::parse) {
@@ -611,31 +626,9 @@ pub fn writer_layer(doc: &Value, writer: &str) -> Result<String, Refused> {
     }
 }
 
-/// The fields each op has, `op` included; the optional ones are listed in [`OPTIONAL`].
-fn op_fields(name: &str) -> Option<&'static [&'static str]> {
-    match name {
-        "create" => Some(&["op", "item"]),
-        "set" => Some(&["op", "id", "path", "value"]),
-        "unset" => Some(&["op", "id", "path"]),
-        "delete" => Some(&["op", "id", "cascade"]),
-        "move" => Some(&["op", "id", "parent", "keep"]),
-        "reorder" => Some(&["op", "id", "after", "before"]),
-        "rows" => Some(&["op", "id", "append", "set", "remove"]),
-        "break_out" => Some(&["op", "instance", "item"]),
-        _ => None,
-    }
-}
-
-/// The op fields that may be left out: a delete's `cascade`, a move's `keep`, a reorder's `after`
-/// and `before`, of which it names exactly one, and a rows op's `append`, `set` and `remove`,
-/// likewise one.
-const OPTIONAL: &[&str] = &[
-    "cascade", "keep", "after", "before", "append", "set", "remove",
-];
-
-/// Refuses an op whose fields are not exactly its op's: an unknown field is `unknown_field`,
-/// an absent one `out_of_range`; `cascade` must be a bool, `keep` world or local, and a reorder
-/// names one neighbor.
+/// Refuses an op whose fields are not exactly its op's in the patch schema: an unknown field is
+/// `unknown_field`, an absent one `out_of_range`; `cascade` must be a bool, `keep` world or
+/// local, a reorder names one neighbor and a rows op one of append, set and remove.
 fn check_op_fields(j: usize, op: &Map<String, Value>, name: &str) -> Result<(), Refused> {
     let bad = |field: &str, what: &str| -> Refused {
         Box::new(Issue::envelope(
@@ -645,25 +638,30 @@ fn check_op_fields(j: usize, op: &Map<String, Value>, name: &str) -> Result<(), 
             what,
         ))
     };
-    let Some(fields) = op_fields(name) else {
+    let Some(schema) = patch_schema::op(name) else {
+        let ops: Vec<&str> = patch_schema::OPS.iter().map(|o| o.name).collect();
         return Err(Box::new(Issue::envelope(
             "unknown_field",
             format!("ops/{j}/op"),
             json!(name),
-            "not an op of this slice (create, set, unset, delete, move, reorder, rows, break_out)",
+            &format!("not an op of this slice ({})", ops.join(", ")),
         )));
     };
-    if let Some(key) = op.keys().find(|k| !fields.contains(&k.as_str())) {
+    let fields = schema.fields;
+    if let Some(key) = op
+        .keys()
+        .find(|k| !fields.iter().any(|f| f.name == k.as_str()))
+    {
         return Err(Box::new(Issue::envelope(
             "unknown_field",
             format!("ops/{j}/{key}"),
             op[key].clone(),
-            &format!("not a field of `{name}` ({})", fields.join(", ")),
+            &format!("not a field of `{name}` ({})", patch_schema::names(fields)),
         )));
     }
     for field in fields {
-        if !OPTIONAL.contains(field) && !op.contains_key(*field) {
-            return Err(bad(field, "required, and absent"));
+        if !field.optional && !op.contains_key(field.name) {
+            return Err(bad(field.name, "required, and absent"));
         }
     }
     if op.get("cascade").is_some_and(|c| !c.is_boolean()) {
@@ -800,7 +798,15 @@ fn op_path(id: &str, op: &Value) -> Result<Vec<String>, Refused> {
         } else {
             "bad_path"
         };
-        Box::new(Issue::error(code, id, at.clone(), json!(text), &r.what))
+        let mut issue = Issue::error(code, id, at.clone(), json!(text), &r.what);
+        // A path written from below the item, such as `at/pos`, names its item's full path (#1972).
+        let first = text.split('/').next().unwrap_or_default();
+        let full = format!("{at}/{text}");
+        if Section::parse(first).is_none() && Path::parse(&full).is_ok() {
+            issue.fix =
+                format!("Write the path from its section and the item's ID, items/<id>/{text}: here {full}.");
+        }
+        Box::new(issue)
     })?;
     if path.id().as_str() != id {
         return Err(Box::new(Issue::error(

@@ -280,6 +280,9 @@ export interface HubControlPort {
   attach(session: string, args: Obj): Promise<Obj>;
   retain(): Promise<void>;
   forgeRepos(): Promise<string[]>;
+  /** Your answer to a brief's card (#1342): true when it was one. */
+  briefAnswered(delivery: Delivery): boolean;
+  briefsDue(): Promise<void>;
 }
 
 /** The session-flag capabilities consumed by another hub domain (#2019). */

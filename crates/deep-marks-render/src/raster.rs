@@ -28,7 +28,7 @@ use deep_marks_vello::{
     Scopes,
 };
 use serde_json::{json, Map, Value};
-use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
+use vello_cpu::kurbo::{Affine, Cap, RoundedRect, Shape};
 use vello_cpu::peniko::{Fill as FillRule, FontData, ImageAlphaType};
 use vello_cpu::{
     Image, ImageSource, Level, Pixmap, RasterizerSettings, RenderContext, RenderMode,
@@ -518,9 +518,40 @@ impl<C: Glyphs> Painter<'_, C> {
                 y: 0.0,
             };
             let size = (g.size, g.skew);
-            self.ctx
-                .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
-            if let Some((name, width)) = &p.paint.stroke {
+            match p.paint.write {
+                None => self
+                    .ctx
+                    .glyph(&mut self.resources, &g.font, size, &g.coords, glyph),
+                // #1969: a glyph a write is drawing: its fill as far as it has come in, under its
+                // outline drawn from its start, in its own stroke, else a hairline in its fill's
+                // paint that fades as the fill comes in (Text `text@1`: write mode). The outline's
+                // ends are square, as a pen set down on it, so its first stretch draws whole.
+                Some([drawn, filled]) => {
+                    if filled > 0.0 {
+                        self.ctx.push_layer(None, None, Some(filled as f32), None);
+                        self.ctx
+                            .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
+                        self.ctx.pop_layer();
+                    }
+                    let own = p.paint.stroke.as_ref().filter(|(_, w)| *w > 0.0);
+                    let (rgb, width, alpha) = match own.and_then(|(n, w)| Some((role_rgb(n)?, *w)))
+                    {
+                        Some((rgb, w)) => (adjust.rgb(rgb), w, 1.0),
+                        None => (color, 1.0, 1.0 - filled),
+                    };
+                    let outline = deep_canvas_marks::animator::drawn_outline(g, drawn);
+                    if alpha > 0.0 && !outline.is_empty() {
+                        self.ctx.push_layer(None, None, Some(alpha as f32), None);
+                        self.ctx.set_paint(solid(rgb));
+                        self.ctx.set_stroke(stroke(width).with_caps(Cap::Square));
+                        self.ctx.stroke_path(&bez(&outline, [0.0, 0.0], self.zoom));
+                        self.ctx.pop_layer();
+                    }
+                }
+            }
+            if let Some((name, width)) =
+                &p.paint.stroke.as_ref().filter(|_| p.paint.write.is_none())
+            {
                 if let (Some(rgb), true) = (role_rgb(name), *width > 0.0) {
                     self.ctx.set_paint(solid(adjust.rgb(rgb)));
                     self.ctx.glyph_stroke(
@@ -549,6 +580,9 @@ impl<C: Glyphs> Painter<'_, C> {
             row["transform"] = json!(p.transform);
             row["clip"] = json!(p.clip);
             row["opacity"] = json!(p.opacity);
+            if let Some([drawn, filled]) = p.paint.write {
+                row["write"] = json!({"drawn": drawn, "filled": filled});
+            }
             out.push(row);
         }
         out
