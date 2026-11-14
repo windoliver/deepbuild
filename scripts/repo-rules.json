@@ -1,4 +1,26 @@
 {
+  "advisories": {
+    "ignore": [
+      {
+        "id": "RUSTSEC-2026-0194",
+        "package": "quick-xml",
+        "why": "citationberg 0.7.0 requires ^0.38.1, holding quick-xml at 0.38.4 below fixed 0.41.0. Typst typeset input can pass inline CSL bytes to citationberg's NsReader deserializer, so quadratic attribute checking is reachable; this is a deferred fix, not a claim of safety.",
+        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
+      },
+      {
+        "id": "RUSTSEC-2026-0195",
+        "package": "quick-xml",
+        "why": "citationberg 0.7.0 requires ^0.38.1, holding quick-xml at 0.38.4 below fixed 0.41.0. Typst typeset input can pass inline CSL bytes to citationberg's NsReader deserializer, so namespace-allocation denial of service is reachable despite restricted file reads.",
+        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
+      },
+      {
+        "id": "RUSTSEC-2026-0235",
+        "package": "rkyv",
+        "why": "mitex-spec 0.2.7 requires ^0.7.42, holding rkyv at 0.7.46 below fixed 0.8.17. deep-typeset supplies no custom MiTeX spec; only the compiled-in default.rkyv is deserialized, with no document, pack or panel archive bytes accepted by this entry.",
+        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
+      }
+    ]
+  },
   "deps": {
     "lean-toolchain": {
       "toolchain": {

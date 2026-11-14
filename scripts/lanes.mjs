@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -665,6 +665,8 @@ timed.push('tests/acceptance/548/ac3-budgets.test.ts');
 // ac02-rebuild-budget judges the task's budget on the reference Mac.
 alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
+// #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
+alone.push('tests/acceptance/1940/');
 // #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
 // Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).

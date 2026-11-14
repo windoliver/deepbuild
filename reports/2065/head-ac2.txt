@@ -1,0 +1,17 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ ↓ tests/acceptance/2065/restart.test.ts > AC1 #2065.d984fab2 stalled claim's ask answered split after a hub restart records one issue.drafted listing the open items
+ ✓ tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart 15346ms
+ ↓ tests/acceptance/2065/restart.test.ts > AC3 #2065.e0ad4590 stays off survives restart: Closes runs with no second reject_expired ask, in a second worktree too
+ ↓ tests/acceptance/2065/restart.test.ts > AC4 #2065.4d4ad2b8 task sent back twice without new evidence, then restart: next claim.sent_back is round 3, not round 1
+ ↓ tests/acceptance/2065/restart.test.ts > AC5 #2065.ae196407 planted price, one paid check locks, restart, approve budget ask: one spend.approved with asked cap $4.00
+ ↓ tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by answer: refused Closes must not say "you're asked in your inbox"
+ ↓ tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by deadline: refused Closes must not say "you're asked in your inbox"
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 6 skipped (7)
+   Start at  12:18:37
+   Duration  15.59s (tests 100%)
+
+JSON report written to <proof-dir>/pr-ready-ac2-isolated.json
