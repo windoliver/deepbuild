@@ -93,9 +93,12 @@ test('a cleaned run has no scan of its sandbox still running', async () => {
   dirs.push(dir);
   const real = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const children = () => process.getActiveResourcesInfo().filter((kind) => kind === 'ProcessWrap').length;
-  let quiet = 0;
+  let quiet = 0, scans = 0;
   const append: typeof real.append = async (stream, event) => {
-    if (event.kind === 'run.cleaned') for (let i = 0; i < 500 && children() <= quiet; i++) await new Promise((resolve) => setTimeout(resolve, 1));
+    if (event.kind === 'run.cleaned') {
+      for (let i = 0; i < 500 && children() <= quiet; i++) await new Promise((resolve) => setTimeout(resolve, 1));
+      if (children() > quiet) scans += 1;
+    }
     return real.append(stream, event);
   };
   const record = new Proxy(real, { get: (target, key) => (key === 'append' ? append : Reflect.get(target, key, target)) });
@@ -111,6 +114,7 @@ test('a cleaned run has no scan of its sandbox still running', async () => {
       for (let turn = 0; turn < 2; turn++) await new Promise((resolve) => setImmediate(resolve));
       left.push(children() - quiet);
     }
+    expect(scans, 'cleanups that were recorded while a timed scan ran: without one the test shows nothing').toBe(5);
     expect(left, 'child processes of this one still running after each of 5 cleanups').toEqual([0, 0, 0, 0, 0]);
   } finally {
     await sup.close();
