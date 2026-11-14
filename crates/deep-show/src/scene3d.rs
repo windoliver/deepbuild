@@ -15,6 +15,20 @@ use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
 
+/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
+/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
+pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
+    let mut look = Look3::from_roles(palette.clone());
+    let camera = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .and_then(|id| doc.get("items")?.get(id));
+    if let Some(ev) = camera.and_then(|c| c.pointer("/params/exposure")?.as_f64()) {
+        look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
+    }
+    look
+}
+
 /// #1401: what a frame's object-ID pass and depth target hold, at their own size: each pixel's
 /// pick (u32, 0 where nothing drew), the item each pick stands for, and, for the planted depth
 /// reader alone, each pixel's view depth in m (f32).
@@ -83,7 +97,7 @@ impl Gpu3 {
         }
         // #524: each skin's item at this frame's time.
         deep_canvas_physics::skin::write(&mut doc, t);
-        let look = Look3::from_roles(palette.clone());
+        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
@@ -121,7 +135,7 @@ impl Gpu3 {
             d.insert("size".into(), json!(size));
         }
         deep_canvas_physics::skin::write(&mut doc, t);
-        let look = Look3::from_roles(palette.clone());
+        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
@@ -150,20 +164,52 @@ impl Gpu3 {
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
+        Some((bytes, self.targets(scene.size, depth)?))
+    }
+
+    /// Each pick of the last frame drawn with the item it stands for, read on the CPU.
+    pub fn picks(&self) -> std::collections::BTreeMap<u32, String> {
+        self.renderer
+            .picks()
+            .iter()
+            .map(|(id, p)| (*p, id.clone()))
+            .collect()
+    }
+
+    /// The targets the last frame drawn at `size` left: its object-ID pass at the renderer's own
+    /// size and each pick's item; the view depth only when `depth` asks.
+    pub fn targets(&self, size: [u32; 2], depth: bool) -> Option<Targets> {
         let r = &self.renderer;
-        let size = r.internal_size(scene.size);
-        let (_, ids) = r.read_targets(&self.device)?;
-        let targets = Targets {
-            size,
-            ids,
-            picks: r.picks().iter().map(|(id, p)| (*p, id.clone())).collect(),
+        Some(Targets {
+            size: r.internal_size(size),
+            ids: r.read_ids(&self.device)?,
+            picks: self.picks(),
             view_depth: if depth {
                 Some(r.read_view_depth(&self.device)?)
             } else {
                 None
             },
-        };
-        Some((bytes, targets))
+        })
+    }
+
+    /// #1938: the linear image the last frame's output pass read, before exposure, as f32 RGBA
+    /// per px, rows top-down.
+    pub fn pre_tone(&self) -> Option<Vec<f32>> {
+        let bytes = self.renderer.read_pre_tone(&self.device)?;
+        Some(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect(),
+        )
+    }
+
+    /// #1939: the px `at` of the last frame's linear image before exposure, as [`Self::pre_tone`]
+    /// reads them: f32 RGBA per px, in order.
+    pub fn pre_tone_at(&self, at: &[usize]) -> Option<Vec<f32>> {
+        self.renderer.read_pre_tone_at(&self.device, at)
     }
 
     /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows

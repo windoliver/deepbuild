@@ -8269,6 +8269,32 @@ impl Renderer {
         Some((floats, ids))
     }
 
+    /// #1939: the px `at` of the image [`Self::read_pre_tone`] reads (indices into its rows,
+    /// top-down), each as f32 RGBA, in order, converting only those px.
+    pub fn read_pre_tone_at(&self, device: &Device, at: &[usize]) -> Option<Vec<f32>> {
+        let t = self.targets.as_ref()?;
+        let texture = self.pre_tone.as_ref().map_or(&t.linear, |v| v.texture());
+        let half = read_texture(device, texture, t.size, 8)?;
+        let mut out = Vec::with_capacity(at.len() * 4);
+        for &i in at {
+            let px = half.get(i * 8..i * 8 + 8)?;
+            out.extend(
+                px.as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|h| f16_to_f32(u16::from_le_bytes(*h))),
+            );
+        }
+        Some(out)
+    }
+
+    /// The frame's object-ID target alone, each pixel's u32 in little-endian bytes, rows top-down
+    /// (#1939); `None` on a backend with no pixels.
+    pub fn read_ids(&self, device: &Device) -> Option<Vec<u8>> {
+        let t = self.targets.as_ref()?;
+        read_texture(device, &t.ids, t.size, 4)
+    }
+
     /// The depth target, f32 per pixel (reversed Z: larger is nearer), which a 3D pick's ties
     /// read (#424).
     pub fn read_depth(&self, device: &Device) -> Option<Vec<u8>> {
