@@ -1,13 +1,13 @@
 # Package story and CPU hill-climb, 2026-11-13
 
-Base: main at `9b77cd2cd`. Asked for: pull the latest change, audit package by package so the packages read as one
+Base: main at `9b77cd2cd`, merged with main at `c56fe5407` once the work was measured. Asked for: pull the latest change, audit package by package so the packages read as one
 connected story, and hill-climb on CPU usage.
 
 Every package was placed in one import graph, and the graph is clean: no package cycle, no undeclared import, and the
 core imports no extension. Six workspaces have no caller in the hub or the CLI; their cards now say so, and none was
 wired here. Three edits cut CPU, each measured against the base's build: an idle hub retires 39% fewer instructions,
-a record replay 5.9% fewer, and on this Mac the hub's sandbox-report stream 63 to 78% fewer. Nothing is committed.
-Main moved 150 commits while this ran and was not merged in.
+a record replay 5.9% fewer, and on this Mac the hub's sandbox-report stream 63 to 78% fewer. A fourth
+edit ends that stream with the process that started it.
 
 ## The story: how the packages connect
 
@@ -117,7 +117,7 @@ real hub never runs. None is wired here: wiring one is a feature, and the first 
 | CPU | `hub/src/agents.ts`: `hookedAgents` reads the agents' facts once. The hub asked every second, and each call parsed five facts files, 96 KB | Same value from the base's build and the change's, on the first call and the second. Measured below |
 | CPU | `record/src/projections.ts`: `up` finds its statement by the table and the columns, not by a key string built for every row | Same rows, below. Measured below |
 | CPU | `supervisor/src/supervisor.ts`: when the sandbox-report stream's first filter shows no report, the stream starts again on the kernel's messages, and on the sender alone only if that shows none either | A test that failed first, below. Measured below |
-| CPU | `supervisor/native/helper.c` gains `leash`, and the stream runs on it: a watcher forked beside the stream ends it once the process that started it is gone. A hub that was killed, or whose start failed, left its `log stream` running until the machine's next matching report | A test that failed first: `sandbox-report streams still running 5 s after their process was killed: expected [ 4389 ] to deeply equal []`. It passes after, with the file's other four cases and `tests/acceptance/30/sandbox.test.ts`'s two |
+| CPU | `supervisor/native/helper.c` gains `leash`, and the stream runs on it: a watcher forked beside the stream ends it once the process that started it is gone. A hub that was killed, or whose start failed, left its `log stream` running until the machine's next matching report | A test that failed first: `sandbox-report streams still running 5 s after their process was killed: expected [ 4389 ] to deeply equal []`. It passes after, with the file's other four cases and `tests/acceptance/30/sandbox.test.ts`'s two. The watcher sleeps in kqueue; what it costs was not measured, and the readings below were taken before it |
 
 `+97 −31` lines of source in 8 files, one of them new; `+60 −4` in one test file; and 17 one-line card edits,
 with one line more in the supervisor's card for the helper's `leash`.
@@ -190,7 +190,7 @@ folder, which the restart emptied, so those rows stand on this session's transcr
 
 ## Verification
 
-On the final tree unless a row says otherwise.
+On the audit's base, before main was merged, unless a row says otherwise. What ran on the merged tree follows.
 
 | Check | Result |
 |---|---|
@@ -214,6 +214,28 @@ alone list. Each failing file was run again alone.
 | `30/sandbox` AC5 | No `sandbox.denied` within 15 s | Not seen again: 12 of 12 on the change and 11 of 11 on the base, six a side run three at once at a load of 265 to 305. Its cause was not found. The file's `afterAll` hook timed out after its cases had passed in 8 of the base's 11 runs and 7 of the change's 12 |
 | `packages/hub/test/reach.test.ts`, one case | `ENOTEMPTY` deleting its temp home | 9 of 9 pass |
 
+### After merging main
+
+Main was merged at `c56fe5407`, 277 commits past the base. Every workspace and `deep-hook` were built again, and
+the touched checks ran once.
+
+| Check | Result |
+|---|---|
+| 17 files side by side: the supervisor's, `packages/record/test`, five of `tests/acceptance/14`, five hub tests, `tests/acceptance/2019/agents.test.ts` | 163 of 165 pass. Two cases timed out at their 5 s, in `packages/record/test/record.test.ts` and `tests/acceptance/14/log.test.ts`, at a load of 270. Those two files alone: 75 of 75 pass |
+| The lanes' alone files, one at a time: `tests/acceptance/30/sandbox.test.ts` and three of `tests/acceptance/1463` | 10 of 12 pass. The two are #2333's, as above |
+| `tests/package-deps.test.mjs`, `tests/acceptance/1687/full/structure.test.mjs` | 10 of 10 pass |
+| #1687's oracle | 2 runtime cycle edges on main, 0 on the branch; 0 edges from the core to an extension on both |
+| Plug-in manifests | 11 of 11 digests are their folder's |
+| `scripts/design-links.mjs`, `scripts/plant-lint.mjs`, `scripts/blocking-call-guard.mjs` | pass |
+| `scripts/public-text.mjs` | FAIL, 36 findings: each is the agent's name in this branch's commit trailers. None is in a changed file |
+| `scripts/repo-rules.mjs` | FAIL, 47 lines: one home path in a `contracts` fixture, and 46 dependencies not listed, in three twins of `tests/acceptance/12`, four crates and `spikes/2435`. Its cards and workflow rules pass |
+| `scripts/size-ratchet.mjs`, `scripts/record-reader-guard.mjs`, `scripts/known-failures-check.mjs` | 51, 1 and 8 FAIL lines |
+| `tsc --noEmit` on the root config | 3 errors, in three test files |
+
+No FAIL line of `repo-rules`, the size ratchet, the reader guard or the known-failures check, and no type error,
+names a file this branch changes against the main it merged. None of them was run on that main alone. The change
+is `+417 −53` handwritten lines against it, over the guideline of about 400: 240 of them are this report.
+
 ### Not run
 
 - `node scripts/affected.mjs`. Its selection for this change is 548 parallel and 802 alone vitest files, 126 node
@@ -225,12 +247,12 @@ alone list. Each failing file was run again alone.
 
 - **The machine restarted mid-run**, at 13:51. Every measurement taken before it was taken again after it, on the
   final tree. What was not repeated is marked above.
-- **Main was not merged.** It is 150 commits ahead of the base. Of the touched files it changed only
-  `packages/jobs/README.md`, on the sentence this change edits: both additions should stay. Four crates and one job
-  plug-in that arrived on main were not read.
-- **Two other audits started the same day edit some of the same files**, uncommitted in worktrees of their own:
-  one `packages/hub/src/rows.ts` and `packages/jobs/README.md`, the other the cards of `budget`, `config-eval` and
-  `jobs`. Their files were read, not changed.
+- **Main was merged once**, after every measurement above. One conflict, in `packages/jobs/README.md`, where both
+  sides added to one sentence: the merged line is main's with this change's clause in it. Four crates and one job
+  plug-in that arrived with main were not read.
+- **Two other audits of the same day touch some of the same files.** The memory audit's edit to
+  `packages/hub/src/rows.ts` came in with main and merged with no conflict. The other edits the cards of `budget`,
+  `config-eval` and `jobs` in a worktree of its own, and was not on main at the merge.
 - **An existing test was changed**: the supervisor's fallback case keeps its assertions and gains one. A second
   case with its plant (`reports-other-process`) and the leash's case were added.
 - **Part of #1982**, not a close: its fifth criterion asks that the cards of `gate`, `buying`, `proof` and
