@@ -372,7 +372,7 @@ export class Core {
       dir: this.root.spool, held: options.held, plant: options.plant, durable: this.durable, stopping: () => this.stopping,
       raw: this.raw, appendCore: (kind, data) => this.appendCore(kind, data),
       tryNetwork: (drafts, meta, tries) => this.tryNetwork(drafts, meta, tries),
-      replay: (drafts, meta) => (this.promptItems.read(drafts, meta) ?? Promise.resolve()).then(() => this.queue(() => this.handleHook(drafts, meta, 'hook', true), true)).then(({ settled }) => settled),
+      replay: (drafts, meta) => this.replayed(drafts, meta, true),
       sync: () => this.record.sync(),
     });
     this.holds = new Holds({
@@ -1186,26 +1186,30 @@ export class Core {
     return trying.then((reached) => { meta.network = { host, reached }; });
   }
 
-  /** A hook another machine spooled for this hub while its link was down (#1338): recorded once, as a spool's line is. */
-  replayed(drafts: Draft[], meta: HookMeta): Promise<void> {
-    this.delivery.track(meta);
-    const item = this.promptItems.read(drafts, meta);
-    const intake = (item ?? Promise.resolve()).then(() => this.queue(() => this.handleHook(drafts, meta, 'hook', true)));
-    const handled = intake.then(({ settled }) => settled);
-    return item ? this.promptItems.keep(handled, meta, intake) : handled;
+  async replayed(drafts: Draft[], meta: HookMeta, starting = false): Promise<void> {
+    if (!starting) this.delivery.track(meta);
+    await this.promptItems.settling.get(meta.id);
+    const known = await this.record.raw('SELECT 1 FROM events WHERE id = ? LIMIT 1', [meta.id]);
+    const item = known.length ? undefined : this.promptItems.read(drafts, meta);
+    const intake = Promise.all([starting ? undefined : this.promptItems.ordering.get(meta.session), item]).then(() => this.queue(() => this.handleHook(drafts, meta, 'hook', true), starting));
+    return this.promptItems.keep(intake.then(({ settled }) => settled), meta, intake);
   }
   /** Network reads precede the chain; once queued, hooks are checked and appended in order, without waiting on commits. */
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
+    const pending = this.promptItems.settling.get(meta.id); if (pending) return pending;
     this.delivery.track(meta);
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
-    const replayed = this.replaying ?? Promise.resolve();
+    const replayed = this.replaying;
     // Network work runs before it queues, so it holds no other hook of any session (#85, #2068).
     const tried = this.tryNetwork(drafts, meta);
-    const item = this.promptItems.read(drafts, meta);
-    const intake = Promise.all([replayed, tried, item]).then(() => this.queue(() => this.handleHook(drafts, meta, writer)));
+    const item = this.promptItems.read(drafts, meta), prior = this.promptItems.ordering.get(meta.session);
+    const intake = Promise.all([prior, replayed, tried, item]).then(async () => {
+      const duplicate = replayed && (await this.record.raw('SELECT 1 FROM events WHERE id = ? LIMIT 1', [meta.id])).length > 0;
+      return this.queue(() => this.handleHook(drafts, meta, writer, Boolean(duplicate)));
+    });
     const handled = intake.then(({ settled }) => settled);
-    return tried || item ? this.promptItems.keep(handled, meta, item ? intake : undefined) : handled;
+    return tried || item || prior ? this.promptItems.keep(handled, meta, item || prior ? intake : undefined, Boolean(replayed)) : handled;
   }
   /** Whether a hook is a Claude Code prompt whose transcript entry isn't written yet, so its origin can't be read (#567). */
   private async entryLater(meta: HookMeta): Promise<boolean> {
@@ -1505,7 +1509,7 @@ export class Core {
 
   private promptDraft(draft: Draft, meta: HookMeta, verified: boolean, data: Obj, count: Counter, live: Live, typed: { text: string; task: string | undefined }[], opens: Promise<void>[]): void {
         // A prompt you typed that asks for a change opens a task: the issue it names, or the message that asked for it.
-        const item = data.from === 'person' ? this.promptItems.items.get(draft) : undefined;
+        const prepared = this.promptItems.items.get(draft), item = (data.from === 'person' || data.from === 'app') && prepared && String(data.text).includes(prepared.link) ? prepared : undefined;
         let tasks = this.tasks.tasksOf({ session: meta.session, msg: Number(data.msg), text: String(data.text), from: String(data.from), queued: draft.queued === true, first: data.msg === 0 });
         if (item && tasks.length) tasks = [`task:${letters(item.source_id)}`];
         // Kept on the draft too: the turn it opens reads its task there (#83).
@@ -1599,7 +1603,7 @@ export class Core {
       // The tasks a prompt opens are appended after it, as the core.
       return [this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
-      }), ...opens, ...(draft.kind === 'user.ask' && verified && data.from === 'person' && ISSUE_LINK.test(String(data.text)) && this.promptItems.items.has(draft) && !this.promptItems.items.get(draft)
+      }), ...opens, ...(draft.kind === 'user.ask' && verified && (data.from === 'person' || data.from === 'app') && ISSUE_LINK.test(String(data.text)) && this.promptItems.items.has(draft) && !this.promptItems.items.get(draft)
         ? [this.appendReading(meta.session, meta.agent, `${ISSUE_UNREAD} ${ISSUE_LINK.exec(String(data.text))![0]}. The task uses your words.`, derivedId(draft.ts, `${draft.id}:issue-unread`))] : [])];
     });
     return { appends, claimed, live, typed };

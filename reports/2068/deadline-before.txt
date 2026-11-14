@@ -1,0 +1,47 @@
+
+ RUN  v5.0.5 <merge-base-checkout>
+
+ × packages/hub/test/github-deadline.test.ts > cancels the real gh token child at the caller deadline without reading credentials 2488ms
+   → the caller deadline must abort credential acquisition rather than read its late answer: expected false to be true // Object.is equality
+ × packages/hub/test/github-deadline.test.ts > cancels an unfinished JSON body with the same signal that reached the headers 1009ms
+   → stalled response-body wait must end at the caller deadline, not its per-request 20 s timeout: expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/github-deadline.test.ts > cancels the real gh token child at the caller deadline without reading credentials
+AssertionError: the caller deadline must abort credential acquisition rather than read its late answer: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/github-deadline.test.ts:26:118
+     24|     }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+     25|     const result = JSON.parse(output.trim()) as { missing: boolean; el…
+     26|     expect(result.missing, 'the caller deadline must abort credential …
+       |                                                                                                                      ^
+     27|     expect(result.elapsed, 'credentials must not retain their own five…
+     28|   } finally { rmSync(dir, { recursive: true, force: true }); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/github-deadline.test.ts > cancels an unfinished JSON body with the same signal that reached the headers
+AssertionError: stalled response-body wait must end at the caller deadline, not its per-request 20 s timeout: expected undefined to be defined
+ ❯ packages/hub/test/github-deadline.test.ts:44:116
+     42|     const done = liveFetch(`http://127.0.0.1:${address.port}`, undefin…
+     43|     const result = await Promise.race([done, new Promise<undefined>((r…
+     44|     expect(result, 'stalled response-body wait must end at the caller …
+       |                                                                                                                    ^
+     45|     expect(result?.body, 'a truncated body never supplies issue data')…
+     46|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:09:50
+   Duration  4.07s (tests 90%, transform 9%, import 1%)
+

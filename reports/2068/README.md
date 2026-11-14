@@ -1,57 +1,85 @@
-# #2068 — partial implementation, verification BLOCKED
+# #2068 — requirement/proof record
 
-Part of #2068, **not ready to close**. No commit or PR was made. Base and merge base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`. Work is on `fix/2068-forge-read` in a separate worktree; the original dirty worktree was not changed.
+## Latest result
+
+All four original, independently drafted #2068 acceptance cases pass unchanged. The same files fail on the merge base at the required wait/fallback assertions; the instant-source guard passes there. The author-role scenarios reused from #322 pass. The **affected run is not green**: see inherited cleanup and repository-wide findings below. No test or known-failure entry was weakened to get these results.
+
+Merge base tested: `5c92a77023e251385c6b9c7727d103ec5ed61a0e`. Initial drafting base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`. The timing test prints the initial baseline as metadata on both sides; `final-timings.json` names the actual comparison base. `acceptance.sha256` pins the original delivered tests; `source.sha256` pins the tested source and added regressions.
 
 ## Requirement → change → proof
 
-| Requirement | Change | Observed proof / remaining gap |
+| Requirement | Change | Proof |
 |---|---|---|
-| AC1: B's PostToolUse, 100 ms after A, is recorded before a forge's first 5 s answer | `core.ts` prepares issue data before joining the chain; `prompt-items.ts` holds per-hook data/reply/shutdown state. Task creation and origin checks remain on the chain. | Base: B observed at 26,716 ms after A, first forge answer at 6,205 ms. First fix: B at 530 ms, answer at 5,508 ms. **Both AC1 runs INCONCLUSIVE**: the forge request began after B arrived, violating the test's fixture precondition. Neither is the required before/after assertion proof. |
-| AC2: one bounded read; prompt/task from your words; visible unread-issue warning | `ask-tasks.ts` gives credentials, HTTP bodies and all pages one 1,000 ms abort signal. `hub-shared.ts` passes it to `gh auth token`; `github-source.ts` passes it to fetch. Timeout discards partial readings. Core records a distinct deterministic `session.reading`; `rows.ts` shows it until a later person/app prompt. | Base prompt observed at 20,367 ms; prompt/task absent at the acknowledged hold and no warning. First fix bounded the wait but its warning ID collided with the prompt. After correcting the ID, the unchanged never-answering case passed (1 passed; 3 deliberately not selected). The endless-pagination case passed on the first fix. **Final extraction into `prompt-items.ts` was typechecked, not behavior-tested.** |
-| AC3: instant source retains issue criteria and author roles | Preserve `readIssue`'s criteria/membership logic; consume prepared data only after origin checks. | Base instant twin passed. First fix's instant twin failed to lock its definition under extreme load. No isolated fixed run was available, so **unresolved**, not attributed conclusively to load. The reused #322 role tests were not run. |
+| AC1 `#2068.3406ba1b`: B arrives 100 ms after A and records before the forge's first 5 s answer; base fails naming the wait | Work-item preparation runs before the shared hook chain. A reply waits for its own intake, not another session's source. | `merge-base-failure.txt`: B waited **25,003 ms after arrival**, first answer about 5,062 ms after A; failed its named wait assertion. `acceptance-pass.txt`: B records before the first answer. Earlier fixed reading: about **13 ms after B's arrival**. Exact final intervals: `final-timings.json`. |
+| AC2 `#2068.b095ccdc`: never-answering source ends within the read deadline, records A and a task from your words, and shows the unread-issue row | One 1,000 ms abort signal covers token acquisition, requests, response bodies and all pages. Expiration discards partial readings. A distinct deterministic `session.reading` supplies the row warning. | Base waits about **20,015 ms**, misses its advertised prompt hold, and has no unread-issue row. Fixed never-answering and endless-pagination cases pass, checking actual committed prompt/task visibility and `rows.read`. Credential-child and stalled-body regressions fail on base and pass on the fix (`deadline-before.txt`, `deadline-after.txt`). |
+| AC3 `#2068.865fe586`: instant source retains criteria and authors' provider-derived roles | Keep the existing `readIssue` criteria/membership logic; consume preparation only after person/app origin placement, for the final prompt's link. | Instant HTTP twin passes on base and fix for owner and page-2 collaborator. Unchanged #322 normal scenarios pass for outside comments/owner attribution, automated collaborators, and complete/incomplete membership pages (`roles-result.txt`). Negative-control cleanup failures are disclosed below, not reported as PASS. |
 
-This belongs in the core's existing hook/ask scheduling: an extension cannot release the core's queue while its existing `enrich` call awaits a forge. No new setting, dependency, flag, event schema or verdict is introduced. The one-second read budget is an implementation choice below the existing two-second prompt context hold; the issue states no exact read duration.
+The exact read duration is an implementation choice, not an issue-specified number. The blind acceptance draft checks the public prompt hold as the outer bound; one second leaves room in its existing two-second hold for intake and recording. This belongs at the existing core hook/ask scheduling boundary: an extension cannot release a chain that the core itself is awaiting. No new dependency, product setting, flag, event schema or verdict is introduced.
 
-## Independent acceptance tests
+## Regression protection and review corrections
 
-A separate ephemeral drafting job saw only a base archive, the issue and design, with file-only tools and no session/diff inputs. It supplied `tests/acceptance/2068/`; `acceptance.sha256` pins its delivered files. The implementing session has not changed them. Their README documents the assumption that the read must fit inside the prompt's advertised `hold_until_ms`, an externally observable bound rather than an invented timeout setting. It also documents the unproven credential-delay path. The initial Claude drafting launch could not authenticate; the independent pi drafting job completed instead.
+`packages/hub/test/prompt-items.test.ts` uses real hub/socket/record components and the existing external forge fixture. Each new behavior correction was made after its unchanged test failed:
 
-The draft reuses #322's existing role tests rather than duplicating them. It adds four cases (slow forge, never answering, endless pages, instant twin) with real hub, adapters, record and task machinery, and an HTTP fixture only at the forge boundary. No check/golden was weakened, skipped in source, deleted or re-recorded. Filtered runs below leave all unselected cases unrun.
+- Same-session tools cannot overtake their issue prompt; other sessions remain independent. `same-session-before.txt` / `same-session-after.txt`.
+- An in-flight live prompt's spooled copy does not start another forge read. `replay-before.txt`.
+- A spool that already contains the live prompt cannot form a replay/live mutual wait. `replay-cycle-before.txt`.
+- A genuinely fresh hook after spool replay still processes queued words. `live-after-replay-before.txt`.
+- An authenticated app note carried by the prompt retains its prepared criteria. `app-before.txt` / `app-after.txt`.
+- A prompt whose transcript is written only after its reply still gets that reply; its late origin placement retains the issue definition.
 
-## Checks actually run
+`regressions-pass.txt` records the final six prompt regressions and four existing replay cases passing (10 tests). `github-deadline.test.ts` proves cancellation at the external credential executable and unfinished-body boundaries. Its fake `gh` is the only executable on the child's PATH, returns no real credential and never reads login state; no authentication implementation or clock is mocked. Both tests fail at assertions on the merge base and pass on the fix.
 
-- Base `npm run build --workspaces`: exit 0.
-- Base `cargo build --locked -q -p deep-hook`: exit 0, using the installed 1.99.1 toolchain directory on PATH. An initial attempt had no cargo on PATH; its following acceptance setup was BLOCKED by the missing binary (`base-setup-blocked.txt`), not a regression failure.
-- Unchanged new acceptance file on base: **3 failed / 1 passed** (`base-failure.txt`). AC2 failed on its expected wait/row assertions; AC1 reported INCONCLUSIVE as above.
-- First implementation: **3 failed / 1 passed** (`first-fix-failure.txt`), with endless pages passing. AC2's warning failure was corrected, not its test.
-- Corrected warning: `node node_modules/vitest/vitest.mjs run --config tests/acceptance/2068/vitest.config.ts tests/acceptance/2068/forge-wait.test.ts -t 'AC2: never'`: **1 passed / 3 not selected** (`row-fix-result.txt`).
-- Final `node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json`: exit 0; acceptance `tsc -p tests/acceptance/2068/tsconfig.json`: exit 0.
-- `git diff --check` and acceptance hashes: passed.
-- Size ratchet: 34 existing findings in unchanged files (`size-result.txt`), none in this change's source. `core.ts` shrank 2641 → 2636 lines; its ceiling was lowered, never raised. This required extracting the new prompt-read state, shared by live and replayed hooks. The only check-data edit tightens that existing ceiling.
+An independent read-only review prompted these corrections. The shutdown wait now covers intake rather than a parked job's final settlement, so shutdown can reach runner cancellation. That path has code review/typecheck, not a dedicated end-to-end parked-job test.
 
-The patch plus independently authored acceptance harness is about 450 handwritten code/config lines (about 100 implementation lines and 350 acceptance lines). The real-process/socket fixture and three required scenarios plus whole-read pagination protection cannot sensibly be split from the bug proof; existing #322 role coverage is reused. No full preflight was run.
+## Checks and commands
 
-## Machine and affected verification
+```sh
+# Builds, on each side, with installed dependencies and the installed Rust toolchain on PATH
+npm run build --workspaces
+cargo build --locked -q -p deep-hook
 
-The reference Mac was at roughly **260–320 one-minute load on 18 cores**. These are causal observations on a loaded machine, not latency budgets or a speed claim. A single exclusive attempt through `node scripts/throttle.mjs timed --wait 2 -- …` received no grant (`timed-unrun.txt`). The paired isolated base/fix commands therefore **did not run**; no retry-until-green was attempted.
+# Original immutable acceptance file, same on base and fix
+node node_modules/vitest/vitest.mjs run \
+  --config tests/acceptance/2068/vitest.config.ts \
+  tests/acceptance/2068/forge-wait.test.ts --reporter=verbose
 
-`node scripts/affected.mjs --list` selected approximately 1,000 test files plus a Rust crate for the source change. No **WIDE** line was emitted. Timed, slow and by-hand lanes remain unrun. To avoid a whole-core sweep on this overloaded machine, the attempted check was narrowed explicitly to:
+# Reused role coverage
+node node_modules/vitest/vitest.mjs run \
+  --config tests/acceptance/2068/vitest.config.ts \
+  tests/acceptance/322/github.test.ts --reporter=verbose
+
+# Added regression protection
+node node_modules/vitest/vitest.mjs run \
+  packages/hub/test/prompt-items.test.ts packages/hub/test/replay.test.ts \
+  --maxWorkers=1 --no-file-parallelism --reporter=verbose
+node node_modules/vitest/vitest.mjs run packages/hub/test/github-deadline.test.ts \
+  --maxWorkers=1 --no-file-parallelism --reporter=verbose
+```
+
+Builds/tests used the repository's machine throttle. The rebased workspace initially lacked the new `@deepbuild/briefs` workspace link; restoring that install link and rebuilding the affected CLI resolved the setup error. Hub and acceptance typechecks, diff whitespace, and immutable acceptance hashes passed. The code changed no dependency manifests. `core.ts` stays at main's 2,638-line ceiling.
+
+### Affected result — NOT PASS
+
+The source-change `affected --list` reaches over 1,000 files plus a crate. No WIDE line was emitted. Rather than run a whole-core/graphics sweep on this heavily loaded machine, verification explicitly named the sufficient acceptance/regression files:
 
 ```sh
 node scripts/affected.mjs \
-  tests/acceptance/2068/forge-wait.test.ts \
-  tests/acceptance/322/github.test.ts \
-  packages/hub/test/github-source.test.ts
+  tests/acceptance/2068/forge-wait.test.ts tests/acceptance/322/github.test.ts \
+  packages/hub/test/prompt-items.test.ts packages/hub/test/github-deadline.test.ts \
+  packages/hub/test/github-source.test.ts packages/hub/test/prompt-flush.test.ts \
+  packages/hub/test/queued.test.ts packages/hub/test/replay.test.ts
 ```
 
-It selected the new acceptance file, GitHub-source unit test, and #322 github/coverage files. It produced no WIDE line and no completed verdict: its test job and most lint jobs were still waiting for machine grants after about nine minutes. The runner and only its owned descendants were stopped (`affected-unrun.txt`): **INCONCLUSIVE affected: cancelled after waiting for shared machine grants; no completed verification result**. The full source-change selection was **not** run. Completed unrelated lint findings are not claimed green. Nothing is left running by this session.
+`affected-result.txt`: **155 new/unlisted findings, 44 known on main, 24 passed** on that snapshot. No WIDE or INCONCLUSIVE line. Three failures were #322 negative controls' `afterEach` cleanup (`ENOTEMPTY`), not role assertions. Cleanup failures also occur on the unmodified merge base (`base-roles-result.txt`); these are inherited/flaky, not excused as passes. The normal owner/outside/bot/paged-membership scenarios pass. An earlier affected run also hit the same cleanup problem in prompt-flush; the subsequent meaningful-change run passed that file, so its history remains inconclusive, not retry-green proof.
 
-## Resume / open work
+The other unlisted findings concern unchanged repository files: stale dependency/size/vendor tables, an existing fixture home path, code mappings, record-reader/closure lints and expired known-failure entries. The last correction (fresh-hook handling after spool replay) was checked by the 10-test regression run and all four acceptance cases, not another whole affected run. **Full source-selected affected, timed/slow/by-hand lanes, full preflight, native UI rendering, mutation and static proof-trace lanes were not run.** The original blind tests use numbered AC names rather than static hash tags; the table above supplies the exact criterion mapping but is not a static trace PASS.
 
-1. Run the immutable AC1/AC3 checks on base and fixed trees under an available exclusive timed slot. The baseline needs AC1 to fail at its wait assertion, not its scheduling precondition. Preserve the currently inconclusive readings.
-2. Diagnose the failed instant twin if it fails in that run; run the reused #322 role checks. A one-second deadline must not turn an immediately answering source into a words-only fallback on a normally available machine.
-3. Run all four acceptance cases against the **final** extracted implementation, then `node scripts/affected.mjs` for the actual source changes. Review WIDE/INCONCLUSIVE and known-vs-new failures. Relevant unrun regressions include prompt replies before transcript placement, spool/remote replay, normal prompt origins and shutdown.
-4. Review the deadline interpretation and the untested credential-delay/body-stall cases. The signal reaches the real token child and fetch, but that code review is not test evidence.
-5. Review prefetch semantics: unknown-origin prompts may be fetched speculatively, but only person-origin prompts consume the reading; no agent-origin prompt can open an issue task through the prepared map. No same-session ordering beyond the existing network-stop exception was added.
+Measurements occurred on an arm64 Mac with Node v24.22.2, with load above its 18 cores. They establish the planted causal ordering, not a reference-Mac latency budget or a statistical speedup. Prior overloaded/inconclusive runs are preserved, not discarded.
 
-`source.sha256` pins the final production/ceiling files. Logs in this folder redact fixture/worktree/home paths and contain no real forge token or live forge data.
+## Blind drafting and retained history
+
+The first acceptance job used only the issue, design and a base archive. `tests/acceptance/2068/` remains byte-for-byte unchanged. A one-time blind redraft was requested while the original AC1 was inconclusive; it was written in a separate base archive, without seeing the implementation or dispute. It requires a separately approved numeric oracle and leaves static-tag metadata open, so it was **not adopted**, not run and not used to replace any test. The original check subsequently proved the required base/fix relation unchanged. The unused redraft remains outside the PR; no criterion was dropped.
+
+The old `base-failure.txt`, `first-fix-failure.txt`, `row-fix-result.txt`, `timed-unrun.txt`, `affected-unrun.txt`, `timings.json` and setup/size logs document the initial attempt. They are historical, not current passing evidence. The original dirty worktree was never edited by this task; all changes are on the issue worktree.
+
+Handwritten acceptance + regression + implementation exceeds the ~400-line guideline: the independent real-process fixture, three issue criteria, and essential ordering/replay/cancellation regressions belong to one bug fix. Existing #322 author-role coverage is reused rather than duplicated. Generated command output accounts for most of the PR's remaining lines. No CI is added, no hook settings are written, no failed checks are edited or suppressed, and only owned child PIDs are stopped.
