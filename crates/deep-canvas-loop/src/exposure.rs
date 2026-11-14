@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::ops::{log2, sqrt};
-use deep_canvas::registry::{Frame, Raised, Report};
+use deep_canvas::registry::{Frame, LightQuery, LightSums, Raised, Report};
 use deep_canvas_scene3d::finish::exposure_scale;
 use deep_canvas_scene3d::light::LightKind;
 use deep_canvas_scene3d::scene::Scene;
@@ -32,44 +32,74 @@ pub struct Reading {
     pub px: usize,
 }
 
-/// The reading of the px `subject` marks in `linear` (RGBA per px, before exposure) at
-/// `exposure`; `None` when the subject has no px.
-pub fn measure(linear: &[f32], exposure: f64, subject: &[bool]) -> Option<Reading> {
-    // A px's luminance floor: ten stops under middle grey, so black reads finite.
-    let floor = MIDDLE_GREY / 1024.0;
-    let black = deep_canvas::color::srgb_decode(0.5 / 255.0);
-    let (mut n, mut clipped, mut crushed, mut logs) = (0usize, 0usize, 0usize, 0.0);
-    for (i, _) in subject.iter().enumerate().filter(|(_, s)| **s) {
-        let px = &linear[i * 4..i * 4 + 3];
-        let rgb = [0, 1, 2].map(|c| f64::from(px[c]) * exposure);
-        let most = rgb[0].max(rgb[1]).max(rgb[2]);
-        n += 1;
-        clipped += usize::from(most > 1.0);
-        crushed += usize::from(most < black);
-        logs += log2(pixels::luminance(rgb).max(floor));
+/// What render.exposure's measure asks of a frame (#2513): the px whose pick is one of `picks`
+/// (sorted; `None`, every px) at `exposure`.
+pub fn query(picks: Option<Vec<u32>>, exposure: f64) -> LightQuery {
+    LightQuery {
+        picks,
+        exposure,
+        white: 1.0,
+        // A px whose brightest channel encodes to 0.
+        black: deep_canvas::color::srgb_decode(0.5 / 255.0),
+        weights: pixels::WEIGHTS,
+        // A px's luminance floor: ten stops under middle grey, so black reads finite.
+        floor: MIDDLE_GREY / 1024.0,
     }
-    (n > 0).then(|| Reading {
-        clipped: clipped as f64 / n as f64,
-        crushed: crushed as f64 / n as f64,
-        key_ev: logs / n as f64 - log2(MIDDLE_GREY),
-        px: n,
+}
+
+/// The reading of what a query returned; `None` where it read no px.
+pub fn reading(s: LightSums) -> Option<Reading> {
+    let n = s.px as f64;
+    (s.px > 0).then(|| Reading {
+        clipped: s.over as f64 / n,
+        crushed: s.under as f64 / n,
+        key_ev: s.log2 / n - log2(MIDDLE_GREY),
+        px: s.px as usize,
     })
 }
 
-/// #1939: the subject render.exposure reads by default in `doc`, its camera's kept items, when a
-/// frame whose picks are `picks` draws any of it; `None` where it keeps nothing or draws none.
-pub fn kept_drawn(doc: &Value, picks: &BTreeMap<u32, String>) -> Option<Vec<String>> {
-    let subject = scene::kept(doc, &Value::Null, "subject", KIND).ok()?;
-    let drawn = picks
-        .values()
-        .any(|id| subject.iter().any(|k| scene::is_of(id, k)));
-    drawn.then_some(subject)
+/// The reading of `q` in `frame`: by the reduction of the GPU that drew it (#2513), else over its
+/// linear image on the CPU; `None` where it reads no px.
+pub fn measure(frame: &Frame, q: &LightQuery) -> Option<Reading> {
+    let sums = match &frame.reduce {
+        Some(r) => (r.0)(q)?,
+        None => sums(frame, q)?,
+    };
+    reading(sums)
 }
 
-/// #1939: the px of `frame` that render.exposure reads for `subject`, by the object-ID pass, so a
-/// snapshot's readings measure the same px the check does.
-pub fn subject_px(frame: &Frame, subject: &[String]) -> Vec<bool> {
-    pixels::mask(frame, subject)
+/// `q` over `frame`'s linear image (RGBA per px, before exposure) and its object-ID pass.
+fn sums(frame: &Frame, q: &LightQuery) -> Option<LightSums> {
+    if frame.linear.len() != frame.ids.len() * 4 {
+        return None;
+    }
+    let mut s = LightSums::default();
+    for (i, pick) in frame.ids.iter().enumerate() {
+        if q.picks
+            .as_ref()
+            .is_some_and(|p| p.binary_search(pick).is_err())
+        {
+            continue;
+        }
+        let px = &frame.linear[i * 4..i * 4 + 3];
+        let rgb = [0, 1, 2].map(|c| f64::from(px[c]) * q.exposure);
+        let most = rgb[0].max(rgb[1]).max(rgb[2]);
+        let lum = q.weights[0] * rgb[0] + q.weights[1] * rgb[1] + q.weights[2] * rgb[2];
+        s.px += 1;
+        s.over += u64::from(most > q.white);
+        s.under += u64::from(most < q.black);
+        s.log2 += log2(lum.max(q.floor));
+    }
+    Some(s)
+}
+
+/// #1939: the picks among `picks` of the subject render.exposure reads by default in `doc`, its
+/// camera's kept items (#2513: the picks its query names); `None` where it keeps nothing or a
+/// frame whose picks are `picks` draws none of it.
+pub fn kept_drawn(doc: &Value, picks: &BTreeMap<u32, String>) -> Option<Vec<u32>> {
+    let subject = scene::kept(doc, &Value::Null, "subject", KIND).ok()?;
+    let drawn = pixels::picks_of(picks, &subject);
+    (!drawn.is_empty()).then_some(drawn)
 }
 
 /// The check input's limits, which a brief may only tighten.
@@ -171,8 +201,9 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
             out.blocked.push(blocked("not_drawn", KIND, &[], "frames"));
             return out;
         }
-        let mask = pixels::mask(f, &subject);
-        let Some(r) = measure(&f.linear, f.exposure, &mask) else {
+        let picks = pixels::picks_of(&f.picks, &subject);
+        let at = |exposure: f64| measure(f, &query(Some(picks.clone()), exposure));
+        let Some(r) = at(f.exposure) else {
             out.blocked.push(blocked("subject_unseen", KIND, &subject, "subject"));
             return out;
         };
@@ -197,9 +228,7 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
         });
         let reflected = (round(now + r.key_ev), "its own light");
         // Named as ops only when the frame, exposed at that EV, reads inside the limits.
-        let cures = |ev: f64| {
-            measure(&f.linear, exposure_scale(ev), &mask).is_some_and(|r| limits.passes(&r))
-        };
+        let cures = |ev: f64| at(exposure_scale(ev)).is_some_and(|r| limits.passes(&r));
         let metered = incident
             .into_iter()
             .chain([reflected])

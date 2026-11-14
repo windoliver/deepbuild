@@ -5,11 +5,13 @@
 
 use std::sync::Arc;
 
+use deep_canvas::registry::{LightQuery, LightSums, Reduce};
 use deep_canvas_marks::scene::Palette;
 use deep_canvas_scene3d::contributed::Fills;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate_any, Labels, Scene};
 use deep_gpu::device::{Backend, Device, Gpu};
+use deep_scene3d_render::exposure::{Kept, Reducer};
 use deep_scene3d_render::{draw_offscreen, Planted, Renderer};
 use serde_json::{json, Value};
 
@@ -29,6 +31,12 @@ pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
     look
 }
 
+/// The rows of a frame of `size` render.exposure's reduction reads: all of them, or, under
+/// #2513's planted reduction, those in whole 32-row groups.
+fn read_rows([w, h]: [u32; 2], short: bool) -> [u32; 2] {
+    [w, if short { h / 32 * 32 } else { h }]
+}
+
 /// #1401: what a frame's object-ID pass and depth target hold, at their own size: each pixel's
 /// pick (u32, 0 where nothing drew), the item each pick stands for, and, for the planted depth
 /// reader alone, each pixel's view depth in m (f32).
@@ -46,6 +54,8 @@ pub struct Gpu3 {
     labels: Labels,
     /// The print pass, built on first use and kept: an export prints every frame (#157).
     printer: Option<deep_scene3d_render::print::Printer>,
+    /// render.exposure's reduction, built on first use and kept (#2513).
+    reducer: Option<Arc<Reducer>>,
     /// The build's outline sources and module fills (#226), and the planted module program.
     outlines: Vec<deep_canvas::registry::SealedOutline>,
     fills: Vec<deep_canvas::contributed::Sealed>,
@@ -76,6 +86,7 @@ impl Gpu3 {
             renderer,
             labels: Labels::new(),
             printer: None,
+            reducer: None,
             outlines: sealed.outlines.clone(),
             fills: sealed.fills.clone(),
             planted,
@@ -192,24 +203,32 @@ impl Gpu3 {
         })
     }
 
-    /// #1938: the linear image the last frame's output pass read, before exposure, as f32 RGBA
-    /// per px, rows top-down.
-    pub fn pre_tone(&self) -> Option<Vec<f32>> {
-        let bytes = self.renderer.read_pre_tone(&self.device)?;
-        Some(
-            bytes
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|b| f32::from_le_bytes(*b))
-                .collect(),
-        )
+    fn reducer(&mut self) -> Arc<Reducer> {
+        let device = &self.device;
+        self.reducer
+            .get_or_insert_with(|| Arc::new(Reducer::new(device)))
+            .clone()
     }
 
-    /// #1939: the px `at` of the last frame's linear image before exposure, as [`Self::pre_tone`]
-    /// reads them: f32 RGBA per px, in order.
-    pub fn pre_tone_at(&self, at: &[usize]) -> Option<Vec<f32>> {
-        self.renderer.read_pre_tone_at(&self.device, at)
+    /// #2513: render.exposure's `q` reduced on this GPU over the last frame drawn, its pre-tone
+    /// image and object-ID pass; under #2513's planted reduction, without the frame's last rows.
+    pub fn light(&mut self, q: &LightQuery, short: bool) -> Option<LightSums> {
+        let reducer = self.reducer();
+        let (pre_tone, ids, size) = self.renderer.light_source()?;
+        reducer.reduce(&self.device, pre_tone, ids, read_rows(size, short), q)
+    }
+
+    /// #2513: the last frame drawn, kept on this GPU for render.exposure to reduce after later
+    /// frames draw: a frame's reduction in place of its linear image.
+    pub fn kept_light(&mut self, short: bool) -> Option<Reduce> {
+        let reducer = self.reducer();
+        let (pre_tone, ids, size) = self.renderer.light_source()?;
+        let kept = Kept::copy(&self.device, pre_tone, ids, size);
+        let device = self.device.clone();
+        let rows = read_rows(size, short);
+        Some(Reduce(Arc::new(move |q| {
+            kept.reduce(&device, &reducer, rows, q)
+        })))
     }
 
     /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows
