@@ -63,11 +63,10 @@ pub(crate) enum Mix {
         p: f64,
     },
     /// #466: a circle at `center` of `radius`, in the frame's units on a frame `frame` wide and
-    /// high; the outgoing side inside it while it closes, the incoming side while it opens.
+    /// high: the outgoing side inside it, the incoming side around it.
     Iris {
         center: [f64; 2],
         radius: f64,
-        closing: bool,
         frame: [f64; 2],
     },
     /// #466: a pack's pass over the two finished sides at the transition's progress.
@@ -196,7 +195,6 @@ fn iris_mix(
     Mix::Iris {
         center: i.center,
         radius: i.radius,
-        closing: !i.inside_incoming,
         frame,
     }
 }
@@ -287,7 +285,6 @@ pub(crate) fn blend(
                 Mix::Iris {
                     center,
                     radius,
-                    closing,
                     frame,
                 } => {
                     let k = [w as f64 / frame[0], h as f64 / frame[1]];
@@ -298,7 +295,7 @@ pub(crate) fn blend(
                     let d = deep_canvas::ops::sqrt(dx * dx + dy * dy);
                     // The share inside the circle, over a one-pixel edge.
                     let inside = (radius * k[0] - d + 0.5).clamp(0.0, 1.0);
-                    let (inn, out) = if closing { (pa, pb) } else { (pb, pa) };
+                    let (inn, out) = (pa, pb);
                     for c in 0..4 {
                         o[c] = if inside >= 1.0 {
                             inn[c]

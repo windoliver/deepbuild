@@ -62,7 +62,7 @@ pub enum Center {
 
 /// An iris's radius in the frame's units: a document channel on `transitions/<id>/iris/radius`
 /// (by the channel's ID), else a number, else by default the distance from its centre to the
-/// frame's farthest corner, closing to 0 at the cut and opening again by the progress.
+/// frame's farthest corner, closing to 0 over the window by the progress.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Radius {
     Closing,
@@ -79,20 +79,20 @@ pub struct Iris {
     pub hold_at: Option<f64>,
 }
 
-/// An iris at a time: its centre and radius in px of the frame, and the side inside the circle
-/// (the outgoing one until the cut, the incoming one from it); the other side shows outside.
+/// An iris at a time: its centre and radius in px of the frame. The outgoing side shows inside
+/// the circle, closing on its item, and the incoming side around it, so a window's ends are its
+/// two sides whole and nothing flashes back at the cut.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct IrisAt {
     pub center: [f64; 2],
     pub radius: f64,
-    pub inside_incoming: bool,
 }
 
 impl Iris {
     /// The iris at `t` (Transition: "an iris centers on an evaluated item, so it follows a
-    /// character"): its centre the item's anchor at t through the camera of the side inside the
-    /// circle, on a frame `size` px; `state` evaluated at t. With `from_start` (#466's planted
-    /// iris) the anchor is where it stood at the window's first flick.
+    /// character"): its centre the item's anchor at t through the outgoing side's camera, the side
+    /// the circle closes on, on a frame `size` px; `state` evaluated at t. With `from_start`
+    /// (#466's planted iris) the anchor is where it stood at the window's first flick.
     #[allow(clippy::too_many_arguments)]
     pub fn at(
         &self,
@@ -106,9 +106,7 @@ impl Iris {
         size: [f64; 2],
         from_start: bool,
     ) -> IrisAt {
-        let inside_incoming = t >= tr.cut;
-        let side = if inside_incoming { tr.to } else { tr.from };
-        let pose = plan.side(side, t, at);
+        let pose = plan.side(tr.from, t, at);
         let anchored = if from_start {
             let mut early = program.state();
             program.evaluate(tr.start, crate::eval::Validity::Full, &mut early);
@@ -148,18 +146,12 @@ impl Iris {
                     sqrt(dx * dx + dy * dy)
                 })
                 .fold(0.0, f64::max);
-                let p = tr.progress(held);
-                far * if p < 0.5 {
-                    1.0 - 2.0 * p
-                } else {
-                    2.0 * p - 1.0
-                }
+                far * (1.0 - tr.progress(held))
             }
         };
         IrisAt {
             center,
             radius: radius.max(0.0),
-            inside_incoming,
         }
     }
 }
