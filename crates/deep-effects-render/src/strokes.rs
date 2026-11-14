@@ -72,13 +72,8 @@ impl Draw {
                 })],
             }),
             primitive: Default::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
+            // The shader reads the scene's depth itself: a stroke paints only its own surface.
+            depth_stencil: None,
             multisample: Default::default(),
             multiview_mask: None,
             cache: None,
@@ -87,7 +82,7 @@ impl Draw {
         Draw { pipeline, layout }
     }
 
-    /// The frame's strokes over `target`, tested against `depth`.
+    /// The frame's strokes over `target`, each where `depth` holds its own surface.
     #[allow(clippy::too_many_arguments)]
     pub fn job(
         &self,
@@ -100,10 +95,17 @@ impl Draw {
         profiler: Option<Profiler>,
     ) -> Job {
         let d = &device.device;
+        // A perspective clip's w reads depth; an orthographic one's is 1.
+        let perspective = clip[3] != 0.0 || clip[7] != 0.0 || clip[11] != 0.0;
         let uniform: Vec<u8> = clip
             .iter()
             .map(|x| *x as f32)
-            .chain([size[0] as f32, size[1] as f32, 0.0, 0.0])
+            .chain([
+                size[0] as f32,
+                size[1] as f32,
+                f32::from(u8::from(perspective)),
+                0.0,
+            ])
             .flat_map(f32::to_le_bytes)
             .collect();
         let words: Vec<u8> = dabs
@@ -139,6 +141,10 @@ impl Draw {
                     binding: 1,
                     resource: sb.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&depth),
+                },
             ],
         });
         let pipeline = self.pipeline.clone();
@@ -157,11 +163,6 @@ impl Draw {
                             store: wgpu::StoreOp::Store,
                         },
                     })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &depth,
-                        depth_ops: None,
-                        stencil_ops: None,
-                    }),
                     timestamp_writes: ts,
                     ..Default::default()
                 });
