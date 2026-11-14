@@ -922,6 +922,7 @@ export class Core {
       this.transcriptReader.endTurn(session);
       this.transcripts.judge(session);
     }
+    await this.judging.recoverGateAnswers();
     await this.judging.judgedAcrossRestart();
     await this.runs.recover();
     await this.control.retain();

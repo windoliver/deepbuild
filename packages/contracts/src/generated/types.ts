@@ -3250,6 +3250,45 @@ export interface AskAnsweredV5 {
   evidence?: Array<string>;
 }
 
+export type AskAnsweredV6PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@6 */
+export interface AskAnsweredV6 {
+  v: 6;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session" | "channel";
+    verified: boolean;
+    on: AskAnsweredV6PinnedTo;
+    token: string | null;
+    steps?: Array<number>;
+    words: string | null;
+    image: string | null;
+    option: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.batched@1 */
 export interface AskBatched {
   v: 1;
@@ -3773,6 +3812,169 @@ export interface AskCreatedV4 {
     key: string;
     pinned_to: AskCreatedV4PinnedTo;
     subject?: AskCreatedV4SubjectPoint;
+  };
+  evidence?: Array<string>;
+}
+
+export type AskCreatedV5PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedV5Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskCreatedV5SubjectEffect = {
+  effect: string;
+  target: {
+    kind: string;
+    ref: string;
+    owner: string;
+  };
+  change: {
+    kind: string;
+    lines: number;
+    paths: Array<string>;
+  } | null;
+};
+
+export type AskCreatedV5SubjectTaste = {
+  screen: string;
+  element: string;
+};
+
+export type AskCreatedV5SubjectPoint = {
+  point: string;
+};
+
+/** ask.created@5 */
+export interface AskCreatedV5 {
+  v: 5;
+  id: string;
+  kind: "ask.created";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "authority";
+    question: string;
+    options: AskCreatedV5Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV5PinnedTo;
+    subject?: AskCreatedV5SubjectEffect;
+    action?: {
+      kind: "budget.issue";
+      scope: {
+        kind: "issue";
+        ref: string;
+      };
+      runs: number;
+      cap_usd: number;
+      ends: number;
+    };
+  } | {
+    kind: "unblock";
+    question: string;
+    options: AskCreatedV5Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV5PinnedTo;
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+    cost_usd?: number;
+  } | {
+    kind: "taste";
+    question: string;
+    options: AskCreatedV5Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV5PinnedTo;
+    dropped?: Array<{
+      option: string;
+      same_as: string;
+    }>;
+    subject?: AskCreatedV5SubjectTaste;
+  } | {
+    kind: "exception";
+    question: string;
+    options: AskCreatedV5Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV5PinnedTo;
+    action?: {
+      kind: "claim.stalled";
+      task: string;
+    } | {
+      kind: "switch.off";
+      repo: string;
+      name: string;
+      deployed: string;
+      task: string;
+      issue: number;
+    };
+  } | {
+    kind: "choice";
+    question: string;
+    options: AskCreatedV5Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV5PinnedTo;
+    subject?: AskCreatedV5SubjectPoint;
+  } | {
+    kind: "definition";
+    question: string;
+    options: AskCreatedV5Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV5PinnedTo;
+    subject?: AskCreatedV5SubjectPoint;
   };
   evidence?: Array<string>;
 }
@@ -4471,6 +4673,31 @@ export interface ClaimMadeV3 {
       at: number;
     }>;
     hash: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** claim.progress@1 */
+export interface ClaimProgress {
+  v: 1;
+  id: string;
+  kind: "claim.progress";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task: string;
+    rounds: number;
+    last: {
+      items: string;
+      passing: Array<string>;
+    } | null;
+    seen: Array<string>;
+    stalled: string | null;
   };
   evidence?: Array<string>;
 }
@@ -8896,6 +9123,31 @@ export interface SpendApprovedV2 {
     via: "card" | "inbox";
   };
   evidence?: Array<string>;
+}
+
+/** spend.approved@3 */
+export interface SpendApprovedV3 {
+  v: 3;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    runs?: number;
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+  subject?: string;
 }
 
 /** spend.asked@1 */

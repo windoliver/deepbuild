@@ -24886,6 +24886,348 @@ impl Contract for AskAnsweredV5 {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6PinnedToCommitKind;
+
+impl Contract for AskAnsweredV6PinnedToCommitKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"commit\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"commit\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6PinnedToCommit {
+    pub kind: AskAnsweredV6PinnedToCommitKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskAnsweredV6PinnedToCommit {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_94)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6PinnedToDocRevisionKind;
+
+impl Contract for AskAnsweredV6PinnedToDocRevisionKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"doc_revision\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"doc_revision\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6PinnedToDocRevision {
+    pub kind: AskAnsweredV6PinnedToDocRevisionKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskAnsweredV6PinnedToDocRevision {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_6)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6PinnedToEvidenceKind;
+
+impl Contract for AskAnsweredV6PinnedToEvidenceKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"evidence\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"evidence\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6PinnedToEvidence {
+    pub kind: AskAnsweredV6PinnedToEvidenceKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskAnsweredV6PinnedToEvidence {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AskAnsweredV6PinnedTo {
+    Commit(AskAnsweredV6PinnedToCommit),
+    DocRevision(AskAnsweredV6PinnedToDocRevision),
+    Evidence(AskAnsweredV6PinnedToEvidence),
+}
+
+impl Contract for AskAnsweredV6PinnedTo {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "kind")?.as_str() {
+            "\"commit\"" => Ok(Self::Commit(<AskAnsweredV6PinnedToCommit as Contract>::from_json(value, at)?)),
+            "\"doc_revision\"" => Ok(Self::DocRevision(<AskAnsweredV6PinnedToDocRevision as Contract>::from_json(value, at)?)),
+            "\"evidence\"" => Ok(Self::Evidence(<AskAnsweredV6PinnedToEvidence as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Commit(inner) => inner.to_json(),
+            Self::DocRevision(inner) => inner.to_json(),
+            Self::Evidence(inner) => inner.to_json(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6V;
+
+impl Contract for AskAnsweredV6V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "6").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("6").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6Kind;
+
+impl Contract for AskAnsweredV6Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"ask.answered\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"ask.answered\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6Writer;
+
+impl Contract for AskAnsweredV6Writer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskAnsweredV6DataDecision {
+    Allow,
+    Deny,
+    None,
+}
+
+impl Contract for AskAnsweredV6DataDecision {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "allow" => Ok(Self::Allow),
+            "deny" => Ok(Self::Deny),
+            "none" => Ok(Self::None),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+            Self::None => "none",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskAnsweredV6DataVia {
+    Card,
+    Inbox,
+    Session,
+    Channel,
+}
+
+impl Contract for AskAnsweredV6DataVia {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "card" => Ok(Self::Card),
+            "inbox" => Ok(Self::Inbox),
+            "session" => Ok(Self::Session),
+            "channel" => Ok(Self::Channel),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Card => "card",
+            Self::Inbox => "inbox",
+            Self::Session => "session",
+            Self::Channel => "channel",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6Data {
+    pub answer: String,
+    pub plan_hash: Option<String>,
+    pub decision: AskAnsweredV6DataDecision,
+    pub via: AskAnsweredV6DataVia,
+    pub verified: bool,
+    pub on: AskAnsweredV6PinnedTo,
+    pub token: Option<String>,
+    pub steps: Option<Vec<i64>>,
+    pub words: Option<String>,
+    pub image: Option<String>,
+    pub option: Option<String>,
+}
+
+impl Contract for AskAnsweredV6Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["answer", "plan_hash", "decision", "via", "verified", "on", "token", "steps", "words", "image", "option"])?;
+        deep_contracts::check_member(members, at, "answer", &RULE_6)?;
+        deep_contracts::check_member(members, at, "plan_hash", &RULE_92)?;
+        deep_contracts::check_member(members, at, "token", &RULE_14)?;
+        deep_contracts::check_member(members, at, "steps", &RULE_95)?;
+        deep_contracts::check_member(members, at, "words", &RULE_14)?;
+        deep_contracts::check_member(members, at, "image", &RULE_92)?;
+        deep_contracts::check_member(members, at, "option", &RULE_14)?;
+        Ok(Self {
+            answer: deep_contracts::required(members, at, "answer")?,
+            plan_hash: deep_contracts::required(members, at, "plan_hash")?,
+            decision: deep_contracts::required(members, at, "decision")?,
+            via: deep_contracts::required(members, at, "via")?,
+            verified: deep_contracts::required(members, at, "verified")?,
+            on: deep_contracts::required(members, at, "on")?,
+            token: deep_contracts::required(members, at, "token")?,
+            steps: deep_contracts::optional(members, at, "steps")?,
+            words: deep_contracts::required(members, at, "words")?,
+            image: deep_contracts::required(members, at, "image")?,
+            option: deep_contracts::required(members, at, "option")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("answer".to_string(), self.answer.to_json()));
+        members.push(("plan_hash".to_string(), self.plan_hash.to_json()));
+        members.push(("decision".to_string(), self.decision.to_json()));
+        members.push(("via".to_string(), self.via.to_json()));
+        members.push(("verified".to_string(), self.verified.to_json()));
+        members.push(("on".to_string(), self.on.to_json()));
+        members.push(("token".to_string(), self.token.to_json()));
+        if let Some(value) = &self.steps {
+            members.push(("steps".to_string(), value.to_json()));
+        }
+        members.push(("words".to_string(), self.words.to_json()));
+        members.push(("image".to_string(), self.image.to_json()));
+        members.push(("option".to_string(), self.option.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskAnsweredV6 {
+    pub v: AskAnsweredV6V,
+    pub id: String,
+    pub kind: AskAnsweredV6Kind,
+    pub subject: String,
+    pub writer: AskAnsweredV6Writer,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: AskAnsweredV6Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for AskAnsweredV6 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_89)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::required(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("subject".to_string(), self.subject.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AskBatchedV;
 
 impl Contract for AskBatchedV {
@@ -28449,6 +28791,1158 @@ impl Contract for AskCreatedV4 {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5PinnedToCommitKind;
+
+impl Contract for AskCreatedV5PinnedToCommitKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"commit\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"commit\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5PinnedToCommit {
+    pub kind: AskCreatedV5PinnedToCommitKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskCreatedV5PinnedToCommit {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_94)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5PinnedToDocRevisionKind;
+
+impl Contract for AskCreatedV5PinnedToDocRevisionKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"doc_revision\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"doc_revision\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5PinnedToDocRevision {
+    pub kind: AskCreatedV5PinnedToDocRevisionKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskCreatedV5PinnedToDocRevision {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_6)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5PinnedToEvidenceKind;
+
+impl Contract for AskCreatedV5PinnedToEvidenceKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"evidence\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"evidence\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5PinnedToEvidence {
+    pub kind: AskCreatedV5PinnedToEvidenceKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskCreatedV5PinnedToEvidence {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AskCreatedV5PinnedTo {
+    Commit(AskCreatedV5PinnedToCommit),
+    DocRevision(AskCreatedV5PinnedToDocRevision),
+    Evidence(AskCreatedV5PinnedToEvidence),
+}
+
+impl Contract for AskCreatedV5PinnedTo {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "kind")?.as_str() {
+            "\"commit\"" => Ok(Self::Commit(<AskCreatedV5PinnedToCommit as Contract>::from_json(value, at)?)),
+            "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedV5PinnedToDocRevision as Contract>::from_json(value, at)?)),
+            "\"evidence\"" => Ok(Self::Evidence(<AskCreatedV5PinnedToEvidence as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Commit(inner) => inner.to_json(),
+            Self::DocRevision(inner) => inner.to_json(),
+            Self::Evidence(inner) => inner.to_json(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskCreatedV5OptionsItemDecision {
+    Allow,
+    Deny,
+    None,
+}
+
+impl Contract for AskCreatedV5OptionsItemDecision {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "allow" => Ok(Self::Allow),
+            "deny" => Ok(Self::Deny),
+            "none" => Ok(Self::None),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+            Self::None => "none",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5OptionsItem {
+    pub id: String,
+    pub label: String,
+    pub decision: AskCreatedV5OptionsItemDecision,
+}
+
+impl Contract for AskCreatedV5OptionsItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["id", "label", "decision"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_6)?;
+        deep_contracts::check_member(members, at, "label", &RULE_6)?;
+        Ok(Self {
+            id: deep_contracts::required(members, at, "id")?,
+            label: deep_contracts::required(members, at, "label")?,
+            decision: deep_contracts::required(members, at, "decision")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("label".to_string(), self.label.to_json()));
+        members.push(("decision".to_string(), self.decision.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type AskCreatedV5Options = Vec<AskCreatedV5OptionsItem>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5SubjectEffectTarget {
+    pub kind: String,
+    pub r#ref: String,
+    pub owner: String,
+}
+
+impl Contract for AskCreatedV5SubjectEffectTarget {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref", "owner"])?;
+        deep_contracts::check_member(members, at, "kind", &RULE_6)?;
+        deep_contracts::check_member(members, at, "ref", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5SubjectEffectChange {
+    pub kind: String,
+    pub lines: i64,
+    pub paths: Vec<String>,
+}
+
+impl Contract for AskCreatedV5SubjectEffectChange {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "lines", "paths"])?;
+        deep_contracts::check_member(members, at, "kind", &RULE_6)?;
+        deep_contracts::check_member(members, at, "lines", &RULE_4)?;
+        deep_contracts::check_member(members, at, "paths", &RULE_13)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            lines: deep_contracts::required(members, at, "lines")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("lines".to_string(), self.lines.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5SubjectEffect {
+    pub effect: String,
+    pub target: AskCreatedV5SubjectEffectTarget,
+    pub change: Option<AskCreatedV5SubjectEffectChange>,
+}
+
+impl Contract for AskCreatedV5SubjectEffect {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["effect", "target", "change"])?;
+        deep_contracts::check_member(members, at, "effect", &RULE_6)?;
+        Ok(Self {
+            effect: deep_contracts::required(members, at, "effect")?,
+            target: deep_contracts::required(members, at, "target")?,
+            change: deep_contracts::required(members, at, "change")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("effect".to_string(), self.effect.to_json()));
+        members.push(("target".to_string(), self.target.to_json()));
+        members.push(("change".to_string(), self.change.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5SubjectTaste {
+    pub screen: String,
+    pub element: String,
+}
+
+impl Contract for AskCreatedV5SubjectTaste {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["screen", "element"])?;
+        deep_contracts::check_member(members, at, "screen", &RULE_6)?;
+        deep_contracts::check_member(members, at, "element", &RULE_6)?;
+        Ok(Self {
+            screen: deep_contracts::required(members, at, "screen")?,
+            element: deep_contracts::required(members, at, "element")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("screen".to_string(), self.screen.to_json()));
+        members.push(("element".to_string(), self.element.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5SubjectPoint {
+    pub point: String,
+}
+
+impl Contract for AskCreatedV5SubjectPoint {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["point"])?;
+        deep_contracts::check_member(members, at, "point", &RULE_6)?;
+        Ok(Self {
+            point: deep_contracts::required(members, at, "point")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("point".to_string(), self.point.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5V;
+
+impl Contract for AskCreatedV5V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "5").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("5").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5Kind;
+
+impl Contract for AskCreatedV5Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"ask.created\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"ask.created\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataAuthorityKind;
+
+impl Contract for AskCreatedV5DataAuthorityKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"authority\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"authority\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataAuthorityActionKind;
+
+impl Contract for AskCreatedV5DataAuthorityActionKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"budget.issue\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"budget.issue\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataAuthorityActionScopeKind;
+
+impl Contract for AskCreatedV5DataAuthorityActionScopeKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"issue\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"issue\"").expect("a constant is JSON")
+    }
+}
+
+static PATTERN_103: &[deep_contracts::Inst] = &[
+    deep_contracts::Inst::Split(1, 11),
+    deep_contracts::Inst::Char(&[(116, 116)]),
+    deep_contracts::Inst::Char(&[(97, 97)]),
+    deep_contracts::Inst::Char(&[(115, 115)]),
+    deep_contracts::Inst::Char(&[(107, 107)]),
+    deep_contracts::Inst::Char(&[(58, 58)]),
+    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
+    deep_contracts::Inst::Split(8, 10),
+    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
+    deep_contracts::Inst::Jmp(7),
+    deep_contracts::Inst::Jmp(28),
+    deep_contracts::Inst::Char(&[(115, 115)]),
+    deep_contracts::Inst::Char(&[(101, 101)]),
+    deep_contracts::Inst::Char(&[(115, 115)]),
+    deep_contracts::Inst::Char(&[(115, 115)]),
+    deep_contracts::Inst::Char(&[(105, 105)]),
+    deep_contracts::Inst::Char(&[(111, 111)]),
+    deep_contracts::Inst::Char(&[(110, 110)]),
+    deep_contracts::Inst::Char(&[(58, 58)]),
+    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
+    deep_contracts::Inst::Split(21, 23),
+    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
+    deep_contracts::Inst::Jmp(20),
+    deep_contracts::Inst::Char(&[(35, 35)]),
+    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
+    deep_contracts::Inst::Split(26, 28),
+    deep_contracts::Inst::Char(&[(45, 46), (48, 57), (65, 90), (95, 95), (97, 122)]),
+    deep_contracts::Inst::Jmp(25),
+    deep_contracts::Inst::Match,
+];
+
+static RULE_104: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_103) };
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataAuthorityActionScope {
+    pub kind: AskCreatedV5DataAuthorityActionScopeKind,
+    pub r#ref: String,
+}
+
+impl Contract for AskCreatedV5DataAuthorityActionScope {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_104)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataAuthorityAction {
+    pub kind: AskCreatedV5DataAuthorityActionKind,
+    pub scope: AskCreatedV5DataAuthorityActionScope,
+    pub runs: i64,
+    pub cap_usd: f64,
+    pub ends: i64,
+}
+
+impl Contract for AskCreatedV5DataAuthorityAction {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "scope", "runs", "cap_usd", "ends"])?;
+        deep_contracts::check_member(members, at, "runs", &RULE_5)?;
+        deep_contracts::check_member(members, at, "cap_usd", &RULE_63)?;
+        deep_contracts::check_member(members, at, "ends", &RULE_4)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            runs: deep_contracts::required(members, at, "runs")?,
+            cap_usd: deep_contracts::required(members, at, "cap_usd")?,
+            ends: deep_contracts::required(members, at, "ends")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("runs".to_string(), self.runs.to_json()));
+        members.push(("cap_usd".to_string(), self.cap_usd.to_json()));
+        members.push(("ends".to_string(), self.ends.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataAuthority {
+    pub kind: AskCreatedV5DataAuthorityKind,
+    pub question: String,
+    pub options: AskCreatedV5Options,
+    pub recommended: Option<String>,
+    pub deadline: i64,
+    pub fallback: String,
+    pub default: String,
+    pub provisional: bool,
+    pub owner: String,
+    pub key: String,
+    pub pinned_to: AskCreatedV5PinnedTo,
+    pub subject: Option<AskCreatedV5SubjectEffect>,
+    pub action: Option<AskCreatedV5DataAuthorityAction>,
+}
+
+impl Contract for AskCreatedV5DataAuthority {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "question", "options", "recommended", "deadline", "fallback", "default", "provisional", "owner", "key", "pinned_to", "subject", "action"])?;
+        deep_contracts::check_member(members, at, "question", &RULE_6)?;
+        deep_contracts::check_member(members, at, "recommended", &RULE_14)?;
+        deep_contracts::check_member(members, at, "deadline", &RULE_4)?;
+        deep_contracts::check_member(members, at, "fallback", &RULE_6)?;
+        deep_contracts::check_member(members, at, "default", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        deep_contracts::check_member(members, at, "key", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            question: deep_contracts::required(members, at, "question")?,
+            options: deep_contracts::required(members, at, "options")?,
+            recommended: deep_contracts::required(members, at, "recommended")?,
+            deadline: deep_contracts::required(members, at, "deadline")?,
+            fallback: deep_contracts::required(members, at, "fallback")?,
+            default: deep_contracts::required(members, at, "default")?,
+            provisional: deep_contracts::required(members, at, "provisional")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+            key: deep_contracts::required(members, at, "key")?,
+            pinned_to: deep_contracts::required(members, at, "pinned_to")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            action: deep_contracts::optional(members, at, "action")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("question".to_string(), self.question.to_json()));
+        members.push(("options".to_string(), self.options.to_json()));
+        members.push(("recommended".to_string(), self.recommended.to_json()));
+        members.push(("deadline".to_string(), self.deadline.to_json()));
+        members.push(("fallback".to_string(), self.fallback.to_json()));
+        members.push(("default".to_string(), self.default.to_json()));
+        members.push(("provisional".to_string(), self.provisional.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("pinned_to".to_string(), self.pinned_to.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.action {
+            members.push(("action".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataUnblockKind;
+
+impl Contract for AskCreatedV5DataUnblockKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"unblock\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"unblock\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataUnblock {
+    pub kind: AskCreatedV5DataUnblockKind,
+    pub question: String,
+    pub options: AskCreatedV5Options,
+    pub recommended: Option<String>,
+    pub deadline: i64,
+    pub fallback: String,
+    pub default: String,
+    pub provisional: bool,
+    pub owner: String,
+    pub key: String,
+    pub pinned_to: AskCreatedV5PinnedTo,
+    pub steps: Vec<String>,
+    pub r#where: String,
+    pub why: String,
+    pub unblocks: Vec<String>,
+    pub proves: String,
+    pub cost_usd: Option<f64>,
+}
+
+impl Contract for AskCreatedV5DataUnblock {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "question", "options", "recommended", "deadline", "fallback", "default", "provisional", "owner", "key", "pinned_to", "steps", "where", "why", "unblocks", "proves", "cost_usd"])?;
+        deep_contracts::check_member(members, at, "question", &RULE_6)?;
+        deep_contracts::check_member(members, at, "recommended", &RULE_14)?;
+        deep_contracts::check_member(members, at, "deadline", &RULE_4)?;
+        deep_contracts::check_member(members, at, "fallback", &RULE_6)?;
+        deep_contracts::check_member(members, at, "default", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        deep_contracts::check_member(members, at, "key", &RULE_83)?;
+        deep_contracts::check_member(members, at, "steps", &RULE_101)?;
+        deep_contracts::check_member(members, at, "where", &RULE_6)?;
+        deep_contracts::check_member(members, at, "why", &RULE_6)?;
+        deep_contracts::check_member(members, at, "unblocks", &RULE_102)?;
+        deep_contracts::check_member(members, at, "proves", &RULE_6)?;
+        deep_contracts::check_member(members, at, "cost_usd", &RULE_4)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            question: deep_contracts::required(members, at, "question")?,
+            options: deep_contracts::required(members, at, "options")?,
+            recommended: deep_contracts::required(members, at, "recommended")?,
+            deadline: deep_contracts::required(members, at, "deadline")?,
+            fallback: deep_contracts::required(members, at, "fallback")?,
+            default: deep_contracts::required(members, at, "default")?,
+            provisional: deep_contracts::required(members, at, "provisional")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+            key: deep_contracts::required(members, at, "key")?,
+            pinned_to: deep_contracts::required(members, at, "pinned_to")?,
+            steps: deep_contracts::required(members, at, "steps")?,
+            r#where: deep_contracts::required(members, at, "where")?,
+            why: deep_contracts::required(members, at, "why")?,
+            unblocks: deep_contracts::required(members, at, "unblocks")?,
+            proves: deep_contracts::required(members, at, "proves")?,
+            cost_usd: deep_contracts::optional(members, at, "cost_usd")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("question".to_string(), self.question.to_json()));
+        members.push(("options".to_string(), self.options.to_json()));
+        members.push(("recommended".to_string(), self.recommended.to_json()));
+        members.push(("deadline".to_string(), self.deadline.to_json()));
+        members.push(("fallback".to_string(), self.fallback.to_json()));
+        members.push(("default".to_string(), self.default.to_json()));
+        members.push(("provisional".to_string(), self.provisional.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("pinned_to".to_string(), self.pinned_to.to_json()));
+        members.push(("steps".to_string(), self.steps.to_json()));
+        members.push(("where".to_string(), self.r#where.to_json()));
+        members.push(("why".to_string(), self.why.to_json()));
+        members.push(("unblocks".to_string(), self.unblocks.to_json()));
+        members.push(("proves".to_string(), self.proves.to_json()));
+        if let Some(value) = &self.cost_usd {
+            members.push(("cost_usd".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataTasteKind;
+
+impl Contract for AskCreatedV5DataTasteKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"taste\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"taste\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataTasteDroppedItem {
+    pub option: String,
+    pub same_as: String,
+}
+
+impl Contract for AskCreatedV5DataTasteDroppedItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["option", "same_as"])?;
+        deep_contracts::check_member(members, at, "option", &RULE_6)?;
+        deep_contracts::check_member(members, at, "same_as", &RULE_6)?;
+        Ok(Self {
+            option: deep_contracts::required(members, at, "option")?,
+            same_as: deep_contracts::required(members, at, "same_as")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("option".to_string(), self.option.to_json()));
+        members.push(("same_as".to_string(), self.same_as.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataTaste {
+    pub kind: AskCreatedV5DataTasteKind,
+    pub question: String,
+    pub options: AskCreatedV5Options,
+    pub recommended: Option<String>,
+    pub deadline: i64,
+    pub fallback: String,
+    pub default: String,
+    pub provisional: bool,
+    pub owner: String,
+    pub key: String,
+    pub pinned_to: AskCreatedV5PinnedTo,
+    pub dropped: Option<Vec<AskCreatedV5DataTasteDroppedItem>>,
+    pub subject: Option<AskCreatedV5SubjectTaste>,
+}
+
+impl Contract for AskCreatedV5DataTaste {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "question", "options", "recommended", "deadline", "fallback", "default", "provisional", "owner", "key", "pinned_to", "dropped", "subject"])?;
+        deep_contracts::check_member(members, at, "question", &RULE_6)?;
+        deep_contracts::check_member(members, at, "recommended", &RULE_14)?;
+        deep_contracts::check_member(members, at, "deadline", &RULE_4)?;
+        deep_contracts::check_member(members, at, "fallback", &RULE_6)?;
+        deep_contracts::check_member(members, at, "default", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        deep_contracts::check_member(members, at, "key", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            question: deep_contracts::required(members, at, "question")?,
+            options: deep_contracts::required(members, at, "options")?,
+            recommended: deep_contracts::required(members, at, "recommended")?,
+            deadline: deep_contracts::required(members, at, "deadline")?,
+            fallback: deep_contracts::required(members, at, "fallback")?,
+            default: deep_contracts::required(members, at, "default")?,
+            provisional: deep_contracts::required(members, at, "provisional")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+            key: deep_contracts::required(members, at, "key")?,
+            pinned_to: deep_contracts::required(members, at, "pinned_to")?,
+            dropped: deep_contracts::optional(members, at, "dropped")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("question".to_string(), self.question.to_json()));
+        members.push(("options".to_string(), self.options.to_json()));
+        members.push(("recommended".to_string(), self.recommended.to_json()));
+        members.push(("deadline".to_string(), self.deadline.to_json()));
+        members.push(("fallback".to_string(), self.fallback.to_json()));
+        members.push(("default".to_string(), self.default.to_json()));
+        members.push(("provisional".to_string(), self.provisional.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("pinned_to".to_string(), self.pinned_to.to_json()));
+        if let Some(value) = &self.dropped {
+            members.push(("dropped".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataExceptionKind;
+
+impl Contract for AskCreatedV5DataExceptionKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"exception\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"exception\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataExceptionActionClaimStalledKind;
+
+impl Contract for AskCreatedV5DataExceptionActionClaimStalledKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"claim.stalled\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"claim.stalled\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataExceptionActionClaimStalled {
+    pub kind: AskCreatedV5DataExceptionActionClaimStalledKind,
+    pub task: String,
+}
+
+impl Contract for AskCreatedV5DataExceptionActionClaimStalled {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "task"])?;
+        deep_contracts::check_member(members, at, "task", &RULE_104)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            task: deep_contracts::required(members, at, "task")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("task".to_string(), self.task.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataExceptionActionSwitchOffKind;
+
+impl Contract for AskCreatedV5DataExceptionActionSwitchOffKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"switch.off\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"switch.off\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataExceptionActionSwitchOff {
+    pub kind: AskCreatedV5DataExceptionActionSwitchOffKind,
+    pub repo: String,
+    pub name: String,
+    pub deployed: String,
+    pub task: String,
+    pub issue: i64,
+}
+
+impl Contract for AskCreatedV5DataExceptionActionSwitchOff {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "repo", "name", "deployed", "task", "issue"])?;
+        deep_contracts::check_member(members, at, "repo", &RULE_6)?;
+        deep_contracts::check_member(members, at, "name", &RULE_6)?;
+        deep_contracts::check_member(members, at, "deployed", &RULE_6)?;
+        deep_contracts::check_member(members, at, "task", &RULE_104)?;
+        deep_contracts::check_member(members, at, "issue", &RULE_5)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            repo: deep_contracts::required(members, at, "repo")?,
+            name: deep_contracts::required(members, at, "name")?,
+            deployed: deep_contracts::required(members, at, "deployed")?,
+            task: deep_contracts::required(members, at, "task")?,
+            issue: deep_contracts::required(members, at, "issue")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("repo".to_string(), self.repo.to_json()));
+        members.push(("name".to_string(), self.name.to_json()));
+        members.push(("deployed".to_string(), self.deployed.to_json()));
+        members.push(("task".to_string(), self.task.to_json()));
+        members.push(("issue".to_string(), self.issue.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AskCreatedV5DataExceptionAction {
+    ClaimStalled(AskCreatedV5DataExceptionActionClaimStalled),
+    SwitchOff(AskCreatedV5DataExceptionActionSwitchOff),
+}
+
+impl Contract for AskCreatedV5DataExceptionAction {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "kind")?.as_str() {
+            "\"claim.stalled\"" => Ok(Self::ClaimStalled(<AskCreatedV5DataExceptionActionClaimStalled as Contract>::from_json(value, at)?)),
+            "\"switch.off\"" => Ok(Self::SwitchOff(<AskCreatedV5DataExceptionActionSwitchOff as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::ClaimStalled(inner) => inner.to_json(),
+            Self::SwitchOff(inner) => inner.to_json(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataException {
+    pub kind: AskCreatedV5DataExceptionKind,
+    pub question: String,
+    pub options: AskCreatedV5Options,
+    pub recommended: Option<String>,
+    pub deadline: i64,
+    pub fallback: String,
+    pub default: String,
+    pub provisional: bool,
+    pub owner: String,
+    pub key: String,
+    pub pinned_to: AskCreatedV5PinnedTo,
+    pub action: Option<AskCreatedV5DataExceptionAction>,
+}
+
+impl Contract for AskCreatedV5DataException {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "question", "options", "recommended", "deadline", "fallback", "default", "provisional", "owner", "key", "pinned_to", "action"])?;
+        deep_contracts::check_member(members, at, "question", &RULE_6)?;
+        deep_contracts::check_member(members, at, "recommended", &RULE_14)?;
+        deep_contracts::check_member(members, at, "deadline", &RULE_4)?;
+        deep_contracts::check_member(members, at, "fallback", &RULE_6)?;
+        deep_contracts::check_member(members, at, "default", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        deep_contracts::check_member(members, at, "key", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            question: deep_contracts::required(members, at, "question")?,
+            options: deep_contracts::required(members, at, "options")?,
+            recommended: deep_contracts::required(members, at, "recommended")?,
+            deadline: deep_contracts::required(members, at, "deadline")?,
+            fallback: deep_contracts::required(members, at, "fallback")?,
+            default: deep_contracts::required(members, at, "default")?,
+            provisional: deep_contracts::required(members, at, "provisional")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+            key: deep_contracts::required(members, at, "key")?,
+            pinned_to: deep_contracts::required(members, at, "pinned_to")?,
+            action: deep_contracts::optional(members, at, "action")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("question".to_string(), self.question.to_json()));
+        members.push(("options".to_string(), self.options.to_json()));
+        members.push(("recommended".to_string(), self.recommended.to_json()));
+        members.push(("deadline".to_string(), self.deadline.to_json()));
+        members.push(("fallback".to_string(), self.fallback.to_json()));
+        members.push(("default".to_string(), self.default.to_json()));
+        members.push(("provisional".to_string(), self.provisional.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("pinned_to".to_string(), self.pinned_to.to_json()));
+        if let Some(value) = &self.action {
+            members.push(("action".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataChoiceKind;
+
+impl Contract for AskCreatedV5DataChoiceKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"choice\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"choice\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataChoice {
+    pub kind: AskCreatedV5DataChoiceKind,
+    pub question: String,
+    pub options: AskCreatedV5Options,
+    pub recommended: Option<String>,
+    pub deadline: i64,
+    pub fallback: String,
+    pub default: String,
+    pub provisional: bool,
+    pub owner: String,
+    pub key: String,
+    pub pinned_to: AskCreatedV5PinnedTo,
+    pub subject: Option<AskCreatedV5SubjectPoint>,
+}
+
+impl Contract for AskCreatedV5DataChoice {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "question", "options", "recommended", "deadline", "fallback", "default", "provisional", "owner", "key", "pinned_to", "subject"])?;
+        deep_contracts::check_member(members, at, "question", &RULE_6)?;
+        deep_contracts::check_member(members, at, "recommended", &RULE_14)?;
+        deep_contracts::check_member(members, at, "deadline", &RULE_4)?;
+        deep_contracts::check_member(members, at, "fallback", &RULE_6)?;
+        deep_contracts::check_member(members, at, "default", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        deep_contracts::check_member(members, at, "key", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            question: deep_contracts::required(members, at, "question")?,
+            options: deep_contracts::required(members, at, "options")?,
+            recommended: deep_contracts::required(members, at, "recommended")?,
+            deadline: deep_contracts::required(members, at, "deadline")?,
+            fallback: deep_contracts::required(members, at, "fallback")?,
+            default: deep_contracts::required(members, at, "default")?,
+            provisional: deep_contracts::required(members, at, "provisional")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+            key: deep_contracts::required(members, at, "key")?,
+            pinned_to: deep_contracts::required(members, at, "pinned_to")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("question".to_string(), self.question.to_json()));
+        members.push(("options".to_string(), self.options.to_json()));
+        members.push(("recommended".to_string(), self.recommended.to_json()));
+        members.push(("deadline".to_string(), self.deadline.to_json()));
+        members.push(("fallback".to_string(), self.fallback.to_json()));
+        members.push(("default".to_string(), self.default.to_json()));
+        members.push(("provisional".to_string(), self.provisional.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("pinned_to".to_string(), self.pinned_to.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataDefinitionKind;
+
+impl Contract for AskCreatedV5DataDefinitionKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"definition\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"definition\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5DataDefinition {
+    pub kind: AskCreatedV5DataDefinitionKind,
+    pub question: String,
+    pub options: AskCreatedV5Options,
+    pub recommended: Option<String>,
+    pub deadline: i64,
+    pub fallback: String,
+    pub default: String,
+    pub provisional: bool,
+    pub owner: String,
+    pub key: String,
+    pub pinned_to: AskCreatedV5PinnedTo,
+    pub subject: Option<AskCreatedV5SubjectPoint>,
+}
+
+impl Contract for AskCreatedV5DataDefinition {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "question", "options", "recommended", "deadline", "fallback", "default", "provisional", "owner", "key", "pinned_to", "subject"])?;
+        deep_contracts::check_member(members, at, "question", &RULE_6)?;
+        deep_contracts::check_member(members, at, "recommended", &RULE_14)?;
+        deep_contracts::check_member(members, at, "deadline", &RULE_4)?;
+        deep_contracts::check_member(members, at, "fallback", &RULE_6)?;
+        deep_contracts::check_member(members, at, "default", &RULE_6)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_6)?;
+        deep_contracts::check_member(members, at, "key", &RULE_83)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            question: deep_contracts::required(members, at, "question")?,
+            options: deep_contracts::required(members, at, "options")?,
+            recommended: deep_contracts::required(members, at, "recommended")?,
+            deadline: deep_contracts::required(members, at, "deadline")?,
+            fallback: deep_contracts::required(members, at, "fallback")?,
+            default: deep_contracts::required(members, at, "default")?,
+            provisional: deep_contracts::required(members, at, "provisional")?,
+            owner: deep_contracts::required(members, at, "owner")?,
+            key: deep_contracts::required(members, at, "key")?,
+            pinned_to: deep_contracts::required(members, at, "pinned_to")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("question".to_string(), self.question.to_json()));
+        members.push(("options".to_string(), self.options.to_json()));
+        members.push(("recommended".to_string(), self.recommended.to_json()));
+        members.push(("deadline".to_string(), self.deadline.to_json()));
+        members.push(("fallback".to_string(), self.fallback.to_json()));
+        members.push(("default".to_string(), self.default.to_json()));
+        members.push(("provisional".to_string(), self.provisional.to_json()));
+        members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("pinned_to".to_string(), self.pinned_to.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AskCreatedV5Data {
+    Authority(AskCreatedV5DataAuthority),
+    Unblock(AskCreatedV5DataUnblock),
+    Taste(AskCreatedV5DataTaste),
+    Exception(AskCreatedV5DataException),
+    Choice(AskCreatedV5DataChoice),
+    Definition(AskCreatedV5DataDefinition),
+}
+
+impl Contract for AskCreatedV5Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "kind")?.as_str() {
+            "\"authority\"" => Ok(Self::Authority(<AskCreatedV5DataAuthority as Contract>::from_json(value, at)?)),
+            "\"unblock\"" => Ok(Self::Unblock(<AskCreatedV5DataUnblock as Contract>::from_json(value, at)?)),
+            "\"taste\"" => Ok(Self::Taste(<AskCreatedV5DataTaste as Contract>::from_json(value, at)?)),
+            "\"exception\"" => Ok(Self::Exception(<AskCreatedV5DataException as Contract>::from_json(value, at)?)),
+            "\"choice\"" => Ok(Self::Choice(<AskCreatedV5DataChoice as Contract>::from_json(value, at)?)),
+            "\"definition\"" => Ok(Self::Definition(<AskCreatedV5DataDefinition as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Authority(inner) => inner.to_json(),
+            Self::Unblock(inner) => inner.to_json(),
+            Self::Taste(inner) => inner.to_json(),
+            Self::Exception(inner) => inner.to_json(),
+            Self::Choice(inner) => inner.to_json(),
+            Self::Definition(inner) => inner.to_json(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AskCreatedV5 {
+    pub v: AskCreatedV5V,
+    pub id: String,
+    pub kind: AskCreatedV5Kind,
+    pub subject: Option<String>,
+    pub writer: String,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: AskCreatedV5Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for AskCreatedV5 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_98)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AskDefaultedV;
 
 impl Contract for AskDefaultedV {
@@ -28925,7 +30419,7 @@ impl Contract for AskMootDataCheckPassedBecause {
     }
 }
 
-static PATTERN_103: &[deep_contracts::Inst] = &[
+static PATTERN_105: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(118, 118)]),
     deep_contracts::Inst::Char(&[(101, 101)]),
     deep_contracts::Inst::Char(&[(114, 114)]),
@@ -28941,7 +30435,7 @@ static PATTERN_103: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_104: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_103) };
+static RULE_106: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_105) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AskMootDataCheckPassed {
@@ -28952,7 +30446,7 @@ pub struct AskMootDataCheckPassed {
 impl Contract for AskMootDataCheckPassed {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["because", "verdict"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
         Ok(Self {
             because: deep_contracts::required(members, at, "because")?,
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -28978,7 +30472,7 @@ impl Contract for AskMootDataAttemptReplacedBecause {
     }
 }
 
-static RULE_105: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_73) };
+static RULE_107: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_73) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AskMootDataAttemptReplaced {
@@ -28989,7 +30483,7 @@ pub struct AskMootDataAttemptReplaced {
 impl Contract for AskMootDataAttemptReplaced {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["because", "session"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
         Ok(Self {
             because: deep_contracts::required(members, at, "because")?,
             session: deep_contracts::required(members, at, "session")?,
@@ -29147,7 +30641,7 @@ pub struct AskMootV2DataCheckPassed {
 impl Contract for AskMootV2DataCheckPassed {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["because", "verdict"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
         Ok(Self {
             because: deep_contracts::required(members, at, "because")?,
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -29182,7 +30676,7 @@ pub struct AskMootV2DataAttemptReplaced {
 impl Contract for AskMootV2DataAttemptReplaced {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["because", "session"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
         Ok(Self {
             because: deep_contracts::required(members, at, "because")?,
             session: deep_contracts::required(members, at, "session")?,
@@ -30043,7 +31537,7 @@ impl Contract for AskSourcesAsk {
     }
 }
 
-static PATTERN_106: &[deep_contracts::Inst] = &[
+static PATTERN_108: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(97, 122)]),
     deep_contracts::Inst::Split(2, 4),
     deep_contracts::Inst::Char(&[(48, 57), (95, 95), (97, 122)]),
@@ -30063,7 +31557,7 @@ static PATTERN_106: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_107: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_106) };
+static RULE_109: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_108) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AskSourcesItemKind {
@@ -30175,7 +31669,7 @@ pub struct AskSourcesItem {
 impl Contract for AskSourcesItem {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["source", "kind", "fixture"])?;
-        deep_contracts::check_member(members, at, "source", &RULE_107)?;
+        deep_contracts::check_member(members, at, "source", &RULE_109)?;
         Ok(Self {
             source: deep_contracts::required(members, at, "source")?,
             kind: deep_contracts::required(members, at, "kind")?,
@@ -30350,7 +31844,7 @@ impl Contract for AskTakenOverWriter {
     }
 }
 
-static PATTERN_108: &[deep_contracts::Inst] = &[
+static PATTERN_110: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(100, 100)]),
     deep_contracts::Inst::Char(&[(101, 101)]),
     deep_contracts::Inst::Char(&[(118, 118)]),
@@ -30365,9 +31859,9 @@ static PATTERN_108: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_109: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_108) };
+static RULE_111: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_110) };
 
-static RULE_110: deep_contracts::Rule = deep_contracts::Rule::Number { min: Some(2.0), max: Some(9007199254740991.0) };
+static RULE_112: deep_contracts::Rule = deep_contracts::Rule::Number { min: Some(2.0), max: Some(9007199254740991.0) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AskTakenOverData {
@@ -30378,8 +31872,8 @@ pub struct AskTakenOverData {
 impl Contract for AskTakenOverData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["device", "revision"])?;
-        deep_contracts::check_member(members, at, "device", &RULE_109)?;
-        deep_contracts::check_member(members, at, "revision", &RULE_110)?;
+        deep_contracts::check_member(members, at, "device", &RULE_111)?;
+        deep_contracts::check_member(members, at, "revision", &RULE_112)?;
         Ok(Self {
             device: deep_contracts::required(members, at, "device")?,
             revision: deep_contracts::required(members, at, "revision")?,
@@ -30629,7 +32123,7 @@ impl Contract for BriefDraftedWriter {
     }
 }
 
-static PATTERN_111: &[deep_contracts::Inst] = &[
+static PATTERN_113: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(97, 97)]),
     deep_contracts::Inst::Char(&[(115, 115)]),
     deep_contracts::Inst::Char(&[(107, 107)]),
@@ -30663,7 +32157,7 @@ static PATTERN_111: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_112: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_111) };
+static RULE_114: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_113) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BriefDraftedDataBriefMakes {
@@ -30955,7 +32449,7 @@ impl Contract for BriefDraftedDataBriefHeldItem {
     }
 }
 
-static PATTERN_113: &[deep_contracts::Inst] = &[
+static PATTERN_115: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Split(1, 5),
     deep_contracts::Inst::Char(&[(100, 100)]),
     deep_contracts::Inst::Char(&[(97, 97)]),
@@ -30981,9 +32475,9 @@ static PATTERN_113: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_114: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_113) };
+static RULE_116: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_115) };
 
-static RULE_115: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_114);
+static RULE_117: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_116);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BriefDraftedDataBrief {
@@ -31002,7 +32496,7 @@ impl Contract for BriefDraftedDataBrief {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["makes", "software", "lines", "promises", "tasks", "left_out", "held", "fits", "every"])?;
         deep_contracts::check_member(members, at, "fits", &RULE_16)?;
-        deep_contracts::check_member(members, at, "every", &RULE_115)?;
+        deep_contracts::check_member(members, at, "every", &RULE_117)?;
         Ok(Self {
             makes: deep_contracts::required(members, at, "makes")?,
             software: deep_contracts::required(members, at, "software")?,
@@ -31042,7 +32536,7 @@ impl Contract for BriefDraftedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["key", "ask", "heading", "brief"])?;
         deep_contracts::check_member(members, at, "key", &RULE_83)?;
-        deep_contracts::check_member(members, at, "ask", &RULE_112)?;
+        deep_contracts::check_member(members, at, "ask", &RULE_114)?;
         deep_contracts::check_member(members, at, "heading", &RULE_15)?;
         Ok(Self {
             key: deep_contracts::required(members, at, "key")?,
@@ -31201,9 +32695,9 @@ impl Contract for BriefMadeDataStep {
     }
 }
 
-static RULE_116: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_15) };
+static RULE_118: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_15) };
 
-static RULE_117: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+static RULE_119: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BriefMadeData {
@@ -31233,8 +32727,8 @@ impl Contract for BriefMadeData {
         deep_contracts::check_member(members, at, "key", &RULE_83)?;
         deep_contracts::check_member(members, at, "heading", &RULE_15)?;
         deep_contracts::check_member(members, at, "words", &RULE_15)?;
-        deep_contracts::check_member(members, at, "links", &RULE_116)?;
-        deep_contracts::check_member(members, at, "files", &RULE_116)?;
+        deep_contracts::check_member(members, at, "links", &RULE_118)?;
+        deep_contracts::check_member(members, at, "files", &RULE_118)?;
         deep_contracts::check_member(members, at, "reason", &RULE_15)?;
         deep_contracts::check_member(members, at, "project", &RULE_15)?;
         deep_contracts::check_member(members, at, "folder", &RULE_15)?;
@@ -31242,9 +32736,9 @@ impl Contract for BriefMadeData {
         deep_contracts::check_member(members, at, "clone", &RULE_15)?;
         deep_contracts::check_member(members, at, "title", &RULE_15)?;
         deep_contracts::check_member(members, at, "number", &RULE_5)?;
-        deep_contracts::check_member(members, at, "tasks", &RULE_117)?;
+        deep_contracts::check_member(members, at, "tasks", &RULE_119)?;
         deep_contracts::check_member(members, at, "index", &RULE_4)?;
-        deep_contracts::check_member(members, at, "ask", &RULE_112)?;
+        deep_contracts::check_member(members, at, "ask", &RULE_114)?;
         deep_contracts::check_member(members, at, "round", &RULE_5)?;
         Ok(Self {
             step: deep_contracts::required(members, at, "step")?,
@@ -31414,9 +32908,9 @@ impl Contract for BuildRolledBackKind {
     }
 }
 
-static RULE_118: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_93) };
+static RULE_120: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_93) };
 
-static RULE_119: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(1), max: Some(200), format: None, pattern: None };
+static RULE_121: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(1), max: Some(200), format: None, pattern: None };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildRolledBackData {
@@ -31428,8 +32922,8 @@ pub struct BuildRolledBackData {
 impl Contract for BuildRolledBackData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["commit", "restored", "why"])?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
-        deep_contracts::check_member(members, at, "restored", &RULE_119)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
+        deep_contracts::check_member(members, at, "restored", &RULE_121)?;
         deep_contracts::check_member(members, at, "why", &RULE_15)?;
         Ok(Self {
             commit: deep_contracts::required(members, at, "commit")?,
@@ -31699,7 +33193,7 @@ impl Contract for CapabilityRefusedKind {
     }
 }
 
-static PATTERN_120: &[deep_contracts::Inst] = &[
+static PATTERN_122: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(97, 122)]),
     deep_contracts::Inst::Split(2, 4),
     deep_contracts::Inst::Char(&[(45, 46), (48, 57), (65, 90), (95, 95), (97, 122)]),
@@ -31707,7 +33201,7 @@ static PATTERN_120: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_121: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_120) };
+static RULE_123: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_122) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CapabilityRefusedDataBroke {
@@ -31745,7 +33239,7 @@ pub struct CapabilityRefusedData {
 impl Contract for CapabilityRefusedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["call", "broke", "clause", "digest"])?;
-        deep_contracts::check_member(members, at, "call", &RULE_121)?;
+        deep_contracts::check_member(members, at, "call", &RULE_123)?;
         deep_contracts::check_member(members, at, "clause", &RULE_6)?;
         deep_contracts::check_member(members, at, "digest", &RULE_83)?;
         Ok(Self {
@@ -31869,7 +33363,7 @@ impl Contract for CardRuleSetWriter {
     }
 }
 
-static PATTERN_122: &[deep_contracts::Inst] = &[
+static PATTERN_124: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(65, 90), (97, 122)]),
     deep_contracts::Inst::Char(&[(65, 90), (97, 122)]),
     deep_contracts::Inst::Split(3, 14),
@@ -31897,7 +33391,7 @@ static PATTERN_122: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_123: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(1), max: Some(8192), format: None, pattern: Some(PATTERN_122) };
+static RULE_125: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(1), max: Some(8192), format: None, pattern: Some(PATTERN_124) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CardRuleSetDataVia {
@@ -31934,7 +33428,7 @@ impl Contract for CardRuleSetData {
         let members = deep_contracts::members(value, at, &["seller", "max_usd", "card", "via"])?;
         deep_contracts::check_member(members, at, "seller", &RULE_6)?;
         deep_contracts::check_member(members, at, "max_usd", &RULE_4)?;
-        deep_contracts::check_member(members, at, "card", &RULE_123)?;
+        deep_contracts::check_member(members, at, "card", &RULE_125)?;
         Ok(Self {
             seller: deep_contracts::required(members, at, "seller")?,
             max_usd: deep_contracts::required(members, at, "max_usd")?,
@@ -32049,7 +33543,7 @@ impl Contract for ChannelAnsweredWriter {
     }
 }
 
-static PATTERN_124: &[deep_contracts::Inst] = &[
+static PATTERN_126: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(97, 122)]),
     deep_contracts::Inst::Split(2, 127),
     deep_contracts::Inst::Char(&[(45, 45), (48, 57), (97, 122)]),
@@ -32180,7 +33674,7 @@ static PATTERN_124: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_125: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_124) };
+static RULE_127: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_126) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChannelAnsweredDataProof {
@@ -32215,7 +33709,7 @@ pub struct ChannelAnsweredData {
 impl Contract for ChannelAnsweredData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["channel", "thread_key", "answer", "proof"])?;
-        deep_contracts::check_member(members, at, "channel", &RULE_125)?;
+        deep_contracts::check_member(members, at, "channel", &RULE_127)?;
         deep_contracts::check_member(members, at, "thread_key", &RULE_6)?;
         deep_contracts::check_member(members, at, "answer", &RULE_6)?;
         Ok(Self {
@@ -32345,7 +33839,7 @@ pub struct ChannelConflictData {
 impl Contract for ChannelConflictData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["channel", "conflict"])?;
-        deep_contracts::check_member(members, at, "channel", &RULE_125)?;
+        deep_contracts::check_member(members, at, "channel", &RULE_127)?;
         deep_contracts::check_member(members, at, "conflict", &RULE_6)?;
         Ok(Self {
             channel: deep_contracts::required(members, at, "channel")?,
@@ -32445,7 +33939,7 @@ impl Contract for ChannelDeliveredKind {
     }
 }
 
-static PATTERN_126: &[deep_contracts::Inst] = &[
+static PATTERN_128: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Split(1, 5),
     deep_contracts::Inst::Char(&[(97, 97)]),
     deep_contracts::Inst::Char(&[(115, 115)]),
@@ -32465,7 +33959,7 @@ static PATTERN_126: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_127: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_126) };
+static RULE_129: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_128) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChannelDeliveredWriter;
@@ -32479,9 +33973,9 @@ impl Contract for ChannelDeliveredWriter {
     }
 }
 
-static RULE_128: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(0), max: Some(8192), format: None, pattern: None };
+static RULE_130: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(0), max: Some(8192), format: None, pattern: None };
 
-static PATTERN_129: &[deep_contracts::Inst] = &[
+static PATTERN_131: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(97, 122)]),
     deep_contracts::Inst::Split(2, 4),
     deep_contracts::Inst::Char(&[(43, 43), (45, 46), (48, 57), (97, 122)]),
@@ -32496,7 +33990,7 @@ static PATTERN_129: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_130: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_129) };
+static RULE_132: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_131) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChannelDeliveredDataItemAnswerable {
@@ -32550,7 +34044,7 @@ impl Contract for ChannelDeliveredDataItemOptionsItem {
     }
 }
 
-static RULE_131: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(32), items: None };
+static RULE_133: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(32), items: None };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChannelDeliveredDataItemPlanStepsItem {
@@ -32652,9 +34146,9 @@ impl Contract for ChannelDeliveredDataItem {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["thread_key", "summary", "link", "answerable", "options", "plan", "revision", "hub", "refused", "unpaired"])?;
         deep_contracts::check_member(members, at, "thread_key", &RULE_6)?;
-        deep_contracts::check_member(members, at, "summary", &RULE_128)?;
-        deep_contracts::check_member(members, at, "link", &RULE_130)?;
-        deep_contracts::check_member(members, at, "options", &RULE_131)?;
+        deep_contracts::check_member(members, at, "summary", &RULE_130)?;
+        deep_contracts::check_member(members, at, "link", &RULE_132)?;
+        deep_contracts::check_member(members, at, "options", &RULE_133)?;
         deep_contracts::check_member(members, at, "revision", &RULE_5)?;
         deep_contracts::check_member(members, at, "hub", &RULE_6)?;
         deep_contracts::check_member(members, at, "refused", &RULE_14)?;
@@ -32731,7 +34225,7 @@ pub struct ChannelDeliveredData {
 impl Contract for ChannelDeliveredData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["channel", "thread_key", "item", "outcome", "ack"])?;
-        deep_contracts::check_member(members, at, "channel", &RULE_125)?;
+        deep_contracts::check_member(members, at, "channel", &RULE_127)?;
         deep_contracts::check_member(members, at, "thread_key", &RULE_6)?;
         deep_contracts::check_member(members, at, "ack", &RULE_14)?;
         Ok(Self {
@@ -32773,7 +34267,7 @@ impl Contract for ChannelDelivered {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
-        deep_contracts::check_member(members, at, "subject", &RULE_127)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_129)?;
         deep_contracts::check_member(members, at, "actor", &RULE_3)?;
         deep_contracts::check_member(members, at, "scope", &RULE_3)?;
         deep_contracts::check_member(members, at, "ts", &RULE_4)?;
@@ -32921,9 +34415,9 @@ pub struct ChannelRefusedData {
 impl Contract for ChannelRefusedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["channel", "thread_key", "answer", "field", "reason"])?;
-        deep_contracts::check_member(members, at, "channel", &RULE_125)?;
+        deep_contracts::check_member(members, at, "channel", &RULE_127)?;
         deep_contracts::check_member(members, at, "thread_key", &RULE_6)?;
-        deep_contracts::check_member(members, at, "answer", &RULE_128)?;
+        deep_contracts::check_member(members, at, "answer", &RULE_130)?;
         deep_contracts::check_member(members, at, "reason", &RULE_6)?;
         Ok(Self {
             channel: deep_contracts::required(members, at, "channel")?,
@@ -33083,7 +34577,7 @@ impl Contract for CheckHeldWriter {
     }
 }
 
-static PATTERN_132: &[deep_contracts::Inst] = &[
+static PATTERN_134: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(99, 99)]),
     deep_contracts::Inst::Char(&[(108, 108)]),
     deep_contracts::Inst::Char(&[(97, 97)]),
@@ -33097,7 +34591,7 @@ static PATTERN_132: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_133: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_132) };
+static RULE_135: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_134) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckHeldData {
@@ -33115,8 +34609,8 @@ pub struct CheckHeldData {
 impl Contract for CheckHeldData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "claim", "check", "snapshot", "held_at", "reason", "started_at", "started_by", "replaced_by"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
         deep_contracts::check_member(members, at, "snapshot", &RULE_6)?;
         deep_contracts::check_member(members, at, "held_at", &RULE_4)?;
@@ -33292,7 +34786,7 @@ impl Contract for CheckOracle {
     }
 }
 
-static RULE_134: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_3);
+static RULE_136: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_3);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Check {
@@ -33310,7 +34804,7 @@ impl Contract for Check {
         deep_contracts::check_member(members, at, "runner", &RULE_3)?;
         deep_contracts::check_member(members, at, "inputs", &RULE_40)?;
         deep_contracts::check_member(members, at, "depth", &RULE_3)?;
-        deep_contracts::check_member(members, at, "contract", &RULE_134)?;
+        deep_contracts::check_member(members, at, "contract", &RULE_136)?;
         Ok(Self {
             kind: deep_contracts::required(members, at, "kind")?,
             runner: deep_contracts::required(members, at, "runner")?,
@@ -33356,7 +34850,7 @@ impl Contract for CiArchivedKind {
     }
 }
 
-static PATTERN_135: &[deep_contracts::Inst] = &[
+static PATTERN_137: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(0, 8), (14, 31), (33, 46), (48, 159), (161, 5759), (5761, 8191), (8203, 8231), (8234, 8238), (8240, 8286), (8288, 12287), (12289, 65278), (65280, 1114111)]),
     deep_contracts::Inst::Split(2, 4),
     deep_contracts::Inst::Char(&[(0, 8), (14, 31), (33, 46), (48, 159), (161, 5759), (5761, 8191), (8203, 8231), (8234, 8238), (8240, 8286), (8288, 12287), (12289, 65278), (65280, 1114111)]),
@@ -33369,9 +34863,9 @@ static PATTERN_135: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_136: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_135) };
+static RULE_138: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_137) };
 
-static PATTERN_137: &[deep_contracts::Inst] = &[
+static PATTERN_139: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(48, 57)]),
     deep_contracts::Inst::Split(2, 4),
     deep_contracts::Inst::Char(&[(48, 57)]),
@@ -33379,7 +34873,7 @@ static PATTERN_137: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_138: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_137) };
+static RULE_140: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_139) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CiArchivedDataLogsItem {
@@ -33390,7 +34884,7 @@ pub struct CiArchivedDataLogsItem {
 impl Contract for CiArchivedDataLogsItem {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["job", "evidence"])?;
-        deep_contracts::check_member(members, at, "job", &RULE_138)?;
+        deep_contracts::check_member(members, at, "job", &RULE_140)?;
         deep_contracts::check_member(members, at, "evidence", &RULE_83)?;
         Ok(Self {
             job: deep_contracts::required(members, at, "job")?,
@@ -33405,7 +34899,7 @@ impl Contract for CiArchivedDataLogsItem {
     }
 }
 
-static RULE_139: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(1000), items: None };
+static RULE_141: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(1000), items: None };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CiArchivedData {
@@ -33418,10 +34912,10 @@ pub struct CiArchivedData {
 impl Contract for CiArchivedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["repo", "run", "result", "logs"])?;
-        deep_contracts::check_member(members, at, "repo", &RULE_136)?;
-        deep_contracts::check_member(members, at, "run", &RULE_138)?;
+        deep_contracts::check_member(members, at, "repo", &RULE_138)?;
+        deep_contracts::check_member(members, at, "run", &RULE_140)?;
         deep_contracts::check_member(members, at, "result", &RULE_6)?;
-        deep_contracts::check_member(members, at, "logs", &RULE_139)?;
+        deep_contracts::check_member(members, at, "logs", &RULE_141)?;
         Ok(Self {
             repo: deep_contracts::required(members, at, "repo")?,
             run: deep_contracts::required(members, at, "run")?,
@@ -33531,40 +35025,6 @@ impl Contract for ClaimMadeKind {
     }
 }
 
-static PATTERN_140: &[deep_contracts::Inst] = &[
-    deep_contracts::Inst::Split(1, 11),
-    deep_contracts::Inst::Char(&[(116, 116)]),
-    deep_contracts::Inst::Char(&[(97, 97)]),
-    deep_contracts::Inst::Char(&[(115, 115)]),
-    deep_contracts::Inst::Char(&[(107, 107)]),
-    deep_contracts::Inst::Char(&[(58, 58)]),
-    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
-    deep_contracts::Inst::Split(8, 10),
-    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
-    deep_contracts::Inst::Jmp(7),
-    deep_contracts::Inst::Jmp(28),
-    deep_contracts::Inst::Char(&[(115, 115)]),
-    deep_contracts::Inst::Char(&[(101, 101)]),
-    deep_contracts::Inst::Char(&[(115, 115)]),
-    deep_contracts::Inst::Char(&[(115, 115)]),
-    deep_contracts::Inst::Char(&[(105, 105)]),
-    deep_contracts::Inst::Char(&[(111, 111)]),
-    deep_contracts::Inst::Char(&[(110, 110)]),
-    deep_contracts::Inst::Char(&[(58, 58)]),
-    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
-    deep_contracts::Inst::Split(21, 23),
-    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
-    deep_contracts::Inst::Jmp(20),
-    deep_contracts::Inst::Char(&[(35, 35)]),
-    deep_contracts::Inst::Char(&[(48, 57), (65, 90), (97, 122)]),
-    deep_contracts::Inst::Split(26, 28),
-    deep_contracts::Inst::Char(&[(45, 46), (48, 57), (65, 90), (95, 95), (97, 122)]),
-    deep_contracts::Inst::Jmp(25),
-    deep_contracts::Inst::Match,
-];
-
-static RULE_141: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_140) };
-
 static RULE_142: deep_contracts::Rule = deep_contracts::Rule::Number { min: Some(0.0), max: Some(65535.0) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33603,7 +35063,7 @@ pub struct ClaimMadeData {
 impl Contract for ClaimMadeData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "attempt", "commit", "scope"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "attempt", &RULE_142)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         Ok(Self {
@@ -33801,7 +35261,7 @@ pub struct ClaimMadeV2Data {
 impl Contract for ClaimMadeV2Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "attempt", "commit", "scope", "predictions"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "attempt", &RULE_142)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         Ok(Self {
@@ -34002,7 +35462,7 @@ pub struct ClaimMadeV3Data {
 impl Contract for ClaimMadeV3Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "attempt", "commit", "scope", "predictions", "hash"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "attempt", &RULE_142)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
@@ -34096,6 +35556,168 @@ impl Contract for ClaimMadeV3 {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ClaimProgressV;
+
+impl Contract for ClaimProgressV {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "1").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("1").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimProgressKind;
+
+impl Contract for ClaimProgressKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"claim.progress\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"claim.progress\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimProgressWriter;
+
+impl Contract for ClaimProgressWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimProgressDataLast {
+    pub items: String,
+    pub passing: Vec<String>,
+}
+
+impl Contract for ClaimProgressDataLast {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["items", "passing"])?;
+        deep_contracts::check_member(members, at, "items", &RULE_15)?;
+        deep_contracts::check_member(members, at, "passing", &RULE_13)?;
+        Ok(Self {
+            items: deep_contracts::required(members, at, "items")?,
+            passing: deep_contracts::required(members, at, "passing")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("items".to_string(), self.items.to_json()));
+        members.push(("passing".to_string(), self.passing.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimProgressData {
+    pub task: String,
+    pub rounds: i64,
+    pub last: Option<ClaimProgressDataLast>,
+    pub seen: Vec<String>,
+    pub stalled: Option<String>,
+}
+
+impl Contract for ClaimProgressData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["task", "rounds", "last", "seen", "stalled"])?;
+        deep_contracts::check_member(members, at, "task", &RULE_104)?;
+        deep_contracts::check_member(members, at, "rounds", &RULE_4)?;
+        deep_contracts::check_member(members, at, "seen", &RULE_13)?;
+        deep_contracts::check_member(members, at, "stalled", &RULE_14)?;
+        Ok(Self {
+            task: deep_contracts::required(members, at, "task")?,
+            rounds: deep_contracts::required(members, at, "rounds")?,
+            last: deep_contracts::required(members, at, "last")?,
+            seen: deep_contracts::required(members, at, "seen")?,
+            stalled: deep_contracts::required(members, at, "stalled")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("task".to_string(), self.task.to_json()));
+        members.push(("rounds".to_string(), self.rounds.to_json()));
+        members.push(("last".to_string(), self.last.to_json()));
+        members.push(("seen".to_string(), self.seen.to_json()));
+        members.push(("stalled".to_string(), self.stalled.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimProgress {
+    pub v: ClaimProgressV,
+    pub id: String,
+    pub kind: ClaimProgressKind,
+    pub subject: Option<String>,
+    pub writer: ClaimProgressWriter,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: ClaimProgressData,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for ClaimProgress {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClaimSentBackV;
 
 impl Contract for ClaimSentBackV {
@@ -34130,8 +35752,8 @@ pub struct ClaimSentBackData {
 impl Contract for ClaimSentBackData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["claim", "verdict", "round", "to"])?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
         deep_contracts::check_member(members, at, "round", &RULE_142)?;
         deep_contracts::check_member(members, at, "to", &RULE_99)?;
         Ok(Self {
@@ -34482,8 +36104,8 @@ pub struct ClaimSizedData {
 impl Contract for ClaimSizedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["claim", "task_ref", "kind", "lines", "files", "usual", "over", "biggest", "dependencies", "folders", "resources", "duplicated", "unreached", "items", "sent_back", "asked"])?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "kind", &RULE_14)?;
         deep_contracts::check_member(members, at, "files", &RULE_4)?;
         deep_contracts::check_member(members, at, "duplicated", &RULE_4)?;
@@ -34632,7 +36254,7 @@ pub struct ClaimStalledData {
 impl Contract for ClaimStalledData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["claim", "rule"])?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "rule", &RULE_6)?;
         Ok(Self {
             claim: deep_contracts::required(members, at, "claim")?,
@@ -37308,7 +38930,7 @@ pub struct DefinitionCheckedData {
 impl Contract for DefinitionCheckedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "solved", "solve", "flags"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "solve", &RULE_6)?;
         deep_contracts::check_member(members, at, "flags", &RULE_13)?;
         Ok(Self {
@@ -37548,7 +39170,7 @@ impl Contract for DefinitionDraftedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "hash", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "base_commit", &RULE_94)?;
         Ok(Self {
@@ -37774,7 +39396,7 @@ impl Contract for DefinitionLockedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "hash", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "base_commit", &RULE_94)?;
         Ok(Self {
@@ -38322,7 +39944,7 @@ impl Contract for DefinitionLockedV10Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -38657,7 +40279,7 @@ impl Contract for DefinitionLockedV2Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -39004,7 +40626,7 @@ impl Contract for DefinitionLockedV3Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -39404,7 +41026,7 @@ impl Contract for DefinitionLockedV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -39850,7 +41472,7 @@ impl Contract for DefinitionLockedV5Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -40302,7 +41924,7 @@ impl Contract for DefinitionLockedV6Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -40784,7 +42406,7 @@ impl Contract for DefinitionLockedV7Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -41297,7 +42919,7 @@ impl Contract for DefinitionLockedV8Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -41815,7 +43437,7 @@ impl Contract for DefinitionLockedV9Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "hash", "issue_rev", "base_commit", "budget"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "issue_rev", &RULE_6)?;
@@ -42047,7 +43669,7 @@ impl Contract for DefinitionRevisedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "hash", "base_commit", "budget", "dispute_ask"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "hash", &RULE_83)?;
         deep_contracts::check_member(members, at, "base_commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "dispute_ask", &RULE_96)?;
@@ -42286,7 +43908,7 @@ impl Contract for DefinitionStoodInData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements"])?;
         deep_contracts::check_member(members, at, "definition", &RULE_83)?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "requirements", &RULE_174)?;
         Ok(Self {
             definition: deep_contracts::required(members, at, "definition")?,
@@ -47853,7 +49475,7 @@ impl Contract for LandingMadeDataStep {
 
 static RULE_241: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_94);
 
-static RULE_242: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_133);
+static RULE_242: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_135);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LandingMadeDataOutcome {
@@ -53479,7 +55101,7 @@ impl Contract for NoticeDeliveredDataType {
     }
 }
 
-static RULE_265: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_105);
+static RULE_265: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_107);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoticeDeliveredDataVia {
@@ -53531,7 +55153,7 @@ impl Contract for NoticeDeliveredData {
         let members = deep_contracts::members(value, at, &["notice", "type", "source", "target", "files", "pr", "key", "version", "via", "text"])?;
         deep_contracts::check_member(members, at, "notice", &RULE_264)?;
         deep_contracts::check_member(members, at, "source", &RULE_265)?;
-        deep_contracts::check_member(members, at, "target", &RULE_105)?;
+        deep_contracts::check_member(members, at, "target", &RULE_107)?;
         deep_contracts::check_member(members, at, "files", &RULE_13)?;
         deep_contracts::check_member(members, at, "pr", &RULE_77)?;
         deep_contracts::check_member(members, at, "key", &RULE_6)?;
@@ -53754,7 +55376,7 @@ impl Contract for NoticeDeliveredV2Data {
         let members = deep_contracts::members(value, at, &["notice", "type", "source", "target", "files", "pr", "key", "version", "via", "text"])?;
         deep_contracts::check_member(members, at, "notice", &RULE_264)?;
         deep_contracts::check_member(members, at, "source", &RULE_265)?;
-        deep_contracts::check_member(members, at, "target", &RULE_105)?;
+        deep_contracts::check_member(members, at, "target", &RULE_107)?;
         deep_contracts::check_member(members, at, "files", &RULE_13)?;
         deep_contracts::check_member(members, at, "pr", &RULE_77)?;
         deep_contracts::check_member(members, at, "key", &RULE_6)?;
@@ -54123,7 +55745,7 @@ pub struct OpenItemClosedData {
 impl Contract for OpenItemClosedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         Ok(Self {
             task_ref: deep_contracts::required(members, at, "task_ref")?,
@@ -54241,7 +55863,7 @@ pub struct OpenItemClosedV2Data {
 impl Contract for OpenItemClosedV2Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text", "item", "by"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         deep_contracts::check_member(members, at, "item", &RULE_83)?;
         deep_contracts::check_member(members, at, "by", &RULE_6)?;
@@ -54363,7 +55985,7 @@ pub struct OpenItemOpenedData {
 impl Contract for OpenItemOpenedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         Ok(Self {
             task_ref: deep_contracts::required(members, at, "task_ref")?,
@@ -54522,7 +56144,7 @@ pub struct OpenItemOpenedV2Data {
 impl Contract for OpenItemOpenedV2Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text", "item", "from", "resolved_by"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         deep_contracts::check_member(members, at, "item", &RULE_83)?;
         deep_contracts::check_member(members, at, "resolved_by", &RULE_6)?;
@@ -54694,7 +56316,7 @@ pub struct OpenItemOpenedV3Data {
 impl Contract for OpenItemOpenedV3Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text", "item", "from", "resolved_by"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         deep_contracts::check_member(members, at, "item", &RULE_83)?;
         deep_contracts::check_member(members, at, "resolved_by", &RULE_6)?;
@@ -54867,7 +56489,7 @@ pub struct OpenItemOpenedV4Data {
 impl Contract for OpenItemOpenedV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text", "item", "from", "resolved_by", "replaces"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         deep_contracts::check_member(members, at, "item", &RULE_83)?;
         deep_contracts::check_member(members, at, "resolved_by", &RULE_6)?;
@@ -59065,7 +60687,7 @@ impl Contract for ReviewReadData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["pr", "claim", "commit", "sent", "open"])?;
         deep_contracts::check_member(members, at, "pr", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "sent", &RULE_85)?;
         deep_contracts::check_member(members, at, "open", &RULE_85)?;
@@ -59284,7 +60906,7 @@ impl Contract for ReviewSettledData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["pr", "claim", "commit", "outcomes"])?;
         deep_contracts::check_member(members, at, "pr", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "outcomes", &RULE_85)?;
         Ok(Self {
@@ -61410,7 +63032,7 @@ impl Contract for RunFinishedV2DataKey {
         deep_contracts::check_member(members, at, "id", &RULE_83)?;
         deep_contracts::check_member(members, at, "stem", &RULE_83)?;
         deep_contracts::check_member(members, at, "paths", &RULE_13)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "session", &RULE_6)?;
         Ok(Self {
             id: deep_contracts::required(members, at, "id")?,
@@ -61660,7 +63282,7 @@ impl Contract for RunFinishedV3DataKey {
         deep_contracts::check_member(members, at, "id", &RULE_83)?;
         deep_contracts::check_member(members, at, "stem", &RULE_83)?;
         deep_contracts::check_member(members, at, "paths", &RULE_13)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "session", &RULE_6)?;
         Ok(Self {
             id: deep_contracts::required(members, at, "id")?,
@@ -62012,11 +63634,11 @@ pub struct RunStaleData {
 impl Contract for RunStaleData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "run", "check", "claim", "newer_claim"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
         deep_contracts::check_member(members, at, "run", &RULE_157)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
-        deep_contracts::check_member(members, at, "newer_claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
+        deep_contracts::check_member(members, at, "newer_claim", &RULE_135)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
             run: deep_contracts::required(members, at, "run")?,
@@ -62140,7 +63762,7 @@ impl Contract for RunStartedData {
         let members = deep_contracts::members(value, at, &["run", "check", "claim", "commit"])?;
         deep_contracts::check_member(members, at, "run", &RULE_157)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         Ok(Self {
             run: deep_contracts::required(members, at, "run")?,
@@ -62325,7 +63947,7 @@ impl Contract for RunStartedV2Data {
         let members = deep_contracts::members(value, at, &["run", "check", "claim", "commit", "host", "needs", "lane"])?;
         deep_contracts::check_member(members, at, "run", &RULE_157)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "host", &RULE_6)?;
         Ok(Self {
@@ -62593,7 +64215,7 @@ impl Contract for RunStartedV3Data {
         let members = deep_contracts::members(value, at, &["run", "check", "claim", "commit", "host", "needs", "lane", "argv", "cwd", "env", "grant", "deadline_ms", "environment", "command", "stand_ins", "withheld"])?;
         deep_contracts::check_member(members, at, "run", &RULE_157)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "host", &RULE_6)?;
         deep_contracts::check_member(members, at, "argv", &RULE_293)?;
@@ -62877,7 +64499,7 @@ impl Contract for RunStartedV4Data {
         let members = deep_contracts::members(value, at, &["run", "check", "claim", "commit", "host", "needs", "lane", "argv", "cwd", "env", "grant", "deadline_ms", "environment", "command", "stand_ins", "withheld", "ask"])?;
         deep_contracts::check_member(members, at, "run", &RULE_157)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "commit", &RULE_94)?;
         deep_contracts::check_member(members, at, "host", &RULE_6)?;
         deep_contracts::check_member(members, at, "argv", &RULE_293)?;
@@ -63236,7 +64858,7 @@ impl Contract for RunUnderLoadData {
         let members = deep_contracts::members(value, at, &["run", "check", "claim", "under_load", "load", "cores"])?;
         deep_contracts::check_member(members, at, "run", &RULE_157)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "load", &RULE_299)?;
         deep_contracts::check_member(members, at, "cores", &RULE_171)?;
         Ok(Self {
@@ -65052,7 +66674,7 @@ impl Contract for SessionChildStartedKind {
     }
 }
 
-static RULE_306: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_141);
+static RULE_306: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_104);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionChildStartedData {
@@ -65064,8 +66686,8 @@ pub struct SessionChildStartedData {
 impl Contract for SessionChildStartedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["parent", "child", "task_ref"])?;
-        deep_contracts::check_member(members, at, "parent", &RULE_105)?;
-        deep_contracts::check_member(members, at, "child", &RULE_105)?;
+        deep_contracts::check_member(members, at, "parent", &RULE_107)?;
+        deep_contracts::check_member(members, at, "child", &RULE_107)?;
         deep_contracts::check_member(members, at, "task_ref", &RULE_306)?;
         Ok(Self {
             parent: deep_contracts::required(members, at, "parent")?,
@@ -65186,7 +66808,7 @@ impl Contract for SessionContextFitWriter {
     }
 }
 
-static RULE_307: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(100), items: Some(&RULE_119) };
+static RULE_307: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(100), items: Some(&RULE_121) };
 
 static RULE_308: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(1000), items: Some(&RULE_6) };
 
@@ -68898,6 +70520,218 @@ impl Contract for SpendApprovedV2 {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SpendApprovedV3V;
+
+impl Contract for SpendApprovedV3V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "3").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("3").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpendApprovedV3Kind;
+
+impl Contract for SpendApprovedV3Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"spend.approved\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"spend.approved\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpendApprovedV3Writer;
+
+impl Contract for SpendApprovedV3Writer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpendApprovedV3DataScopeKind {
+    Issue,
+    Resource,
+    Project,
+    Work,
+}
+
+impl Contract for SpendApprovedV3DataScopeKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "issue" => Ok(Self::Issue),
+            "resource" => Ok(Self::Resource),
+            "project" => Ok(Self::Project),
+            "work" => Ok(Self::Work),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Issue => "issue",
+            Self::Resource => "resource",
+            Self::Project => "project",
+            Self::Work => "work",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpendApprovedV3DataScope {
+    pub kind: SpendApprovedV3DataScopeKind,
+    pub r#ref: String,
+}
+
+impl Contract for SpendApprovedV3DataScope {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "ref"])?;
+        deep_contracts::check_member(members, at, "ref", &RULE_6)?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            r#ref: deep_contracts::required(members, at, "ref")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("ref".to_string(), self.r#ref.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpendApprovedV3DataVia {
+    Card,
+    Inbox,
+}
+
+impl Contract for SpendApprovedV3DataVia {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "card" => Ok(Self::Card),
+            "inbox" => Ok(Self::Inbox),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Card => "card",
+            Self::Inbox => "inbox",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpendApprovedV3Data {
+    pub scope: SpendApprovedV3DataScope,
+    pub runs: Option<i64>,
+    pub cap_usd: f64,
+    pub ends: i64,
+    pub via: SpendApprovedV3DataVia,
+}
+
+impl Contract for SpendApprovedV3Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["scope", "runs", "cap_usd", "ends", "via"])?;
+        deep_contracts::check_member(members, at, "runs", &RULE_5)?;
+        deep_contracts::check_member(members, at, "cap_usd", &RULE_4)?;
+        deep_contracts::check_member(members, at, "ends", &RULE_4)?;
+        Ok(Self {
+            scope: deep_contracts::required(members, at, "scope")?,
+            runs: deep_contracts::optional(members, at, "runs")?,
+            cap_usd: deep_contracts::required(members, at, "cap_usd")?,
+            ends: deep_contracts::required(members, at, "ends")?,
+            via: deep_contracts::required(members, at, "via")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("scope".to_string(), self.scope.to_json()));
+        if let Some(value) = &self.runs {
+            members.push(("runs".to_string(), value.to_json()));
+        }
+        members.push(("cap_usd".to_string(), self.cap_usd.to_json()));
+        members.push(("ends".to_string(), self.ends.to_json()));
+        members.push(("via".to_string(), self.via.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpendApprovedV3 {
+    pub v: SpendApprovedV3V,
+    pub id: String,
+    pub kind: SpendApprovedV3Kind,
+    pub writer: SpendApprovedV3Writer,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: SpendApprovedV3Data,
+    pub evidence: Option<Vec<String>>,
+    pub subject: Option<String>,
+}
+
+impl Contract for SpendApprovedV3 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence", "subject"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_89)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SpendAskedV;
 
 impl Contract for SpendAskedV {
@@ -69913,7 +71747,7 @@ pub struct StackWaitingData {
 impl Contract for StackWaitingData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["claim", "check", "wait_ms", "expected_ms"])?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "check", &RULE_6)?;
         deep_contracts::check_member(members, at, "wait_ms", &RULE_4)?;
         deep_contracts::check_member(members, at, "expected_ms", &RULE_4)?;
@@ -71141,7 +72975,7 @@ pub struct StopHeldData {
 impl Contract for StopHeldData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "stop", "claim", "total", "question", "slow", "fast", "snapshot_start", "queue_wait", "code_changing", "budget_cost"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
         deep_contracts::check_member(members, at, "stop", &RULE_0)?;
         deep_contracts::check_member(members, at, "claim", &RULE_242)?;
         deep_contracts::check_member(members, at, "total", &RULE_4)?;
@@ -71750,7 +73584,7 @@ impl Contract for TaskClosedKind {
     }
 }
 
-static RULE_329: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_140) };
+static RULE_329: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_103) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaskClosedWriter;
@@ -71772,7 +73606,7 @@ pub struct TaskClosedData {
 impl Contract for TaskClosedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["by_verdict"])?;
-        deep_contracts::check_member(members, at, "by_verdict", &RULE_104)?;
+        deep_contracts::check_member(members, at, "by_verdict", &RULE_106)?;
         Ok(Self {
             by_verdict: deep_contracts::required(members, at, "by_verdict")?,
         })
@@ -71929,7 +73763,7 @@ impl Contract for TaskCompleted {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
-        deep_contracts::check_member(members, at, "subject", &RULE_105)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_107)?;
         deep_contracts::check_member(members, at, "actor", &RULE_3)?;
         deep_contracts::check_member(members, at, "scope", &RULE_3)?;
         deep_contracts::check_member(members, at, "ts", &RULE_4)?;
@@ -72009,7 +73843,7 @@ pub struct TaskCreatedData {
 impl Contract for TaskCreatedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "thread", "owner", "title"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_104)?;
         deep_contracts::check_member(members, at, "thread", &RULE_6)?;
         deep_contracts::check_member(members, at, "owner", &RULE_6)?;
         deep_contracts::check_member(members, at, "title", &RULE_6)?;
@@ -81510,7 +83344,7 @@ pub struct TranscriptArchivedData {
 impl Contract for TranscriptArchivedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "evidence"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
         deep_contracts::check_member(members, at, "evidence", &RULE_83)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
@@ -81651,7 +83485,7 @@ pub struct TranscriptArchivedV2Data {
 impl Contract for TranscriptArchivedV2Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "evidence", "source"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_105)?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
         deep_contracts::check_member(members, at, "evidence", &RULE_83)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
@@ -82107,7 +83941,7 @@ impl Contract for UserAskWriter {
     }
 }
 
-static RULE_338: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_141) };
+static RULE_338: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_104) };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserAskDataFrom {
@@ -82921,8 +84755,8 @@ pub struct VerdictMadeDataPass {
 impl Contract for VerdictMadeDataPass {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -82982,8 +84816,8 @@ pub struct VerdictMadeDataFail {
 impl Contract for VerdictMadeDataFail {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -83043,8 +84877,8 @@ pub struct VerdictMadeDataInvalid {
 impl Contract for VerdictMadeDataInvalid {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -83104,8 +84938,8 @@ pub struct VerdictMadeDataBlocked {
 impl Contract for VerdictMadeDataBlocked {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -83165,8 +84999,8 @@ pub struct VerdictMadeDataInconclusive {
 impl Contract for VerdictMadeDataInconclusive {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -83796,8 +85630,8 @@ pub struct VerdictMadeV2DataPass {
 impl Contract for VerdictMadeV2DataPass {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key", "why"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -83925,8 +85759,8 @@ pub struct VerdictMadeV2DataFail {
 impl Contract for VerdictMadeV2DataFail {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key", "why"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -84054,8 +85888,8 @@ pub struct VerdictMadeV2DataInvalid {
 impl Contract for VerdictMadeV2DataInvalid {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key", "why"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -84183,8 +86017,8 @@ pub struct VerdictMadeV2DataBlocked {
 impl Contract for VerdictMadeV2DataBlocked {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key", "why"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -84312,8 +86146,8 @@ pub struct VerdictMadeV2DataInconclusive {
 impl Contract for VerdictMadeV2DataInconclusive {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["outcome", "verdict", "claim", "reasons", "requirements", "smallest", "points_to", "commit", "key", "why"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
-        deep_contracts::check_member(members, at, "claim", &RULE_133)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
+        deep_contracts::check_member(members, at, "claim", &RULE_135)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_13)?;
         deep_contracts::check_member(members, at, "smallest", &RULE_16)?;
         deep_contracts::check_member(members, at, "points_to", &RULE_16)?;
@@ -84563,7 +86397,7 @@ pub struct VerdictStaleData {
 impl Contract for VerdictStaleData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["verdict", "because"])?;
-        deep_contracts::check_member(members, at, "verdict", &RULE_104)?;
+        deep_contracts::check_member(members, at, "verdict", &RULE_106)?;
         deep_contracts::check_member(members, at, "because", &RULE_6)?;
         Ok(Self {
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -84992,7 +86826,7 @@ pub struct VerdictKey {
 impl Contract for VerdictKey {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["commit", "doc_revisions", "check_digests", "state_digests", "environment", "tools"])?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
         deep_contracts::check_member(members, at, "doc_revisions", &RULE_40)?;
         deep_contracts::check_member(members, at, "check_digests", &RULE_348)?;
         deep_contracts::check_member(members, at, "state_digests", &RULE_9)?;
@@ -85019,9 +86853,9 @@ impl Contract for VerdictKey {
     }
 }
 
-static RULE_349: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_103) };
+static RULE_349: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_105) };
 
-static RULE_350: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_132) };
+static RULE_350: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: None, format: None, pattern: Some(PATTERN_134) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerdictPassOutcome;
@@ -85055,7 +86889,7 @@ impl Contract for VerdictPass {
         deep_contracts::check_member(members, at, "verdict", &RULE_349)?;
         deep_contracts::check_member(members, at, "claim", &RULE_350)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_40)?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
         deep_contracts::check_member(members, at, "checkout", &RULE_3)?;
         Ok(Self {
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -85118,7 +86952,7 @@ impl Contract for VerdictFail {
         deep_contracts::check_member(members, at, "verdict", &RULE_349)?;
         deep_contracts::check_member(members, at, "claim", &RULE_350)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_40)?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
         deep_contracts::check_member(members, at, "checkout", &RULE_3)?;
         Ok(Self {
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -85181,7 +87015,7 @@ impl Contract for VerdictInvalid {
         deep_contracts::check_member(members, at, "verdict", &RULE_349)?;
         deep_contracts::check_member(members, at, "claim", &RULE_350)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_40)?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
         deep_contracts::check_member(members, at, "checkout", &RULE_3)?;
         Ok(Self {
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -85244,7 +87078,7 @@ impl Contract for VerdictBlocked {
         deep_contracts::check_member(members, at, "verdict", &RULE_349)?;
         deep_contracts::check_member(members, at, "claim", &RULE_350)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_40)?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
         deep_contracts::check_member(members, at, "checkout", &RULE_3)?;
         Ok(Self {
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -85307,7 +87141,7 @@ impl Contract for VerdictInconclusive {
         deep_contracts::check_member(members, at, "verdict", &RULE_349)?;
         deep_contracts::check_member(members, at, "claim", &RULE_350)?;
         deep_contracts::check_member(members, at, "reasons", &RULE_40)?;
-        deep_contracts::check_member(members, at, "commit", &RULE_118)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_120)?;
         deep_contracts::check_member(members, at, "checkout", &RULE_3)?;
         Ok(Self {
             verdict: deep_contracts::required(members, at, "verdict")?,
@@ -87368,7 +89202,7 @@ impl Contract for WorkspaceTaskDataAuthorsItem {
     }
 }
 
-static RULE_351: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_118);
+static RULE_351: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_120);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceTaskData {
@@ -87399,7 +89233,7 @@ impl Contract for WorkspaceTaskData {
         deep_contracts::check_member(members, at, "body", &RULE_6)?;
         deep_contracts::check_member(members, at, "criteria", &RULE_13)?;
         deep_contracts::check_member(members, at, "updated", &RULE_6)?;
-        deep_contracts::check_member(members, at, "blocked_by", &RULE_117)?;
+        deep_contracts::check_member(members, at, "blocked_by", &RULE_119)?;
         deep_contracts::check_member(members, at, "issue", &RULE_37)?;
         deep_contracts::check_member(members, at, "commit", &RULE_351)?;
         deep_contracts::check_member(members, at, "kept", &RULE_351)?;
@@ -87538,7 +89372,7 @@ impl Contract for WorktreeCreatedData {
         let members = deep_contracts::members(value, at, &["path", "branch", "owner", "base"])?;
         deep_contracts::check_member(members, at, "path", &RULE_6)?;
         deep_contracts::check_member(members, at, "branch", &RULE_16)?;
-        deep_contracts::check_member(members, at, "owner", &RULE_141)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_104)?;
         deep_contracts::check_member(members, at, "base", &RULE_94)?;
         Ok(Self {
             path: deep_contracts::required(members, at, "path")?,
@@ -87680,7 +89514,7 @@ impl Contract for WorktreeRemovedData {
         let members = deep_contracts::members(value, at, &["path", "branch", "owner"])?;
         deep_contracts::check_member(members, at, "path", &RULE_6)?;
         deep_contracts::check_member(members, at, "branch", &RULE_16)?;
-        deep_contracts::check_member(members, at, "owner", &RULE_141)?;
+        deep_contracts::check_member(members, at, "owner", &RULE_104)?;
         Ok(Self {
             path: deep_contracts::required(members, at, "path")?,
             branch: deep_contracts::required(members, at, "branch")?,
@@ -87797,12 +89631,14 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "ask.answered@3" => <AskAnsweredV3 as Contract>::from_json(&value, "")?.to_json(),
         "ask.answered@4" => <AskAnsweredV4 as Contract>::from_json(&value, "")?.to_json(),
         "ask.answered@5" => <AskAnsweredV5 as Contract>::from_json(&value, "")?.to_json(),
+        "ask.answered@6" => <AskAnsweredV6 as Contract>::from_json(&value, "")?.to_json(),
         "ask.batched@1" => <AskBatched as Contract>::from_json(&value, "")?.to_json(),
         "ask.cancelled@1" => <AskCancelled as Contract>::from_json(&value, "")?.to_json(),
         "ask.created@1" => <AskCreated as Contract>::from_json(&value, "")?.to_json(),
         "ask.created@2" => <AskCreatedV2 as Contract>::from_json(&value, "")?.to_json(),
         "ask.created@3" => <AskCreatedV3 as Contract>::from_json(&value, "")?.to_json(),
         "ask.created@4" => <AskCreatedV4 as Contract>::from_json(&value, "")?.to_json(),
+        "ask.created@5" => <AskCreatedV5 as Contract>::from_json(&value, "")?.to_json(),
         "ask.defaulted@1" => <AskDefaulted as Contract>::from_json(&value, "")?.to_json(),
         "ask.escalated@1" => <AskEscalated as Contract>::from_json(&value, "")?.to_json(),
         "ask.later@1" => <AskLater as Contract>::from_json(&value, "")?.to_json(),
@@ -87829,6 +89665,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "claim.made@1" => <ClaimMade as Contract>::from_json(&value, "")?.to_json(),
         "claim.made@2" => <ClaimMadeV2 as Contract>::from_json(&value, "")?.to_json(),
         "claim.made@3" => <ClaimMadeV3 as Contract>::from_json(&value, "")?.to_json(),
+        "claim.progress@1" => <ClaimProgress as Contract>::from_json(&value, "")?.to_json(),
         "claim.sent_back@1" => <ClaimSentBack as Contract>::from_json(&value, "")?.to_json(),
         "claim.sized@1" => <ClaimSized as Contract>::from_json(&value, "")?.to_json(),
         "claim.stalled@1" => <ClaimStalled as Contract>::from_json(&value, "")?.to_json(),
@@ -88010,6 +89847,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "source.called@1" => <SourceCalled as Contract>::from_json(&value, "")?.to_json(),
         "spend.approved@1" => <SpendApproved as Contract>::from_json(&value, "")?.to_json(),
         "spend.approved@2" => <SpendApprovedV2 as Contract>::from_json(&value, "")?.to_json(),
+        "spend.approved@3" => <SpendApprovedV3 as Contract>::from_json(&value, "")?.to_json(),
         "spend.asked@1" => <SpendAsked as Contract>::from_json(&value, "")?.to_json(),
         "spend.charged@1" => <SpendCharged as Contract>::from_json(&value, "")?.to_json(),
         "spend.reserved@1" => <SpendReserved as Contract>::from_json(&value, "")?.to_json(),
