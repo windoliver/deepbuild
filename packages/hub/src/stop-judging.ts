@@ -40,7 +40,8 @@ import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey, type St
 import { type Root } from './paths.js';
 import { Agents } from './agents.js';
 import { Box } from './box.js';
-import { closesIssue, partOfIssue, prUrlIn } from './forge.js';
+import { partOfIssue, prUrlIn } from './forge.js';
+import { gatePrBodies } from './pr-commands.js';
 import { OpenItems } from './open-items.js';
 import { claimState, newestClaim, type ClaimState } from './verdict-chat.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
@@ -180,9 +181,11 @@ export class StopJudging {
    * open task that no verdict has passed keeps the PR at "Part of", and so does a review note on its PR that is
    * neither fixed nor accepted by you (#87); the refusal lists what's left; undefined when it may run.
    */
-  async closesGate(session: string, command: string): Promise<string | undefined> {
-    const issue = closesIssue(command);
-    if (issue === undefined) return this.partOfGate(session, command);
+  async closesGate(session: string, command: string, cwd: string): Promise<string | undefined> {
+    return gatePrBodies(command, cwd, (issue) => this.closingGate(session, issue), (body) => this.partOfGate(session, body));
+  }
+
+  private async closingGate(session: string, issue: number): Promise<string | undefined> {
     // The planted wrong program judges the bootstrap's commands alone: the issue's criteria never hold a PR back.
     if (this.options.settings.plant === 'bootstrap-commands-only') return undefined;
     const open = await this.options.services.tasks.unproven(session, issue);

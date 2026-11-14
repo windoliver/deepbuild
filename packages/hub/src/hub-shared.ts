@@ -21,7 +21,7 @@ import { ownHome } from './keychain.js';
 import { adapterOf } from './hookmap.js';
 import { type Piece } from './context-fit.js';
 
-import { isPrCreate } from './forge.js';
+import { prCommands } from './pr-commands.js';
 
 import { type Plant } from './plant.js';
 
@@ -239,7 +239,7 @@ export function callOf(d: Obj, { effects, tools }: ReturnType<typeof effectEntri
   const kind = String(d.kind);
   const command = typeof d.command === 'string' ? d.command : undefined;
   const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
-  const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
+  const pr = kind === 'shell' && command !== undefined && prCommands(command).some((pr) => pr.verb === 'create');
   // An MCP tool sends when its facts give it such an effect, or when it counts as send or destructive, by its facts or your rules.json.
   const counts = kind === 'mcp' ? tools.get(`mcp__${String(d.server)}__${String(d.tool)}`) ?? d.counts : undefined;
   const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && ((typeof d.effect === 'string' && EFFECTS.has(d.effect)) || counts === 'send' || counts === 'destructive'));
