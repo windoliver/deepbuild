@@ -678,3 +678,16 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   the field and blanked the text would pass. Its two P2s are fixed here: the second mutant was rerun over the whole
   lane, and this bullet names the new logs. So the lane counts for criteria 1 and 3 by a partly held upstream check
   each, on the owner's delegation; the owner can overrule it. These are runs by hand, not checks the lanes rerun.
+- **Merge of main 93624580f (2755be633, 2026-11-14)**, after GitHub reported a conflict: `lib.rs` and `piece.rs` of
+  deep-logic keep #534's saves beside #190's links (both sets of planted twins and commands; an item declares
+  `links` and `saves`; the bake reply carries `saves` and `frames` beside the libraries' `traps`). On this host
+  19 of #190's tests pass, the same 4 are BLOCKED, and **ac07 fails** (`acceptance-linux-2755be633.txt`): "piece
+  plain: its golden isn't the merge base's". The hash, the bake key, every step hash and every checkpoint's deep hash
+  are the merge base's; what differs is `ns`, the CPU time main's #534 (55ea69078) now writes into each checkpoint,
+  which the golden's `checkpoint_hashes` carries. The merge base's own binary gives a different golden on each run
+  (the same file: base1 against base2), so ac07, which compares `checkpoint_hashes` whole and was written before #534,
+  can't pass against any base that has #534, whatever this change does. Criterion 7 is therefore **BLOCKED at this
+  head on main** (it passed at 34f30ffd5, on the Mac too); it isn't edited or skipped here. Unblock: main's golden
+  leaves each checkpoint's time out (`golden_verify` on main compares `checkpoint_hashes` whole too, so a golden no
+  longer verifies against a second run), then main is merged again; or the blind job redrafts ac07's comparison. The
+  Mac runs at 34f30ffd5 are of the head before this merge; none has run at 2755be633.
