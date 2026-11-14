@@ -42,5 +42,8 @@ It never saw the work, the diff or this dispute.
 
 ## The ruling
 
-Asked of the owner, once: swap the first-draft files above for the redraft's folders. Until then the first-draft
-files stay as written and fail.
+Asked of the owner once, on 2026-11-14 in the implementing session. The owner (Tao Feng) answered: "Yes, swap them".
+
+So the redraft's folders `466-redraft-ac3/`, `466-redraft-ac6/` and `466-redraft-ac7/` prove AC3, AC6 and AC7, and run
+in the `alone` lane. The first-draft files `ac3-boil.test.ts`, `ac6-captions.test.ts` and `ac7-blur.test.ts` stay as
+written and run by hand (`scripts/lanes.mjs`). Nothing in either draft was edited.

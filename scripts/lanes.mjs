@@ -642,7 +642,10 @@ byHand.push('tests/acceptance/226-oracle/');
 // regressions in 2D films, exports, the live window and 3D motifs.
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
 // #466's files each build deep-show, deep-motion or deep-gpu and draw films through them (AC1 on the Metal GPU).
-alone.push('tests/acceptance/466/');
+// AC3, AC6 and AC7 are proved by their blind redraft, on the owner's ruling; the first draft's three files can't pass
+// on any program and are kept by hand (466/DISPUTE.md).
+alone.push('tests/acceptance/466/', 'tests/acceptance/466-redraft-ac3/', 'tests/acceptance/466-redraft-ac6/', 'tests/acceptance/466-redraft-ac7/');
+byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/acceptance/466/${f}.test.ts`));
 // #222's files each build deep-show and expand cue lists through it; budgets.test.ts times 512 cues in release.
 // AC7's blind redraft runs the same way, and the first draft's budgets file is kept by hand: its per-frame half
 // reads check-phase nodes as frame work, so it fails on whichever film loads first (222/REDRAFT-AC7.md).
