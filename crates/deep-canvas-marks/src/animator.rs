@@ -312,6 +312,9 @@ pub struct Paint {
     /// A role and the stroke's width, px.
     pub stroke: Option<(String, f64)>,
     pub blur: f64,
+    /// #1969: a unit a write is drawing: the share of its outline drawn and of its fill in, each
+    /// 0..1 (Text `text@1`: write mode); `None` once it is written, or when nothing writes it.
+    pub write: Option<[f64; 2]>,
 }
 
 impl Default for Paint {
@@ -323,6 +326,7 @@ impl Default for Paint {
             brightness: 1.0,
             stroke: None,
             blur: 0.0,
+            write: None,
         }
     }
 }
@@ -360,10 +364,17 @@ pub struct Input<'a> {
     pub afterglow: Option<i64>,
 }
 
-/// #1646: a text's `reveal: {mode: fade, order: reading, progress}` (Text text@1). Units are
-/// graphemes and overlap by `lag = min(4 ÷ n, 0.2)`: unit u of n reveals over the progress from
-/// u·lag·w to that plus w, w = 1 ÷ (1 + (n − 1)·lag), so the last ends at 1.
-fn reveal_of(params: &Map<String, Value>, id: &str) -> Result<Option<f64>, Refused> {
+/// A text's reveal as its evaluated params hold it: its progress, and whether it writes.
+struct Reveal {
+    progress: f64,
+    /// #1969: `mode: write`, each unit outline first, then fill; else `fade`.
+    write: bool,
+}
+
+/// #1646: a text's `reveal: {mode: fade | write, order: reading, progress}` (Text text@1). Units
+/// are graphemes and overlap by `lag = min(4 ÷ n, 0.2)`: unit u of n reveals over the progress
+/// from u·lag·w to that plus w, w = 1 ÷ (1 + (n − 1)·lag), so the last ends at 1.
+fn reveal_of(params: &Map<String, Value>, id: &str) -> Result<Option<Reveal>, Refused> {
     let Some(r) = params.get("reveal").filter(|r| !r.is_null()) else {
         return Ok(None);
     };
@@ -371,10 +382,13 @@ fn reveal_of(params: &Map<String, Value>, id: &str) -> Result<Option<f64>, Refus
     let Value::Object(r) = r else {
         return Err(bad(path));
     };
-    for (field, built) in [("mode", "fade"), ("order", "reading")] {
+    for (field, built) in [
+        ("mode", ["fade", "write"]),
+        ("order", ["reading", "reading"]),
+    ] {
         match r.get(field).and_then(Value::as_str) {
             None => {}
-            Some(v) if v == built => {}
+            Some(v) if built.contains(&v) => {}
             Some(_) => {
                 return Err(Refused {
                     code: "unsupported",
@@ -389,7 +403,10 @@ fn reveal_of(params: &Map<String, Value>, id: &str) -> Result<Option<f64>, Refus
             path: format!("{path}/emits"),
         });
     }
-    Ok(Some(num(r.get("progress")).unwrap_or(0.0).clamp(0.0, 1.0)))
+    Ok(Some(Reveal {
+        progress: num(r.get("progress")).unwrap_or(0.0).clamp(0.0, 1.0),
+        write: r.get("mode").and_then(Value::as_str) == Some("write"),
+    }))
 }
 
 fn reveal_span(n: usize) -> (f64, f64) {
@@ -412,6 +429,79 @@ pub fn reveal_levels(
     Ok(Some((0..n).map(|u| (u as f64 * lag + 0.5) * w).collect()))
 }
 
+/// #1969: the progress a `type` cue keys a text's reveal to as it types each of its graphemes:
+/// midway between that grapheme passing half its reveal and the next one doing so, so `#head`
+/// sits right after it, and 1 for the last, so every glyph ends drawn.
+pub fn typed_levels(text: &str) -> Vec<f64> {
+    let n = deep_text::unicode::grapheme_starts(text).len();
+    let (lag, w) = reveal_span(n);
+    (0..n)
+        .map(|u| match u + 1 == n {
+            true => 1.0,
+            false => ((u as f64 + 0.5) * lag + 0.5) * w,
+        })
+        .collect()
+}
+
+/// #1969: a revealed text's `#head` in its run's own frame (from its box's top left, y down):
+/// the caret after the last unit whose reveal passed 0.5, on that line's baseline, and before
+/// the first unit on the first line while none has; `None` when the text has no reveal.
+pub fn head(
+    params: &Map<String, Value>,
+    run: &Shaped,
+    id: &str,
+) -> Result<Option<[f64; 2]>, Refused> {
+    let Some(r) = reveal_of(params, id)? else {
+        return Ok(None);
+    };
+    let n = deep_text::unicode::grapheme_starts(&run.shown).len();
+    let (lag, w) = reveal_span(n);
+    let shown = (0..n)
+        .take_while(|u| (r.progress - *u as f64 * lag * w) / w > 0.5)
+        .count();
+    let caret = match shown {
+        0 => run.glyphs.first().map(|g| [f64::from(g.x), f64::from(g.y)]),
+        k => run
+            .glyphs
+            .iter()
+            .filter(|g| g.grapheme == k - 1)
+            .map(|g| [f64::from(g.x + g.advance), f64::from(g.y)])
+            .reduce(|a, b| if b[0] > a[0] { b } else { a }),
+    };
+    Ok(caret)
+}
+
+/// #1969: the first `share` of a glyph's outline, from its start along its contours in order, in
+/// the glyph's own frame (pen origin on the baseline, y down), as a write draws it.
+pub fn drawn_outline(g: &Glyph, share: f64) -> Vec<crate::path::Verb> {
+    use crate::path::Verb;
+    use deep_text::outlines::Cmd;
+    let verbs: Vec<Verb> = deep_text::outlines::outline_of(g)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| match c {
+            Cmd::Move(p) => Verb::Move(p),
+            Cmd::Line(p) => Verb::Line(p),
+            Cmd::Quad(c, p) => Verb::Quad(c, p),
+            Cmd::Cubic(a, b, p) => Verb::Cubic(a, b, p),
+            Cmd::Close => Verb::Close,
+        })
+        .collect();
+    if share >= 1.0 {
+        return verbs;
+    }
+    let trim = crate::pathops::Op::Trim {
+        start: 0.0,
+        end: share.max(0.0),
+        offset: 0.0,
+        each: false,
+    };
+    crate::pathops::apply(&[trim], &verbs)
+        .into_iter()
+        .flat_map(|c| c.verbs)
+        .collect()
+}
+
 /// #407: each glyph's opacity under a text's `reveal` at the progress its evaluated params hold,
 /// as laying out fades it; `None` when the text has no reveal.
 pub fn reveal_opacity(
@@ -419,7 +509,7 @@ pub fn reveal_opacity(
     run: &Shaped,
     id: &str,
 ) -> Result<Option<Vec<f64>>, Refused> {
-    let Some(progress) = reveal_of(params, id)? else {
+    let Some(Reveal { progress, .. }) = reveal_of(params, id)? else {
         return Ok(None);
     };
     let (units, n) = units_of("grapheme", run, &format!("items/{id}/params/reveal"))?;
@@ -1336,7 +1426,7 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
     // lights it from its own reveal time, never from an earlier frame.
     let mut afterglow = Vec::new();
     let mut reveal = Vec::new();
-    if let Some(progress) = reveal_of(input.params, id)? {
+    if let Some(Reveal { progress, write }) = reveal_of(input.params, id)? {
         let (units, n) = units_of("grapheme", run, &format!("items/{id}/params/reveal"))?;
         let (lag, w) = reveal_span(n);
         if let Some(tau) = input.afterglow {
@@ -1352,7 +1442,16 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
         for (g, unit) in units.iter().enumerate() {
             let Some(u) = *unit else { continue };
             let x = &mut acc[g];
-            x.opacity *= ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0);
+            let own = ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0);
+            if !write {
+                x.opacity *= own;
+            } else if own <= 0.0 {
+                x.opacity = 0.0;
+            } else if own < 1.0 {
+                // #1969: the outline draws over the first half of the unit's span, then its fill
+                // comes in while the outline turns into its own stroke (Text `text@1`).
+                x.paint.write = Some([(2.0 * own).min(1.0), (2.0 * own - 1.0).max(0.0)]);
+            }
             if let Some(a) = afterglow.get(u) {
                 x.paint.brightness *= 1.0 + a;
             }

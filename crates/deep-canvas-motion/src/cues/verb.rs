@@ -7,20 +7,21 @@
 //!   fields: `set: {path → value}` moves each path from what it holds to the value; `from: {path →
 //!   value}` starts a path there (and, without a `set`, brings it back to what it held); a value
 //!   `{pulse: {amount, shape?}}` adds a pulse instead, `{along: <ID>}` travels the path item's
-//!   shape from where the target is, `{count: n}` counts a text in whole numbers, and `{to,
-//!   travel}` moves on a key `travel`. `at` and `until` are the fractions of the window it covers
-//!   (0 and 1), `ease` its own ease, `type` a path's channel type, and `on` the item it writes: an
-//!   item step's copies, an `ID` input's item, or the target.
+//!   shape from where the target is, `{count: n}` counts a text in whole numbers, `{typed: true}`
+//!   keys a text's reveal once a grapheme, in order (#1969), and `{to, travel}` moves on a key
+//!   `travel`. `at` and `until` are the fractions of the window it covers (0 and 1), `ease` its
+//!   own ease, `type` a path's channel type, and `on` the item it writes: an item step's copies,
+//!   an `ID` input's item, or the target.
 //! - `{op: mark | item, kind, params, at, repeat: {count, as}, when}` makes a derived item
 //!   `<list>.<cue>.<step>[.<i>][.<j>]` (`.<i>` when the cue has several targets).
 //!
 //! Every value is a recipe expression over the inputs and lets, `i` and `n` (the target's rank
 //! and the cue's count of targets), `j` (an item step's copy), `d` (the span in seconds), `target`
-//! (its ID), its bounds `x0`, `y0`, `x1`, `y1`, `w`, `h`, `cx`, `cy`, a text's `letters` and
-//! `words`, `next` (the target after it in the cue's list, cyclic), and, in a cue step, `now`
-//! (what the path holds on the item it writes at the step's start), `here` (on the target),
-//! `next_now` (on the next target) and `<input>_now` (on the item an `ID` input names). A cue
-//! step may `repeat: {count, as}` like an item step.
+//! (its ID), `head` (its `#head` anchor, #1969), its bounds `x0`, `y0`, `x1`, `y1`, `w`, `h`,
+//! `cx`, `cy`, a text's `letters` and `words`, `next` (the target after it in the cue's list,
+//! cyclic), and, in a cue step, `now` (what the path holds on the item it writes at the step's
+//! start), `here` (on the target), `next_now` (on the next target) and `<input>_now` (on the item
+//! an `ID` input names). A cue step may `repeat: {count, as}` like an item step.
 
 use deep_canvas::document::packs::Template;
 use deep_canvas::grammar::FLICKS_PER_SECOND;
@@ -227,6 +228,7 @@ fn scope_of(
         json!(cue.d as f64 / FLICKS_PER_SECOND as f64),
     );
     set(&mut scope, "target", json!(w.target));
+    set(&mut scope, "head", json!(format!("{}#head", w.target)));
     let at_list = cue
         .targets
         .iter()
@@ -472,6 +474,18 @@ fn cue_path(
             keys,
         });
     }
+    if one.and_then(|o| o.get("typed")).is_some_and(truthy) {
+        let text = match item {
+            Some(item) => item.pointer("/params/text"),
+            None => w.items.get(owner).and_then(|i| i.pointer("/params/text")),
+        };
+        let text = text.and_then(Value::as_str).unwrap_or_default();
+        return Ok(Write::Keys {
+            path: full,
+            ty,
+            keys: typed(start, text, (s0, s1)),
+        });
+    }
     if let Some(to) = one.and_then(|o| o.get("count")) {
         let to = eval(to, &scope)?.as_f64().ok_or("a count is a number")?;
         let keys = count(&start, to, (s0, s1), ease);
@@ -642,6 +656,28 @@ fn count(start: &Value, to: f64, (s0, s1): (i64, i64), ease: &Value) -> Vec<Key>
                 travel: None,
             }
         })
+        .collect()
+}
+
+/// #1969: the keys of a text typed on over `[s0, s1]`: its reveal from `start`, then one key a
+/// grapheme, held, the k-th of n at `s0 + k/n` of the span, to the level that shows k graphemes
+/// with `#head` after the k-th ([`typed_levels`]), the last at `s1` to 1.
+///
+/// [`typed_levels`]: deep_canvas_marks::animator::typed_levels
+fn typed(start: Value, text: &str, (s0, s1): (i64, i64)) -> Vec<Key> {
+    let levels = deep_canvas_marks::animator::typed_levels(text);
+    let n = levels.len().max(1) as f64;
+    let key = |t: i64, value: Value| Key {
+        t,
+        value,
+        interp: json!("hold"),
+        travel: None,
+    };
+    std::iter::once(key(s0, start))
+        .chain(levels.into_iter().enumerate().map(|(k, level)| {
+            let t = s0 + ((k + 1) as f64 / n * (s1 - s0) as f64).round() as i64;
+            key(t, json!(level))
+        }))
         .collect()
 }
 

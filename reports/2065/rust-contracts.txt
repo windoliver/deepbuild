@@ -1,0 +1,13 @@
+   Compiling deep-contracts v0.0.0 (<head-checkout>/crates/deep-contracts)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.82s
+     Running tests/jcs.rs (target/debug/deps/jcs-5314bcf858bd4cbe)
+
+running 6 tests
+test a_number_halfway_between_two_shortest_forms_prints_the_even_one_as_ecmascript_does ... ok
+test a_seq_is_never_negative ... ok
+test a_unicode_escape_takes_four_hex_digits_and_nothing_else ... ok
+test an_integer_is_one_both_languages_hold_exactly ... ok
+test a_repeated_key_keeps_its_first_place_and_its_last_value_in_a_small_object_and_a_large_one ... ok
+test an_object_with_many_keys_parses_in_linear_time ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s

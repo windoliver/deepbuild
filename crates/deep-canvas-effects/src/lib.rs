@@ -7,6 +7,7 @@
 //! same steps, fx@1's named operators ([`fx`]) are a pack's, and [`module`] registers it through
 //! the registry and seal.
 
+pub mod audit;
 pub mod check;
 pub mod chrome_fx;
 pub mod dirt;

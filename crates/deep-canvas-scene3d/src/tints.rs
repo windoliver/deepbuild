@@ -28,6 +28,8 @@ pub const RANGE: &str = "terrain.overlay_range";
 const FIX: &str = "Write values that index the overlay's roles, or add the roles they index.";
 /// An overlay's fields.
 const KEYS: [&str; 6] = ["grid", "size", "origin", "cell", "roles", "opacity"];
+/// An overlay's opacity where it's left out.
+const OPACITY: f64 = 1.0;
 
 /// One overlay of a plate at a frame's t, as the renderer uploads it.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +58,20 @@ impl Tint {
     pub fn key(&self) -> String {
         format!("{}/{}", self.plate, self.layer)
     }
+}
+
+/// `overlays` with each overlay's `opacity` as its reader takes it, so a plate's overlays resolve
+/// alike whether one leaves its opacity out or writes the default (#1974).
+pub fn resolved(mut overlays: Value) -> Value {
+    for o in overlays
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object_mut)
+    {
+        o.entry("opacity").or_insert(json!(OPACITY));
+    }
+    overlays
 }
 
 /// One overlay as read from its plate, with the baked array its grid names.
@@ -168,7 +184,7 @@ fn overlay<'a>(
     };
     let cell = positive("cell", spacing)?;
     let opacity = match field("opacity") {
-        None => 1.0,
+        None => OPACITY,
         Some(v) => v
             .as_f64()
             .filter(|x| (0.0..=1.0).contains(x))

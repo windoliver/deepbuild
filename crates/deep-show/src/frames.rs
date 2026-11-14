@@ -1059,6 +1059,7 @@ fn cell_grids(
                     to: *to,
                     role: String::new(),
                     color: *c,
+                    opacity: 1.0,
                 })
                 .collect();
             let text = row.text.trim_end().to_string();
@@ -1066,6 +1067,8 @@ fn cell_grids(
                 item: id.clone(),
                 spec: scene::TextSpec {
                     spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
+                    gap: 0.0,
+                    indent: 0.0,
                     text,
                     font: "mono".into(),
                     family: Some(deep_text::Role::Mono.family()),

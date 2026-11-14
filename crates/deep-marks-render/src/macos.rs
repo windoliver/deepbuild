@@ -1450,7 +1450,10 @@ impl Renderer {
                         label,
                         origin: point(px(origin[0] as f32), px(origin[1] as f32)),
                         color: hsla(*color),
-                        runs: runs.iter().map(|r| (r.from..r.to, hsla(r.color))).collect(),
+                        runs: runs
+                            .iter()
+                            .map(|r| (r.from..r.to, hsla(r.color).opacity(r.opacity as f32)))
+                            .collect(),
                     });
                 }
                 Mark::Shape {

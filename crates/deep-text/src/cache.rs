@@ -33,6 +33,9 @@ pub struct Key {
     fitted: bool,
     /// #1964: the hash of its styled spans, 0 with none.
     spans: u64,
+    /// #1966: the gap after each paragraph, and the indent every line starts at.
+    gap: u32,
+    indent: u32,
     /// Nonzero only under the planted cache per document.
     scope: u64,
 }
@@ -51,6 +54,8 @@ impl Key {
     pub(crate) fn of(spec: &Spec<'_>, text: &str, fitted: bool) -> Key {
         Key {
             spans: spans_hash(spec.spans),
+            gap: spec.gap.to_bits(),
+            indent: spec.indent.to_bits(),
             text: text.into(),
             font: font_hash(spec.family, spec.fallback, spec.lang),
             size: spec.size.to_bits(),

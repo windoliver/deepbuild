@@ -16,7 +16,7 @@ import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { isPrCreate, isPrEdit } from './forge.js';
+import { prCommands } from './pr-commands.js';
 import { adapterOf, registry } from './hookmap.js';
 import type { Part } from './context-fit.js';
 import { takeLock, type Lock } from './lock.js';
@@ -920,7 +920,7 @@ class Hub {
     const resend = this.resend.has(meta.session) && (data.kind === 'shell' || data.kind === 'mcp');
     // A `gh pr create`, or a `gh pr edit` of its body (#87), is checked for its body's Closes against the issue's task
     // (#322), whatever else it needs.
-    const pr = data.kind === 'shell' && typeof data.command === 'string' && (isPrCreate(data.command) || isPrEdit(data.command));
+    const pr = data.kind === 'shell' && typeof data.command === 'string' && prCommands(data.command).length > 0;
     const card = this.cardOf(meta);
     if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr && !named.length && !card) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);

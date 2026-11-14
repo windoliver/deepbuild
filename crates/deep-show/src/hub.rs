@@ -98,6 +98,10 @@ pub enum Planted {
     PartRunsHalf,
     /// #138: `schedule` exits 0 with a failed case in its results.
     ExitZeroWithFailedCase,
+    /// #1972: a path such as `at/pos` is refused with a fix naming `items/at/pos`, without the ID.
+    PatchFixPathWithoutId,
+    /// #1972: a bare op list is refused with a fix naming the envelope without `reason`.
+    PatchFixEnvelopeWithoutReason,
     /// #138: the kit counts a case's declared coverage as reached.
     CountsDeclaredAsReached,
     /// #138: the kit passes a snapshot case without comparing its pixels.

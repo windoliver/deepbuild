@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -395,6 +395,8 @@ timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
 // #1936's files each build deep-show.
 alone.push('tests/acceptance/1936/');
+// #1935's files each build deep-show.
+alone.push('tests/acceptance/1935/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
@@ -404,8 +406,12 @@ timed.push('tests/acceptance/202/budgets.test.ts');
 // #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
 alone.push('tests/acceptance/1971/');
 timed.push('tests/acceptance/1971/budget.test.ts');
+// #1972's files each build deep-show and apply the patches guide's examples through deep-show run.
+alone.push('tests/acceptance/1972/');
 // #1973's files each build deep-show and run the full build's dump through op: field and deep_show.
 alone.push('tests/acceptance/1973/');
+// #1974's files each build deep-show and run its defaults run over the full build's dump.
+alone.push('tests/acceptance/1974/');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
@@ -598,6 +604,8 @@ alone.push('tests/acceptance/2144/');
 alone.push('tests/acceptance/1332/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
+// #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
+alone.push('tests/acceptance/1342/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
 alone.push('tests/acceptance/525/');
 // Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.
@@ -646,6 +654,8 @@ alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
+alone.push('tests/acceptance/1969/');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views
 // frame by frame, draw the app's window and time the logic module's budgets on the reference Mac.
 alone.push('tests/acceptance/548/');
@@ -654,6 +664,8 @@ timed.push('tests/acceptance/548/ac3-budgets.test.ts');
 // ac02-rebuild-budget judges the task's budget on the reference Mac.
 alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
+// #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
+alone.push('tests/acceptance/1940/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
