@@ -225,12 +225,13 @@ path = "../../tests/acceptance/1510/app/card.rs"
 name = "acceptance_1738"
 path = "../../tests/acceptance/1738/app/titles.rs"
 
-# Issue #995: the canvas panel's acceptance test, written blind in tests/acceptance/995. A binary of its own, so its
-# process holds the one panel and nothing another test allocated; it draws the panel in a headless window, and AppKit
-# needs the main thread, so no libtest harness.
+# Issue #995: the canvas panel's acceptance test, redrafted blind in tests/acceptance/995/redraft, which runs in the
+# first draft's place (tests/acceptance/995/app). A binary of its own, so its process holds the one panel and nothing
+# another test allocated; it draws the panel in a headless window, and AppKit needs the main thread, so no libtest
+# harness.
 [[test]]
 name = "acceptance_995"
-path = "../../tests/acceptance/995/app/panel.rs"
+path = "../../tests/acceptance/995/redraft/panel.rs"
 harness = false
 
 # Issue #1477: the long lists and tables bench, and the calls its acceptance tests make of our table (README in
