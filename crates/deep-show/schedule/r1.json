@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "977e82f7e17c800b1f83b876b7a30505471bfa346c9ec0b767dae58ba21feea9",
+  "set_digest": "46f2c8d12437ece1a946dcf53deb685e12f2421e18781e15b54985a94763a163",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
@@ -122,7 +122,7 @@
       }
     },
     "motion@1": {
-      "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
+      "digest": "d81abbf088e7c6a563940c0cf9f8adce5874f9d0342e2c19fb05b8094f41b7c8",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "text@1": {
-      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
+      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -387,6 +387,74 @@
         "per": "item"
       },
       {
+        "operator": "motion.clock",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t"
+        ],
+        "writes": [
+          "motion.next"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "motion.flip",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.flip"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "data.decimate",
         "module": "data",
         "version": "1.0.0",
@@ -423,44 +491,6 @@
         "per": "item"
       },
       {
-        "operator": "motion.clock",
-        "module": "motion",
-        "version": "1.0.0",
-        "reads": [
-          "motion.program",
-          "t"
-        ],
-        "writes": [
-          "motion.next"
-        ],
-        "per": "document"
-      },
-      {
-        "operator": "motion.placed",
-        "module": "motion",
-        "version": "1.0.0",
-        "reads": [
-          "motion.arranged"
-        ],
-        "writes": [
-          "motion.placed"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "record.salience",
         "module": "record",
         "version": "1.0.0",
@@ -485,6 +515,22 @@
         "per": "item"
       },
       {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
@@ -492,7 +538,8 @@
           "core.fields",
           "refs",
           "reading",
-          "view(locale)"
+          "view(locale)",
+          "text.copy"
         ],
         "writes": [
           "text.counter"
@@ -621,7 +668,9 @@
   "contributions": {
     "core.fields": [
       "data.columns",
-      "motion.fields"
+      "motion.fields",
+      "motion.flip",
+      "text.columns"
     ],
     "core.status": [
       "look.status"

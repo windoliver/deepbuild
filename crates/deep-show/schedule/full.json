@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "7a62a8553c6aea00a74379b06ac2e4e7f65248f15aea86106a4b0c2e597a9b28",
+  "set_digest": "6c67d68973302306d03167a558a5be58f763bbda5f1b95379d54aea40fee4263",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -35,7 +35,7 @@
       }
     },
     "cells@1": {
-      "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
+      "digest": "ad13803629031e0f3fbebd55a00f95da95e81f9f7e78fe2765449bcbc8c89431",
       "reference": "cells",
       "kit": [
         "fixtures",
@@ -115,6 +115,35 @@
       "module": "effects",
       "implementation": {
         "name": "effects",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "export@1": {
+      "digest": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+      "reference": "export",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "export",
+      "implementation": {
+        "name": "export",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -296,7 +325,7 @@
       }
     },
     "media@1": {
-      "digest": "fb65db20803994ed5ef09250f97e09ff3e265237ede21f650361d3fc5f764bfb",
+      "digest": "ceeb27a5bf5262e2a2c5a8930f66217926d25695e3d70de2faf6acdc416ac9f4",
       "reference": "media",
       "kit": [
         "fixtures",
@@ -325,7 +354,7 @@
       }
     },
     "motion@1": {
-      "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
+      "digest": "d81abbf088e7c6a563940c0cf9f8adce5874f9d0342e2c19fb05b8094f41b7c8",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -594,7 +623,7 @@
       }
     },
     "text@1": {
-      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
+      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -729,7 +758,8 @@
           "self",
           "look",
           "t",
-          "reading"
+          "reading",
+          "refs"
         ],
         "writes": [
           "cells.grid"
@@ -870,42 +900,6 @@
         "per": "item"
       },
       {
-        "operator": "data.decimate",
-        "module": "data",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "data.decimated"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "data.scale",
-        "module": "data",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "data.scale"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "graph.layout",
-        "module": "graph",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "graph.layout"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "motion.clock",
         "module": "motion",
         "version": "1.0.0",
@@ -919,6 +913,20 @@
         "per": "document"
       },
       {
+        "operator": "motion.flip",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.flip"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.placed",
         "module": "motion",
         "version": "1.0.0",
@@ -927,18 +935,6 @@
         ],
         "writes": [
           "motion.placed"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "record.salience",
-        "module": "record",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "record.level"
         ],
         "per": "item"
       },
@@ -1064,6 +1060,70 @@
         "per": "item"
       },
       {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.scale",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.scale"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "graph.layout",
+        "module": "graph",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "graph.layout"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "record.salience",
+        "module": "record",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "record.level"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "sheet.place",
         "module": "sheet",
         "version": "1.0.0",
@@ -1076,6 +1136,22 @@
         "per": "item"
       },
       {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
@@ -1083,7 +1159,8 @@
           "core.fields",
           "refs",
           "reading",
-          "view(locale)"
+          "view(locale)",
+          "text.copy"
         ],
         "writes": [
           "text.counter"
@@ -1236,7 +1313,9 @@
   "contributions": {
     "core.fields": [
       "data.columns",
-      "motion.fields"
+      "motion.fields",
+      "motion.flip",
+      "text.columns"
     ],
     "core.glyphs": [
       "vector.glyphs"
