@@ -92,11 +92,6 @@ pub(crate) fn resolved(
             None
         });
         match found {
-            None if array.split_once('.').is_some_and(|(_, n)| n.starts_with("preview.")) => {
-                refused.push(no(format!(
-                    "{array} is a preview array: session state no step reads"
-                )))
-            }
             None => refused.push(no(format!(
                 "{array}: no logic item of this piece writes it; a mirror copies another logic item's array"
             ))),
