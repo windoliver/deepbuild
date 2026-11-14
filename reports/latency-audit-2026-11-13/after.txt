@@ -1,0 +1,28 @@
+# After: the same three files, unchanged, on the change's sources and build.
+# node node_modules/vitest/vitest.mjs run packages/cli/test/loads.test.ts packages/hub/test/clock.test.ts packages/hub/test/hub-waits.test.ts --testTimeout=600000 --reporter=verbose
+
+
+ RUN  v5.0.5 <repo>
+
+ ✓ packages/cli/test/loads.test.ts > deep inbox loads none of the YAML parser, SQLite, the gate, the record or the contracts 182ms
+ ✓ packages/cli/test/loads.test.ts > deep lease,--,true loads none of the YAML parser, SQLite, the gate, the record or the contracts 126ms
+ ✓ packages/hub/test/hub-waits.test.ts > deep hub start returns within 20 ms of the hub's socket answering, not at the next 100 ms step 141ms
+ ✓ packages/cli/test/loads.test.ts > deep, in a folder that joined no project's hub, loads neither TLS nor the contracts 126ms
+ ✓ packages/cli/test/loads.test.ts > deep status, in a folder that joined no project's hub, loads neither TLS nor the contracts 143ms
+ ✓ packages/hub/test/hub-waits.test.ts > deep hub stop returns within 20 ms of the hub going, and never while its socket still answers 308ms
+ ✓ packages/cli/test/loads.test.ts > deep hub status, which only asks the hub on its socket, loads none of the hub's own server 196ms
+ ✓ packages/hub/test/hub-waits.test.ts > a hub that never answers still fails deep hub start at 15 s, naming its socket and its log 297ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week America/Los_Angeles changes its clocks reads as the locale's formatter writes it 4589ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week Europe/London changes its clocks reads as the locale's formatter writes it 4859ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week Australia/Lord_Howe changes its clocks reads as the locale's formatter writes it 4488ms
+ ✓ packages/hub/test/clock.test.ts > every day of two years in Asia/Kathmandu names its weekday and month as the locale's formatter does 148ms
+ ✓ packages/hub/test/clock.test.ts > every day of two years in Pacific/Kiritimati names its weekday and month as the locale's formatter does 168ms
+ ✓ packages/hub/test/clock.test.ts > every day of two years in UTC names its weekday and month as the locale's formatter does 139ms
+ ✓ packages/hub/test/clock.test.ts > a time that is no time reads as the locale's formatter writes it 0ms
+ ✓ packages/hub/test/clock.test.ts > deep status with the hub down says since when in a clock time, and constructs no date formatter to say it 858ms
+
+ Test Files  3 passed (3)
+      Tests  16 passed (16)
+   Start at  14:19:17
+   Duration  16.71s (tests 93%, transform 5%, import 1%)
+

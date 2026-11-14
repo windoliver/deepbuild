@@ -60,7 +60,13 @@ fn param(
 }
 
 fn boxed() -> Param {
-    param("box", ParamType::Json, Value::Null, None, None)
+    param(
+        "box",
+        ParamType::Json("[x, y, w, h]"),
+        Value::Null,
+        None,
+        None,
+    )
 }
 
 fn number(name: &'static str, default: f64, min: f64, max: f64) -> Param {
@@ -68,7 +74,7 @@ fn number(name: &'static str, default: f64, min: f64, max: f64) -> Param {
 }
 
 fn flag(name: &'static str) -> Param {
-    param(name, ParamType::Json, json!(false), None, None)
+    param(name, ParamType::Json("bool"), json!(false), None, None)
 }
 
 fn kind(name: &'static str, params: Vec<Param>) -> Entry {
@@ -369,7 +375,7 @@ fn fixer_rule_dangles(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 }
 
 fn fixer_with(r: &mut Registrar, rule: deep_canvas::registry::Rule, unproved: bool) {
-    let link = param("link", ParamType::Json, Value::Null, None, None);
+    let link = param("link", ParamType::Json("item ID"), Value::Null, None, None);
     r.kind(
         kind(
             "fixer",
@@ -979,7 +985,13 @@ fn keys_with(r: &mut Registrar, run: deep_canvas::registry::Run) {
             "keys",
             vec![
                 boxed(),
-                param("keys", ParamType::Json, json!([]), None, None),
+                param(
+                    "keys",
+                    ParamType::Json("[[t: s, value]]"),
+                    json!([]),
+                    None,
+                    None,
+                ),
             ],
         ),
         &[],

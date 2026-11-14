@@ -13,6 +13,7 @@ import { line } from './wire.js';
 const LABEL = 'com.deepbuild.hub';
 const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
+const STEP_MS = 10;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
 type Obj = Record<string, unknown>;
@@ -66,7 +67,7 @@ async function waitForHub(path: string): Promise<boolean> {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline) {
     if (await answers(path)) return true;
-    await new Promise((done) => setTimeout(done, 100));
+    await new Promise((done) => setTimeout(done, STEP_MS));
   }
   return false;
 }
@@ -258,7 +259,7 @@ export async function stopHub(options: { root: string }): Promise<number> {
     return 3;
   }
   const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, 100));
+  while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
   return 0;
 }
 
@@ -277,5 +278,5 @@ export async function stopIfRunning(root: string): Promise<void> {
   if (!(await answers(at.socket))) return;
   try { await control(at.socket, at.token, 'hub.stop'); } catch { return; }
   const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline && (await answers(at.socket))) await new Promise((done) => setTimeout(done, 100));
+  while (Date.now() < deadline && (await answers(at.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
 }

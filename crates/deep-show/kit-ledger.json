@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "0eb468e0c093c3b119d333cc3d060e9dd65967d041f8f7f70244bda804ff5b7d",
+    "digest": "d446205849dada9e09ed9f41aaaa5aaf34ab3e3de119922a781ec993e037d22b",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -18,7 +18,7 @@
   },
   "building": {
     "version": "1.0.0",
-    "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
+    "digest": "6c932b2a8efa56170d153ff1eebd957b04800110bf99d2da4385d651a2cc2bd5",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -34,7 +34,7 @@
   },
   "cells": {
     "version": "1.0.0",
-    "digest": "ad13803629031e0f3fbebd55a00f95da95e81f9f7e78fe2765449bcbc8c89431",
+    "digest": "2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -66,7 +66,7 @@
   },
   "effects": {
     "version": "1.0.0",
-    "digest": "d45a9a5ad3664b3c5a5849ae6bf54992cadea2d518fac39a4a5cc16c936dce78",
+    "digest": "728754098ff7e4fa72004323be2f19eb772021f76c26ca3a01930aa343f6e2af",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -98,7 +98,7 @@
   },
   "graph": {
     "version": "1.0.0",
-    "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
+    "digest": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -139,7 +139,7 @@
   },
   "look": {
     "version": "1.0.0",
-    "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+    "digest": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -187,7 +187,7 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "ceeb27a5bf5262e2a2c5a8930f66217926d25695e3d70de2faf6acdc416ac9f4",
+    "digest": "16ba0318533d04e814906d17e911f9c632fb8b1089227252dad47ec6b392c1a2",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -205,7 +205,7 @@
   },
   "motion": {
     "version": "1.0.0",
-    "digest": "40fc4246f449f233e370e13e5a10150dc1ddbaa2cdeff07312a759f63ffe7add",
+    "digest": "27a25f69d76019d98ec386c96bda4437a7bfd2363517578cf55100e9d4dbe8d8",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -218,6 +218,16 @@
       "time_order": "PASS",
       "catalog": "FAIL",
       "migration": "PASS"
+    }
+  },
+  "net": {
+    "version": "1.0.0",
+    "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS"
     }
   },
   "physics": {
@@ -267,7 +277,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "61c7c1cfa53706ec4050b74561317e375f04c2d38e69668bab48bdfbad633b55",
+    "digest": "9edd239b48ca54a24b54998ca5f2208381bdc9cac8792e7e473ffc5dd17d94d4",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -300,14 +310,14 @@
   "text": {
     "version": "1.0.0",
     "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
-    "verdict": "PASS",
+    "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "read_set": "PASS",
       "order": "PASS",
-      "schedule": "PASS",
+      "schedule": "FAIL",
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"
@@ -315,7 +325,7 @@
   },
   "vector": {
     "version": "1.0.0",
-    "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
+    "digest": "0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -328,16 +338,6 @@
       "time_order": "PASS",
       "contribution": "PASS",
       "catalog": "PASS"
-    }
-  },
-  "net": {
-    "version": "1.0.0",
-    "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
-    "verdict": "PASS",
-    "parts": {
-      "clean_rebuild": "PASS",
-      "patch_fuzz": "PASS",
-      "schedule": "PASS"
     }
   }
 }

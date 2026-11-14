@@ -29,12 +29,15 @@ use deep_canvas_physics::roles::{self, Row};
 use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
+mod audit;
+mod held;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
+mod replay;
 mod timeline;
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 24] = [
+pub const PLANTED: [&str; 25] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -59,6 +62,7 @@ pub const PLANTED: [&str; 24] = [
     "joint_force_per_step",
     "solve_cap_reports_success",
     "mass_ratio_declared_only",
+    "volume_without_constraint",
 ];
 
 /// The reply to a line that isn't a call.
@@ -94,6 +98,8 @@ pub struct Run {
     keeps_replaced: bool,
     late_forks: bool,
     all_steps: bool,
+    /// #524's twin: a soft volume is built without its volume constraint.
+    no_volume: bool,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -112,6 +118,7 @@ fn issue(r: &Refusal) -> Value {
                 "contact_materials",
                 "forces",
                 "outputs",
+                "soft",
             ]
             .contains(map) =>
         {
@@ -119,8 +126,13 @@ fn issue(r: &Refusal) -> Value {
         }
         _ => vec![],
     };
-    json!({"check": "document.validate", "code": r.code, "severity": "error", "ids": ids, "path": r.path,
-           "actual": r.actual, "t": Value::Null, "what": r.what, "fix": fix(r.code)})
+    let mut v = json!({"check": "document.validate", "code": r.code, "severity": "error", "ids": ids, "path": r.path,
+           "actual": r.actual, "t": Value::Null, "what": r.what, "fix": fix(r.code)});
+    // #524: an open soft volume's issue names its open edge by its two welded vertices.
+    if r.code == deep_canvas_physics::doc::OPEN_MESH {
+        v["edge"] = r.actual.clone();
+    }
+    v
 }
 
 fn state(b: &BodyState) -> Value {
@@ -216,26 +228,36 @@ pub fn timed_note() {
     });
 }
 
-/// The bodies `read` names (every body when absent), as `{ID: [state]}` to fill.
-fn series(call: &Value, b: &Rapier) -> Option<Map<String, Value>> {
+/// The bodies `read` names (every body when absent), as `{ID: [state]}` to fill; and the soft
+/// bodies it names (#524), as `{ID: {addresses, positions: []}}`.
+fn series(call: &Value, b: &Rapier, w: &World) -> Option<(Map<String, Value>, Map<String, Value>)> {
     let all: Vec<String> = b.read().bodies.into_iter().map(|s| s.id).collect();
-    let ids: Vec<String> = match call.get("read") {
-        None => all,
-        Some(r) => r
-            .as_array()?
-            .iter()
-            .map(|x| {
-                x.as_str()
-                    .filter(|id| all.iter().any(|a| a == id))
-                    .map(String::from)
-            })
-            .collect::<Option<_>>()?,
+    let named: Option<Vec<&str>> = match call.get("read") {
+        None => None,
+        Some(r) => Some(
+            r.as_array()?
+                .iter()
+                .map(Value::as_str)
+                .collect::<Option<_>>()?,
+        ),
     };
-    Some(
-        ids.into_iter()
-            .map(|id| (id, Value::Array(Vec::new())))
-            .collect(),
-    )
+    let wants = |id: &str| named.as_ref().is_none_or(|n| n.contains(&id));
+    if named
+        .iter()
+        .flatten()
+        .any(|id| !all.iter().any(|a| a == id) && !w.soft.contains_key(*id))
+    {
+        return None;
+    }
+    let bodies = all
+        .into_iter()
+        .filter(|id| wants(id))
+        .map(|id| (id, json!([])))
+        .collect();
+    let soft = w.soft.iter().filter(|(id, _)| wants(id));
+    let empty =
+        |s: &deep_canvas_physics::doc::Soft| json!({"addresses": s.addresses, "positions": []});
+    Some((bodies, soft.map(|(id, s)| (id.clone(), empty(s))).collect()))
 }
 
 /// The call's `frame_rate` (60/1 when absent) as `p/q` and its frame in flicks, or its refusal.
@@ -369,6 +391,8 @@ struct Trace {
     occurrences: Vec<occurrence::Row>,
     /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
     shaped: Vec<Value>,
+    /// #524: each soft body's particles, every `every` steps, as `{addresses, positions}`.
+    particles: Map<String, Value>,
 }
 
 /// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
@@ -459,6 +483,7 @@ impl Run {
             keeps_replaced: false,
             late_forks: false,
             all_steps: false,
+            no_volume: false,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -488,6 +513,7 @@ impl Run {
             Some("joint_force_per_step") => run.twin = Twin::ForcePerStep,
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
+            Some("volume_without_constraint") => run.no_volume = true,
             Some(_) => return None,
         }
         Some(run)
@@ -533,7 +559,9 @@ impl Run {
                 id: b.id.clone(),
                 values: b
                     .values
-                    .map(|v| ((f64::from(v) * 1e6).round() / 1e6) as f32),
+                    .iter()
+                    .map(|v| ((f64::from(*v) * 1e6).round() / 1e6) as f32)
+                    .collect(),
             })
             .collect();
         golden::step_hash(&rounded, joints)
@@ -571,6 +599,7 @@ impl Run {
             twin: self.twin,
             ..Rapier::default()
         };
+        b.soft.no_volume = self.no_volume;
         b.build(&w).map_err(refused)?;
         Ok((w, b))
     }
@@ -588,6 +617,10 @@ impl Run {
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
             let w = check(&doc, &self.caps, self.table)?;
+            let skins = deep_canvas_physics::skin::check(&w, scene);
+            if !skins.is_empty() {
+                return Err(skins);
+            }
             Ok((doc, Some(Scene::read(scene, id, &w)?)))
         });
         Some(read.map_err(|e| refused(&e)))
@@ -615,9 +648,21 @@ impl Run {
             }
         }
         if (k - start).is_multiple_of(plan.every) {
-            for s in b.read().bodies {
+            let read = b.read();
+            for s in read.bodies {
                 if let Some(Value::Array(v)) = t.bodies.get_mut(&s.id) {
                     v.push(state(&s));
+                }
+            }
+            for s in read.soft {
+                if let Some(Value::Array(v)) =
+                    t.particles.get_mut(&s.id).map(|p| &mut p["positions"])
+                {
+                    v.push(json!(s
+                        .positions
+                        .iter()
+                        .map(|p| p.map(|x| x as f32))
+                        .collect::<Vec<_>>()));
                 }
             }
         }
@@ -692,8 +737,11 @@ impl Run {
     ) -> Result<(String, Trace, Value), Value> {
         let (rate, frame) = rate(call)?;
         let (w, mut b) = self.build(world)?;
+        let (bodies, particles) =
+            series(call, &b, &w).ok_or_else(|| json!({"ok": false, "code": "bad_input"}))?;
         let mut t = Trace {
-            bodies: series(call, &b).ok_or_else(|| json!({"ok": false, "code": "bad_input"}))?,
+            bodies,
+            particles,
             ..Trace::default()
         };
         self.run(&mut b, &w, plan, &mut t).map_err(|s| match s {
@@ -756,16 +804,20 @@ impl Run {
                     .and_then(|(w, b)| Track::read(&w, call).map(|_| (w, b)))
                 {
                     Ok((w, b)) => {
-                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built()})
+                        let (soft, backend) = held::held(&w, &b.held());
+                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built(),
+                               "soft": soft, "backend": backend})
                     }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),
                 },
             ),
             "runtime" => {
                 let b = &self.build;
-                Some(json!({"ok": true, "runtime_digest": b.runtime_digest(),
+                Some(
+                    json!({"ok": true, "runtime_digest": b.runtime_digest(), "soft_solver": crate::soft::SOLVER,
                     "backend": {"name": b.backend.name, "version": b.backend.version, "features": b.backend.features},
-                    "pins": b.pins.iter().map(|p| p.json()).collect::<Vec<_>>()}))
+                    "pins": b.pins.iter().map(|p| p.json()).collect::<Vec<_>>()}),
+                )
             }
             "bake" => {
                 let (world, scene) = match self.subject(call)? {
@@ -814,7 +866,7 @@ impl Run {
                     }
                 }
                 done(self.bake(call, &world, &plan).map(|(key, t, record)| {
-                    let mut reply = json!({"ok": true, "key": key, "bodies": t.bodies,
+                    let mut reply = json!({"ok": true, "key": key, "bodies": t.bodies, "particles": t.particles,
                                            "step_hashes": t.step_hashes, "outputs": record["outputs"],
                                            "occurrences": record["occurrences"],
                                            "occurrences_hash": record["occurrences_hash"], "ring": record["ring"]});
@@ -863,8 +915,10 @@ impl Run {
                     );
                 }
                 b.plant(self.restore, &built);
+                let (bodies, particles) = series(call, &b, &w)?;
                 let mut t = Trace {
-                    bodies: series(call, &b)?,
+                    bodies,
+                    particles,
                     ..Trace::default()
                 };
                 if let Err(Stop::Refused(v)) = self.run(&mut b, &w, &plan, &mut t) {
@@ -909,7 +963,11 @@ impl Run {
                 })
             }
             "golden" => {
-                let world = call.get("world")?;
+                let (world, scene) = match self.subject(call)? {
+                    Ok(x) => x,
+                    Err(e) => return Some(e),
+                };
+                let world = &world;
                 call.get("store")?.as_str()?;
                 let verify_on: Vec<&str> = call
                     .get("verify_on")?
@@ -923,7 +981,7 @@ impl Run {
                 };
                 let plan = Plan {
                     steps: steps()?,
-                    scene: None,
+                    scene: scene.as_ref(),
                     every: 1,
                     guard: true,
                     ftz_at: None,
@@ -934,6 +992,7 @@ impl Run {
                     Ok(r) => r,
                     Err(e) => return Some(e),
                 };
+                let reads = reads(&plan, plan.steps);
                 done(self.bake(call, world, &plan).map(|(_, t, record)| {
                     let hashes: Vec<Value> = record["checkpoints"]
                         .as_array()
@@ -942,7 +1001,7 @@ impl Run {
                         .map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
                         .collect();
                     json!({"ok": true, "golden": {
-                        "bake_key": self.key(world, &json!([]), &track.json(), &rate, plan.steps, None),
+                        "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
                         "runtime_digest": self.build.runtime_digest(), "machine": machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
@@ -952,6 +1011,7 @@ impl Run {
             "golden_verify" => self.verify(call),
             "seek" => self.seek(call),
             "determinism" => self.determinism(call),
+            "audit" => self.audit(call),
             #[cfg(not(target_arch = "wasm32"))]
             "view" => self.view(call),
             #[cfg(not(target_arch = "wasm32"))]
@@ -1021,9 +1081,6 @@ impl Run {
         }
     }
 
-    /// Replays a golden's world on this machine (Golden): each step's start asserts the control
-    /// register; then the first step whose hash differs, and the first body and field that differ
-    /// at the recording bake's first checkpoint at or after it.
     /// physics.pairs over `world` against `brief` (`{touch?, never?}`), with the document check's refusals.
     fn pairs(&self, world: &Value, brief: &Value) -> Option<Value> {
         let locks = |k: &str| -> Option<Vec<[String; 2]>> {
@@ -1267,110 +1324,6 @@ impl Run {
         Some(
             json!({"ok": true, "verdict": if met { "PASS" } else { "FAIL" }, "key": key, "result": result, "what": what}),
         )
-    }
-
-    fn verify(&self, call: &Value) -> Option<Value> {
-        let (g, world) = (call.get("golden")?, call.get("world")?);
-        let shift = match call.get("shift") {
-            None => None,
-            Some(s) => Some((
-                s.get("step")?.as_u64()?,
-                s.get("id")?.as_str()?.to_string(),
-                FIELDS
-                    .iter()
-                    .position(|f| Some(*f) == s.get("field").and_then(Value::as_str))?,
-                s.get("ulps").map_or(Some(1), Value::as_i64)?,
-            )),
-        };
-        let plan = Plan {
-            steps: call.get("steps")?.as_u64()?,
-            scene: None,
-            every: 1,
-            guard: true,
-            ftz_at: call
-                .get("ftz_at")
-                .map(Value::as_u64)
-                .map_or(Some(None), |s| s.map(Some))?,
-            shift,
-            track: &NO_TRACK,
-        };
-        let dir = call
-            .get("store")
-            .map(Value::as_str)
-            .map_or(Some(None), |s| s.map(Some))?;
-        let (rate, _) = match rate(call) {
-            Ok(r) => r,
-            Err(e) => return Some(e),
-        };
-        let (w, mut b) = match self.build(world) {
-            Ok(x) => x,
-            Err(e) => return Some(e),
-        };
-        let key = self.key(world, &json!([]), &json!([]), &rate, plan.steps, None);
-        let digest = self.build.runtime_digest();
-        let here = machine(&self.build.target);
-        let machines = golden::machines(g, &here);
-        let mut reply = json!({"ok": true, "verdict": "FAIL", "bake_key": key, "runtime_digest": digest,
-                               "machine": here, "target": self.build.target, "machines": machines,
-                               "report": null, "failure": null});
-        if g["bake_key"] != json!(key) || g["runtime_digest"] != json!(digest) {
-            reply["refused"] = json!(format!(
-                "a golden is never compared under another key or runtime digest: it holds {} and {}, this run {key} and {digest}",
-                g["bake_key"], g["runtime_digest"]
-            ));
-            return Some(reply);
-        }
-        let mut t = Trace::default();
-        let ran = self.run(&mut b, &w, &plan, &mut t);
-        // This replay's own step hashes, so a second machine's run is compared step for step.
-        reply["step_hashes"] = json!(t.step_hashes);
-        match ran {
-            Err(Stop::Refused(v)) => return Some(v),
-            Err(Stop::Register(step, what)) => {
-                reply["failure"] = json!({"step": step, "register": fp::REGISTER, "what": what});
-                return Some(reply);
-            }
-            Ok(()) => {}
-        }
-        let recorded: Vec<&str> = g["step_hashes"]
-            .as_array()?
-            .iter()
-            .map(Value::as_str)
-            .collect::<Option<_>>()?;
-        let n = recorded.len().max(t.step_hashes.len());
-        let Some(k) =
-            (0..n).find(|&i| recorded.get(i).copied() != t.step_hashes.get(i).map(String::as_str))
-        else {
-            reply["verdict"] = json!("PASS");
-            return Some(reply);
-        };
-        let every = w.checkpoint_every;
-        let c = (k as u64).max(1).div_ceil(every) * every;
-        let checkpoint = (c <= plan.steps).then_some(c);
-        let field = checkpoint.zip(dir).and_then(|(c, dir)| {
-            let target = g["record_on"].as_str()?;
-            let bake = stored(
-                dir,
-                &self.key(
-                    world,
-                    &json!([]),
-                    &json!([]),
-                    &rate,
-                    plan.steps,
-                    Some(target),
-                ),
-            )?;
-            let cp = bake["checkpoints"]
-                .as_array()?
-                .iter()
-                .find(|x| x["step"] == json!(c))
-                .and_then(checkpoint_of)?;
-            let (_, mut theirs) = self.build(world).ok()?;
-            theirs.restore(&cp).ok()?;
-            golden::first_field(&theirs.canonical(), t.at.get(&c)?)
-        });
-        reply["report"] = json!({"first_step": k, "checkpoint": checkpoint, "field": field});
-        Some(reply)
     }
 }
 

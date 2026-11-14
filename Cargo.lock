@@ -2664,6 +2664,7 @@ dependencies = [
  "bincode",
  "deep-canvas-motion",
  "deep-canvas-physics",
+ "deep-canvas-scene3d",
  "rapier3d",
  "serde_json",
  "simba",
