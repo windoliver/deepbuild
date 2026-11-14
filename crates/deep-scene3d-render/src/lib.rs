@@ -1109,6 +1109,12 @@ fn pack(c: [u8; 3]) -> u32 {
     u32::from_le_bytes([c[0], c[1], c[2], 255])
 }
 
+/// [`pack`] with the opacity a mark is faded to in its alpha byte (#226), 255 when it isn't.
+fn faded_pack(c: [u8; 3], opacity: Option<&f64>) -> u32 {
+    let a = opacity.map_or(255, |o| (o.clamp(0.0, 1.0) * 255.0).round() as u8);
+    u32::from_le_bytes([c[0], c[1], c[2], a])
+}
+
 fn v4(v: [f64; 3], w: f64) -> [f32; 4] {
     [v[0] as f32, v[1] as f32, v[2] as f32, w as f32]
 }
@@ -6269,7 +6275,7 @@ impl Renderer {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
                     b: v4(seg.b, seg.wb),
-                    color: pack(l.color),
+                    color: faded_pack(l.color, layer.fades.get(&l.id)),
                     pick: picks[&l.id],
                     // A mesh-edge line sits a hair toward the camera, so the faces whose
                     // edges it draws don't hide it; one drawn over everything skips depth.
@@ -6338,7 +6344,7 @@ impl Renderer {
                     uv: [texel(a.x), texel(a.y), texel(a.x + a.w), texel(a.y + a.h)],
                     right: v4(l.axes[0], half[0]),
                     up: v4(l.axes[1], half[1]),
-                    color: pack(l.color),
+                    color: faded_pack(l.color, layer.fades.get(&l.id)),
                     pick: picks[&l.id],
                     flags: u32::from(l.world)
                         | (facing << 1)

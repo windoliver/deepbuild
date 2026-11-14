@@ -1499,6 +1499,24 @@
       ]
     },
     {
+      "id": "canvas-axes3d",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "axes3d"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "axes_over_marks": 1.05,
+        "still_maps": 0
+      },
+      "initialReason": "Issue #226 first measurement (#226.6a40f5c8): the merge base has no 3D axes. A release deep-gpu draws criterion 7's axes (three linear scales on [-4, 4] over 8 m, the xy grid plane, labels facing the camera) and the same lines, ticks, labels and plane written as mark.line@1 and mark.text@1, each orbiting at 1920 x 1080 for 300 frames with GPU timings, in alternating order, five runs after a warm-up one; and the axes with a point carrying mod.axes@1 under a still camera for four frames, counting the items its frames 1 to 3 map. canvas.mjs judge holds the axes' p95 GPU frame to 1.05 x the marks' (axes_over_marks) and the still frames' maps to 0 (still_maps, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#226.6a40f5c8"
+      ]
+    },
+    {
       "id": "logic-between-steps",
       "command": [
         "node",

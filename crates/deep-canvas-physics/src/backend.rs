@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use deep_canvas::ops;
 use serde_json::Value;
 
 use crate::caps::Caps;
@@ -88,6 +89,53 @@ pub struct Canonical {
     pub values: [f32; 13],
 }
 
+/// #523: one joint as a step left it (Joint). `turns` and `past` are its own state, beside its
+/// bodies', kept in checkpoints and the state hash; the rest are its readings.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JointState {
+    pub id: String,
+    /// A hinge's whole turns, counted when a step's shortest signed change crosses ±180°.
+    pub turns: i32,
+    /// The steps it has spent past `breaks_at`.
+    pub past: u32,
+    /// `joint_coordinate`: a hinge's angle between its bodies plus 360° a turn, deg; a slider's
+    /// travel, m; none for another kind.
+    pub coordinate: Option<f64>,
+    /// N and N·m: its locks' and limits' impulses over the substep they came from, never its
+    /// motor's.
+    pub force: f64,
+    pub torque: f64,
+}
+
+/// #523: a hinge's angle between its bodies, deg in (−180, 180], from the rotation `[x, y, z, w]`
+/// that takes its first frame to its second, whose axis is x, on pinned math (`deep_canvas::ops`),
+/// so every machine reads it alike.
+pub fn hinge_angle(q: [f64; 4]) -> f64 {
+    let s = if q[3] < 0.0 { -1.0 } else { 1.0 };
+    ops::deg(2.0 * ops::atan2(s * q[0], s * q[3]))
+}
+
+/// #523: the rotation `[x, y, z, w]` by `deg` about x, on pinned math.
+pub fn about_x(deg: f64) -> [f64; 4] {
+    let h = ops::rad(deg) / 2.0;
+    [ops::sin(h), 0.0, 0.0, ops::cos(h)]
+}
+
+/// #523: the whole turns a hinge gains over a step from angle `a0` to `a1` (deg, each in
+/// (−180, 180]): ±1 when the step's shortest signed change carries it across the wrap (Joint).
+pub fn turn(a0: f64, a1: f64) -> i32 {
+    let d = match a1 - a0 {
+        d if d > 180.0 => d - 360.0,
+        d if d <= -180.0 => d + 360.0,
+        d => d,
+    };
+    match a0 + d {
+        x if x > 180.0 => 1,
+        x if x <= -180.0 => -1,
+        _ => 0,
+    }
+}
+
 /// A deep checkpoint: the backend's whole-world state as its own bytes, stamped with the backend
 /// and the version that wrote them, which no other version loads (Checkpoint ring).
 #[derive(Clone, Debug, PartialEq)]
@@ -146,6 +194,8 @@ pub trait Backend {
     fn read(&self) -> State;
     /// Every body's canonical state, in canonical (ID) order.
     fn canonical(&self) -> Vec<Canonical>;
+    /// #523: every joint's state and readings, by ID.
+    fn joints(&self) -> Vec<JointState>;
     fn checkpoint(&self) -> Checkpoint;
     /// Loads `checkpoint`, or refuses one another backend or version wrote, naming both, and
     /// loads nothing.

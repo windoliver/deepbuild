@@ -530,6 +530,8 @@ timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-red
 // #538's first AC8 draft is kept by hand until the owner swaps it: its heap, crowd and fogger programs run out of the
 // default fuel at step 0, so their arrays never change; its blind redraft, 538-redraft-ac8/, runs in its place.
 byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
+// #540's files each build deep-show (most also #544's assembler), run logic programs, draw 3D and bake a world.
+alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -601,6 +603,16 @@ alone.push('tests/acceptance/450/');
 alone.push('tests/acceptance/239/', 'tests/look-type.test.ts');
 timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budget.test.ts', 'tests/acceptance/239/off-reference.test.ts');
 slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
+// #507's files each build deep-show with cargo; ac6 reads PDFs with poppler, ac3 renders a 50 s session's sound.
+alone.push('tests/acceptance/507/', 'tests/acceptance/507-oracle/');
+// #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
+// ac7-budgets judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/226/');
+timed.push('tests/acceptance/226/ac7-budgets.test.ts');
+// #226's first-draft Oracle lane needs a tick at every whole number on [−4, 4], where axis@1's rule ticks every other
+// one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/226-oracle-redraft/');
+byHand.push('tests/acceptance/226-oracle/');
 // #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
 alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
 timed.push('tests/acceptance/213/ac8-budgets.test.ts');

@@ -348,3 +348,35 @@ fn a_dotted_table_name_counts_once() {
     let e = Expr::compile(&text, &OneTable, 512).unwrap();
     assert_eq!(e.size, 454);
 }
+
+#[test]
+fn a_dotted_path_from_a_plain_name_is_one_var() {
+    // #540: `aim.ray.dir` reads a point control's entry by field; a swizzle after it still
+    // swizzles.
+    let e = Expr::compile("20 aim.ray.dir + aim.ray.origin.y", &Nothing, 64).unwrap();
+    assert_eq!(e.vars, ["aim.ray.dir", "aim.ray.origin"]);
+    let (dir, origin) = (
+        V::V(3, [0.0, 0.5, 0.25, 0.0]),
+        V::V(3, [1.0, 2.0, 3.0, 0.0]),
+    );
+    let V::V(3, c) = e.eval(&[dir, origin]) else {
+        panic!("a vec3")
+    };
+    assert_eq!(c[..3], [2.0, 12.0, 7.0]);
+    // A sum's index, a constant or a call before the names is no path.
+    for text in ["sum(k, 0, 2, k.foo)", "pi.foo", "vec2(1, 2).foo"] {
+        let r = Expr::compile(text, &Nothing, 64).unwrap_err();
+        assert_eq!(r.call, "foo", "{text}");
+    }
+}
+
+#[test]
+fn a_swizzle_of_a_plain_name_stays_a_swizzle() {
+    let e = Expr::compile("v.yx + w.zw", &Nothing, 64).unwrap();
+    assert_eq!(e.vars, ["v", "w"]);
+    let w = V::V(4, [0.0, 0.0, 10.0, 20.0]);
+    let V::V(2, c) = e.eval(&[V::V(2, [1.0, 2.0, 0.0, 0.0]), w]) else {
+        panic!("a vec2")
+    };
+    assert_eq!(c[..2], [12.0, 21.0]);
+}

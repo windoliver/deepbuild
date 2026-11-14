@@ -1,0 +1,93 @@
+The #523 suite run once at base commit 9b77cd2cd ("Merge pull request #2438 …"; no implementation of #523, and #522
+not merged), on macOS arm64 (Mac17,10, rustc 1.99.1, Node 24.22.2, vitest 5.0.5), with
+`PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node
+scripts/throttle.mjs build --wait 120 -- sh scripts/lease npx vitest run --root tests/acceptance/523
+--testTimeout=600000 --no-file-parallelism` (scripts/lease: "no deep on PATH and no built CLI at packages/cli/dist, so
+… runs unleased"). The base's deep-physics was built just before, through the same throttle and lease (`cargo build
+--locked --bin deep-physics`, 38 s cold), so each file's own cargo build was a no-op.
+
+Result: Test Files 7 failed (7); Tests 20 failed | 1 passed (21); 4.5 s. Every failure is at an assertion because the
+surface is absent; none is in the harness and none is BLOCKED. The one test that passes is ac4's (break): the base
+already breaks a joint on its lock force ÷ the substep, the whole load of a hanging body; its wrong program is the twin
+`joint_force_per_step` (twins.json). Each failing test, trimmed to its failing assertion:
+
+ac1-flywheel-turns.test.ts
+- #523.b6499735 (coordinate), (crossing), (seek): each at helpers.ts `baked`:
+    AssertionError: the flywheel [played to 3 s] is baked, not refused: {"ok":false,"issues":[{"check":
+    "document.validate","code":"unknown_field","severity":"error","ids":["spin"],"path":"outputs/spin/crossings",
+    "actual":[90],"t":null,"what":"outputs/spin/crossings is not a field here; the fields are from, read, to,
+    interpolate, reduce, average, sample, keep, expr, unit", …}]}: expected false to be true
+- #523.b6499735 (twin: hinge_coordinate_wraps):
+    AssertionError: deep-physics --planted hinge_coordinate_wraps (the flywheel, 3 s) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+- #523.b6499735 (twin: checkpoint_drops_turns):
+    AssertionError: deep-physics --planted checkpoint_drops_turns (the flywheel, 3 s) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+ac2-flywheel-speed-cap.test.ts
+- #523.93bf83d7 (fault):
+    AssertionError: the flywheel at 22,800 deg/s writes fault speed_cap on step 1:
+      no fault speed_cap at step 1, the flywheel's first step, which would turn its hinge 190° (fault rows: none):
+    expected [ Array(1) ] to deeply equal []
+- #523.93bf83d7 (twin: speed_cap_silent):
+    AssertionError: deep-physics --planted speed_cap_silent (the flywheel at 22,800 deg/s) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+ac3-motor-and-limit.test.ts
+- #523.959eb1ca (held):
+    AssertionError: the pressed arm: outputs.series.load (the output's reading at each frame) is an array, got
+    undefined: expected false to be true
+- #523.959eb1ca (broken):
+    AssertionError: the arm on its limit: outputs.series.load (the output's reading at each frame) is an array, got
+    undefined: expected false to be true
+  (Beyond the readings, read from the base's code: the base counts lock impulses alone, so the arm resting on its limit
+  never breaks; its probe's break payload read a torque of 3.9e-13 N·m.)
+
+ac4-hanging-body.test.ts
+- #523.188f7266 (reading):
+    AssertionError: the hanging body at substeps 1: outputs.series.load (the output's reading at each frame) is an
+    array, got undefined: expected false to be true
+- #523.188f7266 (break): passes at the base (see above).
+- #523.188f7266 (twin: joint_force_per_step):
+    AssertionError: deep-physics --planted joint_force_per_step (the hanging body) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+ac5-disc-and-shot-caps.test.ts
+- #523.46a838d3 (disc):
+    AssertionError: the disc at 7,200 deg/s: outputs.series.turn (the output's reading at each frame) is an array, got
+    undefined: expected false to be true
+- #523.46a838d3 (shot):
+    AssertionError: the shot is capped at 400 m/s, and says so:
+      the shot at 500 m/s: no fault speed_cap naming shot (fault rows: none): expected [ Array(1) ] to deeply equal []
+  (Its speed and position checks pass at the base: Rapier caps it at 400 m/s from step 1, without a row.)
+- #523.46a838d3 (twin: speed_cap_silent):
+    AssertionError: deep-physics --planted speed_cap_silent (the disc at 7,200 deg/s) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+ac6-kinematic-solve.test.ts
+- #523.c74d0c1b (gear):
+    AssertionError: the gears is baked, not refused: {"ok":false,"issues":[{"check":"document.validate","code":
+    "physics.unsupported","severity":"error","ids":["mesh"],"path":"joints/mesh/kind","actual":"gear","t":null,
+    "what":"a gear joint isn't run by this backend interface yet; #523 brings it", …}]}: expected false to be true
+- #523.c74d0c1b (pulley):
+    AssertionError: the pulley is baked, not refused: {"ok":false,"issues":[{"check":"document.validate","code":
+    "physics.unsupported","severity":"error","ids":["rope"],"path":"joints/rope/kind","actual":"pulley","t":null,
+    "what":"a pulley joint isn't run by this backend interface yet; #523 brings it", …}]}: expected false to be true
+- #523.c74d0c1b (jam):
+    AssertionError: the arm jams when it can reach no further:
+      no jam in 264 steps, none within one step of step 240 (2 s), where the arm is straight and its tip's driver moves
+      on: the solve reported success (rows: none): expected [ Array(1) ] to deeply equal []
+- #523.c74d0c1b (twin: solve_cap_reports_success):
+    AssertionError: deep-physics --planted solve_cap_reports_success (the two-link arm) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+ac7-mass-ratio.test.ts
+- #523.84b7ab39 (ratio):
+    AssertionError: physics.mass_ratio reads declared and derived masses:
+      no physics.mass_ratio issue names the joint wrist, the hand, the torso and the ratio 200 for the 0.2 kg hand
+      (density × volume) on the 40 kg torso: []: expected [ Array(1) ] to deeply equal []
+- #523.84b7ab39 (twin: mass_ratio_declared_only):
+    AssertionError: deep-physics --planted mass_ratio_declared_only (the hand and the torso) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
+
+The type-check, `npx tsc -p tests/acceptance/523/tsconfig.json`, exits 0.

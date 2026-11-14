@@ -14,6 +14,7 @@ use std::rc::Rc;
 use deep_canvas::document::Issue;
 use deep_canvas::scope::{Event, Hit};
 use deep_canvas_input::rows::{self, Move, Row};
+use deep_logic::piece::Piece;
 use deep_logic::world::{track_of, Entry, Record, World};
 use serde_json::{json, Map, Value};
 
@@ -230,6 +231,70 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
     Ok(json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint}))
 }
 
+/// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
+/// `logic` reports them (#540's `match` reports each copy's the same way).
+pub(crate) fn stepped(
+    piece: &Rc<Piece>,
+    entries: &[Entry],
+    count: i64,
+) -> Result<Vec<Value>, Value> {
+    let mut rec = Record::default();
+    let mut world = World::new(
+        piece.clone(),
+        track_of(entries),
+        false,
+        Default::default(),
+        &mut rec,
+        None,
+    )?;
+    Ok(step_rows(&mut world, &mut rec, piece, count, false))
+}
+
+/// Each step 0 … `count` − 1 of `world`: its hash and arrays per item and, with `full` (#213's
+/// `logic` call), its fuel, its services' and mirrors' times and, where `rec` keeps them, the
+/// services regions each step read.
+fn step_rows(world: &mut World, rec: &mut Record, piece: &Piece, count: i64, full: bool) -> Vec<Value> {
+    let len = piece.items.first().map_or(1, |i| i.step);
+    let mut steps = Vec::new();
+    for k in 0..count {
+        world.run(k + 1, rec, &mut |_, _| {});
+        let row = rec.rows().get(&k).map(|r| &r.0);
+        let field = |f: &str| -> Map<String, Value> {
+            piece
+                .items
+                .iter()
+                .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
+                .collect()
+        };
+        let mut arrays = Map::new();
+        for (n, item) in piece.items.iter().enumerate() {
+            let region = world.write_region(n);
+            for w in &item.writes {
+                let Some(e) = item.write(&w.name) else {
+                    continue;
+                };
+                let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
+                let values = bytes
+                    .chunks_exact(w.ty.size() as usize)
+                    .map(|b| w.ty.value(b))
+                    .collect();
+                arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+            }
+        }
+        let mut step = json!({"step": k, "t": k * len, "hash": field("hash"), "arrays": arrays});
+        if full {
+            for f in ["fuel", "service_ns", "mirror_ns"] {
+                step[f] = json!(field(f));
+            }
+            if let Some(r) = rec.regions.as_ref() {
+                step["regions"] = json!(r.get(&k).cloned().unwrap_or_default());
+            }
+        }
+        steps.push(step);
+    }
+    steps
+}
+
 /// Whether a logic item of `form` reads control `c`.
 fn read_by_logic(form: &Value, c: &str) -> bool {
     let items = form.get("items").and_then(Value::as_object);
@@ -409,7 +474,7 @@ impl Hub<'_> {
     /// A pick: one entry on `doc`'s track at `t`. When a logic item reads the control, the
     /// document's logic is baked again on the track, as an export bakes it, so the live session
     /// draws what its rules make of the pick. The entry appended.
-    fn pick(
+    pub(crate) fn pick(
         &mut self,
         doc: &str,
         control: &str,
@@ -542,12 +607,14 @@ impl Hub<'_> {
         let Some(v) = self.scopes.get(panel).map(|s| &s.picks) else {
             return;
         };
-        for (c, cell) in &v.hover {
+        let points = self.scopes.get(panel).map(|s| &s.points.hover);
+        let hovers = v.hover.iter().map(|(c, cell)| (c, json!(cell)));
+        for (c, h) in hovers.chain(points.into_iter().flatten().map(|(c, h)| (c, h.clone()))) {
             if let Some(control) = form
                 .get_mut("controls")
                 .and_then(|cs| cs.get_mut(c.as_str()))
             {
-                control["hover"] = json!(cell);
+                control["hover"] = h;
             }
         }
         if let (Some((c, d)), Some(items)) = (
@@ -615,8 +682,10 @@ impl Hub<'_> {
 
     /// The hub's track of `doc` as a read takes it. The planted `pick_resolves_on_replay`
     /// resolves each pick's row again from its panel point through the camera as it is now.
-    fn track_read(&mut self, doc: &str) -> Vec<Value> {
+    pub(crate) fn track_read(&mut self, doc: &str) -> Vec<Value> {
         let mut track = self.track_json(doc);
+        // #540: the planted point twins that compute an entry again at a replay.
+        let _ = self.points_read(doc, &mut track);
         let panel = self.scenario.docs.get(doc).cloned().unwrap_or_default();
         let points = self
             .scopes
@@ -677,42 +746,8 @@ impl Hub<'_> {
             Ok(w) => w,
             Err(e) => return e,
         };
+        let steps = step_rows(&mut world, &mut rec, &piece, l.steps, true);
         let len = piece.items.first().map_or(1, |i| i.step);
-        let mut steps = Vec::new();
-        for k in 0..l.steps {
-            world.run(k + 1, &mut rec, &mut |_, _| {});
-            let row = rec.rows().get(&k).map(|r| &r.0);
-            let field = |f: &str| -> Map<String, Value> {
-                piece
-                    .items
-                    .iter()
-                    .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
-                    .collect()
-            };
-            let (hash, fuel) = (field("hash"), field("fuel"));
-            let (service_ns, mirror_ns) = (field("service_ns"), field("mirror_ns"));
-            let mut arrays = Map::new();
-            for (n, item) in piece.items.iter().enumerate() {
-                let region = world.write_region(n);
-                for w in &item.writes {
-                    let Some(e) = item.write(&w.name) else {
-                        continue;
-                    };
-                    let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
-                    let values = bytes
-                        .chunks_exact(w.ty.size() as usize)
-                        .map(|b| w.ty.value(b))
-                        .collect();
-                    arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
-                }
-            }
-            let mut step = json!({"step": k, "t": k * len, "hash": hash, "fuel": fuel, "service_ns": service_ns,
-                                  "mirror_ns": mirror_ns, "arrays": arrays});
-            if let Some(r) = rec.regions.as_ref() {
-                step["regions"] = json!(r.get(&k).cloned().unwrap_or_default());
-            }
-            steps.push(step);
-        }
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
         let mut out = json!({"steps": steps, "track": held, "traps": rec.traps, "checkpoints": rec.checkpoints,

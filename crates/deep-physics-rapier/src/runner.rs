@@ -12,14 +12,15 @@ use std::path::Path;
 
 use crate::planted::Restore;
 use crate::scene::Scene;
-use crate::{fp, Rapier};
+use crate::{fp, Rapier, Twin};
 use base64::Engine;
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Hit, Input, Query, ShapeRef, Targets, FIELDS,
+    Backend, BodyState, Canonical, Checkpoint, Hit, Input, JointState, Query, ShapeRef, Targets,
+    FIELDS,
 };
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
-use deep_canvas_physics::check::{check, fix};
+use deep_canvas_physics::check::{check, fix, mass_ratios, MASS_RATIO};
 use deep_canvas_physics::doc::{Read, Refusal, World};
 use deep_canvas_physics::golden;
 use deep_canvas_physics::occurrence;
@@ -34,7 +35,7 @@ mod live;
 mod timeline;
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 18] = [
+pub const PLANTED: [&str; 24] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -53,6 +54,12 @@ pub const PLANTED: [&str; 18] = [
     "ring_drops_oldest",
     "restore_without_warm_start",
     "simulate_runs_all_steps",
+    "hinge_coordinate_wraps",
+    "checkpoint_drops_turns",
+    "speed_cap_silent",
+    "joint_force_per_step",
+    "solve_cap_reports_success",
+    "mass_ratio_declared_only",
 ];
 
 /// The reply to a line that isn't a call.
@@ -74,6 +81,10 @@ pub struct Run {
     /// `machines: any` whatever its golden's standing.
     bypass: bool,
     machines_any: bool,
+    /// #523 criterion 7's twin: the mass-ratio check reads only declared masses.
+    declared_masses_only: bool,
+    /// #523's backend twins.
+    twin: Twin,
     build: Build,
     /// #522's twins: what a restore leaves out; a ring that drops its oldest; a scrub that forks;
     /// a late entry's restore that keeps the replaced steps' occurrences, or that forks; a live
@@ -352,6 +363,9 @@ struct Trace {
     at: BTreeMap<u64, Vec<Canonical>>,
     /// Each output's body's position after each step.
     positions: BTreeMap<String, Vec<[f32; 3]>>,
+    /// #523: each joint output's reading after each step: whether it is joint_force's
+    /// `{force, torque}`, and the values.
+    readings: BTreeMap<String, (bool, Vec<[f64; 2]>)>,
     /// The occurrence list, each step's rows sorted (#1918).
     occurrences: Vec<occurrence::Row>,
     /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
@@ -437,6 +451,8 @@ impl Run {
             engine_order: false,
             bypass: false,
             machines_any: false,
+            declared_masses_only: false,
+            twin: Twin::None,
             build: crate::build(),
             restore: Restore::Whole,
             ring_drops_oldest: false,
@@ -467,9 +483,37 @@ impl Run {
             Some("late_entry_forks") => run.late_forks = true,
             Some("ring_drops_oldest") => run.ring_drops_oldest = true,
             Some("simulate_runs_all_steps") => run.all_steps = true,
+            Some("hinge_coordinate_wraps") => run.twin = Twin::CoordinateWraps,
+            Some("checkpoint_drops_turns") => run.twin = Twin::CheckpointDropsTurns,
+            Some("speed_cap_silent") => run.twin = Twin::SpeedCapSilent,
+            Some("joint_force_per_step") => run.twin = Twin::ForcePerStep,
+            Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
+            Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some(_) => return None,
         }
         Some(run)
+    }
+
+    /// #523: `physics.mass_ratio` for each joint whose two dynamic bodies' masses, declared or
+    /// density × volume, differ by more than 10:1; the planted check reads declared masses only.
+    fn mass_ratios(&self, w: &World, b: &Rapier) -> Vec<Value> {
+        let mass = |id: &str| {
+            let declared = w.bodies.get(id).and_then(|x| x.mass);
+            if self.declared_masses_only {
+                declared
+            } else {
+                declared.or_else(|| b.shapes_mass(id))
+            }
+        };
+        mass_ratios(w, mass)
+            .into_iter()
+            .map(|(joint, a, b, ratio)| {
+                let what = format!("joint {joint} holds {a} and {b}, whose masses differ by {ratio:.4}:1, more than 10:1, so the chain jitters or blows apart");
+                json!({"check": "document.validate", "code": MASS_RATIO, "severity": "warning",
+                       "ids": [joint, a, b], "path": format!("joints/{joint}"), "actual": ratio,
+                       "ratio": ratio, "t": Value::Null, "what": what, "fix": fix(MASS_RATIO)})
+            })
+            .collect()
     }
 
     /// The reply line to one call line.
@@ -480,9 +524,9 @@ impl Run {
             .map_or_else(|| BAD_INPUT.to_string(), |r| r.to_string())
     }
 
-    fn hash(&self, s: &[Canonical]) -> String {
+    fn hash(&self, s: &[Canonical], joints: &[JointState]) -> String {
         if !self.round_hashes {
-            return golden::step_hash(s);
+            return golden::step_hash(s, joints);
         }
         let rounded: Vec<Canonical> = s
             .iter()
@@ -493,7 +537,7 @@ impl Run {
                     .map(|v| ((f64::from(v) * 1e6).round() / 1e6) as f32),
             })
             .collect();
-        golden::step_hash(&rounded)
+        golden::step_hash(&rounded, joints)
     }
 
     /// The bake key of `world` at `rate` over `steps`, with what it reads of its scene (`[]` when
@@ -525,6 +569,7 @@ impl Run {
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
+            twin: self.twin,
             ..Rapier::default()
         };
         b.build(&w).map_err(refused)?;
@@ -552,11 +597,22 @@ impl Run {
     /// The state after step `k` into `t`.
     fn take(&self, b: &Rapier, w: &World, plan: &Plan, t: &mut Trace, k: u64, start: u64) {
         let c = b.canonical();
-        t.step_hashes.push(self.hash(&c));
+        let joints = b.joints();
+        t.step_hashes.push(self.hash(&c, &joints));
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read == Read::Position) {
             if let Some(body) = c.iter().find(|x| x.id == o.from) {
                 let p = [body.values[0], body.values[1], body.values[2]];
                 t.positions.entry(id.clone()).or_default().push(p);
+            }
+        }
+        for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
+            if let Some(j) = joints.iter().find(|j| j.id == o.from) {
+                let (pair, v) = match o.read {
+                    Read::JointCoordinate => (false, [j.coordinate.unwrap_or(0.0), 0.0]),
+                    _ => (true, [j.force, j.torque]),
+                };
+                let e = t.readings.entry(id.clone()).or_insert((pair, Vec::new()));
+                e.1.push(v);
             }
         }
         if (k - start).is_multiple_of(plan.every) {
@@ -678,7 +734,7 @@ impl Run {
             steps,
             Some(&self.build.target),
         );
-        let outputs = bake::outputs(&t.positions, rate, frame, w.step_rate, steps);
+        let outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
         let rank = occurrence::ranks(w);
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
@@ -698,9 +754,11 @@ impl Run {
                 match self
                     .subject(call)?
                     .and_then(|(world, _)| self.build(&world))
-                    .and_then(|(w, b)| Track::read(&w, call).map(|_| b))
+                    .and_then(|(w, b)| Track::read(&w, call).map(|_| (w, b)))
                 {
-                    Ok(b) => json!({"ok": true, "issues": [], "built": b.built()}),
+                    Ok((w, b)) => {
+                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built()})
+                    }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),
                 },
             ),

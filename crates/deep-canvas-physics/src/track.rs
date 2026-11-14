@@ -144,13 +144,25 @@ pub fn from_controls(w: &World, h: i64, core: &[Value]) -> Vec<(usize, Entry)> {
             if c != control || (*change && !changed) {
                 continue;
             }
+            // #540: its data expressions read at the entry's flick over its defaults; a field that
+            // reads nothing there derives no input from the entry.
+            let mut data = input.defaults.clone();
+            if !input.exprs.is_empty() {
+                let Some(fields) = crate::doc::data::fields(&input.exprs, e, core) else {
+                    continue;
+                };
+                data.extend(fields);
+            }
+            if data.get("from").is_some_and(|f| f == "pose") {
+                data.remove("from");
+            }
             for target in &input.targets {
                 let entry = Entry {
                     step,
                     kind: input.kind.clone(),
                     target: target.clone(),
                     input: id.clone(),
-                    data: input.defaults.clone(),
+                    data: data.clone(),
                 };
                 out.push((i, entry));
             }

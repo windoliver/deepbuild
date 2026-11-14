@@ -840,6 +840,22 @@ impl World {
             match &e.read {
                 // A text commit's bytes come with its control kind (#542).
                 Read::Control if e.ty == "text" => {}
+                // #540: a point control's entries packed, each its 248 B record and, after a box
+                // release holding unit keys, their tail, so a step walks them by its flags.
+                Read::Control if e.ty == "point" => {
+                    let list = &taken[e.name.as_str()];
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    let mut o = at + 8;
+                    for x in list {
+                        let v = x.value.bytes();
+                        if !matches!(x.value, Given::Point(_)) || o + 8 + v.len() > at + e.size as usize {
+                            continue;
+                        }
+                        region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
+                        region[o + 8..o + 8 + v.len()].copy_from_slice(&v);
+                        o += 8 + v.len();
+                    }
+                }
                 Read::Control => {
                     // Each entry a u32 player, 4 zero bytes, then its value as the control's
                     // form lays it out; a value of another form leaves its bytes zero.

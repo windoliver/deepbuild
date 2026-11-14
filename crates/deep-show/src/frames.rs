@@ -382,7 +382,9 @@ impl<'a> Hub<'a> {
             (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
             _ => None,
         };
-        let drawing = if e.pixels || e.film {
+        // #507: the timeline position the frame at this clock time shows.
+        reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
+        let drawing = if e.pixels || e.film || e.texts {
             drawing_of(&self.sched, evaluated)
         } else {
             None
@@ -410,6 +412,15 @@ impl<'a> Hub<'a> {
                 (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
                 _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
             };
+        }
+        if e.texts {
+            reply["texts"] = Value::Object(
+                drawing
+                    .as_ref()
+                    .and_then(|d| d.drawing.as_deref())
+                    .map(crate::film_audit::drawn_texts)
+                    .unwrap_or_default(),
+            );
         }
         let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self

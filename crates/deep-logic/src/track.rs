@@ -5,13 +5,17 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
 
-/// An entry's value: a number, or the row a pick wrote (Control: picks on rows and grid focus):
+use crate::point::Point;
+
+/// An entry's value: a number, the row a pick wrote (Control: picks on rows and grid focus):
 /// its set's index in `rows` and its key, an integer key column's value and 0, a grid's
-/// `(cx, cy)` or a fed instancer's `(slot, gen)`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// `(cx, cy)` or a fed instancer's `(slot, gen)`, or a point control's press, move or release
+/// (Control: point).
+#[derive(Clone, Debug, PartialEq)]
 pub enum Given {
     Number(f64),
     Pick { set: u32, key: [i64; 2] },
+    Point(Point),
 }
 
 impl From<f64> for Given {
@@ -25,6 +29,9 @@ impl Given {
         if let Some(n) = v.as_f64() {
             return Some(Given::Number(n));
         }
+        if v.get("phase").is_some() {
+            return Point::parse(v).map(Given::Point);
+        }
         let set = v.get("set")?.as_u64().filter(|s| *s < 8)? as u32;
         match v.get("key")?.as_array()?.as_slice() {
             [a, b] => Some(Given::Pick {
@@ -34,15 +41,16 @@ impl Given {
             _ => None,
         }
     }
-    pub fn to_json(self) -> Value {
+    pub fn to_json(&self) -> Value {
         match self {
             Given::Number(n) => json!(n),
             Given::Pick { set, key } => json!({"set": set, "key": key}),
+            Given::Point(p) => p.to_json(),
         }
     }
-    /// The value as its control's read region lays it out: an f64 (8 B), or a pick's `u32 set,
-    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B).
-    pub fn bytes(self) -> Vec<u8> {
+    /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
+    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B), or a point's record (248 B).
+    pub fn bytes(&self) -> Vec<u8> {
         match self {
             Given::Number(n) => n.to_le_bytes().to_vec(),
             Given::Pick { set, key } => {
@@ -52,6 +60,7 @@ impl Given {
                 b.extend(key[1].to_le_bytes());
                 b
             }
+            Given::Point(p) => p.bytes().to_vec(),
         }
     }
 }
