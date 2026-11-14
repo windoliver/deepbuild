@@ -637,7 +637,7 @@ alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/accep
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
 // #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
-alone.push('tests/acceptance/506/');
+alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
