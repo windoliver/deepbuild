@@ -86393,9 +86393,9 @@ impl Contract for WorkspaceTaskDataAuthorsItem {
     }
 }
 
-static RULE_340: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
+static RULE_344: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: None, items: Some(&RULE_5) };
 
-static RULE_341: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_111);
+static RULE_345: deep_contracts::Rule = deep_contracts::Rule::Nullable(&RULE_111);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceTaskData {
@@ -86418,7 +86418,7 @@ pub struct WorkspaceTaskData {
 impl Contract for WorkspaceTaskData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["workspace", "task", "step", "source_id", "link", "title", "body", "criteria", "authors", "updated", "blocked_by", "issue", "commit", "kept"])?;
-        deep_contracts::check_member(members, at, "workspace", &RULE_313)?;
+        deep_contracts::check_member(members, at, "workspace", &RULE_317)?;
         deep_contracts::check_member(members, at, "task", &RULE_5)?;
         deep_contracts::check_member(members, at, "source_id", &RULE_6)?;
         deep_contracts::check_member(members, at, "link", &RULE_6)?;
@@ -86426,10 +86426,10 @@ impl Contract for WorkspaceTaskData {
         deep_contracts::check_member(members, at, "body", &RULE_6)?;
         deep_contracts::check_member(members, at, "criteria", &RULE_13)?;
         deep_contracts::check_member(members, at, "updated", &RULE_6)?;
-        deep_contracts::check_member(members, at, "blocked_by", &RULE_340)?;
+        deep_contracts::check_member(members, at, "blocked_by", &RULE_344)?;
         deep_contracts::check_member(members, at, "issue", &RULE_37)?;
-        deep_contracts::check_member(members, at, "commit", &RULE_341)?;
-        deep_contracts::check_member(members, at, "kept", &RULE_341)?;
+        deep_contracts::check_member(members, at, "commit", &RULE_345)?;
+        deep_contracts::check_member(members, at, "kept", &RULE_345)?;
         Ok(Self {
             workspace: deep_contracts::required(members, at, "workspace")?,
             task: deep_contracts::required(members, at, "task")?,
