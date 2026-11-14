@@ -249,6 +249,8 @@ alone.push('tests/acceptance/1485-redraft-ac2/');
 byHand.push('tests/acceptance/1485/cap.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
+// #1816's live file runs the spine judge for #44 for hours and reopens #44 on GitHub if it doesn't read PASS.
+byHand.push('tests/acceptance/1816/judged-again.live.test.ts');
 
 // #1515's files each start a hub on a 500-session record, and its budgets must run with nothing beside them.
 alone.push('tests/acceptance/1515/');
