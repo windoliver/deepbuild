@@ -240,6 +240,7 @@
   "session.gone@1": "d1:f15a97d86fd799affbd39253a4883c0f09f55d8f0159cc0cc84f6c0ee88fdbeb",
   "session.named@1": "d1:fe1693f3f4dd4eea6ea2ffa496c8c39f79732381d4e6ab87f25f3ba967829f86",
   "session.never_started@1": "d1:a9c1daf460e8cec8034dc5d12a77984775cd75c49cc652f87494b0293c6223e2",
+  "session.note@1": "d1:834111ae93c4b0031878c618346ae41b0c2f4558be9096ed59bae8bbe947d441",
   "session.paused@1": "d1:3ca4257b76f43a5ae53955bd7267f8f0d0a88e0f759d4035c20f6c635c5f787f",
   "session.pushed@1": "d1:faa92f61849e8e5ba4d152229844edf01039964b738d92d868b8d6c8abcbbc91",
   "session.reading@1": "d1:ab6cd9e4df39e55e47521c4a7b7201e87be859f87e53318ef376a6adb0e3e800",
@@ -262,6 +263,7 @@
   "spool.refused@1": "d1:cd4890e2092e808b2e45c9e85bb5f3fe19842292319581bede3c71dac9ff19ac",
   "stack.served@1": "d1:aedc416cf00ff97d5f02d6692d9b04e907d168bbde942976f0ab303c6866fe4e",
   "stack.waiting@1": "d1:b745199a47d1aaaa8d76ce4fa9475d3bc380a39538d486d52ddcecbb0fa73dc5",
+  "staged.undone@1": "d1:ef4377c9d99447488d2aa2a1c599b30f73168dfaefe357dd6f33aa146be61895",
   "start.approval@1": "d1:f7209f198792f6a335e4f3ebd26dbd61f148d4885747d411f72f54b408354673",
   "start.refused@1": "d1:54a790f40da5a3b50758b654ad438e84f21943262ac20cabfd11440e09b21dfd",
   "start.session@1": "d1:98d56f9df12db76f4f90d9d1e6f170ee57f1328ffc007dc8165653240773ac25",
@@ -312,6 +314,7 @@
   "work.state@1": "d1:c7f35169b0eeea484057f26a3ad92880450254aa9490f4d198f2f813ad224bf2",
   "workspace.created@1": "d1:05d709e008336bd6a1907eb5d02451a3b026da0ec182dc04bcd7bddcd17a6955",
   "workspace.moved@1": "d1:ede086426851af386ba1dc5b0318723a2dc8bf14c3b6ee640b77bb0eac070520",
+  "workspace.task@1": "d1:cce5e73bd276d9305da5e369cdd7010e9ed19816fe7191617b497e94d6d35746",
   "worktree.created@1": "d1:dea9b05ceff3089d338c4881262aa529524cc63c3161257eda6e2db5edc0f2e3",
   "worktree.removed@1": "d1:645f1b3b4d84d811073e3d08b3b053a46a0b127d9a237fca629bee48a9eb2939"
 }

@@ -303,6 +303,13 @@ impl Hub<'_> {
         let reply = self
             .placement
             .pop_out(self.now, panel, display, serial, full_screen, size);
+        if let (true, Some(d)) = (
+            full_screen,
+            reply.pointer("/window/display").and_then(Value::as_str),
+        ) {
+            let d = d.to_string();
+            self.start_present(panel, &d);
+        }
         if let (Some((rect, display)), Some(s)) = (self.placed(panel), self.scopes.get_mut(panel)) {
             s.scope.placed(rect, display);
         }
@@ -326,6 +333,10 @@ impl Hub<'_> {
         // The router's serial, your latest input for the card's display, and the gesture a
         // pop-out needs (#400, #401). A key goes to the panel that holds keyboard focus.
         let (serial, reached) = self.route(panel, event);
+        // #507: present mode takes its keys first, Esc included.
+        if let Some(reply) = self.present_key(panel, event, serial) {
+            return reply;
+        }
         let now = self.now;
         if matches!(reached, Some(ref to) if to.as_deref() != Some(panel)) {
             return json!({"serial": serial, "reached": [reached.flatten().map_or("shell".to_string(), |p| format!("panel:{p}"))]});
@@ -604,6 +615,7 @@ impl Hub<'_> {
                 f["frame_seq"] = json!(seq);
             }
             let evaluations = self.evaluations(panel, &window, &frames, &unseen, clock.lead);
+            self.mark_over(&mut frames);
             return json!({"frames": frames, "evaluations": evaluations});
         }
         json!({"frames": frames})

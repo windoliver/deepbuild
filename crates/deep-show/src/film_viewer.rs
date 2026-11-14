@@ -177,7 +177,11 @@ impl Hub<'_> {
 
     /// The export frames at `times` (ascending) from a fresh scheduler and session, each hashed
     /// with BLAKE3 on the GPU as the export hashes its frames.
-    fn frame_hashes(&mut self, doc: &Value, times: &[i64]) -> Result<Vec<String>, Value> {
+    pub(crate) fn frame_hashes(
+        &mut self,
+        doc: &Value,
+        times: &[i64],
+    ) -> Result<Vec<String>, Value> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
         session.load(&mut sched, doc);
