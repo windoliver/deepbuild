@@ -739,7 +739,8 @@ fn register(r: &mut Registrar) {
         .sidecar(json!({"codes": [], "covers": {"kinds": ["light.sun@1"], "fields": ["light.sun@1/params/shadow"]}}));
     // #1940: effects.audit is the effects module's, so the loop module depends only on scene3d
     // and look; it reads nothing yet (#2485), so its fixture raises its unread error.
-    r.check(audit::KIND, "same", &[audit::UNREAD], audit::issues).check_report(audit::report);
+    r.check(audit::KIND, "same", &[audit::UNREAD], audit::issues)
+        .check_report(audit::report);
     r.code(
         audit::UNREAD,
         "effects.audit couldn't read an effect's peak count, bounds, overdraw or GPU time.",
