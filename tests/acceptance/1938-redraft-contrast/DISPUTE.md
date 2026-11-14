@@ -24,5 +24,10 @@ The Oracle lane fails the same way (`the caption over 4.5:1 passes: … raises n
 
 This folder is a fresh run of the same blind job with the same inputs (the issue, the design and base `23baa43b4`) and
 the criterion, never the work, the diff or this dispute (design: Dogfooding). On the work it passes, 2 of 2, its plant
-`contrast_min_3` included; so the dispute goes to the owner once, with both drafts and this output. Until then the first
-draft's faults file and its Oracle lane run by hand (`scripts/lanes.mjs`), and this folder runs in the lanes.
+`contrast_min_3` included; so the dispute goes to the owner once, with both drafts and this output.
+
+## The ruling
+
+Asked of the owner once, on 2026-11-14 in the session that folded #1938 into PR #2515. The owner (Tao Feng) answered:
+"Yes, swap it". This folder proves #1938's text-under-4.5:1 pair and runs in the lanes; the first draft's faults file
+and its Oracle lane stay as written and run by hand (`scripts/lanes.mjs`). Nothing in either draft was edited.
