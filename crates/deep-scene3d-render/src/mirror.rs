@@ -205,17 +205,22 @@ impl Mirrorer {
         ids: &wgpu::TextureView,
         reflection: Option<wgpu::TextureView>,
         profiler: &Option<crate::Profiler>,
+        keep: bool,
     ) -> Vec<(String, Job)> {
         let Some((uniform, parts)) = &self.frame else {
             return Vec::new();
         };
-        let mut jobs: Vec<(String, Job)> = self
-            .view
-            .jobs(device, slot, None, None)
-            .into_iter()
-            .take_while(|(name, _)| name != OUTPUT_PASS)
-            .map(|(_, job)| (MIRROR_PASS.to_string(), job))
-            .collect();
+        // #506's planted core keeps the picture the view before it drew.
+        let mut jobs: Vec<(String, Job)> = match keep {
+            true => Vec::new(),
+            false => self
+                .view
+                .jobs(device, slot, None, None)
+                .into_iter()
+                .take_while(|(name, _)| name != OUTPUT_PASS)
+                .map(|(_, job)| (MIRROR_PASS.to_string(), job))
+                .collect(),
+        };
         let Some((_, picture)) = self.view.linear() else {
             return Vec::new();
         };

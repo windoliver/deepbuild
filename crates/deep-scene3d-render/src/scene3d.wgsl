@@ -435,6 +435,10 @@ fn fetch(k: u32, t: texture_2d<f32>, sm: sampler, uv: vec4<f32>, g: array<vec4<f
     return textureSampleGrad(t, sm, map_uv(k, uv), map_d(k, g[0]), map_d(k, g[1]));
 }
 
+// #506: how an inset's picture in the base color slot draws (maps.rs).
+const MAP_OVER: u32 = 256u;
+const MAP_AT_PIXEL: u32 = 512u;
+
 fn has_map(k: u32) -> bool {
     return (maps.has.x & (1u << k)) != 0u;
 }
@@ -656,9 +660,20 @@ fn mapped(in: MeshOut, n: vec3<f32>, s0: Surface, g: array<vec4<f32>, 2>) -> Map
     var emission = in.emission.rgb;
     var spread = 1.0;
     if has_map(0u) {
-        let c = fetch(0u, map_base, sampler_base, in.uv, g);
-        s.base = s.base * c.rgb;
-        alpha = alpha * c.a;
+        // #506: an eye inset's window reads its view's picture at this px; a content inset
+        // lays its straight-alpha color over the face's.
+        if (maps.has.x & MAP_AT_PIXEL) != 0u {
+            let k = vec2<f32>(textureDimensions(map_base)) / frame.viewport.xy;
+            let c = textureLoad(map_base, vec2<i32>(in.pos.xy * k), 0);
+            s.base = s.base * c.rgb;
+        } else if (maps.has.x & MAP_OVER) != 0u {
+            let c = fetch(0u, map_base, sampler_base, in.uv, g);
+            s.base = mix(s.base, c.rgb, c.a);
+        } else {
+            let c = fetch(0u, map_base, sampler_base, in.uv, g);
+            s.base = s.base * c.rgb;
+            alpha = alpha * c.a;
+        }
     }
     if has_map(1u) {
         let c = fetch(1u, map_mr, sampler_mr, in.uv, g);
@@ -2389,7 +2404,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
-        m.s.base = tinted(m.s.base, in.pick, in.local);
+        m.s.base = projected(tinted(m.s.base, in.pick, in.local), in.pick, in.world, geometric);
         // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
         // and its occlusion scales only what the map's does: the ambient light (#486).
         if op_normal.w > 0.0 {
@@ -2484,7 +2499,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
-    let albedo = tinted(paint(in.color), in.pick, in.local);
+    let albedo = projected(tinted(paint(in.color), in.pick, in.local), in.pick, in.world, n);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);

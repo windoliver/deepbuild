@@ -16,6 +16,8 @@ pub(crate) fn plant_name(planted: Option<Planted>) -> Option<&'static str> {
     match planted? {
         Planted::AxesModAppliesTransform => Some("axes_mod_applies_transform"),
         Planted::Axes3dOwnTickRule => Some("axes3d_own_tick_rule"),
+        // #506: scene3d draws an eye inset's centred twin.
+        Planted::EyeInsetCentredFrustum => Some("eye_inset_centred_frustum"),
         _ => None,
     }
 }

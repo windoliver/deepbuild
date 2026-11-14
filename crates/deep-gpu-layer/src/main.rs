@@ -38,6 +38,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod insets;
 mod indexed;
 mod interp_suite;
 mod levels;
@@ -332,6 +333,15 @@ pub enum Planted {
     /// the live rung; a frame-health drop climbed again without a view change.
     BandHysteresis,
     LightCutHysteresis,
+    /// #506's wrong programs (tests/acceptance/506/README.md: Planted programs): an eye inset
+    /// drawn from the eye through a frustum centred on the window, its picture laid on the face's
+    /// corners; a view overlay that reads the main view's backdrop, mirror or light cut from the
+    /// same frame; an inset's premultiplied render sampled as straight alpha.
+    EyeInsetCentredFrustum,
+    OneBackdropPerFrame,
+    OneMirrorPerFrame,
+    OneLightCutPerFrame,
+    InsetPremultipliedAsStraight,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -635,6 +645,11 @@ impl Planted {
             "premixed_metallic" => Planted::PremixedMetallic,
             "band_hysteresis" => Planted::BandHysteresis,
             "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "eye_inset_centred_frustum" => Planted::EyeInsetCentredFrustum,
+            "one_backdrop_per_frame" => Planted::OneBackdropPerFrame,
+            "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
+            "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
+            "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,

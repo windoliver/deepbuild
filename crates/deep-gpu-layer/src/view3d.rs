@@ -8,6 +8,7 @@
 //! view draws through frame history's window (#173, `history`).
 
 mod history;
+mod views;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -134,6 +135,8 @@ struct Args {
     /// its band masks (#425).
     lod: bool,
     light_cut: bool,
+    /// #506: each frame reports where its anchored overlays draw.
+    overlays: bool,
     masks: bool,
     /// The view's class (#419): an export draws every frame with all of the look's export
     /// samples and never settles; the live view draws its live samples while moving.
@@ -508,6 +511,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         shadows: call["shadows"].as_bool().unwrap_or(false),
         lod: call["lod"].as_bool().unwrap_or(false),
         light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        overlays: call["overlays"].as_bool().unwrap_or(false),
         masks: call["masks"].as_bool().unwrap_or(false),
         export,
         viewer,
@@ -936,6 +940,16 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
 }
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
+    run_view(app, out, call, &mut None)
+}
+
+/// [`run`]; `sub` is a view overlay's own run, which keeps its frames (#506).
+fn run_view(
+    app: &mut App,
+    out: &str,
+    call: &Value,
+    sub: &mut Option<views::Sub>,
+) -> Result<Value, Value> {
     // The cold report's build time runs from here to the first frame's scene, less the view's
     // opening, which compiles (#428).
     let started = std::time::Instant::now();
@@ -957,6 +971,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if !broken.is_empty() {
         return Err(json!({"code": "refused", "issues": broken}));
     }
+    // #506: insets and view overlays the check refuses, each naming its items.
+    let broken = deep_canvas_scene3d::inset::refusals(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
+    // #506: each view overlay drawn by its own run before this view opens.
+    let shown = match sub {
+        None => views::run_all(app, out, call, &args.doc, args.size, &args.look)?,
+        Some(_) => Vec::new(),
+    };
+    let mut drawn_k = 0usize;
     crate::physics::bake(&mut args.doc)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
@@ -1102,6 +1127,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     )?;
     let mut receipt = Value::Null;
     let mut videos = crate::video::Session::new(map_paths.clone(), args.fps, args.export);
+    // #506: the pictures insets draw, in the look's roles, their images from the assets.
+    let mut pictures = crate::insets::Pictures::new(
+        &args.assets,
+        args.look.roles.clone(),
+        app.planted == Some(Planted::InsetPremultipliedAsStraight),
+    );
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
@@ -1291,6 +1322,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             // document's decoded-image cap (#423), and its videos' frames at t there (#503).
             let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
             scene.texels = videos.at(app, &composed, n, &scene, texels)?;
+            pictures.paint(&mut scene)?;
             videos.clouds(app, &fx, &scene)?;
             // Over a window's flat page the view shows the page where nothing draws, so what it
             // lays over the page (a shadow catcher's alpha) composites in linear light (#424).
@@ -1338,6 +1370,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .as_ref()
                 .map(|(item, _)| crate::lod::tiles_of(&scene, item));
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
+            // #506's planted core: a view overlay shaded with the main view's light cut.
+            if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
+                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
+                scene.light_cut = Some(deep_canvas_scene3d::light::policy(&scene.lights, &main.camera));
+            }
             // How many times this frame derived each mesh-edge line's edge set (#1640).
             let edge_sets_derived: Map<String, Value> = scene
                 .layers
@@ -1887,6 +1925,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // A frame's CPU: its evaluation, up to handing the scene to the render side.
             let cpu_ms = frame_started.elapsed().as_secs_f64() * 1e3;
+            // #506's planted cores: a view overlay drawn after the main view in the same frame,
+            // keeping the backdrop copy or the mirror's picture that one left.
+            let keeps = match app.planted {
+                Some(Planted::OneBackdropPerFrame) => [true, false],
+                Some(Planted::OneMirrorPerFrame) => [false, true],
+                _ => [false, false],
+            };
+            let keeping = sub.is_some() && keeps.contains(&true);
+            let anchored = scene.overlays.clone();
+            if let (Some(s), true) = (sub.as_ref(), keeping) {
+                let mut main = s.main.clone();
+                main["size"] = json!(size);
+                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
+                first.texels.clone_from(&scene.texels);
+                session3::draw(app, &opened, Arc::new(first), args.look.clone(), n, 0, false, false)?;
+                session3::keep_first(app, keeps[0], keeps[1]);
+            }
             let mut drawn = match (hist.as_mut(), &planned) {
                 (Some(h), Some((_, plan))) if windowed => {
                     // Each window frame is the evaluation at its own grid step, drawn as any
@@ -2007,6 +2063,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     *bytes = mixed;
                 }
             }
+            if keeping {
+                session3::keep_first(app, false, false);
+            }
             let scene_bytes = drawn.bytes.clone();
             // The viewer's marks laid over the resolved frame where they drew.
             if let (Some(over), Some(plain), Some(bytes)) =
@@ -2026,6 +2085,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     }
                 }
             }
+            // #506: each view overlay's frame over its rect; a view overlay's own run keeps its
+            // frames for its host.
+            if let Some(bytes) = drawn.bytes.as_mut() {
+                pictures.frames_over(&composed, &anchored, bytes, size)?;
+                views::composite(&shown, drawn_k, bytes, size);
+                if let Some(s) = sub.as_mut() {
+                    s.frames.push(bytes.clone());
+                }
+            }
+            drawn_k += 1;
             casts |= !drawn.counts.shadow_maps.is_empty();
             let compiled: Vec<&'static str> = session3::pipelines(app)
                 .into_iter()
@@ -2086,6 +2155,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("upload_ms".into(), json!(drawn.counts.upload_ms));
             }
             frame.insert("samples".into(), samples_report);
+            if args.overlays {
+                let rows: Vec<Value> = anchored
+                    .iter()
+                    .map(|o| json!({"id": o.id, "at": o.origin}))
+                    .collect();
+                frame.insert("overlays".into(), Value::Array(rows));
+            }
             frame.insert(
                 "history".into(),
                 match (&hist, &planned) {

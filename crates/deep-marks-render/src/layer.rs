@@ -49,6 +49,17 @@ pub fn vello(marks: &[Arc<Drawn>], size: [u32; 2]) -> Result<image::RgbaImage, V
     crate::raster::picture(&marks, size)
 }
 
+/// #506: the marks over transparent black at `size` px, by Vello CPU, their images from `store`;
+/// premultiplied alpha, as drawn.
+pub fn premultiplied(
+    marks: &[Arc<Drawn>],
+    size: [u32; 2],
+    store: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
+    let marks: Vec<&Drawn> = marks.iter().map(|m| &**m).collect();
+    crate::raster::premultiplied(&marks, size, store)
+}
+
 /// #385's wrong programs in GPUI's drawing of a layer.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Planted {

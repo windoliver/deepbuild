@@ -1470,6 +1470,31 @@ pub(crate) fn picture(marks: &[&scene::Drawn], size: [u32; 2]) -> Result<image::
         .ok_or_else(|| refused("not_written", "picture"))
 }
 
+/// #506: `marks` over transparent black at `size` px and zoom 1, their images read from `store`
+/// (`<2 hex>/<62 hex>`), as the raster draws them: premultiplied alpha.
+pub(crate) fn premultiplied(
+    marks: &[&scene::Drawn],
+    size: [u32; 2],
+    store: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
+    let (Ok(w), Ok(h)) = (u16::try_from(size[0]), u16::try_from(size[1])) else {
+        return Err(refused("out_of_range", "size"));
+    };
+    let mut p = Painter::on(RenderContext::new_with(w, h, settings()));
+    p.store = store;
+    let new_ctx = || RenderContext::new_with(w, h, settings());
+    composite(&mut p, marks, &new_ctx, rasterizer())?;
+    let mut pixmap = Pixmap::new(w, h);
+    p.ctx
+        .render_with(&mut pixmap, &mut p.resources, rasterizer());
+    image::RgbaImage::from_raw(
+        size[0],
+        size[1],
+        pixmap.take_rgba8(ImageAlphaType::AlphaPremultiplied),
+    )
+    .ok_or_else(|| refused("not_written", "picture"))
+}
+
 /// Every look role a document names, in black: geometry needs the outline, never its colors.
 fn any_roles(value: &Value, palette: &mut scene::Palette) {
     match value {

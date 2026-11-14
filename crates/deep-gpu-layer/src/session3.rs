@@ -419,6 +419,18 @@ pub fn cull_on_cpu(app: &mut App) {
     })
 }
 
+/// #506's planted cores: the next draws keep the backdrop copy and the mirror's picture the draw
+/// before them left.
+pub fn keep_first(app: &mut App, backdrop: bool, mirror: bool) {
+    app.worker.call(move |state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.keep_first(backdrop, mirror);
+            }
+        }
+    })
+}
+
 /// What each culled list of the frame just drawn kept (#484).
 pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
     app.worker.call(|state| {

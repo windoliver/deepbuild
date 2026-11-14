@@ -840,6 +840,15 @@ pub struct Scene {
     /// #462: the items the look's strokes land on, each with the fill role that paints it; empty
     /// for a look with no strokes.
     pub stroked: BTreeMap<String, Option<String>>,
+    /// #506: the pictures the view's insets draw, which the host rasters into `texels`.
+    pub pictures: Vec<crate::inset::Picture>,
+    /// #506: the view's projected insets, at most [`crate::inset::MAX_PROJECTED`].
+    pub projected: Vec<crate::inset::Projected>,
+    /// #506: its view insets, each drawn from its own camera one level deep.
+    pub views: Vec<crate::views::View>,
+    /// #506: its layers before their levels of detail were resolved, which a nested view
+    /// resolves at its own camera; `None` while they are unresolved.
+    pub sources: Option<Arc<Vec<Layer3>>>,
 }
 
 impl Scene {
@@ -2396,6 +2405,10 @@ pub fn evaluate_any(
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
     };
+    // #506: an item a view-class control's value hides (Control: `binds` on its `visible`, as
+    // the core's draw reads it), such as a card its close button closed.
+    let unbound = bound_hidden(map);
+    let map = unbound.as_ref().unwrap_or(map);
     // #166: a wake behind an item a logic array moves, refused at check before anything else.
     crate::water::logic_moved(map)?;
     // #268: a shore item that anything moves or reshapes, refused at check.
@@ -2405,6 +2418,32 @@ pub fn evaluate_any(
         path: r.path,
     })?;
     evaluate_compiled(map, &program, t, look, labels, assets, outlines)
+}
+
+/// The document with each item hidden that a view-class control bound to its `visible` holds
+/// off (#506); `None` when no such control is off.
+fn bound_hidden(map: &Map<String, Value>) -> Option<Map<String, Value>> {
+    let hidden: Vec<String> = map
+        .get("controls")
+        .and_then(Value::as_object)?
+        .values()
+        .filter(|c| c.get("class").and_then(Value::as_str) == Some("view"))
+        .filter(|c| c.get("default") == Some(&Value::Bool(false)))
+        .flat_map(|c| c.get("binds").and_then(Value::as_array).into_iter().flatten())
+        .filter_map(|b| b.as_str()?.strip_prefix("items/")?.strip_suffix("/visible"))
+        .map(str::to_string)
+        .collect();
+    if hidden.is_empty() {
+        return None;
+    }
+    let mut out = map.clone();
+    let items = out.get_mut("items").and_then(Value::as_object_mut)?;
+    for id in hidden {
+        if let Some(item) = items.get_mut(&id).and_then(Value::as_object_mut) {
+            item.insert("visible".into(), Value::Bool(false));
+        }
+    }
+    Some(out)
 }
 
 /// The items a scatter's field names: an item's ID (a part's `<item>#<part>` as its item), or a
@@ -3619,6 +3658,8 @@ pub(crate) fn evaluate_compiled(
                     layer.labels.push(l);
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                // #506: read once every solid is placed, below.
+                crate::inset::KIND | crate::views::KIND => {}
                 // #1183: an overlay whose `show` is false at t draws nothing.
                 "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
@@ -3906,6 +3947,21 @@ pub(crate) fn evaluate_compiled(
         &bounds,
         &cam_path,
     )?;
+    // #506: the insets: their windows join the layers; their pictures, views and casts, the scene.
+    let get = |k: &str| items.get(k);
+    let world_of = |k: &str| world(&items, k);
+    let insets = crate::inset::evaluate(
+        &crate::inset::Ctx {
+            doc: map,
+            get: &get,
+            world: &world_of,
+            bounds: &bounds,
+            camera: &camera,
+            planted: outlines.planted,
+        },
+        look,
+        &mut layers,
+    )?;
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
@@ -4038,6 +4094,10 @@ pub(crate) fn evaluate_compiled(
         tints: crate::tints::tints(map, look, t)?,
         volumes,
         stroked: BTreeMap::new(),
+        pictures: insets.pictures,
+        projected: insets.projected,
+        views: insets.views,
+        sources: None,
     };
     if let Some(s) = &look.strokes {
         let solids = scene

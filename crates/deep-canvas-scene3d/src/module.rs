@@ -23,6 +23,11 @@ pub const MIRROR_PASS: &str = "scene3d.mirror";
 pub const FLARE_PASS: &str = "scene3d.flare";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
+/// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
+/// the shadows place, beside the other passes that draw the scene from another eye first.
+pub const INSET_VIEW_PASS: &str = "scene3d.inset_view";
+/// #506: the unlit projected insets, after tone mapping, the grade and the upscale.
+pub const INSET_UNLIT_PASS: &str = "scene3d.inset_unlit";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
 /// only (the core's shadow pass, in the frame's shadows place).
 pub const SHADOW_PASS: &str = "scene3d.shadow";
@@ -439,6 +444,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(MIRROR_PASS, "geometry");
     r.pass(WATER_PASS, "geometry");
+    r.pass(INSET_VIEW_PASS, "shadows");
+    r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
