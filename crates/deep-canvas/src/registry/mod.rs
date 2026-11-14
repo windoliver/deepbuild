@@ -527,6 +527,9 @@ pub struct Operator {
     /// What its per-item nodes key on of `self` and `refs`, when narrower than the whole item
     /// and document (#420).
     pub keyed: Option<Keyed>,
+    /// Its CPU time on one item, in ms, from what the item gives it to work on, charged on top of
+    /// its coefficients' terms: an operator whose work grows with its item's params (#1417).
+    pub cost: Option<Cost>,
 }
 
 impl Operator {
@@ -577,6 +580,12 @@ impl Operator {
     /// Keys its per-item nodes on `keyed`'s value in place of their item and document.
     pub fn keyed(&mut self, keyed: Keyed) -> &mut Self {
         self.keyed = Some(keyed);
+        self
+    }
+
+    /// Its CPU time on an item beyond its coefficients' terms (#1417).
+    pub fn cost(&mut self, cost: Cost) -> &mut Self {
+        self.cost = Some(cost);
         self
     }
 }
@@ -932,6 +941,7 @@ impl Registrar {
             serial: false,
             determinism: "exact",
             keyed: None,
+            cost: None,
         });
         self.operators.last_mut().expect("just pushed")
     }
