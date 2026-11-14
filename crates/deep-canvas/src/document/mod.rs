@@ -233,7 +233,7 @@ pub struct Issue {
     pub actual: Value,
     pub what: String,
     pub fix: String,
-    /// The forms a field takes; only on `bad_unit`.
+    /// The forms a field takes: on `bad_unit`, and on a structured value no form takes (#1973).
     pub forms: Vec<String>,
     /// The fix as patch ops, where the code's fix is ops (the check catalog).
     pub fix_ops: Option<Vec<Value>>,
@@ -281,7 +281,7 @@ impl Issue {
         out.insert("actual".into(), cut(&self.actual));
         out.insert("what".into(), json!(self.what));
         out.insert("fix".into(), json!(self.fix));
-        if self.code == "bad_unit" {
+        if self.code == "bad_unit" || !self.forms.is_empty() {
             out.insert("forms".into(), json!(self.forms));
         }
         // The column view's issue names its reader, column, row, value and step (#397); a terrain

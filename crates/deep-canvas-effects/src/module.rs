@@ -76,27 +76,34 @@ pub const OPERATOR_KINDS: [(&str, &str); 3] = [
 ];
 
 /// An operator item's fields (GPU operator: Fields), every one structured, which the operator
-/// check reads.
-const OPERATOR_FIELDS: &[&str] = &[
-    "about",
-    "inputs",
-    "steps",
-    "source",
-    "outputs",
-    "determinism",
-    "cost",
-    "resolution",
-    "fallback",
-    "uses",
-    "origin",
-    "chain",
-    "order",
-    "applies_to",
-    "elements",
-    "workgroup",
-    "after",
+/// check reads, each with the forms `graph::read` takes for it (#1973), the same for all three
+/// kinds.
+const OPERATOR_FIELDS: &[(&str, &str)] = &[
+    ("about", "string ≤ 400 (chars)"),
+    (
+        "inputs",
+        "{name → {type, unit?, range?: [min, max], default?, from}} (from: t | time | seed | {param | channel | texture | texture3d | storage | phase | role | column | attribute | time | seed})",
+    ),
+    ("steps", "{step ID → {op: <name>@<major>, args?, when?: step ID}} ≤ 256"),
+    ("source", "{wgsl: asset ID}"),
+    (
+        "outputs",
+        "{name → step ID | number | bool | [number | bool] | {from | texture | texture3d | storage | readback | instances}} (blend: replace | over | add | multiply | screen)",
+    ),
+    ("determinism", "exact | same_machine | live_only"),
+    ("cost", "{ns_per_px | ns_per_element: f32}"),
+    ("resolution", "full | half | quarter | {of: <input>, scale: ratio}"),
+    ("fallback", "none | look"),
+    ("uses", "[<operator>@<major>]"),
+    ("origin", "shipped | pack | composed"),
+    ("chain", "effects | finish"),
+    ("order", "key (fractional)"),
+    ("applies_to", "view | collection"),
+    ("elements", "u32 ≤ 1048576 | {from: <op>.<output>, max: u32 ≤ 1048576}"),
+    ("workgroup", "64 | 128 | 256 | [8, 8] | [16, 16]"),
+    ("after", "[operator ID]"),
     // Whether a pixel-wise pass may fuse with its neighbours (#432: pass fusion).
-    "fuse",
+    ("fuse", "pixel_wise | none"),
 ];
 
 fn operator_entry(name: &'static str) -> Entry {
@@ -108,9 +115,9 @@ fn operator_entry(name: &'static str) -> Entry {
             minor: 0,
             params: OPERATOR_FIELDS
                 .iter()
-                .map(|f| Param {
-                    name: f,
-                    ty: ParamType::Json,
+                .map(|&(field, form)| Param {
+                    name: field,
+                    ty: ParamType::Json(form),
                     unit: "",
                     default: Value::Null,
                     min: None,
