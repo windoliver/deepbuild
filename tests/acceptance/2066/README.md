@@ -1,25 +1,26 @@
-# #2066 acceptance: a `rule:` line in a prompt nobody typed saves nothing
+# #2066: only a person's prompt saves rules or rejections
 
-Drafted blind from ../issue.json, AGENTS.md and docs/technical-design.md (The learned layer, Threats, Dogfooding) at
-base 1c4d1f0e. Real hub, real `deep-hook` binary, record read over the hub socket (`events.read`), all via
-`tests/acceptance/303/helpers.ts` (makeWorld, startHub, Session). No fakes, no seams.
+The owner approved adopting `redraft/recorded-origin.test.ts` in place of the two earlier drafts, including adding criterion tags, after reviewing PR #2519's drafts and failing output. The earlier draft bytes remain in commit `47aba2b4d`, the independently written redraft in `3e7f97070`, and their before/after output in `reports/2066/`. No acceptance assertion or expected value in the adopted redraft changed: only the test-name tags below were added.
 
-Run: `npx vitest run tests/acceptance/2066` (needs `packages/cli/dist` and `target/debug/deep-hook` built, as #303).
+The independent job's inputs, test surfaces and limitations are in `redraft/README.md`. The suite drives the real hub over its hook socket, reads the real event log and guard file, and checks person controls alongside every denied origin.
 
-| Requirement | Test (origin.test.ts) |
-|---|---|
-| AC1: `scheduled` prompt with `rule:` appends no `learn.applied`; a second open session's next prompt has no such rule; failure names the rule's target | `AC1/AC2 … origin scheduled` |
-| AC2: `session`, `subagent`, `continuation`, `unknown` save nothing; a hub excluding only `<task-notification>` fails naming the origin | `AC1/AC2 … origin session/subagent/continuation/unknown` (one test per origin; title and messages name it) |
-| Scope: session record says **once** that the rule line was not saved, naming the origin | same tests: exactly one non-prompt event on that session naming the origin and a rule |
-| Scope: origin read from the prompt's own recorded event; no recorded origin saves nothing | each test first asserts the `user.ask`'s `from` (BLOCKED otherwise); `unknown` sends a prompt with no transcript entry |
-| AC3: typed twin saved once and reaches a second open session (#344) | `AC3 …` |
-| AC4: `rejected:` in a scheduled prompt saves no `decision.created` and no `rules.json` guard entry; typed twin saves both | `AC4 …` |
+| Criterion | Tag | Test |
+|---|---|---|
+| Scheduled rule never saves or propagates | `#2066.be686212` | non-person matrix |
+| Session/subagent/continuation/unknown rules never save | `#2066.0f5e890b` | non-person matrix |
+| Same rule typed by a person saves once and reaches another open session | `#2066.6caf3df8` | typed twin |
+| Scheduled rejection saves neither decision nor guard; person saves both | `#2066.99a5e19f` | both tests |
 
-## Gaps / assumptions
-- The refusal reading's event kind and wording aren't named by the issue; the test accepts any session-scoped event
-  (other than `user.ask`/`learn.applied`) whose data names the origin and mentions "rule", and requires exactly one.
-- `continuation` is sent as a prompt starting with the app's resume words plus the rule line. If the adapter matches
-  those words exactly, the prompt records `unknown` and the test stops as BLOCKED rather than proving the continuation
-  case. That would be a test-driver limit, not a pass.
-- "Nothing else about #344's typed rules changes" is covered only by AC3 here; #344's own suite stays the guard.
-- Not run here (drafting job); base failure output not captured.
+Tags are the first eight SHA-256 hex digits of each complete checkbox sentence, trimmed with whitespace collapsed, as `scripts/proof-change.mjs` defines. Once-only origin-naming readings and delivery at an automatic prompt are checked too.
+
+The non-person matrix must fail on the merge base at its assertions. The typed twin is existing behavior and should pass the base, so `twins/person-origin-reversed/` reverses only the production person-origin guard. Its copied `session-memory.ts` differs from the candidate by that one comparison; it edits no test, fixture or runner. The typed twin must fail it because a person's rule is no longer saved or delivered. `twins.json` maps it only to AC3, which needs this regression proof.
+
+```sh
+npm run build --workspaces
+cargo build --locked -p deep-hook
+node scripts/affected.mjs tests/acceptance/2066/redraft/recorded-origin.test.ts
+node node_modules/typescript/bin/tsc -p tests/acceptance/2066/tsconfig.json
+node scripts/proof.mjs before trace
+```
+
+No test rerun or baseline change is implied by adoption. Any later failure remains a failure. The earlier `SELECT *`/64-bit sequence error and fixture-cleanup failures are retained in evidence rather than concealed.

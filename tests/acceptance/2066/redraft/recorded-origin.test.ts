@@ -94,7 +94,7 @@ async function withAgent(body: (pid: number) => Promise<void>): Promise<void> {
 }
 
 describe('#2066 rules and rejections come only from prompts a person typed', () => {
-  it('AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin', async () => {
+  it('AC1 #2066.be686212 AC2 #2066.0f5e890b AC4 #2066.99a5e19f a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin', async () => {
     await withAgent((agent) => withHub(async (root, home) => {
       writeFileSync(join(root, 'rules.json'), JSON.stringify({ v: 1, entries: {} }));
       const observer = await open(root, home, agent);
@@ -152,7 +152,7 @@ describe('#2066 rules and rejections come only from prompts a person typed', () 
     }));
   }, 180_000);
 
-  it('AC3 AC4 the same lines typed by you are saved once, and reach open sessions at their next prompt, a person\'s or an automatic one', async () => {
+  it('AC3 #2066.6caf3df8 AC4 #2066.99a5e19f the same lines typed by you are saved once, and reach open sessions at their next prompt, a person\'s or an automatic one', async () => {
     await withAgent((agent) => withHub(async (root, home) => {
       writeFileSync(join(root, 'rules.json'), JSON.stringify({ v: 1, entries: {} }));
       const line = lineOf('scheduled');

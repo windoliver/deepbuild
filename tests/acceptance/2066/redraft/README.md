@@ -34,7 +34,7 @@ Every prompt's recorded `user.ask.from` is asserted explicitly.
 
 ## Criteria to tests
 
-There is no hashing tool in this job, so the `#2066.<8hex>` tags are **left out**. The criteria are cited as AC1–AC4, in the issue's order.
+The blind job cited AC1–AC4 without hashes. After the owner approved adoption in PR #2519, the implementing job added the four tags computed from the issue's complete checkbox sentences: `#2066.be686212`, `#2066.0f5e890b`, `#2066.6caf3df8`, and `#2066.99a5e19f`. Only test-name metadata changed; all assertions and expected values remain this blind draft's.
 
 | Requirement | Test | What a wrong hub shows |
 |---|---|---|
