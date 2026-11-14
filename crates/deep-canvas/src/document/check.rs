@@ -446,7 +446,8 @@ fn copy_of(doc: &Value) -> Value {
 pub const FRAME_CPU_MS: f64 = 16.0;
 
 /// The checks canvas modules register over their kinds' items, and the budget estimate over
-/// the costs they register: a module's code carries its catalog's fix, and the estimate past
+/// the costs they register, and in a document with no budget class over what operators declare
+/// on the items they apply to: a module's code carries its catalog's fix, and the estimate past
 /// the frame's CPU is `over_budget`, naming the items that cost.
 fn module_checks(
     lowered: &Value,
@@ -525,6 +526,26 @@ fn module_checks(
             if ms > 0.0 {
                 cost += ms;
                 costly.push(id.clone());
+            }
+        }
+    }
+    // What an operator declares on each item it applies to counts too (#1417), a graph's layout,
+    // in a document no budget class judges: one that names a class is held to its own caps.
+    let unbudgeted = crate::budget::of(lowered).is_none();
+    for o in sealed.ops.iter().filter(|_| unbudgeted) {
+        let Some(c) = o.op.cost else {
+            continue;
+        };
+        for (id, item) in items {
+            if !o.op.applies.is_none_or(|a| a(lowered, id, item)) {
+                continue;
+            }
+            let ms = c(item);
+            if ms > 0.0 {
+                cost += ms;
+                if !costly.contains(id) {
+                    costly.push(id.clone());
+                }
             }
         }
     }
@@ -617,15 +638,29 @@ fn budget_check(
     if over.is_empty() {
         return;
     }
+    // Each operator's share of the CPU, and the costliest by name when the CPU is past its cap
+    // (#1417).
+    let operators: Map<String, Value> = e
+        .by_op
+        .iter()
+        .filter(|(_, ms)| *ms > 0.0)
+        .map(|(key, ms)| (key.clone(), json!(ms)))
+        .collect();
+    let costliest = e
+        .costliest_op()
+        .filter(|_| limits.cpu_ms.is_some_and(|c| e.cpu_ms > c))
+        .map(|(key, ms)| format!("; the costliest operator is {key} at {ms:.3} ms"))
+        .unwrap_or_default();
     let mut issue = Issue::envelope(
         "over_budget",
         "budget".into(),
         json!({
             "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "operators": operators,
             "fingerprint": coefficients.fingerprint,
         }),
         &format!(
-            "the document's estimate per frame passes its {} class: {}",
+            "the document's estimate per frame passes its {} class: {}{costliest}",
             class.name(),
             over.join(", ")
         ),
@@ -745,12 +780,22 @@ fn recheck_by(
             .and_then(Value::as_object)
             .is_none_or(Map::is_empty)
     });
-    // The budget estimate sums the whole document, so a build whose modules cost needs it whole;
-    // a document that names packs expands at check, so a patch to it re-expands whole.
+    // The budget estimate and the frame's warning sum the whole document, so a build whose modules
+    // cost needs it whole, as does a document holding an item an operator declares a cost on
+    // (#1417); a document that names packs expands at check, so a patch to it re-expands whole.
     let packed = member(doc, "packs")
         .and_then(Value::as_array)
         .is_some_and(|p| !p.is_empty());
-    if !maps_empty || sealed.has_costs() || packed {
+    let costly = member(doc, "items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| {
+            sealed.ops.iter().filter(|o| o.op.cost.is_some()).any(|o| {
+                items
+                    .iter()
+                    .any(|(id, item)| o.op.applies.is_none_or(|a| a(doc, id, item)))
+            })
+        });
+    if !maps_empty || sealed.has_costs() || costly || packed {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;

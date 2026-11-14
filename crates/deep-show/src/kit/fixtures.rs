@@ -117,6 +117,20 @@ fn seek_and_play(
     })
 }
 
+/// Each frame operator's estimated ms of CPU on a fixture's document, by key, as the budget
+/// check charges them (#1417).
+fn charged(hub: &Hub<'_>, f: &Entry) -> Value {
+    let sealed = &hub.startup.sealed;
+    let lowered = deep_canvas::document::check_in(&stamped(&f.document), sealed).lowered;
+    let e = deep_canvas::cost::estimate(&lowered, sealed, &sealed.costs);
+    Value::Object(
+        e.by_op
+            .into_iter()
+            .map(|(key, ms)| (key, json!(ms)))
+            .collect(),
+    )
+}
+
 /// Whether an analytic or CPU-reference check holds on this commit.
 pub fn criterion_holds(hub: &Hub<'_>, f: &Entry, check: &Map<String, Value>) -> bool {
     let doc = stamped(&f.document);
@@ -288,7 +302,15 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
             let got = codes(&fixture_issues(hub, f));
             let mut case = Case::new(format!("{}#codes", f.name), Verdict::Pass)
                 .with("fixture", json!(f.name));
-            if let Some(fl) = exact(hub, &mut case, module, "fixtures", &f.name, &want, &got) {
+            if let Some(mut fl) = exact(hub, &mut case, module, "fixtures", &f.name, &want, &got) {
+                // #1417: a fixture expected over budget and found within it names what each
+                // operator was charged, so an operator that declares too little shows.
+                if want.iter().any(|c| c == "over_budget")
+                    && !got.iter().any(|c| c == "over_budget")
+                {
+                    fl["operators"] = charged(hub, f);
+                    case.set("failure", fl.clone());
+                }
                 run.failures.push(fl);
             }
             run.cases.push(case);

@@ -346,6 +346,8 @@ pub struct Shot {
     pub essential: bool,
     pub shake: Option<Shake>,
     pub look: Option<String>,
+    /// #462: its look regions, each a world-space mask drawn in a look of its own.
+    pub regions: Vec<Region>,
     /// The kept items' union over the span the framing fit, `[lo, hi]`.
     pub union: Option<[Vec3; 2]>,
     /// Follow-forward's baked target x, a sample every [`FOLLOW_STEP`] from the start.
@@ -353,6 +355,67 @@ pub struct Shot {
 }
 
 const FOLLOW_STEP: i64 = FLICKS_PER_SECOND / 240;
+
+/// How a region's edge passes from the outer look to the region's (Look `look@1`: regions and
+/// edges).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Edge {
+    Straight,
+    Torn,
+    Pixel,
+    Brush,
+}
+
+/// A look region (#462): what the item `mask` holds, at its evaluated pose, draws in `look`, the
+/// edge `edge` (`None`: the incoming look's own) `width` px wide, seeded from `seed`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Region {
+    pub mask: String,
+    pub look: String,
+    pub edge: Option<Edge>,
+    pub width: f64,
+    pub seed: u64,
+}
+
+fn regions_of(s: &Map<String, Value>, path: &str) -> Result<Vec<Region>, Refused> {
+    let mut out = Vec::new();
+    for (k, r) in s
+        .get("regions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let at = format!("{path}/regions/{k}");
+        let Some(r) = r.as_object() else {
+            return bad(at);
+        };
+        let text = |f: &str| r.get(f).and_then(Value::as_str).map(str::to_string);
+        let (Some(mask), Some(look)) = (text("mask"), text("look")) else {
+            return bad(at);
+        };
+        let edge = match r.get("edge").and_then(Value::as_str) {
+            None => None,
+            Some("straight") => Some(Edge::Straight),
+            Some("torn") => Some(Edge::Torn),
+            Some("pixel") => Some(Edge::Pixel),
+            Some("brush") => Some(Edge::Brush),
+            Some(_) => return bad(format!("{at}/edge")),
+        };
+        let width = num(r.get("width"), &format!("{at}/width"))?.unwrap_or(16.0);
+        if width < 0.0 {
+            return bad(format!("{at}/width"));
+        }
+        out.push(Region {
+            mask,
+            look,
+            edge,
+            width,
+            seed: r.get("seed").and_then(Value::as_u64).unwrap_or(0),
+        });
+    }
+    Ok(out)
+}
 
 /// The transition kinds (Transition); whip is #493's.
 #[derive(Clone, Debug, PartialEq)]
@@ -1700,6 +1763,7 @@ impl Plan {
             essential: s.get("essential").and_then(Value::as_bool).unwrap_or(false),
             shake,
             look: s.get("look").and_then(Value::as_str).map(str::to_string),
+            regions: regions_of(s, &path)?,
             union,
             follow,
         })

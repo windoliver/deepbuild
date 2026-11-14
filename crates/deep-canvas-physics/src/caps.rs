@@ -37,7 +37,7 @@ pub const RAPIER3D: Caps = Caps {
         "Each substep caps a body's linear speed at solver.max_speed and its turn at about 45° a step; a step it caps writes fault {kind: speed_cap}.",
         "It has no restitution threshold: a new contact bounces at any approach speed.",
         "A joint's impulses are its last substep's; a contact's reported impulse sums every substep.",
-        "A balloon holds its volume by its inflate ratio, since it takes no pressure.",
+        "A balloon or a soft volume holds inflate times its rest volume, since it takes no pressure; its volume constraint runs at 8 times its stretch's frequency, so its edges can't hold it smaller.",
         "It has no rolling resistance or tangent speed; a ball that should roll to rest takes angular damping.",
         "It runs gear, rack, pulley and path joints only in kinematic mode.",
         "A contact with restitution 1 or more never comes to rest.",
