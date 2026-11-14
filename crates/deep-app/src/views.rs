@@ -1273,9 +1273,9 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             })
             .collect()
     } else {
-        view.inbox
-            .iter()
-            .filter(|row| row["status"] != "closed")
+        // Each open ask the core has shown: one waiting for its batch isn't drawn (#22).
+        view.needs_you()
+            .into_iter()
             .map(|row| {
                 // The row draws the question as the card does, its controls and direction marks shown (#1510).
                 (
@@ -3932,7 +3932,77 @@ mod tests {
             "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
             "options": [{"id": "no", "label": "No"}]}}),
         );
+        view.apply(
+            serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "now:1970-01-01T00:00:00.000Z", "asks": [{"ask": "ask:a1"}]}}),
+        );
         let open = read(&view, Kind::NeedsYou, None).open;
         assert_eq!(open[0].2, "Open invoice\\u{202e}txt.exe?");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_record_no_batching_core_wrote_shows_its_asks_at_once() {
+        // #22: a record with neither the hub's list nor any batch of the core's has nothing to wait for, so its open
+        // asks draw as they did, and the rows are as many as the count.
+        let mut view = crate::record::View::default();
+        for id in ["a1", "a2"] {
+            view.apply(serde_json::json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "core",
+                                          "data": {"kind": "taste", "question": format!("{id}?")}}));
+        }
+        let open = read(&view, Kind::NeedsYou, None).open;
+        let handles: Vec<&str> = open.iter().map(|row| row.0.as_str()).collect();
+        assert_eq!(handles, ["ask:a1", "ask:a2"]);
+        assert_eq!(open.len(), states::count(&view.table()));
+    }
+
+    #[std::prelude::v1::test]
+    fn needs_you_shows_an_ask_once_the_core_shows_it_and_a_folded_one_only_through_its_exception() {
+        // #22: Needs you reads the inbox projection the CLI reads, where an ask waits for its batch. Session sd asks
+        // five, the core raises its exception, and a sixth folds into it; sa asks one.
+        let mut view = crate::record::View::default();
+        let ask = |id: &str, kind: &str, writer: &str| {
+            let session = if id.starts_with('a') { "sa" } else { "sd" };
+            serde_json::json!({"kind": "ask.created", "id": id, "session": session, "writer": writer,
+                               "data": {"kind": kind, "question": format!("{id}?")}})
+        };
+        // The record is a batching core's: it showed an earlier ask, answered since.
+        view.apply(ask("a0", "taste", "mcp:agent"));
+        view.apply(
+            serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T00:00:00.000Z", "asks": [{"ask": "ask:a0"}]}}),
+        );
+        view.apply(serde_json::json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a0", "data": {}}));
+        for id in ["a1", "d1", "d2", "d3", "d4", "d5"] {
+            view.apply(ask(id, "taste", "mcp:agent"));
+        }
+        view.apply(ask("x", "exception", "core"));
+        view.apply(ask("d6", "taste", "mcp:agent"));
+        let rows = |view: &crate::record::View| -> Vec<(String, String)> {
+            read(view, Kind::NeedsYou, None)
+                .open
+                .into_iter()
+                .map(|(handle, _, _, status, _)| (handle, status))
+                .collect()
+        };
+        assert_eq!(
+            rows(&view),
+            Vec::<(String, String)>::new(),
+            "every ask waits for the batch"
+        );
+
+        let shown = ["a1", "d1", "d2", "d3", "d4", "d5", "x"];
+        view.apply(serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T08:00:00.000Z",
+            "asks": shown.iter().map(|id| serde_json::json!({"ask": format!("ask:{id}")})).collect::<Vec<_>>()}}));
+        let want: Vec<(String, String)> = shown
+            .iter()
+            .map(|id| (format!("ask:{id}"), "shown".to_owned()))
+            .collect();
+        assert_eq!(
+            rows(&view),
+            want,
+            "the batch shows them, and the sixth only through the exception"
+        );
+        assert_eq!(asks_need_you(rows(&view).len()), "7 asks need you");
     }
 }

@@ -26,6 +26,12 @@ use crate::states::{closes, handle, Table};
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
+/// Whether the row is an exception that asks fold into: one the core raised, or, for a row from the hub's inbox read,
+/// any exception.
+fn holds(row: &Value) -> bool {
+    row["holder"] == true || (row["holder"].is_null() && row["kind"] == "exception")
+}
+
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
 /// The newest events a view keeps.
@@ -101,6 +107,8 @@ pub struct View {
     pub inbox: Vec<Value>,
     /// The events applied since the reads, folded: what the views and the notifier read, through [`View::table`].
     table: Table,
+    /// Whether the core has shown asks in this record: an `ask.batched` of its was applied.
+    batched: bool,
     /// The planted walker's every event.
     #[cfg(feature = "plant-walks-events")]
     all: Vec<Value>,
@@ -167,6 +175,24 @@ impl View {
         Ok(())
     }
 
+    /// The rows Needs you draws, oldest first: each open ask the core has shown, or put off with Later, as the hub's
+    /// list holds them. One waiting for its batch, or held for the agent's next step, isn't one, and one folded into
+    /// an exception shows through that exception (#22).
+    ///
+    /// A record with neither the hub's list nor any showing of the core's, a fixture's or an older hub's, has no
+    /// batch to wait for: its open asks draw at once, as its count counts them.
+    pub fn needs_you(&self) -> Vec<&Value> {
+        let unbatched = !self.batched && !self.table().listed();
+        self.inbox
+            .iter()
+            .filter(|row| {
+                row["status"] == "shown"
+                    || row["status"] == "later"
+                    || (unbatched && row["status"] == "queued")
+            })
+            .collect()
+    }
+
     /// Applies one event the view doesn't have yet.
     pub fn apply(&mut self, event: Value) {
         self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
@@ -174,21 +200,34 @@ impl View {
         if kind == "ask.created" {
             let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
             if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
-                // Past a session's fifth open ask, it folds, as in the core.
-                let mine = self
-                    .inbox
-                    .iter()
-                    .filter(|row| row["session"] == event["session"] && row["status"] != "closed");
-                let status = if mine.count() < FOLD_AFTER {
-                    "shown"
-                } else {
-                    "folded"
-                };
+                // As in the core: it folds while its session has an open exception the core raised, which never folds
+                // itself; otherwise it waits for the core to show it, at its batch or at once (#22).
+                let holder = event["writer"] == "core" && event["data"]["kind"] == "exception";
+                let held = !holder
+                    && self.inbox.iter().any(|row| {
+                        row["session"] == event["session"]
+                            && holds(row)
+                            && row["status"] != "closed"
+                    });
+                let status = if held { "folded" } else { "queued" };
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
                     "status": status, "outcome": "unanswered", "owner": event["data"]["owner"],
-                    "question": event["data"]["question"],
+                    "question": event["data"]["question"], "holder": holder,
                 }));
+            }
+        } else if kind == "ask.batched" && event["writer"] == "core" {
+            // Shown, at a batch or at once, or again when its Later ends; a folded ask shows inside its exception.
+            self.batched = true;
+            let asks = event["data"]["asks"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            for row in self.inbox.iter_mut().filter(|row| {
+                (row["status"] == "queued" || row["status"] == "later")
+                    && asks.iter().any(|item| item["ask"] == row["ask"])
+            }) {
+                row["status"] = json!("shown");
             }
         } else if kind == "ask.later" && event["writer"] == "core" {
             // Only the core's Later hides an ask, as in the core: an app's or the CLI's own event changes nothing.
@@ -850,6 +889,8 @@ mod tests {
         for id in ["a1", "a2", "a3"] {
             view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
         }
+        // The core's batch shows them (#22): until it does an ask is queued.
+        view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}, {"ask": "ask:a2"}, {"ask": "ask:a3"}]}}));
         view.apply(
             json!({"kind": "decision.applied", "writer": "core", "subject": "ask:a3",
                           "data": {"decision": "d1", "ask": "ask:a1"}}),
@@ -883,6 +924,8 @@ mod tests {
         for id in ["a1", "a2"] {
             view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
         }
+        // The core's batch shows them (#22): until it does an ask is queued.
+        view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}, {"ask": "ask:a2"}]}}));
         let later = |id: &str, writer: &str| json!({"kind": "ask.later", "writer": writer, "subject": format!("ask:{id}"), "data": {"until": 9}});
         view.apply(later("a1", "cli"));
         view.apply(later("a2", "core"));

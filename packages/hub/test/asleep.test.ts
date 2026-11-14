@@ -1,8 +1,9 @@
 // While the Mac sleeps the hub process stays up but none of its timers run (#908). A real hub, stopped with SIGSTOP
 // as sleep stops it and resumed, finds its next beat far past the last on the wall clock and moves the deadline of an
-// ask that waited for its batch the whole time, by that time, recorded on the ask.
+// ask that waited for its batch the whole time, by that time, recorded on the ask. Awake, a hub's beat shows each ask
+// waiting for a batch at that batch's time, with nothing else due (#22).
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -80,3 +81,65 @@ it('a hub that slept with an ask waiting for its batch moves its deadline later 
   expect(moves[0]!.data.deadline, 'to its deadline plus that time').toBe(deadline + span);
   expect(moves[0]!.writer).toBe('core');
 }, 60_000);
+
+it('a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches', async () => {
+  dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-batch-')));
+  const [home, root] = ['home', 'root'].map((p) => join(dir, p)) as [string, string];
+  for (const p of [home, root]) mkdirSync(p);
+  // Batches every 8 h, as setup drafts them: the ask, due in two days, waits for the next one.
+  draftAskSettings(root);
+  // Start at least 30 s before a batch time, so the ask is seen waiting first, even with a slow hub start.
+  while (Date.now() % 60_000 > 30_000) await pause(250);
+  const now = Date.now();
+  const batch = (Math.floor(now / 60_000) + 1) * 60_000;
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
+  const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
+  const ask = ulid(now);
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
+  await record.close();
+  hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], { stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home } });
+  const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
+  const call = await cli(ready.socket, readFileSync(join(root, 'control.token'), 'utf8').trim());
+  const batched = async () => ((await call('events.read', { after: 0, limit: 1000 })).events as { kind: string; data: { batch: string; asks: { ask: string }[] } }[])
+    .filter((e) => e.kind === 'ask.batched' && e.data.asks.some((a) => a.ask === `ask:${ask}`));
+  await pause(2000);
+  expect(await batched(), 'before the batch time the ask waits, unshown').toEqual([]);
+  // You change them to every minute while the hub runs: the next minute's batch shows it.
+  const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'));
+  config.asks.batch = { every: '1m', cap: 20 };
+  writeFileSync(join(root, 'config.json'), `${JSON.stringify(config)}\n`);
+  // The beat is 1 s; 5 s leaves room for a loaded machine, as the hub's start does in #319.
+  while (Date.now() < batch + 5000) await pause(250);
+  expect((await batched()).map((e) => e.data.batch), `the ${new Date(batch).toISOString()} batch shows it within 5 s of its time`).toEqual([`batch:${new Date(batch).toISOString()}`]);
+}, 120_000);
+
+it("the hub's list holds an ask from the batch that shows it, not while it waits for that batch", async () => {
+  dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-list-')));
+  const [home, root] = ['home', 'root'].map((p) => join(dir, p)) as [string, string];
+  for (const p of [home, root]) mkdirSync(p);
+  // Batches every minute: the ask, due in two days, waits for the next one.
+  draftAskSettings(root);
+  const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'));
+  config.asks.batch = { every: '1m', cap: 20 };
+  writeFileSync(join(root, 'config.json'), `${JSON.stringify(config)}\n`);
+  // Start at least 30 s before a batch time, so the ask is seen waiting first, even with a slow hub start.
+  while (Date.now() % 60_000 > 30_000) await pause(250);
+  const now = Date.now();
+  const batch = (Math.floor(now / 60_000) + 1) * 60_000;
+  const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
+  const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
+  const ask = ulid(now);
+  await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
+  await record.close();
+  hub = spawn(process.execPath, [MAIN, 'hub', 'run', '--root', root], { stdio: ['ignore', 'pipe', 'inherit'], env: { PATH: '/usr/bin:/bin', HOME: home } });
+  const ready = await new Promise<{ socket: string }>((done) => hub!.stdout!.once('data', (d) => done(JSON.parse(String(d).split('\n')[0]!))));
+  const call = await cli(ready.socket, readFileSync(join(root, 'control.token'), 'utf8').trim());
+  // The list's rows every reader draws (#1463): whether the ask's row is in it, as its row.set events last said.
+  const listed = async () => ((await call('events.read', { after: 0, limit: 1000 })).events as { kind: string; data: { id?: string; listed?: boolean } }[])
+    .filter((e) => e.kind === 'row.set' && e.data.id === `ask:${ask}`).at(-1)?.data.listed ?? false;
+  // The hub's start runs a list pass; the 60 s pass is far off.
+  await pause(3000);
+  expect(await listed(), 'before its batch the ask has no row in the list').toBe(false);
+  while (Date.now() < batch + 5000) await pause(250);
+  expect(await listed(), `once the ${new Date(batch).toISOString()} batch shows it, the ask has its row`).toBe(true);
+}, 120_000);

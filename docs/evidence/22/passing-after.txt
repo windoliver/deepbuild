@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  10:25:20
+   Duration  105.21s (tests 100%)
+
