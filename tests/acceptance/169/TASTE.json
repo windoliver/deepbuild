@@ -1,0 +1,16 @@
+{
+  "issue": 169,
+  "criterion": "#169.5ca52f96",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-14T02:12:53Z",
+  "screenshots": {
+    "page-start.png": "088c662e09578eeba231c99caea2cc606a08d45c1ef828c0ebbbd9ff893ae508",
+    "page-exploded.png": "ad0b5c1b5983d77eaa59760cec17d8c0e6b41ad2d6b25fda6cfa08414d2badac",
+    "page-lagoon.png": "d218eaab261efe150f8c4d302a01ab739508f3c7158105e6f7fbbd1203697892",
+    "page-orchid.png": "1cc662aa91bd27c0b804b932d410edcdc605c28e7bd2e46109f50c3aa5bbad92",
+    "page-graphite.png": "bb7c95f2f4937ccc6c15828713f6703f67ee4e0011a7a73288f3a0bddd0f9a52",
+    "page-stepping.webm": "f68c0c0b13aa45a4619499cf886a25fa3e43057aba1f760d35964acef7e70ba0"
+  },
+  "note": "Taken by docs/evidence/169/shoot.mjs from the walkthrough's page opened from disk in Chrome with networking off, through the suite's own driver. The start shows the product together on its plate with the four stage, explode and three finish controls; explode lifts the shell, cover and cap apart; the three finishes recolour the shell lagoon, orchid and graphite at the shell stage; the recording steps through the four stages, each with its own framing, and the toggle apart and back."
+}
