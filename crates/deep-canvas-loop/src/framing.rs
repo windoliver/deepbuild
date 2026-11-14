@@ -69,9 +69,14 @@ fn points(scene: &Scene, keep: &[String]) -> Result<Vec<(String, Vec<Vec3>)>, Va
         .collect()
 }
 
-/// The boxes overlays and readouts cover on the frame, by ID.
-fn overlay_boxes(scene: &Scene) -> Vec<(String, [f64; 4])> {
+/// The boxes overlays and readouts cover on the frame, by ID: each view overlay's rect (#506)
+/// among them.
+fn overlay_boxes(doc: &Value, scene: &Scene) -> Vec<(String, [f64; 4])> {
     let mut out = Vec::new();
+    for v in deep_canvas_scene3d::views::placed(doc, scene.size, None).unwrap_or_default() {
+        let [x, y, w, h] = v.rect.map(f64::from);
+        out.push((v.id, [x, y, x + w, y + h]));
+    }
     for o in &scene.overlays {
         let Some([ox, oy]) = o.origin else { continue };
         for s in &o.shapes {
@@ -124,7 +129,7 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
     } else {
         0.0
     };
-    let mut under: Vec<String> = overlay_boxes(scene)
+    let mut under: Vec<String> = overlay_boxes(doc, scene)
         .into_iter()
         .filter(|(_, b)| b[0] < bbox[2] && b[2] > bbox[0] && b[1] < bbox[3] && b[3] > bbox[1])
         .map(|(id, _)| id)
@@ -278,10 +283,6 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             out.blocked.push(blocked("out_of_range", KIND, &[], field));
         }
     }
-    // A shot poses the camera at each time, which the hub writes before it draws.
-    if lowered.get("shots").and_then(Value::as_object).is_some_and(|s| !s.is_empty()) {
-        out.blocked.push(blocked("not_run", KIND, &[], "shots"));
-    }
     let fill = input
         .get("fill")
         .and_then(Value::as_array)
@@ -301,7 +302,14 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             return out;
         }
     };
-    let times = match scene::times(input, KIND) {
+    // #506: a film's main shot is checked along its span, at 30 Hz (`path_rate`'s default) from
+    // each timeline shot's start to its end, when the input names no times.
+    let shot_times = input
+        .get("at_times")
+        .is_none()
+        .then(|| scene::shot_times(lowered, 30))
+        .filter(|t| !t.is_empty());
+    let times = match shot_times.map_or_else(|| scene::times(input, KIND), Ok) {
         Ok(t) => t,
         Err(b) => {
             out.blocked.push(b);
@@ -315,6 +323,10 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         times
             .iter()
             .map(|&t| {
+                // A shot poses the camera at each time, as the frame draws it (#506: the main
+                // shot's kept items).
+                let posed = deep_canvas_motion::shots::posed(doc, t);
+                let doc = posed.as_ref().unwrap_or(doc);
                 let s = scene::evaluate(doc, input, t, KIND)?;
                 Ok((read(doc, &s, t, &keep, &o)?, s))
             })

@@ -39,7 +39,7 @@ pub(super) fn run_all(
     size: [u32; 2],
     look: &Look3,
 ) -> Result<Vec<Shown>, Value> {
-    let placed = views::placed(doc, size, look).map_err(|r| refused(r.code, r.path))?;
+    let placed = views::placed(doc, size, Some(look)).map_err(|r| refused(r.code, r.path))?;
     let mut shown = Vec::new();
     for p in placed {
         let path = std::env::temp_dir().join(format!(

@@ -51,7 +51,7 @@ pub struct Placed {
 
 /// Each view overlay of `doc` in a frame of `size` px: `size` a share of the safe frame's width
 /// and height, in its bottom-right corner (Overlay: `overlay.view@1`), its border in its role.
-pub fn placed(doc: &Value, size: [u32; 2], look: &crate::look::Look3) -> Result<Vec<Placed>, Refused> {
+pub fn placed(doc: &Value, size: [u32; 2], look: Option<&crate::look::Look3>) -> Result<Vec<Placed>, Refused> {
     let safe = doc.get("safe").and_then(Value::as_f64).unwrap_or(24.0).max(0.0);
     let mut out = Vec::new();
     for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
@@ -81,7 +81,7 @@ pub fn placed(doc: &Value, size: [u32; 2], look: &crate::look::Look3) -> Result<
             id: id.clone(),
             camera: camera.to_string(),
             rect: [x as u32, y as u32, w as u32, h as u32],
-            border: look.role(role).unwrap_or([0, 0, 0]),
+            border: look.and_then(|l| l.role(role)).unwrap_or([0, 0, 0]),
         });
     }
     Ok(out)

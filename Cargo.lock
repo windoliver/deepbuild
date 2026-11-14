@@ -2314,6 +2314,7 @@ name = "deep-canvas-loop"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-motion",
  "deep-canvas-scene3d",
  "serde_json",
 ]
