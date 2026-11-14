@@ -701,3 +701,7 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   (`mac/ac04-34f30ffd5-docker.txt`, `mac/exits-34f30ffd5-docker.txt`, host name redacted, load 46 at its end; it has
   no timed check). ac05 has no result: the runner stopped it 34 minutes into its container's build (exit 143 is the
   stop). Both are of the head before the two merges above.
+- **Merge of main 06b6e6d7a (0aff36be1, 2026-11-14)**, without conflict: main now has #2524, whose golden holds each
+  checkpoint's `step` and `deep_hash` and no `ns`. On this host (`acceptance-linux-0aff36be1.txt`): 20 pass, 4
+  BLOCKED (ac04's Mac comparison, ac05's two machines, ac10's two budgets), and ac07 passes against the merge base
+  06b6e6d7a, unchanged. Criterion 7 is proven on Linux at this head. No Mac run has covered a head after 34f30ffd5.
