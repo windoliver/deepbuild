@@ -9,9 +9,8 @@
 //! `deep-hook <agent> waiter`, Claude Code's background Stop entry, it waits for an answer to its session and
 //! wakes the session with it (#25). As `deep-hook mcp actions`, it is the deep-actions MCP server (actions.rs).
 
-use std::fs::{self, DirBuilder, File, OpenOptions};
+use std::fs;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -27,6 +26,7 @@ use deep_hook::matcher;
 mod actions;
 mod heavy;
 mod remote;
+mod spool_file;
 mod tool_paths;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
@@ -928,7 +928,7 @@ fn spool(request: &str, written: &mut dyn FnMut()) -> io::Result<()> {
         Some(joined) => remote::spool_folder(&home(), &joined.hub),
         None => home().join("spool"),
     };
-    let upto = append(&folder, request, &mut || {})?;
+    let upto = spool_file::append(&folder, request, &mut || {})?;
     written();
     let synced = Command::new(env::current_exe()?)
         .arg("spool-sync")
@@ -944,159 +944,6 @@ fn spool(request: &str, written: &mut dyn FnMut()) -> io::Result<()> {
         ));
     }
     Ok(())
-}
-
-/// `deep-hook spool-sync <folder> <file|folder|parent>`: syncs the spool file and, as far up as `upto` says, the
-/// folder that names it and the folder's parent. One runs at a time for a spool, holding a lock on its folder, so
-/// hooks on a stalled disk leave at most one sync behind. One that finds the lock held leaves its line to the
-/// holder, which syncs the file again until it stops changing, and looks once more after letting go: a line
-/// written as it let go is synced by it or by the next holder. The write that made the file or the folder waits
-/// for the lock instead, since a holder syncs only the file; that's one write per spool file, not one per hook.
-fn sync(folder: &Path, upto: &str) -> io::Result<()> {
-    let path = folder.join("spool.jsonl");
-    let state = || fs::symlink_metadata(&path).ok().map(|m| (m.ino(), m.len()));
-    let mut names = upto != "file";
-    loop {
-        let lock = File::open(folder)?;
-        if names {
-            lock.lock()?;
-        } else {
-            match lock.try_lock() {
-                Ok(()) => {}
-                Err(fs::TryLockError::WouldBlock) => return Ok(()),
-                Err(fs::TryLockError::Error(error)) => return Err(error),
-            }
-        }
-        let mut seen;
-        loop {
-            seen = state();
-            if seen.is_some() {
-                OpenOptions::new()
-                    .read(true)
-                    .custom_flags(NOFOLLOW)
-                    .open(&path)?
-                    .sync_data()?;
-            }
-            if names {
-                lock.sync_all()?;
-                if upto == "parent" {
-                    if let Some(parent) = folder.parent() {
-                        File::open(parent)?.sync_all()?;
-                    }
-                }
-                names = false;
-            }
-            if state() == seen {
-                break;
-            }
-        }
-        drop(lock);
-        if state() == seen {
-            return Ok(());
-        }
-    }
-}
-
-/// The spool's one append, with `opened` run between opening the file and writing to it (a test moves it there).
-/// Returns how far up the line's sync must reach: the folder too when the file was made, and the folder's parent
-/// when the folder was.
-fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<&'static str> {
-    let path = folder.join("spool.jsonl");
-    for _ in 0..3 {
-        // Made by this write, exactly: only one write makes the folder, and only one makes each spool file.
-        let made = match DirBuilder::new().mode(0o700).create(folder) {
-            Ok(()) => true,
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => false,
-            Err(_) => {
-                DirBuilder::new()
-                    .recursive(true)
-                    .mode(0o700)
-                    .create(folder)?;
-                true
-            }
-        };
-        // The spool is a folder of its own and one file in it, never a link to somewhere else: deep-hook only appends.
-        let dir = fs::symlink_metadata(folder)?;
-        if !dir.is_dir() || dir.mode() & 0o022 != 0 {
-            return Err(io::Error::other(
-                "the spool folder is a link, or others can write it",
-            ));
-        }
-        let (mut file, fresh) = match OpenOptions::new()
-            .create_new(true)
-            .append(true)
-            .mode(0o600)
-            .custom_flags(NOFOLLOW)
-            .open(&path)
-        {
-            Ok(file) => (file, true),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-                match OpenOptions::new()
-                    .append(true)
-                    .custom_flags(NOFOLLOW)
-                    .open(&path)
-                {
-                    Ok(file) => (file, false),
-                    // The hub moved it aside since: make the next one.
-                    Err(error) if error.kind() == ErrorKind::NotFound => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            Err(error) => return Err(error),
-        };
-        let made_file = file.metadata()?;
-        if !made_file.is_file() || made_file.nlink() != 1 {
-            return Err(io::Error::other("the spool file is a link to another file"));
-        }
-        opened();
-        #[cfg(debug_assertions)]
-        if let Some(n) = stall() {
-            file.write_all(&request.as_bytes()[..n.min(request.len())])?;
-            loop {
-                std::thread::sleep(Duration::from_secs(3600));
-            }
-        }
-        // One write call, never write_all's retries: a second call could land after another hook's line. A short
-        // write leaves a cut line, which the hub skips, and the next try writes the whole line again.
-        if file.write(request.as_bytes())? < request.len() {
-            continue;
-        }
-        let written = file.metadata()?;
-        match fs::symlink_metadata(&path) {
-            Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => {}
-            _ => continue,
-        }
-        return Ok(if made {
-            "parent"
-        } else if fresh {
-            "folder"
-        } else {
-            "file"
-        });
-    }
-    Err(io::Error::other(
-        "the spool line was cut or moved in each of three tries",
-    ))
-}
-
-/// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
-#[cfg(target_os = "macos")]
-const NOFOLLOW: i32 = 0x0100;
-#[cfg(all(
-    target_os = "linux",
-    not(any(target_arch = "aarch64", target_arch = "arm"))
-))]
-const NOFOLLOW: i32 = 0o400000;
-// arm64 and arm number it otherwise; 0o400000 there is O_LARGEFILE, which follows the link.
-#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
-const NOFOLLOW: i32 = 0o100000;
-
-/// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
-#[cfg(debug_assertions)]
-fn stall() -> Option<usize> {
-    env::var("DEEP_HOOK_TEST_SPOOL_STALL")
-        .ok()
-        .and_then(|text| text.parse::<usize>().ok())
 }
 
 /// How long after its spool thread starts deep-hook stops waiting for the write and exits with its decision: a
@@ -1130,7 +977,7 @@ fn spool_by(request: String, id: &str, start: Instant) {
         let _ = tell.send(Spooling::Done(result));
     });
     #[cfg(debug_assertions)]
-    let forever = stall().is_some();
+    let forever = spool_file::stall().is_some();
     #[cfg(not(debug_assertions))]
     let forever = false;
     // A thread the machine hasn't run yet holds no write up: its deadline starts once it runs.
@@ -1547,7 +1394,7 @@ fn watchdog(start: Instant) {
         return;
     }
     #[cfg(debug_assertions)]
-    if stall().is_some() {
+    if spool_file::stall().is_some() {
         return;
     }
     std::thread::spawn(move || {
@@ -2070,7 +1917,7 @@ fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         [arg, folder, upto] if arg == "spool-sync" => {
-            return match sync(Path::new(folder), upto) {
+            return match spool_file::sync(Path::new(folder), upto) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(_) => ExitCode::from(1),
             };
@@ -2089,7 +1936,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::append;
+    use super::spool_file::append;
     use crate::tool_paths::pi_path;
     use deep_hook::shell::glob;
     use std::fs::{self, DirBuilder};
