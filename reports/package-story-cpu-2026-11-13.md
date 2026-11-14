@@ -238,7 +238,7 @@ is `+417 −53` handwritten lines against it, over the guideline of about 400: 2
 
 ### After merging main a second time
 
-Main moved 131 commits more and conflicted in three cards, so it was merged again, at `82a68d6e2`. Another audit
+Main moved 131 commits more and conflicted in three cards, so it was merged again, at `658b44f04`. Another audit
 of the same day had landed there and rewritten the same sentence in the cards of `budget`, `config-eval` and
 `jobs`. Each said what this change's sentence said, and its `jobs` card already names `score`, so main's wording
 stands in all three. This change now edits 14 cards. Main touched none of its source files.
