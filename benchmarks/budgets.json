@@ -1497,6 +1497,45 @@
       "criteria": [
         "#538.ed6f8052"
       ]
+    },
+    {
+      "id": "physics-module",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "module"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "bridge_step_ms": 2,
+        "stress_step_ms": 2,
+        "bake_10s_ms": 1000,
+        "world_mb": 50,
+        "startup_ms": 5
+      },
+      "initialReason": "Issue #524 first measurement: the merge base has no soft bodies, no rope bridge lab and no such task. Release deep-physics times the rope bridge lab's 600 steps and a 200-body stack's, each step on its own clock, and bakes the bridge 1,200 steps (10 s) in one process, its wall time and peak resident memory read by /usr/bin/time -l; release deep-show's registry reads the seal's interface checks, in whose pass the runtime digest is hashed. One warm-up and five runs each, each a fresh process. physics.mjs judge holds each target on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#524.584c6e80"
+      ]
+    },
+    {
+      "id": "physics-soft-labs",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "soft-labs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "bridge_step_ms": 2,
+        "banner_step_ms": 2
+      },
+      "initialReason": "Issue #524 first measurement: the merge base steps no soft body and has no lab documents or such task. Release deep-physics times each of the rope bridge and banner labs' 600 steps, the steps their goldens record, on its own clock, the 95th percentile a run, one warm-up and five runs each in a fresh process. physics.mjs judge holds each target on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#524.d7f0282a"
+      ]
     }
   ]
 }

@@ -72,6 +72,8 @@ impl Gpu3 {
         if let Some(d) = doc.as_object_mut() {
             d.insert("size".into(), json!(size));
         }
+        // #524: each skin's item at this frame's time.
+        deep_canvas_physics::skin::write(&mut doc, t);
         let look = Look3::from_roles(palette.clone());
         let scene = evaluate(&doc, t, &look, &mut self.labels).map_err(|r| Unfit {
             code: r.code,
@@ -102,6 +104,7 @@ impl Gpu3 {
         if let Some(d) = doc.as_object_mut() {
             d.insert("size".into(), json!(size));
         }
+        deep_canvas_physics::skin::write(&mut doc, t);
         let look = Look3::from_roles(palette.clone());
         let scene =
             deep_canvas_scene3d::scene::evaluate_with(&doc, t, &look, &mut self.labels, assets)

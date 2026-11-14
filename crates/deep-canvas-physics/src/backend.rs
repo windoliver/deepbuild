@@ -53,6 +53,38 @@ pub struct BodyState {
 pub struct State {
     pub step: u64,
     pub bodies: Vec<BodyState>,
+    /// Its soft bodies by ID (#524).
+    pub soft: Vec<SoftState>,
+}
+
+/// #524: one soft body as a step left it: each particle of its lattice, in address order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SoftState {
+    pub id: String,
+    pub positions: Vec<[f64; 3]>,
+    pub velocities: Vec<[f64; 3]>,
+}
+
+/// #524: one soft body as the engine holds it, read back from the engine rather than the
+/// document: how many of the engine's soft bodies it is (more than one once a tear splits it),
+/// its particles, and a closed one's target volume over its rest volume, with whether the engine
+/// holds that volume at all.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SoftHeld {
+    pub id: String,
+    pub bodies: usize,
+    pub particles: usize,
+    pub volume_ratio: Option<f64>,
+    pub volume_held: bool,
+}
+
+/// #524: what the engine holds: its rigid bodies and joints, none of a soft body's own counted,
+/// and each soft body.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Held {
+    pub rigid_bodies: usize,
+    pub joints: usize,
+    pub soft: Vec<SoftHeld>,
 }
 
 /// One shape use: its body's ID and its index among the body's shapes.
@@ -80,12 +112,30 @@ pub const FIELDS: [&str; 13] = [
     "angular.z",
 ];
 
-/// One body's canonical state: the backend's own f32 value of each of `FIELDS`, never converted,
-/// so a hash of it reads exactly what the backend steps.
+/// The fields of a soft body's particle in the canonical state, after every body's (#524):
+/// position, then velocity.
+pub const PARTICLE_FIELDS: [&str; 6] = [
+    "pos.x", "pos.y", "pos.z", "linear.x", "linear.y", "linear.z",
+];
+
+/// One body's or one particle's (`<soft>#<address>`) canonical state: the backend's own f32
+/// value of each of `FIELDS` or `PARTICLE_FIELDS`, never converted, so a hash of it reads exactly
+/// what the backend steps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Canonical {
     pub id: String,
-    pub values: [f32; 13],
+    pub values: Vec<f32>,
+}
+
+impl Canonical {
+    /// The names of its values.
+    pub fn fields(&self) -> &'static [&'static str] {
+        if self.values.len() == PARTICLE_FIELDS.len() {
+            &PARTICLE_FIELDS
+        } else {
+            &FIELDS
+        }
+    }
 }
 
 /// A deep checkpoint: the backend's whole-world state as its own bytes, stamped with the backend
@@ -140,8 +190,11 @@ pub trait Backend {
     /// What the last step wrote, in the engine's own order; the module sorts it (Occurrence list).
     fn occurrences(&self) -> Vec<Raw>;
     fn read(&self) -> State;
-    /// Every body's canonical state, in canonical (ID) order.
+    /// Every body's canonical state, in canonical (ID) order, then each soft body's particles,
+    /// by soft body ID and then address (#524).
     fn canonical(&self) -> Vec<Canonical>;
+    /// #524: what the engine holds, read back from it.
+    fn held(&self) -> Held;
     fn checkpoint(&self) -> Checkpoint;
     /// Loads `checkpoint`, or refuses one another backend or version wrote, naming both, and
     /// loads nothing.

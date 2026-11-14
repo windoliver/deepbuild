@@ -2077,6 +2077,12 @@
           "why": "Issue #2009: deep-physics's JSON lines. Already in the workspace tree."
         }
       },
+      "target.'cfg(not(target_arch = \"wasm32\"))'.dependencies": {
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #524: a soft volume's particles are its source item's welded vertices and a balloon's its geodesic ball's, built by the scene3d builders the skin draws, so the two lattices are one. Native only: scene3d links meshopt, whose C++ doesn't build for wasm32 (#2466)."
+        }
+      },
       "dev-dependencies": {
         "simba": {
           "spec": "=0.10.2",

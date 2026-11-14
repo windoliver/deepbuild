@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
-use super::{join, Body, BodyKind, Breaks, Joint, JointKind, Pose, Reader, Refusal, Shape};
+use super::{join, Body, BodyKind, Breaks, Joint, JointKind, Pose, Reader, Refusal, Shape, Soft};
 
 /// The issue that brings an output's post-processing fields.
 pub const OUTPUT_LATER: &str = "#2248";
@@ -22,10 +22,12 @@ pub enum Read {
     JointForce,
     ContactCount,
     Energy,
+    /// A soft body's particles (#524).
+    ParticlePositions,
 }
 
 /// Each read's name, and whether it reads a joint rather than a body.
-pub const READS: [(&str, Read, bool); 8] = [
+pub const READS: [(&str, Read, bool); 9] = [
     ("pose", Read::Pose, false),
     ("position", Read::Position, false),
     ("angle", Read::Angle, false),
@@ -34,6 +36,7 @@ pub const READS: [(&str, Read, bool); 8] = [
     ("joint_force", Read::JointForce, true),
     ("contact_count", Read::ContactCount, false),
     ("energy", Read::Energy, false),
+    ("particle_positions", Read::ParticlePositions, false),
 ];
 
 impl Read {
@@ -63,6 +66,16 @@ pub struct Output {
     pub to: Option<String>,
     /// `interpolate: hold`: a frame between two steps shows the earlier; else it lerps.
     pub hold: bool,
+    /// `to: skin {item, material}` (#524): the soft body drawn on an item built on its lattice.
+    pub skin: Option<Skin>,
+}
+
+/// A skin (Physics output: a skin): the item a soft body's particles draw as the vertices of, or
+/// `None` for the one the core builds (`item: auto`), in `material` or the look's default.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Skin {
+    pub item: Option<String>,
+    pub material: Option<String>,
 }
 
 /// A kinematic solve (Kinematic solve): in kinematic mode, each step sets each driven joint's
@@ -204,14 +217,15 @@ impl Reader {
         })
     }
 
-    /// An output reading a body or a joint; its post-processing fields and the reads of soft and
-    /// character bodies are refused, naming the issue that brings each.
+    /// An output reading a body, a joint or a soft body's particles; its post-processing fields
+    /// and the reads of character bodies are refused, naming the issue that brings each.
     pub(super) fn output(
         &mut self,
         v: &Value,
         p: &str,
         bodies: &BTreeMap<String, Body>,
         joints: &BTreeMap<String, Joint>,
+        soft: &BTreeMap<String, Soft>,
     ) -> Option<Output> {
         let o = &self.obj(v, p, OUTPUT_KEYS);
         for k in ["reduce", "average", "sample", "keep", "expr", "unit"] {
@@ -222,13 +236,15 @@ impl Reader {
         let name = o.get("read").and_then(Value::as_str).unwrap_or_default();
         let read = match (Read::named(name), name) {
             (Some(r), _) => r,
-            (None, "particle_positions" | "grounded" | "sliding") => {
-                let issue = if name == "particle_positions" {
-                    "#1786"
-                } else {
-                    "#182"
-                };
-                self.refuse("physics.unsupported", join(p, "read"), &o["read"], format!("the read {name} isn't run by this backend interface yet; {issue} brings it"));
+            (None, "grounded" | "sliding") => {
+                self.refuse(
+                    "physics.unsupported",
+                    join(p, "read"),
+                    &o["read"],
+                    format!(
+                        "the read {name} isn't run by this backend interface yet; #182 brings it"
+                    ),
+                );
                 return None;
             }
             (None, _) => {
@@ -243,20 +259,12 @@ impl Reader {
                 return None;
             }
         };
-        let to = match o.get("to") {
-            Some(Value::Object(s)) if s.contains_key("skin") => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "to"),
-                    &o["to"],
-                    "a skin isn't drawn by this backend interface yet; #1786 brings it".into(),
-                );
-                None
-            }
-            _ => self.text(o, "to", p),
-        };
         let hold = self.word(o, "interpolate", p, "linear", &["linear", "hold"]) == "hold";
         let from = o.get("from").unwrap_or(&Value::Null);
+        if read == Read::ParticlePositions || o.get("to").is_some_and(Value::is_object) {
+            return self.particles(o, p, read, hold, soft);
+        }
+        let to = self.text(o, "to", p);
         // #1921: `<body>#*` reads every element body of an each: body, and writes each one's pose
         // into its row of an instancer's position and rotation columns.
         if let Some(body) = from.as_str().and_then(|f| f.strip_suffix("#*")) {
@@ -287,6 +295,7 @@ impl Reader {
                 read,
                 to,
                 hold,
+                skin: None,
             });
         }
         let found = from.as_str().filter(|id| {
@@ -311,6 +320,72 @@ impl Reader {
             read,
             to,
             hold,
+            skin: None,
+        })
+    }
+
+    /// An output of `particle_positions` (#524): every particle of a soft body, or with
+    /// `#<address>` one particle, `#pins` its pinned ones; with `to: {skin: {item, material}}`
+    /// the whole body drawn on an item built on its lattice. A skin reads only particles.
+    fn particles(
+        &mut self,
+        o: &Map<String, Value>,
+        p: &str,
+        read: Read,
+        hold: bool,
+        soft: &BTreeMap<String, Soft>,
+    ) -> Option<Output> {
+        let from = o.get("from").unwrap_or(&Value::Null);
+        let name = from.as_str().unwrap_or_default();
+        let (id, part) = name
+            .split_once('#')
+            .map_or((name, None), |(a, b)| (a, Some(b)));
+        let Some(s) = soft.get(id) else {
+            let what =
+                format!("{from} is not a soft body of this world, which particle_positions reads");
+            self.refuse("ref_unresolved", join(p, "from"), from, what);
+            return None;
+        };
+        if let Some(part) = part.filter(|a| *a != "pins" && !s.addresses.iter().any(|x| x == a)) {
+            let what = format!("{part:?} is no particle address of soft body {id}, nor pins");
+            self.refuse("ref_unresolved", join(p, "from"), from, what);
+            return None;
+        }
+        let to = o.get("to").unwrap_or(&Value::Null);
+        let skin = match to {
+            Value::Object(t) => {
+                let tp = join(p, "to");
+                let t = &self.obj(&Value::Object(t.clone()), &tp, &["skin"]);
+                let sp = join(&tp, "skin");
+                let k = &self.obj(
+                    t.get("skin").unwrap_or(&Value::Null),
+                    &sp,
+                    &["item", "material"],
+                );
+                let item = self.text(k, "item", &sp).filter(|i| i != "auto");
+                let skin = Skin {
+                    item,
+                    material: self.text(k, "material", &sp),
+                };
+                if read != Read::ParticlePositions || part.is_some() {
+                    let what = "a skin draws a whole soft body's particle_positions".to_string();
+                    self.refuse("out_of_range", sp, to, what);
+                    return None;
+                }
+                Some(skin)
+            }
+            _ => None,
+        };
+        Some(Output {
+            from: name.into(),
+            read,
+            to: if skin.is_some() {
+                None
+            } else {
+                self.text(o, "to", p)
+            },
+            hold,
+            skin,
         })
     }
 }

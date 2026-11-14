@@ -281,6 +281,8 @@ pub struct World {
     pub outputs: BTreeMap<String, Output>,
     /// The inputs it declares (#522).
     pub inputs: BTreeMap<String, Input>,
+    /// Its soft bodies (#524).
+    pub soft: BTreeMap<String, Soft>,
     /// In kinematic mode, what sets each driven joint's coordinate (#1918).
     pub solve: Option<Solve>,
 }
@@ -288,9 +290,11 @@ pub struct World {
 mod heightfield;
 mod inputs;
 mod reads;
+mod soft;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
-pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
+pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
+pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -318,6 +322,7 @@ const WORLD_KEYS: &[&str] = &[
     "inputs",
     "outputs",
     "solve",
+    "soft",
 ];
 const RULES: &[(&str, Rule)] = &[
     ("geometric", Rule::Geometric),
@@ -676,9 +681,10 @@ impl Reader {
         }
         let solve = self.solve(m, mode == Mode::Kinematic, &joints);
         let inputs = self.inputs(m, &bodies);
+        let soft = self.softs(m, &bodies, &materials, &groups);
         let mut outputs = BTreeMap::new();
         for (id, v) in self.map(m, "outputs") {
-            if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies, &joints) {
+            if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies, &joints, &soft) {
                 outputs.insert(id.clone(), o);
             }
         }
@@ -704,6 +710,7 @@ impl Reader {
             forces,
             outputs,
             inputs,
+            soft,
             solve,
         }
     }
@@ -725,35 +732,6 @@ impl Reader {
                 Vec::new()
             }
         }
-    }
-
-    fn capacity(&mut self, m: &Map<String, Value>) -> BTreeMap<String, u64> {
-        const KEYS: [&str; 5] = ["bodies", "shapes", "joints", "contacts", "particles"];
-        let Some(v) = m.get("capacity") else {
-            self.refuse(
-                "physics.missing_field",
-                "capacity".into(),
-                &Value::Null,
-                "capacity is required: {bodies, shapes, joints, contacts, particles}".into(),
-            );
-            return BTreeMap::new();
-        };
-        let c = &self.obj(v, "capacity", &KEYS);
-        let mut out = BTreeMap::new();
-        for k in KEYS {
-            match c.get(k).and_then(Value::as_u64) {
-                Some(n) if n <= u32::MAX as u64 => {
-                    out.insert(k.to_string(), n);
-                }
-                _ => self.refuse(
-                    "out_of_range",
-                    format!("capacity/{k}"),
-                    c.get(k).unwrap_or(&Value::Null),
-                    format!("capacity/{k} must be a whole number up to {}", u32::MAX),
-                ),
-            }
-        }
-        out
     }
 
     fn solver(&mut self, v: &Value) -> Solver {

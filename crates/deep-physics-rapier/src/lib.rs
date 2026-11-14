@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Hit, Input, Query, ShapeRef, State, Targets,
+    Backend, BodyState, Canonical, Checkpoint, Held, Hit, Input, Query, ShapeRef, State, Targets,
 };
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -32,12 +32,15 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 }
 
 pub mod bound;
+pub mod channels;
 pub mod fp;
 mod inputs;
 mod occurrences;
 pub mod planted;
 pub mod runner;
 pub mod scene;
+mod soft;
+pub mod source;
 
 /// #1919 criterion 1's test backend (`test-count-calls`): each backend-interface call this process
 /// made, by method, `query`'s by kind (`query.ray`), which `backend_calls` answers.
@@ -126,6 +129,11 @@ pub struct Rapier {
     /// warm-start impulse.
     grabs: BTreeMap<String, inputs::Grab>,
     cold: bool,
+    /// #524: its soft bodies' particles by name, the most particles its capacity holds, and the
+    /// steps between its checkpoints.
+    soft: soft::Softs,
+    particle_capacity: u64,
+    checkpoint_every: u64,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -843,6 +851,9 @@ impl Backend for Rapier {
         for (id, j) in &w.joints {
             self.joint(&handles, id, j, &mut out);
         }
+        self.soft.build(w, &mut self.world, &handles);
+        self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
+        self.checkpoint_every = w.checkpoint_every;
         self.forces = w.forces.values().cloned().collect();
         if out.is_empty() {
             Ok(())
@@ -858,18 +869,31 @@ impl Backend for Rapier {
         self.aim(targets);
         self.push();
         self.pull();
+        let (particles, quarantined) = (
+            self.soft.particles(&self.world),
+            self.soft.quarantined(&self.world),
+        );
+        let warm = self.world.integration_parameters.warmstart_coefficient;
         if std::mem::take(&mut self.cold) {
-            let warm = self.world.integration_parameters.warmstart_coefficient;
             self.world.integration_parameters.warmstart_coefficient = 0.0;
-            self.world.step();
-            self.world.integration_parameters.warmstart_coefficient = warm;
-        } else {
-            self.world.step();
         }
+        let torn = self.soft.step(&mut self.world);
+        self.world.integration_parameters.warmstart_coefficient = warm;
         self.step += 1;
         self.last = self.gather(&before);
         let broken = self.breaks();
         self.last.extend(broken);
+        self.last.extend(torn);
+        let faults = self.soft_faults(particles, &quarantined);
+        self.last.extend(faults);
+        // #524: a world with soft bodies continues from its own checkpoint at every checkpoint's
+        // step, since the engine's checkpoint leaves out caches its soft contacts keep; so a run
+        // and a seek from any checkpoint pass through the same states.
+        if self.soft.has_any() && self.step.is_multiple_of(self.checkpoint_every.max(1)) {
+            let (last, cp) = (std::mem::take(&mut self.last), self.checkpoint());
+            self.restore(&cp)?;
+            self.last = last;
+        }
         Ok(())
     }
 
@@ -913,6 +937,7 @@ impl Backend for Rapier {
         State {
             step: self.step,
             bodies,
+            soft: self.soft.read(&self.world),
         }
     }
 
@@ -925,12 +950,22 @@ impl Backend for Rapier {
                 let (p, q, v, w) = (rb.translation(), rb.rotation(), rb.linvel(), rb.angvel());
                 Canonical {
                     id: id.clone(),
-                    values: [
+                    values: vec![
                         p.x, p.y, p.z, q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z,
                     ],
                 }
             })
+            .chain(self.soft.canonical(&self.world))
             .collect()
+    }
+
+    fn held(&self) -> Held {
+        let (rigid_bodies, joints) = self.rigid_held();
+        Held {
+            rigid_bodies,
+            joints,
+            soft: self.soft.held(&self.world),
+        }
     }
 
     fn checkpoint(&self) -> Checkpoint {
@@ -942,6 +977,7 @@ impl Backend for Rapier {
             step: self.step,
             state: [
                 bincode::serialize(&self.world).expect("a Rapier world serializes"),
+                self.soft.bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -976,6 +1012,7 @@ impl Backend for Rapier {
             ))
         })?;
         self.world = world;
+        let rest = self.soft.restore(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();

@@ -6,20 +6,21 @@
 use deep_canvas::canon::sha256_hex;
 use serde_json::{json, Value};
 
-use crate::backend::{Canonical, FIELDS};
+use crate::backend::Canonical;
 
 /// A u64 hash as 16 hex: the first 8 bytes of the SHA-256 of `bytes`.
 fn h64(bytes: &[u8]) -> String {
     sha256_hex(bytes)[..16].to_string()
 }
 
-/// The step hash of a state: each body's ID, then its pose and velocity, by bits.
+/// The step hash of a state: each body's ID, then its pose and velocity, by bits; then each
+/// soft body's particles, their positions and velocities (#524).
 pub fn step_hash(state: &[Canonical]) -> String {
     let mut bytes = Vec::new();
     for b in state {
         bytes.extend_from_slice(&(b.id.len() as u64).to_le_bytes());
         bytes.extend_from_slice(b.id.as_bytes());
-        for v in b.values {
+        for v in &b.values {
             bytes.extend_from_slice(&v.to_bits().to_le_bytes());
         }
     }
@@ -49,10 +50,11 @@ pub fn ulp_distance(a: f32, b: f32) -> u64 {
 /// one world's, so their bodies are the same IDs in the same order.
 pub fn first_field(recorded: &[Canonical], mine: &[Canonical]) -> Option<Value> {
     recorded.iter().zip(mine).find_map(|(a, b)| {
-        let i = (0..FIELDS.len()).find(|&i| a.values[i].to_bits() != b.values[i].to_bits())?;
-        let (x, y) = (a.values[i], b.values[i]);
+        let i = (0..a.values.len())
+            .find(|&i| b.values.get(i).map(|y| y.to_bits()) != Some(a.values[i].to_bits()))?;
+        let (x, y) = (a.values[i], b.values.get(i).copied().unwrap_or(f32::NAN));
         Some(
-            json!({"id": a.id, "field": FIELDS[i], "values": [f64::from(x), f64::from(y)],
+            json!({"id": a.id, "field": a.fields()[i], "values": [f64::from(x), f64::from(y)],
                     "ulp_distance": ulp_distance(x, y)}),
         )
     })
