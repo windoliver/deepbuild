@@ -180,7 +180,7 @@
       }
     },
     "motion@1": {
-      "digest": "d81abbf088e7c6a563940c0cf9f8adce5874f9d0342e2c19fb05b8094f41b7c8",
+      "digest": "10f4b3a24c7b4425b80cd6fd0c84ffcfd43f91af29634a2e58d39ab963cb94c4",
       "reference": "motion",
       "kit": [
         "fixtures",
