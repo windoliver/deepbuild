@@ -58,6 +58,11 @@
       "file": "logic.md",
       "name": "logic",
       "title": "Logic: work across steps, and rolls keyed by the action"
+    },
+    {
+      "file": "patches.md",
+      "name": "patches",
+      "title": "Patches: the envelope, paths, base, and every op with an example"
     }
   ]
 }

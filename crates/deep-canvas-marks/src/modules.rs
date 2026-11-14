@@ -139,17 +139,26 @@ pub fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
         return item;
     };
     let mut placed = at.to_json();
-    if let (Some(own), Some(out)) = (fields.lowered.get("at"), placed.as_object_mut()) {
+    let own = fields.lowered.get("at");
+    if let Some(out) = placed.as_object_mut() {
         for k in ["place", "align", "anchor"] {
-            if let Some(v) = own.get(k) {
-                let mut v = v.clone();
-                if let Some(e) = edited.as_ref().and_then(|e| e.get(k)) {
-                    overlay(&mut v, e);
+            let edit = edited.as_ref().and_then(|e| e.get(k));
+            let v = match (own.and_then(|o| o.get(k)), edit) {
+                (Some(v), edit) => {
+                    let mut v = v.clone();
+                    if let Some(e) = edit {
+                        overlay(&mut v, e);
+                    }
+                    v
                 }
-                out.insert(k.into(), v);
-            }
+                // #1969: an anchor a channel keys on an item that names none (a `type` cue's
+                // cursor).
+                (None, Some(e)) if k == "anchor" => e.clone(),
+                (None, _) => continue,
+            };
+            out.insert(k.into(), v);
         }
-        if let Some(p) = own.get("pivot").filter(|p| p.is_string()) {
+        if let Some(p) = own.and_then(|o| o.get("pivot")).filter(|p| p.is_string()) {
             out.insert("pivot".into(), p.clone());
         }
     }
