@@ -888,3 +888,58 @@ impl Waterer {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::tests::{orbiting_camera, played, stamped};
+
+    /// Canvas primitives, Frame budget: the water's parts bind what the first frame made. Its
+    /// uniform, its path and its bind groups hold while the targets they bind do.
+    #[test]
+    fn a_frame_after_the_first_makes_no_buffer_and_no_bind_group() {
+        let (cam, channels) = orbiting_camera();
+        let doc = stamped(
+            &[
+                ("cam", cam),
+                (
+                    "sky",
+                    json!({"kind": "sky@1", "params": {"top": [0.15, 0.3, 0.75, 1], "low": [0.45, 0.6, 0.85, 1], "ambient_top": [0.25, 0.25, 0.25], "ambient_low": [0.1, 0.1, 0.1]}}),
+                ),
+                (
+                    "sun",
+                    json!({"kind": "light.sun@1", "params": {"illuminance": 3, "color": [1, 1, 1], "shadow": false}, "at": {"rot": [-45, 30, 0]}}),
+                ),
+                (
+                    "lake_mat",
+                    json!({"kind": "material@1", "params": {"base_color": [0.1, 0.3, 0.4, 1], "roughness": 0.05, "water": {}}}),
+                ),
+                (
+                    "box_mat",
+                    json!({"kind": "material@1", "params": {"base_color": [0.7, 0.45, 0.3, 1], "roughness": 0.6}}),
+                ),
+                (
+                    "lake",
+                    json!({"kind": "plate@1", "params": {"grid": [16, 16], "size": [40, 40]}, "at": {"pos": [0, 0, 0]}, "material": "lake_mat"}),
+                ),
+                (
+                    "box",
+                    json!({"kind": "mark.box@1", "params": {"size": [0.7, 0.7, 0.7]}, "at": {"pos": [3, 0.35, 0]}, "material": "box_mat"}),
+                ),
+            ],
+            channels,
+        );
+        let frames = played(&doc, None, |_, scene| {
+            assert!(scene.water.is_some(), "the lake is water");
+        });
+        for (n, made) in frames.iter().enumerate() {
+            assert_eq!(
+                (made.buffers, made.bind_groups),
+                (0, 0),
+                "frame {}: buffers and bind groups made",
+                n + 1
+            );
+        }
+    }
+}

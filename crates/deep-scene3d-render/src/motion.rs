@@ -731,3 +731,46 @@ impl Frame {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::tests::{orbiting_camera, played, stamped};
+
+    /// Motion blur by velocity (#419) and the core's velocity target (#431) bind what the first
+    /// frame made: their uniforms and instances are written where they change.
+    #[test]
+    fn a_frame_after_the_first_makes_no_buffer_and_no_bind_group() {
+        let (cam, channels) = orbiting_camera();
+        let doc = stamped(
+            &[
+                ("cam", cam),
+                (
+                    "box",
+                    json!({"kind": "mark.box@1", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 0.5, 0]}}),
+                ),
+            ],
+            channels,
+        );
+        for (what, blur, target) in [
+            ("motion blur", true, false),
+            ("the velocity target", false, true),
+        ] {
+            let frames = played(&doc, None, |renderer, scene| {
+                if blur {
+                    scene.motion = Some(std::sync::Arc::new(crate::still_motion(scene)));
+                }
+                renderer.core.want.velocity = target;
+            });
+            for (n, made) in frames.iter().enumerate() {
+                assert_eq!(
+                    (made.buffers, made.bind_groups),
+                    (0, 0),
+                    "{what}, frame {}: buffers and bind groups made",
+                    n + 1
+                );
+            }
+        }
+    }
+}

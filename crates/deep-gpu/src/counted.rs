@@ -352,3 +352,60 @@ impl Queue {
         self.raw.write_texture(texture, data, layout, size);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::device::{Backend, Gpu};
+
+    /// wgpu stages every queue write in a buffer of its own, so a uniform's changed words go up
+    /// in one write where at most a row of unchanged words sits between them: a matrix whose
+    /// zeros hold, a vector whose fourth word does, a row a camera's turn leaves alone.
+    #[test]
+    fn changed_words_within_a_row_of_each_other_go_up_in_one_write() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test uniform"),
+            size: 128,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let written = Written::default();
+        // 32 words; `bump` changes one of them.
+        let mut data = [0u8; 128];
+        let bump = |data: &mut [u8; 128], word: usize| data[word * 4] += 1;
+        let write = |data: &[u8; 128]| {
+            let before = device.device.counts().read();
+            device.queue.write_changed(&buffer, &written, data);
+            let made = device.device.counts().read().since(before);
+            (made.writes, made.uploaded)
+        };
+        assert_eq!(write(&data), (1, 128), "the first write is whole");
+        assert_eq!(write(&data), (0, 0), "nothing changed");
+        // Words 0 to 2 and 4 to 6 of two rows, each row's fourth word held; then word 11, a
+        // whole row (words 7 to 10) further on.
+        for word in [0, 1, 2, 4, 5, 6, 11] {
+            bump(&mut data, word);
+        }
+        assert_eq!(
+            write(&data),
+            (1, 48),
+            "words 0 to 11, the held ones among them"
+        );
+        // Word 17 sits five unchanged words past word 11: more than a row, so a write of its own.
+        for word in [11, 17] {
+            bump(&mut data, word);
+        }
+        assert_eq!(write(&data), (2, 8), "words 11 and 17, each alone");
+        // The held words between two changed ones went up as they were: a change to one of them
+        // is still seen, and one changed back is written back.
+        bump(&mut data, 3);
+        assert_eq!(write(&data), (1, 4), "word 3 alone");
+        data[12] = 0;
+        bump(&mut data, 31);
+        assert_eq!(write(&data), (2, 8), "word 3 back, and the last word");
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
+}
