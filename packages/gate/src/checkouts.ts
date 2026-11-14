@@ -7,7 +7,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { constants, existsSync, lstatSync, readFileSync } from 'node:fs';
-import { appendFile, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, link, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { connect } from 'node:net';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
@@ -274,7 +274,11 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
     try {
       const index = join(dir, 'index');
       const store = o.plant === 'snapshot-into-repo' ? {} : await repoEnv(worktree);
-      const env = { ...store, ...(o.plant === 'snapshot-through-index' ? {} : { GIT_INDEX_FILE: index }) };
+      // Read the tree into temporary objects, with only the repo as an alternate: git add/write-tree freshen even
+      // existing objects, so writing straight into our store would change it on an unchanged claim (#2078).
+      const pending = join(dir, 'objects');
+      await mkdir(pending);
+      const env = { ...store, ...(o.plant === 'snapshot-into-repo' ? {} : { GIT_OBJECT_DIRECTORY: pending }), ...(o.plant === 'snapshot-through-index' ? {} : { GIT_INDEX_FILE: index }) };
       if (existsSync(join(gitDir, 'index'))) {
         await writeFile(index, await readFile(join(gitDir, 'index')));
         // The copy keeps the index's time: git reads a file edited in that second by its bytes only by comparing the two.
@@ -300,11 +304,18 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
       const date = o.plant === 'stamps-time' ? new Date().toISOString() : FIXED_DATE;
       const commit = await git(worktree, ['commit-tree', tree, '-p', head, '-m', 'deep snapshot'], { ...env, ...FIXED, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
       if (o.plant === 'snapshot-into-repo') return { commit, wrote: true, tree };
-      const known = await refOf(commit);
-      // Written again: its 30 days start over, so a new claim on old bytes never loses its snapshot.
-      if (known) await inStore(['update-ref', '-d', known]);
+      if (await refOf(commit)) return { commit, wrote: false, tree };
+      // Publish complete objects only for a new snapshot. A link is atomic and never rewrites an existing object;
+      // the temporary objects are on the store's filesystem and lose their temporary names in finally.
+      for (const prefix of await readdir(pending)) {
+        await mkdir(join(objects, prefix), { recursive: true });
+        for (const name of await readdir(join(pending, prefix))) {
+          await link(join(pending, prefix, name), join(objects, prefix, name)).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== 'EEXIST') throw error;
+          });
+        }
+      }
       await inStore(['update-ref', `${SNAPSHOTS}${Math.floor(o.now())}/${commit}`, commit]);
-      if (known) return { commit, wrote: false, tree };
       return { commit, wrote: true, tree };
     } finally {
       await rm(dir, { recursive: true, force: true });

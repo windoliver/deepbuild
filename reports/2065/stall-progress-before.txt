@@ -1,0 +1,80 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ × packages/hub/test/stall-progress.test.ts > free text fund does not reset a persisted stall 366ms
+   → no option was selected, so the task is still stalled: expected 'send back' to be undefined
+ × packages/hub/test/stall-progress.test.ts > concurrent send-backs on one task advance distinct rounds 249ms
+   → neither stop overwrites the other round: expected [ 1, 1 ] to deeply equal [ 1, 2 ]
+ × packages/hub/test/stall-progress.test.ts > an old funded ask does not hide the missing ask of a later stalled episode 349ms
+   → the later stalled episode reaches the person: expected [ { v: 5, …(9) } ] to have a length of 2 but got 1
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/stall-progress.test.ts > free text fund does not reset a persisted stall
+AssertionError: no option was selected, so the task is still stalled: expected 'send back' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"send back"
+
+ ❯ packages/hub/test/stall-progress.test.ts:62:127
+     60|   await w.asks.answer({ ...w.core, writer: 'app' }, ask, { words: 'fun…
+     61|   w.judging.lastMessage.set('S1', 'Still open:\n- A dropped connection…
+     62|   expect(await w.judging.stallGate(w.meta('S1'), claim, 'send back'), …
+       |                                                                                                                               ^
+     63|   expect(await w.record.read({ after: 0, kinds: ['claim.sent_back'] })…
+     64| }));
+ ❯ world packages/hub/test/stall-progress.test.ts:18:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/hub/test/stall-progress.test.ts > concurrent send-backs on one task advance distinct rounds
+AssertionError: neither stop overwrites the other round: expected [ 1, 1 ] to deeply equal [ 1, 2 ]
+
+- Expected
++ Received
+
+  [
+    1,
+-   2,
++   1,
+  ]
+
+ ❯ packages/hub/test/stall-progress.test.ts:71:166
+     69|   w.judging.lastMessage.set('S2', 'Still open:\n- A dropped connection…
+     70|   await Promise.all([w.judging.stallGate(w.meta('S1'), a, 'send back')…
+     71|   expect((await w.record.read({ after: 0, kinds: ['claim.sent_back'] }…
+       |                                                                                                                                                                      ^
+     72| }));
+     73|
+ ❯ world packages/hub/test/stall-progress.test.ts:18:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  packages/hub/test/stall-progress.test.ts > an old funded ask does not hide the missing ask of a later stalled episode
+AssertionError: the later stalled episode reaches the person: expected [ { v: 5, …(9) } ] to have a length of 2 but got 1
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ packages/hub/test/stall-progress.test.ts:83:117
+     81|   w.judging.lastMessage.set('S1', 'Still open:\n- A dropped connection…
+     82|   await w.judging.stallGate(w.meta('S1'), later, 'send back');
+     83|   expect(await w.record.read({ after: 0, kinds: ['ask.created'] }), 't…
+       |                                                                                                                     ^
+     84|   await w.judging.stallGate(w.meta('S1'), later, 'send back');
+     85|   expect(await w.record.read({ after: 0, kinds: ['ask.created'] }), 't…
+ ❯ world packages/hub/test/stall-progress.test.ts:18:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  11:45:20
+   Duration  8.09s (transform 60%, tests 27%, import 13%)
