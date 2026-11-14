@@ -3,6 +3,7 @@ import type { StateSource } from '@deepbuild/conformance';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Connection, EventInput, RecordStore } from '@deepbuild/record';
 import type { StatePin } from './gate-runner.js';
+import type { IntakeDeps, IntakeService } from './intake-port.js';
 import type { Plant } from './plant.js';
 
 type Obj = Record<string, unknown>;
@@ -53,4 +54,6 @@ export interface WorkspaceService {
 export interface WorkspacesProvider {
   create(options: WorkspaceDeps): WorkspaceService;
   renamedSince(folder: string, base: string, path: string): Promise<string | undefined>;
+  /** The one input (#1342): your words to one brief's card, and its yes to a running project. */
+  intake(options: IntakeDeps): IntakeService;
 }

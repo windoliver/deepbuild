@@ -151,6 +151,11 @@ impl WordsBox {
                         ask: reply["ask"].as_str().unwrap_or_default().to_owned(),
                         question: reply["question"].as_str().unwrap_or_default().to_owned(),
                     },
+                    // Words for a new project (#1342): its brief is being worked out, and its card comes to Needs you.
+                    Ok(reply) if reply["state"] == "working" => Said::Unread(format!(
+                        "Working on it: {}. Its card comes to Needs you when it's ready.",
+                        reply["heading"].as_str().unwrap_or_default()
+                    )),
                     Ok(reply) => Said::Unread(
                         reply["unread"]
                             .as_str()

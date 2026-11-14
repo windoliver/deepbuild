@@ -16,6 +16,7 @@ import { Kinds } from './kinds.js';
 import { pageClaims, type IndexFill } from './search.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf } from './wiki-build.js';
 import type { CoreOptions } from './wire.js';
+import { Intake } from './intake.js';
 import { Workspaces } from './workspaces.js';
 
 /** Synchronous construction; started() still waits for the original ordered asynchronous initialization. */
@@ -57,7 +58,7 @@ export function createCore(
       },
     },
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
-    workspaces: { create: (o) => new Workspaces(o), renamedSince },
+    workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
   };
   return new Core(options, emit, providers, asking, acking, scrubbing);
 }

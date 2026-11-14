@@ -1,0 +1,403 @@
+{
+  "title": "brief.drafted@1",
+  "description": "A brief's card (#1342): the research job's answer held to what its sources say, with no model, and the authority ask that carries it. Only the core appends it.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-tracking": "#1342",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "brief.drafted"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The brief's key.",
+          "maxLength": 8192
+        },
+        "ask": {
+          "type": "string",
+          "pattern": "^ask:[0-9A-HJKMNP-TV-Z]{26}$",
+          "description": "The card: the authority ask your yes answers.",
+          "maxLength": 8192
+        },
+        "heading": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "Its heading, from your first words."
+        },
+        "brief": {
+          "type": "object",
+          "properties": {
+            "makes": {
+              "type": "string",
+              "enum": [
+                "document",
+                "deck",
+                "film",
+                "plan",
+                "budget",
+                "report",
+                "site",
+                "game",
+                "app"
+              ],
+              "description": "What it makes, read from your words.",
+              "x-closure": {
+                "closed": "the results a brief makes, each with its home: a site, game or app is software",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "software": {
+              "type": "boolean",
+              "description": "True when it makes software, so its home is a private repo."
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The line's id."
+                  },
+                  "field": {
+                    "type": "string",
+                    "enum": [
+                      "makes",
+                      "for",
+                      "holds",
+                      "leaves_out",
+                      "proves",
+                      "goes",
+                      "fact"
+                    ],
+                    "description": "Its field: one of the brief's six, or fact, a source's own text that adds nothing.",
+                    "x-closure": {
+                      "closed": "a brief has six fields, and a fact is a source's text",
+                      "reopens": "a new major of this schema",
+                      "mark": "exhaustive"
+                    }
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The line, in plain words."
+                  },
+                  "cites": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8192,
+                          "description": "words for your words, else a link or a file's path as you gave it."
+                        },
+                        "quote": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 8192,
+                          "description": "The exact words at that source."
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "quote"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Its sources: each named as you gave it, and the exact words there."
+                  },
+                  "default": {
+                    "type": "boolean",
+                    "description": "True for a strong default you didn't choose, with no source."
+                  }
+                },
+                "required": [
+                  "id",
+                  "field",
+                  "text",
+                  "cites"
+                ],
+                "additionalProperties": false
+              },
+              "description": "The brief, a line each."
+            },
+            "promises": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "line": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The line it promises."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "document",
+                      "data",
+                      "message",
+                      "money",
+                      "code",
+                      "taste"
+                    ],
+                    "description": "The kind of check, or taste for a taste call.",
+                    "x-closure": {
+                      "closed": "the kinds of check work beyond code needs, and the taste call",
+                      "reopens": "a new major of this schema",
+                      "mark": "exhaustive"
+                    }
+                  },
+                  "recommended": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "A taste call's recommended answer."
+                  }
+                },
+                "required": [
+                  "line",
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Each promise, mapped to the kind of check that proves it, or a taste call."
+            },
+            "tasks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "The task's title."
+                  },
+                  "serves": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "A line's id."
+                    },
+                    "description": "The lines it serves."
+                  },
+                  "criteria": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "A criterion."
+                    },
+                    "description": "What shows it done."
+                  },
+                  "blocked_by": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8192,
+                      "description": "A task's title."
+                    },
+                    "description": "The tasks it waits on, by title."
+                  }
+                },
+                "required": [
+                  "title",
+                  "serves",
+                  "criteria",
+                  "blocked_by"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Its tasks, each tracing to lines of the brief."
+            },
+            "left_out": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "The task's title."
+                  },
+                  "why": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "Why it was left out."
+                  }
+                },
+                "required": [
+                  "title",
+                  "why"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Each task left out, and why."
+            },
+            "held": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "does": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "description": "What it does."
+                  },
+                  "usd": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Its price, in US dollars."
+                  },
+                  "due": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192,
+                    "description": "When it's due, as an ISO time, or null for when the run starts."
+                  },
+                  "at": {
+                    "type": "string",
+                    "maxLength": 8192,
+                    "description": "Where it buys, books, posts or sends."
+                  }
+                },
+                "required": [
+                  "does",
+                  "usd",
+                  "due",
+                  "at"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Each step that buys, books, posts or sends: never in the card's plan, asked once when it's due."
+            },
+            "fits": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192,
+              "description": "A project of yours it fits, by its id, offered as the other answer; or null."
+            },
+            "every": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^(day|week|month|year)$",
+              "description": "How often it repeats, or null for once.",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "makes",
+            "software",
+            "lines",
+            "promises",
+            "tasks",
+            "left_out",
+            "held",
+            "fits",
+            "every"
+          ],
+          "additionalProperties": false,
+          "description": "The brief the card carries."
+        }
+      },
+      "required": [
+        "key",
+        "ask",
+        "heading",
+        "brief"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -73,6 +73,8 @@ export interface WorkOptions {
   plant: Plant | undefined;
   /** The workspaces a run's folder may be (#1347), and a workspace task's change judged on its merge with main. */
   spaces(): Pick<WorkspaceService, 'idAt' | 'tasksOf' | 'finished'>;
+  /** Each pass's turn for the briefs (#1342). */
+  due?(): Promise<void>;
   judgeTask(r: { folder: string; item: WorkItem; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined>;
 }
 
@@ -118,6 +120,13 @@ export class Work {
     const { ask } = await this.o.starts().approve({ repo: params.repo, ...bounds, lands: typeof params.repo === 'string' && this.o.spaces().idAt(params.repo) ? 'workspace' : true }, caller);
     await this.o.appendCore('work.run', { ask, step: 'asked', scope: words.slice(0, 2000) }, { subject: ask });
     return { ask, bounds };
+  }
+  /** A run your yes on a brief's card approved (#1342): the same bounds and record, under that card's ask, with no ask of its own. */
+  async under(ask: string, folder: string, words: string): Promise<void> {
+    const bounds = scopeOf(words, this.o.now());
+    if (typeof bounds === 'string') throw Error(bounds);
+    await this.o.starts().approved(ask, { repo: folder, ...bounds, lands: this.o.spaces().idAt(folder) ? 'workspace' : true });
+    await this.o.appendCore('work.run', { ask, step: 'asked', scope: words.slice(0, 2000) }, { subject: ask });
   }
   /** `deep work pause`: no new starts, and running turns finish. */
   async pause(params: Obj): Promise<{ paused: string[] }> {
@@ -362,6 +371,8 @@ export class Work {
   private pass(): Promise<void> {
     this.passing ??= (async () => {
       for (const r of await this.runs()) await this.passRun(r).catch((error: unknown) => process.stderr.write(`deep hub: work run ${r.ask}: ${error instanceof Error ? error.message : String(error)}\n`));
+      // Briefs (#1342): one a restart left half done carries on, and a held step that is due asks.
+      await this.o.due?.().catch((error: unknown) => process.stderr.write(`deep hub: briefs: ${error instanceof Error ? error.message : String(error)}\n`));
     })().finally(() => { this.passing = undefined; });
     return this.passing;
   }

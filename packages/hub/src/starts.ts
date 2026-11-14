@@ -165,39 +165,8 @@ export class Starts {
     if (caller.role !== 'cli') throw new Refused(refusal('role', '/method', 'Ask for a run from your own terminal, with deep start approve.', 'start.approve'));
     const agent = await this.o.agentAbove(caller.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was asked: this deep command runs inside agent session ${agent}'s process tree, and no session asks for a run of its own. Ask from your own terminal.`, 'start.approve'));
-    const repo = await this.repoOf(params.repo);
-    const list = (v: unknown, at: string): string[] => {
-      if (!Array.isArray(v) || !v.length || !v.every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as a list of names.`, v));
-      return v as string[];
-    };
-    const map = (v: unknown, at: string): Record<string, string> => {
-      if (v === undefined) return {};
-      if (!isObj(v) || !Object.values(v).every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as agent=value pairs.`, v));
-      return v as Record<string, string>;
-    };
-    const issues = Array.isArray(params.issues) && params.issues.length && params.issues.every((n) => Number.isSafeInteger(n) && (n as number) > 0) ? params.issues as number[] : undefined;
-    if (!issues) throw new Refused(refusal('type', '/params/issues', 'Name the set: one or more issue numbers.', params.issues));
-    const agents = list(params.agents, '/params/agents');
-    for (const a of agents) if (!this.launchOf(a)) throw new Refused(refusal('enum', '/params/agents', `${a} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, a));
-    const homes = map(params.homes, '/params/homes');
-    const modes = map(params.modes, '/params/modes');
-    for (const [a, m] of Object.entries(modes)) if (!isObj(this.launchOf(a)?.modes) || !(m in (this.launchOf(a)!.modes as Obj))) throw new Refused(refusal('enum', '/params/modes', `${a} has no mode ${m}: its facts name ${Object.keys((this.launchOf(a)?.modes ?? {}) as Obj).join(', ')}.`, m));
-    const at_once = params.at_once;
-    if (!Number.isSafeInteger(at_once) || (at_once as number) < 1 || (at_once as number) > 1000) throw new Refused(refusal('type', '/params/at_once', 'Say how many may run at once: 1 to 1000.', at_once));
-    const plan_share = params.plan_share;
-    if (typeof plan_share !== 'number' || !(plan_share >= 0 && plan_share <= 100)) throw new Refused(refusal('type', '/params/plan_share', 'Give the plan share as a percent, 0 to 100.', plan_share));
-    const until = params.until === undefined || params.until === null ? null : params.until;
-    if (until !== null && (!Number.isSafeInteger(until) || (until as number) <= this.o.now())) throw new Refused(refusal('type', '/params/until', 'Give its end as a time still to come.', until));
-    const hosts = params.hosts === undefined ? [] : list(params.hosts, '/params/hosts');
-    const bounds = { repo, issues, agents, homes, modes, at_once: at_once as number, plan_share, until: until as number | null, hosts };
-    // What each agent's own sandbox holds at the version installed now, so the ask shows it.
-    const sandbox: Record<string, Sandbox> = {};
-    const versions: Record<string, string> = {};
-    for (const a of agents) {
-      const v = await this.versionOf(a).catch(() => undefined);
-      if (v) versions[a] = v.version;
-      sandbox[a] = v ? this.sandboxOf(a, v.version).sandbox : NONE;
-    }
+    const { bounds, sandbox, versions } = await this.drafted(params);
+    const { repo, issues, agents, homes, modes, at_once, plan_share, until, hosts } = bounds;
     const now = this.o.now();
     const key = sha256Hex(canonicalize({ start: bounds } as unknown as JsonValue));
     const held = (a: string): string => {
@@ -233,6 +202,49 @@ export class Starts {
     });
     await this.o.appendCore('start.approval', { ask, ...bounds, sandbox }, { subject: ask });
     return { ask };
+  }
+
+  /** A run's bounds from its params, refused where one is out of range, with what each agent's own sandbox holds at the version installed now. */
+  private async drafted(params: Obj): Promise<{ bounds: { repo: string; issues: number[]; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }; sandbox: Record<string, Sandbox>; versions: Record<string, string> }> {
+    const repo = await this.repoOf(params.repo);
+    const list = (v: unknown, at: string): string[] => {
+      if (!Array.isArray(v) || !v.length || !v.every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as a list of names.`, v));
+      return v as string[];
+    };
+    const map = (v: unknown, at: string): Record<string, string> => {
+      if (v === undefined) return {};
+      if (!isObj(v) || !Object.values(v).every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as agent=value pairs.`, v));
+      return v as Record<string, string>;
+    };
+    const issues = Array.isArray(params.issues) && params.issues.length && params.issues.every((n) => Number.isSafeInteger(n) && (n as number) > 0) ? params.issues as number[] : undefined;
+    if (!issues) throw new Refused(refusal('type', '/params/issues', 'Name the set: one or more issue numbers.', params.issues));
+    const agents = list(params.agents, '/params/agents');
+    for (const a of agents) if (!this.launchOf(a)) throw new Refused(refusal('enum', '/params/agents', `${a} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, a));
+    const homes = map(params.homes, '/params/homes');
+    const modes = map(params.modes, '/params/modes');
+    for (const [a, m] of Object.entries(modes)) if (!isObj(this.launchOf(a)?.modes) || !(m in (this.launchOf(a)!.modes as Obj))) throw new Refused(refusal('enum', '/params/modes', `${a} has no mode ${m}: its facts name ${Object.keys((this.launchOf(a)?.modes ?? {}) as Obj).join(', ')}.`, m));
+    const at_once = params.at_once;
+    if (!Number.isSafeInteger(at_once) || (at_once as number) < 1 || (at_once as number) > 1000) throw new Refused(refusal('type', '/params/at_once', 'Say how many may run at once: 1 to 1000.', at_once));
+    const plan_share = params.plan_share;
+    if (typeof plan_share !== 'number' || !(plan_share >= 0 && plan_share <= 100)) throw new Refused(refusal('type', '/params/plan_share', 'Give the plan share as a percent, 0 to 100.', plan_share));
+    const until = params.until === undefined || params.until === null ? null : params.until;
+    if (until !== null && (!Number.isSafeInteger(until) || (until as number) <= this.o.now())) throw new Refused(refusal('type', '/params/until', 'Give its end as a time still to come.', until));
+    const hosts = params.hosts === undefined ? [] : list(params.hosts, '/params/hosts');
+    const bounds = { repo, issues, agents, homes, modes, at_once: at_once as number, plan_share, until: until as number | null, hosts };
+    // What each agent's own sandbox holds at the version installed now, so the ask shows it.
+    const sandbox: Record<string, Sandbox> = {};
+    const versions: Record<string, string> = {};
+    for (const a of agents) {
+      const v = await this.versionOf(a).catch(() => undefined);
+      if (v) versions[a] = v.version;
+      sandbox[a] = v ? this.sandboxOf(a, v.version).sandbox : NONE;
+    }
+    return { bounds, sandbox, versions };
+  }
+  /** A run your yes on another card already approved (#1342's brief): its bounds recorded under that card's ask, with no ask of its own. */
+  async approved(ask: string, params: Obj): Promise<void> {
+    const { bounds, sandbox } = await this.drafted(params);
+    await this.o.appendCore('start.approval', { ask, ...bounds, sandbox }, { subject: ask });
   }
 
   /** The approvals on the record for a repo, newest first: each `start.approval` whose ask you answered yes on the trusted path. */

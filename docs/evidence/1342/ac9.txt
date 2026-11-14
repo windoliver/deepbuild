@@ -1,0 +1,4 @@
+ Test Files  1 passed (1)
+      Tests  1 passed | 6 skipped (7)
+   Start at  03:16:03
+   Duration  13.06s (tests 99%, transform 1%)

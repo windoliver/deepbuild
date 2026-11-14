@@ -63,7 +63,7 @@ export interface AnswerDeliveryOptions {
   state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "startOf" | "turnsStarted">;
   mcp: () => Pick<McpOperationsPort, "pinOf">;
   judging: () => Pick<StopJudgingPort, "delivery" | "landedLine" | "lineStanding" | "openedPr">;
-  control: () => Pick<HubControlPort, "trusted">;
+  control: () => Pick<HubControlPort, "trusted" | "briefAnswered">;
   memory: () => Pick<SessionMemoryPort, "syncStanding">;
   events: Pick<HubEvents, "appendSession" | "appendReading" | "connection" | "append">;
 kernel: Pick<HubRuntime, "stopping" | "ready">;
@@ -560,6 +560,8 @@ export class AnswerDelivery {
     if (this.prompts.has(delivery.ask)) return;
     // Your answer to a library fetch's authority ask (#1731), which no session raised: a yes runs the fetch's job.
     if (this.options.services.libraries?.answered(delivery.ask, delivery.decision)) return;
+    // Your answer to a brief's card (#1342), which no session raised: a yes makes the project and starts its run.
+    if (this.options.control().briefAnswered(delivery)) return;
     // Your answer to a paid job call's authority ask (#1922): a yes lets that call run once.
     if (this.options.services.jobKinds?.answered(delivery.ask, delivery.decision)) return;
     // Your answer to a host's ask for changes as you there (#1942): a yes lets its runs start, now and later.
