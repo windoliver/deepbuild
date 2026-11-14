@@ -1,0 +1,282 @@
+Base run of the #1972 acceptance tests at e0c90a5a5 (origin/main), November 13, 2026, on the shared Mac (Mac17,10,
+Apple M5 Max, 18 cores; 1-minute load about 200 to 260 through the build and the run).
+
+Built first, in the checkout's own target/ (CARGO_TARGET_DIR unset), through scripts/lease (which ran it unleased:
+no deep on PATH and no built CLI):
+  cargo build --locked --bin deep-show            (default features: full; 24 min 16 s cold)
+  npm ci
+(cargo from the rustup toolchain 1.99.1, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; the files' own builds were
+then no-ops.)
+
+Command:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/1972 --no-file-parallelism --testTimeout=600000
+
+Result: 2 files, 7 tests, 7 failed, each at an assertion (none at load or build).
+
+Summary, per criterion:
+- AC1, guide.test.ts:
+  - "returns every op the patch schema lists, each with an example": FAILS. deep_kinds op: field refuses `patch` and
+    every `patch.<op>` with unknown_field ("patch is no kind this build lists."), so the schema lists none of set,
+    create, unset, delete, move, reorder; and `read guide: patches` is refused not_found at /guide ("Give a guide's
+    name as a search hit gives it."). The guide holds no patch.
+  - "each example applies to the gallery's product reveal ... with outcome applied": FAILS the same two ways, and the
+    guide holds no patch to apply. (The product reveal itself is found and served: the gallery and read example
+    calls pass.)
+  - The plant test FAILS: `deep-show run --planted patches_guide_without_reorder` answers
+    {"ok":false,"code":"bad_input"} and exits 2, since the base has no such plant.
+- AC2, refusal.test.ts:
+  - The control passes in both fixture tests: the same op (set items/name/at/pos to [400, 140, 0]) in its envelope
+    applies to the product reveal, sent as you.
+  - "a patch whose path is at/pos": FAILS. It is refused bad_path at items/name ("`at/pos`: section `at` is not one of
+    items, controls, channels, markers, data, inputs, assemblies") with the fix "Write the path as
+    <section>/<id>[#<sub>]/<field>[/<field>...].", which doesn't name items/name/at/pos.
+  - "a bare op list": FAILS. It is refused out_of_range at patch ("a patch is an object") with the fix "Give the field
+    a value of its type inside its range.", which leaves out patch, doc, base, reason and ops.
+  - Both plant tests FAIL: `--planted patch_fix_path_without_id` and `--planted patch_fix_envelope_without_reason` are
+    bad_input, exit 2.
+
+The output below is the run's, with the absolute checkout path written <repo>. The four lines over 700 characters
+(the deep_kinds refusals of patch.set ... patch.reorder, which repeat one form) are cut at 700 characters, marked
+"[cut]".
+
+================ The run ================
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1972 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1972
+
+stdout | guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 deep_kinds read guide: patches returns every op the patch schema lists, each with an example
+the patch schema's ops, by deep_kinds op: field: none
+the guide holds 0 patch(es): 
+
+ ❯ guide.test.ts (3 tests | 3 failed) 14531ms
+   ❯ AC1 the patches guide: every op the patch schema lists, each with an example that applies (3)
+     × AC1 deep_kinds read guide: patches returns every op the patch schema lists, each with an example 5718ms
+     × AC1 each example applies to the gallery's product reveal through deep-show run with outcome applied 5208ms
+     × AC1 a planted guide missing reorder (patches_guide_without_reorder) fails, naming it 24ms
+ ❯ refusal.test.ts (4 tests | 4 failed) 12573ms
+   ❯ AC2 the two refusals the dry run hit name the full path and the envelope fields (4)
+     × AC2 a patch whose path is at/pos is refused with a fix that names items/name/at/pos 4776ms
+     × AC2 its planted twin patch_fix_path_without_id fails, naming items/name/at/pos 1171ms
+     × AC2 a bare op list is refused with a fix that names the envelope fields 1843ms
+     × AC2 its planted twin patch_fix_envelope_without_reason fails, naming reason 846ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 deep_kinds read guide: patches returns every op the patch schema lists, each with an example
+AssertionError: the patch schema's ops, read through deep_kinds op: field:
+  deep_kinds op: field, path: patch answers no lines: {"error":{"code":"unknown_field","retryable":false,"remediation":"patch is no kind this build lists.","path":"/path","actual":"patch","evidence":[]},"core":"core@0.0.0","set_digest":"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5"}
+  the patch schema, as deep_kinds op: field answers it, doesn't list set, create, unset, delete, move, reorder: patch.set: {"error":{"code":"unknown_field","retryable":false,"remediation":"patch.set is no kind this build lists.","path":"/path","actual":"patch.set","evidence":[]},"core":"core@0.0.0","set_digest":"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5"}; patch.create: {"error":{"code":"unknown_field","retryable":false,"remediation":"patch.create is no kind this build lists.","path":"/path","actual":"patch.create","evidence":[]},"core":"core@0.0.0","set_digest":"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5"}; patch.unset: {"error":{"code":"unknown_ [cut]
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds op: field, path: patch answers no lines: {\"error\":{\"code\":\"unknown_field\",\"retryable\":false,\"remediation\":\"patch is no kind this build lists.\",\"path\":\"/path\",\"actual\":\"patch\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5\"}",
++   "the patch schema, as deep_kinds op: field answers it, doesn't list set, create, unset, delete, move, reorder: patch.set: {\"error\":{\"code\":\"unknown_field\",\"retryable\":false,\"remediation\":\"patch.set is no kind this build lists.\",\"path\":\"/path\",\"actual\":\"patch.set\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5\"}; patch.create: {\"error\":{\"code\":\"unknown_field\",\"retryable\":false,\"remediation\":\"patch.create is no kind this build lists.\",\"path\":\"/path\",\"actual\":\"patch.create\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e3 [cut]
++ ]
+
+ ❯ guide.test.ts:27:131
+     25|     const schema = schemaOps(b);
+     26|     console.log(`the patch schema's ops, by deep_kinds op: field: ${sc…
+     27|     expect.soft(schema.failures, `the patch schema's ops, read through…
+       |                                                                                                                                   ^
+     28|     const guide = guideText(b);
+     29|     expect.soft(guide.failure, `deep_kinds read guide: ${GUIDE}`).toBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 deep_kinds read guide: patches returns every op the patch schema lists, each with an example
+AssertionError: deep_kinds read guide: patches: expected 'deep_kinds read guide: patches at off…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep_kinds read guide: patches at offset 0 answers no text: {\"error\":{\"code\":\"not_found\",\"retryable\":false,\"remediation\":\"Give a guide's name as a search hit gives it.\",\"path\":\"/guide\",\"actual\":\"patches\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5\"}"
+
+ ❯ guide.test.ts:29:67
+     27|     expect.soft(schema.failures, `the patch schema's ops, read through…
+     28|     const guide = guideText(b);
+     29|     expect.soft(guide.failure, `deep_kinds read guide: ${GUIDE}`).toBe…
+       |                                                                   ^
+     30|     const patches = patchesIn(guide.text);
+     31|     console.log(`the guide holds ${patches.length} patch(es): ${patche…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 each example applies to the gallery's product reveal through deep-show run with outcome applied
+AssertionError: the patch schema's ops, read through deep_kinds op: field:
+  deep_kinds op: field, path: patch answers no lines: {"error":{"code":"unknown_field","retryable":false,"remediation":"patch is no kind this build lists.","path":"/path","actual":"patch","evidence":[]},"core":"core@0.0.0","set_digest":"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5"}
+  the patch schema, as deep_kinds op: field answers it, doesn't list set, create, unset, delete, move, reorder: patch.set: {"error":{"code":"unknown_field","retryable":false,"remediation":"patch.set is no kind this build lists.","path":"/path","actual":"patch.set","evidence":[]},"core":"core@0.0.0","set_digest":"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5"}; patch.create: {"error":{"code":"unknown_field","retryable":false,"remediation":"patch.create is no kind this build lists.","path":"/path","actual":"patch.create","evidence":[]},"core":"core@0.0.0","set_digest":"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5"}; patch.unset: {"error":{"code":"unknown_ [cut]
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds op: field, path: patch answers no lines: {\"error\":{\"code\":\"unknown_field\",\"retryable\":false,\"remediation\":\"patch is no kind this build lists.\",\"path\":\"/path\",\"actual\":\"patch\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5\"}",
++   "the patch schema, as deep_kinds op: field answers it, doesn't list set, create, unset, delete, move, reorder: patch.set: {\"error\":{\"code\":\"unknown_field\",\"retryable\":false,\"remediation\":\"patch.set is no kind this build lists.\",\"path\":\"/path\",\"actual\":\"patch.set\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5\"}; patch.create: {\"error\":{\"code\":\"unknown_field\",\"retryable\":false,\"remediation\":\"patch.create is no kind this build lists.\",\"path\":\"/path\",\"actual\":\"patch.create\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e3 [cut]
++ ]
+
+ ❯ guide.test.ts:38:131
+     36|     const b = bin();
+     37|     const schema = schemaOps(b);
+     38|     expect.soft(schema.failures, `the patch schema's ops, read through…
+       |                                                                                                                                   ^
+     39|     const guide = guideText(b);
+     40|     expect.soft(guide.failure, `deep_kinds read guide: ${GUIDE}`).toBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 each example applies to the gallery's product reveal through deep-show run with outcome applied
+AssertionError: deep_kinds read guide: patches: expected 'deep_kinds read guide: patches at off…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"deep_kinds read guide: patches at offset 0 answers no text: {\"error\":{\"code\":\"not_found\",\"retryable\":false,\"remediation\":\"Give a guide's name as a search hit gives it.\",\"path\":\"/guide\",\"actual\":\"patches\",\"evidence\":[]},\"core\":\"core@0.0.0\",\"set_digest\":\"2d0283de6e5590d14c36bd7e3e2ab6f34ac127d1525e34be591cc82c509c18a5\"}"
+
+ ❯ guide.test.ts:40:67
+     38|     expect.soft(schema.failures, `the patch schema's ops, read through…
+     39|     const guide = guideText(b);
+     40|     expect.soft(guide.failure, `deep_kinds read guide: ${GUIDE}`).toBe…
+       |                                                                   ^
+     41|     const patches = patchesIn(guide.text);
+     42|     const reveal = productReveal(b);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 each example applies to the gallery's product reveal through deep-show run with outcome applied
+AssertionError: the patches guide holds at least one patch to apply: "": expected 0 to be greater than 0
+ ❯ guide.test.ts:45:110
+     43|     const outcomes = applyEach(b, reveal.document, patches);
+     44|     patches.forEach((p, i) => console.log(`${opsOf(p).join('+')}: ${ou…
+     45|     expect(patches.length, `the ${GUIDE} guide holds at least one patc…
+       |                                                                                                              ^
+     46|     none(appliedFailures(schema.ops, patches, outcomes), `every op's e…
+     47|   }, 3_600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  guide.test.ts > AC1 the patches guide: every op the patch schema lists, each with an example that applies > AC1 a planted guide missing reorder (patches_guide_without_reorder) fails, naming it
+AssertionError: deep-show run --planted patches_guide_without_reorder starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runScenarios helpers.ts:113:175
+    111|   expect(r.error, `deep-show ${args.join(' ')} runs within its timeout…
+    112|   const stdout = r.stdout ?? '';
+    113|   expect(r.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                               ^
+    114|   const lines = stdout.split('\n').filter((l) => l !== '');
+    115|   expect(lines.length, `deep-show ${args.join(' ')}: one output line p…
+ ❯ kindsReplies helpers.ts:133:21
+ ❯ schemaOps helpers.ts:156:20
+ ❯ guide.test.ts:51:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  refusal.test.ts > AC2 the two refusals the dry run hit name the full path and the envelope fields > AC2 a patch whose path is at/pos is refused with a fix that names items/name/at/pos
+AssertionError: the patch whose path is at/pos:
+  the patch whose path is at/pos is refused, but no fix names items/name/at/pos: the fixes were ["Write the path as <section>/<id>[#<sub>]/<field>[/<field>...]."] ("refused" (bad_path at items/name: `at/pos`: section `at` is not one of items, controls, channels, markers, data, inputs, assemblies)): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the patch whose path is at/pos is refused, but no fix names items/name/at/pos: the fixes were [\"Write the path as <section>/<id>[#<sub>]/<field>[/<field>...].\"] (\"refused\" (bad_path at items/name: `at/pos`: section `at` is not one of items, controls, channels, markers, data, inputs, assemblies))",
++ ]
+
+ ❯ none helpers.ts:47:60
+     45| /** No failures; the message lists them. */
+     46| export function none(failures: readonly string[], what: string): void {
+     47|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     48| }
+     49| /** At least one failure, and one that names every one of `names` toge…
+ ❯ refusal.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  refusal.test.ts > AC2 the two refusals the dry run hit name the full path and the envelope fields > AC2 its planted twin patch_fix_path_without_id fails, naming items/name/at/pos
+AssertionError: deep-show run --planted patch_fix_path_without_id starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runScenarios helpers.ts:113:175
+    111|   expect(r.error, `deep-show ${args.join(' ')} runs within its timeout…
+    112|   const stdout = r.stdout ?? '';
+    113|   expect(r.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                               ^
+    114|   const lines = stdout.split('\n').filter((l) => l !== '');
+    115|   expect(lines.length, `deep-show ${args.join(' ')}: one output line p…
+ ❯ sendEach helpers.ts:338:10
+ ❯ refusal.test.ts:39:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  refusal.test.ts > AC2 the two refusals the dry run hit name the full path and the envelope fields > AC2 a bare op list is refused with a fix that names the envelope fields
+AssertionError: the bare op list:
+  the bare op list is refused, but its fix leaves out patch, doc, base, reason, ops: "Give the field a value of its type inside its range.": expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the bare op list is refused, but its fix leaves out patch, doc, base, reason, ops: \"Give the field a value of its type inside its range.\"",
++ ]
+
+ ❯ none helpers.ts:47:60
+     45| /** No failures; the message lists them. */
+     46| export function none(failures: readonly string[], what: string): void {
+     47|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     48| }
+     49| /** At least one failure, and one that names every one of `names` toge…
+ ❯ refusal.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  refusal.test.ts > AC2 the two refusals the dry run hit name the full path and the envelope fields > AC2 its planted twin patch_fix_envelope_without_reason fails, naming reason
+AssertionError: deep-show run --planted patch_fix_envelope_without_reason starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runScenarios helpers.ts:113:175
+    111|   expect(r.error, `deep-show ${args.join(' ')} runs within its timeout…
+    112|   const stdout = r.stdout ?? '';
+    113|   expect(r.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                               ^
+    114|   const lines = stdout.split('\n').filter((l) => l !== '');
+    115|   expect(lines.length, `deep-show ${args.join(' ')}: one output line p…
+ ❯ sendEach helpers.ts:338:10
+ ❯ refusal.test.ts:55:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed (7)
+   Start at  17:38:44
+   Duration  28.28s (tests 99%, transform 1%)
+
+exit 1

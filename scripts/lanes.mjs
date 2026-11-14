@@ -404,6 +404,8 @@ timed.push('tests/acceptance/202/budgets.test.ts');
 // #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
 alone.push('tests/acceptance/1971/');
 timed.push('tests/acceptance/1971/budget.test.ts');
+// #1972's files each build deep-show and apply the patches guide's examples through deep-show run.
+alone.push('tests/acceptance/1972/');
 // #1973's files each build deep-show and run the full build's dump through op: field and deep_show.
 alone.push('tests/acceptance/1973/');
 // #1957's file builds deep-show and offers it pack graphs.
