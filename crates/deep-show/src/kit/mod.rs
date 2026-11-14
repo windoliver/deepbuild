@@ -25,7 +25,7 @@ mod fixtures;
 mod fuzz;
 pub mod goldens;
 mod gpu;
-mod instance;
+pub(crate) mod instance;
 mod interface;
 pub mod ledger;
 pub mod manifest;

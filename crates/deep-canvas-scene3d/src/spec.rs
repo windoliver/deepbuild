@@ -2389,6 +2389,10 @@ pub fn resolved(spec: &Spec, params: &Value, geometry: bool, planted: Option<&st
             .get(&path["params/".len()..])
             .cloned()
             .unwrap_or_else(|| q.default.clone());
+        let v = match q.name {
+            "overlays" => crate::tints::resolved(v),
+            _ => v,
+        };
         out.insert(q.name.to_string(), v);
     }
     Value::Object(out)
