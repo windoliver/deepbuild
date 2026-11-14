@@ -144,6 +144,8 @@ impl BuildSet {
 /// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
+    // #540: a lockstep match, Net `net@1`.
+    ("net", "net"),
     ("slab", "scene3d"),
     ("lathe", "scene3d"),
     ("extrude", "scene3d"),
