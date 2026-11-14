@@ -37,12 +37,16 @@ pub const INTERFACE: &str = "logic@1";
 pub const STATE: &str = "logic.state";
 /// A step at 60 Hz, in flicks: the rate of a document whose items name none.
 const STEP: i64 = 11_760_000;
-/// The params a logic item takes here, each with the form its reader takes (#1973); `wasm` is the
-/// program's bytes, which whoever holds the evidence store inlines by the program's hash before
-/// a frame, as a vector's outline is.
-const PARAMS: [(&str, &str); 10] = [
+/// The params a logic item takes here: every field the logic check reads (`piece::declared`) and
+/// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
+/// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
+/// outline is.
+const PARAMS: [(&str, &str); 15] = [
     ("program", "asset ID"),
+    ("debug", "asset ID"),
     ("step_rate", "Hz"),
+    ("clock", "fixed | on_input"),
+    ("due", "name"),
     ("reads", "[control ID | reading ID | path]"),
     (
         "writes",
@@ -56,6 +60,14 @@ const PARAMS: [(&str, &str); 10] = [
     ),
     ("checkpoint", "{every?: integer, budget?: bytes}"),
     ("assets", "[asset ID]"),
+    (
+        "saves",
+        "{slots?: integer, request?: name, ends?: name, migrate?}",
+    ),
+    (
+        "preview",
+        "{reads?: [control ID | path], writes?: {name → {type, count?: u32}}}",
+    ),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
