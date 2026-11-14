@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
+use sha2::Digest as _;
 
 const DOC: &str = "01JB412G0000000000000000001";
 
@@ -15,6 +16,16 @@ fn gallery() -> PathBuf {
 
 fn show(document: Value) -> Value {
     let evidence = std::env::temp_dir().join(format!("deep-show-gallery-{}", std::process::id()));
+    // #548: the programs the gallery's logic examples run, in the evidence store by their bytes' hash.
+    for f in std::fs::read_dir(gallery()).expect("the gallery").flatten() {
+        if f.path().extension().is_some_and(|e| e == "wasm") {
+            let bytes = std::fs::read(f.path()).expect("a program");
+            let sha: String = sha2::Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
+            let dir = evidence.join(&sha[..2]);
+            std::fs::create_dir_all(&dir).expect("the evidence store");
+            std::fs::write(dir.join(&sha[2..]), bytes).expect("written");
+        }
+    }
     let scenario = json!({
         "evidence": evidence,
         "sessions": {"sess-alpha": {"thread": "thread-alpha", "name": "Alpha", "process": {"pid": 4100, "start": 1000}}},

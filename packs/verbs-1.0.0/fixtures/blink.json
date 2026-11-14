@@ -1,0 +1,142 @@
+{
+  "verb": "blink",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Blink fixture",
+    "description": "Blink fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "blink",
+              "targets": [
+                "sq"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Blink fixture written by hand",
+    "description": "Blink fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "blink": {
+        "target": "items/sq/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 1,
+            "interp": "hold"
+          }
+        },
+        "modifiers": [
+          {
+            "kind": "pulse",
+            "at": 352800000,
+            "span": 705600000,
+            "amount": -1,
+            "ease": {
+              "name": "sigmoid",
+              "params": 10
+            },
+            "shape": {
+              "pause": {
+                "share": 0.6
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "paths": [
+    "items/sq/adjust/opacity"
+  ]
+}

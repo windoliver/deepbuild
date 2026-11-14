@@ -1,0 +1,15 @@
+✔ SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output (3358.739458ms)
+✔ a failed process scan cannot turn a build with a live descendant into a successful result (2488.713666ms)
+✔ failed process scan returns BLOCKED promptly and kills its recorded worker instead of relying on caller timeout (2300.011125ms)
+✔ a supplied owner that is not an ancestor cannot authorize a detached build (971.223125ms)
+✔ killing the recorded supervisor wrapper cannot strand Cargo (2168.611042ms)
+✔ successful build leader cannot leave a writer behind (2831.534584ms)
+✔ a spawn timeout through real lease returns nonzero and leaves no compiler descendants (3961.533125ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19974.157291

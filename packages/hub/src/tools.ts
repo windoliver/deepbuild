@@ -28,6 +28,8 @@ const LOCATOR = object({
   text: maybe(str('The innermost element whose drawn text is exactly this.')),
   label: maybe(str('The form control whose accessible name, or else visible label, is this.')),
 });
+/** deep_show's diagnostic modes, the canvas core's closed list (crates/deep-show/src/modes.rs, MODES; #411, #427). */
+const MODES = ['lighting_only', 'overdraw', 'normals', 'cascade_splits', 'shadow_atlas', 'luminance_false_color', 'lights_per_cluster', 'lod_per_item', 'receivers_casters', 'skeleton', 'lights_cameras', 'bounds', 'physics_shapes', 'uv_checker', 'deviation', 'tangents', 'probes', 'sound_sources', 'motion_paths', 'pick_hierarchy'] as const;
 /** The same fields where another locator goes: every session loads this schema, so they are described once, above. */
 const LOCATOR_BARE = object(Object.fromEntries(Object.keys(LOCATOR.properties as object).map((field) => [field, maybe(str())])));
 
@@ -84,6 +86,27 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
     camera: maybe(str('With no document or patch, render a 3D revision back through this camera@1 item, by its ID; null for its own camera.')),
     probes: maybe({ type: 'array', items: { type: 'array', items: INT }, description: 'With no document or patch, up to 64 pixels [x, y] of a 3D snapshot, x right and y down; the reply\'s hits says what lies under each, nearest first, at most 8 a pixel. Display only, never evidence. null for none.' }),
+    sheet: maybe({ ...object({ views: { type: 'array', items: { type: 'string', enum: ['front', 'back', 'left', 'right', 'top', 'three_quarter'] }, description: 'The named views, each framing the whole scene.' } }), description: 'With no document or patch, a contact sheet of a 3D revision in one call: one snapshot per view, each with its view and its own visible table. Display only, never evidence. null for one frame through its camera.' }),
+    mode: oneOf([...MODES], 'A diagnostic mode: the same frame at t drawn as a view in place of the look, with what it drew as numbers in drawn; with no document or patch, of the current revision. Display only, never evidence. null for none.'),
+    cursor: maybe(str('mode: where the readings an earlier page cut left off, as its next gave it.')),
+    item: maybe(str('mode deviation: the item measured, by its ID.')),
+    reference: maybe(str('mode deviation: the reference asset, by its SHA-256.', '^[0-9a-f]{64}$')),
+    select: maybe({ type: 'array', items: str(), description: 'mode motion_paths: the items whose paths it draws, by ID.' }),
+    span: maybe({ type: 'array', items: str(), description: 'mode motion_paths: [from, to] in the time grammar.' }),
+    depth: maybe({ type: 'integer', description: 'mode pick_hierarchy: the deepest level drawn, the root\'s 0.' }),
+  }),
+  deep_query: object({
+    doc: str('The document, by its doc ID.', '^[0-9A-Za-z]{26}$'),
+    what: oneOf(['rows', 'summary', 'why'], 'rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path. null for rows.'),
+    rev: maybe({ type: 'integer', description: 'The revision read; null for the current one.' }),
+    items: maybe({ type: 'array', items: str(), description: 'rows: only these items, by ID; null for every item.' }),
+    paths: maybe({ type: 'array', items: str(), description: 'rows: values read at items/<id>/<field>, such as items/door/params/open or items/<id>/modifiers/<k>#out; null for none.' }),
+    at: maybe({ type: 'array', items: str(), description: 'rows: the times paths are read at, in the time grammar, such as 0s or 1.5s; null for 0s.' }),
+    cap: maybe({ type: 'integer', description: 'rows: at most this many rows, cut depth first; null for 200.' }),
+    cursor: maybe(str('Where an earlier answer cut left off, as its next gave it.')),
+    expect: maybe(object({ none: object({ kind: str('The kind no row should be of.') }) })),
+    path: maybe(str('why: the value, items/<id>/<field>.')),
+    t: maybe(str('why: the time, in the time grammar; null for 0s.')),
   }),
   deep_drive: object({
     call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
@@ -149,7 +172,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -166,6 +189,9 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
     path: maybe(str('field: kind@major.field for one field, kind@major for every field of that kind, or patch or patch.<op> for a patch\'s fields.')),
+    doc: maybe(str('bindings: the document whose logic item they are.')),
+    item: maybe(str('bindings: the logic item\'s ID.')),
+    language: oneOf(['rust'], 'bindings: the pinned language they are written in.'),
   }),
   deep_job: object({
     op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools, their builds and each one\'s cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },

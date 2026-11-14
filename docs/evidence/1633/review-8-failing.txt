@@ -1,0 +1,40 @@
+ RUN  v5.0.5 /tmp/dh1633v2
+ ❯ packages/hub/test/reopened-items.test.ts (8 tests | 1 failed | 7 skipped) 74734ms
+   ❯ #1633 review rounds: a reopened review note and its ask (8)
+     × a note the session's own account once resolved, opened again while its thread is unresolved and its ask still open, gets no new ask once that ask passes its deadline 74597ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a note the session's own account once resolved, opened again while its thread is unresolved and its ask still open, gets no new ask once that ask passes its deadline
+AssertionError: it opened again while its thread was unresolved, as a note never resolved by the session does, so the same question never reaches you twice: expected [ { v: 1, …(10) } ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   {
++     "actor": "you",
++     "data": {
++       "deadline": 1794372415297,
++       "default": "keep",
++       "fallback": "you",
++       "key": "126d3a9aa6fc930d3f890861da35c932a37465e5c7f66a379cfb37ec7d6ded9f",
++       "kind": "exception",
++       "options": [
++         {
++           "decision": "none",
++           "id": "accept",
++           "label": "Accept it: close it without a fix",
++         },
++         {
++           "decision": "none",
++           "id": "keep",
++           "label": "Keep it open",
++         },
++       ],
++       "owner": "you",
++       "pinned_to": {
++         "kind": "commit",
++         "ref": "dce6e305ca226259b8d407b16f0ec47777042722",
++       },
++       "provisional": false,
++       "question": "Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”",
++       "recommended": "keep",
++     },

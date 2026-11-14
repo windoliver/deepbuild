@@ -1,0 +1,95 @@
+{
+  "id": "verbs.focus",
+  "version": "1.0",
+  "title": "Focus",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An emphasis: a soft spot closes in on each target from four times its size, dimming to `opacity` and gone again, while it lifts.",
+  "inputs": {
+    "opacity": {
+      "type": "number",
+      "default": 0.2,
+      "min": 0,
+      "max": 1,
+      "about": "how dark the spot gets at its densest"
+    }
+  },
+  "steps": {
+    "spot": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          "0 - max(w, h) * 0.75",
+          "0 - max(w, h) * 0.75",
+          "max(w, h) * 1.5",
+          "max(w, h) * 1.5"
+        ],
+        "corner": "max(w, h) * 0.75",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "cx",
+          "cy",
+          0
+        ]
+      }
+    },
+    "close": {
+      "op": "cue",
+      "params": {
+        "on": "spot",
+        "from": {
+          "at/scale": [
+            4,
+            4,
+            1
+          ]
+        }
+      }
+    },
+    "dim": {
+      "op": "cue",
+      "params": {
+        "on": "spot",
+        "from": {
+          "adjust/opacity": 0
+        },
+        "set": {
+          "adjust/opacity": "opacity"
+        },
+        "until": 0.5
+      }
+    },
+    "clear": {
+      "op": "cue",
+      "params": {
+        "on": "spot",
+        "from": {
+          "adjust/opacity": "opacity"
+        },
+        "set": {
+          "adjust/opacity": 0
+        },
+        "at": 0.5
+      }
+    },
+    "lift": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/brightness": {
+            "pulse": {
+              "amount": 0.3
+            }
+          }
+        }
+      }
+    }
+  }
+}
