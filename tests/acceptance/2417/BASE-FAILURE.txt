@@ -1,0 +1,101 @@
+# #2417 acceptance tests: the run on the base
+
+## The base (e5aa3923aa7508a5a2df3469c0d77ee95701d45a, "Merge pull request #2394 from windoliver/fix/2144-canvas-lint"; no implementation)
+
+$ node --test tests/acceptance/2417/unreadable.test.mjs
+(run once, 2026-11-13, node v24.22.0; verbatim but for the checkout's path, which reads <checkout>. On this node
+`node --test tests/acceptance/2417/` reads the folder as a module and fails with MODULE_NOT_FOUND before any test, so
+the file is named.)
+
+Both tests FAIL, as they must, on the issue's TypeError from reopen() (scripts/spine.mjs:141), with nothing on stdout
+and one call to the gh stub (`issue view 44`): no line for #44, none for #47.
+
+✖ #2417.47b7983a AC1: judge prints a task whose issue is unreadable as its JSON line, verdict BLOCKED with its why, and never stops with a TypeError (202.361404ms)
+✖ #2417.a410064f AC2: after such a task the run goes on to judge the next one, and the run exits non-zero (194.068998ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 430.364795
+
+✖ failing tests:
+
+test at tests/acceptance/2417/unreadable.test.mjs:54:1
+✖ #2417.47b7983a AC1: judge prints a task whose issue is unreadable as its JSON line, verdict BLOCKED with its why, and never stops with a TypeError (202.361404ms)
+  AssertionError [ERR_ASSERTION]: the run stopped with a TypeError
+  exit 1
+  stdout:
+  
+  stderr:
+  file://<checkout>/scripts/spine.mjs:141
+    const body = `Re-judged at its merged commit ${j.commit} once this repo was gated (#33 AC8): ${j.verdict}, naming ${j.reopen.criterion}.\n\n${lines}${j.why ? `\n\n${j.why}` : ''}`;
+                                                                                                                                 ^
+  
+  TypeError: Cannot read properties of null (reading 'criterion')
+      at reopen (file://<checkout>/scripts/spine.mjs:141:128)
+      at file://<checkout>/scripts/spine.mjs:154:46
+  
+  Node.js v24.22.0
+  
+  gh calls: [["issue","view","44"]]
+      at ranToItsEnd (file://<checkout>/tests/acceptance/2417/unreadable.test.mjs:42:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2417/unreadable.test.mjs:56:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "file://<checkout>/scripts/spine.mjs:141\n  const body = `Re-judged at its merged commit ${j.commit} once this repo was gated (#33 AC8): ${j.verdict}, naming ${j.reopen.criterion}.\\n\\n${lines}${j.why ? `\\n\\n${j.why}` : ''}`;\n                                                                                                                               ^\n\nTypeError: Cannot read properties of null (reading 'criterion')\n    at reopen (file://<checkout>/scripts/spine.mjs:141:128)\n    at file://<checkout>/scripts/spine.mjs:154:46\n\nNode.js v24.22.0\n",
+    expected: /TypeError/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2417/unreadable.test.mjs:61:1
+✖ #2417.a410064f AC2: after such a task the run goes on to judge the next one, and the run exits non-zero (194.068998ms)
+  AssertionError [ERR_ASSERTION]: the run stopped with a TypeError
+  exit 1
+  stdout:
+  
+  stderr:
+  file://<checkout>/scripts/spine.mjs:141
+    const body = `Re-judged at its merged commit ${j.commit} once this repo was gated (#33 AC8): ${j.verdict}, naming ${j.reopen.criterion}.\n\n${lines}${j.why ? `\n\n${j.why}` : ''}`;
+                                                                                                                                 ^
+  
+  TypeError: Cannot read properties of null (reading 'criterion')
+      at reopen (file://<checkout>/scripts/spine.mjs:141:128)
+      at file://<checkout>/scripts/spine.mjs:154:46
+  
+  Node.js v24.22.0
+  
+  gh calls: [["issue","view","44"]]
+      at ranToItsEnd (file://<checkout>/tests/acceptance/2417/unreadable.test.mjs:42:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2417/unreadable.test.mjs:63:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "file://<checkout>/scripts/spine.mjs:141\n  const body = `Re-judged at its merged commit ${j.commit} once this repo was gated (#33 AC8): ${j.verdict}, naming ${j.reopen.criterion}.\\n\\n${lines}${j.why ? `\\n\\n${j.why}` : ''}`;\n                                                                                                                               ^\n\nTypeError: Cannot read properties of null (reading 'criterion')\n    at reopen (file://<checkout>/scripts/spine.mjs:141:128)\n    at file://<checkout>/scripts/spine.mjs:154:46\n\nNode.js v24.22.0\n",
+    expected: /TypeError/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+## Wrong and right programs, each a scratch copy of scripts/ with one line of spine.mjs's judge loop changed
+
+(The suite copied beside each; only each test's mark and first failing message kept.)
+
+right: the CLI doesn't reopen a task with no criterion to name (`if (j.reopen) reopen(j)`)        AC1 ✔  AC2 ✔
+right: reopen() names "no criterion" when there is none (`j.reopen?.criterion ?? …`)              AC1 ✔  AC2 ✔
+wrong: prints the task's line, then stops the run (`break`)                                       AC1 ✔  AC2 ✖ a line for #44, then one for #47
+wrong: skips the task without failing the run (`all` stays true, exit 0)                          AC1 ✔  AC2 ✖ the run exits 1 when a task isn't PASS
+wrong: skips the task without printing its line (`continue`)                                      AC1 ✖ one task judged, one line on stdout   AC2 ✖ a line for #44, then one for #47
+wrong: prints the task as INVALID with no why                                                     AC1 ✖ #44 is unreadable, so it reads BLOCKED   AC2 ✖ (same)
