@@ -382,6 +382,16 @@ Reads the latest item under every key of the plug-in's own store.
 |---|---|---|
 | `kind` | string, `^ext\.[a-z0-9_-]+\.[a-z][a-z0-9_]*$` | yes |
 
+### `deep.schedule.read`
+
+In R1 · preview · `d1:05a2343b28cd68859192ba8971bcbac01e101886005a29242a5fd1c2cc72e493`
+
+Reads a source the job declared among its readings, for the run under way: a job calls it as its context's `read`, and outside a run it is refused.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `source` | string, `^[a-z][a-z0-9_.-]*$` | yes |
+
 ### `deep.runner.run`
 
 In R1 · preview · `d1:867ba9b60a91e097afdb8ecb28794259d5f1bfa59f66065c0ede01b825b56ea0`

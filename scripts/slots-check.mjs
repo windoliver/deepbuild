@@ -1,8 +1,9 @@
 // The preflight's slot check (#349): every `deep.register*` call the published extension API declares, and every
 // variant its shape names, has one row in the hub-slot table with an interface at its frozen digest, a kit the
 // conformance package ships and at least one planted wrong fill that kit refuses. The slot list comes from the API,
-// never from the table. One `PASS slots` or one `FAIL slots: ...` line per finding; exit 1 on a finding, 3 when the
-// built packages are missing. `--api <file>` and `--table <file>` point it at other copies of the contract.
+// never from the table. The runtime's table of methods and the published API also name the same methods (#1887). One
+// `PASS slots` or one `FAIL slots: ...` line per finding; exit 1 on a finding, 3 when the built packages are missing.
+// `--api <file>` and `--table <file>` point it at other copies of the contract.
 import { existsSync, readFileSync } from 'node:fs';
 
 const arg = (flag) => {
@@ -23,9 +24,11 @@ const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const api = arg('--api') ? read(arg('--api')) : extensionApi();
 const table = arg('--table') ? read(arg('--table')) : hubSlots();
 const problems = slotProblems(api, table, [...slotKits(), ...kits()], frozenDigests());
-// The runtime's own API table: a register call the host serves has its published entry, or the slot list misses it.
+// The runtime's own API table against the published one, both ways (#1887): a method the host serves has its published
+// entry, or the slot list and every other reader of the API miss it; and a published entry is one the host serves.
 const { API } = await import('../packages/extension-host/runtime/deep.mjs');
-for (const { method } of API) if (method.startsWith('deep.register') && !api.some((e) => e.method === method)) problems.push({ method, variant: null, slot: null, fill: null, reason: `${method} is in the host's API and has no entry in the published extension API` });
+for (const { method } of API) if (!api.some((e) => e.method === method)) problems.push({ method, variant: null, slot: null, fill: null, reason: `${method} is in the host's API and has no entry in the published extension API` });
+for (const { method } of api) if (!API.some((m) => m.method === method)) problems.push({ method, variant: null, slot: null, fill: null, reason: `${method} is in the published extension API and the host's API doesn't serve it` });
 for (const p of problems) console.log(`FAIL slots: ${p.method}, ${p.variant ?? '-'}${p.fill ? ` (planted ${p.fill})` : ''}: ${p.reason}`);
 const slots = api.filter((e) => e.method.startsWith('deep.register')).reduce((n, e) => n + (e.variants?.length ?? 1), 0);
 if (!problems.length) console.log(`PASS slots: ${slots} slots from the published API, each with one row, a frozen interface, a kit and a planted fill it refuses`);

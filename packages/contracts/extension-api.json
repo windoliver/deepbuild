@@ -864,6 +864,29 @@
     }
   },
   {
+    "method": "deep.schedule.read",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#365",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "digest": "d1:05a2343b28cd68859192ba8971bcbac01e101886005a29242a5fd1c2cc72e493",
+    "params": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.secret",
     "variants": null,
     "since": "R1",
