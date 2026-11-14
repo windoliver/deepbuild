@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The asks core (#318): an ask is raised only from a place in ask.sources@1, holds to ask.created, and ends answered on the trusted path, superseded, moot or defaulted at its deadline. It also decides when an ask shows (#319), gates resolvers (#349) and keys decisions by kind and scope (#23). The budget, buying, supervisor, runner, resolver-decisions, extension host, archive and hub raise and answer asks through it.
+The asks core (#318): an ask is raised only from a place in ask.sources@1, holds to ask.created, and ends answered on the trusted path, superseded, moot or defaulted at its deadline. It also decides when an ask shows (#319), gates resolvers (#349) and keys decisions by kind and scope (#23). The budget, buying, supervisor, runner, resolver-decisions, extension host, archive, routing replay and hub raise and answer asks through it.
 
 ## Where new code goes
 

@@ -29,8 +29,14 @@ const WARM_MS = 60_000;
 const REPORTS = 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"';
 /** The same reports by the subsystem they carry too, which the log filters by before it sends the stream a message. */
 const REPORTS_BY_SUBSYSTEM = `subsystem == "com.apple.sandbox.reporting" AND ${REPORTS}`;
+/** The same reports by the process that writes them, the kernel, whose sandbox extension is their sender: the log sends the stream the kernel's messages alone. */
+const REPORTS_BY_KERNEL = `process == "kernel" AND ${REPORTS}`;
+/** The stream's filters, the cheapest for `log` first: the next is tried when one shows no report of a canary's. */
+const FILTERS: readonly string[] = [REPORTS_BY_SUBSYSTEM, REPORTS_BY_KERNEL, REPORTS];
 /** The planted world of the fallback's test: a macOS whose reports carry another subsystem than the filter names. */
 const REPORTS_ELSEWHERE = `subsystem == "com.apple.sandbox.elsewhere" AND ${REPORTS}`;
+/** And the planted world of the last fallback's: one whose reports another process than the filter names writes. */
+const REPORTS_BY_ANOTHER = `process == "deepbuild-elsewhere" AND ${REPORTS}`;
 /** How long a run's output may stay open after its process exits: a background process holding it is a leftover, reaped by cleanup. */
 const DRAIN_MS = 1000;
 /** How often a key out of its pool has its cleanup check run again. */
@@ -320,7 +326,10 @@ class LocalSupervisor implements Supervisor {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
-    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials(this.options.plant === 'reports-other-subsystem' ? REPORTS_ELSEWHERE : REPORTS_BY_SUBSYSTEM);
+    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') {
+      this.watchDenials(this.options.plant === 'reports-other-subsystem' ? [REPORTS_ELSEWHERE, REPORTS_BY_KERNEL, REPORTS]
+        : this.options.plant === 'reports-other-process' ? [REPORTS_ELSEWHERE, REPORTS_BY_ANOTHER, REPORTS] : FILTERS);
+    }
     this.beatFrom = Date.now();
     this.scanSoon();
   }
@@ -360,11 +369,13 @@ class LocalSupervisor implements Supervisor {
    * message the machine writes for the hub's whole life. The stream announces its filter before it is attached,
    * and after a while idle macOS drops the first reports of a program that isn't Apple's, so it counts as ready
    * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
-   * comes through. A macOS whose reports carry another subsystem shows the canary's through that filter never:
-   * the stream then starts again on the sender alone.
+   * comes through. A macOS whose reports carry another subsystem, or none, shows the canary's through that filter
+   * never: the stream then starts again on the next filter, the kernel's messages, and only where that shows none
+   * either on the sender alone. The stream writes nothing while no report matches, so no closed pipe tells it that
+   * this process has gone: it runs on the helper's leash, which ends it when this process ends, however it ends.
    */
-  private watchDenials(filter: string): void {
-    const log = spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
+  private watchDenials([filter, ...wider]: readonly string[]): void {
+    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter!], { stdio: ['ignore', 'pipe', 'ignore'] });
     this.log = log;
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
@@ -389,9 +400,9 @@ class LocalSupervisor implements Supervisor {
     });
     this.warming = this.warm(10_000).then((live) => {
       if (live || this.closed) return undefined;
-      if (filter === REPORTS) return void process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      if (!wider.length) return void process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
       if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
-      this.watchDenials(REPORTS);
+      this.watchDenials(wider);
       return this.warming;
     });
   }

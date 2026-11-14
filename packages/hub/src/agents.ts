@@ -66,14 +66,18 @@ function agentFacts(): AgentFacts[] {
   }));
 }
 const factsOf = (id: string): AgentFacts | undefined => agentFacts().find((a) => a.id === id);
-/** The agents whose sessions reach DeepBuild through hooks, by their facts: those that map hook events and name the agent (#2019). */
-export function hookedAgents(): { id: string; name: string }[] {
-  return AGENT_IDS.flatMap((id) => {
+let hookedCache: readonly { id: string; name: string }[] | undefined;
+/**
+ * The agents whose sessions reach DeepBuild through hooks, by their facts: those that map hook events and name the
+ * agent (#2019). Read once, as agentFacts reads them: the hub asks every second, and the shipped facts don't change under it.
+ */
+export function hookedAgents(): readonly { id: string; name: string }[] {
+  return (hookedCache ??= AGENT_IDS.flatMap((id) => {
     let f: Obj;
     try { f = readFacts<Obj>(`${id}.facts.json`); } catch { return []; }
     const e = isObj(f.entries) ? f.entries : {};
     return isObj(f.mapping) && typeof e.name === 'string' ? [{ id, name: e.name }] : [];
-  });
+  }));
 }
 const expand = (p: string): string => (p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 /** A path as you'd read it: under your home as ~/... */

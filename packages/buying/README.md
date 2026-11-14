@@ -2,7 +2,7 @@
 
 ## What it is for
 
-Buying within a budget you approved (#69, with the money extensions). A purchase reserves its price in the #86 ledger before anything is paid, one past what's left asks you as an authority ask, and payment is a task for you or a card rule you set for one seller, paid by the payment processor. Its receipt is kept as evidence and charges the budget.
+Buying within a budget you approved (#69, with the money extensions). A purchase reserves its price in the #86 ledger before anything is paid, one past what's left asks you as an authority ask, and payment is a task for you or a card rule you set for one seller, paid by the payment processor. Its receipt is kept as evidence and charges the budget. A library so far: nothing in the hub or the CLI opens it, and only its own tests and `tests/acceptance/69/` call `openBuying`. Buying comes with the money extensions (docs/technical-design.md, Plans before acting), which are what will call it.
 
 ## Where new code goes
 
