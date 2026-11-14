@@ -51,6 +51,8 @@ pub enum What {
     Rows,
     Summary,
     Why,
+    /// #548: logic items' arrays, fuel and traps at steps from their bake, and their region maps.
+    Logic,
 }
 
 /// A check plug-in reading through `deep.canvas.read`: its package ID and the documents its
@@ -82,6 +84,8 @@ pub struct Query {
     pub t: i64,
     /// #504: the document's input track the reads replay.
     pub track: Vec<Value>,
+    /// #548: the steps a logic read answers for.
+    pub steps: Vec<i64>,
 }
 
 /// One revision as a query reads it: the document as written, the form that draws, and the
@@ -227,6 +231,16 @@ impl Hub<'_> {
                 }
             }
             What::Rows => self.rows_reply(q, &revision, &hidden),
+            What::Logic => {
+                let items = q.items.clone().unwrap_or_default();
+                if let Some(id) = items.iter().find(|id| hidden.contains_key(id.as_str())) {
+                    return json!({"rev": rev, "code": "ref_unresolved", "item": id});
+                }
+                let track = if q.track.is_empty() { self.track_read(&q.doc) } else { q.track.clone() };
+                let mut out = self.logic_read(&revision.drawn, &items, &q.steps, &track);
+                out["rev"] = json!(rev);
+                out
+            }
         }
     }
 

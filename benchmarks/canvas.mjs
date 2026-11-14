@@ -1065,6 +1065,8 @@ const EFFICIENCY = {
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
+  // #548: each reading by its own name (benchmarks/logic-budgets.mjs).
+  'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps']);
 
@@ -1505,6 +1507,9 @@ workloads['lottie-export'] = () => {
 };
 // #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
 workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
+// #548's budgets: the logic module's occurrence rows, linear writes, previews and checkpoints of pages
+// (benchmarks/logic-budgets.mjs).
+workloads['logic-budgets'] = async () => (await import('./logic-budgets.mjs')).logicBudgets({ root, release });
 // #226's budgets: the 3D axes against the same marks, and a still view's maps (benchmarks/axes3d.mjs).
 workloads.axes3d = async () => (await import('./axes3d.mjs')).axes3d({ root, release, once, runs });
 

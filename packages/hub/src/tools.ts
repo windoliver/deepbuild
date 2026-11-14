@@ -172,7 +172,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind, by path; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind, by path; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -189,6 +189,9 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
     path: maybe(str('field: kind@major.field for one field, or kind@major for every field of that kind.')),
+    doc: maybe(str('bindings: the document whose logic item they are.')),
+    item: maybe(str('bindings: the logic item\'s ID.')),
+    language: oneOf(['rust'], 'bindings: the pinned language they are written in.'),
   }),
   deep_job: object({
     op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools, their builds and each one\'s cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
