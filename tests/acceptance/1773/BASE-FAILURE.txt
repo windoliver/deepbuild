@@ -1,0 +1,37 @@
+Base commit: 2a69a293 (Merge pull request #1757 from windoliver/worktree-github-issue-1731-161c16), origin/main
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1773
+Date: 2026-11-09  Machine: Linux arm64 (spark, load average about 6)  Node: v24.22.0  vitest 5.0.5
+Result: Test Files 2 failed | 1 passed (3); Tests 2 failed | 2 passed (4). Duration 66 s (two files each wait a
+minute past an MCP call's expected time, side by side).
+
+AC1 #1773.3ccc73f7 waits.test.ts: FAILS, for the expected reason. The twin (a Claude Code session's
+mcp__forge__list_issues, in the same hub and minute) was recorded as call.overrun, shown as still waiting and announced
+next time, so the run reached all three; then, at the first assertion on deep_claim:
+    "deep_claim is never recorded as call.overrun: [{"call":"toolu_ours_1","kind":"mcp","command":null,
+     "expected_ms":60000,"ran_ms":60000,"deadline":"none"}]: expected [...] to deeply equal []"
+
+AC2 #1773.6dc4e7a9 lists.test.ts: FAILS, for the expected reason, at its first assertion:
+    "toolLists returns a list for forge and none for deepbuild: expected [ 'deepbuild', 'forge' ] to deeply equal
+     [ 'forge' ]"
+
+AC3 #1773.6bec8743 same.test.ts: PASSES, both tests (as the issue says, the name `deep` is skipped today): a Codex
+mcp__deep__deep_claim past its expected time has no call.overrun, no reading and no announced history while its
+third-party twin has all of them; toolLists neither starts nor lists `deep` and lists forge.
+
+Checked of AC1 at the base, in one throwaway run not kept in the suite (the same test with expect.soft on the
+deep_claim assertions): every one of them fails at the base, not only the first:
+  - call.overrun recorded for toolu_ours_1 (above);
+  - the session's readings name it four times: "Call toolu_ours_1 overran: still running 1 minute in, ...",
+    "`mcp__deepbuild__deep_claim` ran 1 min, about 1 min was expected",
+    "still waiting on `mcp__deepbuild__deep_claim` · 1 min so far, about 1 min was expected",
+    "waiting on `mcp__deepbuild__deep_claim` · about 1 min expected";
+  - the FileChanged reply showed "DeepBuild: still waiting on `mcp__deepbuild__deep_claim` ...";
+  - the PostToolUse reply showed "DeepBuild: `mcp__deepbuild__deep_claim` ran ...";
+  - the next PreToolUse of the tool was announced "DeepBuild: waiting on `mcp__deepbuild__deep_claim` · about 1 min
+    expected" (its 60 s run entered the timing history).
+Of AC2 at the base, from a like throwaway run of lists.test.ts: the deepbuild fixture server was started (its mark was
+written) and listed first, with deep_claim, deep_ask and deep_wait.
+
+Not run here: the suite against any fix (none exists; this job writes tests only). tsc -p
+tests/acceptance/1773/tsconfig.json: no errors. Every /tmp/dh1773-* folder was gone after the run.

@@ -223,10 +223,11 @@ export class Waits {
   private before(s: SessionWaits, seen: HookSeen, now: number): Reply {
     const out: Reply = {};
     const call = seen.call;
-    // Our own tools are asks and waits on you, which the asks core times; a call with no ID can't be followed to its
-    // end; a call outside a turn the hub saw begin (a subagent's, or one let through while no prompt ran) is no wait.
+    // Our own tools (`deep` for Codex and pi, `deepbuild` for Claude Code) are asks and waits on you, which the asks
+    // core times; a call with no ID can't be followed to its end; a call outside a turn the hub saw begin (a subagent's,
+    // or one let through while no prompt ran) is no wait.
     // A call run in the background returns at once: no wait, and nothing to learn of its time.
-    if (!call || !call.id || call.tool.startsWith('mcp__deep__') || call.input.run_in_background === true || s.turnStart === undefined || s.open.size >= OPEN_KEPT) { this.progressAt(s, now); return this.take(s, now); }
+    if (!call || !call.id || /^mcp__(?:deep|deepbuild)__/.test(call.tool) || call.input.run_in_background === true || s.turnStart === undefined || s.open.size >= OPEN_KEPT) { this.progressAt(s, now); return this.take(s, now); }
     const key = historyKey(call.kind, call.command, call.tool);
     const expected = this.history.expected(key, call.kind);
     const what = excerpt(call.command ?? call.tool);
