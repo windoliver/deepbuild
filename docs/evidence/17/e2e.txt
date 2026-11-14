@@ -56,30 +56,45 @@ TEXT Only the first command ran. ...
 # only to a log, so Claude Code showed "No stderr output" for the denial; the wrapper now passes it through.)
 # On the Mac the same check stopped at Claude Code's folder-trust prompt for a new work folder; no hook ran there.
 
-## E. The same check in an interactive Claude Code session, recorded as screenshots (Linux, 2026-11-11, load ~5-7),
-## binary built from 6d4fccfb. Two tmux windows rendered to PNG; home paths were replaced with <home>, and Claude
-## Code's U+23F5 arrow (no installed font has it) with a similar arrow, after capture.
-# shots/6-binary-and-settings.png: crates unchanged at HEAD 6d4fccfb, cargo rebuilds nothing (the binary is current
-#   for these sources), and the whole --settings file: the wrapper for the five events, nothing else.
-# shots/1-setup-and-live-session-checks.png: the settings file maps all five events to the wrapper, which runs
-#   deep-hook with HOME=/tmp/dh17-e2e/home; the spool is empty. With the session open, both before its prompt and
-#   after its turn: its process (claude --settings /tmp/dh17-e2e/settings.json --allowedTools Bash) and cwd, no hub
-#   socket and no process with that HOME; the load; the wrapper's log: six hook calls, 6-20 ms each, the pkill's
-#   PreToolUse exiting 2.
+## E. The same check in an interactive Claude Code session, recorded as screenshots (Linux, 2026-11-13 22:27-22:29,
+## load 6.7 before the prompt and 6.6 after the turn), binary built from e574148b (PR #2096's head). Two tmux windows
+## rendered to PNG; home paths were replaced with <home>, and Claude Code's U+23F5 arrow (no installed font has it)
+## with a similar arrow, after capture. These replace the screenshots of the binary at 6d4fccfb (commit c4f54b63
+## holds those).
+# shots/1-setup-and-live-session-checks.png: HEAD, the binary's and the wrapper's sha256; no hooks in the repo's, the
+#   user's or managed settings (no /etc/claude-code at all); the --settings file maps all five events to the wrapper,
+#   which runs deep-hook with HOME=/tmp/dh17-e2e/home; that HOME's rules.json entries for the two calls
+#   (no-kill-by-name: shell:pkill *, block, fail_closed; listing-noted: shell:ls*, watch, not fail_closed); the spool
+#   and the wrapper's logs empty; a throwaway process (dh17-victim) for the pkill to name; a sampler reading the hub's
+#   socket five times a second from 22:27:23. With the session open (started 22:27:25, session ID fb9e32de-...,
+#   claude --session-id ... --settings /tmp/dh17-e2e/settings.json --allowedTools Bash), before its prompt and after
+#   its turn: no hub socket and no process with that HOME; dh17-victim still alive 46 s on; the load; the wrapper's
+#   log: six hook calls with their times, 7-11 ms each through the wrapper, the pkill's PreToolUse exiting 2;
+#   deep-hook's whole stderr (the one denial). Then the session's process gone, 300 socket samples with the socket
+#   present in none, and dh17-victim stopped by its PID.
 # shots/2-session-ls-ran-pkill-blocked.png: the prompt asks for the two calls and a report, nothing about the outcome;
 #   ls ran; the pkill was not run, with DeepBuild's reason (guard no-kill-by-name, which holds while the hub doesn't
-#   answer). The agent's reply calls this "the e2e": the session runs in this repo, so it has the project's context.
-#   The grey text in the input box is Claude Code's own suggestion; it was never sent (the spool has one prompt).
+#   answer).
 # shots/3-session-expanded.png: the same turn in the detailed view: the raw ls output and the hook's full denial.
 # shots/4-spool-hub-stopped.png: after the session, hub still stopped: the spool folder holds one file of six lines,
-#   with their matched entries (listing-noted for ls, no-kill-by-name for the pkill); no ledger row for the session.
+#   with their matched entries (listing-noted for ls, no-kill-by-name for the pkill) and the session's own ID; no
+#   ledger row for the session.
 # shots/5-hub-replay-ledger.png: the CLI entry (node packages/cli/dist/main.js hub run; this branch changes no hub or
-#   CLI code) replays the spool, which empties; the ledger holds the six hook events (writer hook) in hook order with
-#   the spool's IDs, plus three rows the hub wrote itself (writer core: session.reading, turn.usage, session.state);
-#   the hub stopped by its PID, and afterwards no socket and no process with that HOME.
-# Independent agents reviewed each capture from the images alone. Their findings were fixed in the next capture:
-# hidden commands, no proof the hub was down while the session ran, no ledger read before the replay, a filtered
-# ledger query, no load or hook timings, the hub not shown gone, and a missing glyph. The last review is cited in the PR.
-# In an earlier capture at load ~10 Claude Code also showed "spooled <id>, but its sync didn't finish within the
-# hook's 50 ms" beside the denial. That note (from 1d65b7d1f, not this change) means the line was written to the spool
-# file but its fsync to disk hadn't returned within the budget; the line was in the spool and reached the ledger.
+#   CLI file, and no source is newer than the built CLI) starts the hub: its socket is present and one process has
+#   that HOME; it replays the spool, which empties; the ledger holds the six hook events (writer hook) in hook order
+#   with the spool's IDs, plus four rows by writer core (session.reading, holds.watch, session.state, turn.usage);
+#   the hub stopped by its PID, and afterwards gone, with no socket and no process with that HOME.
+# shots/6-binary-and-settings.png: the same two hashes; crates, Cargo.toml and Cargo.lock unchanged at HEAD e574148b;
+#   no source file newer than the binary; the whole --settings file. cargo build --locked is not shown: since 20:37
+#   that day it fails in this worktree, because the main checkout's .cargo/config.toml, which cargo also reads from a
+#   worktree under it, patches symphonia-codec-vorbis, a crate this branch's Cargo.lock doesn't hold.
+# The wall times are the wrapper's (bash, date and tee around deep-hook) on a machine other sessions were building
+# on: not a budget reading. The budgets are the reference Mac's (mac-judge.txt).
+# Not checked: hooks a plugin or a remotely delivered managed policy could add (the wrapper's log and the spool each
+# hold exactly the six calls), and processes of other users.
+# Independent agents reviewed each capture from the images alone; their findings were fixed in the next capture.
+# For this binary, captures 5 to 9 left, in turn: the session's exit, its ID's tie to its process, other settings'
+# hooks, the binary's identity and the hub's absence between checks; the sampler's log not shown empty, a pkill
+# whose pattern matched nothing, managed settings; where no-kill-by-name comes from, cut hashes, hook times, one load
+# reading; the session's start time and a positive control for the hub check. Capture 10 is the one recorded here.
+# The last review is cited in the PR.
