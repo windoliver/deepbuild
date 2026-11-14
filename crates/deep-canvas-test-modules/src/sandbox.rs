@@ -21,7 +21,7 @@ pub fn mesh() -> Module {
 fn register_mesh(r: &mut Registrar) {
     let mesh = Param {
         name: "mesh",
-        ty: ParamType::Json,
+        ty: ParamType::Json("asset ID | {gen: <pack>.<provider>, params}"),
         unit: "",
         default: Value::Null,
         min: None,

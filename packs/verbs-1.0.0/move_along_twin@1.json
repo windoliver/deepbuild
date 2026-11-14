@@ -1,0 +1,29 @@
+{
+  "id": "verbs.move_along_twin",
+  "version": "1.0",
+  "title": "Move along, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of move_along: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "path": {
+      "type": "ID",
+      "default": "path",
+      "about": "the path item whose shape the targets travel"
+    }
+  },
+  "steps": {
+    "travel": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/pos": [
+            "now[0]",
+            "now[1] + 10",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

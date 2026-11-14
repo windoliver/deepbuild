@@ -165,11 +165,12 @@ fn spectrum_fixture() -> Value {
     json!({"frames": frames, "changed": changed, "seeks": [{"from": 3, "to": 2, "rows": frames[2]}]})
 }
 
-/// `media.strip@1`: Strip and track's fields as params.
+/// `media.strip@1`: Strip and track's fields as params, each with the forms a strip's readers
+/// take (#1973): the mix's (`mixdown`), the picture link's and the score's.
 fn strip_kind() -> Entry {
-    let json = |name: &'static str| Param {
+    let json = |(name, form): (&'static str, &'static str)| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
@@ -179,8 +180,37 @@ fn strip_kind() -> Entry {
         operator: "",
     };
     let fields = [
-        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch",
-        "pan", "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
+        ("track", "u16"),
+        ("src", "sha256 | {asset?: sha256, synth?, score?: item ID}"),
+        ("start", "flick | time"),
+        ("in", "flick | time"),
+        ("out", "flick | time"),
+        ("rate", "number | [p, q] | <p>/<q>"),
+        ("offset", "flick | time"),
+        ("span", "flick | time"),
+        ("loop", "bool"),
+        (
+            "gain",
+            "dB | text (-inf) | {keys: [{t: flick, value: dB | text, interp?}]}",
+        ),
+        ("pitch", "st | expr"),
+        ("pan", "-1..1"),
+        ("bus", "bus ID"),
+        (
+            "enabled",
+            "bool | {keys: [{t: flick, value: bool, interp?}]}",
+        ),
+        (
+            "fade_in",
+            "{length: flick, curve?: linear | equal_power | exp}",
+        ),
+        (
+            "fade_out",
+            "{length: flick, curve?: linear | equal_power | exp}",
+        ),
+        ("align", "{onset?: strongest | first, to: flick | time}"),
+        ("at_stage", "play | wait"),
+        ("tags", "[text]"),
     ];
     Entry {
         family: "media",

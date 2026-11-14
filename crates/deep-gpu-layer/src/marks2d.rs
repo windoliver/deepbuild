@@ -769,6 +769,15 @@ pub(crate) struct Frame2 {
     pub print: Option<Arc<crate::print2d::Printing>>,
     /// #464: an indexed look's frame, which the index operator draws in place of Vello GPU.
     pub indexed: Option<Arc<crate::indexed::IndexFrame>>,
+    /// #462: the other looks this frame mixes with its own, through its shot's look regions.
+    pub mix: Option<Arc<Mix2>>,
+}
+
+/// #462: a 2D frame's look regions: each other look's frame, in the mix's key order after this
+/// frame's own, and the mix the composite pass reads.
+pub(crate) struct Mix2 {
+    pub frames: Vec<Arc<Frame2>>,
+    pub mix: crate::regions::Mix,
 }
 
 impl Frame2 {
@@ -780,9 +789,9 @@ impl Frame2 {
 /// A 2D writer layer drawn by Vello GPU into a GPU surface's slot, one pass a frame.
 struct Module2 {
     marks: Marks2,
-    groups: Option<Arc<Mutex<Groups>>>,
-    /// `--planted`: frames this session drew.
-    played: u64,
+    /// What draws the frame's own look, and each other look a frame mixes (#462).
+    painter: Painter,
+    mixed: Vec<Painter>,
     planted: Option<Planted>,
     vello: Option<Arc<Mutex<Vello2d>>>,
     built: Option<u64>,
@@ -791,10 +800,160 @@ struct Module2 {
     error: Arc<Mutex<Option<Value>>>,
     /// When the film's frame finished encoding Vello GPU's passes (#417).
     encoded: Option<crate::film::Encoded>,
-    /// #464: the textures a printed frame draws through, and what the call reads back.
-    stage: Option<Arc<crate::print2d::Stage>>,
+    /// #464: what the call reads back.
     taps: crate::print2d::Taps,
+    /// #462: each mixed look's render target, and the composite that mixes them into the slot.
+    targets: Vec<(wgpu::Texture, wgpu::TextureView)>,
+    composite: Arc<Mutex<crate::regions::Composite>>,
+}
+
+/// What draws one look's frame: its composited groups, its print stage and its index operator,
+/// kept from frame to frame.
+#[derive(Default)]
+struct Painter {
+    groups: Option<Arc<Mutex<Groups>>>,
+    /// `--planted`: frames it drew.
+    played: u64,
+    /// #464: the textures a printed frame draws through.
+    stage: Option<Arc<crate::print2d::Stage>>,
     indexer: Option<Arc<Mutex<crate::indexed::Indexer>>>,
+}
+
+/// One look's draw, recorded into an encoder when the frame's job runs.
+type Draw = Box<dyn FnOnce(&mut wgpu::CommandEncoder) -> Result<(), Value> + Send>;
+
+impl Painter {
+    /// Prepares `frame`'s draw into `target` of `size`, in the slot's format; `taps` reads its
+    /// linear and index targets back.
+    #[allow(clippy::too_many_arguments)]
+    fn draw(
+        &mut self,
+        device: &Device,
+        vello: &Arc<Mutex<Vello2d>>,
+        frame: Arc<Frame2>,
+        target: wgpu::TextureView,
+        size: [u32; 2],
+        options: Options,
+        planted: Option<Planted>,
+        taps: crate::print2d::Taps,
+    ) -> Draw {
+        let vello = vello.clone();
+        let (dev, queue) = (device.device.clone(), device.queue.clone());
+        // A composited group's passes record ahead of the frame, on their own command buffers.
+        let on_paper = frame
+            .page
+            .as_ref()
+            .is_some_and(|p| p.sheet.is_some() || p.relief.is_some());
+        let groups = (on_paper || groups::composited(frame.marks())).then(|| {
+            let mut clock = frame.clock;
+            if planted == Some(Planted::DissolveReadsPlayback) {
+                clock.t = (self.played * groups::FLICKS as u64 / 60) as i64;
+            }
+            self.played += 1;
+            let layers: Vec<&[Arc<Drawn>]> = frame.layers.iter().map(Vec::as_slice).collect();
+            let layer = groups::Layer {
+                layers: &layers,
+                size,
+                options,
+                clock,
+                roles: &frame.roles,
+                packs: &frame.packs,
+                canonical: false,
+                base: None,
+                keep: false,
+                planted,
+                guard: frame.guard.as_ref(),
+                other: None,
+                page: frame.page.as_deref(),
+                ground: true,
+            };
+            let mut v = vello.lock().unwrap_or_else(|e| e.into_inner());
+            let g = self
+                .groups
+                .get_or_insert_with(|| Arc::new(Mutex::new(Groups::new(&device.device))));
+            let done = g
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .compose(device, &mut v, &layer)
+                .map(|(done, ..)| done);
+            (g.clone(), done)
+        });
+        // #464: a printed frame draws its base and each ink's coverage into the stage, and the
+        // finish prints them into the target.
+        let printing = frame.print.clone();
+        let wants_linear = taps.wants_linear();
+        let stage = printing.as_ref().map(|p| {
+            let kept = self.stage.take().and_then(|s| Arc::try_unwrap(s).ok());
+            let s = Arc::new(crate::print2d::Stage::ensure(
+                kept,
+                &device.device,
+                FORMAT,
+                size,
+                p.print.separations.len(),
+                wants_linear,
+            ));
+            self.stage = Some(s.clone());
+            s
+        });
+        let indexer = self
+            .indexer
+            .get_or_insert_with(|| {
+                Arc::new(Mutex::new(crate::indexed::Indexer::new(&device.device)))
+            })
+            .clone();
+        Box::new(move |encoder| {
+            let base = stage.as_ref().map_or(&target, |s| &s.source.1);
+            let inked = printing.as_ref().map(|p| p.inked()).unwrap_or_default();
+            // Each ink's coverage first, each Vello GPU draw on its own encoder and submit, since
+            // its uploads land before any encoder that shares its buffers runs (#430).
+            let mut inks = Ok(());
+            if let (Some(p), Some(s)) = (&printing, &stage) {
+                for (k, items) in p.inks.iter().enumerate() {
+                    let mut own = dev.create_command_encoder(&Default::default());
+                    inks = inks.and(vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
+                        &dev,
+                        &queue,
+                        &mut own,
+                        frame.marks().filter(|d| items.contains(d.mark.item())),
+                        size,
+                        &s.covs[k].1,
+                        options,
+                    ));
+                    queue.submit([own.finish()]);
+                }
+            }
+            let drawn = match (groups, &frame.indexed) {
+                // #464: an indexed look draws its marks through the index operator.
+                (_, Some(f)) => {
+                    let mut ix = indexer.lock().unwrap_or_else(|e| e.into_inner());
+                    ix.record(&dev, encoder, f, base, FORMAT, &taps.indices);
+                    Ok(())
+                }
+                (Some((g, done)), None) => done.map(|done| {
+                    let mut g = g.lock().unwrap_or_else(|e| e.into_inner());
+                    g.finish(&dev, encoder, &done, base, FORMAT, false);
+                }),
+                (None, None) => vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
+                    &dev,
+                    &queue,
+                    encoder,
+                    frame.marks().filter(|d| !inked.contains(d.mark.item())),
+                    size,
+                    base,
+                    options,
+                ),
+            };
+            let drawn = drawn.and(inks);
+            if let (Ok(()), Some(p), Some(s)) = (&drawn, &printing, &stage) {
+                s.record(&dev, encoder, p, &target, FORMAT, wants_linear);
+                if let Some((t, _)) = s.linear.as_ref().filter(|_| wants_linear) {
+                    *taps.linear.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some((t.clone(), size));
+                }
+            }
+            drawn
+        })
+    }
 }
 
 impl RenderModule for Module2 {
@@ -833,123 +992,88 @@ impl RenderModule for Module2 {
         let Some(vello) = self.vello.clone() else {
             return Vec::new();
         };
-        let (dev, queue) = (device.device.clone(), device.queue.clone());
         let frame = self.marks.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        let (options, error, encoded) = (self.options, self.error.clone(), self.encoded.clone());
-        let target = target.clone();
-        // A composited group's passes record ahead of the frame, on their own command buffers.
-        let on_paper = frame
-            .page
-            .as_ref()
-            .is_some_and(|p| p.sheet.is_some() || p.relief.is_some());
-        let groups = (on_paper || groups::composited(frame.marks())).then(|| {
-            let mut clock = frame.clock;
-            if self.planted == Some(Planted::DissolveReadsPlayback) {
-                clock.t = (self.played * groups::FLICKS as u64 / 60) as i64;
-            }
-            self.played += 1;
-            let layers: Vec<&[Arc<Drawn>]> = frame.layers.iter().map(Vec::as_slice).collect();
-            let layer = groups::Layer {
-                layers: &layers,
-                size: target.size,
+        let (options, planted) = (self.options, self.planted);
+        let (error, encoded) = (self.error.clone(), self.encoded.clone());
+        let size = target.size;
+        let Some(mix) = frame.mix.clone() else {
+            let draw = self.painter.draw(
+                device,
+                &vello,
+                frame,
+                target.view.clone(),
+                size,
                 options,
-                clock,
-                roles: &frame.roles,
-                packs: &frame.packs,
-                canonical: false,
-                base: None,
-                keep: false,
-                planted: self.planted,
-                guard: frame.guard.as_ref(),
-                other: None,
-                page: frame.page.as_deref(),
-                ground: true,
-            };
-            let mut v = vello.lock().unwrap_or_else(|e| e.into_inner());
-            let g = self
-                .groups
-                .get_or_insert_with(|| Arc::new(Mutex::new(Groups::new(&device.device))));
-            let done = g
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .compose(device, &mut v, &layer)
-                .map(|(done, ..)| done);
-            (g.clone(), done)
-        });
-        // #464: a printed frame draws its base and each ink's coverage into the stage, and the
-        // finish prints them into the slot.
-        let printing = frame.print.clone();
-        let wants_linear = self.taps.wants_linear();
-        let stage = printing.as_ref().map(|p| {
-            let kept = self.stage.take().and_then(|s| Arc::try_unwrap(s).ok());
-            let s = Arc::new(crate::print2d::Stage::ensure(
-                kept,
-                &device.device,
-                FORMAT,
-                target.size,
-                p.print.separations.len(),
-                wants_linear,
+                planted,
+                self.taps.clone(),
+            );
+            let job: Job = Box::new(move |encoder| {
+                let drawn = draw(encoder);
+                if let Some(at) = &encoded {
+                    *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                }
+                *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
+            });
+            return vec![("vello2d".into(), job)];
+        };
+        // #462: each look the frame mixes draws whole into its own target, then the composite
+        // mixes them into the slot.
+        let looks = 1 + mix.frames.len();
+        self.targets
+            .retain(|(t, _)| t.width() == size[0] && t.height() == size[1]);
+        while self.targets.len() < looks {
+            let t = crate::regions::scratch(&device.device, size, "look.regions render");
+            let v = t.create_view(&Default::default());
+            self.targets.push((t, v));
+        }
+        self.mixed.resize_with(mix.frames.len(), Painter::default);
+        let mut draws = vec![self.painter.draw(
+            device,
+            &vello,
+            frame,
+            self.targets[0].1.clone(),
+            size,
+            options,
+            planted,
+            self.taps.clone(),
+        )];
+        for (j, f) in mix.frames.iter().enumerate() {
+            draws.push(self.mixed[j].draw(
+                device,
+                &vello,
+                f.clone(),
+                self.targets[j + 1].1.clone(),
+                size,
+                options,
+                planted,
+                crate::print2d::Taps::default(),
             ));
-            self.stage = Some(s.clone());
-            s
-        });
-        let taps = self.taps.clone();
-        let indexer = self
-            .indexer
-            .get_or_insert_with(|| {
-                Arc::new(Mutex::new(crate::indexed::Indexer::new(&device.device)))
-            })
-            .clone();
+        }
+        let views: Vec<wgpu::TextureView> = self.targets[..looks]
+            .iter()
+            .map(|(_, v)| v.clone())
+            .collect();
+        let (dev, queue) = (device.device.clone(), device.queue.clone());
+        let composite = self.composite.clone();
+        let slot = target.view.clone();
         let job: Job = Box::new(move |encoder| {
-            let base = stage.as_ref().map_or(&target.view, |s| &s.source.1);
-            let inked = printing.as_ref().map(|p| p.inked()).unwrap_or_default();
-            // Each ink's coverage first, each Vello GPU draw on its own encoder and submit, since
-            // its uploads land before any encoder that shares its buffers runs (#430).
-            let mut inks = Ok(());
-            if let (Some(p), Some(s)) = (&printing, &stage) {
-                for (k, items) in p.inks.iter().enumerate() {
-                    let mut own = dev.create_command_encoder(&Default::default());
-                    inks = inks.and(vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
-                        &dev,
-                        &queue,
-                        &mut own,
-                        frame.marks().filter(|d| items.contains(d.mark.item())),
-                        target.size,
-                        &s.covs[k].1,
-                        options,
-                    ));
-                    queue.submit([own.finish()]);
-                }
+            // Each look on its own encoder and submit: their draws share Vello GPU's buffers.
+            let mut drawn = Ok(());
+            for d in draws {
+                let mut own = dev.create_command_encoder(&Default::default());
+                drawn = drawn.and(d(&mut own));
+                queue.submit([own.finish()]);
             }
-            let drawn = match (groups, &frame.indexed) {
-                // #464: an indexed look draws its marks through the index operator.
-                (_, Some(f)) => {
-                    let mut ix = indexer.lock().unwrap_or_else(|e| e.into_inner());
-                    ix.record(&dev, encoder, f, base, FORMAT, &taps.indices);
-                    Ok(())
-                }
-                (Some((g, done)), None) => done.map(|done| {
-                    let mut g = g.lock().unwrap_or_else(|e| e.into_inner());
-                    g.finish(&dev, encoder, &done, base, FORMAT, false);
-                }),
-                (None, None) => vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
-                    &dev,
-                    &queue,
-                    encoder,
-                    frame.marks().filter(|d| !inked.contains(d.mark.item())),
-                    target.size,
-                    base,
-                    options,
-                ),
-            };
-            let drawn = drawn.and(inks);
-            if let (Ok(()), Some(p), Some(s)) = (&drawn, &printing, &stage) {
-                s.record(&dev, encoder, p, &target.view, FORMAT, wants_linear);
-                if let Some((t, _)) = s.linear.as_ref().filter(|_| wants_linear) {
-                    *taps.linear.lock().unwrap_or_else(|e| e.into_inner()) =
-                        Some((t.clone(), target.size));
-                }
-            }
+            let refs: Vec<&wgpu::TextureView> = views.iter().collect();
+            composite.lock().unwrap_or_else(|e| e.into_inner()).record(
+                &dev,
+                encoder,
+                &mix.mix,
+                &refs,
+                crate::regions::Depth::None,
+                &slot,
+                None,
+            );
             if let Some(at) = &encoded {
                 *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
             }
@@ -974,8 +1098,8 @@ pub(crate) fn open2(
     let error = Arc::new(Mutex::new(None));
     let module = Module2 {
         marks,
-        groups: None,
-        played: 0,
+        painter: Painter::default(),
+        mixed: Vec::new(),
         planted: app.planted,
         vello: None,
         built: None,
@@ -985,9 +1109,9 @@ pub(crate) fn open2(
         },
         error: error.clone(),
         encoded,
-        stage: None,
         taps,
-        indexer: None,
+        targets: Vec::new(),
+        composite: Default::default(),
     };
     let path = app.decision.path;
     let ui = app
@@ -1085,6 +1209,7 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
             page: ev.page.clone(),
             print: None,
             indexed: None,
+            mix: None,
         };
         for l in &ev.layers {
             let path = path_of(app, l);
@@ -1274,6 +1399,7 @@ pub fn spike2d(app: &mut App, out: &str, call: &Value) -> Value {
             page: ev.page.clone(),
             print: None,
             indexed: None,
+            mix: None,
         };
         let (ui, error) = open2(
             app,

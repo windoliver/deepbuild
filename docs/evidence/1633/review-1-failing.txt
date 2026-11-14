@@ -1,0 +1,34 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1633-reopened-review-thread-3bc754
+
+ ❯ packages/hub/test/reopened-items.test.ts (2 tests | 1 failed) 26651ms
+   ❯ #1633 review rounds: a reopened review note and its ask (2)
+     × a note you accepted after a reviewer resolved its thread stays closed when the thread is unresolved again, and no ask is raised for it again 13974ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a note you accepted after a reviewer resolved its thread stays closed when the thread is unresolved again, and no ask is raised for it again
+AssertionError: you accepted PRRT_kwDOAcme1633r's note, so the third stop leaves its item 0784f5e9c0b1354446b7f0e6a420141dd19357523f307b5b546702987b8ab471 closed: open_item.opened at log_pos 22 {"task_ref":"task:item7","text":"Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”","item":"0784f5e9c0b1354446b7f0e6a420141dd19357523f307b5b546702987b8ab471","from":"review_thread"}; open_item.opened at log_pos 180 {"task_ref":"task:item7","text":"Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”","item":"0784f5e9c0b1354446b7f0e6a420141dd19357523f307b5b546702987b8ab471","from":"review_thread","replaces":"01M6YH79P464PE3QP1PCFGHBZF"}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/hub/test/reopened-items.test.ts:72:167
+     70|     const last = stops.at(-1)!.events;
+     71|     const item = itemsOf(last, ref).find(namesT)!;
+     72|     expect(isOpen(last, item), `you accepted ${T.id}'s note, so the th…
+       |                                                                                                                                                                       ^
+     73|     expect(asksForT(last, accepted), 'no new ask names T after your an…
+     74|   }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  13:32:18
+   Duration  26.86s (tests 100%)
+

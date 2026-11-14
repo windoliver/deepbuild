@@ -1,0 +1,21 @@
+ RUN  v5.0.5 /tmp/dh1633v2
+ ❯ packages/hub/test/reopened-items.test.ts (7 tests | 1 failed | 6 skipped) 73533ms
+   ❯ #1633 review rounds: a reopened review note and its ask (7)
+     × a note that opens again while the session's own account holds its thread resolved gets its new accept ask once the thread is unresolved, and only once 73422ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a note that opens again while the session's own account holds its thread resolved gets its new accept ask once the thread is unresolved, and only once
+AssertionError: stop 4 raised an accept ask for PRRT_kwDOAcme1633r: expected undefined to be defined
+ ❯ packages/hub/test/reopened-items.test.ts:146:69
+    144|       if (n !== 0 && n !== 3) return;
+    145|       const [ask] = asksForT(events, n === 0 ? 0 : defaulted);
+    146|       expect(ask, `stop ${n + 1} raised an accept ask for ${T.id}`).to…
+       |                                                                     ^
+    147|       const all = await settle(hub, (e) => e.some((x) => x.kind === 'a…
+    148|       expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject =…
+ ❯ play packages/hub/test/reopened-items.test.ts:62:11
+ ❯ packages/hub/test/reopened-items.test.ts:142:33
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  20:25:49
+   Duration  73.64s (tests 100%)

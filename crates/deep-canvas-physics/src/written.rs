@@ -116,9 +116,10 @@ fn at(array: &Value, t: i64, width: usize) -> Vec<Value> {
         .collect()
 }
 
-/// Whether a world of `form` writes an instancer's columns.
+/// Whether a world of `form` writes an instancer's columns, or draws a soft body through a skin
+/// (#524: skin.rs).
 pub fn writes(form: &Value) -> bool {
-    outputs(form).next().is_some()
+    outputs(form).next().is_some() || crate::skin::writes(form)
 }
 
 /// Each `<body>#*` output of `form`'s worlds: its world's ID, its own and its instancer's.
@@ -146,8 +147,10 @@ fn outputs(form: &Value) -> impl Iterator<Item = (&str, &str, &str)> {
 }
 
 /// `form` with each instancer column its worlds' outputs write set to its value at `t`, from the
-/// form's `arrays` (baked by [`arrays`]); every other column stays the instancer's own.
+/// form's `arrays` (baked by [`arrays`]); every other column stays the instancer's own. Each
+/// skin's item is drawn at `t` too (#524: skin.rs).
 pub fn write(form: &mut Value, t: i64) {
+    crate::skin::write(form, t);
     let mut cols = Vec::new();
     for (id, oid, item) in outputs(form) {
         for (part, _, width) in COLUMNS {

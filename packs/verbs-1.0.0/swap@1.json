@@ -1,0 +1,34 @@
+{
+  "id": "verbs.swap",
+  "version": "1.0",
+  "title": "Swap",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A move: each target and the item `with` names trade places over its window.",
+  "inputs": {
+    "with": {
+      "type": "ID",
+      "default": "",
+      "about": "the item it trades places with"
+    }
+  },
+  "steps": {
+    "mine": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/pos": "with_now"
+        }
+      }
+    },
+    "theirs": {
+      "op": "cue",
+      "params": {
+        "on": "with",
+        "set": {
+          "at/pos": "here"
+        }
+      }
+    }
+  }
+}

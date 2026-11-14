@@ -63,6 +63,10 @@ const TOOLS = {
     use: 'Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.',
     proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
   },
+  deep_query: {
+    use: 'Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; or the why behind one value, naming the canvas module, operator and document paths that made it. It reads only what your session may read.',
+    proves: 'A reading does not prove your work is right: it is never evidence for a claim, only check results are, and an absence concluded from a cut answer is refused.',
+  },
   deep_job: {
     use: 'List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub\'s process; a rerun with the same tool, params and input bytes is a cache hit that starts no process.',
     proves: 'A job\'s outputs are a reading by hash with a receipt, never a verdict: one reaches an item only after the kind\'s output checks pass, and a job changes no document.',

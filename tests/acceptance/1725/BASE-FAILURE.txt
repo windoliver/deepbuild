@@ -1,0 +1,77 @@
+The suite at the base, e0c90a5a5, run once on November 13, 2026, on this Mac (Node 24.22, Rust 1.99.1):
+
+  npm ci && npm run build --workspaces
+  npm run generate -w @deepbuild/contracts        # see "The base's build" below
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook -p deep-show
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1725 --no-file-parallelism --testTimeout=600000
+
+The base's build: at e0c90a5a5, crates/deep-contracts/src/generated.rs defines RULE_340 and RULE_341 twice (two merged
+pull requests each numbered new rules), so `cargo build -p deep-show` fails there with E0428 in deep-contracts. The base was
+built with that file regenerated from the base's own schemas by `npm run generate -w @deepbuild/contracts`, which changed
+only generated.rs (6 lines renumbered). The regenerated file is not part of this suite and was not committed.
+
+Result: 5 failed, 1 passed, each for the reason the issue names.
+
+ ❯ binding.test.ts (1 test | 1 failed)
+   × #1725.9bb6c26d deep_query from another session answers only the writer's layer as its binding allows, as deep-show run answers it
+ ❯ bounds.test.ts (1 test | 1 failed)
+   × #1725.cdf8a813 deep_show with mode: bounds on the session's document answers a display_only snapshot and each item's bounds as numbers
+ ❯ gap.test.ts (1 test | 1 failed)
+   × #1725.52debd6c the scene audit's resting gap reads through deep mcp: a box 0.2 m above the slab reads 0.2, as deep-show run reads it
+ ❯ sheet.test.ts (1 test | 1 failed)
+   × #1725.8867fb84 one deep_show of a contact sheet of the six named views returns one snapshot per view, each with its own visible table
+ ❯ summary.test.ts (1 test | 1 failed)
+   × #1725.6bd3c6a3 deep_query what: summary on the document the session drew answers what deep-show run answers, apart from core and set_digest
+   ✓ strict.test.ts #1725.fb4e8d7a every listed tool's schema passes #26's strict validator, and a planted anyOf schema fails it, naming the tool
+
+ Test Files  5 failed | 1 passed (6)
+      Tests  5 failed | 1 passed (6)
+   Duration  41.83s
+
+The failures, as printed:
+
+ FAIL  summary.test.ts > #1725.6bd3c6a3
+AssertionError: deep_query is in deep mcp's tool list (deep_ask, deep_wait, deep_open_item, deep_status, deep_search,
+deep_claim, deep_evidence, deep_run, deep_show, deep_drive, deep_kinds, deep_job, deep_env, deep_root_plan, deep_propose);
+it is not, so deep_query can't be called: expected [ 'deep_ask', 'deep_wait', …(13) ] to include 'deep_query'
+
+ FAIL  bounds.test.ts > #1725.cdf8a813
+AssertionError: deep_show with mode: bounds on 01JB7D00000000000000000001: refused unlisted_field at /params/arguments/mode:
+{"code":"unlisted_field","retryable":false,"remediation":"Leave out mode: the schema lists only doc, document, patch,
+removes, t, size, include, rev, camera, probes.","path":"/params/arguments/mode","actual":"mode","evidence":[]}: expected
+true to be false
+
+ FAIL  binding.test.ts > #1725.9bb6c26d
+AssertionError: deep_query is in deep mcp's tool list (deep_ask, deep_wait, deep_open_item, deep_status, deep_search,
+deep_claim, deep_evidence, deep_run, deep_show, deep_drive, deep_kinds, deep_job, deep_env, deep_root_plan, deep_propose);
+it is not, so deep_query can't be called: expected [ 'deep_ask', 'deep_wait', …(13) ] to include 'deep_query'
+
+ FAIL  sheet.test.ts > #1725.8867fb84
+AssertionError: deep_show with a contact sheet of the six named views (sheet) on 01JB7D00000000000000000001: refused
+unlisted_field at /params/arguments/sheet: {"code":"unlisted_field","retryable":false,"remediation":"Leave out sheet: the
+schema lists only doc, document, patch, removes, t, size, include, rev, camera, probes.","path":"/params/arguments/sheet",
+"actual":"sheet","evidence":[]}: expected true to be false
+
+ FAIL  gap.test.ts > #1725.52debd6c
+AssertionError: through deep mcp: the reply's audit reading gives each 3D item's resting gap (audit.support): audit is
+{"failures":[{"check":"support","ids":["slab"],"fix":"rest slab on something, or declare it floating"},{"check":"support",
+"ids":["red-box"],"fix":"rest red-box on something, or declare it floating"}]}: expected undefined to be defined
+
+#1725.fb4e8d7a passes on the base, as expected: the base's list (no deep_query, no mode or sheet on deep_show) is strict,
+and the planted anyOf in deep_show's schema fails the validator, naming deep_show.
+
+What the base run did reach: bounds, sheet and gap each drew the red-box fixture (or its twin, with include: [issues,
+audit]) through the Claude Code session's own deep_show, presented, before the step that fails. summary and binding fail at
+the tool list, before any document is drawn.
+
+Checked once beside the run, on the same base build, with a scratch script that wasn't kept: `deep-show run` and `deep-show
+canvas` (the long-lived mode the hub keeps) answered the same world and calls identically: the red box's
+deep_show; its deep_query summary, {rev: 1, summary: {items: 5, by_kind: {camera@1: 1, light.sun@1: 1, mark.box@1: 2,
+material@1: 1}, by_layer: {agent-…: 5}, by_module: {core: 1, scene3d: 4}}}, the issue's counts; the bounds mode without a
+document (display_only snapshot, red-box min [0.3, 0.1, 0.2] max [0.7, 0.4, 0.4] to float rounding, slab [-1, 0, -1]–[1, 0.1,
+1]); the twin's include: [issues, audit] (audit: failures only, no gap); and the gate board's deep_query rows, the other
+session's ref_unresolved for the gate's fill, both rows in the writer's layer, and the writer's own query reading the value,
+with equal content keys in both modes. So the comparisons with `deep-show run` that criteria 1, 3 and 6 make can hold for a
+hub that forwards the call unchanged.
+
+No processes or temporary folders of this run were left: each test's hub and stand-ins were stopped by PID (#806's cleanup).

@@ -1,0 +1,40 @@
+ RUN  v5.0.5 /tmp/dh1633v2
+ ❯ packages/hub/test/reopened-items.test.ts (7 tests | 1 failed | 6 skipped) 140506ms
+   ❯ #1633 review rounds: a reopened review note and its ask (7)
+     × a note that opens again while the session's own account holds its thread resolved gets its new accept ask once the thread is unresolved, and only once 140383ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a note that opens again while the session's own account holds its thread resolved gets its new accept ask once the thread is unresolved, and only once
+AssertionError: that ask passed its deadline too, so the same question never reaches you a third time: expected [ { v: 1, …(10) } ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   {
++     "actor": "you",
++     "data": {
++       "deadline": 1794371924734,
++       "default": "keep",
++       "fallback": "you",
++       "key": "8a225be3c1a1986facac39e8c2738d29fe272445246c5baa5d1770f33e91b3fe",
++       "kind": "exception",
++       "options": [
++         {
++           "decision": "none",
++           "id": "accept",
++           "label": "Accept it: close it without a fix",
++         },
++         {
++           "decision": "none",
++           "id": "keep",
++           "label": "Keep it open",
++         },
++       ],
++       "owner": "you",
++       "pinned_to": {
++         "kind": "commit",
++         "ref": "0db51e2cb2f248842a4d058816b3c8af4e09db6c",
++       },
++       "provisional": false,
++       "question": "Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”",
++       "recommended": "keep",
++     },

@@ -1,0 +1,20 @@
+{
+  "id": "verbs.in_turn",
+  "version": "1.0",
+  "title": "In turn",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target fades up over the first half of its own window, so with a lag they come in one after another.",
+  "inputs": {},
+  "steps": {
+    "in": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/opacity": 0
+        },
+        "until": 0.5
+      }
+    }
+  }
+}
