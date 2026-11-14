@@ -130,7 +130,7 @@ function apng(list, fps) {
 
 const pictures = {
   'mosaic.png': mosaic[Math.round(0.95 * FPS)],
-  'iris.png': iris[Math.round(0.8 * FPS)],
+  'iris.png': iris[18],
   'dip.png': dip[14],
   'caption.png': caption[0],
   'transitions-boil.apng': apng([...mosaic, ...iris, ...dip, ...boil, ...boil], FPS),
