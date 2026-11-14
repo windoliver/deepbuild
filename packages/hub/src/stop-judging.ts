@@ -1079,19 +1079,16 @@ export class StopJudging {
       // The repo's spec checks run beside the definition's (#322): in a project the core's trust decision marks
       // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
       // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
-      if (!r.joins) {
-        if (hasSpec && trusted && this.options.settings.plant !== 'drafted-spec-only') {
-          const release = releaseNames.length ? await this.releaseChecks(r.cwd, r.commit) : [];
-          // A named release check runs on the merge only, even when the ordinary done claim names it too.
-          checks.push(...spec.filter((c) => !releaseNames.includes(c.check)), ...release);
-        }
-        else if (hasSpec) {
-          this.watchOnlyClaims.add(r.claim);
-          if (!this.toldUntrusted.has(r.session)) {
-            this.toldUntrusted.add(r.session);
-            await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
-            await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
-          }
+      if (hasSpec && trusted && this.options.settings.plant !== 'drafted-spec-only') {
+        const release = releaseNames.length ? await this.releaseChecks(r.cwd, r.commit) : [];
+        // A named release check runs on the merge only, even when the ordinary done claim names it too.
+        checks.push(...spec.filter((c) => !releaseNames.includes(c.check)), ...release);
+      } else if (hasSpec) {
+        this.watchOnlyClaims.add(r.claim);
+        if (!this.toldUntrusted.has(r.session)) {
+          this.toldUntrusted.add(r.session);
+          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+          await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
         }
       }
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
