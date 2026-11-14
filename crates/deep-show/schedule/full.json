@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "f54a7b72c2a3e9c792a2449c7293f7f7af83c0016db833ce2e5f776ed30c1bed",
+  "set_digest": "e47f2d2aa087f786cc96d152dfcb5d6d062ae005826fd1fbcab01896149de55d",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -267,7 +267,7 @@
       }
     },
     "loop@1": {
-      "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+      "digest": "adeb0c97c338cfd0618dc3e56cf1a050699528591b5b48c642e9c6a9dcaad35a",
       "reference": "loop",
       "kit": [
         "fixtures",
@@ -594,7 +594,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "e42321e652963fe4899a25a7ca6c068fa2e06b6460d85deca6859cd5ccfb3740",
+      "digest": "d5a6bb2f51c1086a157667d2e775a9aebe6308d1196cebe5e4e9e4c09a5d3306",
       "reference": "scene3d",
       "kit": [
         "fixtures",
