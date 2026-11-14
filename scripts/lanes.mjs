@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -662,6 +662,8 @@ timed.push('tests/acceptance/548/ac3-budgets.test.ts');
 // ac02-rebuild-budget judges the task's budget on the reference Mac.
 alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
+// #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
+alone.push('tests/acceptance/1940/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
