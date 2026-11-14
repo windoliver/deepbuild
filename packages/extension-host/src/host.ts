@@ -2725,6 +2725,7 @@ class Host implements ExtensionHost {
         // An error's text is the package's own words: only a release package's reaches the reply.
         return fail(`${id}'s ${kind} handler failed${ext.released ? `: ${message(e)}` : ''}`);
       }
+      if (this.exts.get(id) !== ext || !ext.live) return fail(`${id} was removed while its ${kind} handler ran`); // its late reply goes nowhere
       const replier = { id, firstParty: ext.released, templates: ext.manifest.templates ?? [] };
       const context: string[] = [];
       let deny: { reason: string } | undefined;
@@ -2747,9 +2748,8 @@ class Host implements ExtensionHost {
         deny ??= checked.deny;
       }
       // A failed reply takes all its package's context with it, but no handler's failure removes a deny that stands.
-      if (failure !== undefined) fail(failure);
-      const kept = failure === undefined ? context : [];
-      if (kept.length || deny) contributions.push({ extension: id, firstParty: ext.released, context: kept, ...(deny ? { deny } : {}) });
+      if (failure !== undefined) { fail(failure); context.length = 0; }
+      if (context.length || deny) contributions.push({ extension: id, firstParty: ext.released, context, ...(deny ? { deny } : {}) });
     }));
     const plant = this.options.plant === 'join-by-id-alone' || this.options.plant === 'cut-in-join-order' ? this.options.plant : undefined;
     return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };
