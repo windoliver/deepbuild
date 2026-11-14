@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "9922621447e23e61beb9bfcf47cd38b8291077c61988da00f83850492ad5f523",
+  "set_digest": "18196f77d26d6ee80ae0ef245e29ff32847c0d2ddc95c80e9265eb8e28bfd71c",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
@@ -35,7 +35,7 @@
       }
     },
     "graph@1": {
-      "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
+      "digest": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
       "reference": "graph",
       "kit": [
         "fixtures",
@@ -64,7 +64,7 @@
       }
     },
     "look@1": {
-      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "digest": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
       "reference": "look",
       "kit": [
         "fixtures",
@@ -93,7 +93,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
+      "digest": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -122,7 +122,7 @@
       }
     },
     "motion@1": {
-      "digest": "d81abbf088e7c6a563940c0cf9f8adce5874f9d0342e2c19fb05b8094f41b7c8",
+      "digest": "96de108e4837f517589bf1e1eff950f2693ce0d947aa7f3bcf47d083b559a74a",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -353,6 +353,19 @@
         ],
         "writes": [
           "look.finish"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
         ],
         "per": "item"
       },
@@ -669,6 +682,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "marks2d.warp",
       "motion.fields",
       "motion.flip",
       "text.columns"

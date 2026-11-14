@@ -1927,6 +1927,8 @@ pub struct PathBuilt {
     pub below: bool,
     /// Flicks each repeater copy lags the one before, 0 for none.
     pub lag: i64,
+    /// #223: the ways a group's warp cut each of its cubics, 1 with no warp.
+    pub cuts: usize,
 }
 
 /// Builds `verbs` (after any attachment, in the item's own space) through the item's ops, with
@@ -1991,15 +1993,6 @@ fn build_path(
         .get("stroke")
         .and_then(|s| num(s.get("width")))
         .unwrap_or(1.0);
-    let mut heads = Vec::new();
-    if let Some(e) = &ends {
-        for (k, copy) in copies.iter().enumerate() {
-            for h in ends::build(&copy.verbs, e, stroke_width) {
-                heads.push((k, h));
-            }
-        }
-    }
-    let segments = copies.iter().map(|c| pathops::segments(&c.verbs)).sum();
     let mut k = KeyBuilder::new("tessellate@marks2d.160");
     for c in &copies {
         k.int(c.verbs.len() as i64).number(c.opacity);
@@ -2009,6 +2002,107 @@ fn build_path(
             }
         }
     }
+    // #223: under a group's warp, each copy carried through it in the group's own space (its
+    // inputs key what it carries, so a still warp carries nothing again), then heads drawn along
+    // the mapped ends, or built first and carried with the path.
+    let warp = warp_over(ctx, id)?.filter(|(_, w)| w.1.size() > 0.0 && place.size() > 0.0);
+    let mut cuts = 1;
+    let mut warped_heads = None;
+    // A head redrawn under a warp keeps its own size: its cap reads the path's length unwarped.
+    let lengths: Option<Vec<f64>> = (warp.is_some() && ends.is_some())
+        .then(|| copies.iter().map(|c| pathops::length(&c.verbs)).collect());
+    if let Some((group, w)) = &warp {
+        let (warp, gplace) = (&w.0, w.1);
+        let mut wk = KeyBuilder::new("warp@marks2d.223");
+        wk.key(&k.finish());
+        warp.feed(&mut wk);
+        for p in [
+            place.at([0.0, 0.0]),
+            place.at([1.0, 0.0]),
+            place.at([0.0, 1.0]),
+        ] {
+            wk.number(p[0]).number(p[1]);
+        }
+        for p in [
+            gplace.at([0.0, 0.0]),
+            gplace.at([1.0, 0.0]),
+            gplace.at([0.0, 1.0]),
+        ] {
+            wk.number(p[0]).number(p[1]);
+        }
+        let key = wk.finish();
+        k.key(&key);
+        let tolerance = warp.tolerance / gplace.size();
+        let to = |p: [f64; 2]| gplace.back(place.at(p)).unwrap_or(p);
+        let from = |p: [f64; 2]| place.back(gplace.at(p)).unwrap_or(p);
+        let carry = |verbs: &[Verb]| {
+            let (out, n, points) = warp.carry(&crate::warp::pointwise(verbs, to), tolerance);
+            (crate::warp::pointwise(&out, from), n, points)
+        };
+        if warp.ends == crate::warp::Ends::Warp {
+            if let Some(e) = &ends {
+                let mut hs = Vec::new();
+                for (c, copy) in copies.iter().enumerate() {
+                    for mut h in ends::build(&copy.verbs, e, stroke_width) {
+                        let a = deep_canvas::ops::rad(h.angle);
+                        let base = [
+                            h.tip[0] - h.length * deep_canvas::ops::cos(a),
+                            h.tip[1] - h.length * deep_canvas::ops::sin(a),
+                        ];
+                        let (tip, base) = (from(warp.point(to(h.tip))), from(warp.point(to(base))));
+                        h.verbs = carry(&h.verbs).0;
+                        h.tip = tip;
+                        h.length = deep_canvas::ops::hypot(tip[0] - base[0], tip[1] - base[1]);
+                        h.angle = deep_canvas::ops::deg(deep_canvas::ops::atan2(
+                            tip[1] - base[1],
+                            tip[0] - base[0],
+                        ));
+                        hs.push((c, h));
+                    }
+                }
+                warped_heads = Some(hs);
+            }
+        }
+        let carried = crate::warp::kept(key, || {
+            let mut n = 1;
+            let mut points = 0;
+            let out = copies
+                .iter()
+                .map(|c| {
+                    let (v, cut, p) = carry(&c.verbs);
+                    n = n.max(cut);
+                    points += p;
+                    v
+                })
+                .collect();
+            (out, n, points)
+        });
+        for (c, v) in copies.iter_mut().zip(&carried.0) {
+            c.verbs = v.clone();
+        }
+        cuts = carried.1;
+        ctx.warps
+            .points
+            .borrow_mut()
+            .entry(group.clone())
+            .or_default()
+            .insert(id.to_string(), carried.2);
+    }
+    let mut heads = Vec::new();
+    if let Some(hs) = warped_heads {
+        heads = hs;
+    } else if let Some(e) = &ends {
+        for (k, copy) in copies.iter().enumerate() {
+            let built = match &lengths {
+                Some(l) => ends::build_sized(&copy.verbs, e, stroke_width, l[k]),
+                None => ends::build(&copy.verbs, e, stroke_width),
+            };
+            for h in built {
+                heads.push((k, h));
+            }
+        }
+    }
+    let segments = copies.iter().map(|c| pathops::segments(&c.verbs)).sum();
     for (_, h) in &heads {
         k.text(h.kind)
             .number(h.tip[0])
@@ -2040,6 +2134,7 @@ fn build_path(
         digest: k.finish(),
         below,
         lag,
+        cuts,
     })
 }
 
@@ -2550,6 +2645,7 @@ pub fn path_report(
         bound: &bound,
         row_readings: &row_readings,
         planted,
+        warps: &crate::warp::Warps::default(),
     };
     let Some(item) = items.get(id) else {
         return Ok(None);
@@ -2579,10 +2675,15 @@ pub fn path_report(
             digest: k.finish(),
         }));
     }
-    let Some(verbs) = base_verbs(kind, params) else {
-        return Ok(None);
-    };
     let path = format!("items/{id}");
+    // A path function the evaluator didn't lower draws from its samples, as a frame draws it.
+    let verbs = match params.get("fn").filter(|_| kind == "path@1") {
+        Some(f) => fn_verbs(f, &path)?,
+        None => match base_verbs(kind, params) {
+            Some(v) => v,
+            None => return Ok(None),
+        },
+    };
     let verbs = if kind == "path@1" {
         attached(&ctx, verbs, params, &path)?
     } else {
@@ -4243,6 +4344,10 @@ pub enum Planted {
     /// #536's twins: a hex grid shifting the other parity; terrain reading a square grid's sides.
     HexOtherParity,
     TerrainSquareSides,
+    /// #223's twins: a warp that maps only each verb's own points, uncut; a flow that finds its
+    /// stream table by the `vector_field@1` kind rather than by its data layout.
+    WarpAnchorsOnly,
+    WarpFlowByKind,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -4303,6 +4408,7 @@ pub fn frame_with(
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
+    planted: Planted,
 ) -> Result<Frame, Refused> {
     let row_readings = bound_rows(doc, record);
     frame_shown(
@@ -4310,7 +4416,7 @@ pub fn frame_with(
         items,
         (palette, ty),
         zoom,
-        Planted::None,
+        planted,
         bound,
         &row_readings,
     )
@@ -4733,6 +4839,59 @@ struct ItemCtx<'a> {
     bound: &'a BTreeMap<String, Shown>,
     row_readings: &'a BTreeMap<String, data::BoundRows>,
     planted: Planted,
+    /// #223: the groups' warps, read once per frame, and the points carried under each.
+    warps: &'a crate::warp::Warps,
+}
+
+/// #223: the warp of the nearest group over `id` that has one, with where that group draws.
+fn warp_over(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+) -> Result<Option<(String, Arc<(crate::warp::Warp, Place)>)>, Refused> {
+    for g in ancestors(ctx.items, id) {
+        let Some(group) = ctx.items.get(&g) else {
+            continue;
+        };
+        let params = object_or_empty(group.get("params"));
+        if group.get("kind").and_then(Value::as_str) != Some("group@1")
+            || params.get("warp").is_none_or(Value::is_null)
+        {
+            continue;
+        }
+        if let Some(read) = ctx.warps.read.borrow().get(&g) {
+            return Ok(read.clone().map(|w| (g, w)));
+        }
+        let planted = crate::warp::Planted {
+            anchors_only: ctx.planted == Planted::WarpAnchorsOnly,
+            flow_by_kind: ctx.planted == Planted::WarpFlowByKind,
+        };
+        let read = crate::warp::Warp::read(&g, params, ctx.items, planted)?
+            .map(|w| Arc::new((w, Place::of(group))));
+        ctx.warps.read.borrow_mut().insert(g.clone(), read.clone());
+        return Ok(read.map(|w| (g, w)));
+    }
+    Ok(None)
+}
+
+/// The verbs a path function `f` of the item at `path` draws, from its samples (#490).
+fn fn_verbs(f: &Value, path: &str) -> Result<Vec<Verb>, Refused> {
+    let drawn = crate::function::draw(f).map_err(|r| Refused {
+        code: "bad_doc",
+        path: format!("{path}/params/fn/{}", r.field),
+    })?;
+    Ok(drawn
+        .subpaths
+        .iter()
+        .flat_map(|s| {
+            s.iter().enumerate().map(|(i, p)| {
+                if i == 0 {
+                    Verb::Move(*p)
+                } else {
+                    Verb::Line(*p)
+                }
+            })
+        })
+        .collect())
 }
 
 /// What `item` draws; `None` for an item that draws nothing.
@@ -4760,24 +4919,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let path_data = || -> Result<(String, Vec<Verb>), Refused> {
         // #490: a path function in place of `d`, drawn from its samples; its text keys it.
         if let Some(f) = params.get("fn") {
-            let drawn = crate::function::draw(f).map_err(|r| Refused {
-                code: "bad_doc",
-                path: format!("{path}/params/fn/{}", r.field),
-            })?;
-            let verbs = drawn
-                .subpaths
-                .iter()
-                .flat_map(|s| {
-                    s.iter().enumerate().map(|(i, p)| {
-                        if i == 0 {
-                            Verb::Move(*p)
-                        } else {
-                            Verb::Line(*p)
-                        }
-                    })
-                })
-                .collect();
-            return Ok((format!("fn:{f}"), verbs));
+            return Ok((format!("fn:{f}"), fn_verbs(f, &path)?));
         }
         let Some(Value::String(d)) = params.get("d") else {
             return refuse("bad_doc", format!("{path}/params/d"));
@@ -4797,6 +4939,9 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         || stroke.is_some_and(|s| s.contains_key("taper") || s.contains_key("wave"))
         || paint.get("shade").is_some_and(|v| !v.is_null())
         || joined_under(ctx, id, "opacity").is_some();
+    // #223: under a group's warp, an outline is carried point by point, which R1 can't draw.
+    let warp = warp_over(ctx, id)?;
+    let kinetic = kinetic || warp.is_some();
     // #149: a lamp of a backlit screen is light, and draws nothing of its own.
     if let Some(look) = &ctx.ty.drawn {
         let lamps = look.light.as_ref().and_then(|l| l.back.as_ref());
@@ -5141,10 +5286,15 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 let tokened = code
                     .as_ref()
                     .filter(|_| shown.is_none() && !params.contains_key("text"));
+                // #223: under a warp a text moves by its anchor and keeps its glyphs.
+                let origin = match &warp {
+                    Some((_, w)) => w.1.back(pos).map(|g| w.1.at(w.0.point(g))).unwrap_or(pos),
+                    None => pos,
+                };
                 Mark::Text {
                     item: id.clone(),
                     spec: text_spec_of(id, params, shown, ctx.ty, text)?,
-                    origin: pos,
+                    origin,
                     color: role(
                         ctx.palette,
                         Some(&color_role),
@@ -5607,6 +5757,7 @@ pub fn item_placed(
         bound: &bound,
         row_readings: &BTreeMap::new(),
         planted: Planted::None,
+        warps: &crate::warp::Warps::default(),
     };
     let mut placed = placed(&ctx, &id.to_string(), item).ok()??;
     let bucket = path::bucket(1.0);
@@ -5625,6 +5776,7 @@ pub fn frame_prebuilt(
     bound: &BTreeMap<String, Shown>,
     record: &Record,
     prebuilt: &[(&str, &Placed)],
+    planted: Planted,
 ) -> Result<Option<(Frame, Places)>, Refused> {
     let row_readings = bound_rows(doc, record);
     let (frame, wants_boxes, places) = build(
@@ -5633,7 +5785,7 @@ pub fn frame_prebuilt(
         (palette, ty),
         (bound, &row_readings),
         zoom,
-        Planted::None,
+        planted,
         None,
     )?;
     Ok((!wants_boxes).then_some((frame, places)))
@@ -5732,6 +5884,7 @@ fn build(
     // #495: each matte's source, drawn alone though hidden: the item and what is under it.
     let mut sources: BTreeMap<String, Arc<Vec<Drawn>>> = BTreeMap::new();
     let bare = BTreeMap::new();
+    let warps = crate::warp::Warps::default();
     let alone = ItemCtx {
         items,
         size,
@@ -5742,6 +5895,7 @@ fn build(
         bound,
         row_readings,
         planted,
+        warps: &warps,
     };
     for (id, item) in items {
         if item.get("kind").and_then(Value::as_str) != Some("matte@1") {
@@ -5806,6 +5960,7 @@ fn build(
         bound,
         row_readings,
         planted,
+        warps: &warps,
     };
     // Each item's marks, then each one prebuilt from the item alone (#857), each in its layer.
     let mut built: Vec<(&str, Placed)> = Vec::new();
@@ -5818,6 +5973,8 @@ fn build(
         }
         built.push((id, placed));
     }
+    // #223: a group's warp carries at most its `max_points` across the items under it.
+    warps.over()?;
     if planted != Planted::SectorsSourceOver {
         cover(&mut built, items);
     }

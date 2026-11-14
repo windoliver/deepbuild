@@ -123,5 +123,42 @@
         "offset": null
       }
     ]
+  },
+  "streams@1": {
+    "program": "ed6be561b2b731c298789f079bfc07d5f0054bb1d7f9c6d9459844cbf8dd8ce3",
+    "twins": [
+      {
+        "asset": "e50aa3fec138c61cc88f2653cf67317909a12c101abe248e730d1ef8445119ac",
+        "valid": false,
+        "offset": 8
+      },
+      {
+        "asset": "3c3b010d249e7859054b7fb92b414c18c6217d79f89f0db8793f70d86224b53b",
+        "valid": false,
+        "offset": 48
+      },
+      {
+        "asset": "834e73c453df3f74d478946bc8cc74218ea1d99fbf221e91b7cb358b4d0e4465",
+        "valid": false,
+        "offset": 160
+      },
+      {
+        "asset": "0f2f6c09fccf5cd0dbaebbf9e88393ac54612241edc04fac2b3a26c46c47d0a0",
+        "valid": false,
+        "offset": 160
+      },
+      {
+        "asset": "1b361f62a72eaf6a990e1e4837f92d3e07be7cdfae7f0b04235bec5e77d292b8",
+        "valid": false,
+        "offset": 38
+      }
+    ],
+    "fixtures": [
+      {
+        "asset": "576253b8a9312b02ae5324e9d7fa3e50be273baacdabb9d99d3d929dd22f6bc2",
+        "valid": true,
+        "offset": null
+      }
+    ]
   }
 }

@@ -20,6 +20,7 @@ pub mod probe;
 pub mod registries;
 pub mod sandbox;
 pub mod sim;
+pub mod swirl;
 pub mod weight;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {

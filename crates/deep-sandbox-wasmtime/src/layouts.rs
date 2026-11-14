@@ -149,6 +149,16 @@ mod tests {
             ),
             ("pages@1", vec!["pages[2].number"]),
             ("table.layout@1", vec!["tables[0].columns[3].values[1]"]),
+            (
+                "streams@1",
+                vec![
+                    "header.step",
+                    "var[0].value",
+                    "stream[2].count",
+                    "trailing",
+                    "fn_y",
+                ],
+            ),
         ];
         for (name, fields) in want {
             let l = deep_canvas_sandbox::layouts::named(name).unwrap();
