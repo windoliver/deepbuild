@@ -72,7 +72,7 @@ async function explain(session: string, json: boolean): Promise<number> {
 // judged by that schema's enum, and the exit status 0, 1 or 3 by the verdict. A code the enum doesn't list,
 // a result the schema refuses, a file that isn't JSON and a pass that ran no tests are INVALID, never a pass.
 async function run(path: string): Promise<number> {
-  const { exitCode, judge } = await import('@deepbuild/conformance');
+  const { exitCode, judge, worst } = await import('@deepbuild/conformance');
   const { validate } = await import('@deepbuild/contracts');
   const file = resolve(path);
   if (!existsSync(file)) {
@@ -96,8 +96,8 @@ async function run(path: string): Promise<number> {
   const held = validate('run.finished@1', result);
   if (!held.ok) return verdict('INVALID', `${file} is not a run.finished@1 event: ${held.issues.map((issue) => `${issue.code} at ${issue.path || '/'}`).join(', ')}`);
   // A finding written as one identifier (trimmed) is a check code, judged by its own family, an unlisted one
-  // INVALID naming it; a finding in words, or a place such as a file and line, is the check's prose. The verdict is the worst of the outcome and the codes, FAIL first,
-  // as the exit table takes it.
+  // INVALID naming it; a finding in words, or a place such as a file and line, is the check's prose. The verdict is the worst of the outcome and the codes, by
+  // conformance's precedence (#1882): the CLI keeps no order of its own.
   const counts = data as { tests_run: number; passed: number; runs: number; findings: string[] };
   // A finding led by a listed code and a colon ("exit_masked: npm test") is that code with its detail.
   const codeOf = (finding: string): string | undefined => {
@@ -107,9 +107,8 @@ async function run(path: string): Promise<number> {
     return lead !== undefined && judge('check', lead).listed ? lead : undefined;
   };
   const judgements = [judged, ...counts.findings.flatMap((finding) => { const code = codeOf(finding); return code === undefined ? [] : [judge('check', code)]; })];
-  const order: Verdict[] = ['FAIL', 'BLOCKED', 'INVALID', 'INCONCLUSIVE', 'PASS'];
-  const worst = [...judgements].sort((a, b) => order.indexOf(a.verdict) - order.indexOf(b.verdict))[0]!;
-  if (worst.verdict !== 'PASS') return verdict(worst.verdict, judgements.filter((j) => j.verdict !== 'PASS').map((j) => j.message).join('; '));
+  const decided = worst(judgements.map((j) => j.verdict));
+  if (decided !== 'PASS') return verdict(decided, judgements.filter((j) => j.verdict !== 'PASS').map((j) => j.message).join('; '));
   if (counts.tests_run === 0 || counts.runs < 1) return verdict('INVALID', 'run outcome passed with no tests run: a run that ran nothing proves nothing');
   if (counts.passed !== counts.tests_run) return verdict('INVALID', `run outcome passed with ${counts.passed} of ${counts.tests_run} tests passing: the counts don't agree with the outcome`);
   return verdict(judged.verdict, judged.message);
