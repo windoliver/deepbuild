@@ -1,0 +1,115 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/gate/test/snapshot-reuse.test.ts tests/acceptance/1906/exit/children-at-exit.test.ts tests/acceptance/1906/exit/sync-children-at-exit.test.ts tests/acceptance/2078/reuse.test.ts` runs unleased
+
+ RUN  v5.0.5 <work>
+
+··x····x·xx··
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/gate/test/snapshot-reuse.test.ts > an unchanged tree and HEAD reuse the snapshot without rewriting its objects or retention ref
+AssertionError: the unchanged snapshot writes neither objects nor a new retention ref: expected [ [ …(4) ], [ …(4) ], [ …(4) ], …(2) ] to deeply equal [ [ …(4) ], [ …(4) ], [ …(4) ], …(2) ]
+
+- Expected
++ Received
+
+  [
+    [
+      "objects/3b/bae22975aefed5fcb2502b865fee62216b6146",
+      54n,
+-     1794685774559039734n,
+-     1794685774559423819n,
++     1794685774899051000n,
++     1794685774899077002n,
+    ],
+    [
+      "objects/5e/a2ed416fbd4a4cbe227b75fe255dd7fa6bd4d6",
+      23n,
+-     1794685774491143714n,
+-     1794685774491508840n,
++     1794685774847126000n,
++     1794685774847148234n,
+    ],
+    [
+      "objects/a9/e421a36565a5925588c4b41deacdb26e05dad4",
+      160n,
+-     1794685774615100055n,
+-     1794685774615499598n,
++     1794685774940206000n,
++     1794685774940231074n,
+    ],
+    [
+      "objects/info/alternates",
+      43n,
+      1794685774392835111n,
+      1794685774392835111n,
+    ],
+    [
+-     "refs/deep/snapshots/1800000000000/a9e421a36565a5925588c4b41deacdb26e05dad4",
++     "refs/deep/snapshots/1800000060000/a9e421a36565a5925588c4b41deacdb26e05dad4",
+      41n,
+-     1794685774683546410n,
+-     1794685774683665243n,
++     1794685774990043752n,
++     1794685774990149169n,
+    ],
+  ]
+
+ ❯ packages/gate/test/snapshot-reuse.test.ts:39:106
+     37|     const second = await checkouts.snapshot(repo);
+     38|     expect(second).toEqual({ ...first, wrote: false });
+     39|     expect(stored(world.store), 'the unchanged snapshot writes neither…
+       |                                                                                                          ^
+     40|   } finally {
+     41|     await world.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2078/reuse.test.ts > AC1 #2078.f33c092f after a claim whose checks passed, a tracked file is changed by a process no hook saw and the session stops again with only reads in its turn: the new claim's snapshot holds the changed file and its checks run on it > AC1 #2078.f33c092f src/cart.ts rewritten by a process no hook saw, then a Read and a stop: the second claim's snapshot holds the rewritten src/cart.ts, its check runs on that snapshot and fails there, and the claim is FAIL, never the first claim's PASS
+AssertionError: src/cart.ts was rewritten by a process no hook saw before the second stop, so the second claim's snapshot 83181bc30e93b2fbd142e07db1361c9278d588ba must hold the rewritten src/cart.ts; it is the first claim's snapshot, taken before src/cart.ts changed: claim:01M7DSQX0S5WF654T71XRW6H9T: verdicts [{"outcome":"PASS","commit":"83181bc30e93b2fbd142e07db1361c9278d588ba","reasons":[".deepbuild/checks/cart-discount.sh: PASS on 1 clean run",".deepbuild/checks/cart-discount.sh carried run:01M7DSQDCQG18N7V9FA98TZNVC from claim:01M7DSQC7YX0032KDH3R2EKPJB in session:1bfedb7be2b24d87b168b7a96c79471d",".deepbuild/checks/cart-discount.sh carried its base run run:01M7DSQQMG4JD0EWFQD06JN342 from claim:01M7DSQC7YX0032KDH3R2EKPJB in session:1bfedb7be2b24d87b168b7a96c79471d"]}]; runs []: expected 'export interface Cart { items: number…' to be '// rewritten by a process no hook saw…' // Object.is equality
+
+- Expected
++ Received
+
+- // rewritten by a process no hook saw
+  export interface Cart { items: number[]; discount: number }
+  export function total(cart: Cart): number {
+-   return cart.items.reduce((a, b) => a + b, 0);
++   return cart.items.reduce((a, b) => a + b, 0) - cart.discount;
+  }
+
+
+ ❯ tests/acceptance/2078/reuse.test.ts:47:313
+
+ ❯ verdict tests/acceptance/82/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2078/reuse.test.ts > Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's > Scope #2078 HEAD: the worktree committed as it stands by a process no hook saw, then a Read and a stop: the tree is the first snapshot's and HEAD is not, so the second claim covers the new HEAD, not the first claim's snapshot
+AssertionError: HEAD moved from 88aac37a94d656316f14c4b960173544c46421f5 to 972cb23b55fe43efd0e705925bb43dce776752f8 with the worktree clean, so the second claim covers HEAD 972cb23b55fe43efd0e705925bb43dce776752f8; it took the first claim's snapshot e384585c3ed1e3602624b50702a500adc2781e92, whose parent is the old HEAD: claim:01M7DSSH5VC3DCS0RKSK6TBR54: verdicts [{"outcome":"PASS","commit":"e384585c3ed1e3602624b50702a500adc2781e92","reasons":[".deepbuild/checks/cart-discount.sh: PASS on 1 clean run",".deepbuild/checks/cart-discount.sh carried run:01M7DSRYTR44VZWQRA1EKN3EBG from claim:01M7DSRXY98VT32EZ86H1S4PT1 in session:7f36aaa583a2451b9b6d8134649eee36",".deepbuild/checks/cart-discount.sh carried its base run run:01M7DSSB1NM5Z0SQ5MBZXTK1NJ from claim:01M7DSRXY98VT32EZ86H1S4PT1 in session:7f36aaa583a2451b9b6d8134649eee36"]}]; runs []: expected 'e384585c3ed1e3602624b50702a500adc2781…' to be '972cb23b55fe43efd0e705925bb43dce77675…' // Object.is equality
+
+Expected: "972cb23b55fe43efd0e705925bb43dce776752f8"
+Received: "e384585c3ed1e3602624b50702a500adc2781e92"
+
+ ❯ tests/acceptance/2078/reuse.test.ts:83:248
+
+ ❯ verdict tests/acceptance/82/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2078/reuse.test.ts > Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's > Scope #2078 budget: an untracked file no snapshot takes inside its budget is left by a process no hook saw, then a Read and a stop: the tree can't be read inside the budget, so the second claim is INCONCLUSIVE naming "snapshot over budget", none of its checks runs, and it never carries the first claim's PASS
+AssertionError: big.bin can't be read inside the snapshot's budget, so the second claim is INCONCLUSIVE, never the first claim's PASS on a tree no one read: claim:01M7DSTA5K39QKBHASHW716QXK: verdicts [{"outcome":"PASS","commit":"a745af4843112e0031aa8d10abed5b3482105bfe","reasons":[".deepbuild/checks/cart-discount.sh: PASS on 1 clean run",".deepbuild/checks/cart-discount.sh carried run:01M7DSSQS19AVKFRWQ2DG8EYQX from claim:01M7DSSPMS1W623D6GWMAXBR2G in session:6689a4bea1374019be516c5faca151d8",".deepbuild/checks/cart-discount.sh carried its base run run:01M7DST536TVBXGV09QN5DHN3E from claim:01M7DSSPMS1W623D6GWMAXBR2G in session:6689a4bea1374019be516c5faca151d8"]}]; runs []: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+
+Expected: "INCONCLUSIVE"
+Received: "PASS"
+
+ ❯ tests/acceptance/2078/reuse.test.ts:92:193
+
+ ❯ verdict tests/acceptance/82/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  4 failed | 9 passed (13)
+   Start at  11:49:29
+   Duration  310.92s (tests 98%, transform 1%)

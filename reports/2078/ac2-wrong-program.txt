@@ -1,0 +1,32 @@
+
+ RUN  v5.0.5 <wrong-program>
+
+ ❯ tests/acceptance/2078/reuse.test.ts (4 tests | 1 failed | 3 skipped) 24732ms
+   ❯ AC2 #2078.f4160036 the twin: with nothing changed, the second claim takes the first one's snapshot, writes nothing to the object store and starts no run (1)
+     × AC2 #2078.f4160036 nothing changed, then a Read and a stop: the second claim covers the first claim's snapshot, no object is written to the store and no run starts 24665ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2078/reuse.test.ts > AC2 #2078.f4160036 the twin: with nothing changed, the second claim takes the first one's snapshot, writes nothing to the object store and starts no run > AC2 #2078.f4160036 nothing changed, then a Read and a stop: the second claim covers the first claim's snapshot, no object is written to the store and no run starts
+AssertionError: nothing changed, so no run starts after the second stop: claim:01M7CVJH11GXS2JSR4SGYEEVF7: verdicts [{"outcome":"PASS","commit":"aabd6561eb42700001496e5219ac6d962d05209a","reasons":[".deepbuild/checks/cart-discount.sh: PASS on 2 clean runs",".deepbuild/checks/cart-discount.sh carried run:01M7CVJ2DFRRGE4F5784GE4MNR from claim:01M7CVJ1XEYE2JY7J3GBSE15AR in session:bb065dd2077b4cdca0f97f78811a3634"]}]; runs [{"run":"run:01M7CVJHRG8N1ACJ3RENNP45MD","check":".deepbuild/checks/cart-discount.sh","commit":"aabd6561eb42700001496e5219ac6d962d05209a","outcome":"passed"},{"run":"run:01M7CVJKMTHEH5EBSJ881MRSSX","check":".deepbuild/checks/cart-discount.sh","commit":"45c63c8bbb3c63bc37a6a10bf1b27f8232144eb8","outcome":"failed"}]: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01M7CVJHRG8N1ACJ3RENNP45MD (.deepbuild/checks/cart-discount.sh on aabd6561eb42700001496e5219ac6d962d05209a for claim:01M7CVJH11GXS2JSR4SGYEEVF7)",
++   "run:01M7CVJKMTHEH5EBSJ881MRSSX (.deepbuild/checks/cart-discount.sh on 45c63c8bbb3c63bc37a6a10bf1b27f8232144eb8 for claim:01M7CVJH11GXS2JSR4SGYEEVF7)",
++ ]
+
+ ❯ tests/acceptance/2078/reuse.test.ts:70:103
+
+ ❯ verdict tests/acceptance/82/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  03:02:21
+   Duration  25.80s (tests 96%, transform 3%, import 1%)
