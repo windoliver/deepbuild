@@ -92,13 +92,18 @@ impl Hub<'_> {
         let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, depth) else {
             return refused("unsupported_platform");
         };
+        let light = self.light3d(&doc, t, Some(size));
         let png = crate::snapshot::png(rgba, size);
         let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
             return refused("not_written");
         };
+        let mut snapshot = json!({"sha256": sha, "w": size[0], "h": size[1]});
+        if let Some(l) = light {
+            snapshot["light"] = l;
+        }
         let mut reply = json!({
             "rev": rev, "t": t, "outcome": "presented",
-            "snapshots": [{"sha256": sha, "w": size[0], "h": size[1]}],
+            "snapshots": [snapshot],
             "backends": crate::seams::backends(true),
         });
         if probes.at.is_empty() {

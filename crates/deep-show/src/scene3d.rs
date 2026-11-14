@@ -17,7 +17,7 @@ use crate::snapshot::Unfit;
 
 /// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
 /// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
-fn look_of(doc: &Value, palette: &Palette) -> Look3 {
+pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
     let mut look = Look3::from_roles(palette.clone());
     let camera = doc
         .get("camera")
@@ -164,20 +164,32 @@ impl Gpu3 {
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
+        Some((bytes, self.targets(scene.size, depth)?))
+    }
+
+    /// Each pick of the last frame drawn with the item it stands for, read on the CPU.
+    pub fn picks(&self) -> std::collections::BTreeMap<u32, String> {
+        self.renderer
+            .picks()
+            .iter()
+            .map(|(id, p)| (*p, id.clone()))
+            .collect()
+    }
+
+    /// The targets the last frame drawn at `size` left: its object-ID pass at the renderer's own
+    /// size and each pick's item; the view depth only when `depth` asks.
+    pub fn targets(&self, size: [u32; 2], depth: bool) -> Option<Targets> {
         let r = &self.renderer;
-        let size = r.internal_size(scene.size);
-        let (_, ids) = r.read_targets(&self.device)?;
-        let targets = Targets {
-            size,
-            ids,
-            picks: r.picks().iter().map(|(id, p)| (*p, id.clone())).collect(),
+        Some(Targets {
+            size: r.internal_size(size),
+            ids: r.read_ids(&self.device)?,
+            picks: self.picks(),
             view_depth: if depth {
                 Some(r.read_view_depth(&self.device)?)
             } else {
                 None
             },
-        };
-        Some((bytes, targets))
+        })
     }
 
     /// #1938: the linear image the last frame's output pass read, before exposure, as f32 RGBA
@@ -192,6 +204,12 @@ impl Gpu3 {
                 .map(|b| f32::from_le_bytes(*b))
                 .collect(),
         )
+    }
+
+    /// #1939: the px `at` of the last frame's linear image before exposure, as [`Self::pre_tone`]
+    /// reads them: f32 RGBA per px, in order.
+    pub fn pre_tone_at(&self, at: &[usize]) -> Option<Vec<f32>> {
+        self.renderer.read_pre_tone_at(&self.device, at)
     }
 
     /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows

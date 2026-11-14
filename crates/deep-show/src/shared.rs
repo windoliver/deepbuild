@@ -1540,6 +1540,7 @@ impl Hub<'_> {
         if three && visible && show.include.iter().any(|i| matches!(i, Include::Pixels)) {
             let shown = self.shared[&show.doc].doc.clone();
             self.pending3d = Some(self.draw3d(&shown, show.t, show.size));
+            self.pending_light = self.light3d(&shown, show.t, show.size);
         }
         self.present(show, visible, drawn.as_ref(), reply)
     }

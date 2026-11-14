@@ -1327,6 +1327,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
                 "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
                 "pixel_checks_hold_anywhere" => Planted::PixelChecksHoldAnywhere,
+                "light_from_whole_frame" => Planted::LightFromWholeFrame,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,

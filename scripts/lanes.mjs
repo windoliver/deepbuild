@@ -390,6 +390,10 @@ alone.push('tests/acceptance/1936/');
 // decides anything (tests/acceptance/1938-redraft-contrast/DISPUTE.md); the blind redraft runs in their place.
 alone.push('tests/acceptance/1938/machines.test.ts', 'tests/acceptance/1938-redraft-contrast/');
 byHand.push('tests/acceptance/1938/faults.test.ts', 'tests/acceptance/1938-oracle/');
+// #1939's files each build deep-show and draw on the GPU; ac2-budget judges the readings' added time on the reference
+// Mac (building deep-show for release where it times).
+alone.push('tests/acceptance/1939/');
+timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and

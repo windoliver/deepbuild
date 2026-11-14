@@ -71,6 +71,8 @@ pub enum Planted {
     /// #1938: the loop's pixel checks hold on any machine: a verdict read against another
     /// machine's keeps their PASS or FAIL.
     PixelChecksHoldAnywhere,
+    /// #1939: a snapshot's light readings measure the whole frame, not the kept subject.
+    LightFromWholeFrame,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.
@@ -1161,6 +1163,8 @@ pub struct Hub<'a> {
     pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
+    /// #1939: that snapshot's light readings, for the document's kept subject.
+    pub pending_light: Option<Value>,
     /// Each panel's interaction scope (#383).
     pub scopes: BTreeMap<String, crate::input::PanelScope>,
     /// The input router's last serial.
@@ -1341,6 +1345,7 @@ impl<'a> Hub<'a> {
             gpu3: None,
             hash_pass: None,
             pending3d: None,
+            pending_light: None,
             scopes: BTreeMap::new(),
             serial: 0,
             ring: {
@@ -2544,6 +2549,7 @@ impl<'a> Hub<'a> {
             let shown = self.shown_at(&show.doc, &self.with_outputs(&show.doc, &doc), show.t);
             let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
+            self.pending_light = self.light3d(&placed, show.t, show.size);
         }
         self.present(show, visible, drawn.as_ref(), reply)
     }
@@ -2671,6 +2677,7 @@ impl<'a> Hub<'a> {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         let mut snapshot_taken = !wants_pixels;
         let drawn3d = self.pending3d.take();
+        let light = self.pending_light.take();
         let three = drawn3d.is_some();
         if !visible {
             reply.insert("outcome".into(), json!("not_presented"));
@@ -2735,7 +2742,13 @@ impl<'a> Hub<'a> {
                             // their text snapshot (The status-color rule).
                             let entry = match drawn.filter(|_| !three) {
                                 Some(d) => snapshot::entry(&sha, d, size),
-                                None => json!({"sha256": sha, "w": size[0], "h": size[1]}),
+                                None => {
+                                    let mut e = json!({"sha256": sha, "w": size[0], "h": size[1]});
+                                    if let Some(l) = light {
+                                        e["light"] = l;
+                                    }
+                                    e
+                                }
                             };
                             let rows = match drawn.filter(|_| !three) {
                                 Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
