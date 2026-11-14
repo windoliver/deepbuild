@@ -1,6 +1,6 @@
 // The spine re-judged (#33 AC8; design: The verdict spine is the first exit). Once this repo is gated, each of the 25
 // spine tasks is judged again at its merged commit against its issue's criteria and the tests it landed; a task that
-// doesn't reach PASS reopens, naming the criterion.
+// doesn't reach PASS reopens, naming the criterion; one with no criterion to name (its issue unreadable) is left as it is.
 //
 //   node scripts/spine.mjs list                    #<issue> <merged commit>, one line per task
 //   node scripts/spine.mjs judge [--issue <n>]...  one JSON line per task; exit 0 when every task is PASS, 1 otherwise
@@ -159,7 +159,7 @@ function judge(issue, commit) {
   return { issue, commit, verdict, criteria, reopen: failing ? { criterion: failing.id } : null, ...(why ? { why } : {}) };
 }
 
-/** A task that didn't reach PASS opens again, its comment naming the criterion and how each ended. */
+/** A task that didn't reach PASS and names a criterion opens again, its comment naming it and how each ended. */
 function reopen(j) {
   const lines = j.criteria.filter((c) => c.outcome !== 'PASS').map((c) => `- ${c.id}: ${c.outcome}${c.why ? ` (${c.why})` : ''}`).join('\n');
   const body = `Re-judged at its merged commit ${j.commit} once this repo was gated (#33 AC8): ${j.verdict}, naming ${j.reopen.criterion}.\n\n${lines}${j.why ? `\n\n${j.why}` : ''}`;
