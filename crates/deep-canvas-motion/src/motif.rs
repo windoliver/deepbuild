@@ -211,9 +211,9 @@ fn skipping(t: i64, spans: &[(i64, i64)]) -> i64 {
 }
 
 fn is_text(item: &Value) -> bool {
-    item.get("kind")
-        .and_then(Value::as_str)
-        .is_some_and(|k| k.starts_with("text@") || k.starts_with("label@"))
+    item.get("kind").and_then(Value::as_str).is_some_and(|k| {
+        k.starts_with("text@") || k.starts_with("label@") || k.starts_with("mark.text@")
+    })
 }
 
 impl Motifs {
@@ -224,7 +224,15 @@ impl Motifs {
         doc: &Map<String, Value>,
         program: &Program,
     ) -> Result<Option<Motifs>, Refused> {
-        let motifs = parse(look)?;
+        Motifs::bind(parse(look)?, doc, program)
+    }
+
+    /// [`Motifs::compile`] of motifs [`parse`] read already: a 3D look keeps them parsed.
+    pub fn bind(
+        motifs: Vec<Motif>,
+        doc: &Map<String, Value>,
+        program: &Program,
+    ) -> Result<Option<Motifs>, Refused> {
         let slots = doc.get("motif_slots").and_then(Value::as_object);
         if let Some(Value::Object(s)) = doc.get("motif_slots") {
             for (slot, c) in s {
@@ -290,6 +298,11 @@ impl Motifs {
             tempo,
             doc_seed: doc.get("seed").and_then(Value::as_u64).unwrap_or(0),
         }))
+    }
+
+    /// Whether a slot binds `id`.
+    pub fn binds(&self, id: &str) -> bool {
+        self.bound.iter().any(|b| b.members.iter().any(|m| m == id))
     }
 
     /// Each bound item's motion at `t`, written into the evaluated `items`; nothing under

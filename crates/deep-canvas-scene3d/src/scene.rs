@@ -3069,7 +3069,24 @@ pub(crate) fn evaluate_compiled(
         .get("items")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let written = eval::written(map, program, &state);
+    // #462: the look's motifs move the evaluated items the document's slots bind, never the
+    // document; under reduced motion they hold still.
+    let motifs = match look.motifs.is_empty() {
+        true => None,
+        false => deep_canvas_motion::motif::Motifs::bind(look.motifs.clone(), map, program)
+            .map_err(|r| Refused {
+                code: r.code,
+                path: r.path,
+            })?,
+    };
+    let written = match &motifs {
+        Some(m) => {
+            let mut w = eval::written_with(map, program, &state, |id| m.binds(id));
+            m.apply(&mut w, t, look.reduced_motion);
+            w
+        }
+        None => eval::written(map, program, &state),
+    };
     let mut items = Items::new(doc_items, &written, &state, program);
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
