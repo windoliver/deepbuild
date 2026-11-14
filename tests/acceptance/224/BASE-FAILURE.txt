@@ -1,0 +1,36 @@
+The #224 suite at base commit c56fe5407 ("Merge pull request #2462 …"; no implementation of #224), on macOS 27.2 arm64
+(not a reference Mac; node v24.22.2, vitest 5.0.5), the checkout's path redacted to <checkout>. The machine was shared
+and heavily loaded (load average about 300), and the surface plainly doesn't exist at the base, so no Rust was built
+for this run: only the file that fails before any build was run, once:
+
+  NO_COLOR=1 npx vitest run --root tests/acceptance/224 --no-file-parallelism --testTimeout=600000 ac02-rebuild-budget.test.ts
+
+  FAIL  ac02-rebuild-budget.test.ts > AC2 #224.e2f417bd the family's rebuild, on the reference Mac against the merge base >
+        AC2 #224.e2f417bd recorded for the budget window, and on a reference Mac at rest a 128 × 128 rebuild of the family within 2 ms
+  AssertionError: benchmarks/budgets.json records canvas-surface for the budget window:
+    benchmarks/budgets.json has no task canvas-surface: expected [ Array(1) ] to deeply equal []
+   ❯ none helpers.ts:76:73
+   ❯ ac02-rebuild-budget.test.ts:22:5
+  Test Files  1 failed (1)
+       Tests  1 failed (1)
+
+Type-check: npx tsc -p tests/acceptance/224/tsconfig.json exits 0 with no output.
+
+The other 21 tests weren't run at the base: each first builds deep-show (and ac11 deep-gpu), the expensive part, and
+what they meet there is read from the base's own source:
+
+- `surface@1` isn't a kind the base registers (crates/deep-canvas-scene3d/src/builders.rs KINDS, scene.rs is_3d), so
+  `deep_show` presents each document with the notice `unknown_kind` on the surface item ("the item is skipped",
+  crates/deep-canvas/src/document/check.rs). Every test that presents a surface fails at `admitted`'s named assertion
+  "<what>: no item skipped as an unknown kind": ac01 (1), ac02-family (2), ac03 (2), ac04's first two and its third
+  at the 256 × 256 control, ac06's first two (and the third at the implicit sphere's control), ac07 (2), ac08's first
+  (its plant test then fails at meshOf: geometry answers `ref_unresolved` for an item with no build node, "geometry
+  answers rows, not a refusal"), ac09 (2; the second at meshOf as ac08's), ac10 (2; the second at its unplanted run's
+  `admitted`), and ac11 at the sphere document's presentation, before anything is drawn.
+- curve@1 with `fn` and no `points` (ac05): the base's curve reads only `points` (crates/deep-canvas-scene3d/src/
+  curve.rs, `made`: "params/points"), so the helix is either refused by the check or answered by `geometry` as
+  `{"code": "out_of_range", "path": "items/helix/params/points"}`: the test fails at `admitted` or at meshOf's "geometry
+  answers rows, not a refusal".
+- The scenario's planted names are unknown at the base: deep-show's `read_line` refuses a `planted` it doesn't know, so a
+  planted run answers `bad_input` and fails at "deep-show run accepts the scenario" — after the unplanted half of each
+  such test has already failed as above.
