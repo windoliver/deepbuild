@@ -1,0 +1,3 @@
+{"type":"pass","file":"<work>/tests/acceptance/2066/redraft/recorded-origin.test.ts","name":"#2066 rules and rejections come only from prompts a person typed › AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin"}
+{"type":"pass","file":"<work>/tests/acceptance/2066/redraft/recorded-origin.test.ts","name":"#2066 rules and rejections come only from prompts a person typed › AC3 AC4 the same lines typed by you are saved once, and reach open sessions at their next prompt, a person's or an automatic one"}
+{"type":"end"}

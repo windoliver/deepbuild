@@ -1,0 +1,40 @@
+import { afterEach, expect, it } from 'vitest';
+import { AC4, fixture, held, clean } from './fixture.ts';
+import { claimsOf, lastPos, settle, taskVerdicts } from '../325/helpers.ts';
+afterEach(clean, 60_000);
+it(`${AC4} local-main twin: one preflight per head, merged tree and reused result on another claim`, async () => {
+  const r = await fixture('local-main', { passing: true });
+  expect(r.verdict?.data.outcome, 'the unchanged local-main path passes').toBe('PASS');
+  const runs = r.release(r.events);
+  expect(runs).toHaveLength(1);
+  expect(runs[0]!.finished?.data.outcome).toBe('passed');
+  const merged = String(runs[0]!.started.data.commit);
+  expect(r.g('rev-parse', `${merged}^{tree}`)).toBe(r.g('merge-tree', '--write-tree', r.w.head(), r.w.main));
+  expect(new Set(r.g('show', '-s', '--format=%P', merged).split(' '))).toEqual(new Set([r.w.head(), r.w.main]));
+  expect(r.closesAfter.allowed, 'a completed local-main preflight allows Closes').toBe(true);
+  const head = r.w.head();
+  await r.s.edit('src/auth.js', 'note: 0', 'note: 1');
+  await r.s.edit('src/auth.js', 'note: 1', 'note: 0');
+  const after = await lastPos(r.hub);
+  await r.s.stop('The same change is ready.');
+  const again = await settle(r.hub, (ev) => taskVerdicts(ev, r.task, after).length > 0, 90_000);
+  expect(claimsOf(again, r.task, after).length, 'a second claim, not just the original result').toBeGreaterThan(0);
+  const second = taskVerdicts(again, r.task, after).at(-1);
+  expect(second?.data.outcome).toBe('PASS');
+  expect(second?.data.commit, 'both claims cover the same branch head').toBe(head);
+  expect(JSON.stringify(second?.data.reasons), 'the second claim includes preflight, not just the ordinary checks').toMatch(/preflight: PASS/);
+  expect(r.release(again), 'unchanged head reuses the one release run').toHaveLength(1);
+  expect(r.release(again)[0]!.started.data.commit, 'the reused run covers the same actual merged commit').toBe(merged);
+  expect(r.w.head(), 'judging preserves the branch head').toBe(head);
+  expect(r.w.head(), 'judging never changes the branch head').not.toBe(merged);
+  console.log(`2067 twin ${JSON.stringify({ verdict: 'PASS', releaseRuns: r.release(again).length, merged })}`);
+}, 360_000);
+
+it('scope twin: a genuine merge conflict still FAILs preflight and holds Closes', async () => {
+  const r = await fixture('local-main', { conflict: true });
+  expect.soft(r.verdict.data.outcome, 'a conflict is FAIL, not BLOCKED').toBe('FAIL');
+  const check = r.change.checks.find((c: { check: string }) => c.check === 'preflight');
+  expect.soft(check?.outcome).toBe('failed');
+  expect.soft(JSON.stringify(r.verdict.data.reasons), 'the verdict names the conflict').toMatch(/conflict/i);
+  held(r);
+}, 360_000);

@@ -1,0 +1,49 @@
+#2067 supplementary cross-session base qualification
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 (unchanged)
+Test: tests/acceptance/2067-scope/inherited-cross-session.test.ts
+Command (only this path, once on the corrected setup):
+  node scripts/affected.mjs tests/acceptance/2067-scope/inherited-cross-session.test.ts
+
+RESULT: expected behavioral failure on the pristine base; NOT PASS.
+
+Setup prerequisites all held:
+- Two independent session IDs and distinct fixture tasks, one hub/repo/host.
+- Both definitions lock to the original base; both ordinary claims PASS.
+- Identical branch head, mainline, release check and environment at PR claims.
+- A has one real merged-head preflight run, validated by Git tree and both
+  parents, and one real original-base comparison; each runs one test and fails
+  its 'release is ready' assertion.
+- A's PR verdict is BLOCKED, reason 'preflight: inherited: also fails on the
+  merge base: release is ready'.
+- B makes a fresh PR claim belonging to B, on the same head, with a correlated
+  verdict and public changes.read receipt.
+
+Two expected assertions fail:
+1. B verdict expected BLOCKED, received FAIL.
+2. B reasons expected inherited preflight, received:
+   'preflight: failed on every real run: release is ready'
+
+The same two release run IDs remain, with no additional release runs:
+- merged: run:01M7DZVZW78M30SJBMJKZ849QN
+- base:   run:01M7DZW0K771F74MFW0EGEJ2Z2
+The exact reuse assertion passes. Branch HEAD, mainline and clean-input
+assertions pass. Both observed verdict keys have the same commit, check digests,
+environment and tools. The base comparison remains recorded, but B's verdict
+no longer classifies its failure as inherited. No implementation cause inferred.
+
+Affected exit 1: 173 new (1 test + 172 unrelated base lint findings), 11 known,
+0 inconclusive/blocked, 0 skips, 0 passed; 143 s at load 188.
+Vitest: 1 failed test, 2 assertion failures, 18.15 s; no setup/loader/timeout error.
+No WIDE or INCONCLUSIVE lines. Normal throttle entry, no bypass; lease wrapper
+reported no hub token and ran unleased. No timing proof is claimed.
+
+One earlier setup attempt is preserved in setup-attempt/ and is NOT behavioral
+proof: B shared A's task and made a claim without a verdict within the wait.
+Its exact test, logs, reporter and hashes remain separate. Material correction:
+use a distinct fixture task for B with identical check/base and establish B's
+ordinary PASS first. Expected cross-session BLOCKED/inheritance/reuse assertions
+are unchanged. No further test run, broad suite, mutant or implementation check.
+
+All delivered prior files except the allowed README append are byte-identical.
+Historical BASE-FAILURE.txt and SHA256SUMS were not overwritten.
+No production changes or commits. Stop at base qualification.

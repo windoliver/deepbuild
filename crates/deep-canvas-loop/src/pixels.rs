@@ -1,13 +1,18 @@
 //! What the loop's pixel checks share (#1938): the frames a host drew, read through the
 //! object-ID pass, in pinned f64 math.
 
+use std::collections::BTreeMap;
+
 use deep_canvas::registry::Frame;
 
 use crate::scene;
 
+/// BT.709's weights of linear R, G and B in luminance, as WCAG's.
+pub const WEIGHTS: [f64; 3] = [0.2126, 0.7152, 0.0722];
+
 /// Relative luminance of linear RGB (BT.709, as WCAG's).
 pub fn luminance(rgb: [f64; 3]) -> f64 {
-    0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+    WEIGHTS[0] * rgb[0] + WEIGHTS[1] * rgb[1] + WEIGHTS[2] * rgb[2]
 }
 
 /// Relative luminance of an sRGB-encoded px.
@@ -21,15 +26,23 @@ pub fn ratio(a: f64, b: f64) -> f64 {
     (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }
 
-/// Which px of `frame` draw any of `items` (each a whole item or its parts), by the ID pass.
-pub fn mask(frame: &Frame, items: &[String]) -> Vec<bool> {
-    let of: std::collections::BTreeSet<u32> = frame
-        .picks
+/// The picks of `items` (each a whole item or its parts) among `picks`, sorted.
+pub fn picks_of(picks: &BTreeMap<u32, String>, items: &[String]) -> Vec<u32> {
+    picks
         .iter()
         .filter(|(_, id)| items.iter().any(|k| scene::is_of(id, k)))
         .map(|(p, _)| *p)
-        .collect();
-    frame.ids.iter().map(|p| of.contains(p)).collect()
+        .collect()
+}
+
+/// Which px of `frame` draw any of `items` (each a whole item or its parts), by the ID pass.
+pub fn mask(frame: &Frame, items: &[String]) -> Vec<bool> {
+    let of = picks_of(&frame.picks, items);
+    frame
+        .ids
+        .iter()
+        .map(|p| of.binary_search(p).is_ok())
+        .collect()
 }
 
 /// The shown px `i`, sRGB.
@@ -60,8 +73,10 @@ pub fn bounds(mask: &[bool], w: usize) -> Option<[usize; 4]> {
     b
 }
 
-/// Whether the frame's buffers hold its size: a frame that doesn't is unreadable.
+/// Whether the frame's buffers hold its size: a frame that doesn't is unreadable. Its light is
+/// its linear image, or the host's reduction of it (#2513).
 pub fn whole(frame: &Frame) -> bool {
     let n = frame.size[0] as usize * frame.size[1] as usize;
-    n > 0 && frame.ids.len() == n && frame.rgba.len() == n * 4 && frame.linear.len() == n * 4
+    let light = frame.linear.len() == n * 4 || frame.reduce.is_some();
+    n > 0 && frame.ids.len() == n && frame.rgba.len() == n * 4 && light
 }
