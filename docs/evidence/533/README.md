@@ -64,12 +64,13 @@ This evidence does not show the time order of logic and physics steps. The issue
 
 ## Screenshots, and the agents' check of them
 
-`screens/` holds the end-to-end screenshots, made on head `6e3a2e3bc` by the scripts in `e2e/`. After the #2324 merge `capture.sh` ran again: the four captures that print the pin (`c3-seal-shipped`, `c3-seal-patch`, `c3-seal-planted-control`, `c4-no-physics-seal`) changed, and the other eleven came out byte-identical. `screens.test.ts` ran again on wasmtime 49.0.5 and passed, and its six frames and manifest came out byte-identical. Paths print as `<scratch>` and `<evidence>`.
+`screens/` holds the end-to-end screenshots, made by the scripts in `e2e/` and last run on head `f88878caf` (main merged through `e0c90a5a5`), on binaries rebuilt from it. That run left the eleven captures that don't print the seal byte-identical, changed the four seal captures only by the two fields round 9 added, added `c1-replay` and `c2-orders-and-twins`, and gave the same six frames; `manifest.json`'s module lists gained main's `export` and `net`. The history before it: first made on head `6e3a2e3bc`. After the #2324 merge `capture.sh` ran again: the four captures that print the pin (`c3-seal-shipped`, `c3-seal-patch`, `c3-seal-planted-control`, `c4-no-physics-seal`) changed, and the other eleven came out byte-identical. `screens.test.ts` ran again on wasmtime 49.0.5 and passed, and its six frames and manifest came out byte-identical. Paths print as `<scratch>` and `<evidence>`.
 
 - **Terminal captures:** `e2e/capture.sh <scratch>` runs each criterion's command through the built binaries and saves `$ command`, its output and its exit status (`bash -o pipefail`) as a PNG.
-  - Criterion 1: `c1-readings.png`.
+  - Criterion 1: `c1-readings.png`, and `c1-replay.png`: `e2e/replay.sh` opens a second process on the track the live run recorded, appends nothing, and gets the same arrays and step hash at every step. The source here is the test writer's `append` calls, as in the acceptance suite; no hub runs in these captures.
   - Criterion 2: `c2-players-2-then-1.png` and `c2-players-1-then-2.png`, plus the planted twins `c2-planted-arrival.png` and `c2-planted-drops.png`; `c2-step-seq-order.png` shows order by step and seq.
-  - Criterion 3: `c3-seal-shipped.png` and `c3-seal-patch.png`. The planted twin is `c3-seal-planted.png`, with its control `c3-seal-planted-control.png`.
+    `c2-orders-and-twins.png` is the criterion's own check: `e2e/orders.sh` runs both arrival orders through one build and names the first step where `first` isn't 1 or the two orders' hashes differ. The real build passes with six equal step hashes; each planted twin fails at step 3. `deep-logic` itself replies `ok` under a twin, since a twin is a wrong build and not an error; the failure is the check's, as it is in `ac02-players.test.ts`.
+  - Criterion 3: `c3-seal-shipped.png` and `c3-seal-patch.png`. Both print the implementation's `equivalence: bit` and `state: canonical`. The planted twin is `c3-seal-planted.png`, with its control `c3-seal-planted-control.png`.
   - Criterion 4:
     - `c4-no-physics-seal.png`: the build without physics seals.
     - `c4-no-physics.png`: that build's documents and arrays.
@@ -114,3 +115,16 @@ This evidence does not show the time order of logic and physics steps. The issue
   - Pixel-diffed against the earlier captures, each differs in one character cell, the pin's "2" → "5"; every logic digest is unchanged.
   - The unfiltered kit reports hide no failing part; their only FAIL verdicts are planted twins the kit caught.
   - It found no personal paths or secrets.
+
+- **Round 9, on head `f88878caf`:** one agent, over all 21 images, with the binaries, the inputs and `capture.sh`, and without this section. It recaptured all 15 terminal images (byte-identical), ran every command unfiltered, and checked the frames against the manifest.
+  - Every image was legible, complete and matched a fresh run; the filters hid no failing part, issue code or refusal; it found no personal paths or secrets.
+  - Criterion 1's replay was in no picture. `c1-replay.png` adds it.
+  - Criterion 2's equal step hashes were filtered out, and the twins only gave another number. `c2-orders-and-twins.png` shows the hashes and the check failing at step 3.
+  - Criterion 3's `bit` and `canonical` were filtered out. The seal filter now prints them, which changed the four seal captures.
+  - `manifest.json` was modified and uncommitted, and `screens-run.txt` was from the first run. Both are committed from this run.
+  - Stated, not changed:
+    - The kit reports `interface: {truth: false, missing: [logic@1]}`, visible in the seal captures. It means no logic fixture carries an expected value set outside the implementation; the issue's oracle page says no upstream test checks these criteria. `cells` and `media` report the same on main, and it is not part of the kit's verdict.
+    - The schedule lists 14 kit parts for `logic@1` and the kit reports 11 (12 with `bit`): `contribution` and `migration` report nothing for a module with no contribution and one version, as for other modules.
+    - In the patch build the kit row's `version` is the module's (1.0.0); the implementation's is 1.0.1.
+    - The build without physics reports `build_set: full`: it is the full set with a test feature.
+    - Criterion 4's two refused documents are also refused by the full build, for another reason (`c4-full-control.png`), and they name `lab` without declaring a world.

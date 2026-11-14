@@ -13,6 +13,10 @@ shot() { python3 -I "$HERE/terminal.py" "$OUT/$1.png" "$2" "$S" "$3" > /dev/null
 LOGIC='if .session then {ok, session} elif .steps then {ok, step, steps: [.steps[] | {step, t, arrays}]} else . end'
 shot c1-readings 'Criterion 1: a reading is recorded at the first step not yet run (the last call names an undeclared source and is refused)' \
   "bin/deep-logic < evin/readings.in | jq -c '$LOGIC'"
+# The replay: e2e/replay.sh opens a second process on the track the live run recorded, with nothing delivering.
+mkdir -p "$S/e2e" && cp "$HERE/replay.sh" "$HERE/orders.sh" "$S/e2e/"
+shot c1-replay 'Criterion 1: a replay of the recorded track, with nothing delivering, reads the same values at the same steps' \
+  "grep -v '^#' e2e/replay.sh; bash e2e/replay.sh; s=\$?; rm -f live.steps replay.steps; exit \$s"
 shot c2-players-2-then-1 'Criterion 2: two players press at step 3, player 2 arriving first' \
   "bin/deep-logic < evin/players-2-then-1.in | jq -c '$LOGIC'"
 shot c2-players-1-then-2 'Criterion 2: the same presses, player 1 arriving first' \
@@ -21,13 +25,16 @@ shot c2-planted-arrival 'Criterion 2: planted read_region_orders_by_arrival (mus
   "bin/deep-logic --planted read_region_orders_by_arrival < evin/players-2-then-1.in | jq -c '$LOGIC'"
 shot c2-planted-drops 'Criterion 2: planted read_region_drops_player: the first entry reads as player 0 (must differ)' \
   "bin/deep-logic --planted read_region_drops_player < evin/players-2-then-1.in | jq -c '$LOGIC'"
+# The check itself: e2e/orders.sh runs both orders through one build and names the first step that breaks the criterion.
+shot c2-orders-and-twins 'Criterion 2: both orders give first = 1 with equal step hashes; each planted twin fails, naming step 3' \
+  "grep -v '^#' e2e/orders.sh; for p in '' '--planted read_region_orders_by_arrival' '--planted read_region_drops_player'; do echo \"deep-logic \$p:\"; bash e2e/orders.sh \$p || exit; done"
 # e2e/order.wat writes, for the first four entries in its read region, each one's player and value.
 ORDER='[.[] | select(.steps) | .steps[] | select(.step >= 3) | {step, order: .arrays["order.order"]}]'
 shot c2-step-seq-order 'Criterion 2: entries arrive out of step and seq order; the read region holds [player, value] by step, player, seq; twins differ' \
   "for p in '' '--planted read_region_orders_by_arrival' '--planted read_region_drops_player'; do echo \"deep-logic \$p:\"; bin/deep-logic \$p < evin/seq-order.in | jq -s -c '$ORDER' || exit; done"
 
 # deep-show's seal: logic@1's digest and implementation from the schedule, and the logic kit's verdict.
-SEAL='if .ok == false then . else {ok, physics: (.replies[0].modules | index("physics") != null), logic_digest: .replies[0].digests.logic, implementation: (.replies[1].interfaces["logic@1"].implementation | {name, version, wasmtime: .pins.wasmtime.version}), kit: [.replies[2].modules[] | {module, verdict, interface, parts: (.parts | map({(.part): .verdict}) | add)}]} end'
+SEAL='if .ok == false then . else {ok, physics: (.replies[0].modules | index("physics") != null), logic_digest: .replies[0].digests.logic, implementation: (.replies[1].interfaces["logic@1"].implementation | {name, version, equivalence, state, wasmtime: .pins.wasmtime.version}), kit: [.replies[2].modules[] | {module, verdict, interface, parts: (.parts | map({(.part): .verdict}) | add)}]} end'
 shot c3-seal-shipped 'Criterion 3: the full build seals logic@1 and its kit passes' \
   "bin/deep-show-full run < evin/seal.json | jq -c '$SEAL'"
 shot c3-seal-patch 'Criterion 3: a patch release (1.0.1) seals with the same digest; its kit adds the bit part, run for an implementation whose version differs from the reference' \
