@@ -190,12 +190,21 @@ impl Hub<'_> {
                     // During a transition the side shown most is the one read, its share fading
                     // its texts.
                     let (k, share) = match &s.mix {
-                        Some(crate::film::Mix::Fade(m) | crate::film::Mix::Dip(m)) => {
+                        Some(crate::film::Mix::Fade(m)) => {
                             if *m >= 0.5 {
                                 (1, *m)
                             } else {
                                 (0, 1.0 - *m)
                             }
+                        }
+                        // #466: a dip shows the side under its color, at the color's
+                        // remaining share.
+                        Some(crate::film::Mix::Dip { weight, under, .. }) => {
+                            let k = usize::from(!matches!(
+                                under,
+                                deep_canvas_motion::shots::Under::Outgoing
+                            ));
+                            (k, 1.0 - *weight)
                         }
                         Some(_) => (s.status, 1.0),
                         None => (0, 1.0),
@@ -721,6 +730,7 @@ impl Hub<'_> {
                         frame,
                         start,
                         analyzed,
+                        reseeded,
                     }) = self.film_luminance(&revision.drawn, reduced)
                     else {
                         failed =
@@ -733,6 +743,19 @@ impl Hub<'_> {
                             "doc": doc, "t": start, "rendition": rendition, "counter": "analyzed", "frames": frames.len(), "analyzed": analyzed,
                             "what": format!("{analyzed} of {} frames were analyzed from their own raster", frames.len()),
                             "fix": "analyze every frame the check judges; a result served to other frames isn't theirs"}));
+                    }
+                    if let Some(t) = reseeded {
+                        let path = if revision.drawn.pointer("/look/asset").is_some()
+                            && self.has_boil(&revision.drawn)
+                        {
+                            "look/time/boil"
+                        } else {
+                            "look"
+                        };
+                        issues.push(json!({"check": audit::FILM_FLICKER, "code": "film.reseed", "severity": "error", "ids": [],
+                            "doc": doc, "t": t, "rendition": rendition, "path": path,
+                            "what": format!("the frame at {:.3} s draws otherwise sought than played: a seed at {path} follows playback, not time and IDs", seconds(t)),
+                            "fix": "seed the boil, paper or fill from quantized time (⌊t × hz⌋, or a cycle of n drawings) and IDs, never from playback"}));
                     }
                     for found in audit::flashes(&frames, per_second, &f, count) {
                         let t = start + found.first as i64 * frame;
@@ -795,6 +818,7 @@ impl Hub<'_> {
                 ok = false;
                 break;
             };
+            let painted = self.boiled(drawn, t, reduced, painted);
             let sides = program
                 .as_deref()
                 .and_then(|p| crate::film::sides(p, drawn, t, reduced));
@@ -817,6 +841,14 @@ impl Hub<'_> {
             );
             analyzed += 1;
         }
+        // #466: the reseed rule: sampled frames drawn again cold draw what played.
+        let times: Vec<i64> = (0..out.len()).map(|n| start + n as i64 * frame).collect();
+        let reseeded = if ok && !once {
+            self.reseeded(drawn, &out, &times, px, reduced)
+                .map(|k| times[k])
+        } else {
+            None
+        };
         if let Some((look, def)) = kept {
             self.look = look;
             self.look_def = def;
@@ -828,6 +860,7 @@ impl Hub<'_> {
             frame,
             start,
             analyzed,
+            reseeded,
         })
     }
 
@@ -946,12 +979,14 @@ struct Lit {
     start: i64,
     /// #1399: the frames analyzed from their own raster.
     analyzed: usize,
+    /// #466: the first sampled frame that draws otherwise sought than played.
+    reseeded: Option<i64>,
 }
 
 impl Hub<'_> {
     /// Sets the hub's look to the one `drawn` names by asset, as a show of it does; the look it
     /// replaced, to put back.
-    fn with_look_of(
+    pub(crate) fn with_look_of(
         &mut self,
         drawn: &Value,
     ) -> Option<(deep_canvas_marks::look::Look, Option<Value>)> {
