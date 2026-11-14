@@ -597,9 +597,12 @@ impl<'a> Hub<'a> {
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|()| Unfit {
-            code: "gpu_unavailable",
-            path: "snapshots".into(),
+        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|u| match u.code {
+            "unsupported_platform" => Unfit {
+                code: "gpu_unavailable",
+                path: "snapshots".into(),
+            },
+            _ => u,
         })?;
         let over = self.renderer.raster(&drawn, size, None);
         snapshot::over(&mut rgba, &over);

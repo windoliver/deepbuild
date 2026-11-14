@@ -234,11 +234,15 @@ pub fn parse(
         match v.as_str() {
             Some("sky") => Ok(Source::Sky),
             Some("studio") => Ok(Source::Studio),
-            // Never a URL: an HDR comes by its hash from the document's assets.
-            Some(s) if is_sha(s) => Ok(Source::Asset(
-                s.to_string(),
-                assets.and_then(|a| a(s)).map(std::sync::Arc::new),
-            )),
+            // Never a URL: an HDR comes by its hash from the document's assets; with them, one
+            // that isn't there is missing, never a black environment (#1729).
+            Some(s) if is_sha(s) => match (assets, assets.and_then(|a| a(s))) {
+                (Some(_), None) => Err(Refused {
+                    code: "asset_missing",
+                    path: format!("{path}/{k}"),
+                }),
+                (_, bytes) => Ok(Source::Asset(s.to_string(), bytes.map(std::sync::Arc::new))),
+            },
             _ => Err(bad(k)),
         }
     };

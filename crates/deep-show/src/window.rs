@@ -309,12 +309,15 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 (dim(0) * scale).round().clamp(1.0, f64::from(size[0])) as u16,
                 (dim(1) * scale).round().clamp(1.0, f64::from(size[1])) as u16,
             ];
-            let Some(gpu) = hub.gpu3() else {
+            if hub.gpu3().is_none() {
                 return refused("unsupported_platform");
-            };
-            let Ok((mut drawn, scene)) =
-                gpu.draw(&Value::Object(stamped.clone()), t, &palette, drawn_size)
+            }
+            // #1729: its assets and maps from the evidence store, as render-back reads them.
+            let Ok((scene, look)) = hub.evaluate3d(&Value::Object(stamped.clone()), t, drawn_size)
             else {
+                continue;
+            };
+            let Some(mut drawn) = hub.gpu3().and_then(|g| g.draw(&scene, &look)) else {
                 continue;
             };
             for (id, b) in scene.boxes() {

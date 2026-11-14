@@ -304,6 +304,7 @@ fn checked(
         labels,
         Some((&raw, plants)),
         planted,
+        None,
     )
     .map_err(|issues| json!({"code": "refused", "issues": issues}))?;
     Ok((raw, a))
@@ -560,6 +561,7 @@ fn play(
                         labels,
                         None,
                         planted,
+                        None,
                     )
                     .map_err(|issues| json!({"code": "refused", "issues": issues}))?;
                     view.set_frames(a.into_frames());
@@ -1362,6 +1364,7 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
                     &mut labels,
                     Some((&payload, &plants)),
                     planted,
+                    None,
                 ) {
                     Ok(a) => a,
                     Err(issues) => return json!({"code": "refused", "issues": issues}),

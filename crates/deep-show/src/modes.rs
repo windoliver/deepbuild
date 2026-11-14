@@ -334,15 +334,17 @@ impl Hub<'_> {
         let size = show.size.unwrap_or_else(|| {
             crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        let evidence = self.scenario.evidence.clone();
-        let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-        let palette = self.look.light.clone();
-        let ink = palette.get("ink").copied().unwrap_or([0x1f, 0x23, 0x28]);
-        let Some(gpu) = self.gpu3() else {
+        let ink = self
+            .look
+            .light
+            .get("ink")
+            .copied()
+            .unwrap_or([0x1f, 0x23, 0x28]);
+        if self.gpu3().is_none() {
             return Err(refuse("unsupported_platform", json!({})));
-        };
-        let (mut scene, look) = gpu
-            .evaluate(doc, show.t, &palette, size, &read)
+        }
+        let (mut scene, look) = self
+            .evaluate3d(doc, show.t, size)
             .map_err(|u| refuse(u.code, json!({"path": u.path})))?;
         let planted = |p: Planted| self.scenario.planted == Some(p);
         let mut diag = view_of(mode);
