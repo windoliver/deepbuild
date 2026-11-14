@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "46f2c8d12437ece1a946dcf53deb685e12f2421e18781e15b54985a94763a163",
+  "set_digest": "d4fc1c6ab0d85ca0d676327a5734b2ad38d18d87a8219cbce3cf14907552f4c9",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
@@ -122,7 +122,7 @@
       }
     },
     "motion@1": {
-      "digest": "d81abbf088e7c6a563940c0cf9f8adce5874f9d0342e2c19fb05b8094f41b7c8",
+      "digest": "40fc4246f449f233e370e13e5a10150dc1ddbaa2cdeff07312a759f63ffe7add",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -554,7 +554,8 @@
           "core.fields",
           "text.counter",
           "view(locale)",
-          "table:text.fonts"
+          "table:text.fonts",
+          "look"
         ],
         "writes": [
           "text.run"

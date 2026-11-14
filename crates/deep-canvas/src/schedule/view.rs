@@ -508,6 +508,12 @@ impl<'a> View<'a> {
         &self.sealed.outlines
     }
 
+    /// The build's module fills (#226): the deforms and kinds scene3d runs and draws for the
+    /// modules that fill them, without naming those modules.
+    pub fn fills(&self) -> &'a [crate::contributed::Sealed] {
+        &self.sealed.fills
+    }
+
     /// `table:<name>`: a table's value.
     pub fn table<T: Any + Send + Sync>(&mut self, name: &str) -> Result<Arc<T>, OpError> {
         self.declared(&format!("table:{name}"))?;

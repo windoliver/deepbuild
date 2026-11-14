@@ -348,6 +348,21 @@ impl Timer {
         }
     }
 
+    /// [`Timer::resolve`] in a submission of its own, once the frame's work is done (#239):
+    /// Metal orders no read of a counter sample against the pass that writes it, so a resolve in
+    /// the frame's own encoder could copy the last pass's end before its fragment stage wrote it,
+    /// and read the frame before's.
+    pub fn resolve_after(&self, device: &Device) {
+        if !self.timed() || self.n == 0 {
+            return;
+        }
+        outside(|| {
+            let mut encoder = device.device.create_command_encoder(&Default::default());
+            self.resolve(&mut encoder);
+            device.queue.submit([encoder.finish()]);
+        });
+    }
+
     /// After the frame's work is done: each pass's ticks, and whether they resolved (#1899).
     pub fn read(&mut self, device: &Device) -> bool {
         let Some((_, _, read, _)) = &self.query else {

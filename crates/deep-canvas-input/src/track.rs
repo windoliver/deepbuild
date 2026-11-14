@@ -53,8 +53,13 @@ impl Entry {
         let mut o = Map::new();
         o.insert("t".into(), json!(self.t));
         o.insert("seq".into(), json!(self.seq));
-        o.insert("control".into(), json!(self.control));
-        o.insert("value".into(), self.value.clone());
+        // #507: a present-mode entry (advance, back, blank or a stage) names no control.
+        if self.control.is_empty() {
+            o.insert("present".into(), self.value.clone());
+        } else {
+            o.insert("control".into(), json!(self.control));
+            o.insert("value".into(), self.value.clone());
+        }
         if let Some(samples) = &self.samples {
             let list: Vec<Value> = samples
                 .iter()

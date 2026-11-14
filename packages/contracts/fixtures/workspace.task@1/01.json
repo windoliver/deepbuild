@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8J1",
+  "kind": "workspace.task",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "workspace": "Clientreport3fa9c1d2",
+    "task": 1,
+    "step": "entered",
+    "source_id": "Clientreport3fa9c1d2#1",
+    "link": "deepbuild://workspace/Clientreport3fa9c1d2/task/1",
+    "title": "Write part 1 of the client report",
+    "body": "task:Clientreport3fa9c1d2#1",
+    "criteria": [
+      "Part 1 of the client report is written"
+    ],
+    "authors": [
+      {
+        "handle": "you",
+        "role": "owner"
+      }
+    ],
+    "updated": "2026-11-13T10:00:00.000Z",
+    "blocked_by": [],
+    "issue": null,
+    "commit": null,
+    "kept": null
+  }
+}

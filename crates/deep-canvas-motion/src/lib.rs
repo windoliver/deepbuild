@@ -32,6 +32,7 @@ pub mod module;
 pub mod morph;
 pub mod occurrence;
 mod pace;
+pub mod present;
 pub mod program;
 pub mod quat;
 pub mod remap;

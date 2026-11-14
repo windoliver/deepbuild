@@ -113,7 +113,7 @@ impl Frames {
             code: "out_of_range",
             path: String::new(),
         })?;
-        let scene = evaluate_compiled(map, &program, 0, look, labels, None, &[])?;
+        let scene = evaluate_compiled(map, &program, 0, look, labels, None, Default::default())?;
         let state = program.state();
         let fast = fast_path(map, &program, &scene);
         let mut bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
