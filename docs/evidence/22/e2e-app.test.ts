@@ -50,7 +50,8 @@ it('app', async () => {
   appPid = app.pid;
   log(`World: home ${home}; deep-app pid ${app.pid}; machine ${execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim()}`);
   const ask = async (who: string, n: number, o: any = {}) => {
-    const question = `${who}: which header colour for checkout screen ${n}?`;
+    // The row is narrow: the number comes first, so each row reads as its own ask.
+    const question = `${who}${n}: which header colour for this checkout screen?`;
     const s = o.s ?? h.newSession(home, repo);
     const claude = o.claude ?? h.Claude.start(home);
     if (!o.s) {
