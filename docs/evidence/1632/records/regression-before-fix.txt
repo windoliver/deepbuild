@@ -1,0 +1,17 @@
+# The regression test before the fix, run 2026-11-09 01:01:54 PST (vitest output tail, saved 01:02:09; the last line was condensed when saved, with `...` eliding fields of the error, so it is not verbatim vitest output).
+    202|         expect(stamped.isError, JSON.stringify(stamped.value)).toBe(fa…
+       |                                                                ^
+    203|         expect(stamped.value?.session, 'the claim is B\'s').toBe(b);
+    204|       } finally {
+ ❯ withHub test/hub.ts:83:5
+ ❯ test/mcp-rebind.test.ts:181:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  01:01:54
+   Duration  1.24s (tests 92%, transform 6%, import 2%)
+
+AssertionError: {"code":"unbound",...,"remediation":"This deep_claim call binds to no session: no PreToolUse stamped for it is unspent."} expected true to be false

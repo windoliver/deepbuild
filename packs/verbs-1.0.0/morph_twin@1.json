@@ -1,0 +1,31 @@
+{
+  "id": "verbs.morph_twin",
+  "version": "1.0",
+  "title": "Morph, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of morph: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "to": {
+      "type": "ID",
+      "default": "",
+      "about": "the item whose outline it becomes"
+    }
+  },
+  "steps": {
+    "morph": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "path": {
+            "of": "to"
+          }
+        },
+        "type": {
+          "path": "path"
+        },
+        "until": 0.5
+      }
+    }
+  }
+}

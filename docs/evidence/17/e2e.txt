@@ -1,0 +1,100 @@
+# deep-hook e2e on this branch's build (target/debug/deep-hook at 4ab03520), Linux, hub stopped then started.
+# Paths under the home are redacted to <home>. The hooks were passed with `claude -p --settings <file>` (a user-supplied
+# settings file, never a repo's), each hook a wrapper that runs deep-hook with HOME=<e2e home> and logs its exit and time.
+
+## A. A real Claude Code session (2.1.317) with the hub stopped: fail open, spooled, then delivered in order
+# The account hit its weekly usage limit at the first model call, so the session ran its SessionStart and
+# UserPromptSubmit hooks and no tool call. Hook wrapper log:
+SessionStart exit=0 ms=18
+UserPromptSubmit exit=0 ms=14
+# Both calls were in <e2e home>/.deepbuild/spool/spool.jsonl. `deep hub run` on that home then drained the spool; ledger
+# rows (seq|type|id|hook ns|session|payload, cut):
+2|session.start|01M6ZVKWA2D8Y3CMRGSVGVPMBN|1794217996610702924|877ae042-022e-434d-8a20-7acf05e8761d|{"agent":"claude-code","worktree":"/tmp/dh17-e2e/work",...
+3|user.ask|01M6ZVKX3ABNCCTRD2FKHQ17CP|1794217997418437195|877ae042-022e-434d-8a20-7acf05e8761d|{"msg":0,"text":"Run these two shell commands with the Bash tool, ...
+# Same IDs the hook spooled, in hook order. The hub was stopped by its PID afterwards.
+
+## B. Recorded Claude Code 2.1.308 Bash PreToolUse payloads, replayed into the same binary with the hub stopped
+# (the fast rules decide alone; 5 rounds each). Every call was spooled with its matched entries.
+'ls /tmp/dh17-e2e'               exit=0  30.8 ms
+"pkill -f 'dh17[-]nomatch'"      exit=2  18.0 ms stderr='DeepBuild blocked this: Never kill processes by name. Stop the process by its PID. (guard no-kill-by-name, ...'
+'ls /tmp/dh17-e2e'               exit=0  13.5 ms
+"pkill -f 'dh17[-]nomatch'"      exit=2   8.9 ms
+'ls /tmp/dh17-e2e'               exit=0   7.8 ms
+"pkill -f 'dh17[-]nomatch'"      exit=2  13.6 ms
+'ls /tmp/dh17-e2e'               exit=0  10.4 ms
+"pkill -f 'dh17[-]nomatch'"      exit=2  19.4 ms
+'ls /tmp/dh17-e2e'               exit=0  13.5 ms
+"pkill -f 'dh17[-]nomatch'"      exit=2  22.0 ms
+
+## C. Under load (Linux box at load 33-44): 30 passes of 200 hooks each with the hub stopped
+# base 6042ef5a: 13/30 passes lost nothing, 202 of 6000 calls lost, silently
+# this fix:      20/30 passes lost nothing, 131 of 6000 lost, each one logged "could not spool ... within the hook's 50 ms"
+#                (a write the swapping disk stalled past the hook's budget); none lost silently
+
+## D. A real Claude Code turn with tool calls (2.1.317, Linux, 2026-11-10), hub stopped, binary built from 81de2652
+# claude -p --settings <settings> --allowedTools Bash, from an untouched work folder; prompt: run `ls /tmp/dh17-e2e`,
+# then `pkill -f 'dh17[-]nomatch'`, one Bash call each. Hook wrapper log (event, exit, ms including the wrapper):
+SessionStart exit=0 ms=7
+UserPromptSubmit exit=0 ms=6
+PreToolUse exit=0 ms=17
+PostToolUse exit=0 ms=7
+PreToolUse exit=2 ms=18
+Stop exit=0 ms=7
+# The session's own record (stream-json), cut:
+TOOL_USE toolu_015RA2zZrzmLJ6NPbRXbG7LM {"command":"ls /tmp/dh17-e2e"}  -> RESULT ok "b\nb1\ncorpus-runs.txt\nhome\n..."
+TOOL_USE toolu_01V45EAuRazmQ1TPh4Qcoi6E {"command":"pkill -f 'dh17[-]nomatch'"}  -> RESULT error "PreToolUse:Bash hook error: [<wrapper> PreToolUse]: DeepBuild blocked this: Never kill processes by name. Stop the process by its PID. (guard no-kill-by-name, which holds while the hub doesn't answer)"
+TEXT Only the first command ran. ...
+# The spool grew by 6 lines, one per hook. `deep hub run` on that home then drained it (the spool folder emptied), and
+# the ledger holds the turn in hook order (hook ns|kind|id|session|data, cut):
+1794297795916929007|session.start|01M727Q5ACF4YV4HNS37MWBDYW|98a90304-a399-40d3-b8e1-b06972a99273|{"agent":"claude-code","worktree":"/tmp/dh17-e2e/b/work",...
+1794297795976999613|user.ask|01M727Q5C8A5RMP750XQYNT597|98a90304-...|{"msg":0,"text":"Run these two shell commands with the Bash tool, ...
+1794297806395635633|tool.before|01M727QFHVCXSCVAMXEHMAHZX7|98a90304-...|{"kind":"shell","command":"ls /tmp/dh17-e2e","call":"toolu_015RA2zZrzmLJ6NPbRXbG7LM","matched":["listing-noted"]}
+1794297806466322114|tool.after|01M727QFM278VMMEZJY7QQB5TC|98a90304-...|{"kind":"shell","command":"ls /tmp/dh17-e2e","call":"toolu_015RA2zZrzmLJ6NPbRXbG7LM","outcome":"ok"}
+1794297808621026131|tool.before|01M727QHQD9XWFX3Z6731P54ZA|98a90304-...|{"kind":"shell","command":"pkill -f 'dh17[-]nomatch'","call":"toolu_01V45EAuRazmQ1TPh4Qcoi6E","matched":["no-kill-by-name"]}
+1794297815929709433|agent.stop|01M727QRVS3DZDRRFFQ4VRX64D|98a90304-...|{"turn":1,"did_work":true,"claim":true,"outcome":"finished",...}
+# The hub was stopped by its PID. (A first run the same night was identical, but its wrapper sent deep-hook's stderr
+# only to a log, so Claude Code showed "No stderr output" for the denial; the wrapper now passes it through.)
+# On the Mac the same check stopped at Claude Code's folder-trust prompt for a new work folder; no hook ran there.
+
+## E. The same check in an interactive Claude Code session, recorded as screenshots (Linux, 2026-11-13 22:27-22:29,
+## load 6.7 before the prompt and 6.6 after the turn), binary built from e574148b (PR #2096's head). Two tmux windows
+## rendered to PNG; home paths were replaced with <home>, and Claude Code's U+23F5 arrow (no installed font has it)
+## with a similar arrow, after capture. These replace the screenshots of the binary at 6d4fccfb (commit c4f54b63
+## holds those).
+# shots/1-setup-and-live-session-checks.png: HEAD, the binary's and the wrapper's sha256; no hooks in the repo's, the
+#   user's or managed settings (no /etc/claude-code at all); the --settings file maps all five events to the wrapper,
+#   which runs deep-hook with HOME=/tmp/dh17-e2e/home; that HOME's rules.json entries for the two calls
+#   (no-kill-by-name: shell:pkill *, block, fail_closed; listing-noted: shell:ls*, watch, not fail_closed); the spool
+#   and the wrapper's logs empty; a throwaway process (dh17-victim) for the pkill to name; a sampler reading the hub's
+#   socket five times a second from 22:27:23. With the session open (started 22:27:25, session ID fb9e32de-...,
+#   claude --session-id ... --settings /tmp/dh17-e2e/settings.json --allowedTools Bash), before its prompt and after
+#   its turn: no hub socket and no process with that HOME; dh17-victim still alive 46 s on; the load; the wrapper's
+#   log: six hook calls with their times, 7-11 ms each through the wrapper, the pkill's PreToolUse exiting 2;
+#   deep-hook's whole stderr (the one denial). Then the session's process gone, 300 socket samples with the socket
+#   present in none, and dh17-victim stopped by its PID.
+# shots/2-session-ls-ran-pkill-blocked.png: the prompt asks for the two calls and a report, nothing about the outcome;
+#   ls ran; the pkill was not run, with DeepBuild's reason (guard no-kill-by-name, which holds while the hub doesn't
+#   answer).
+# shots/3-session-expanded.png: the same turn in the detailed view: the raw ls output and the hook's full denial.
+# shots/4-spool-hub-stopped.png: after the session, hub still stopped: the spool folder holds one file of six lines,
+#   with their matched entries (listing-noted for ls, no-kill-by-name for the pkill) and the session's own ID; no
+#   ledger row for the session.
+# shots/5-hub-replay-ledger.png: the CLI entry (node packages/cli/dist/main.js hub run; this branch changes no hub or
+#   CLI file, and no source is newer than the built CLI) starts the hub: its socket is present and one process has
+#   that HOME; it replays the spool, which empties; the ledger holds the six hook events (writer hook) in hook order
+#   with the spool's IDs, plus four rows by writer core (session.reading, holds.watch, session.state, turn.usage);
+#   the hub stopped by its PID, and afterwards gone, with no socket and no process with that HOME.
+# shots/6-binary-and-settings.png: the same two hashes; crates, Cargo.toml and Cargo.lock unchanged at HEAD e574148b;
+#   no source file newer than the binary; the whole --settings file. cargo build --locked is not shown: since 20:37
+#   that day it fails in this worktree, because the main checkout's .cargo/config.toml, which cargo also reads from a
+#   worktree under it, patches symphonia-codec-vorbis, a crate this branch's Cargo.lock doesn't hold.
+# The wall times are the wrapper's (bash, date and tee around deep-hook) on a machine other sessions were building
+# on: not a budget reading. The budgets are the reference Mac's (mac-judge.txt).
+# Not checked: hooks a plugin or a remotely delivered managed policy could add (the wrapper's log and the spool each
+# hold exactly the six calls), and processes of other users.
+# Independent agents reviewed each capture from the images alone; their findings were fixed in the next capture.
+# For this binary, captures 5 to 9 left, in turn: the session's exit, its ID's tie to its process, other settings'
+# hooks, the binary's identity and the hub's absence between checks; the sampler's log not shown empty, a pkill
+# whose pattern matched nothing, managed settings; where no-kill-by-name comes from, cut hashes, hook times, one load
+# reading; the session's start time and a positive control for the hub check. Capture 10 is the one recorded here.
+# The last review is cited in the PR.

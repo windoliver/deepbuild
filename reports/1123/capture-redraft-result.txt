@@ -1,0 +1,17 @@
+
+
+PASS before: tests/acceptance/1123/consumer.test.mjs › #9001.12345678 own build reaches the consumer: failed on the merge base at its assertion
+proof: wall time 55.0 s
+
+
+✔ lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite (41996.673291ms)
+✔ affected.mjs hands its own executable to the consumer after a competing Cargo rewrite (40073.212667ms)
+✔ before keeps base and change origins separate during competing Cargo rewrites (70851.867208ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 152986.666917

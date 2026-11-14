@@ -1,0 +1,191 @@
+[
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/README.md",
+    "consolidated": "reports/1123/blind-redrafts/374/README.md",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/VALIDATION.txt",
+    "consolidated": "reports/1123/blind-redrafts/374/VALIDATION.txt",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/helpers.ts",
+    "consolidated": "reports/1123/blind-redrafts/374/helpers.ts",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/original-helpers.ts",
+    "consolidated": "reports/1123/migration-374/original-helpers.ts",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/paint.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/374/paint.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/proof.json",
+    "consolidated": "reports/1123/migration-374/proof.json",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/prove-consumer.mjs",
+    "consolidated": "reports/1123/blind-redrafts/374/prove-consumer.mjs",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/steps.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/374/steps.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/stroke.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/374/stroke.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "reports/374-binary-redraft/wrong-program.json",
+    "consolidated": "reports/1123/blind-redrafts/374/wrong-program.json",
+    "equal": true
+  },
+  {
+    "issue": 374,
+    "sourceCommit": "c4c10086cf56f37c655c1c18704acd101c4f06ce",
+    "source": "tests/acceptance/374/helpers.ts",
+    "consolidated": "tests/acceptance/374/helpers.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/README.md",
+    "consolidated": "reports/1123/blind-redrafts/375/README.md",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/column.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/375/column.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/fixtures/column.doc.json",
+    "consolidated": "reports/1123/blind-redrafts/375/fixtures/column.doc.json",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/fixtures/grid.doc.json",
+    "consolidated": "reports/1123/blind-redrafts/375/fixtures/grid.doc.json",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/fixtures/row.doc.json",
+    "consolidated": "reports/1123/blind-redrafts/375/fixtures/row.doc.json",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/grid.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/375/grid.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/helpers.ts",
+    "consolidated": "reports/1123/blind-redrafts/375/helpers.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/never.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/375/never.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/original-helpers.ts",
+    "consolidated": "reports/1123/migration-375/original-helpers.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/plant.mjs",
+    "consolidated": "reports/1123/blind-redrafts/375/plant.mjs",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/proof.json",
+    "consolidated": "reports/1123/migration-375/proof.json",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/prove.sh",
+    "consolidated": "reports/1123/blind-redrafts/375/prove.sh",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/row.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/375/row.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/scope.test.ts",
+    "consolidated": "reports/1123/blind-redrafts/375/scope.test.ts",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "reports/375-binary-redraft/tsconfig.json",
+    "consolidated": "reports/1123/blind-redrafts/375/tsconfig.json",
+    "equal": true
+  },
+  {
+    "issue": 375,
+    "sourceCommit": "b7ae6caaf71dcebf67c4f566ca0637b08c2a6e1e",
+    "source": "tests/acceptance/375/helpers.ts",
+    "consolidated": "tests/acceptance/375/helpers.ts",
+    "equal": true
+  }
+]

@@ -1,5 +1,6 @@
-// What the slot kits share: a stable text for comparing JSON answers, random words for the seeded parts, and
-// the shape refusal a case raises when a fill's answer isn't even the right kind of value.
+// What the slot kits share: a stable text for comparing JSON answers, random words for the seeded parts, a step on
+// an upstream's reply that stays synchronous when the reply is, and the shape refusal a case raises when a fill's
+// answer isn't even the right kind of value.
 import { stableText, type JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { Finding } from '../slot-types.js';
@@ -30,3 +31,6 @@ export function list(what: string, value: unknown): unknown[] {
   if (!Array.isArray(value)) throw shape(what, 'type', value);
   return value;
 }
+
+/** `then` on an upstream's reply: at once when it answered at once, as a kit's stand-in does, else once it settles. */
+export const after = <T, R>(reply: Promise<T> | T, then: (reply: T) => R): R | Promise<R> => (reply instanceof Promise ? reply.then(then) : then(reply));

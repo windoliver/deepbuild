@@ -1,0 +1,12 @@
+✖ affected stops before starting consumers when its required binary cannot build (3220.365208ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3276.650083
+✖ failing tests:
+✖ affected stops before starting consumers when its required binary cannot build (3220.365208ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /BLOCKED test binaries: cargo build failed/. Input:
+    expected: /BLOCKED test binaries: cargo build failed/,

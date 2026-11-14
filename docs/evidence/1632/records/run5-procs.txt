@@ -1,0 +1,39 @@
+# ps in run 5, captured 2026-11-09 01:03:50 PST (09:03:50Z): after /clear (record position 36, 09:03:45Z) and before turn B's prompt (43, 09:03:51Z). ps cut the long command lines; the full ones are in the mcpServers entry below. The home directory is shortened to ~ throughout.
+    PID    PPID                  STARTED COMMAND
+3311397 3311182 Mon Nov  9 01:03:06 2026 ~/.local/opt/node-v24.22.0-linux-arm64/bin/node ~/deepbuild/.claude/worktrees/iss
+3311398 3311182 Mon Nov  9 01:03:06 2026 ~/deepbuild/.claude/worktrees/issue-1501-3907b7/target/debug/deep-hook mcp actions
+    PID                  STARTED COMMAND
+3311182 Mon Nov  9 01:03:06 2026 claude --allowedTools mcp__deepbuild --model haiku
+
+# Taken 2026-11-11, after the runs: mcpServers in the throwaway home's ~/.claude.json (/tmp/e2e1632-uA59/home), as deep setup wrote them:
+{
+ "deepbuild": {
+  "type": "stdio",
+  "command": "~/.local/opt/node-v24.22.0-linux-arm64/bin/node",
+  "args": [
+   "~/deepbuild/.claude/worktrees/issue-1501-3907b7/packages/cli/dist/main.js",
+   "mcp"
+  ]
+ },
+ "deep-actions": {
+  "type": "stdio",
+  "command": "~/deepbuild/.claude/worktrees/issue-1501-3907b7/target/debug/deep-hook",
+  "args": [
+   "mcp",
+   "actions"
+  ]
+ }
+}
+
+# Taken 2026-11-11 from the final transcripts: Claude Code version per session transcript in that home (count of lines carrying it):
+     47 05f51489-2453-4835-b15d-67e2f3a3a63b.jsonl:"version":"2.1.317"
+     33 27675be9-7e4e-46bb-8038-f58686903711.jsonl:"version":"2.1.317"
+      5 42116983-bef6-4958-ac35-4166cf106937.jsonl:"version":"2.1.317"
+     34 443d4264-6083-4f97-8d00-6ecf806e4b7c.jsonl:"version":"2.1.317"
+     19 7cc89389-0e3a-4964-9d70-4399ca9ba855.jsonl:"version":"2.1.317"
+     23 7fced700-1184-4acf-9aba-88c44bbb1eec.jsonl:"version":"2.1.317"
+     16 8275898c-2fef-40a9-9793-41b494a9d979.jsonl:"version":"2.1.317"
+     43 a861b175-deb7-4f7f-84e7-f97f0bd152b8.jsonl:"version":"2.1.317"
+     56 c1e59276-fde1-4265-bd0a-c9895257ab99.jsonl:"version":"2.1.317"
+     46 ca074ffe-2364-4a19-a4ca-f8a7b789be15.jsonl:"version":"2.1.317"
+      5 f6535c2c-dc22-4908-b3a9-401084df8338.jsonl:"version":"2.1.317"

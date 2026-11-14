@@ -1,0 +1,93 @@
+{
+  "id": "verbs.circumscribe",
+  "version": "1.0",
+  "title": "Circumscribe",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An emphasis: a frame `buff` outside each target's bounds draws around it and is gone by the end of its window, while it lifts.",
+  "inputs": {
+    "shape": {
+      "type": "choice",
+      "options": [
+        "rect",
+        "circle"
+      ],
+      "default": "rect",
+      "about": "the frame's shape"
+    },
+    "buff": {
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "about": "the gap between the bounds and the frame"
+    }
+  },
+  "steps": {
+    "ring": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          "x0 - buff - cx",
+          "y0 - buff - cy",
+          "w + 2 * buff",
+          "h + 2 * buff"
+        ],
+        "corner": "shape == circle ? max(w, h) / 2 + buff : 0",
+        "paint": {
+          "stroke": {
+            "role": "accent",
+            "width": 3
+          }
+        },
+        "ops": [
+          {
+            "trim": {
+              "start": 0,
+              "end": 1
+            }
+          }
+        ]
+      },
+      "at": {
+        "pos": [
+          "cx",
+          "cy",
+          0
+        ]
+      }
+    },
+    "out": {
+      "op": "cue",
+      "params": {
+        "on": "ring",
+        "from": {
+          "params/ops/0/trim/end": 0
+        },
+        "until": 0.5
+      }
+    },
+    "off": {
+      "op": "cue",
+      "params": {
+        "on": "ring",
+        "set": {
+          "params/ops/0/trim/start": 1
+        },
+        "at": 0.5
+      }
+    },
+    "lift": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/brightness": {
+            "pulse": {
+              "amount": 0.3
+            }
+          }
+        }
+      }
+    }
+  }
+}
