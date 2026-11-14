@@ -1,0 +1,176 @@
+# #1417 screenshots: what each round of fresh review agents found, and what changed.
+# Each agent got the issue and the evidence files and was told to look at the pixels and rerun shots.mjs into its
+# own folder. Round 1's two agents saw neither each other's report nor the author's view, and round 2's agent had no
+# log either (this file was written after round 2). From round 3 on, the files included this log, so each agent knew
+# the earlier rounds' findings. Pixel figures are the agents' own: bounding boxes of dark pixels, and band counts from
+# each row's mean brightness against a threshold (stated where given). Their reports are summarised here; they aren't evidence by
+# themselves (invariant 1): the replies and images are, and the sha256s below let anyone check a rerun.
+
+== Round 1, first capture (graphs drawn at full size, no scaling), two agents in parallel
+Agent A: every case OK on behaviour.
+- small 4x6 measured exactly (rows 78 px apart, boxes 24 px apart, widths 40+8*((r+j)%5)).
+- 100,000 nodes in data view refused naming graph.layout at 204.887 ms (AC1); export presented; no class warned.
+- 1000-data-view.png and 15000-no-class.png byte-identical: only the top-left of each layout fits the frame.
+- graph@1 draws no edges or labels and starts at its origin (#494, not #1417).
+Agent B: outcomes and every estimate right (46 ns * rows * log2(rows) + 10,792 ns per item); as evidence, weak.
+- Two PNGs byte-identical; the larger graphs cropped, so no image shows its node count.
+- The no-class warning leaves out costs.json's per-item term (~0.01 ms) and prints its total unrounded.
+- No no-class case under 16 ms.
+Changed: shots.mjs scales each graph to fit the frame; a 1,000-node no-class board added (no warning). Recaptured
+(2026-11-12 07:36 UTC) before round 2 ran.
+
+== Round 2, the scaled capture, one agent
+Every row of the README's table right: counts (small 4x6, 1,000 20x50), scales, extents and drawn sizes
+(the dark pixels' inclusive bounding boxes, 1266x483, 1266x125 and 484x706 px: the expected 1264x481, 1264x122.5
+and 482x704 plus the 2 px outlines; round 2 gave each 1 px less, measuring x1-x0), outcomes, and estimates.
+Rerun matched the text and all five sha256s.
+Findings, all on the README's prose:
+- it cited this file before it existed;
+- it said scaling gave every graph its own image, while the two 1,000-node boards are still byte-identical (by design);
+- the 100,000-node export image is a solid band, so it shows only extent; it read the 15,000-node one as about 95
+  stripes (round 3 measured all 150 ranks as separate bands);
+- the 1.27 ms estimate isn't in shots.txt (presented boards carry no estimate);
+- "an 8 px margin" next to "no margin" read as a contradiction.
+Changed: README rewritten to say what each image can and can't show, where the estimate comes from, and where the
+8 px comes from; this file added.
+
+== Round 3, the rewritten README, one agent
+Rerun matched the text and all five sha256s; every image as the table says; formula, per-item term, extents, rank
+spacing and scales right. Findings, all on the prose:
+- this log counted three rounds where it then held two;
+- the README cited e2e.txt for a 1.3 ms estimate e2e.txt doesn't hold;
+- the 15,000-node image resolves all 150 ranks as separate bands (row brightness shows 149 gaps at every threshold
+  from 40 to 100), not about 95 stripes; its gap brightness, varying in a cycle of about seven ranks, reads as fewer by eye;
+- "the pair shows the class alone decides the reply" overstated a pair with the same reply;
+- "26.1 ms past the 16 ms frame" read as a 26.1 ms overrun;
+- the no-class warning leaves out every per-item operator term, about 0.023 ms, not just graph.layout's 0.01 ms;
+- round 2's drawn sizes didn't say how they were measured.
+Changed: each of these in the README and this log.
+
+== Round 4, the corrected README and this log, one agent
+Rerun matched shots.txt's reply lines and all five sha256s; pixels measured again (small 4x6, 1,000-node 20 bands of
+50, 15,000-node 150 bands for row-mean thresholds from 40 to 110, export a solid band); every outcome, estimate, count, scale
+and extent right. Findings, on provenance and wording:
+- "not the others' conclusions" was false from round 3 on: this log, which those agents read, holds them;
+- the README's e2e note still gave 1,000 nodes "about 1.3 ms", a figure e2e.txt doesn't hold;
+- "the sha256s it lists" read as the script; only this log lists them;
+- the 15,000-node gaps don't alternate: their brightness runs in a cycle of about seven ranks;
+- round 2's sizes were each 1 px short of the inclusive bounding boxes, and the threshold excuse didn't fit;
+- shots.txt printed only over_budget issues, so it didn't show "no warning";
+- 1.27 ms left out the other operators' 0.0124 ms (1.28 ms); "core operators" included look.palette and marks2d.frame;
+- the log didn't record when the capture was retaken.
+Changed: each of these. shots.mjs now prints every issue a reply holds; recaptured 2026-11-12 07:46 UTC with the same
+five images (sha256s below).
+
+== Round 5, the README and this log, one agent
+Rerun matched shots.txt and all five sha256s; pixels measured (15,000-node 150 bands for row-mean thresholds from 30
+to 110; gap brightness repeating every 7 ranks; export uniformly grey 29); estimates (1.277 ms, 204.8873 ms, the
+warning's 26.0959 ms the layout term alone), extents, scales and classes right. Findings:
+- round 2 couldn't have read this log, which was written after it; and round 1 checked an earlier capture, so "four
+  rounds" of these screenshots overstated;
+- the README's older sections were stale: AC3 "queued" to a file that doesn't exist, though it passed on the Air;
+  tests named as present that were replaced; several evidence files not mentioned;
+- "minimum of 25 to 60 runs" had no source here;
+- "readings off the Mac" could be read as taken from the Mac;
+- the log didn't state how pixels were measured; the README said round 1 "saw only the files" (it had the issue too);
+- the item sits at (8, 8) but dark pixels start at 7; the 15,000-node image looks narrower only from its scale;
+- outside the screenshots: e2e.txt's moving board charges graph.layout without its per-item term. That is by design
+  (cost.rs: a declared cost is charged whatever moves; the per-item terms only while the frame evaluates the item).
+Changed: the README's top rewritten as an index of where each criterion is proven, every evidence file named; the
+coefficient's source stated as it is; the rest of these in the README and this log.
+
+== Round 6, the README and this log, one agent
+Rerun matched shots.txt's six reply lines byte for byte and all five sha256s; pixels measured with PIL (small 4x6;
+1,000-node 20 bands of 50, dark 7-1272 by 7-489; 15,000-node 150 bands for row-mean thresholds 30 to 110, 135 at 130,
+pitch 4.71 px, gap brightness repeating every 7 ranks; export 7-1272 by 7-131, grey 29); extents, scales and every
+cost figure (1.2774 ms, 26.0959, 16.535, 204.8873, 204.8765 ms) right; every evidence file named. Findings:
+- the commits the README names predate the history rewrite and aren't on the branch; two run files record no commit;
+- "on every merge since (the PR lists the runs)": no file here holds those runs;
+- the AC3 pass file's header says the graph crate is unchanged since f735d8b9, but main's 6952e777 changes route.rs
+  (used by the view only, not the layout AC3 times);
+- "the 100 boxes in each merge" overstated: one row of 15000-no-class.png has 99 separate dark runs;
+- "(AC1)" on the shots row could read as a second proof;
+- "on the Spark", "approved by the user" and "each failing before its fix" had nothing in these files behind them.
+Changed: the README maps each old commit to its tree's new hash, says where the runs were taken, that merge reruns
+aren't kept, corrects the pass file's header claim (the file itself is left as recorded), and words the rest as they
+are. The images are unchanged.
+
+== Round 7, the README and this log, one agent
+Rerun matched the six reply lines byte for byte and all five sha256s; pixels (bounding boxes at threshold 128,
+row-mean bands: 150 at 30 to 110, at most 99 runs a row), extents, scales and costs right; the commit mapping, the
+fail files' commit, the approvals and merge reruns in the PR body, and route.rs as the only change AC3 could see since
+f735d8b9 all checked. Findings, all wording: "core.*" overstated the charged operators (only core.fields,
+core.transform and core.world); shots.txt's first line was added by hand, unsaid; deep-marks-render imports route.rs's
+types too; only one run file names the Spark. Changed: the README says each of these as it is.
+
+== Round 8, the README, this log and the PR body, one agent
+Rerun matched the six reply lines byte for byte and all five sha256s; pixels, extents, scales, costs, the commit
+mapping and every cited file checked again. Findings: the README's round count lagged this log by one; the PR body's
+AC3 row still said the graph crate was unchanged since f735d8b9 (main's 6952e777 changes route.rs, off the timed
+path). Changed: the README no longer counts rounds (this log does); the PR body's AC3 row says what changed.
+
+== Round 9, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its hand-added first line and all five sha256s; pixels, scales, extents, costs, the
+commit mapping, the run files and the PR body's AC3 row checked. Findings, provenance and wording only: the PR body's
+AC rows name pre-rewrite commits with no mapping; the README cited module.rs's comment for the fit's machine, which it
+doesn't name; shots.mjs's header still said "inside an 8 px margin". Changed: the PR body maps the pre-rewrite commits
+in its AC rows (round 12 found the rest); the README says which source gives what; the script's comment (output unchanged).
+
+== Round 10, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels (row means inside each image's dark bounding
+box: 150 bands at 40 to 110), extents, scales, costs, all nine old-to-new commit pairs and the run files checked.
+Finding: the README said the tests in the fail files pass at the head, but fail-unbudgeted-warning.txt's second test
+exists under no name in any commit; and the PR body said all eight regression tests "failed first", with failing output
+kept for two. Its draft became a_patch_to_one_costly_item_is_warned_on_what_the_whole_document_declares (same
+assertion, two costly items), which fail-recheck-with-old-gate.txt shows failing. Changed: the README says so; the PR
+body says which tests have failing output and that the others' isn't evidenced.
+
+== Round 11, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels, extents, scales, every cost figure, the nine
+commit pairs, all eight regression tests' names in cost.rs, the fail files' commit and the AC3 pass file checked.
+Findings, wording: "the two acceptance-*-linux.txt runs record no commit" (there are three, and the AC3 one records
+its head; the other two's heads come from their commits' parents, not messages); the PR body's opening said two
+earlier Air runs failed "the machine gate", while its AC3 row lists three, for three reasons. Changed: both reworded.
+
+== Round 12, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels, geometry, costs, the nine mapped commit
+pairs, the fail files, the Mac readings and the eight regression tests checked. Findings: the PR body named about a
+dozen more pre-rewrite commits with no mapping (so round 9's "maps every pre-rewrite commit" was false); the README's
+"rounds until one found nothing" wasn't yet true; the AC3 row's "the only change ... is 6952e777" ignored main's other
+deep-canvas and deep-show changes, which compute the estimate; the PR's Lanes line named the retired estimate test;
+"the run files' paths show the worktree" held for three files, not e2e.txt or the fail files. Changed: the PR body maps
+all 27 pre-rewrite commits it names, by tree; the AC3 claim now rests on a run at the head
+(acceptance-redraft-ac3-linux-head.txt), whose three estimates equal the pass's to the last digit; the rest reworded.
+
+== Round 13, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels, extents, scales, every cost figure, all 27
+commit pairs, AC3's head run (estimates equal to the pass's), the Mac files, the regression tests and the lanes checked;
+no contradictions between the three. Findings, provenance wording: the README's which-file-shows-what sentence predated
+the head run (four files show the path, two name the Spark, e2e.txt records Linux aarch64 too); and the AC3 Linux run
+was at db54f8cb with the redraft folder uncommitted, unsaid. Changed: both said as they are.
+
+== Round 14, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels, extents, scales, costs, the 27 commit
+pairs, the AC3 head run, the Mac files and the regression tests checked; no contradictions. Findings, all PR-body
+citations: AC1's row credited 204.9 ms to acceptance-redraft-ac1-linux.txt, which prints no estimate; AC4's row named
+passes at 7c9ddfbd and db54f8cb with no kept output, and AC2's named no file; the Lanes line left out the AC1 redraft.
+Changed: AC1, AC2 and AC4's tests rerun at 131354fe, each file alone (acceptance-head-linux.txt: 5 pass); the rows cite
+it, acceptance-linux.txt, and e2e.txt/shots.txt for the 204.9 ms; the Lanes line names both folders.
+
+== Round 15, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels, extents, scales, pitch, every cost figure,
+the 27 commit pairs, every run file (acceptance-head-linux.txt: 5 pass), the regression tests and the fail files'
+story checked; every evidence file named. No finding in the screenshots, the README or this log. One in the PR body:
+its "Open:" line asked for fourteen approval tags where an earlier bullet says fifteen (the merge 5f7b7c7d needs one
+too). Changed: that line says fifteen.
+
+== Round 16, the README, this log and the PR body, one agent
+Rerun matched shots.txt below its first line and all five sha256s; pixels, extents, scales, pitch, every cost figure,
+eight commit pairs, the run files, the fail files, the lanes and the BASE-FAILURE counts checked. No findings.
+
+== The PNGs, 131354fe1
+09f019a60cc1ebf6bfd88c3fcf03d3554a98922617ecb3ceef1d5c5a87c4b8b8  shots/100000-export.png
+89776a6a8bb68e4b56d4b511db91b7a95b19aead8c50e6df5e96b2003bb601e2  shots/1000-data-view.png
+89776a6a8bb68e4b56d4b511db91b7a95b19aead8c50e6df5e96b2003bb601e2  shots/1000-no-class.png
+9f563af8089b53392089569503e31f5c2a9b659074316b313beb369d3fb216f7  shots/15000-no-class.png
+73493eeab3e93979cda9789a821f7dc8cf1ff861dca9b152ef5d70e15dc1634e  shots/small-data-view.png

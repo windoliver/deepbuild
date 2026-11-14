@@ -57,7 +57,8 @@ fn first_difference(
                 return Some((k, "deep_hash"));
             }
         }
-        if rows(a, k) != rows(b, k) {
+        // A run that starts at a checkpoint never stepped its first step, so wrote none of its rows.
+        if k > a0.max(b0) && rows(a, k) != rows(b, k) {
             return Some((k, "occurrences"));
         }
     }
@@ -82,26 +83,29 @@ impl Run {
         Ok((w, b))
     }
 
-    /// Steps `b` on `steps` steps with `track`, from where it stands, into a fresh trace.
+    /// Steps `b` on `steps` steps with `track` in `scene` (#524: a scene's world), from where it
+    /// stands, into a fresh trace with the bodies and soft bodies `read` names.
     fn ran(
         &self,
         b: &mut Rapier,
         w: &World,
         steps: u64,
-        track: &Track,
-        read: Option<Map<String, Value>>,
+        (track, scene): (&Track, Option<&Scene>),
+        read: Option<(Map<String, Value>, Map<String, Value>)>,
     ) -> Result<Trace, Value> {
         let plan = Plan {
             steps,
-            scene: None,
+            scene,
             every: 1,
             guard: false,
             ftz_at: None,
             shift: None,
             track,
         };
+        let (bodies, particles) = read.unwrap_or_default();
         let mut t = Trace {
-            bodies: read.unwrap_or_default(),
+            bodies,
+            particles,
             ..Trace::default()
         };
         match self.run(b, w, &plan, &mut t) {
@@ -117,7 +121,11 @@ impl Run {
     /// from its ring's checkpoint at or before `to`, stepped to `to` and `play` more steps on its
     /// track; `no_bake` with none. It never re-bakes and stores nothing.
     pub(super) fn seek(&self, call: &Value) -> Option<Value> {
-        let world = call.get("world")?;
+        let (world, scene) = match self.subject(call)? {
+            Ok(x) => x,
+            Err(e) => return Some(e),
+        };
+        let world = &world;
         let (steps, dir, to) = (
             call.get("steps")?.as_u64()?,
             call.get("store")?.as_str()?,
@@ -128,9 +136,10 @@ impl Run {
             let (rate, _) = rate(call)?;
             let (w, _) = self.build(world)?;
             let track = Track::read(&w, call)?;
+            let reads = scene.as_ref().filter(|s| !s.reads_nothing());
             let key = self.key(
                 world,
-                &json!([]),
+                &reads.map_or_else(|| json!([]), |s| s.key_reads(steps)),
                 &track.json(),
                 &rate,
                 steps,
@@ -143,10 +152,17 @@ impl Run {
             };
             let (w, mut b) = self.restored(world, nearest(&bake, to).as_ref())?;
             let from = b.read().step;
-            let read = series(call, &b).ok_or_else(|| json!({"ok": false, "code": "bad_input"}))?;
-            let t = self.ran(&mut b, &w, to + play - from, &track, Some(read))?;
+            let read =
+                series(call, &b, &w).ok_or_else(|| json!({"ok": false, "code": "bad_input"}))?;
+            let t = self.ran(
+                &mut b,
+                &w,
+                to + play - from,
+                (&track, scene.as_ref()),
+                Some(read),
+            )?;
             Ok(
-                json!({"ok": true, "key": key, "from": from, "step_hashes": t.step_hashes, "bodies": t.bodies}),
+                json!({"ok": true, "key": key, "from": from, "step_hashes": t.step_hashes, "bodies": t.bodies, "particles": t.particles}),
             )
         })();
         Some(reply.unwrap_or_else(|e: Value| e))
@@ -154,7 +170,11 @@ impl Run {
 
     /// physics.determinism over `world` and its track for `steps` steps, sampled at `at_times`.
     pub(super) fn determinism(&self, call: &Value) -> Option<Value> {
-        let world = call.get("world")?;
+        let (world, scene) = match self.subject(call)? {
+            Ok(x) => x,
+            Err(e) => return Some(e),
+        };
+        let (world, on) = (&world, scene.as_ref());
         let steps = call.get("steps")?.as_u64()?;
         let at_times: Vec<f64> = call
             .get("at_times")?
@@ -176,9 +196,9 @@ impl Run {
         let ran = (|| {
             let (w, mut b) = self.build(world)?;
             let track = Track::read(&w, call)?;
-            let straight = self.ran(&mut b, &w, steps, &track, None)?;
+            let straight = self.ran(&mut b, &w, steps, (&track, on), None)?;
             let (_, mut b2) = self.build(world)?;
-            let twice = self.ran(&mut b2, &w, steps, &track, None)?;
+            let twice = self.ran(&mut b2, &w, steps, (&track, on), None)?;
             let mut failures = Vec::new();
             let fail = |run: &str,
                         from: Option<u64>,
@@ -197,26 +217,26 @@ impl Run {
             for s in sampled {
                 // The straight state at s, stepped from the world as built, never restored.
                 let (_, mut at_s) = self.build(world)?;
-                self.ran(&mut at_s, &w, s, &track, None)?;
+                self.ran(&mut at_s, &w, s, (&track, on), None)?;
                 let mine = at_s.checkpoint();
                 let probes: Vec<(String, Trace)> = w
                     .inputs
                     .keys()
                     .map(|id| {
-                        self.probe(world, &w, &mine, &track, id, s)
+                        self.probe(world, &w, &mine, (&track, on), id, s)
                             .map(|t| (id.clone(), t))
                     })
                     .collect::<Result<_, _>>()?;
                 for c in straight.ring.kept.iter().filter(|c| c.checkpoint.step < s) {
                     let from = c.checkpoint.step;
                     let (_, mut b) = self.restored(world, Some(&c.checkpoint))?;
-                    let run = self.ran(&mut b, &w, s - from, &track, None)?;
+                    let run = self.ran(&mut b, &w, s - from, (&track, on), None)?;
                     if let Some(d) = first_difference(&straight, 0, &run, from, from, s) {
                         failures.push(fail("checkpoint", Some(from), Some(s), None, d));
                     }
                     let theirs = b.checkpoint();
                     for (id, want) in &probes {
-                        let got = self.probe(world, &w, &theirs, &track, id, s)?;
+                        let got = self.probe(world, &w, &theirs, (&track, on), id, s)?;
                         if let Some(d) = first_difference(want, s, &got, s, s + 1, s + PROBE_STEPS)
                         {
                             failures.push(fail("probe", Some(from), Some(s), Some(id), d));
@@ -240,7 +260,7 @@ impl Run {
         world: &Value,
         w: &World,
         cp: &Checkpoint,
-        track: &Track,
+        (track, scene): (&Track, Option<&Scene>),
         id: &str,
         s: u64,
     ) -> Result<Trace, Value> {
@@ -256,6 +276,6 @@ impl Run {
             input: id.into(),
             data: input.defaults.clone(),
         });
-        self.ran(&mut b, w, PROBE_STEPS, &Track::of(entries), None)
+        self.ran(&mut b, w, PROBE_STEPS, (&Track::of(entries), scene), None)
     }
 }

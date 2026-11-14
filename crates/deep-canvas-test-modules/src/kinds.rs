@@ -244,7 +244,8 @@ fn register_cue<const SPAN_MS: u32>(r: &mut Registrar) {
         pop_in(f64::from(SPAN_MS) / 1000.0),
         "R6",
     );
-    r.kind(kind("test", "cue.list", vec![json_param("cues")]), &[], "")
+    let cues = json_param("cues", "[{id, kind, targets: [item ID], span?: s}]");
+    r.kind(kind("test", "cue.list", vec![cues]), &[], "")
         .described("A cue list: plays its cues in order from 0 s, each a cue kind on its targets.");
     r.contribution(
         "test.cue.scale",
@@ -314,10 +315,10 @@ fn ring_1() -> Version {
         major: 1,
         minor: 0,
         params: vec![
-            json_param("center"),
+            json_param("center", "vec2"),
             with_default(number("r"), json!(10)),
             width("thick"),
-            with_default(json_param("dash"), json!([])),
+            with_default(json_param("dash", "[u]"), json!([])),
             segments(32),
         ],
     }
@@ -342,7 +343,7 @@ fn register_ring_b(r: &mut Registrar) {
         major: 2,
         minor: 0,
         params: vec![
-            json_param("center"),
+            json_param("center", "vec2"),
             with_default(number("r"), json!(10)),
             width("stroke_width"),
             segments(64),

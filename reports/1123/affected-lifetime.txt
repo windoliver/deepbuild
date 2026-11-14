@@ -1,0 +1,11 @@
+INCONCLUSIVE lint scripts/vendor-rebase.mjs job: no grant
+INCONCLUSIVE lint scripts/canvas-lint.mjs job: no grant
+INCONCLUSIVE lint scripts/size-ratchet.mjs job: no grant
+INCONCLUSIVE lint scripts/render-lint.mjs job: no grant
+INCONCLUSIVE lint scripts/plant-lint.mjs job: no grant
+INCONCLUSIVE lint scripts/blocking-call-guard.mjs job: no grant
+INCONCLUSIVE lint scripts/keymap-guard.mjs job: no grant
+INCONCLUSIVE lint scripts/panel-catalog.mjs job: no grant
+INCONCLUSIVE lint scripts/known-failures-check.mjs job: no grant
+INCONCLUSIVE lint scripts/fetch-lock.mjs job: no grant
+FAIL affected: 58 new, 0 already failing on main, 10 inconclusive or blocked, 0 listed skips, 6 passed, in 1863 s at load 221; logs in <scratch>

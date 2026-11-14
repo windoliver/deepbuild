@@ -243,6 +243,8 @@ struct Args {
     windows: Vec<String>,
     named: bool,
     look: Look3,
+    /// #462: the looks the documents' shots and regions name.
+    looks: BTreeMap<String, crate::regions::Named>,
     /// The look's frame-history window, 0 without history.
     history: u32,
     frames: u64,
@@ -303,6 +305,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         .filter(|f| *f >= 1)
         .ok_or_else(|| bad("fps"))?;
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let looks = crate::regions::looks_of(call, None)?;
     let history = if look.history.on() {
         look.history.window
     } else {
@@ -486,6 +489,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         named: call.get("windows").is_some(),
         windows,
         look,
+        looks,
         history,
         frames,
         fps,
@@ -1511,6 +1515,29 @@ impl Live {
                 v.set_frames(frames);
                 v.scale = rev.fit.scale.min(ses.surface.scale);
                 v.window = rev.fit.history;
+            }
+        }
+        // #462: the looks the revision's shots and regions name, checked before it shows.
+        if let Some(v) = ses.view.as_mut() {
+            let independent = self.plants.planted == Some(Planted::RegionSidesClipIndependently);
+            if let Err(e) = v.set_regions(
+                &self.device,
+                &rev.doc,
+                &self.args.look,
+                &self.args.looks,
+                &mut self.labels,
+                crate::session3::msaa_planted(self.plants.planted),
+                independent,
+            ) {
+                let _ = crate::effects::pollster_block(scope.pop());
+                row.1 = "failed";
+                row.2 = match e["issues"].as_array() {
+                    Some(issues) => issues.clone(),
+                    None => vec![e],
+                };
+                ses.view = None;
+                self.results.release(rev.id);
+                return;
             }
         }
         // Frame history on the grid of the frames the view shows, one a call frame (#173).
@@ -2633,6 +2660,7 @@ impl Live {
             &self.device,
             &self.kit,
             &self.args.look,
+            &self.args.looks,
             &rev.doc,
             size,
             self.t(of),
@@ -2867,6 +2895,7 @@ fn render_canonical(
     device: &Arc<Device>,
     kit: &Kit,
     look: &Look3,
+    looks: &BTreeMap<String, crate::regions::Named>,
     doc: &Value,
     size: [u32; 2],
     t: i64,
@@ -2907,6 +2936,11 @@ fn render_canonical(
     if let Some(s) = surface {
         view.surface = s;
         view.scale = s.scale;
+    }
+    // #462: the looks its shots and regions name, each rendered whole and mixed into the frame.
+    let independent = plants.planted == Some(Planted::RegionSidesClipIndependently);
+    if let Err(e) = view.set_regions(device, &doc, look, looks, labels, planted3, independent) {
+        return e;
     }
     #[cfg(feature = "test-meter")]
     let mut results: Cache<crate::testgpu::Made> = Cache::new(cache::Planted::default());
@@ -3044,6 +3078,10 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
         Ok(l) => l,
         Err(e) => return bad(&format!("look: {e}")),
     };
+    let looks = match crate::regions::looks_of(call, None) {
+        Ok(l) => l,
+        Err(e) => return e,
+    };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
     let plants = Plants::of(app.planted);
     let wants = |name: &str| {
@@ -3083,6 +3121,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
             &device,
             &kit,
             &look,
+            &looks,
             &doc,
             size,
             t,

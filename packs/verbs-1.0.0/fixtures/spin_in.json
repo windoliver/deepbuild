@@ -1,0 +1,195 @@
+{
+  "verb": "spin_in",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Spin in fixture",
+    "description": "Spin in fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "spin_in",
+              "targets": [
+                "sq"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Spin in fixture written by hand",
+    "description": "Spin in fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "scale": {
+        "target": "items/sq/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              0,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "turn": {
+        "target": "items/sq/at/rot/2",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": -90,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "pos": {
+        "target": "items/sq/at/pos",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              0,
+              0
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              0,
+              0,
+              0
+            ],
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/sq/at/scale",
+    "items/sq/at/rot/2",
+    "items/sq/at/pos"
+  ]
+}

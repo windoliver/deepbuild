@@ -72,6 +72,7 @@ impl Run {
             keeps_replaced: self.keeps_replaced,
             late_forks: self.late_forks,
             all_steps: self.all_steps,
+            no_volume: self.no_volume,
             declared_masses_only: self.declared_masses_only,
             twin: self.twin,
             views: std::cell::RefCell::default(),

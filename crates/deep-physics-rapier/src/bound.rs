@@ -74,6 +74,8 @@ fn element(params: &Map<String, Value>, row: usize) -> Option<(Vec<f64>, [f64; 4
 /// posed at its item, an `each:` body replaced by its element bodies; unchanged when no body binds.
 /// Without a scene, or with a binding that can't build, the refusals naming each.
 pub fn expand(scene: Option<&Value>, doc: &Value) -> Result<Value, Vec<Refusal>> {
+    // #524: its closed soft bodies' meshes first (source.rs).
+    let doc = &crate::source::expand(scene, doc)?;
     let Some(bodies) = doc.get("bodies").and_then(Value::as_object) else {
         return Ok(doc.clone());
     };

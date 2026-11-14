@@ -1,0 +1,2 @@
+INCONCLUSIVE no grant: no timed grant came within 60 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.

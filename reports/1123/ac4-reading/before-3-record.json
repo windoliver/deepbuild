@@ -1,0 +1,101 @@
+{
+  "lane": "unit-moved-before",
+  "state": "PASS",
+  "host": "<host>",
+  "platform": "darwin-arm64",
+  "tree": "b431abd15e8d5a7e29c8cd50c673d5ee1618082d",
+  "tests": [
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 a square's gradient from sw to ne reads its first role at the lower left corner and its last at the upper right within one code value",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 with span: parent over three squares in a row, the middle square's centre reads the stops' OKLab midpoint within 0.001 ΔEOK",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 fill opacity 0.5 under stroke opacity 1 draws the outline's centre line at alpha ≥ 0.99 over a fill at 0.5 ± 0.01",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 the stroke's own opacity applies to the stroke alone, and the paint's opacity multiplies both",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 a stop's opacity is its own: a ramp from opacity 0 to 1 in one role reads that role at alpha t",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 kind: along colors a stroke by arc length from the path's start, around a bend where a box-wise gradient differs",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/paint.test.ts › AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's › AC1 stops naming a status role are refused in a steps fill, an along stroke and a stop with opacity, naming the item",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/stroke.test.ts › AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle › AC2 a circle with a 4 u stroke scaled 3× by its parent keeps a 4 ± 0.1 u stroke, and 12 ± 0.1 u with scale_stroke: true",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/stroke.test.ts › AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle › AC2 count: 12 on a circle draws 12 dashes and 12 gaps of equal length within 0.5 px",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/steps.test.ts › AC3 steps give each member of a group one solid color mixed from the stops by its rank › AC3 steps {over: children, stops: [{at: 0, role: a}, {at: 1, role: b}], by: order} over 5 squares colors the third at the OKLab midpoint within 0.001 ΔEOK, and the first and last exactly a and b",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/374/steps.test.ts › AC3 steps give each member of a group one solid color mixed from the stops by its rank › AC3 members take their rank from their order keys, not from their position or their ID",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/never.test.ts › It can never: depend on its own result; resize because a bound number changed; let flow children overlap › never: flow children of a frame never overlap, in generated row, column and grid trees (1000 cases, seed 375)",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/never.test.ts › It can never: depend on its own result; resize because a bound number changed; let flow children overlap › never: a layout doesn't depend on its own result: a tree solved again after its own result, and after others', gives the same bytes (1000 cases, seed 375)",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/never.test.ts › It can never: depend on its own result; resize because a bound number changed; let flow children overlap › never: a frame doesn't resize because a bound number changed; the bound text is sized by its widest (1000 cases, seed 375)",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/column.test.ts › AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line › AC1 the column hugs its three text items within 0.5 u, each measured by the shaper",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/column.test.ts › AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line › AC1 when the second item's text grows by one line, the third moves down by its new height and the frame still hugs",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/column.test.ts › AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line › AC1 deep-layout solve answers bad_input to a line it can't read",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/scope.test.ts › Scope: auto layout on the canvas by Taffy, with text leaves measured by the shaper › Scope: the canvas module crate that builds deep-layout lays out with Taffy and measures text with the canvas's one shaper (deep-text)",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/row.test.ts › AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px › AC1 the fixture is six fixed children 40 to 120 u wide, of different heights, in a row with gap 24 and align_cross end",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/row.test.ts › AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px › AC1 the six share one bottom line within 0.5 px, in order with gap 24, and the row is the sum of their widths + 5 × 24 u wide",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/grid.test.ts › AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px › AC1 the fixture is the row's six children in a grid of three hug columns, flowed by column, aligned start, center and end",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/grid.test.ts › AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px › AC1 flow by column puts the second child in row 2, column 1, and every child in its cell",
+      "state": "PASS"
+    },
+    {
+      "id": "tests/acceptance/375/grid.test.ts › AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px › AC1 column 3 is end-aligned: its children's east sides are on one line within 0.5 px, the column's east edge",
+      "state": "PASS"
+    }
+  ]
+}

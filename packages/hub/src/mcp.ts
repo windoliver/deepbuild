@@ -10,7 +10,6 @@ import { readdirSync } from 'node:fs';
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { CODES, codePage } from './codes.js';
-import { toolTimeoutS } from './codex-settings.js';
 import { hubAddress } from './paths.js';
 import { shedStartup } from './settle.js';
 import { actionToolList, nearest, toolList } from './tools.js';
@@ -21,8 +20,9 @@ const UNREACHABLE_MS = 1000;
 /** Longer than any call the hub holds open: deep_ask and deep_wait answer "still waiting" after 40 s. */
 // A held deep_ask answers just before the tool timeout Codex gives this server (#39), which this outlasts.
 const ANSWER_MS = 55_000;
+const isCodex = (client: unknown): boolean => typeof client === 'string' && /codex/i.test(client);
 /** How long a call waits for the hub: Codex gives its MCP server's tool calls `tool_timeout_sec`, which is Codex's setting alone; any other client keeps ANSWER_MS. */
-export const answerWaitMs = (client: unknown, toolS: () => number = toolTimeoutS): number => (typeof client === 'string' && /codex/i.test(client) ? Math.max(ANSWER_MS, toolS() * 1000) : ANSWER_MS);
+export const answerWaitMs = (client: unknown, toolS: () => number): number => (isCodex(client) ? Math.max(ANSWER_MS, toolS() * 1000) : ANSWER_MS);
 const unreachable = (why: string): Refusal => refusal('unavailable', '', `The DeepBuild hub is unreachable (${why}); nothing was recorded. Call again once it is back.`, '', true);
 
 /** One connection to the hub as this process's deep mcp; undefined when the hub can't be reached in time. */
@@ -82,7 +82,19 @@ class Hub {
   }
 
   /** The client's own name, from its initialize. */
-  client: unknown;
+  private client: unknown;
+  /** Codex's `tool_timeout_sec`, read at each call; 0, so ANSWER_MS, until a Codex client names itself. */
+  private toolS: () => number = () => 0;
+  /**
+   * Takes the client's name. Codex's settings load for Codex alone, since no other client's session reads them, and
+   * what loading them leaves is given back as the start's garbage was.
+   */
+  async named(client: unknown): Promise<void> {
+    this.client = client;
+    if (!isCodex(client)) return;
+    this.toolS = (await import('./codex-settings.js')).toolTimeoutS;
+    shedStartup();
+  }
   /** The hub's ID of each call in flight, by the client's request ID (#1923). */
   private readonly inFlight = new Map<string, string>();
   /** One deep_* call through the hub: its result, or the refusal or unreachability as error@2. */
@@ -92,7 +104,7 @@ class Hub {
     const mine = JSON.stringify(request ?? null);
     this.inFlight.set(mine, id);
     const reply = await new Promise<Obj>((resolve) => {
-      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client));
+      const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client, this.toolS));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
       this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
     }).finally(() => { if (this.inFlight.get(mine) === id) this.inFlight.delete(mine); });
@@ -141,7 +153,7 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
-        hub.client = (params.clientInfo as Obj | undefined)?.name;
+        await hub.named((params.clientInfo as Obj | undefined)?.name);
         send({ id, result: { protocolVersion: typeof params.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18', capabilities: { tools: {}, resources: {} }, serverInfo: { name: server, version: '0.0.0' } } });
         break;
       case 'ping':

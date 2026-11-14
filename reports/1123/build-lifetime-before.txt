@@ -1,0 +1,14 @@
+✖ a SIGTERM during Cargo ends owned builders and removes late staging writes (11317.525375ms)
+✖ a SIGKILL during Cargo ends owned builders and removes late staging writes (8973.241208ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20397.257541
+✖ failing tests:
+✖ a SIGTERM during Cargo ends owned builders and removes late staging writes (11317.525375ms)
+  AssertionError [ERR_ASSERTION]: owned builder must not survive its run
+✖ a SIGKILL during Cargo ends owned builders and removes late staging writes (8973.241208ms)
+  AssertionError [ERR_ASSERTION]: owned builder must not survive its run

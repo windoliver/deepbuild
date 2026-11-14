@@ -56,7 +56,8 @@ pub(crate) fn data_reads_logic_array() -> deep_canvas::registry::Module {
     m.register = |r| {
         (deep_canvas_marks::modules::data().register)(r);
         r.array("data.direct", "values", "item", "geometry", "items");
-        r.operator("direct", "items", &["logic.cells"], &["data.direct"]).run(|_| Ok(()));
+        r.operator("direct", "items", &["logic.cells"], &["data.direct"])
+            .run(|_| Ok(()));
     };
     m
 }
@@ -93,7 +94,7 @@ pub(crate) fn boxed_kind(r: &mut Registrar, name: &'static str) {
                 minor: 0,
                 params: vec![Param {
                     name: "box",
-                    ty: ParamType::Json,
+                    ty: ParamType::Json("[x, y, w, h]"),
                     unit: "",
                     default: Value::Null,
                     min: None,

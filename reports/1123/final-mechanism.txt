@@ -1,0 +1,24 @@
+✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (8979.629292ms)
+PASS before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: failed on the merge base at its assertion
+proof: wall time 6.8 s
+✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (13316.064958ms)
+✔ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (12963.128709ms)
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (375.572833ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (381.24775ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (350.791625ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+✔ a SIGTERM during Cargo ends owned builders and removes late staging writes (2031.267792ms)
+✔ a SIGKILL during Cargo ends owned builders and removes late staging writes (2211.178833ms)
+✔ real deep lease cancels all binary builders after SIGTERM, with no recreated run root (2283.632459ms)
+✔ real deep lease cancels all binary builders after SIGKILL, with no recreated run root (2620.596667ms)
+✔ path-skipped lane ignores an actual binary prerequisite; a planted selector is rejected (3317.937833ms)
+✔ Vitest exclude ignores an actual binary prerequisite; a planted selector is rejected (4081.669ms)
+✔ killing the recorded supervisor wrapper cannot strand Cargo (552.422375ms)
+✔ successful build leader cannot leave a writer behind (613.383292ms)
+ℹ tests 14
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 54577.458541

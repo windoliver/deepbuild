@@ -59,6 +59,10 @@ pub enum Planted {
     FieldLine600Bytes,
     /// #1971: an object path answers its kind's lines in field-name order.
     FieldObjectByName,
+    /// #1973: the line `op: field` answers for `slab@1.size` prints its type, `json`, and no form.
+    FieldSizeJsonAlone,
+    /// #548: the bindings generator orders each region's fields by name before laying them out.
+    BindingsByName,
 }
 
 impl Planted {
@@ -78,6 +82,8 @@ impl Planted {
             "field_listing_without_corner" => Planted::FieldWithoutCorner,
             "field_line_600_bytes" => Planted::FieldLine600Bytes,
             "field_object_by_name" => Planted::FieldObjectByName,
+            "field_size_json_alone" => Planted::FieldSizeJsonAlone,
+            "bindings_fields_by_name" => Planted::BindingsByName,
             _ => return None,
         })
     }
@@ -137,6 +143,15 @@ const INSTALLED: &[(&str, &str)] = &[
         include_str!("../gallery/familiar-names.md"),
     ),
     ("logic.md", include_str!("../gallery/logic.md")),
+    // #548: logic@1's example, and its program's source.
+    (
+        "logic-counter.json",
+        include_str!("../gallery/logic-counter.json"),
+    ),
+    (
+        "logic-counter.wat",
+        include_str!("../gallery/logic-counter.wat"),
+    ),
 ];
 
 /// One example of the gallery, as its index records it.
@@ -147,6 +162,8 @@ struct Example {
     title: String,
     steps: u64,
     words: Vec<String>,
+    /// #548: the file holding the source of the program it runs, served beside it.
+    source: Option<String>,
 }
 
 /// The guides and gallery a call reads: the installed corpus, or a scenario's folder.
@@ -186,6 +203,7 @@ impl Corpus {
                             .collect()
                     })
                     .unwrap_or_default(),
+                source: e.get("source").and_then(Value::as_str).map(str::to_string),
             })
             .collect();
         let guides = index["guides"]
@@ -225,7 +243,7 @@ fn fields_of(version: &Version, planted: Option<Planted>) -> Vec<Value> {
         .map(|p| {
             let mut f = json!({
                 "name": p.name,
-                "type": match p.ty { ParamType::F32 => "number", ParamType::Str => "string", ParamType::Json => "json" },
+                "type": match p.ty { ParamType::F32 => "number", ParamType::Str => "string", ParamType::Json(_) => "json" },
                 "unit": if p.unit.is_empty() { Value::Null } else { json!(p.unit) },
                 "range": match (p.min, p.max) { (None, None) => Value::Null, (lo, hi) => json!([lo, hi]) },
                 "list": p.default.is_array(),
@@ -244,9 +262,24 @@ fn fields_of(version: &Version, planted: Option<Planted>) -> Vec<Value> {
                 f["grammar"] = json!("unit");
                 f["forms"] = json!(forms);
             }
+            if let ParamType::Json(declared) = p.ty {
+                // #1973: the forms its reader declares, one per alternative, printed from the
+                // parsed declaration.
+                f["grammar"] = json!("form");
+                f["forms"] = json!(declared_forms(declared));
+            }
             f
         })
         .collect()
+}
+
+/// A structured field's forms as `deep_kinds` prints them: each alternative of its parsed
+/// declaration (#1973). A declaration the form language can't read prints none, and the kit's
+/// every-field test fails naming it.
+pub(crate) fn declared_forms(declared: &str) -> Vec<String> {
+    deep_canvas::form::parse(declared)
+        .map(|f| f.alternatives().iter().map(|a| a.print()).collect())
+        .unwrap_or_default()
 }
 
 /// Whether `form` reads in the unit grammar as a value in `unit`, with no document's frame.
@@ -276,7 +309,7 @@ fn schema_of(version: &Version) -> Value {
                     s
                 }
                 ParamType::Str => json!({"type": "string"}),
-                ParamType::Json => {
+                ParamType::Json(_) => {
                     json!({"x-opaque": "a structured value the kind's own reader checks"})
                 }
             };
@@ -296,33 +329,175 @@ fn example_params(version: &Version) -> Map<String, Value> {
         .collect()
 }
 
-/// Example params for the kinds the marks module draws with no kind-registry entry.
-fn drawn_example(kind: &str) -> Option<Value> {
+/// An example of a kind drawn with no kind-registry entry: its params, the items it reads beside
+/// it (a scale, a matte's source and target, an overlay's frame and anchor), and the modules
+/// those need (#1973: every listed kind has an example).
+struct Drawn {
+    params: Value,
+    others: Value,
+    modules: &'static [&'static str],
+}
+
+/// An item of an example beside the kind's own.
+fn other(id: &str, kind: &str, order: &str, params: Value) -> (String, Value) {
+    let name = id.to_uppercase();
+    (
+        id.to_string(),
+        json!({"id": id, "kind": kind, "name": name, "order": order, "params": params}),
+    )
+}
+
+/// Examples for the kinds the marks module, the data module and scene3d draw with no
+/// kind-registry entry, each from the reader that draws it.
+fn drawn_example(kind: &str) -> Option<Drawn> {
+    let alone = |params: Value| Drawn {
+        params,
+        others: json!({}),
+        modules: &[],
+    };
+    let accent = json!({"fill": {"role": "accent"}});
+    let scale = |range: [f64; 2]| json!({"type": "linear", "domain": [0, 10], "range": range});
+    let camera = || {
+        other(
+            "cam",
+            "camera@1",
+            "b0",
+            json!({"projection": "perspective", "position": [4, 3, 5], "target": [0, 0, 0], "fov": 40}),
+        )
+    };
     Some(match kind {
-        "rect@1" => json!({"box": [16, 16, 128, 72], "paint": {"fill": {"role": "accent"}}}),
-        "text@1" => {
-            json!({"font": "body", "size": 13, "box": {"w": 160, "h": 20}, "text": "A label"})
+        "rect@1" => alone(json!({"box": [16, 16, 128, 72], "paint": accent})),
+        "text@1" => alone(
+            json!({"font": "body", "size": 13, "box": {"w": 160, "h": 20}, "text": "A label"}),
+        ),
+        "path@1" => alone(json!({"d": "M 16 16 L 144 88", "paint": {"stroke": {"role": "ink"}}})),
+        // An image names its asset by hash; the document's store holds the bytes.
+        "image@1" => alone(json!({
+            "asset": "0".repeat(64), "box": [16, 16, 128, 72], "fit": "contain",
+            "alt": "A placeholder image",
+        })),
+        // Three points from one f32 column (60, 160 and 260, little-endian, in base64).
+        "marks@1" => alone(json!({
+            "mark": "point", "n": 3,
+            "columns": {"x": {"dtype": "f32", "len": 3, "data": "AABwQgAAIEMAAIJD"}},
+            "encode": {"x": {"column": "x"}, "y": 100}, "paint": accent,
+        })),
+        "scale@1" => alone(scale([16.0, 304.0])),
+        "axis@1" => Drawn {
+            params: json!({"scale": "xs", "side": "bottom", "at": 160}),
+            others: Value::Object(Map::from_iter([other(
+                "xs",
+                "scale@1",
+                "b0",
+                scale([16.0, 304.0]),
+            )])),
+            modules: &[],
+        },
+        "mask@1" => alone(json!({"shape": "rect", "box": [16, 16, 288, 168]})),
+        "group@1" => alone(json!({"opacity": 1})),
+        "star@1" => alone(json!({
+            "center": [160, 100], "points": 5, "outer_r": 60, "inner_r": 26, "paint": accent,
+        })),
+        "frame@1" => alone(
+            json!({"box": [16, 16, 288, 168], "radius": 8, "paint": {"fill": {"role": "muted"}}}),
+        ),
+        // A matte draws its hidden source's coverage over its target.
+        "matte@1" => Drawn {
+            params: json!({"mode": "alpha", "source": "s", "applies_to": "r"}),
+            others: Value::Object(Map::from_iter([
+                other(
+                    "r",
+                    "rect@1",
+                    "b0",
+                    json!({"box": [16, 16, 288, 168], "paint": accent}),
+                ),
+                (
+                    "s".into(),
+                    json!({"id": "s", "kind": "circle@1", "name": "S", "order": "b1", "visible": false,
+                           "params": {"center": [160, 100], "r": 60, "paint": {"fill": {"role": "ink"}}}}),
+                ),
+            ])),
+            modules: &[],
+        },
+        "axes3d@1" => {
+            let unit = json!({"domain": [0, 1], "range": [0, 2]});
+            Drawn {
+                params: json!({"x": "sx", "y": "sy", "z": "sz", "lengths": [2, 2, 2]}),
+                others: Value::Object(Map::from_iter([
+                    camera(),
+                    other("sx", "scale@1", "b1", unit.clone()),
+                    other("sy", "scale@1", "b2", unit.clone()),
+                    other("sz", "scale@1", "b3", unit),
+                ])),
+                modules: &["scene3d"],
+            }
         }
-        "path@1" => json!({"d": "M 16 16 L 144 88", "paint": {"stroke": {"role": "ink"}}}),
+        // A 2D frame placed at a box's projection.
+        "overlay.frame@1" => Drawn {
+            params: json!({"frame": "f", "anchor": {"item": "b"}}),
+            others: Value::Object(Map::from_iter([
+                camera(),
+                other(
+                    "b",
+                    "mark.box@1",
+                    "b1",
+                    json!({"size": [1, 1, 1], "paint": accent}),
+                ),
+                other(
+                    "f",
+                    "frame@1",
+                    "b2",
+                    json!({"box": [0, 0, 120, 40], "paint": {"fill": {"role": "muted"}}}),
+                ),
+            ])),
+            modules: &["marks2d"],
+        },
         _ => return None,
     })
 }
 
-/// An example document holding one item of `kind`: its text, which its hash pins.
+/// An example document holding one item of `kind` and the items it reads beside it: its text,
+/// which its hash pins. One with a camera beside it is a scene.
 fn example_text(kind: &str, params: Value, module: Option<&str>, preview: bool) -> String {
+    let drawn = Drawn {
+        params,
+        others: json!({}),
+        modules: &[],
+    };
+    example_doc(kind, drawn, module, preview)
+}
+
+fn example_doc(kind: &str, drawn: Drawn, module: Option<&str>, preview: bool) -> String {
     let mut requires = Map::new();
-    if let Some(m) = module {
-        requires.insert("modules".into(), json!({m: "^1"}));
+    let modules: Map<String, Value> = module
+        .into_iter()
+        .chain(drawn.modules.iter().copied())
+        .map(|m| (m.to_string(), json!("^1")))
+        .collect();
+    if !modules.is_empty() {
+        requires.insert("modules".into(), Value::Object(modules));
     }
     if preview {
         requires.insert("preview".into(), json!([kind]));
     }
+    let mut items = Map::from_iter([(
+        "x1".to_string(),
+        json!({"id": "x1", "kind": kind, "name": "X1", "order": "a0", "params": drawn.params}),
+    )]);
+    if let Value::Object(others) = drawn.others {
+        items.extend(others);
+    }
+    let scene = items.contains_key("cam");
     let mut doc = json!({
-        "format": 1, "profile": "board", "title": format!("{kind}, at its defaults"),
+        "format": 1, "profile": if scene { "scene" } else { "board" },
+        "title": format!("{kind}, at its defaults"),
         "description": format!("One {kind} item at its defaults, generated from the kind's schema."),
         "size": [320, 200],
-        "items": {"x1": {"id": "x1", "kind": kind, "name": "X1", "order": "a0", "params": params}},
+        "items": items,
     });
+    if scene {
+        doc["camera"] = json!("cam");
+    }
     if !requires.is_empty() {
         doc["requires"] = Value::Object(requires);
     }
@@ -389,12 +564,16 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             (_, Some(_)) => "retired",
             _ => "stable",
         };
-        let params = match version {
-            Some(v) => Some(Value::Object(example_params(v))),
-            None => drawn_example(&name),
-        };
         let owner = (module != "core").then_some(module.as_str());
-        let example = params.map(|p| example_text(&name, p, owner, preview.is_some()));
+        let example = match version {
+            Some(v) => Some(example_text(
+                &name,
+                Value::Object(example_params(v)),
+                owner,
+                preview.is_some(),
+            )),
+            None => drawn_example(&name).map(|d| example_doc(&name, d, owner, preview.is_some())),
+        };
         let schema = match version {
             Some(v) => schema_of(v),
             None => {
@@ -471,6 +650,19 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             }
             let module = if marks == "marks2d" { owner } else { marks };
             push(kind.to_string(), module.into(), None, &mut out);
+        }
+    }
+    // #548: logic@1, with its exports, the one subset and its budgets, and its gallery example.
+    if drawn_by("logic") && !named.iter().any(|n| n == "logic@1") {
+        named.push("logic@1".into());
+        push("logic@1".into(), "logic".into(), None, &mut out);
+        if let Some(row) = out.last_mut() {
+            let text = INSTALLED.iter().find(|(f, _)| *f == "logic-counter.json").map(|(_, t)| t.to_string());
+            if let (Some(o), Value::Object(l)) = (row.entry.as_object_mut(), deep_logic::piece::listing()) {
+                o.extend(l);
+            }
+            row.entry["example"] = json!(text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+            row.example = text;
         }
     }
     if drawn_by("scene3d") {
@@ -677,10 +869,11 @@ impl Hub<'_> {
                 "gallery" => &["cursor"],
                 "sheet" | "step_ceilings" => &[],
                 "field" => &["path"],
+                "bindings" => &["doc", "item", "language"],
                 _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings or field.",
+                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field or bindings.",
                     op,
                 ),
             };
@@ -743,12 +936,35 @@ impl Hub<'_> {
                     "",
                 ),
             },
+            "bindings" => self.kinds_bindings(text("doc"), text("item"), text("language")),
             // The logic module's step ceilings (Logic: work across steps, #546).
             "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
                 self.kinds_planted() == Some(Planted::StepCeilingsCap)
             )}),
             _ => self.kinds_sheet(),
         }
+    }
+
+    /// `op: bindings` (#548): a document's logic item's typed bindings in the pinned language, Rust,
+    /// from its region map in declaration order, which its declarations alone give, so a program
+    /// is built against them before it exists.
+    fn kinds_bindings(&self, doc: Option<&str>, item: Option<&str>, language: Option<&str>) -> Value {
+        if language != Some("rust") {
+            return refused("enum", "/language", "Give language as rust, the pinned language.", language.unwrap_or_default());
+        }
+        let (Some(doc), Some(item)) = (doc, item) else {
+            return refused("required", "/item", "Give doc and item, the logic item whose bindings these are.", "");
+        };
+        let Some(form) = self.forms.get(doc) else {
+            return refused("ref_unresolved", "/doc", "Give doc, a document the hub holds.", doc);
+        };
+        let maps = crate::logic::piece_json(form)
+            .map(|p| deep_logic::piece::region_maps(&p, &Default::default()));
+        let Some((_, layout, emits)) = maps.and_then(Result::ok).and_then(|m| m.into_iter().find(|(id, _, _)| id == item)) else {
+            return refused("ref_unresolved", "/item", "Give item, a logic item of the document that check admits.", item);
+        };
+        let by_name = self.kinds_planted() == Some(Planted::BindingsByName);
+        json!({"bindings": deep_logic::bindings::rust(item, &layout, &emits, by_name)})
     }
 
     /// `op: field` (#1971): one line per field, printed from the listing's kind entry: the field's
@@ -785,6 +1001,12 @@ impl Hub<'_> {
                 // `,"pad":""` is 9 bytes.
                 let pad = 600usize.saturating_sub(l.to_string().len() + 9);
                 l["pad"] = json!(" ".repeat(pad));
+            }
+            if planted == Some(Planted::FieldSizeJsonAlone) && l["path"] == "slab@1.size" {
+                if let Some(o) = l.as_object_mut() {
+                    o.remove("grammar");
+                    o.remove("forms");
+                }
             }
             l
         };
@@ -1002,7 +1224,13 @@ impl Hub<'_> {
         let bytes = corpus.as_ref().and_then(|c| c.bytes(&e.file));
         match bytes {
             Some(b) if sha256_hex(&b) == hash => match String::from_utf8(b) {
-                Ok(text) => json!({"example": hash, "title": e.title, "text": text}),
+                Ok(text) => {
+                    let mut out = json!({"example": hash, "title": e.title, "text": text});
+                    if let Some(s) = e.source.as_ref().and_then(|f| corpus.as_ref()?.bytes(f)) {
+                        out["source"] = json!({"file": e.source, "text": String::from_utf8_lossy(&s)});
+                    }
+                    out
+                }
                 Err(_) => refused("unavailable", "/example", "The example isn't UTF-8 text; it is not served.", hash),
             },
             _ => refused(
@@ -1545,5 +1773,75 @@ pub fn command(
             json!({"ok": false, "code": "bad_input", "what": "deep-show kinds --dump <dir> | --diff <a> <b>"}),
             2,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #1973: every structured field of the full build declares forms the form language reads,
+    /// its line prints at least one, and its own default is one of them; so does every scene3d
+    /// spec param for its default, both its sweep values and its fixture's, which its reader
+    /// takes.
+    #[test]
+    fn every_structured_field_prints_forms_that_take_its_own_values() {
+        let full = crate::BuildSet::Full;
+        let sealed = crate::assemble(full, crate::modules(full))
+            .seal()
+            .expect("the shipped set seals");
+        let mut bad = Vec::new();
+        let mut held =
+            |name: String, declared: &str, values: &[&Value]| match deep_canvas::form::parse(
+                declared,
+            ) {
+                Err(u) => bad.push(format!("{name}: `{declared}` doesn't read: {}", u.why)),
+                Ok(f) => {
+                    for v in values {
+                        if let Some(got) = f.miss(v) {
+                            bad.push(format!("{name}: `{}` refuses {v}: got {got}", f.print()));
+                        }
+                    }
+                }
+            };
+        for entry in sealed.kinds().entries() {
+            for v in &entry.versions {
+                for p in &v.params {
+                    if let Some(declared) = p.ty.form() {
+                        let name = format!("{}@{}.{}", entry.full_name(), v.major, p.name);
+                        held(name, declared, &[&p.default]);
+                    }
+                }
+            }
+        }
+        for spec in deep_canvas_scene3d::spec::all() {
+            // The params its fixture's items of its kind set.
+            let fixture: Vec<&Map<String, Value>> = spec
+                .fixture
+                .as_object()
+                .into_iter()
+                .flat_map(Map::values)
+                .filter(|i| i["kind"] == spec.kind)
+                .filter_map(|i| i["params"].as_object())
+                .collect();
+            for q in &spec.params {
+                let name = format!("{}.{} (spec)", spec.kind, q.name);
+                let mut values = vec![&q.default, &q.sweep.0, &q.sweep.1];
+                values.extend(fixture.iter().filter_map(|p| p.get(q.name)));
+                held(name, q.declared(), &values);
+            }
+        }
+        for row in kind_rows(&sealed, None) {
+            for f in row.entry["fields"].as_array().into_iter().flatten() {
+                let printed = f["forms"].as_array().map_or(0, Vec::len);
+                if f["type"] == "json" && printed == 0 {
+                    bad.push(format!(
+                        "{}.{}: prints no form",
+                        row.entry["name"], f["name"]
+                    ));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }

@@ -393,6 +393,13 @@ fn lowered(s: &Shape, t: f64) -> Shape {
 /// under it; none where nothing is under it. Two convex pieces close steadily until they meet,
 /// so each pair's first meeting is found by halving.
 fn fall(solids: &[Solid], i: usize) -> Option<f64> {
+    gap_below(solids, i).filter(|g| *g > 0.0)
+}
+
+/// Part `i`'s resting gap (#1725; Geometry audit: scenes, `support`): how far it falls along -Y
+/// before it first meets a part under it, 0 when it already rests on or in one; none where
+/// nothing is under it.
+pub fn gap_below(solids: &[Solid], i: usize) -> Option<f64> {
     let mut least: Option<f64> = None;
     for (_, o) in solids.iter().enumerate().filter(|(j, _)| *j != i) {
         for (x, y) in solids[i]
@@ -405,9 +412,9 @@ fn fall(solids: &[Solid], i: usize) -> Option<f64> {
                 continue;
             }
             let gap = |t: f64| -depth(&lowered(x, t), y);
-            // Already on a part under it, which nothing holds either: it has nowhere to fall.
+            // Already on a part under it: it has nowhere to fall.
             if gap(0.0) <= 0.0 {
-                return None;
+                return Some(0.0);
             }
             let (mut lo, mut hi) = (0.0, xl[1] - yl[1]);
             if gap(hi) > 0.0 {

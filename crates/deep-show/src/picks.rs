@@ -146,6 +146,8 @@ pub struct LogicCall {
     pub seeks: Vec<i64>,
     pub regions: bool,
     pub at_times: Option<Vec<f64>>,
+    /// #548: the input track the replay reads in place of the hub's.
+    pub track: Option<Vec<Value>>,
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
@@ -174,6 +176,10 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
                 .collect::<Option<_>>()?,
         ),
     };
+    let track = match c.get("track") {
+        None => None,
+        Some(t) => Some(t.as_array()?.clone()),
+    };
     Some(LogicCall {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps,
@@ -181,6 +187,7 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         seeks,
         regions: c.get("regions").and_then(Value::as_bool).unwrap_or(false),
         at_times,
+        track,
     })
 }
 
@@ -232,12 +239,13 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
 }
 
 /// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
-/// `logic` reports them (#540's `match` reports each copy's the same way).
+/// `logic` reports them (#540's `match` reports each copy's the same way), up to the first step
+/// that trapped and no further (#548), with that trap.
 pub(crate) fn stepped(
     piece: &Rc<Piece>,
     entries: &[Entry],
     count: i64,
-) -> Result<Vec<Value>, Value> {
+) -> Result<(Vec<Value>, Option<Value>), Value> {
     let mut rec = Record::default();
     let mut world = World::new(
         piece.clone(),
@@ -259,7 +267,7 @@ fn step_rows(
     piece: &Piece,
     count: i64,
     full: bool,
-) -> Vec<Value> {
+) -> (Vec<Value>, Option<Value>) {
     let len = piece.items.first().map_or(1, |i| i.step);
     let mut steps = Vec::new();
     for k in 0..count {
@@ -297,8 +305,12 @@ fn step_rows(
             }
         }
         steps.push(step);
+        // #548: when an item traps, the replay stops there.
+        if let Some(trap) = rec.traps.first() {
+            return (steps, Some(trap.clone()));
+        }
     }
-    steps
+    (steps, None)
 }
 
 /// Whether a logic item of `form` reads control `c`.
@@ -672,6 +684,8 @@ impl Hub<'_> {
         let mut form = self.played_form(doc)?;
         let before = form.clone();
         self.viewer_into(panel, &mut form);
+        // #548: the live frame's logic previews, of the state at `t`.
+        self.preview_into(doc, panel, t, &mut form);
         if form == before {
             return self.live_drawn(doc, t);
         }
@@ -725,8 +739,8 @@ impl Hub<'_> {
         let Some(form) = self.forms.get(&l.doc).cloned() else {
             return json!({"code": "no_revision"});
         };
-        let held = self.track_json(&l.doc);
-        let read = self.track_read(&l.doc);
+        let held = l.track.clone().unwrap_or_else(|| self.track_json(&l.doc));
+        let read = l.track.clone().unwrap_or_else(|| self.track_read(&l.doc));
         let piece = match self.logic_piece(&form, &read) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
@@ -752,11 +766,11 @@ impl Hub<'_> {
             Ok(w) => w,
             Err(e) => return e,
         };
-        let steps = step_rows(&mut world, &mut rec, &piece, l.steps, true);
+        let (steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
         let len = piece.items.first().map_or(1, |i| i.step);
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
-        let mut out = json!({"steps": steps, "track": held, "traps": rec.traps, "checkpoints": rec.checkpoints,
+        let mut out = json!({"steps": steps, "track": held, "trap": trap, "traps": rec.traps, "checkpoints": rec.checkpoints,
                              "handles": deep_physics_rapier::cast::handles(&form)});
         if !l.seeks.is_empty() {
             let mut seeks = Vec::new();

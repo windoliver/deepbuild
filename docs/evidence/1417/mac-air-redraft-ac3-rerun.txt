@@ -1,0 +1,91 @@
+# #1417 AC3, blind redraft, second run on the MacBook Air M3: INCONCLUSIVE (on battery), not proof
+# Run once by the Mac runner on 2026-11-09 at f735d8b954538268c3d1099c606ea3752d9a0425 (clean tree). The layout code is unchanged at this PR's head.
+# Both binaries were built first (no-ops in seconds), then it waited for 1-minute load <= 3.0 (15:01:01-15:04:31): load 2.56 before, 2.70 after.
+# The Mac had come off mains power after the run before it, so the test's gate called all three sizes INCONCLUSIVE; each would read PASS.
+# Colour codes stripped; home paths were already ~ on the Mac.
+
+== runner steps
+HEAD f735d8b954538268c3d1099c606ea3752d9a0425 status []
+build start 15:00:58
+deep-graph release exit=0 15:01:00
+deep-show debug exit=0 15:01:01
+gate wait (load <= 3.0) 15:01:01
+suite start 15:04:31 15:04  up 41 days, 17:29, 1 user, load averages: 2.56 3.44 3.28
+suite exit=1 15:04:40
+DONE-1417R3
+
+== vitest
+== HEAD f735d8b954538268c3d1099c606ea3752d9a0425
+before: 2026-11-09 15:04:31 15:04  up 41 days, 17:29, 1 user, load averages: 2.56 3.44 3.28
+
+
+ RUN  v5.0.5 ~/private/dbc-1417/tests/acceptance/1417-redraft-ac3
+
+stdout | estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 100 nodes the cost model's estimate is within 2 times the measured layout time
+#1417.c04ec518 estimate at 100 nodes: 0.10403227532909633 ms of frame CPU (over_budget ids ["g"])
+#1417.c04ec518 estimate at 1000 nodes: 1.2634041268862966 ms of frame CPU (over_budget ids ["g"])
+#1417.c04ec518 estimate at 10000 nodes: 16.540894456206292 ms of frame CPU (over_budget ids ["g"])
+
+stdout | estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 100 nodes the cost model's estimate is within 2 times the measured layout time
+#1417.c04ec518 on Mac15,12, Apple M3, 8 cores, 16 GiB, macOS 23H723: 100 nodes (125 edges): estimate 0.1040 ms; measured 0.1019, 0.0996, 0.0973, 0.0997, 0.0986 ms; ratio measured/estimate 0.98, 0.96, 0.94, 0.96, 0.95; band [0.0520, 0.2081] ms; margin 5%: PASS
+
+ × estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 100 nodes the cost model's estimate is within 2 times the measured layout time 3354ms
+   → INCONCLUSIVE: not on mains power: Now drawing from 'Battery Power', so this timing is a reading, not a result (it would read PASS): 100 nodes (125 edges): estimate 0.1040 ms; measured 0.1019, 0.0996, 0.0973, 0.0997, 0.0986 ms; ratio measured/estimate 0.98, 0.96, 0.94, 0.96, 0.95; band [0.0520, 0.2081] ms; margin 5%
+stdout | estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 1,000 nodes the cost model's estimate is within 2 times the measured layout time
+#1417.c04ec518 on Mac15,12, Apple M3, 8 cores, 16 GiB, macOS 23H723: 1000 nodes (1401 edges): estimate 1.2634 ms; measured 1.4282, 1.4580, 1.4222, 1.4353, 1.4166 ms; ratio measured/estimate 1.13, 1.15, 1.13, 1.14, 1.12; band [0.6317, 2.5268] ms; margin 5%: PASS
+
+ × estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 1,000 nodes the cost model's estimate is within 2 times the measured layout time 1106ms
+   → INCONCLUSIVE: not on mains power: Now drawing from 'Battery Power', so this timing is a reading, not a result (it would read PASS): 1000 nodes (1401 edges): estimate 1.2634 ms; measured 1.4282, 1.4580, 1.4222, 1.4353, 1.4166 ms; ratio measured/estimate 1.13, 1.15, 1.13, 1.14, 1.12; band [0.6317, 2.5268] ms; margin 5%
+stdout | estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 10,000 nodes the cost model's estimate is within 2 times the measured layout time
+#1417.c04ec518 on Mac15,12, Apple M3, 8 cores, 16 GiB, macOS 23H723: 10000 nodes (14616 edges): estimate 16.5409 ms; measured 25.3378, 25.6039, 25.9322, 24.7648, 26.5894 ms; ratio measured/estimate 1.53, 1.55, 1.57, 1.50, 1.61; band [8.2704, 33.0818] ms; margin 7%: PASS
+
+ × estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 10,000 nodes the cost model's estimate is within 2 times the measured layout time 1441ms
+   → INCONCLUSIVE: not on mains power: Now drawing from 'Battery Power', so this timing is a reading, not a result (it would read PASS): 10000 nodes (14616 edges): estimate 16.5409 ms; measured 25.3378, 25.6039, 25.9322, 24.7648, 26.5894 ms; ratio measured/estimate 1.53, 1.55, 1.57, 1.50, 1.61; band [8.2704, 33.0818] ms; margin 7%
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 100 nodes the cost model's estimate is within 2 times the measured layout time
+AssertionError: INCONCLUSIVE: not on mains power: Now drawing from 'Battery Power', so this timing is a reading, not a result (it would read PASS): 100 nodes (125 edges): estimate 0.1040 ms; measured 0.1019, 0.0996, 0.0973, 0.0997, 0.0986 ms; ratio measured/estimate 0.98, 0.96, 0.94, 0.96, 0.95; band [0.0520, 0.2081] ms; margin 5%
+ ❯ estimate.test.ts:76:23
+     74|       console.log(`${ID} on ${machine()}: ${pairs}: ${verdict}${why}`);
+     75|       const off = notCounted();
+     76|       if (off) expect.fail(`INCONCLUSIVE: ${off}, so this timing is a …
+       |                       ^
+     77|       if (verdict === 'FAIL') expect.fail(`FAIL: every run is outside …
+     78|       if (verdict === 'INCONCLUSIVE') expect.fail(`INCONCLUSIVE: the f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 1,000 nodes the cost model's estimate is within 2 times the measured layout time
+AssertionError: INCONCLUSIVE: not on mains power: Now drawing from 'Battery Power', so this timing is a reading, not a result (it would read PASS): 1000 nodes (1401 edges): estimate 1.2634 ms; measured 1.4282, 1.4580, 1.4222, 1.4353, 1.4166 ms; ratio measured/estimate 1.13, 1.15, 1.13, 1.14, 1.12; band [0.6317, 2.5268] ms; margin 5%
+ ❯ estimate.test.ts:76:23
+     74|       console.log(`${ID} on ${machine()}: ${pairs}: ${verdict}${why}`);
+     75|       const off = notCounted();
+     76|       if (off) expect.fail(`INCONCLUSIVE: ${off}, so this timing is a …
+       |                       ^
+     77|       if (verdict === 'FAIL') expect.fail(`FAIL: every run is outside …
+     78|       if (verdict === 'INCONCLUSIVE') expect.fail(`INCONCLUSIVE: the f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 at 10,000 nodes the cost model's estimate is within 2 times the measured layout time
+AssertionError: INCONCLUSIVE: not on mains power: Now drawing from 'Battery Power', so this timing is a reading, not a result (it would read PASS): 10000 nodes (14616 edges): estimate 16.5409 ms; measured 25.3378, 25.6039, 25.9322, 24.7648, 26.5894 ms; ratio measured/estimate 1.53, 1.55, 1.57, 1.50, 1.61; band [8.2704, 33.0818] ms; margin 7%
+ ❯ estimate.test.ts:76:23
+     74|       console.log(`${ID} on ${machine()}: ${pairs}: ${verdict}${why}`);
+     75|       const off = notCounted();
+     76|       if (off) expect.fail(`INCONCLUSIVE: ${off}, so this timing is a …
+       |                       ^
+     77|       if (verdict === 'FAIL') expect.fail(`FAIL: every run is outside …
+     78|       if (verdict === 'INCONCLUSIVE') expect.fail(`INCONCLUSIVE: the f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  15:04:31
+   Duration  8.79s (tests 100%)
+
+
+after: 2026-11-09 15:04:40 15:04  up 41 days, 17:29, 1 user, load averages: 2.70 3.44 3.28
+vitest exit=1

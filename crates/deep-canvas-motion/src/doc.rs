@@ -2826,7 +2826,7 @@ fn with_target(o: &Map<String, Value>) -> Map<String, Value> {
 
 /// FNV-1a over a string's bytes: the seed a document without one takes from its ID, and what a
 /// placement's ID adds to it, until the design's `hash@1` is defined.
-fn fnv1a(text: &str) -> u64 {
+pub(crate) fn fnv1a(text: &str) -> u64 {
     text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
         (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     })
@@ -3109,7 +3109,7 @@ pub(crate) enum Start {
 
 /// The order a stagger starts its targets in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Order {
+pub(crate) enum Order {
     Index,
     Reverse,
     /// A permutation drawn from the document's seed and the placement's ID, the same on every
@@ -3126,7 +3126,7 @@ struct Raw {
 }
 
 #[derive(Clone, Copy)]
-enum Lag {
+pub(crate) enum Lag {
     Ratio(f64),
     Flicks(i64),
 }
@@ -3290,7 +3290,7 @@ fn placement_of(
 
 /// A stagger's lag (a ratio, or a time), its order and `reverse_on_close` (Placement and Follow:
 /// `stagger`).
-fn stagger_of(
+pub(crate) fn stagger_of(
     st: &Map<String, Value>,
     ctx: &Ctx,
     path: &str,
@@ -3319,7 +3319,7 @@ fn stagger_of(
 
 /// Each of `n` targets' rank in a stagger's `order`: its index, reversed, or a Fisher–Yates
 /// permutation drawn from `seed`, the same on every machine and at every evaluation.
-fn ranks(n: usize, order: Order, seed: u64) -> Vec<usize> {
+pub(crate) fn ranks(n: usize, order: Order, seed: u64) -> Vec<usize> {
     let mut shuffled: Vec<usize> = (0..n).collect();
     if order == Order::Seeded {
         let mut rng = Seeded::new(seed);

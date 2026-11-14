@@ -14,7 +14,7 @@ The scene3d canvas module's R2 subset (issues #378, #379, #381): marks in 3D (bo
 
 ## What it may import
 
-A canvas module crate. It reaches the core through `deep-canvas`, motion through `deep-canvas-motion` and shaping through `deep-text`, by crate name only, and uses third-party crates listed in `lint/canvas/crates.json` (vello_cpu rasterizes glyphs and overlays, which feed drawn pixels only). Its name puts it under `scripts/canvas-lint.mjs` and `canvas_text = true` under `scripts/text-lint.mjs`. No GPU crate, no app.
+A canvas module crate. It reaches the core through `deep-canvas`, motion through `deep-canvas-motion`, shaping through `deep-text`, the marks module's finish and print through `deep-canvas-marks` and a drawn look's profiles through `deep-canvas-drawn`, by crate name only, and uses third-party crates listed in `lint/canvas/crates.json` (vello_cpu rasterizes glyphs and overlays, which feed drawn pixels only). Its name puts it under `scripts/canvas-lint.mjs` and `canvas_text = true` under `scripts/text-lint.mjs`. No GPU crate, no app.
 
 ## Deviations
 

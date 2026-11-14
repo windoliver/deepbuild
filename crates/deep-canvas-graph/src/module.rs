@@ -3,7 +3,7 @@
 //! kept by its layout memory, one node per item, for what draws or checks its positions.
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::registry::{Cost, Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
@@ -14,7 +14,7 @@ use crate::{keep, layered, read_graph, read_layout, read_memory, Refused};
 pub fn module() -> Module {
     Module {
         manifest: manifest("graph"),
-        register: |r| register(r, layout),
+        register: |r| register(r, layout, Some(layout_cost)),
     }
 }
 
@@ -25,8 +25,36 @@ pub fn module() -> Module {
 pub fn tie_by_registration() -> Module {
     Module {
         manifest: manifest("graph.tie_by_registration"),
-        register: |r| register(r, layout_as_listed),
+        register: |r| register(r, layout_as_listed, Some(layout_cost)),
     }
+}
+
+/// A planted implementation of graph@1 (#1417's `test-graph-layout-no-cost`): under its own
+/// name, it lays out as the reference does but its `layout` declares no cost, so its
+/// `over_budget` fixture is never warned and the kit fails it.
+pub fn layout_no_cost() -> Module {
+    Module {
+        manifest: manifest("graph.layout_no_cost"),
+        register: |r| register(r, layout, None),
+    }
+}
+
+/// The layout's ns per row and doubling, rows being its graph's nodes and edges: reading them,
+/// the ranks, the barycenter sweeps and the positions each pass over the rows, sorting them or
+/// finding them by ID (#1417). A fit of `deep-graph layout`'s own time (`timed`) on layered
+/// graphs of 100 to 10,000 nodes, where it reads 44 to 49 ns; what doesn't grow with the rows is
+/// the operator's per-item term in `costs.json`, which the bench fits apart from this.
+const NS_PER_ROW_DOUBLING: f64 = 46.0;
+
+/// The layout's CPU time on an item on top of its per-item term, in ms: `rows · log2 rows`.
+fn layout_cost(item: &Value) -> f64 {
+    let count = |rows: &str| {
+        item.pointer(&format!("/params/graph/{rows}"))
+            .and_then(Value::as_array)
+            .map_or(0.0, |a| a.len() as f64)
+    };
+    let rows = count("nodes") + count("edges");
+    NS_PER_ROW_DOUBLING * rows * rows.max(2.0).log2() / 1e6
 }
 
 fn manifest(implementation: &str) -> Manifest {
@@ -57,12 +85,19 @@ fn manifest(implementation: &str) -> Manifest {
     }
 }
 
-fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>) {
+fn register(
+    r: &mut Registrar,
+    layout: fn(&mut View<'_>) -> Result<(), OpError>,
+    cost: Option<Cost>,
+) {
     // #494: the kind (Graph and layout memory `graph@1`), so a document's graph is kept and a
     // match morph pairs its nodes by key; it draws as its laid-out nodes' boxes.
-    let field = |name: &'static str| Param {
+    // Each field with the forms its reader takes (#1973): `read_graph`, `read_layout` (which
+    // reads `spacing`'s fields only from an object), `read_memory`, and `groups` as `place` reads
+    // it.
+    let field = |(name, form): (&'static str, &'static str)| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
@@ -78,10 +113,21 @@ fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>)
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["graph", "layout", "memory", "groups"]
-                    .into_iter()
-                    .map(field)
-                    .collect(),
+                params: [
+                    (
+                        "graph",
+                        "{nodes: [{id: ID, w: u, h: u, group?: ID, item?: item ID}], edges: [{id: ID, a: node ID, b: node ID, min_len?: u16}]}",
+                    ),
+                    (
+                        "layout",
+                        "{algo: name (layered or pinned), direction?: down | right, seed: u64, spacing?} (spacing: {node, rank, edge} in u)",
+                    ),
+                    ("memory", "{node ID → [rank: u32, order: u32, x: u, y: u]}"),
+                    ("groups", "box | none"),
+                ]
+                .into_iter()
+                .map(field)
+                .collect(),
             }],
             migrations: Vec::new(),
         },
@@ -90,9 +136,13 @@ fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>)
     )
     .drawn(drawn);
     r.array("graph.layout", "memory", "item", "geometry", "items");
-    r.operator("layout", "items", &["core.fields"], &["graph.layout"])
+    let op = r
+        .operator("layout", "items", &["core.fields"], &["graph.layout"])
         .applies(is_graph)
         .run(layout);
+    if let Some(cost) = cost {
+        op.cost(cost);
+    }
     r.code(
         "layout.relayout_needed",
         "A graph its layout memory no longer holds: a node it lacks, or an edge its ranks break.",
@@ -112,6 +162,13 @@ fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>)
         "oracles": ["analytic"],
         "codes": [],
     }));
+    // #1417: a graph whose layout alone passes the frame's CPU, warned at check and still shown.
+    r.fixture("over_budget", over_budget_board(), None)
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": ["over_budget"],
+        }));
 }
 
 /// What a graph item draws as (#494): one `path@1` of its laid-out nodes' boxes, in its own
@@ -224,6 +281,32 @@ fn board() -> Value {
             "cap": {"id": "cap", "kind": "text@1", "name": "Caption", "order": "a1",
                     "params": {"text": "Flow", "font": "body", "size": 13, "box": {"w": 160, "h": 20}},
                     "at": {"pos": [16, 200, 0]}}
+        }
+    })
+}
+
+/// 15,000 steps in 150 ranks of 100, each fed from the step above it, on a board with no budget
+/// class: the layout's declared cost (about 20 ms) passes the 16 ms frame.
+fn over_budget_board() -> Value {
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+    for r in 0..150 {
+        for j in 0..100 {
+            nodes.push(json!({"id": format!("v{r}x{j}"), "w": 40, "h": 30}));
+            if r > 0 {
+                edges.push(json!({"id": format!("e{r}x{j}"), "a": format!("v{}x{j}", r - 1), "b": format!("v{r}x{j}")}));
+            }
+        }
+    }
+    json!({
+        "format": 1, "profile": "board", "seed": 1417, "title": "Big flow", "requires": {"modules": {"graph": "^1"}},
+        "description": "Fifteen thousand steps laid out in layers past the frame's CPU: the graph module's over_budget fixture.",
+        "size": [320, 240],
+        "items": {
+            "flow": {"id": "flow", "kind": "graph@1", "name": "Big flow", "order": "a0",
+                     "params": {
+                         "graph": {"nodes": nodes, "edges": edges},
+                         "layout": {"algo": "layered", "seed": 1417, "spacing": {"rank": 48}}}}
         }
     })
 }

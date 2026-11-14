@@ -1,0 +1,18 @@
+✖ blank arm losing its window after warm-up returns explicit INCONCLUSIVE within its 30 s watchdog (40701.454084ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40714.374666
+
+✖ failing tests:
+
+test at tests/benchmark-arm-progress.test.mjs:11:1
+✖ blank arm losing its window after warm-up returns explicit INCONCLUSIVE within its 30 s watchdog (40701.454084ms)
+  Error: FAIL: hidden arm outlived the existing watchdog
+      at Timeout.<anonymous> (file://<checkout>/tests/benchmark-arm-progress.test.mjs:19:158)
+      at listOnTimeout (node:internal/timers:685:17)
+      at process.processTimers (node:internal/timers:618:7)

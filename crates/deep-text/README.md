@@ -14,7 +14,7 @@ The canvas's one text shaper (#390): parley over HarfRust and skrifa on the bund
 
 ## What it may import
 
-The bottom of the canvas text stack: no workspace crate but deep-canvas-seams (the fonts backend's name and version, #140), no GPUI, and no system font source (parley's `system` feature stays off, so CoreText, fontconfig and DirectWrite are never reached). It is a normal dependency of deep-canvas-marks and deep-canvas-scene3d, so it is in the canvas lint's scope: every third-party crate it reaches needs an audited entry in lint/canvas/crates.json.
+The bottom of the canvas text stack: no workspace crate but deep-canvas-seams (the fonts backend's name and version, #140) and deep-canvas (a slant's tan through the core's one ops module on pinned libm, #2144), no GPUI, and no system font source (parley's `system` feature stays off, so CoreText, fontconfig and DirectWrite are never reached). It is a normal dependency of deep-canvas-marks and deep-canvas-scene3d, so it is in the canvas lint's scope: every third-party crate it reaches needs an audited entry in lint/canvas/crates.json.
 
 ## Deviations
 

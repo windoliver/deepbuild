@@ -1,0 +1,30 @@
+{
+  "id": "verbs.rotate_twin",
+  "version": "1.0",
+  "title": "Rotate, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of rotate: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "angle": {
+      "type": "number",
+      "default": 90,
+      "about": "the turn in degrees"
+    },
+    "about": {
+      "type": "ID",
+      "default": "none",
+      "about": "the item whose place it turns about; its own place when none"
+    }
+  },
+  "steps": {
+    "turn": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/rot/2": "now + angle / 2"
+        }
+      }
+    }
+  }
+}

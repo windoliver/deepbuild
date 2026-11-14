@@ -14,7 +14,7 @@ The binary `deep-canvas-render`, the proof surface for the line's 2D marks (#391
 
 ## What it may import
 
-A proof binary at the top of the 2D stack: the canvas crates, deep-marks-vello, deep-marks-gpui, deep-text, deep-text-gpui and deep-replica (its headless context), each by crate name. It draws canvas text (`canvas_text = true`), so scripts/text-lint.mjs holds it to the canvas's shaper, never GPUI's text system.
+A proof binary at the top of the 2D stack: the canvas crates, deep-marks-vello, deep-marks-gpui, deep-text, deep-text-gpui and deep-replica (its headless context), deep-gpu (the device a layer that needs Vello GPU opens, #385), deep-images (the one image service, #1486) and, on macOS, deep-codecs (a video item's frames from a decode worker, #499), each by crate name. It draws canvas text (`canvas_text = true`), so scripts/text-lint.mjs holds it to the canvas's shaper, never GPUI's text system.
 
 ## Deviations
 

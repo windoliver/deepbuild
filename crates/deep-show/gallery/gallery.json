@@ -26,6 +26,21 @@
         "bars",
         "piece"
       ]
+    },
+    {
+      "file": "logic-counter.json",
+      "hash": "e33b7c39f67fc91eb299324ce7932a8540c5f4db76a6ac300593245cec66b602",
+      "title": "Logic: a counter and its preview",
+      "steps": 120,
+      "words": [
+        "logic",
+        "counter",
+        "preview",
+        "program",
+        "rules",
+        "game"
+      ],
+      "source": "logic-counter.wat"
     }
   ],
   "guides": [

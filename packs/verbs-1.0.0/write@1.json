@@ -1,0 +1,19 @@
+{
+  "id": "verbs.write",
+  "version": "1.0",
+  "title": "Write",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's text is written out over its window, its reveal running from none to all.",
+  "inputs": {},
+  "steps": {
+    "write": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        }
+      }
+    }
+  }
+}

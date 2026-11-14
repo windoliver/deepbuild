@@ -1,0 +1,348 @@
+{
+  "name": "verbs",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "The first-party cue verbs (#222; canvas primitives: Cue list `cues@1`): entries of cue.kind@1, each a recipe over the calling cue's signature, with its planted twin and its fixture.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "motion": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "verbs.create@1": "create@1.json",
+    "verbs.create_twin@1": "create_twin@1.json",
+    "verbs.fade_out@1": "fade_out@1.json",
+    "verbs.fade_out_twin@1": "fade_out_twin@1.json",
+    "verbs.move_along@1": "move_along@1.json",
+    "verbs.move_along_twin@1": "move_along_twin@1.json",
+    "verbs.write@1": "write@1.json",
+    "verbs.write_twin@1": "write_twin@1.json",
+    "verbs.draw_then_fill@1": "draw_then_fill@1.json",
+    "verbs.draw_then_fill_twin@1": "draw_then_fill_twin@1.json",
+    "verbs.fade_in@1": "fade_in@1.json",
+    "verbs.fade_in_twin@1": "fade_in_twin@1.json",
+    "verbs.grow@1": "grow@1.json",
+    "verbs.grow_twin@1": "grow_twin@1.json",
+    "verbs.spin_in@1": "spin_in@1.json",
+    "verbs.spin_in_twin@1": "spin_in_twin@1.json",
+    "verbs.spiral_in@1": "spiral_in@1.json",
+    "verbs.spiral_in_twin@1": "spiral_in_twin@1.json",
+    "verbs.by_letter@1": "by_letter@1.json",
+    "verbs.by_letter_twin@1": "by_letter_twin@1.json",
+    "verbs.by_word@1": "by_word@1.json",
+    "verbs.by_word_twin@1": "by_word_twin@1.json",
+    "verbs.in_turn@1": "in_turn@1.json",
+    "verbs.in_turn_twin@1": "in_turn_twin@1.json",
+    "verbs.uncreate@1": "uncreate@1.json",
+    "verbs.uncreate_twin@1": "uncreate_twin@1.json",
+    "verbs.unwrite@1": "unwrite@1.json",
+    "verbs.unwrite_twin@1": "unwrite_twin@1.json",
+    "verbs.shrink@1": "shrink@1.json",
+    "verbs.shrink_twin@1": "shrink_twin@1.json",
+    "verbs.indicate@1": "indicate@1.json",
+    "verbs.indicate_twin@1": "indicate_twin@1.json",
+    "verbs.flash@1": "flash@1.json",
+    "verbs.flash_twin@1": "flash_twin@1.json",
+    "verbs.circumscribe@1": "circumscribe@1.json",
+    "verbs.circumscribe_twin@1": "circumscribe_twin@1.json",
+    "verbs.passing_flash@1": "passing_flash@1.json",
+    "verbs.passing_flash_twin@1": "passing_flash_twin@1.json",
+    "verbs.wiggle@1": "wiggle@1.json",
+    "verbs.wiggle_twin@1": "wiggle_twin@1.json",
+    "verbs.blink@1": "blink@1.json",
+    "verbs.blink_twin@1": "blink_twin@1.json",
+    "verbs.focus@1": "focus@1.json",
+    "verbs.focus_twin@1": "focus_twin@1.json",
+    "verbs.broadcast@1": "broadcast@1.json",
+    "verbs.broadcast_twin@1": "broadcast_twin@1.json",
+    "verbs.rotate@1": "rotate@1.json",
+    "verbs.rotate_twin@1": "rotate_twin@1.json",
+    "verbs.swap@1": "swap@1.json",
+    "verbs.swap_twin@1": "swap_twin@1.json",
+    "verbs.cycle@1": "cycle@1.json",
+    "verbs.cycle_twin@1": "cycle_twin@1.json",
+    "verbs.morph@1": "morph@1.json",
+    "verbs.morph_twin@1": "morph_twin@1.json",
+    "verbs.match@1": "match@1.json",
+    "verbs.match_twin@1": "match_twin@1.json",
+    "verbs.count_to@1": "count_to@1.json",
+    "verbs.count_to_twin@1": "count_to_twin@1.json"
+  },
+  "entries": {
+    "cue.kind@1": [
+      {
+        "name": "create",
+        "class": "enter",
+        "recipe": "verbs.create@1",
+        "twin": "verbs.create_twin@1",
+        "description": "An enter: each target's outline builds from its start to its end over its window, as a path build."
+      },
+      {
+        "name": "fade_out",
+        "class": "exit",
+        "recipe": "verbs.fade_out@1",
+        "twin": "verbs.fade_out_twin@1",
+        "description": "An exit: each target's opacity falls to 0, to an offset, a point or a scale, over its window."
+      },
+      {
+        "name": "move_along",
+        "class": "move",
+        "recipe": "verbs.move_along@1",
+        "twin": "verbs.move_along_twin@1",
+        "description": "A move: each target travels the shape of the path `path` names, starting from where it is.",
+        "kit": {
+          "params": {
+            "path": "p"
+          }
+        }
+      },
+      {
+        "name": "write",
+        "class": "enter",
+        "recipe": "verbs.write@1",
+        "twin": "verbs.write_twin@1",
+        "description": "An enter: each target's text is written out over its window, its reveal running from none to all.",
+        "kit": {
+          "targets": [
+            "t"
+          ]
+        }
+      },
+      {
+        "name": "draw_then_fill",
+        "class": "enter",
+        "recipe": "verbs.draw_then_fill@1",
+        "twin": "verbs.draw_then_fill_twin@1",
+        "description": "An enter: each target's outline builds over the first half of its window, then its fill comes up from dark."
+      },
+      {
+        "name": "fade_in",
+        "class": "enter",
+        "recipe": "verbs.fade_in@1",
+        "twin": "verbs.fade_in_twin@1",
+        "description": "An enter: each target's opacity rises from 0, from an offset, a point or a scale back to where it is."
+      },
+      {
+        "name": "grow",
+        "class": "enter",
+        "recipe": "verbs.grow@1",
+        "twin": "verbs.grow_twin@1",
+        "description": "An enter: each target grows from nothing at a point, its bounds' center unless `from` names one."
+      },
+      {
+        "name": "spin_in",
+        "class": "enter",
+        "recipe": "verbs.spin_in@1",
+        "twin": "verbs.spin_in_twin@1",
+        "description": "An enter: each target grows from nothing at its center while it turns through `angle` degrees."
+      },
+      {
+        "name": "spiral_in",
+        "class": "enter",
+        "recipe": "verbs.spiral_in@1",
+        "twin": "verbs.spiral_in_twin@1",
+        "description": "An enter: each target turns a full turn in from `scale` times its size, fading up over the first `fade` of its window."
+      },
+      {
+        "name": "by_letter",
+        "class": "enter",
+        "recipe": "verbs.by_letter@1",
+        "twin": "verbs.by_letter_twin@1",
+        "description": "An enter: each target's text reveals letter by letter at an even pace over its window.",
+        "kit": {
+          "targets": [
+            "t"
+          ]
+        }
+      },
+      {
+        "name": "by_word",
+        "class": "enter",
+        "recipe": "verbs.by_word@1",
+        "twin": "verbs.by_word_twin@1",
+        "description": "An enter: each target's text reveals a word at a time, its reveal stepping once per word over its window.",
+        "kit": {
+          "targets": [
+            "t"
+          ]
+        }
+      },
+      {
+        "name": "in_turn",
+        "class": "enter",
+        "recipe": "verbs.in_turn@1",
+        "twin": "verbs.in_turn_twin@1",
+        "description": "An enter: each target fades up over the first half of its own window, so with a lag they come in one after another.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      {
+        "name": "uncreate",
+        "class": "exit",
+        "recipe": "verbs.uncreate@1",
+        "twin": "verbs.uncreate_twin@1",
+        "description": "An exit: each target's outline unbuilds from its end back to its start over its window."
+      },
+      {
+        "name": "unwrite",
+        "class": "exit",
+        "recipe": "verbs.unwrite@1",
+        "twin": "verbs.unwrite_twin@1",
+        "description": "An exit: each target's text unwrites over its window, its reveal running from all to none.",
+        "kit": {
+          "targets": [
+            "t"
+          ]
+        }
+      },
+      {
+        "name": "shrink",
+        "class": "exit",
+        "recipe": "verbs.shrink@1",
+        "twin": "verbs.shrink_twin@1",
+        "description": "An exit: each target shrinks to nothing at its bounds' center over its window."
+      },
+      {
+        "name": "indicate",
+        "class": "emphasis",
+        "recipe": "verbs.indicate@1",
+        "twin": "verbs.indicate_twin@1",
+        "description": "An emphasis: each target swells by `scale` at the middle of its window and its fill takes the role `role`, then is back as it was."
+      },
+      {
+        "name": "flash",
+        "class": "emphasis",
+        "recipe": "verbs.flash@1",
+        "twin": "verbs.flash_twin@1",
+        "description": "An emphasis: `lines` short rays grow out from each target's center and fade by the end of its window, while it lifts."
+      },
+      {
+        "name": "circumscribe",
+        "class": "emphasis",
+        "recipe": "verbs.circumscribe@1",
+        "twin": "verbs.circumscribe_twin@1",
+        "description": "An emphasis: a frame `buff` outside each target's bounds draws around it and is gone by the end of its window, while it lifts."
+      },
+      {
+        "name": "passing_flash",
+        "class": "emphasis",
+        "recipe": "verbs.passing_flash@1",
+        "twin": "verbs.passing_flash_twin@1",
+        "description": "An emphasis: a stroke `width` of its outline long runs once around each target's bounds and is gone, while it lifts."
+      },
+      {
+        "name": "wiggle",
+        "class": "emphasis",
+        "recipe": "verbs.wiggle@1",
+        "twin": "verbs.wiggle_twin@1",
+        "description": "An emphasis: each target swells by `scale` and rocks `count` times through `angle` degrees, then is back as it was."
+      },
+      {
+        "name": "blink",
+        "class": "emphasis",
+        "recipe": "verbs.blink@1",
+        "twin": "verbs.blink_twin@1",
+        "description": "An emphasis: each target goes dark and comes back `count` times over its window."
+      },
+      {
+        "name": "focus",
+        "class": "emphasis",
+        "recipe": "verbs.focus@1",
+        "twin": "verbs.focus_twin@1",
+        "description": "An emphasis: a soft spot closes in on each target from four times its size, dimming to `opacity` and gone again, while it lifts."
+      },
+      {
+        "name": "broadcast",
+        "class": "emphasis",
+        "recipe": "verbs.broadcast@1",
+        "twin": "verbs.broadcast_twin@1",
+        "description": "An emphasis: `copies` outlines of each target's bounds spread out to three times its size one after another and fade, while it lifts."
+      },
+      {
+        "name": "rotate",
+        "class": "move",
+        "recipe": "verbs.rotate@1",
+        "twin": "verbs.rotate_twin@1",
+        "description": "A move: each target turns through `angle` degrees, about its own place or, with `about`, a point it travels around on an arc."
+      },
+      {
+        "name": "swap",
+        "class": "move",
+        "recipe": "verbs.swap@1",
+        "twin": "verbs.swap_twin@1",
+        "description": "A move: each target and the item `with` names trade places over its window.",
+        "kit": {
+          "params": {
+            "with": "b"
+          }
+        },
+        "joins": [
+          "with"
+        ]
+      },
+      {
+        "name": "cycle",
+        "class": "move",
+        "recipe": "verbs.cycle@1",
+        "twin": "verbs.cycle_twin@1",
+        "description": "A move: each target moves to where the next target in the cue's list is, the last to the first's place.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      {
+        "name": "morph",
+        "class": "change",
+        "recipe": "verbs.morph@1",
+        "twin": "verbs.morph_twin@1",
+        "description": "A change: each target's outline becomes the outline of the item `to` names over its window, points matched by arc length.",
+        "kit": {
+          "targets": [
+            "p"
+          ],
+          "params": {
+            "to": "q"
+          }
+        }
+      },
+      {
+        "name": "match",
+        "class": "change",
+        "recipe": "verbs.match@1",
+        "twin": "verbs.match_twin@1",
+        "description": "A change: each target's outline becomes the outline of the item `to` names over its window, its parts paired as `by` says.",
+        "kit": {
+          "targets": [
+            "p"
+          ],
+          "params": {
+            "to": "q"
+          }
+        }
+      },
+      {
+        "name": "count_to",
+        "class": "change",
+        "recipe": "verbs.count_to@1",
+        "twin": "verbs.count_to_twin@1",
+        "description": "A change: each target's text counts in whole numbers from what it shows to `value` over its window.",
+        "kit": {
+          "targets": [
+            "n"
+          ],
+          "params": {
+            "value": 5
+          }
+        }
+      }
+    ]
+  }
+}

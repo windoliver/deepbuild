@@ -6905,6 +6905,29 @@ export interface OpenItemOpenedV3 {
   evidence?: Array<string>;
 }
 
+/** open_item.opened@4 */
+export interface OpenItemOpenedV4 {
+  v: 4;
+  id: string;
+  kind: "open_item.opened";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    text: string;
+    item: string;
+    from: "agent" | "section" | "bug" | "issue" | "limit" | "placeholder" | "task" | "review_thread" | "verdict";
+    resolved_by?: string;
+    replaces?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** package.envelope@1 */
 export interface PackageEnvelope {
   id: string;

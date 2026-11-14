@@ -386,7 +386,33 @@ pub fn settings(
         dirt,
         roles,
         t,
+        strokes: look.strokes.as_ref().map(|s| {
+            Arc::new(gpu_strokes(&deep_canvas_scene3d::strokes::lay(
+                scene,
+                s,
+                &scene.camera,
+            )))
+        }),
     }
+}
+
+/// #462: the strokes a frame laid, as the effects chain's draw reads them (colors linear).
+pub fn gpu_strokes(
+    laid: &[deep_canvas_scene3d::strokes::Dab],
+) -> Vec<deep_effects_render::strokes::Dab> {
+    laid.iter()
+        .map(|d| deep_effects_render::strokes::Dab {
+            at: d.at,
+            near: d.near,
+            angle: d.angle,
+            length: d.length,
+            width: d.width,
+            color: d
+                .color
+                .map(|c| deep_canvas::color::srgb_decode(f64::from(c) / 255.0) * d.shade),
+            seed: f64::from(d.seed) / f64::from(u32::MAX),
+        })
+        .collect()
 }
 
 /// The shipped operators: each one's kind, effect, determinism (the weakest of its stages'),
