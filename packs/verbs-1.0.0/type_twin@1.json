@@ -1,0 +1,39 @@
+{
+  "id": "verbs.type_twin",
+  "version": "1.0",
+  "title": "Type, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of type: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "cursor": {
+      "type": "ID",
+      "default": "cursor",
+      "about": "the item that rides the typed text's #head"
+    }
+  },
+  "steps": {
+    "keys": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        },
+        "ease": "linear"
+      }
+    },
+    "cursor": {
+      "op": "cue",
+      "params": {
+        "on": "cursor",
+        "set": {
+          "at/anchor": "head"
+        },
+        "type": {
+          "at/anchor": "enum"
+        },
+        "until": 0
+      }
+    }
+  }
+}

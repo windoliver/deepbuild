@@ -1,0 +1,95 @@
+
+ RUN  v5.0.5 <clone>
+
+   × starts and stops its kitted provider, and disabling it cleans up the active handle 776ms
+ ❯ tests/acceptance/348/places.test.ts (5 tests | 3 failed) 5770ms
+   ❯ AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub (2)
+     × AC5 a package an agent session built loads in the sandbox, out of the hub's process, and can't read a file outside its grant 978ms
+     × AC5 a release package your agent changed is no longer the release's: it loads in the sandbox, while the unchanged copy loads in the hub and reads the canary 1570ms
+   ❯ AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the package (3)
+     × AC6 the package loads in the sandbox, out of the hub's process, through host@1 547ms
+   × unloads a timed-out provider and cleans its late handle after the caller already received the timeout 5683ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+Error: test/runtime-env's environment local reads FAIL on environment@1's kit at health-route: the fill threw: TypeError: Cannot read properties of undefined (reading 'up'); it isn't installed
+ ❯ judge packages/extension-host/src/host.ts:1175:44
+    1173|       runs.push({ slot, fill: name, verdict: report.verdict });
+    1174|       const failed = report.cases.find((c) => c.outcome !== 'PASS');
+    1175|       if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${what…
+       |                                            ^
+    1176|     };
+    1177|     try {
+ ❯ Host.installKits packages/extension-host/src/host.ts:1203:9
+ ❯ Host.install packages/extension-host/src/host.ts:799:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+AssertionError: expected { Object (id, port, ...) } to deeply equal { Object (id, port, ...) }
+
+- Expected
++ Received
+
+  {
+-   "id": "env-2033178",
+-   "pid": 2033178,
+-   "port": 42995,
++   "id": "env-2031977",
++   "pid": 2031977,
++   "port": 33189,
+  }
+
+     65|     writeFileSync(release, 'go');
+     66|     await until(stopped);
+     67|     expect(JSON.parse(readFileSync(stopped, 'utf8'))).toEqual(JSON.par…
+       |                                                       ^
+     68|     await expect(fetch(`http://127.0.0.1:${address.port}/health`)).rej…
+     69|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/348/places.test.ts > AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub > AC5 a package an agent session built loads in the sandbox, out of the hub's process, and can't read a file outside its grant
+AssertionError: test/probe's process (pid 2031271) wasn't started and tracked by the supervisor: expected [ 2031263 ] to include 2031271
+ ❯ loadsOnlyInSandbox tests/acceptance/348/places.test.ts:40:120
+     38|   expect(load.place, `${id} loaded in the ${load.place}, not the platf…
+     39|   expect(seen.pid, `${id} runs in the hub's own process`).not.toBe(pro…
+     40|   expect(await tracked(w, load.run), `${id}'s process (pid ${seen.pid}…
+       |                                                                                                                        ^
+     41| }
+     42|
+ ❯ tests/acceptance/348/places.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/348/places.test.ts > AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub > AC5 a release package your agent changed is no longer the release's: it loads in the sandbox, while the unchanged copy loads in the hub and reads the canary
+AssertionError: test/probe's process (pid 2031953) wasn't started and tracked by the supervisor: expected [ 2031929 ] to include 2031953
+ ❯ loadsOnlyInSandbox tests/acceptance/348/places.test.ts:40:120
+     38|   expect(load.place, `${id} loaded in the ${load.place}, not the platf…
+     39|   expect(seen.pid, `${id} runs in the hub's own process`).not.toBe(pro…
+     40|   expect(await tracked(w, load.run), `${id}'s process (pid ${seen.pid}…
+       |                                                                                                                        ^
+     41| }
+     42|
+ ❯ tests/acceptance/348/places.test.ts:80:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/348/places.test.ts > AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the package > AC6 the package loads in the sandbox, out of the hub's process, through host@1
+AssertionError: test/probe's process (pid 2032111) wasn't started and tracked by the supervisor: expected [ 2032087 ] to include 2032111
+ ❯ loadsOnlyInSandbox tests/acceptance/348/places.test.ts:40:120
+     38|   expect(load.place, `${id} loaded in the ${load.place}, not the platf…
+     39|   expect(seen.pid, `${id} runs in the hub's own process`).not.toBe(pro…
+     40|   expect(await tracked(w, load.run), `${id}'s process (pid ${seen.pid}…
+       |                                                                                                                        ^
+     41| }
+     42|
+ ❯ tests/acceptance/348/places.test.ts:102:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 2 passed (7)
+   Start at  02:12:49
+   Duration  7.08s (tests 84%, transform 13%, import 2%)
+

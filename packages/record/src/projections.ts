@@ -110,6 +110,8 @@ const PARTIAL = new Set(['ask.batched', 'decision.applied', 'run.started', 'verd
 
 export class Projector {
   private readonly statements = new Map<string, Statement<unknown[]>>();
+  /** `up`'s statements by table, each with the columns it writes, in the order a row names them. */
+  private readonly ups = new Map<string, { cols: string[]; stmt: Statement<unknown[]> }[]>();
   private readonly turns = new Map<string, Turn[]>();
 
   constructor(private readonly db: Db, private readonly plant?: 'turn-closes-at-child-stop') {}
@@ -137,6 +139,7 @@ export class Projector {
   drop(): void {
     for (const t of TABLES) this.db.exec(`DROP TABLE IF EXISTS ${t.name}`);
     this.statements.clear();
+    this.ups.clear();
     this.turns.clear();
     this.ensure();
   }
@@ -157,14 +160,30 @@ export class Projector {
   private built(key: string, build: () => string) {
     return this.statements.get(key) ?? this.stmt(build(), key);
   }
-  /** Inserts the row, or updates the named columns of the row with its key. */
+  /**
+   * Inserts the row, or updates the named columns of the row with its key. Its statement is found by the table and
+   * the columns themselves: the key string `built` takes, made for every row, was a twentieth of a replay's instructions.
+   */
   private up(table: string, row: Row): void {
     const cols = Object.keys(row);
-    this.built(`up ${table} ${cols}`, () => {
-      const def = byName.get(table)!;
-      const rest = cols.filter((c) => !def.pk.includes(c));
-      return `${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`;
-    }).run(...cols.map((c) => row[c] ?? null));
+    let shapes = this.ups.get(table);
+    if (!shapes) this.ups.set(table, (shapes = []));
+    let found: Statement<unknown[]> | undefined;
+    for (const shape of shapes) {
+      const have = shape.cols;
+      let i = have.length === cols.length ? 0 : -1;
+      while (i >= 0 && i < have.length && have[i] === cols[i]) i++;
+      if (i === have.length) { found = shape.stmt; break; }
+    }
+    if (!found) {
+      found = this.built(`up ${table} ${cols}`, () => {
+        const def = byName.get(table)!;
+        const rest = cols.filter((c) => !def.pk.includes(c));
+        return `${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`;
+      });
+      shapes.push({ cols, stmt: found });
+    }
+    found.run(...cols.map((c) => row[c] ?? null));
   }
   /** Inserts the row, or fills only the columns still empty: the first value of each one stands. */
   private fill(table: string, row: Row): void {

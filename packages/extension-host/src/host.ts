@@ -1773,10 +1773,10 @@ class Host implements ExtensionHost {
       // Its connection gone, it is gone: a load still running is unloaded.
       socket.once('close', () => { if (this.exts.get(ext.entry.id) === ext) void this.unload(ext); });
       ext.ask = (method, params) => wire.call(method, params);
-      ext.stop = async () => {
-        socket.end();
-        ext.cleaned = await supervisor.cleanup(run).catch(() => undefined);
-      };
+      ext.stop = async () => { socket.end(); ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
+      // On Linux the package's process is the launcher's child: a scan, within the load's time, tracks it before the load answers.
+      if (process.platform === 'linux') await within(LOAD_MS, `${ext.entry.id}'s start`, supervisor.lives(run));
+      if (!ext.ask) throw Error('it exited before it could load');
     } finally {
       server.close();
       rmSync(dir, { recursive: true, force: true });
@@ -2729,8 +2729,9 @@ class Host implements ExtensionHost {
       const context: string[] = [];
       let deny: { reason: string } | undefined;
       // Late by the host's own clock, whatever the package's said: the grace is for the trip back, so what came after
-      // the deadline fails and its context goes, though a deny it carries still stands.
-      let failure: string | undefined = performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      // the deadline fails and its context goes, though a deny it carries still stands. The same for a version removed
+      // or replaced while its handler ran: its context reaches no one, and its deny still stops the call.
+      let failure: string | undefined = this.exts.get(id) !== ext || !ext.live ? `${id} was removed while its ${kind} handler ran` : performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
       for (const reply of Array.isArray(replies) ? replies : [replies]) {
         // The runtime's marker for one handler that threw or missed the deadline: it fails, its siblings still count.
         const marker = typeof reply === 'object' && reply !== null && Object.keys(reply).length === 1 ? (reply as { $handler?: unknown }).$handler : undefined;
@@ -2747,9 +2748,8 @@ class Host implements ExtensionHost {
         deny ??= checked.deny;
       }
       // A failed reply takes all its package's context with it, but no handler's failure removes a deny that stands.
-      if (failure !== undefined) fail(failure);
-      const kept = failure === undefined ? context : [];
-      if (kept.length || deny) contributions.push({ extension: id, firstParty: ext.released, context: kept, ...(deny ? { deny } : {}) });
+      if (failure !== undefined) { fail(failure); context.length = 0; }
+      if (context.length || deny) contributions.push({ extension: id, firstParty: ext.released, context, ...(deny ? { deny } : {}) });
     }));
     const plant = this.options.plant === 'join-by-id-alone' || this.options.plant === 'cut-in-join-order' ? this.options.plant : undefined;
     return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };

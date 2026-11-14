@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The one conformance runner and its kits (#313, #314, #349): the adapter kit with its fake agent and broken fakes, a kit per hub slot with its reference fill and planted wrong fills, the code families and their judgement, the codes pages, the closure rules and the schema generator. The preflight's kit and slot checks, the extension host, the CLI's `deep run`, `checks-command`, `env-local` and the proof package use it; `deep-conformance` (`src/bin.ts`) runs a kit on a fill.
+The one conformance runner and its kits (#313, #314, #349): the adapter kit with its fake agent and broken fakes, a kit per hub slot with its reference fill and planted wrong fills, the code families and their judgement, the codes pages, the closure rules and the schema generator. The preflight's kit and slot checks, the extension host, the CLI's `deep run` and every check kind's package (`checks-*` and proof) use it, and `env-local`, the gate, the hub and workspaces take its types; `deep-conformance` (`src/bin.ts`) runs a kit on a fill.
 
 ## Where new code goes
 
