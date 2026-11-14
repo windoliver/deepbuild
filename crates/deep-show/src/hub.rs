@@ -814,6 +814,18 @@ pub enum Call {
         event: deep_canvas::scope::Event,
         /// #525: the platform's timestamp of the event, when it carries one.
         t: Option<i64>,
+        /// #540: the button the event pressed, moved with or released, and its modifiers.
+        gesture: crate::points::Gesture,
+    },
+    /// #540: a scene's world baked again on the hub's track.
+    World {
+        doc: String,
+        world: String,
+    },
+    /// #540: every copy of a document's lockstep match.
+    Match {
+        doc: String,
+        steps: i64,
     },
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
@@ -1971,13 +1983,20 @@ impl<'a> Hub<'a> {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
             Call::Kit(k) => self.kit(k),
-            Call::Input { panel, event, t } => match self.ring_input(panel, event) {
+            Call::Input {
+                panel,
+                event,
+                t,
+                gesture,
+            } => match self.ring_input(panel, event) {
                 Some(reply) => reply,
                 None => self
                     .live_press(panel, event, *t)
                     .err()
-                    .unwrap_or_else(|| self.input(panel, event)),
+                    .unwrap_or_else(|| self.input(panel, event, gesture)),
             },
+            Call::World { doc, world } => self.world_call(doc, world),
+            Call::Match { doc, steps } => self.match_call(doc, *steps),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {
@@ -2414,6 +2433,7 @@ impl<'a> Hub<'a> {
             }
             issues.extend(self.inline_vectors(form));
             issues.extend(crate::picks::check(form));
+            issues.extend(deep_canvas_input::point::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {
