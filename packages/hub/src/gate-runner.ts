@@ -124,7 +124,7 @@ const AUTOMATIC = new Set(['continuation', 'scheduled', 'subagent', 'session', '
 /** Those whose next prompt no fact foresees; a Codex goal's continuation too, until the hub reads its goal (#39). */
 const UNFORESEEN = new Set(['continuation', 'session', 'unknown']);
 /** Ignored dependency folders a checkout gets cloned copy-on-write, so a check starts as it would in the worktree. */
-const DEPENDENCIES = ['node_modules', '.venv'];
+export const DEPENDENCIES = ['node_modules', '.venv'];
 /** What a journey asks of its stack, which the core gives it when the checkout's done.yaml has an environment (#580). */
 const stackOf = (c: Pick<Claim, 'session' | 'cwd'>, check: ClaimCheck, more: Partial<Pick<StackWant, 'base' | 'fresh'>> = {}): { stack?: StackWant } => (check.depth === 'journey' ? { stack: { session: c.session, worktree: c.cwd, on_base: check.on_base, ...more } } : {});
 /** The entry that stands for a claim's definition while it hasn't locked (#322): pending, or BLOCKED by a cause outside the code. */
