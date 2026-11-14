@@ -236,6 +236,22 @@ No FAIL line of `repo-rules`, the size ratchet, the reader guard or the known-fa
 names a file this branch changes against the main it merged. None of them was run on that main alone. The change
 is `+417 −53` handwritten lines against it, over the guideline of about 400: 240 of them are this report.
 
+### After merging main a second time
+
+Main moved 131 commits more and conflicted in three cards, so it was merged again, at `82a68d6e2`. Another audit
+of the same day had landed there and rewritten the same sentence in the cards of `budget`, `config-eval` and
+`jobs`. Each said what this change's sentence said, and its `jobs` card already names `score`, so main's wording
+stands in all three. This change now edits 14 cards. Main touched none of its source files.
+
+| Check | Result |
+|---|---|
+| Every workspace built again | no error |
+| `tests/package-deps.test.mjs`, `tests/acceptance/1687/full/structure.test.mjs`, #1687's oracle | 10 of 10 pass; 0 runtime cycle edges |
+| The supervisor's file, `packages/record/test` and two files of `tests/acceptance/14`, two at a time | 114 of 115 pass. One case of `packages/record/test/record.test.ts` timed out at its 5 s |
+| That case alone, on main's build of `projections.js` and on the change's, in turn, at a load of 260 | Main's: 4,658 ms, then a timeout. The change's: two timeouts. It runs at its limit on either build under this load |
+
+`deep-hook` was not rebuilt after this merge, so no test that starts a hub ran on it.
+
 ### Not run
 
 - `node scripts/affected.mjs`. Its selection for this change is 548 parallel and 802 alone vitest files, 126 node
