@@ -335,12 +335,8 @@ fn rule_back_to_base(entry: &Value) -> Result<(), String> {
 }
 
 /// A rule's message naming the entry it read.
-macro_rules! naming {
-    ($f:ident, $text:expr) => {
-        fn $f(entry: &Value) -> Value {
-            json!({"message": format!("{} (`{}`)", $text, name(entry))})
-        }
-    };
+fn naming(text: &str, entry: &Value) -> Value {
+    json!({"message": format!("{text} (`{}`)", name(entry))})
 }
 const SAME_BYTES: &str = "it expands to identical bytes twice";
 const TARGETS_ONLY: &str = "it writes only paths under its targets and its own derived items";
@@ -350,11 +346,21 @@ const END_STATE: &str =
     "an enter verb ends with its targets fully drawn and an exit verb at opacity 0 or unbuilt";
 const BACK_TO_BASE: &str =
     "an emphasis verb leaves every path it wrote at its base value, bit for bit";
-naming!(say_same_bytes, SAME_BYTES);
-naming!(say_targets_only, TARGETS_ONLY);
-naming!(say_inside_span, INSIDE_SPAN);
-naming!(say_end_state, END_STATE);
-naming!(say_back_to_base, BACK_TO_BASE);
+fn say_same_bytes(entry: &Value) -> Value {
+    naming(SAME_BYTES, entry)
+}
+fn say_targets_only(entry: &Value) -> Value {
+    naming(TARGETS_ONLY, entry)
+}
+fn say_inside_span(entry: &Value) -> Value {
+    naming(INSIDE_SPAN, entry)
+}
+fn say_end_state(entry: &Value) -> Value {
+    naming(END_STATE, entry)
+}
+fn say_back_to_base(entry: &Value) -> Value {
+    naming(BACK_TO_BASE, entry)
+}
 
 /// A planted entry: a verb named `name` of `class` whose recipe is the one cue step `params`,
 /// with `inputs`.
