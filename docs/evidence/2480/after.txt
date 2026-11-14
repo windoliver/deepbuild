@@ -1,0 +1,9 @@
+# tests/acceptance/350/ac4-redraft with the fix, 5 runs, Linux arm64 (before: RESULTS.txt beside the test, 1 failed of 7 each run)
+      Tests  7 passed (7)
+      Tests  7 passed (7)
+      Tests  7 passed (7)
+      Tests  7 passed (7)
+      Tests  7 passed (7)
+# node node_modules/vitest/vitest.mjs run --root tests/acceptance/350 --no-file-parallelism
+ Test Files  7 passed (7)
+      Tests  29 passed (29)

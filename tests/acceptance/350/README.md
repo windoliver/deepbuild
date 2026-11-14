@@ -203,7 +203,7 @@ expects that twin to fail the criterion's judge (`judges.ts`) with the problem n
 | AC1 `#350.2f824654` | a tool.before handler can only add context or deny | `replies.test.ts` AC1 (1): seven replies from a first-party package in the hub | none | fails (no `hook`) |
 | AC2 `#350.7727c408` | template with handle and count: planted text failed, naming the field; typed values one labelled block; pass-through host fails | `replies.test.ts` AC2 (2): the outside package in the sandbox; wrong program `context-as-text` | none | fails (no `templates` in the manifest contract) |
 | AC3 `#350.b88afef3` | context, deny, late: same reply in every order; deny stands; bound; late failed; late reply changes no later request | `join.test.ts` AC3 (3): the same replies in 12 runs; deny, bound and failure; the late reply | none | fails |
-| AC4 `#350.43f82359` | fails to start exposes neither; 20 enable/disable cycles leave nothing; removed version's late call | `staged.test.ts` AC4 (4): during and after a failed start, with a control; 20 cycles sandboxed; 20 cycles in the hub; the late call | none | fails |
+| AC4 `#350.43f82359` | fails to start exposes neither; 20 enable/disable cycles leave nothing; removed version's late call | `ac4-redraft/ac4.test.ts` (7), the blind redraft (its README): a failed start, with a control; 20 cycles sandboxed and in the hub; the late action call and the late hook reply | none | fails |
 | AC5 `#350.7c4e7560` | overlapping calls keep their scope; headless and panel get the same explicit target; stale target has no effect | `actions.test.ts` AC5 (3): overlapping calls in the sandbox and in the hub; targets and stale targets | none | fails |
 | AC6 `#350.7884cbb1` | ungranted host refused; one capability.refused by `ext:<id>` with clause and digest; token nowhere; writer-from-arguments host fails | `refusals.test.ts` AC6 (3): the refusal; the token on disk and read back; wrong program `writer-from-arguments` | none | fails |
 | AC7 `#350.b5c18039` | quota and schema refusals each recorded, naming the quota or the field | `refusals.test.ts` AC7 (1) | none | fails |
@@ -251,14 +251,14 @@ No half of a criterion here waits on an unbuilt issue. So a PR for #350 that pas
 - The test files:
   - `replies.test.ts`: AC1, AC2
   - `join.test.ts`: AC3, AC8
-  - `staged.test.ts`: AC4; AC9's first draft is retired for the blind redraft in `ac9-redraft/`, since it removed the provider of a required use with no ask, which #103 forbids
+  - `staged.test.ts` is retired. AC4's test is the blind redraft in `ac4-redraft/`: the first draft's hub cycle test counted this process's handles while the sandboxed package of the test before it still ran, so it failed by chance (#2478). AC9's first draft was retired earlier for the blind redraft in `ac9-redraft/`, since it removed the provider of a required use with no ask, which #103 forbids
   - `actions.test.ts`: AC5
   - `refusals.test.ts`: AC6, AC7
 - `fixtures/`: the test packages, their `.ts` code carrying a `.fixture` suffix so this suite and `tsc` skip it:
-  - first-party, in the hub: `replies` (AC1), `starts` (AC4), `cyclehub` (AC4), `notes` as `deepbuild/z-notes` (AC8),
-    `user` as `deepbuild/a` (AC9), and `acts` as `deepbuild/acts` (AC4, AC5)
+  - first-party, in the hub: `replies` (AC1), `notes` as `deepbuild/z-notes` (AC8),
+    `user` as `deepbuild/a` (AC9), and `acts` as `deepbuild/acts` (AC5)
   - outside the release, in the sandbox: `templated` (AC2), `hooker` as `test/ctx`, `test/deny`, `test/late` (AC3),
-    `cycle` (AC4), `acts` as `test/acts` (AC5, AC7), `caller` (AC6, AC7), `outside` as `acme/a` and `acme/b` (AC8),
+    `acts` as `test/acts` (AC5, AC7), `caller` (AC6, AC7), `outside` as `acme/a` and `acme/b` (AC8),
     `provider` as `test/b` (AC9)
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run and the type check on the base commit.

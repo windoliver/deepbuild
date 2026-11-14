@@ -1,0 +1,43 @@
+$ node names.mjs <origin/main e0c90a5a5>
+a test names the deleted test by path
+  on disk:  tests/acceptance/10/names.test.mjs
+  deleted:  tests/acceptance/10/gone.test.ts
+  selected: tests/acceptance/10/gone.test.ts tests/acceptance/10/names.test.mjs
+  planned:  CRASH ENOENT tests/acceptance/10/gone.test.ts
+a test imports the deleted test
+  on disk:  tests/acceptance/10/imports.test.mjs
+  deleted:  tests/acceptance/10/gone.test.mjs
+  selected: tests/acceptance/10/gone.test.mjs tests/acceptance/10/imports.test.mjs
+  planned:  CRASH ENOENT tests/acceptance/10/gone.test.mjs
+a test imports a deleted helper   (control: main already handles it)
+  on disk:  tests/acceptance/10/uses.test.ts
+  deleted:  tests/acceptance/10/helpers.ts
+  selected: tests/acceptance/10/uses.test.ts
+  planned:  tests/acceptance/10/uses.test.ts
+
+$ node names.mjs <#2251 head 81b630054>
+a test names the deleted test by path
+  on disk:  tests/acceptance/10/names.test.mjs
+  deleted:  tests/acceptance/10/gone.test.ts
+  selected: tests/acceptance/10/names.test.mjs
+  planned:  tests/acceptance/10/names.test.mjs
+a test imports the deleted test
+  on disk:  tests/acceptance/10/imports.test.mjs
+  deleted:  tests/acceptance/10/gone.test.mjs
+  selected: tests/acceptance/10/imports.test.mjs
+  planned:  tests/acceptance/10/imports.test.mjs
+a test imports a deleted helper   (control: main already handles it)
+  on disk:  tests/acceptance/10/uses.test.ts
+  deleted:  tests/acceptance/10/helpers.ts
+  selected: tests/acceptance/10/uses.test.ts
+  planned:  tests/acceptance/10/uses.test.ts
+
+$ node --test --test-name-pattern deletes tests/affected.test.mjs   # #2251's test, with origin/main's script
+ℹ pass 0
+ℹ fail 1
+    actual: [ 'tests/acceptance/10/gone.test.ts', 'tests/acceptance/10/names.test.mjs' ],
+    expected: [ 'tests/acceptance/10/names.test.mjs' ],
+
+$ node --test --test-name-pattern deletes tests/affected.test.mjs   # #2251 head
+ℹ pass 1
+ℹ fail 0
