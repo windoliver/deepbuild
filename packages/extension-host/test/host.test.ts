@@ -173,7 +173,7 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect(c.reasons.join('\n')).not.toMatch(/read the canary/);
   }, 60_000);
 
-  it('the host asks that a main\'s run may read its interpreter\'s own install, and nothing of an install that is your home (#2419)', async () => {
+  it('the host asks that a main\'s run may read its interpreter\'s own install, and nothing of an install that is your home or holds the package (#2419)', async () => {
     // What the host asks the supervisor to let each run read, as it asks it.
     const dir = temp();
     const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
@@ -210,6 +210,8 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       process.env.HOME = yours;
       expect(await granted('test/own', own), 'an install of its own is readable').toContain(own);
       expect(await granted('test/yours', yours), 'an install that is your home is not').not.toContain(yours);
+      // The host keeps installed packages under its own home: an interpreter installed there holds the package's folder.
+      expect(await granted('test/beside', join(dir, 'home')), 'an install that holds the package is not').not.toContain(join(dir, 'home'));
     } finally {
       for (const key of ['HOME', 'PATH'] as const) if (was[key] === undefined) delete process.env[key]; else process.env[key] = was[key];
     }
