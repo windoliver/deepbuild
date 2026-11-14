@@ -699,7 +699,7 @@ pub(super) fn seal(
                 .filter(|r| !r.pass)
                 .map(|r| format!("{}: {}", r.rule, r.why))
                 .collect();
-            return Err(SealError::new(
+            let mut err = SealError::new(
                 "entry_refused",
                 &who,
                 &[],
@@ -710,7 +710,15 @@ pub(super) fn seal(
                     why.join("; ")
                 ),
             )
-            .at(&e.registry, vec![name], &failed));
+            .at(&e.registry, vec![name], &failed);
+            if let Some(r) = err.registry.as_mut() {
+                let reports = kit.rules.iter().filter(|r| !r.pass);
+                r.report = reports
+                    .filter_map(|r| r.report.clone()?.as_object().cloned())
+                    .flatten()
+                    .collect();
+            }
+            return Err(err);
         }
         let twin = reg.def.twin.map(|t| t(&e.name, &e.value));
         let digest = entry_digest(&e.registry, &e.name, &e.value, &e.since);

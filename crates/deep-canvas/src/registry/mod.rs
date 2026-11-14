@@ -1180,6 +1180,8 @@ pub struct RegistryRefusal {
     pub entries: Vec<Value>,
     pub rules: Vec<String>,
     pub passes: Vec<String>,
+    /// What each failing kit rule read on the entry (#213: a service's fixture names its request).
+    pub report: serde_json::Map<String, Value>,
 }
 
 // Each refusal is boxed as it is made: a `SealError` is large, and a `Result` carries only its pointer.
@@ -1220,6 +1222,7 @@ impl SealError {
             entries,
             rules: rules.iter().map(|r| r.to_string()).collect(),
             passes: Vec::new(),
+            report: Default::default(),
         }));
         self
     }

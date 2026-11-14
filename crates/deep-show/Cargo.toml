@@ -263,6 +263,9 @@ test-gpu-output-in-effects = []
 # readings entry hands the column view no changed ranges, and a motion module with one more operator
 # that reads the physics module's occurrence list by its array name.
 test-physics-hands-no-changes = []
+# Issue #213: physics.cast@1 sorting each request's hits by ID before distance, which the service's
+# conformance fixture refuses at the seal.
+test-cast-sorts-by-id = []
 test-motion-reads-physics-array = []
 
 [dependencies]

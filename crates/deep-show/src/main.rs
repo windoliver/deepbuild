@@ -2492,7 +2492,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
                 name: "kind@1".into(),
                 entries: entries.into_iter().map(Value::from).collect(),
                 rules: vec!["sheet_cap".into()],
-                passes: Vec::new(),
+                ..Default::default()
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
@@ -3200,6 +3200,9 @@ fn main() {
                 line["registry"] = json!(r.name);
                 line["entries"] = json!(r.entries);
                 line["rules"] = json!(r.rules);
+                for (k, v) in &r.report {
+                    line[k.as_str()] = v.clone();
+                }
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }

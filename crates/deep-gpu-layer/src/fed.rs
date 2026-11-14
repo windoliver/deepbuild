@@ -71,7 +71,7 @@ pub(crate) fn bake(
         "items": items,
     });
     let read = |sha: &str| std::fs::read(assets.get(sha)?).ok();
-    let piece = check_in(&piece, &Default::default(), &mut History::new(), &read)
+    let piece = check_in(&piece, &Default::default(), &mut History::new(), &read, &[])
         .map_err(|r| json!({"code": "logic_refused", "refusal": r.0}))?;
     let steps = (piece.items.iter())
         .map(|i| until.max(0) / i.step.max(1) + 1)

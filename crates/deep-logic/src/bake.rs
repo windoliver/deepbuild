@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use serde_json::{json, Map, Value};
 
 use crate::piece::{Item, Piece};
-use crate::world::{handed, Record};
+use crate::world::Record;
 
 /// One step's run of changed elements of one write: `[start, end)` and their bytes.
 #[derive(Clone, Debug)]
@@ -123,9 +123,13 @@ impl<'a> Player<'a> {
     }
 }
 
-/// Each write's values in a write region, by `<item>.<write>`.
-fn values(item: &Item, region: &[u8], out: &mut Map<String, Value>) {
-    for w in &item.writes {
+/// Each write's values in a write region, by `<item>.<write>`, of those `only` names (all without).
+fn values(item: &Item, region: &[u8], out: &mut Map<String, Value>, only: Option<&[String]>) {
+    for w in item
+        .writes
+        .iter()
+        .filter(|w| listed(only, &item.id, &w.name))
+    {
         let e = item.write(&w.name).expect("a write entry");
         let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
         let list = bytes
@@ -134,6 +138,12 @@ fn values(item: &Item, region: &[u8], out: &mut Map<String, Value>) {
             .collect();
         out.insert(format!("{}.{}", item.id, w.name), Value::Array(list));
     }
+}
+
+/// Whether array `<id>.<name>` is one `only` names; every array when it names none (#213: a bake's
+/// `arrays`).
+fn listed(only: Option<&[String]>, id: &str, name: &str) -> bool {
+    only.is_none_or(|o| o.iter().any(|p| p.split_once('.') == Some((id, name))))
 }
 
 /// The first write and element where two write regions differ.
@@ -186,14 +196,15 @@ impl Record {
         let mut out = Map::new();
         for item in &piece.items {
             if let Some(region) = Player::new(self, item).at(k) {
-                values(item, region, &mut out);
+                values(item, region, &mut out, None);
             }
         }
         out
     }
 
-    /// Each step's items and arrays, the arrays rebuilt from the bake.
-    pub fn steps_json(&self, piece: &Piece) -> Value {
+    /// Each step's items and arrays, the arrays rebuilt from the bake: of those `only` names, or
+    /// every one.
+    pub fn steps_json(&self, piece: &Piece, only: Option<&[String]>) -> Value {
         let len = piece.items.first().map_or(0, |i| i.step);
         let mut players: Vec<Player> = piece.items.iter().map(|i| Player::new(self, i)).collect();
         Value::Array(
@@ -201,9 +212,16 @@ impl Record {
                 .iter()
                 .map(|(k, (items, arrays))| {
                     let mut arrays = arrays.clone();
+                    arrays.retain(|path, _| {
+                        let (id, name) = path.split_once('.').unwrap_or((path, ""));
+                        listed(only, id, name)
+                    });
                     for (item, p) in piece.items.iter().zip(&mut players) {
+                        if !item.writes.iter().any(|w| listed(only, &item.id, &w.name)) {
+                            continue;
+                        }
                         if let Some(region) = items.get(&item.id).and(p.at(*k)) {
-                            values(item, region, &mut arrays);
+                            values(item, region, &mut arrays, only);
                         }
                     }
                     json!({"step": k, "t": k * len, "items": items, "arrays": arrays})
@@ -212,8 +230,9 @@ impl Record {
         )
     }
 
-    /// Each item's changed ranges as a bake reports them: `{step, array, start, end, values}`.
-    pub fn ranges_json(&self, piece: &Piece) -> Map<String, Value> {
+    /// Each item's changed ranges as a bake reports them: `{step, array, start, end, values}`, of
+    /// the arrays `only` names, or every one.
+    pub fn ranges_json(&self, piece: &Piece, only: Option<&[String]>) -> Map<String, Value> {
         let mut out = Map::new();
         for item in &piece.items {
             let Some(list) = self.ranges.get(&item.id) else {
@@ -221,6 +240,7 @@ impl Record {
             };
             let rows = list
                 .iter()
+                .filter(|r| listed(only, &item.id, &item.writes[r.write as usize].name))
                 .map(|r| {
                     let w = &item.writes[r.write as usize];
                     let values: Vec<Value> = r
@@ -271,5 +291,36 @@ impl Record {
             }
         }
         out
+    }
+}
+
+/// The most index ranges a step hands the column view per array.
+pub const HANDED: usize = 64;
+
+/// A step's changed runs `[start, end)`, ascending, as the column view takes them: the first
+/// [`HANDED`] − 1 as they are and any more merged into their span, so at most [`HANDED`].
+pub fn handed(runs: &[[u64; 2]]) -> Vec<[u64; 2]> {
+    if runs.len() <= HANDED {
+        return runs.to_vec();
+    }
+    let mut out = runs[..HANDED - 1].to_vec();
+    out.push([runs[HANDED - 1][0], runs[runs.len() - 1][1]]);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #535: a step's 100 changed runs reach the column view as 64 ranges, the last the span of
+    /// the 37 past the 63rd; 64 or fewer reach it as they are.
+    #[test]
+    fn a_step_hands_over_at_most_64_ranges() {
+        let runs: Vec<[u64; 2]> = (0..100).map(|i| [3 * i, 3 * i + 1]).collect();
+        let out = handed(&runs);
+        assert_eq!(out.len(), HANDED);
+        assert_eq!(out[..63], runs[..63]);
+        assert_eq!(out[63], [189, 298]);
+        assert_eq!(handed(&runs[..64]), runs[..64].to_vec());
     }
 }

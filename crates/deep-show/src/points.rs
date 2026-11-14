@@ -704,12 +704,12 @@ impl Hub<'_> {
             .and_then(Value::as_u64)
             .filter(|p| (1..=8).contains(p))
             .unwrap_or(2);
-        let piece = match self.logic_piece(&form) {
+        let track = self.track_read(doc);
+        let piece = match self.logic_piece(&form, &track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let track = self.track_read(doc);
         let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
         let mut copies = Vec::new();
         for player in 1..=players {

@@ -677,15 +677,24 @@ impl Rapier {
                 None => return Vec::new(),
             },
         };
-        // The distance along the probe at which collider `c` meets it, if it does.
-        let meet = |c: &Collider| -> Option<f32> {
+        // The distance along the probe at which collider `c` meets it, if it does, with the point
+        // it meets in world space and the collider's outward normal there (zero for an overlap).
+        let meet = |c: &Collider| -> Option<(f32, Vector, Vector)> {
             match &cast {
-                Err((ray, max)) => c.shape().cast_ray(c.position(), ray, *max, true),
+                Err((ray, max)) => {
+                    // The distance from the plain cast, as #1919's physics.query reads it.
+                    let toi = c.shape().cast_ray(c.position(), ray, *max, true)?;
+                    let normal = c
+                        .shape()
+                        .cast_ray_and_get_normal(c.position(), ray, *max, true)
+                        .map_or(Vector::ZERO, |i| i.normal);
+                    Some((toi, ray.point_at(toi), normal))
+                }
                 Ok((s, at, motion)) if *motion == Vector::ZERO => {
                     parry_query::intersection_test(at, s.as_ref(), c.position(), c.shape())
                         .ok()?
                         .intersecting
-                        .then_some(0.0)
+                        .then_some((0.0, Vector::ZERO, Vector::ZERO))
                 }
                 Ok((s, at, motion)) => {
                     let hit = parry_query::cast_shapes(
@@ -698,7 +707,12 @@ impl Rapier {
                         ShapeCastOptions::with_max_time_of_impact(1.0),
                     )
                     .ok()??;
-                    Some(hit.time_of_impact * motion.length())
+                    let (p, n) = (c.position(), c.position().rotation * hit.normal2);
+                    Some((
+                        hit.time_of_impact * motion.length(),
+                        p.transform_point(hit.witness2),
+                        n,
+                    ))
                 }
             }
         };
@@ -711,15 +725,24 @@ impl Rapier {
             w.all_colliders()
                 .filter(|(h, c)| c.is_enabled() && member(*h, c))
                 .collect()
+        } else if let Err((ray, max)) = &cast {
+            // #213: a ray walks the tree along itself, so only the colliders it meets are tested.
+            w.intersect_ray(*ray, *max, true, filter)
+                .map(|(h, c, _)| (h, c))
+                .collect()
         } else {
             w.intersect_aabb_conservative(aabb, filter).collect()
         };
         let mut hits: Vec<Hit> = candidates
             .into_iter()
             .filter_map(|(h, c)| {
+                let (distance, point, normal) = meet(c)?;
+                let f = |v: Vector| [v.x, v.y, v.z].map(f64::from);
                 Some(Hit {
                     shape: self.uses.get(&h)?.clone(),
-                    distance: f64::from(meet(c)?),
+                    distance: f64::from(distance),
+                    point: f(point),
+                    normal: f(normal),
                 })
             })
             .collect();

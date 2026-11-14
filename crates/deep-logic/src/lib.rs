@@ -17,9 +17,12 @@ pub mod keyframes;
 pub mod lane;
 pub mod lines;
 pub mod live;
+pub mod mirrors;
 pub mod module;
 pub mod piece;
 pub mod point;
+pub mod services;
+pub mod track;
 pub mod world;
 
 use std::collections::BTreeMap;
@@ -70,6 +73,9 @@ pub struct Planted {
     pub ring_drops_oldest: bool,
     pub keyframes_held_in_ring: bool,
     pub store_fails_at_step_120: bool,
+    pub mirror_lists_first: bool,
+    pub mirror_restores_whole: bool,
+    pub services_after_checkpoint: bool,
 }
 
 impl Planted {
@@ -107,6 +113,9 @@ impl Planted {
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
             "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
             "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
+            "mirror_lists_before_reads" => p.mirror_lists_first = true,
+            "mirror_whole_after_restore" => p.mirror_restores_whole = true,
+            "services_after_checkpoint" => p.services_after_checkpoint = true,
             _ => return None,
         }
         Some(self)
@@ -130,8 +139,10 @@ pub fn bake_key(piece: &Piece, i: usize, entries: &[Entry]) -> String {
     };
     part(item.content.as_bytes());
     for e in &item.layout.entries {
-        if let piece::Read::Array { item: from, .. } = e.read {
-            part(piece.items[from].content.as_bytes());
+        match e.read {
+            piece::Read::Array { item: from, .. } => part(piece.items[from].content.as_bytes()),
+            piece::Read::Mirror(j) => part(piece.items[item.mirrors[j].item].content.as_bytes()),
+            _ => {}
         }
     }
     part(
@@ -466,13 +477,14 @@ fn seeks_of(v: Option<&Value>) -> Option<Vec<Fork>> {
         .collect()
 }
 
-/// A probe: the same next inputs fed to a state, run on for its steps.
-fn probe(w: &mut World, f: &Fork) -> Result<Value, Value> {
+/// A probe: the same next inputs fed to a state, run on for its steps; its step records hold the
+/// arrays `only` names, or every one.
+fn probe(w: &mut World, f: &Fork, only: Option<&[String]>) -> Result<Value, Value> {
     let at = w.at().unwrap_or(0);
     let mut fork = w.fork(&f.entries)?;
     let mut rec = Record::default();
     fork.run(at + f.steps, &mut rec, &mut |_, _| {});
-    Ok(json!({"at": at, "steps": rec.steps_json(&w.piece), "deep_hash": fork.deep_hashes()}))
+    Ok(json!({"at": at, "steps": rec.steps_json(&w.piece, only), "deep_hash": fork.deep_hashes()}))
 }
 
 impl Logic {
@@ -540,6 +552,16 @@ impl Logic {
         let restores = forks(line.get("restores"), "from").ok_or_else(|| bad("restores"))?;
         let probes = forks(line.get("probes"), "at").ok_or_else(|| bad("probes"))?;
         let seeks = seeks_of(line.get("seeks")).ok_or_else(|| bad("seeks"))?;
+        // #213: the arrays the step records hold, or every one.
+        let only: Option<Vec<String>> = match line.get("arrays") {
+            None => None,
+            Some(a) => Some(
+                a.as_array()
+                    .and_then(|a| a.iter().map(|p| p.as_str().map(str::to_string)).collect())
+                    .ok_or_else(|| bad("arrays"))?,
+            ),
+        };
+        let only = only.as_deref();
         let one_rate = piece.items.windows(2).all(|w| w[0].step == w[1].step);
         if !(restores.is_empty() && probes.is_empty() && seeks.is_empty()) && !one_rate {
             return Err(bad("restores and probes need every item at one step rate"));
@@ -556,7 +578,7 @@ impl Logic {
         let mut probed: Vec<(usize, Result<Value, Value>)> = Vec::new();
         world.run(steps, &mut rec, &mut |w, k| {
             for (i, p) in probes.iter().enumerate().filter(|(_, p)| p.at == k) {
-                probed.push((i, probe(w, p)));
+                probed.push((i, probe(w, p, only)));
             }
         });
         probed.sort_by_key(|(i, _)| *i);
@@ -570,10 +592,10 @@ impl Logic {
             let mut rr = Record::default();
             let mut p = None;
             if let Some(f) = &r.probe {
-                p = Some(probe(&mut w, f)?);
+                p = Some(probe(&mut w, f, only)?);
             }
             w.run(r.at + r.steps, &mut rr, &mut |_, _| {});
-            restores_out.push(json!({"from": r.at, "checkpoints": rr.checkpoints, "steps": rr.steps_json(&piece), "probe": p}));
+            restores_out.push(json!({"from": r.at, "checkpoints": rr.checkpoints, "steps": rr.steps_json(&piece, only), "probe": p}));
         }
         let seeks_out = seeks
             .iter()
@@ -601,7 +623,7 @@ impl Logic {
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
-            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece), "ring": world.ring(),
+            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
             "traps": rec.traps, "budgets": budgets, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
@@ -915,11 +937,29 @@ impl Logic {
     /// rate and budgets, and the input track; the browser checks and rewrites nothing.
     fn web_plan(&mut self, line: &Value) -> Result<Value, Value> {
         let piece = self.check(line)?;
-        // The web runner steps every step: a turn clock would bake wrong hashes there.
-        if let Some(i) = piece.items.iter().find(|i| i.turn) {
+        // The web runner steps every step and fills reads alone: a turn clock would bake wrong
+        // hashes there, and it has no mirrors or services.
+        let unbuilt = piece.items.iter().find_map(|i| {
+            let field = if i.turn {
+                "clock"
+            } else if !i.mirrors.is_empty() {
+                "mirrors"
+            } else if !i.services.is_empty() {
+                "services"
+            } else {
+                return None;
+            };
+            Some((i, field))
+        });
+        if let Some((i, field)) = unbuilt {
+            let what = match field {
+                "clock" => {
+                    "clock: on_input isn't built in the web player's runtime yet".to_string()
+                }
+                f => format!("{f} isn't built in the web player's runtime yet"),
+            };
             return Err(
-                json!({"ok": false, "code": "logic_refused", "item": i.id, "refusals": [{"rule": "field", "field": "clock",
-                "what": "clock: on_input isn't built in the web player's runtime yet"}]}),
+                json!({"ok": false, "code": "logic_refused", "item": i.id, "refusals": [{"rule": "field", "field": field, "what": what}]}),
             );
         }
         let steps = line
@@ -942,7 +982,7 @@ impl Logic {
                             piece::Read::Control => ("control", Value::Null, 0),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
-                            piece::Read::None => ("write", Value::Null, 0),
+                            piece::Read::Mirror(_) | piece::Read::None => ("write", Value::Null, 0),
                         };
                         json!({"region": e.region, "name": e.name, "offset": e.offset, "size": e.size, "type": e.ty, "read": kind, "from": from, "from_offset": offset})
                     })

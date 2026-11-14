@@ -1507,6 +1507,7 @@ workloads['lottie-export'] = () => {
 workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 // #226's budgets: the 3D axes against the same marks, and a still view's maps (benchmarks/axes3d.mjs).
 workloads.axes3d = async () => (await import('./axes3d.mjs')).axes3d({ root, release, once, runs });
+workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

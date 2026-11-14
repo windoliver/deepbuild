@@ -55,9 +55,7 @@ pub fn form(control: &Value) -> (u32, &'static str) {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 7] = [
-    "fires", "links", "preview", "pages", "parallel", "services", "mirrors",
-];
+const LATER: [&str; 5] = ["fires", "links", "preview", "pages", "parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -66,11 +64,11 @@ const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
 #[derive(Debug)]
 pub struct Refused(pub Value);
 
-fn logic_refused(item: &str, refusals: Vec<Value>) -> Refused {
+pub(crate) fn logic_refused(item: &str, refusals: Vec<Value>) -> Refused {
     Refused(json!({"ok": false, "code": "logic_refused", "item": item, "refusals": refusals}))
 }
 
-fn refusal(rule: &str, what: String, extra: Value) -> Value {
+pub(crate) fn refusal(rule: &str, what: String, extra: Value) -> Value {
     let mut out = json!({"rule": rule, "what": what});
     if let (Some(o), Value::Object(e)) = (out.as_object_mut(), extra) {
         o.extend(e);
@@ -187,6 +185,8 @@ pub enum Read {
         offset: u32,
     },
     Seed,
+    /// Mirror j's range list (Logic: mirror reads).
+    Mirror(usize),
     /// A write entry.
     None,
 }
@@ -306,6 +306,11 @@ pub struct Item {
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
+    /// The services it asks between steps, in declaration order, from `services_at`.
+    pub services: Vec<crate::services::Asked>,
+    pub services_at: u32,
+    /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
+    pub mirrors: Vec<crate::mirrors::Mirror>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
@@ -313,8 +318,19 @@ pub struct Item {
 
 impl Item {
     pub fn checked(&self) -> Value {
-        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
-            "pipelined": crate::budget::pipelined(self)})
+        let mut out = json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
+            "pipelined": crate::budget::pipelined(self)});
+        if !self.services.is_empty() {
+            out["services"] = crate::services::listed(self);
+        }
+        if !self.mirrors.is_empty() {
+            out["mirrors"] = self
+                .mirrors
+                .iter()
+                .map(|m| json!({"array": m.array, "at": m.at, "size": m.size()}))
+                .collect();
+        }
+        out
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
     pub fn asset_bytes(&self) -> Vec<u8> {
@@ -351,7 +367,7 @@ pub struct Piece {
 }
 
 /// An item's immutable i32 global's value, by its export name.
-fn global_at(bytes: &[u8], name: &str) -> Option<u32> {
+pub(crate) fn global_at(bytes: &[u8], name: &str) -> Option<u32> {
     let mut inits = Vec::new();
     let mut index = None;
     for payload in Parser::new(0).parse_all(bytes) {
@@ -441,7 +457,7 @@ fn own_name(n: &str) -> bool {
         && c.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-fn align8(n: u32) -> u32 {
+pub(crate) fn align8(n: u32) -> u32 {
     n.div_ceil(8) * 8
 }
 
@@ -465,6 +481,8 @@ struct Declared {
     ring: u64,
     assets: Vec<String>,
     emits: Vec<Emit>,
+    services: Vec<(String, u32)>,
+    mirrors: Vec<(String, String)>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -572,6 +590,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "checkpoint",
             "assets",
             "emits",
+            "services",
+            "mirrors",
         ]
         .contains(&k.as_str())
         {
@@ -743,6 +763,9 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .ok_or_else(|| bad("assets", "assets is a list of asset IDs".into()))?,
         Some(_) => return Err(bad("assets", "assets is a list of asset IDs".into())),
     };
+    let services =
+        crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
+    let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
     Ok(Declared {
         program,
         debug,
@@ -758,6 +781,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         ring,
         assets,
         emits,
+        services,
+        mirrors,
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -769,18 +794,24 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    check_in(piece, planted, history, &|sha| {
-        B64.decode(assets.get(sha)?.as_str()?).ok()
-    })
+    check_in(
+        piece,
+        planted,
+        history,
+        &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+        &[],
+    )
 }
 
 /// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
-/// rather than from the piece's `assets`; bytes that don't hash to their ID are none.
+/// rather than from the piece's `assets`; bytes that don't hash to their ID are none. `services`:
+/// the between-step services this build binds (Logic: between-step services).
 pub fn check_in(
     piece: &Value,
     planted: &Planted,
     history: &mut History,
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
+    services: &[crate::services::Service],
 ) -> Result<Piece, Refused> {
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
@@ -821,6 +852,10 @@ pub fn check_in(
             .unwrap_or_default();
         decls.push((id.clone(), declared(id, &params)?));
     }
+    let writers: Vec<(&str, &[Write])> = decls
+        .iter()
+        .map(|(id, d)| (id.as_str(), d.writes.as_slice()))
+        .collect();
     let mut items = Vec::new();
     for (idx, (id, d)) in decls.iter().enumerate() {
         let missing = |what: &str, sha: &str| {
@@ -872,10 +907,15 @@ pub fn check_in(
                 }
             }
         };
-        // The region map, in declaration order: reads, the step's seed, then writes.
+        // The region map, in declaration order: reads, each mirror's range list, the step's seed,
+        // then writes.
         let mut entries = Vec::new();
         let mut at = 0u32;
         let mut refused = Vec::new();
+        let mut mirrors = crate::mirrors::resolved(&d.mirrors, idx, &writers, &mut refused);
+        if planted.mirror_lists_first {
+            at = crate::mirrors::listed(&mirrors, at, &mut entries);
+        }
         for r in &d.reads {
             let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
                 (*size, ty.to_string(), Read::Control)
@@ -964,6 +1004,9 @@ pub fn check_in(
             });
             at = align8(end);
         }
+        if !planted.mirror_lists_first {
+            at = crate::mirrors::listed(&mirrors, at, &mut entries);
+        }
         entries.push(Region {
             region: "reads",
             name: "seed".into(),
@@ -1033,15 +1076,7 @@ pub fn check_in(
                 )),
                 Some(at) => {
                     let (start, end) = (u64::from(at), u64::from(at) + size);
-                    let why = if end > memory {
-                        Some(format!("passes the end of memory at {memory}"))
-                    } else {
-                        regions
-                            .iter()
-                            .find(|(_, r, n)| *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end)
-                            .map(|(name, r, n)| format!("overlaps {name}, {n} bytes at {r}"))
-                    };
-                    if let Some(why) = why {
+                    if let Some(why) = clash(start, end, memory, &regions, &[]) {
                         refused.push(refusal(
                             "region",
                             format!("the emit region, {size} bytes at {at}, {why}"),
@@ -1052,6 +1087,13 @@ pub fn check_in(
                 }
             }
         }
+        let services_at = global_at(&given, "services_at");
+        let asked =
+            crate::services::asked(&d.services, services, services_at, memory, &mut regions)
+                .unwrap_or_else(|r| {
+                    refused.extend(r);
+                    Vec::new()
+                });
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
         for sha in &d.assets {
@@ -1066,9 +1108,19 @@ pub fn check_in(
                 )),
                 Some(at) => {
                     refused.extend(placed(&assets, at, memory, &regions, &data_segments(&given)));
+                    let len: usize = assets.iter().map(|(_, b)| 4 + b.len()).sum();
+                    regions.push(("the assets", at, len as u32));
                 }
             }
         }
+        let segments = data_segments(&given);
+        refused.extend(crate::mirrors::placed(
+            &mut mirrors,
+            &given,
+            memory,
+            &mut regions,
+            &segments,
+        ));
         match regions_digest(&given) {
             Err(e) => refused.push(refusal("regions_digest", e, json!({}))),
             Ok(Some(v)) if v != layout.digest => {
@@ -1120,6 +1172,9 @@ pub fn check_in(
             assets_at: assets_at.unwrap_or(0),
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
+            services: asked,
+            services_at: services_at.unwrap_or(0),
+            mirrors,
         });
     }
     Ok(Piece {
@@ -1164,21 +1219,7 @@ fn placed(
     let mut start = u64::from(at);
     for (sha, bytes) in assets {
         let end = start + 4 + bytes.len() as u64;
-        let overlaps = |a: u64, b: u64| a < b && start < b && a < end;
-        let why = if end > memory {
-            Some(format!("passes the end of memory at {memory}"))
-        } else if let Some((name, r, n)) = regions
-            .iter()
-            .find(|(_, r, n)| overlaps(u64::from(*r), u64::from(*r) + u64::from(*n)))
-        {
-            Some(format!("overlaps {name}, {n} bytes at {r}"))
-        } else {
-            segments
-                .iter()
-                .find(|(a, b)| overlaps(*a, *b))
-                .map(|(a, b)| format!("overlaps an active data segment, bytes {a} to {b}"))
-        };
-        if let Some(why) = why {
+        if let Some(why) = clash(start, end, memory, regions, segments) {
             out.push(refusal(
                 "assets",
                 format!("asset {sha}, copied to bytes {start} to {end} from assets_at, {why}"),
@@ -1188,6 +1229,31 @@ fn placed(
         start = end;
     }
     out
+}
+
+/// Why bytes `[start, end)` can't be placed: past the end of memory, or over a region or an active
+/// data segment, naming the first it overlaps; none when they fit.
+pub(crate) fn clash(
+    start: u64,
+    end: u64,
+    memory: u64,
+    regions: &[(&str, u32, u32)],
+    segments: &[(u64, u64)],
+) -> Option<String> {
+    let overlaps = |a: u64, b: u64| a < b && start < b && a < end;
+    if end > memory {
+        return Some(format!("passes the end of memory at {memory}"));
+    }
+    if let Some((name, r, n)) = regions
+        .iter()
+        .find(|(_, r, n)| overlaps(u64::from(*r), u64::from(*r) + u64::from(*n)))
+    {
+        return Some(format!("overlaps {name}, {n} bytes at {r}"));
+    }
+    segments
+        .iter()
+        .find(|(a, b)| overlaps(*a, *b))
+        .map(|(a, b)| format!("overlaps an active data segment, bytes {a} to {b}"))
 }
 
 /// A program built for another layout of the item: the first entry, in the item's declaration

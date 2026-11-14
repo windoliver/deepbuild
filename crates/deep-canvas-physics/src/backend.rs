@@ -169,11 +169,15 @@ pub enum Query {
     },
 }
 
-/// One shape use a query met, `distance` m along the ray or the sweep (0 for an overlap).
+/// One shape use a query met, `distance` m along the ray or the sweep (0 for an overlap), with
+/// the point it met in world space and the met shape's outward normal there (both zero for an
+/// overlap).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hit {
     pub shape: ShapeRef,
     pub distance: f64,
+    pub point: [f64; 3],
+    pub normal: [f64; 3],
 }
 
 pub trait Backend {

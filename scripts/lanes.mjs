@@ -613,6 +613,9 @@ timed.push('tests/acceptance/226/ac7-budgets.test.ts');
 // one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/226-oracle-redraft/');
 byHand.push('tests/acceptance/226-oracle/');
+// #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
+alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
+timed.push('tests/acceptance/213/ac8-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
