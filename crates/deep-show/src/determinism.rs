@@ -119,8 +119,16 @@ impl Hub<'_> {
             return Err("no_drawing".into());
         }
         // One pipeline for every render the hub hashes, so hashing adds only its pass (#405).
-        let pass = self.hash_pass.get_or_insert_with(|| PixelHash::new(&dev.device, planted));
-        Ok(hex(pass.sums(&dev.device, &dev.queue, rgba, size, Format::Rgba8)))
+        let pass = self
+            .hash_pass
+            .get_or_insert_with(|| PixelHash::new(&dev.device, planted));
+        Ok(hex(pass.sums(
+            &dev.device,
+            &dev.queue,
+            rgba,
+            size,
+            Format::Rgba8,
+        )))
     }
 
     /// `determinism` with `compare: cross_machine`: this machine's record at `at_times`, drawn at
@@ -188,7 +196,9 @@ impl Hub<'_> {
                 // #157: the seam it is at, when 3 shards start a part there.
                 let len = one.len().max(three.len());
                 let seam = (1..3).find(|i| len * i / 3 == k);
-                let at = seam.map_or(String::new(), |i| format!(", at the seam between shards {} and {}", i - 1, i));
+                let at = seam.map_or(String::new(), |i| {
+                    format!(", at the seam between shards {} and {}", i - 1, i)
+                });
                 issues.push(json!({"check": "document.determinism", "code": "shards_differ", "severity": "error",
                     "ids": [], "doc": doc, "index": k, "hashes": key, "seam": seam,
                     "what": format!("{what} {k} hashes differently with 1 shard and with 3{at}")}));
@@ -228,7 +238,7 @@ impl Hub<'_> {
         let view = deep_canvas::schedule::default_view(document);
         let mut frames = Vec::with_capacity(at_times.len());
         for &t in at_times {
-            let (drawing, nodes, _, _) = self.evaluate(document, &view, &[t], true)?;
+            let (drawing, nodes, ..) = self.evaluate(document, &view, &[t], true)?;
             let pinned = std::mem::replace(&mut self.renderer.raster_2d, settings);
             let drawn = self.canonical_rgba(&drawing, None, true);
             self.renderer.raster_2d = pinned;

@@ -1,0 +1,26 @@
+{
+  "id": "deepbuild/import",
+  "version": "1.0.0",
+  "digest": "d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9",
+  "checks": [
+    "import.document",
+    "import.colors_mapped",
+    "import.no_expression"
+  ],
+  "jobs": [
+    "import"
+  ],
+  "job_tools": [
+    {
+      "kind": "import",
+      "tool": "lottie-import@1.0.0"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerCheck",
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

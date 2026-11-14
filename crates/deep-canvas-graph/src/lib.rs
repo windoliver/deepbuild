@@ -849,7 +849,7 @@ fn settle(row: &[usize], cross: &mut [f64], across: &dyn Fn(usize) -> f64, gap: 
             }
             blocks.truncate(blocks.len() - 2);
             let mean = (p1 * n1 as f64 + p2 * n2 as f64) / (n1 + n2) as f64;
-            debug_assert_eq!(s1 + n1, s2);
+            assert_eq!(s1 + n1, s2);
             blocks.push((s1, n1 + n2, mean));
         }
     }

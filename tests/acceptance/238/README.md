@@ -126,7 +126,7 @@ rewrite), as wasmparser reports an operator's offset and as wasmtime's `module_o
 
 | Call | Reply |
 |---|---|
-| `{"call": "about"}` | `{"interface": "sandbox@1", "implementation": {"name", "version", "pins": {"wasmtime": {"version": "=49.0.2", …}}, "equivalence", "state"}, "engine": {"name": "wasmtime", "version": "49.0.2"}, "arch": "aarch64" \| "x86_64", "os": "macos" \| "linux"}` (`arch` and `os` from the running process) |
+| `{"call": "about"}` | `{"interface": "sandbox@1", "implementation": {"name", "version", "pins": {"wasmtime": {"version": "=49.0.5", …}}, "equivalence", "state"}, "engine": {"name": "wasmtime", "version": "49.0.5"}, "arch": "aarch64" \| "x86_64", "os": "macos" \| "linux"}` (`arch` and `os` from the running process) |
 | `{"call": "check", "program", "role"}` | `{"ok": true, "refusals": []}`, or `{"ok": false, "code": "subset_refused", "refusals": [Refusal]}` |
 | `{"call": "rewrite", "program", "role", "budget"?}` | the check first (a refusal answers as `check` does), then `{"ok": true, "rewritten": base64, "hash": sha256 hex of those bytes, "ms": number}`; `ms` is the rewrite's own wall time, measured by the binary. `budget` is the run's (below) when the rewrite depends on it (the stack cap, say); the tests always pass the budget they then run with |
 | `{"call": "run", "program", "role", "seed"?: 0, "budget": Budget, "read": [Read]}` | check, rewrite and one run in the role (a provider: its start export if any, then `gen(seed)`), off any frame, under the budget: `{"ok": true, "hash": sha256 of the rewritten bytes it ran, "trap": null \| Trap, "result": i32 \| null, "reads": [{"at", "len", "hex"}]}`. `result` is the entry's return value (null after a trap); `reads` are taken from linear memory after the run ends, returned or trapped, one per `read`, lowercase hex |
@@ -204,9 +204,9 @@ Each is one criterion's wrong program, reachable only through this argument, and
 ### deep-show: the sandbox module and the test builds
 
 `full` holds the canvas module `sandbox` (it is in `KNOWN_MODULES` at `full` already), implementing `sandbox@1`
-with `implementation: {name: "sandbox", version, pins: {wasmtime: {version: "=49.0.2", …}}, equivalence: "bit",
+with `implementation: {name: "sandbox", version, pins: {wasmtime: {version: "=49.0.5", …}}, equivalence: "bit",
 state: "canonical"}`, depending only on core; `schedule`'s `interfaces["sandbox@1"]` (#185's shape) shows it, and
-`Cargo.lock` holds wasmtime once, at 49.0.2. New calls of `deep-show run`:
+`Cargo.lock` holds wasmtime once, at 49.0.5. New calls of `deep-show run`:
 
 - **`{"call": "sandbox"}`** → `{"module": "sandbox", "version", "checks", "links", "rewrites", "runs"}`: how many
   subset checks, links, rewrites and check-time runs (providers, validators, registry programs) the sandbox module
@@ -231,7 +231,7 @@ state: "canonical"}`, depending only on core; `schedule`'s `interfaces["sandbox@
 | `test-mesh-item` | test module `test.mesh` (depends only on core) with kind `test.mesh@1`, param `mesh`: a mesh asset ID or `{"gen": "<pack>.<provider>", "params": {}}`; at check it takes the mesh through the sandbox module's check-time runner (gen@1) and draws nothing that any test reads |
 | `test-prog-registry` | test module `test.prog` (no dependency on sandbox) declaring registry `test.prog@1`: owner `test.prog`, entry `{name: "<pack>.<name>", program: sha256}`, the program's role `validator`, `fill: [pack]`, `resolve: check`, `binds: all`, `since`, a kit whose rule is that the program passes sandbox@1's check and rewrite in its role, and a planted wrong entry (a program that imports a function). A pack's program entry needs the sandbox module: in a build without it the pack is refused with `module_missing` naming `sandbox`, whatever the pack's `requires.modules` says |
 | `test-sandbox-needs-logic` | planted: the sandbox module's manifest declares `logic` among its required dependencies |
-| `test-sandbox-alt` | the shipped `sandbox` implementation left out and the test implementation `sandbox.alt` in its place: the same canvas module `sandbox` and interface `sandbox@1`, `equivalence: bit`, `state: canonical`, whose `pins.wasmtime.version` names another wasmtime 49.0 patch (`=49.0.x`, not `=49.0.2`), passing sandbox@1's kit bit for bit |
+| `test-sandbox-alt` | the shipped `sandbox` implementation left out and the test implementation `sandbox.alt` in its place: the same canvas module `sandbox` and interface `sandbox@1`, `equivalence: bit`, `state: canonical`, whose `pins.wasmtime.version` names another exact wasmtime patch release (`=X.Y.Z`, not `=49.0.5`), passing sandbox@1's kit bit for bit |
 
 Builds the tests make: `full`; `full,test-leave-out-logic,test-mesh-item,test-prog-registry`;
 `full,test-leave-out-logic,test-sandbox-needs-logic`; `full,test-leave-out-sandbox,test-prog-registry`;
@@ -278,7 +278,7 @@ bounds). `gen` returns 0.
 Expected values from the issue: 0x7FC00000 and 0x7FF8000000000000 (little-endian `0000c07f`, `000000000000f87f`);
 0xFFF8000000000000 for 0 ÷ 0 on x86_64 without the NaN rewrite; a fuel budget of 10,000,000, the tenth 1 MiB fill
 trapping before it runs (count 10, region 9 still zero, region 8 filled); 4 MiB + 1 byte; 65,537 table entries; caps
-of 64 KiB and 256 KiB; wasmtime =49.0.2; 200 ms for a 1 MB program; the trap kinds and their names; the design's 8
+of 64 KiB and 256 KiB; wasmtime =49.0.5 (the issue's =49.0.2, moved by #2324); 200 ms for a 1 MB program; the trap kinds and their names; the design's 8
 bytes a slot plus 64 a call.
 
 ## Criteria to tests
@@ -287,8 +287,8 @@ IDs are the first 8 hex digits of SHA-256 of each criterion's text, trimmed, wit
 leading `- [ ] ` dropped. Each test's name starts with its criterion's ID.
 
 **`#238.6e920ef3`** (criterion 1, the kit on three hosts) — `kit.test.ts` (4):
-1. `about` on macOS arm64 and Linux x86_64 names wasmtime 49.0.2, pins `=49.0.2`, and the host's `arch`/`os`;
-   `Cargo.lock` holds wasmtime once, at 49.0.2. Wrong programs: another engine version; a "Linux" run that isn't
+1. `about` on macOS arm64 and Linux x86_64 names wasmtime 49.0.5, pins `=49.0.5`, and the host's `arch`/`os`;
+   `Cargo.lock` holds wasmtime once, at 49.0.5. Wrong programs: another engine version; a "Linux" run that isn't
    x86_64.
 2. `check` of every refusal fixture on both native hosts: each refused with a refusal naming the import
    (`env.forbidden_fn`), the instruction and function 1 (`v128.const`, `i32.atomic.load`, `table.set`, `data.drop` or
@@ -316,7 +316,7 @@ leading `- [ ] ` dropped. Each test's name starts with its criterion's ID.
 
 **`#238.432c0da5`** (criterion 3, the build without logic) — `seal.test.ts` (4):
 1. `full,test-leave-out-logic,test-mesh-item,test-prog-registry` seals with `sandbox` and without `logic`;
-   `sandbox@1` is `sandbox`'s, bit, canonical, wasmtime `=49.0.2`; `quadpack` installs; the document naming
+   `sandbox@1` is `sandbox`'s, bit, canonical, wasmtime `=49.0.5`; `quadpack` installs; the document naming
    `quadpack.quad` is presented without errors; `sandbox.runs` rises by one at that check; `provided` shows the quad
    (positions, normals, uv0, indices, bounds) under a content key; thirty frames change no count.
 2. Pack check: `quadpack.grid@1` admitted, its twin refused at offset 5 (`valid: false`); `acceptpack` refused, naming
@@ -333,7 +333,7 @@ leading `- [ ] ` dropped. Each test's name starts with its criterion's ID.
    `module_missing` naming `sandbox`.
 
 **`#238.46afd887`** (criterion 5, a second implementation) — `implementation.test.ts` (2):
-1. `full` and `full,test-sandbox-alt`: implementations `sandbox` (`=49.0.2`) and `sandbox.alt` (another `=49.0.x`), both
+1. `full` and `full,test-sandbox-alt`: implementations `sandbox` (`=49.0.5`) and `sandbox.alt` (another `=X.Y.Z`), both
    module `sandbox`, bit, canonical; `sandbox@1`'s digest equal; both kits PASS with every case equal. Wrong program: a
    digest over the implementation's pins.
 2. `--planted digest_covers_pins`: `full` still seals; `full,test-sandbox-alt` exits 2, `interface_digest`, `interface:
@@ -394,7 +394,7 @@ into the repo):
 
 ## Readings where the issue leaves a choice
 
-- **"In the app"** is wasmtime 49.0.2 driven by the sandbox module's own code: `deep-sandbox` on macOS arm64 (the kit
+- **"In the app"** is wasmtime 49.0.5 driven by the sandbox module's own code: `deep-sandbox` on macOS arm64 (the kit
   also through deep-show's `kit`, which the app's build seals) and the same binary built for Linux x86_64. **"Headless
   Chrome's own WebAssembly engine"** is the web runner's `run` on the native rewrite's bytes: the browser checks and
   rewrites nothing (the web player runs what the app checked), so the refusal fixtures are compared on the two native
@@ -411,8 +411,10 @@ into the repo):
   is a comparison with the merge base's `eval` nodes and `frames` counts and the sandbox module's own counters, so it
   holds on every machine.
 - **"A test sandbox implementation that pins another wasmtime patch version"**: Cargo resolves one semver-compatible
-  wasmtime per lockfile, so a test build can't link 49.0.2 and another 49.0 patch; these tests read the pin from the
-  implementation record and require the kit to pass bit for bit and the digest to stay. Whether the alt build links the
+  wasmtime per lockfile, so a test build can't link 49.0.5 and another patch; these tests read the pin from the
+  implementation record and require the kit to pass bit for bit and the digest to stay. Since #2324, 49.0.5 is the only
+  49.0 patch past every advisory published against 49.0.2, so the other patch may be of another release line (an exact
+  `=X.Y.Z`); #2324's suite checks that it too is past those advisories. Whether the alt build links the
   version it pins isn't observable through these surfaces and isn't checked.
 - **Naming**: an import as `{module, name}`; an instruction by its text-format name; a function by index; a global by
   index (the mutable funcref global and the extended constant are global 3, after the provider's three); a passive

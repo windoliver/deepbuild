@@ -24,13 +24,13 @@ import type { PlanInput } from '@deepbuild/asks';
 import { call } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant, refusal, Refused, ulid, type Plant } from './wire.js';
+import { shellQuote as q } from './shell.js';
 
 type Obj = Record<string, unknown>;
 /** How long a follower may go without a byte, output or heartbeat, before its connection counts as stalled; a new one may take longer for its first. */
 const STALL_MS = 5000;
 const FIRST_BYTE_MS = 30_000;
 const DAY = 86_400_000;
-const q = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 const sha = (s: string | Uint8Array): string => createHash('sha256').update(s).digest('hex');
 const RUNS = 'd="$HOME/.deepbuild/runs/$1"';
 
@@ -177,8 +177,9 @@ export class Hosts {
   }
   /** Refuses a name your SSH config doesn't name, before anything reaches it. */
   named(host: unknown): string {
-    if (typeof host === 'string' && this.names().includes(host)) return host;
-    throw new Refused(refusal('not_found', '/params/host', `${String(host)} isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. Name one of: ${this.names().join(', ') || 'none'}.`, host));
+    const names = this.names();
+    if (typeof host === 'string' && names.includes(host)) return host;
+    throw new Refused(refusal('not_found', '/params/host', `${String(host)} isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. ${names.length ? `Name one of: ${names.join(', ')}.` : 'It names no host.'}`, host));
   }
 
   /** One ssh call on a connection of its own: the script on its stdin, run by `sh -s` with `args`. */

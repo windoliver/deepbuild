@@ -3,6 +3,9 @@
   "description": "A work source's run or \"Fix <id>\" read (#66): the items it took in, the tasks it opened and the read position after them, in one append, so a stop between them loses nothing and takes nothing twice.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#66",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

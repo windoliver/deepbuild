@@ -11,16 +11,18 @@ pub mod doc;
 pub mod duck;
 pub mod dynamics;
 pub mod emitter;
+pub mod eq;
 pub mod export_checks;
 pub mod fixtures;
-pub mod eq;
 pub mod frames;
-pub mod module;
+pub mod heard;
 pub mod mix;
+pub mod module;
 pub mod reverb;
 pub mod ring;
 pub mod script;
 pub mod spawn;
+pub mod synth;
 pub mod viewer;
 
 /// One second in flicks.
@@ -39,10 +41,14 @@ pub const FLICKS: i64 = 705_600_000;
 /// activity bake that thresholds level instead of the model's probabilities, and a visemes bake
 /// with no lead; and #502's, which deep-show's export and script read: a normalizer that rides
 /// gain to −23 LUFS, a words bake read 200 ms late, and a sidecar writer that times cues at 24 fps;
-/// #935's, which deep-show's check reads: a refusal of a generated sound's asset only when
-/// its audio.gen FAILs, so a BLOCKED one plays; and #157's, a master limiter whose lookahead the
-/// mix doesn't compensate against the picture.
-pub const PLANTED: [&str; 23] = [
+/// #503's, which deep-show's spectrum bake reads: bands spaced evenly in hertz, and a bake that
+/// leaves out the window's normalization; and #935's, which deep-show's check reads: a refusal of
+/// a generated sound's asset only when its audio.gen FAILs, so a BLOCKED one plays; and #157's, a
+/// master limiter whose lookahead the mix doesn't compensate against the picture; and #204's synths:
+/// an osc whose checkpoint keeps its phase in f32, a shaper with a bias, a crush one bit short, a
+/// tail stated at half, params or logic read once a frame, an export on another block, a synth
+/// routed around the master's limiter, and a block grid that starts at each seek.
+pub const PLANTED: [&str; 37] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -64,8 +70,22 @@ pub const PLANTED: [&str; 23] = [
     "normalizer_rides_gain",
     "words_bake_200ms_late",
     "sidecar_times_at_24fps",
+    "spectrum_bands_even_hz",
+    "spectrum_skips_window_norm",
     "unpassed_on_fail_only",
     "limiter_lookahead_uncompensated",
+    "synth_holds_params_per_frame",
+    "osc_phase_f32",
+    "synth_grid_from_seek",
+    "synth_reads_logic_per_frame",
+    "synth_bypasses_master",
+    "spawn_synth_starts_next_block",
+    "export_synth_block_64",
+    "synth_ring_drops_oldest",
+    "shaper_bias",
+    "synth_tail_halved",
+    "steal_keeps_filter_state",
+    "crush_7_bits",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

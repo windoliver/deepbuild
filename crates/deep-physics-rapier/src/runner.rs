@@ -10,24 +10,31 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::planted::Restore;
 use crate::scene::Scene;
-use crate::{fp, Rapier};
+use crate::{fp, Rapier, Twin};
 use base64::Engine;
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Query, ShapeRef, Targets, FIELDS,
+    Backend, BodyState, Canonical, Checkpoint, Input, JointState, Query, ShapeRef, Targets, FIELDS,
 };
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
-use deep_canvas_physics::check::{check, fix};
+use deep_canvas_physics::check::{check, fix, mass_ratios, MASS_RATIO};
 use deep_canvas_physics::doc::{Read, Refusal, World};
 use deep_canvas_physics::golden;
 use deep_canvas_physics::occurrence;
 use deep_canvas_physics::pairs::{pairs, Brief};
+use deep_canvas_physics::ring::{Kept, Ring};
 use deep_canvas_physics::roles::{self, Row};
+use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
+#[cfg(not(target_arch = "wasm32"))]
+mod live;
+mod timeline;
+
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 11] = [
+pub const PLANTED: [&str; 24] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_tangent_speed",
@@ -39,6 +46,19 @@ pub const PLANTED: [&str; 11] = [
     "occurrences_in_engine_order",
     "query_bypasses_backend",
     "query_machines_any",
+    "checkpoint_poses_only",
+    "fork_on_scrub",
+    "restore_keeps_replaced_occurrences",
+    "late_entry_forks",
+    "ring_drops_oldest",
+    "restore_without_warm_start",
+    "simulate_runs_all_steps",
+    "hinge_coordinate_wraps",
+    "checkpoint_drops_turns",
+    "speed_cap_silent",
+    "joint_force_per_step",
+    "solve_cap_reports_success",
+    "mass_ratio_declared_only",
 ];
 
 /// The reply to a line that isn't a call.
@@ -60,7 +80,23 @@ pub struct Run {
     /// `machines: any` whatever its golden's standing.
     bypass: bool,
     machines_any: bool,
+    /// #523 criterion 7's twin: the mass-ratio check reads only declared masses.
+    declared_masses_only: bool,
+    /// #523's backend twins.
+    twin: Twin,
     build: Build,
+    /// #522's twins: what a restore leaves out; a ring that drops its oldest; a scrub that forks;
+    /// a late entry's restore that keeps the replaced steps' occurrences, or that forks; a live
+    /// frame that runs every step it needs.
+    restore: Restore,
+    ring_drops_oldest: bool,
+    fork_on_scrub: bool,
+    keeps_replaced: bool,
+    late_forks: bool,
+    all_steps: bool,
+    /// The views this runner holds open, by session (#522).
+    #[cfg(not(target_arch = "wasm32"))]
+    views: std::cell::RefCell<BTreeMap<String, live::View>>,
 }
 
 /// A refusal as the check's issue (What holds a document to its rules), its IDs the entry its
@@ -107,6 +143,11 @@ fn checkpoint_of(c: &Value) -> Option<Checkpoint> {
             .decode(c.get("state")?.as_str()?)
             .ok()?,
     })
+}
+
+/// A bake's ring as its reply names it: its spacing at the end, budget, bytes and peak bytes.
+fn ring(t: &Trace) -> Value {
+    json!({"every": t.ring.spacing, "budget": t.ring.budget, "bytes": t.ring.bytes(), "peak": t.peak})
 }
 
 /// A shape use as the surface names it: its body, its index among the body's shapes and its shape.
@@ -246,7 +287,53 @@ fn keep(dir: &str, key: &str, record: &Value) -> Result<(), Value> {
         .map_err(|e| json!({"ok": false, "code": "store", "what": format!("the bake couldn't be kept in the store: {e}")}))
 }
 
+/// A world's input track, resolved against the inputs it declares: its entries in the order they
+/// apply, and each step's as the backend's inputs (an entry stamped k applies at the start of the
+/// step from the state after k steps).
+#[derive(Clone, Debug, Default)]
+struct Track {
+    entries: Vec<Entry>,
+    by_step: BTreeMap<u64, Vec<Input>>,
+}
+
+static NO_TRACK: Track = Track {
+    entries: Vec::new(),
+    by_step: BTreeMap::new(),
+};
+
+impl Track {
+    fn of(entries: Vec<Entry>) -> Track {
+        let mut by_step: BTreeMap<u64, Vec<Input>> = BTreeMap::new();
+        for (step, list) in track::by_step(&entries) {
+            let inputs = list.into_iter().map(|e| Input {
+                kind: e.kind,
+                target: e.target,
+                data: Value::Object(e.data),
+            });
+            by_step.insert(step, inputs.collect());
+        }
+        let mut entries = entries;
+        track::order(&mut entries);
+        Track { entries, by_step }
+    }
+
+    /// The track as the bake key and a reply hold it: `[]` for none.
+    fn json(&self) -> Value {
+        Value::Array(self.entries.iter().map(Entry::json).collect())
+    }
+
+    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry.
+    fn read(w: &World, call: &Value) -> Result<Track, Value> {
+        let t = call.get("track").unwrap_or(&Value::Null);
+        if t.is_null() {
+            return Ok(Track::default());
+        }
+        track::read(w, t).map(Track::of).map_err(|r| refused(&[*r]))
+    }
+}
+
 /// What one run steps and takes besides its hashes.
+#[derive(Clone)]
 struct Plan<'a> {
     steps: u64,
     /// The scene whose paths each step reads at its own time (#1918).
@@ -259,6 +346,8 @@ struct Plan<'a> {
     ftz_at: Option<u64>,
     /// After this step, moves `(body, field, ulps)` before its hash and checkpoint are taken.
     shift: Option<(u64, String, usize, i64)>,
+    /// The input track it applies (#522).
+    track: &'a Track,
 }
 
 /// What a run took.
@@ -266,11 +355,16 @@ struct Plan<'a> {
 struct Trace {
     bodies: Map<String, Value>,
     step_hashes: Vec<String>,
-    checkpoints: Vec<Value>,
+    /// The checkpoint ring (#522), and the most bytes it held at any moment.
+    ring: Ring,
+    peak: u64,
     /// The canonical state at each checkpoint's step.
     at: BTreeMap<u64, Vec<Canonical>>,
     /// Each output's body's position after each step.
     positions: BTreeMap<String, Vec<[f32; 3]>>,
+    /// #523: each joint output's reading after each step: whether it is joint_force's
+    /// `{force, torque}`, and the values.
+    readings: BTreeMap<String, (bool, Vec<[f64; 2]>)>,
     /// The occurrence list, each step's rows sorted (#1918).
     occurrences: Vec<occurrence::Row>,
     /// The list as #2011's shape uses, for `bake` with `occurrences: true`.
@@ -356,7 +450,17 @@ impl Run {
             engine_order: false,
             bypass: false,
             machines_any: false,
+            declared_masses_only: false,
+            twin: Twin::None,
             build: crate::build(),
+            restore: Restore::Whole,
+            ring_drops_oldest: false,
+            fork_on_scrub: false,
+            keeps_replaced: false,
+            late_forks: false,
+            all_steps: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            views: std::cell::RefCell::default(),
         };
         match planted {
             None => {}
@@ -371,9 +475,44 @@ impl Run {
             Some("occurrences_in_engine_order") => run.engine_order = true,
             Some("query_bypasses_backend") => run.bypass = true,
             Some("query_machines_any") => run.machines_any = true,
+            Some("checkpoint_poses_only") => run.restore = Restore::PosesOnly,
+            Some("restore_without_warm_start") => run.restore = Restore::NoWarmStart,
+            Some("fork_on_scrub") => run.fork_on_scrub = true,
+            Some("restore_keeps_replaced_occurrences") => run.keeps_replaced = true,
+            Some("late_entry_forks") => run.late_forks = true,
+            Some("ring_drops_oldest") => run.ring_drops_oldest = true,
+            Some("simulate_runs_all_steps") => run.all_steps = true,
+            Some("hinge_coordinate_wraps") => run.twin = Twin::CoordinateWraps,
+            Some("checkpoint_drops_turns") => run.twin = Twin::CheckpointDropsTurns,
+            Some("speed_cap_silent") => run.twin = Twin::SpeedCapSilent,
+            Some("joint_force_per_step") => run.twin = Twin::ForcePerStep,
+            Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
+            Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some(_) => return None,
         }
         Some(run)
+    }
+
+    /// #523: `physics.mass_ratio` for each joint whose two dynamic bodies' masses, declared or
+    /// density × volume, differ by more than 10:1; the planted check reads declared masses only.
+    fn mass_ratios(&self, w: &World, b: &Rapier) -> Vec<Value> {
+        let mass = |id: &str| {
+            let declared = w.bodies.get(id).and_then(|x| x.mass);
+            if self.declared_masses_only {
+                declared
+            } else {
+                declared.or_else(|| b.shapes_mass(id))
+            }
+        };
+        mass_ratios(w, mass)
+            .into_iter()
+            .map(|(joint, a, b, ratio)| {
+                let what = format!("joint {joint} holds {a} and {b}, whose masses differ by {ratio:.4}:1, more than 10:1, so the chain jitters or blows apart");
+                json!({"check": "document.validate", "code": MASS_RATIO, "severity": "warning",
+                       "ids": [joint, a, b], "path": format!("joints/{joint}"), "actual": ratio,
+                       "ratio": ratio, "t": Value::Null, "what": what, "fix": fix(MASS_RATIO)})
+            })
+            .collect()
     }
 
     /// The reply line to one call line.
@@ -384,9 +523,9 @@ impl Run {
             .map_or_else(|| BAD_INPUT.to_string(), |r| r.to_string())
     }
 
-    fn hash(&self, s: &[Canonical]) -> String {
+    fn hash(&self, s: &[Canonical], joints: &[JointState]) -> String {
         if !self.round_hashes {
-            return golden::step_hash(s);
+            return golden::step_hash(s, joints);
         }
         let rounded: Vec<Canonical> = s
             .iter()
@@ -397,15 +536,17 @@ impl Run {
                     .map(|v| ((f64::from(v) * 1e6).round() / 1e6) as f32),
             })
             .collect();
-        golden::step_hash(&rounded)
+        golden::step_hash(&rounded, joints)
     }
 
     /// The bake key of `world` at `rate` over `steps`, with what it reads of its scene (`[]` when
-    /// nothing); a golden's when `target` is `None`. Worlds take no input yet (#522).
+    /// nothing) and its input track's entries as resolved (`[]` when none, #522); a golden's when
+    /// `target` is `None`.
     fn key(
         &self,
         world: &Value,
         reads: &Value,
+        track: &Value,
         rate: &str,
         steps: u64,
         target: Option<&str>,
@@ -413,7 +554,7 @@ impl Run {
         let parts = Parts {
             world,
             reads,
-            track: &json!([]),
+            track,
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
@@ -427,6 +568,7 @@ impl Run {
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
+            twin: self.twin,
             ..Rapier::default()
         };
         b.build(&w).map_err(refused)?;
@@ -454,11 +596,22 @@ impl Run {
     /// The state after step `k` into `t`.
     fn take(&self, b: &Rapier, w: &World, plan: &Plan, t: &mut Trace, k: u64, start: u64) {
         let c = b.canonical();
-        t.step_hashes.push(self.hash(&c));
+        let joints = b.joints();
+        t.step_hashes.push(self.hash(&c, &joints));
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read == Read::Position) {
             if let Some(body) = c.iter().find(|x| x.id == o.from) {
                 let p = [body.values[0], body.values[1], body.values[2]];
                 t.positions.entry(id.clone()).or_default().push(p);
+            }
+        }
+        for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
+            if let Some(j) = joints.iter().find(|j| j.id == o.from) {
+                let (pair, v) = match o.read {
+                    Read::JointCoordinate => (false, [j.coordinate.unwrap_or(0.0), 0.0]),
+                    _ => (true, [j.force, j.torque]),
+                };
+                let e = t.readings.entry(id.clone()).or_insert((pair, Vec::new()));
+                e.1.push(v);
             }
         }
         if (k - start).is_multiple_of(plan.every) {
@@ -468,8 +621,17 @@ impl Run {
                 }
             }
         }
+        if k > start && t.ring.due(k) {
+            let cp = b.checkpoint();
+            let kept = Kept {
+                deep_hash: golden::deep_hash(&cp.state),
+                step_hash: t.step_hashes.last().cloned().unwrap_or_default(),
+                checkpoint: cp,
+            };
+            t.ring.offer(kept);
+            t.peak = t.peak.max(t.ring.bytes());
+        }
         if k > start && k.is_multiple_of(w.checkpoint_every) {
-            t.checkpoints.push(checkpoint(&b.checkpoint()));
             t.at.insert(k, c);
         }
     }
@@ -478,6 +640,10 @@ impl Run {
     fn run(&self, b: &mut Rapier, w: &World, plan: &Plan, t: &mut Trace) -> Result<(), Stop> {
         let start = b.read().step;
         let rank = occurrence::ranks(w);
+        if t.ring.spacing == 0 {
+            t.ring = Ring::new(w.checkpoint_every, w.checkpoint_budget);
+            t.ring.drops_oldest = self.ring_drops_oldest;
+        }
         self.take(b, w, plan, t, start, start);
         for k in start + 1..=start + plan.steps {
             if plan.ftz_at == Some(k) {
@@ -490,7 +656,12 @@ impl Run {
                 }
             }
             let targets = plan.scene.map_or_else(Targets::default, |s| s.targets(k));
-            b.step(&[], &targets)
+            let inputs = plan
+                .track
+                .by_step
+                .get(&(k - 1))
+                .map_or(&[][..], Vec::as_slice);
+            b.step(inputs, &targets)
                 .map_err(|r| Stop::Refused(json!({"ok": false, "issues": [issue(&r)]})))?;
             if self.engine_order {
                 t.occurrences
@@ -519,7 +690,6 @@ impl Run {
         world: &Value,
         plan: &Plan,
     ) -> Result<(String, Trace, Value), Value> {
-        let steps = plan.steps;
         let (rate, frame) = rate(call)?;
         let (w, mut b) = self.build(world)?;
         let mut t = Trace {
@@ -530,20 +700,7 @@ impl Run {
             Stop::Refused(v) => v,
             Stop::Register(step, what) => json!({"ok": false, "code": "physics.fp_control", "step": step, "register": fp::REGISTER, "what": what}),
         })?;
-        let key = self.key(
-            world,
-            &reads(plan, steps),
-            &rate,
-            steps,
-            Some(&self.build.target),
-        );
-        let outputs = bake::outputs(&t.positions, &rate, frame, w.step_rate, steps);
-        let rank = occurrence::ranks(&w);
-        t.shaped = shape_uses(&t.occurrences, &w);
-        let record = json!({"key": key, "step_hashes": t.step_hashes, "checkpoints": t.checkpoints, "outputs": outputs,
-                            "positions": t.positions,
-                            "occurrences": occurrence::listed(&t.occurrences),
-                            "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
+        let (key, record) = self.record(world, &w, plan, (&rate, frame), &mut t);
         if let Some(dir) = call.get("store") {
             keep(
                 dir.as_str()
@@ -555,6 +712,38 @@ impl Run {
         Ok((key, t, record))
     }
 
+    /// A bake's key and the record a store keeps of it, from the run `t` of `plan.steps` steps:
+    /// its step hashes, its ring and the checkpoints it keeps, its outputs, positions and
+    /// occurrence list, and the track it applied.
+    fn record(
+        &self,
+        world: &Value,
+        w: &World,
+        plan: &Plan,
+        (rate, frame): (&str, i64),
+        t: &mut Trace,
+    ) -> (String, Value) {
+        let steps = plan.steps;
+        let track = plan.track.json();
+        let key = self.key(
+            world,
+            &reads(plan, steps),
+            &track,
+            rate,
+            steps,
+            Some(&self.build.target),
+        );
+        let outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
+        let rank = occurrence::ranks(w);
+        t.shaped = shape_uses(&t.occurrences, w);
+        let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
+                            "checkpoints": t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint)).collect::<Vec<_>>(),
+                            "outputs": outputs, "positions": t.positions, "track": track,
+                            "occurrences": occurrence::listed(&t.occurrences),
+                            "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
+        (key, record)
+    }
+
     /// The reply to one call, or `None` for a call it doesn't take.
     pub fn answer(&self, call: &Value) -> Option<Value> {
         let steps = || call.get("steps").and_then(Value::as_u64);
@@ -564,8 +753,11 @@ impl Run {
                 match self
                     .subject(call)?
                     .and_then(|(world, _)| self.build(&world))
+                    .and_then(|(w, b)| Track::read(&w, call).map(|_| (w, b)))
                 {
-                    Ok((_, b)) => json!({"ok": true, "issues": [], "built": b.built()}),
+                    Ok((w, b)) => {
+                        json!({"ok": true, "issues": self.mass_ratios(&w, &b), "built": b.built()})
+                    }
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),
                 },
             ),
@@ -580,6 +772,10 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
+                let track = match self.build(&world).and_then(|(w, _)| Track::read(&w, call)) {
+                    Ok(t) => t,
+                    Err(e) => return Some(e),
+                };
                 let plan = Plan {
                     steps: steps()?,
                     scene: scene.as_ref(),
@@ -587,6 +783,7 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
+                    track: &track,
                 };
                 let with_checkpoints = call
                     .get("checkpoints")
@@ -603,27 +800,26 @@ impl Run {
                     let key = self.key(
                         &world,
                         &reads(&plan, plan.steps),
+                        &track.json(),
                         &rate,
                         plan.steps,
                         Some(&self.build.target),
                     );
-                    if self.build(&world).is_ok() {
-                        if let Some(r) = stored(dir, &key) {
-                            return Some(
-                                json!({"ok": true, "key": key, "step_hashes": r["step_hashes"],
-                                       "outputs": r["outputs"], "occurrences": r["occurrences"],
-                                       "occurrences_hash": r["occurrences_hash"], "reused": true}),
-                            );
-                        }
+                    if let Some(r) = stored(dir, &key) {
+                        return Some(
+                            json!({"ok": true, "key": key, "step_hashes": r["step_hashes"],
+                                   "outputs": r["outputs"], "occurrences": r["occurrences"],
+                                   "occurrences_hash": r["occurrences_hash"], "ring": r["ring"], "reused": true}),
+                        );
                     }
                 }
                 done(self.bake(call, &world, &plan).map(|(key, t, record)| {
                     let mut reply = json!({"ok": true, "key": key, "bodies": t.bodies,
                                            "step_hashes": t.step_hashes, "outputs": record["outputs"],
                                            "occurrences": record["occurrences"],
-                                           "occurrences_hash": record["occurrences_hash"]});
+                                           "occurrences_hash": record["occurrences_hash"], "ring": record["ring"]});
                     if with_checkpoints {
-                        reply["checkpoints"] = Value::Array(t.checkpoints);
+                        reply["checkpoints"] = record["checkpoints"].clone();
                     }
                     if call.get("occurrences") == Some(&json!(true)) {
                         reply["occurrences"] = Value::Array(t.shaped);
@@ -643,6 +839,14 @@ impl Run {
                 let with_checkpoints = call
                     .get("checkpoints")
                     .map_or(Some(false), Value::as_bool)?;
+                let (w, mut b) = match self.build(&world) {
+                    Ok(x) => x,
+                    Err(e) => return Some(e),
+                };
+                let track = match Track::read(&w, call) {
+                    Ok(t) => t,
+                    Err(e) => return Some(e),
+                };
                 let plan = Plan {
                     steps: steps()?,
                     scene: scene.as_ref(),
@@ -650,16 +854,15 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
+                    track: &track,
                 };
-                let (w, mut b) = match self.build(&world) {
-                    Ok(x) => x,
-                    Err(e) => return Some(e),
-                };
+                let built = b.checkpoint();
                 if let Err(r) = b.restore(&cp) {
                     return Some(
                         json!({"ok": false, "code": r.code, "path": r.path, "actual": r.actual, "what": r.what}),
                     );
                 }
+                b.plant(self.restore, &built);
                 let mut t = Trace {
                     bodies: series(call, &b)?,
                     ..Trace::default()
@@ -672,7 +875,8 @@ impl Run {
                                        "occurrences": occurrence::listed(&t.occurrences),
                                        "occurrences_hash": occurrence::hash(&t.occurrences, &rank)});
                 if with_checkpoints {
-                    reply["checkpoints"] = Value::Array(t.checkpoints);
+                    let kept = t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint));
+                    reply["checkpoints"] = Value::Array(kept.collect());
                 }
                 Some(reply)
             }
@@ -686,7 +890,14 @@ impl Run {
                 if let Err(e) = self.build(world) {
                     return Some(e);
                 }
-                let key = self.key(world, &json!([]), &rate, steps, Some(&self.build.target));
+                let key = self.key(
+                    world,
+                    &json!([]),
+                    &json!([]),
+                    &rate,
+                    steps,
+                    Some(&self.build.target),
+                );
                 Some(match stored(dir, &key) {
                     Some(r) => {
                         json!({"ok": true, "key": key, "outputs": r["outputs"], "occurrences": r["occurrences"]})
@@ -706,6 +917,10 @@ impl Run {
                     .iter()
                     .map(Value::as_str)
                     .collect::<Option<_>>()?;
+                let track = match self.build(world).and_then(|(w, _)| Track::read(&w, call)) {
+                    Ok(t) => t,
+                    Err(e) => return Some(e),
+                };
                 let plan = Plan {
                     steps: steps()?,
                     scene: None,
@@ -713,6 +928,7 @@ impl Run {
                     guard: true,
                     ftz_at: None,
                     shift: None,
+                    track: &track,
                 };
                 let (rate, _) = match rate(call) {
                     Ok(r) => r,
@@ -726,7 +942,7 @@ impl Run {
                         .map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
                         .collect();
                     json!({"ok": true, "golden": {
-                        "bake_key": self.key(world, &json!([]), &rate, plan.steps, None),
+                        "bake_key": self.key(world, &json!([]), &track.json(), &rate, plan.steps, None),
                         "runtime_digest": self.build.runtime_digest(), "machine": machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
@@ -734,6 +950,14 @@ impl Run {
                 }))
             }
             "golden_verify" => self.verify(call),
+            "seek" => self.seek(call),
+            "determinism" => self.determinism(call),
+            #[cfg(not(target_arch = "wasm32"))]
+            "view" => self.view(call),
+            #[cfg(not(target_arch = "wasm32"))]
+            "frame" => self.frame(call),
+            #[cfg(not(target_arch = "wasm32"))]
+            "record" => self.recorded(call),
             "query" => self.query(call),
             #[cfg(feature = "test-count-calls")]
             "backend_calls" => {
@@ -848,7 +1072,14 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
-        let key = self.key(world, &json!([]), &rate, steps, Some(&self.build.target));
+        let key = self.key(
+            world,
+            &json!([]),
+            &json!([]),
+            &rate,
+            steps,
+            Some(&self.build.target),
+        );
         let Some(bake) = stored(dir, &key) else {
             let what = format!("the store holds no bake under {key}: physics.query reads a bake and never steps or bakes the world");
             return Some(
@@ -981,6 +1212,7 @@ impl Run {
                     guard: false,
                     ftz_at: None,
                     shift: None,
+                    track: &NO_TRACK,
                 };
                 if let Err(Stop::Refused(v)) = self.run(&mut b, &w, &plan, &mut Trace::default()) {
                     return Some(v);
@@ -1060,6 +1292,7 @@ impl Run {
                 .map(Value::as_u64)
                 .map_or(Some(None), |s| s.map(Some))?,
             shift,
+            track: &NO_TRACK,
         };
         let dir = call
             .get("store")
@@ -1073,7 +1306,7 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
-        let key = self.key(world, &json!([]), &rate, plan.steps, None);
+        let key = self.key(world, &json!([]), &json!([]), &rate, plan.steps, None);
         let digest = self.build.runtime_digest();
         let here = machine(&self.build.target);
         let machines = golden::machines(g, &here);
@@ -1118,7 +1351,14 @@ impl Run {
             let target = g["record_on"].as_str()?;
             let bake = stored(
                 dir,
-                &self.key(world, &json!([]), &rate, plan.steps, Some(target)),
+                &self.key(
+                    world,
+                    &json!([]),
+                    &json!([]),
+                    &rate,
+                    plan.steps,
+                    Some(target),
+                ),
             )?;
             let cp = bake["checkpoints"]
                 .as_array()?
@@ -1186,5 +1426,71 @@ mod wasm {
         };
         let n = reply.len();
         (leak(reply.into_bytes()) as u64) << 32 | n as u64
+    }
+}
+
+/// #525: a world its scene steps one step at a time while sound plays, each step the bake's own
+/// (its scene's targets, the inputs its track derives, its rows sorted), so a live world's list
+/// is the bake's whenever the track is the same.
+pub struct Live {
+    w: World,
+    b: Rapier,
+    scene: Option<Scene>,
+    rank: BTreeMap<String, u32>,
+    /// The entries its scene's input track derives (#522's track).
+    track: Track,
+    /// Steps run.
+    pub steps: u64,
+}
+
+impl Run {
+    /// The world a `{scene, world}` call names, built to step live.
+    pub fn live(&self, call: &Value) -> Result<Live, Value> {
+        let (world, scene) = self
+            .subject(call)
+            .unwrap_or_else(|| Err(json!({"ok": false, "code": "bad_input"})))?;
+        let (w, b) = self.build(&world)?;
+        let rank = occurrence::ranks(&w);
+        Ok(Live {
+            w,
+            b,
+            scene,
+            rank,
+            track: Track::default(),
+            steps: 0,
+        })
+    }
+}
+
+impl Live {
+    /// Its step length, in flicks.
+    pub fn step_flicks(&self) -> i64 {
+        occurrence::step_flicks(&self.w)
+    }
+
+    /// The inputs the core input track `track` derives, which the steps not yet run take.
+    pub fn track(&mut self, track: &[Value]) {
+        let derived = track::from_controls(&self.w, self.step_flicks(), track);
+        self.track = Track::of(derived.into_iter().map(|(_, e)| e).collect());
+    }
+
+    /// The next step, and its rows as a bake's scene reads them, each stamped with its `t`.
+    pub fn step(&mut self) -> Result<Vec<Value>, Value> {
+        let k = self.steps + 1;
+        let targets = self
+            .scene
+            .as_ref()
+            .map_or_else(Targets::default, |s| s.targets(k));
+        let inputs = self
+            .track
+            .by_step
+            .get(&(k - 1))
+            .map_or(&[][..], Vec::as_slice);
+        self.b
+            .step(inputs, &targets)
+            .map_err(|r| json!({"ok": false, "issues": [issue(&r)]}))?;
+        self.steps = k;
+        let rows = occurrence::sorted(k as u32, self.b.occurrences(), &self.rank);
+        Ok(occurrence::timed(&occurrence::listed(&rows), &self.w))
     }
 }

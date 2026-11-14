@@ -1,0 +1,117 @@
+{
+  "title": "staged.undone@1",
+  "description": "A staged command was undone from its copy (#1577): each staged folder and file holds again what the copy held. Only you undo one, from the app or the CLI, and the write names the staging by its handle.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "staged.undone"
+    },
+    "writer": {
+      "type": "string",
+      "enum": [
+        "app",
+        "cli"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind.",
+      "x-closure": {
+        "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+        "reopens": "a new major of this schema",
+        "mark": "exhaustive"
+      }
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "staged": {
+          "type": "string",
+          "pattern": "^staged:[0-9A-Za-z]+$",
+          "description": "The staging undone, by its handle.",
+          "maxLength": 8192
+        },
+        "folders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 256,
+          "description": "The folders put back from the copy."
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "description": "The files put back from the copy."
+        }
+      },
+      "required": [
+        "staged",
+        "folders",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -2,7 +2,7 @@
 //! world as the step found it. The gather only reads, so a world's bytes, hashes and checkpoints
 //! are what they were; touching and sensing pairs and sleep come from the world itself, so a
 //! restored world reads them again with nothing kept beside it. A breakable joint's steps past its
-//! threshold are counted in its own `user_data`, which the world's bytes carry.
+//! threshold are counted in its own `user_data`, which the world's bytes carry (joints.rs).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -11,7 +11,7 @@ use deep_canvas_physics::occurrence::{code, Payload, Raw};
 use rapier3d::parry::query::intersection_test;
 use rapier3d::prelude::*;
 
-use crate::Rapier;
+use crate::{joints, Rapier};
 
 type Key = (u32, u32);
 /// A pair as the engine holds it: (collider1, collider2).
@@ -258,29 +258,25 @@ impl Rapier {
         out
     }
 
-    /// Each breakable joint's force and torque after the step, from its lock impulses over the
-    /// substep they came from; one past `breaks_at` for `over_steps` steps is disabled and writes
-    /// `break`. The count lives in the joint's `user_data`, written only when it changes.
+    /// Each breakable joint's force and torque after the step (#523: its locks' and limits', never
+    /// its motor's); one past `breaks_at` for `over_steps` steps is disabled and writes `break`. The
+    /// count lives in the joint's `user_data` beside its turns, written only when it changes.
     pub(crate) fn breaks(&mut self) -> Vec<Raw> {
-        let p = &self.world.integration_parameters;
-        let substep = p.dt / p.num_solver_iterations.max(1) as f32;
         let mut out = Vec::new();
         let breakable: Vec<(String, ImpulseJointHandle, Breaks)> = self.breakable.clone();
         for (id, h, b) in breakable {
-            let Some(j) = self
+            let enabled = self
                 .world
                 .impulse_joints
                 .get(h)
-                .filter(|j| j.data.is_enabled())
-            else {
+                .filter(|j| j.data.is_enabled());
+            let (Some(j), Some((force, torque))) = (enabled, self.load(h)) else {
                 continue;
             };
-            let i = j.impulses;
-            let force = Vector::new(i[0], i[1], i[2]).length() / substep;
-            let torque = Vector::new(i[3], i[4], i[5]).length() / substep;
             let past = b.force.is_some_and(|x| f64::from(force) > x)
                 || b.torque.is_some_and(|x| f64::from(torque) > x);
-            let count = j.data.user_data as u32;
+            let u = j.data.user_data;
+            let count = joints::past(u);
             let next = if past { count + 1 } else { 0 };
             if next == count {
                 continue;
@@ -288,7 +284,7 @@ impl Rapier {
             let Some(j) = self.world.impulse_joints.get_mut(h, false) else {
                 continue;
             };
-            j.data.user_data = u128::from(next);
+            j.data.user_data = joints::packed(next, joints::turns(u));
             if next >= b.over_steps {
                 j.data.set_enabled(false);
                 let payload = Payload::Break { force, torque };

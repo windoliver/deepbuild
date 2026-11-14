@@ -108,6 +108,56 @@ function emitted(item, m) {
   return { rows };
 }
 
+// A point entry's 248 B record at `o`, then a box release's unit keys (u32 n, u32 truncated,
+// n × (u32 slot, u32 gen)), as crates/deep-logic/src/point.rs lays them out from the value the
+// track holds (Control: point); its length. The codes are that file's: change them together.
+const POINT = {
+  phase: { press: 0, move: 1, release: 2 },
+  button: { primary: 0, secondary: 1, middle: 2 },
+  mods: { shift: 1, ctrl: 2, alt: 4, meta: 8 },
+  flag: { cell: 1, ground: 2, hit: 4, corners: 8, surface: 16, uv: 32, ray: 64, units: 128 },
+};
+function pointRecord(d, o, v) {
+  const put = (at, xs) => xs.forEach((x, i) => d.setFloat64(o + at + 8 * i, x, true));
+  let flags = 0;
+  if (v.cell != null) { flags |= POINT.flag.cell; put(8, [v.cell[0], v.cell[1], 0]); }
+  if (v.ground != null) { flags |= POINT.flag.ground; put(8, v.ground); }
+  if (v.hit != null) {
+    flags |= POINT.flag.hit;
+    d.setUint32(o + 32, v.hit.set, true);
+    d.setBigInt64(o + 40, BigInt(v.hit.key[0]), true);
+    d.setBigInt64(o + 48, BigInt(v.hit.key[1]), true);
+  }
+  if (v.corners != null) {
+    // A corner whose ray met nothing stays zero; the flag only when all four met.
+    if (v.corners.every((c) => c != null)) flags |= POINT.flag.corners;
+    v.corners.forEach((c, i) => { if (c != null) put(56 + 24 * i, c); });
+  }
+  if (v.surface != null) {
+    flags |= POINT.flag.surface;
+    put(8, v.surface.point);
+    if (v.surface.normal != null) put(152, v.surface.normal);
+    if (v.surface.uv != null) { flags |= POINT.flag.uv; put(176, v.surface.uv); }
+    if (v.surface.face != null) d.setUint32(o + 192, v.surface.face, true);
+  }
+  if (v.ray != null) { flags |= POINT.flag.ray; put(200, v.ray.origin); put(224, v.ray.dir); }
+  let mods = 0;
+  for (const [name, bit] of Object.entries(POINT.mods)) if (v.mods?.[name]) mods |= bit;
+  d.setUint8(o, POINT.phase[v.phase]);
+  d.setUint8(o + 1, POINT.button[v.button]);
+  d.setUint8(o + 2, mods);
+  let size = 248;
+  if (v.units != null) {
+    flags |= POINT.flag.units;
+    d.setUint32(o + 248, v.units.keys.length, true);
+    d.setUint32(o + 252, v.units.truncated ? 1 : 0, true);
+    v.units.keys.forEach(([slot, gen], i) => { d.setUint32(o + 256 + 8 * i, slot, true); d.setUint32(o + 260 + 8 * i, gen, true); });
+    size += 8 + 8 * v.units.keys.length;
+  }
+  d.setUint8(o + 3, flags);
+  return size;
+}
+
 function trackOf(entries) {
   const out = new Map();
   for (const e of entries) { if (!out.has(e.control)) out.set(e.control, []); out.get(e.control).push(e); }
@@ -236,10 +286,38 @@ class World {
     const region = new Uint8Array(size);
     const d = new DataView(region.buffer);
     for (const e of item.regions) {
-      if (e.read === 'control') {
+      if (e.read === 'control' && e.type === 'text') {
+        // A text commit's bytes come with its control kind (#542).
+      } else if (e.read === 'control') {
         const list = taken.get(e.name);
         d.setUint32(e.offset, list.length, true);
-        list.forEach((x, j) => { d.setUint32(e.offset + 8 + 16 * j, x.player, true); d.setFloat64(e.offset + 16 + 16 * j, x.value, true); });
+        // Each entry a u32 player, 4 zero bytes and its value as the control's form lays it
+        // out: a number's f64, a pick's u32 set, 4 zero bytes, i64 key[0], i64 key[1], or a
+        // point's 248 B record.
+        const stride = (e.size - 8) / PER_STEP;
+        // #540: a point control's entries packed end to end, each its record and any unit keys.
+        if (e.type === 'point') {
+          let o = e.offset + 8;
+          for (const x of list) {
+            if (typeof x.value !== 'object' || x.value === null || !('phase' in x.value)) continue;
+            d.setUint32(o, x.player, true);
+            o += 8 + pointRecord(d, o + 8, x.value);
+          }
+          continue;
+        }
+        list.forEach((x, j) => {
+          const o = e.offset + 8 + stride * j;
+          d.setUint32(o, x.player, true);
+          const object = typeof x.value === 'object' && x.value !== null;
+          const point = object && 'phase' in x.value;
+          const pick = object && !point;
+          if (!object && stride === 16) d.setFloat64(o + 8, x.value, true);
+          if (pick && stride === 32) {
+            d.setUint32(o + 8, x.value.set, true);
+            d.setBigInt64(o + 16, BigInt(x.value.key[0]), true);
+            d.setBigInt64(o + 24, BigInt(x.value.key[1]), true);
+          }
+        });
       } else if (e.read === 'array') {
         region.set(snapshot[e.from].subarray(e.from_offset, e.from_offset + e.size), e.offset);
       } else if (e.read === 'seed') {

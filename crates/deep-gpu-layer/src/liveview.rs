@@ -22,13 +22,13 @@ use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Labels, Refused};
 use deep_effects_render::docops::{item_of_mark, DocOps, Fusing, Pool, Rec, Row, Times};
-use deep_scene3d_render::created::Created;
 use deep_effects_render::runner::Frame;
 use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
 use deep_gpu::surface::{allocate, Handoff, Path};
+use deep_scene3d_render::created::Created;
 use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
 pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
 #[cfg(feature = "test-meter")]
@@ -348,6 +348,21 @@ impl Timer {
         }
     }
 
+    /// [`Timer::resolve`] in a submission of its own, once the frame's work is done (#239):
+    /// Metal orders no read of a counter sample against the pass that writes it, so a resolve in
+    /// the frame's own encoder could copy the last pass's end before its fragment stage wrote it,
+    /// and read the frame before's.
+    pub fn resolve_after(&self, device: &Device) {
+        if !self.timed() || self.n == 0 {
+            return;
+        }
+        outside(|| {
+            let mut encoder = device.device.create_command_encoder(&Default::default());
+            self.resolve(&mut encoder);
+            device.queue.submit([encoder.finish()]);
+        });
+    }
+
     /// After the frame's work is done: each pass's ticks, and whether they resolved (#1899).
     pub fn read(&mut self, device: &Device) -> bool {
         let Some((_, _, read, _)) = &self.query else {
@@ -570,7 +585,12 @@ impl View {
     /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
     /// they draw with is compiled before its first frame; none of them is a frame's, so the
     /// first frame after it encodes each batch (#1903).
-    pub fn warm(&mut self, device: &Device, look: &Look3, scenes: &[deep_canvas_scene3d::scene::Scene]) {
+    pub fn warm(
+        &mut self,
+        device: &Device,
+        look: &Look3,
+        scenes: &[deep_canvas_scene3d::scene::Scene],
+    ) {
         self.renderer.log.warming = true;
         for scene in scenes {
             self.renderer.prepare(device, scene, look);
@@ -745,7 +765,9 @@ impl View {
             }
             // #467: a 2D frame that draws what the view last drew records nothing.
             Content::Flat(flat) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
-                let still = flat.still(t).map_err(|(code, path)| Refused { code, path })?;
+                let still = flat
+                    .still(t)
+                    .map_err(|(code, path)| Refused { code, path })?;
                 if still && self.shown.is_some() {
                     return Ok(false);
                 }

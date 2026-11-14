@@ -15,6 +15,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod axes;
 mod blur;
 mod budget;
 mod calibrate;
@@ -28,8 +29,8 @@ mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
 mod fed;
-mod fix;
 mod film;
+mod fix;
 mod fixtures;
 mod flat;
 mod frames;
@@ -57,6 +58,7 @@ mod scene;
 mod seam;
 mod session3;
 mod simplify;
+mod spawn;
 mod status;
 mod steps_ref;
 #[cfg(feature = "test-meter")]
@@ -64,7 +66,9 @@ mod testgpu;
 mod textures;
 mod timing;
 mod tone;
+mod trails;
 mod validation;
+mod video;
 mod view3d;
 mod warm;
 mod window;
@@ -403,6 +407,11 @@ pub enum Planted {
     WaitClockAfterWarmup,
     /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
     PicksLargestGain,
+    /// #503's wrong programs: a point set's video frame chosen at a time that advances only on a
+    /// played step, so a session opened later or a seek keeps the frame decoded before it; the
+    /// video background's frame prefiltered into the environment, keyed per frame.
+    PointVideoKeepsFrameBeforeSeek,
+    VideoBackgroundPrefiltered,
     /// #449's wrong programs (tests/acceptance/449/README.md: Planted programs).
     CountCap65536EveryClass,
     CountCap1048576EveryClass,
@@ -417,6 +426,12 @@ pub enum Planted {
     SurfaceBindPose,
     InheritPreviousFrame,
     BoundsBindPose,
+    /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
+    TrailAppendsPerFrame,
+    /// #226's wrong programs (tests/acceptance/226/README.md: The planted programs).
+    AxesModAppliesTransform,
+    Axes3dOwnTickRule,
+    AxesModMapsEveryFrame,
 }
 
 impl Planted {
@@ -532,6 +547,10 @@ impl Planted {
             "surface_bind_pose" => Planted::SurfaceBindPose,
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
+            "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
+            "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
+            "axes_mod_maps_every_frame" => Planted::AxesModMapsEveryFrame,
             "velocity_from_transform" => Planted::VelocityFromTransform,
             "sampler_steps_world" => Planted::SamplerStepsWorld,
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
@@ -668,6 +687,8 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
+            "point_video_keeps_frame_before_seek" => Planted::PointVideoKeepsFrameBeforeSeek,
+            "video_background_prefiltered" => Planted::VideoBackgroundPrefiltered,
             "instancer_addresses_by_slot" => Planted::InstancerAddressesBySlot,
             "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
             "line_reads_previous_step" => Planted::LineReadsPreviousStep,
@@ -902,6 +923,7 @@ impl App {
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
             Some("particles") => particles::call(self, out, call),
+            Some("trail") => trails::call(self, out, call),
             Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
@@ -1026,10 +1048,6 @@ fn main() {
             "--planted" => match args.next().and_then(|n| Some((Planted::parse(&n)?, n))) {
                 Some((p, name)) => {
                     planted_name = Some(name);
-                    if p == Planted::DropsDispersion {
-                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
                     planted = Some(p)
                 }
                 None => bad_input(),

@@ -570,8 +570,8 @@ impl Hub<'_> {
         if checks.is_empty() {
             return Vec::new();
         }
-        let mut found: Vec<(Vec<Value>, Vec<Value>, Map<String, Value>)> =
-            checks.iter().map(|_| Default::default()).collect();
+        type Found = Vec<(Vec<Value>, Vec<Value>, Map<String, Value>)>;
+        let mut found: Found = checks.iter().map(|_| Default::default()).collect();
         for doc in &c.deliverables {
             let Some(r) = self.query_revision(doc, None) else {
                 continue;

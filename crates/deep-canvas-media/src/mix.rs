@@ -15,7 +15,9 @@ use std::sync::Arc;
 use deep_canvas::ops;
 
 use crate::delay::{Delay, DelaySpec, DelayState, Pitch, PitchSpec, PitchState};
-use crate::dynamics::{Compressor, CompressorSpec, CompressorState, Limiter, LimiterSpec, LimiterState};
+use crate::dynamics::{
+    Compressor, CompressorSpec, CompressorState, Limiter, LimiterSpec, LimiterState,
+};
 use crate::emitter::{self, Cone, Distance, Model};
 use crate::eq;
 use crate::reverb::{self, Reverb};
@@ -152,6 +154,7 @@ pub struct Emit {
     pub place: Arc<dyn Fn(i64) -> Place + Send + Sync>,
 }
 
+#[derive(Clone)]
 pub struct Strip {
     pub id: String,
     pub source: Arc<Source>,
@@ -170,11 +173,20 @@ pub struct Strip {
     /// Spans of t where `enabled` is false.
     pub disabled: Vec<(i64, i64)>,
     pub emitter: Option<Emit>,
+    /// #204: a synth plays in place of the source (its span already holds the synth's tail).
+    pub synth: Option<Arc<crate::synth::play::Spec>>,
 }
 
 impl Strip {
     /// The auto span: (out − in) ÷ rate, or to the transport's end for a looping strip.
-    pub fn auto_span(start: i64, r#in: i64, out: i64, rate: (i64, i64), looped: bool, end: i64) -> i64 {
+    pub fn auto_span(
+        start: i64,
+        r#in: i64,
+        out: i64,
+        rate: (i64, i64),
+        looped: bool,
+        end: i64,
+    ) -> i64 {
         if looped {
             return (end - start).max(0);
         }
@@ -183,12 +195,16 @@ impl Strip {
 
     /// The source time at `rel` flicks into the strip, wrapped by the loop region.
     pub fn source_at(&self, rel: i64) -> i64 {
-        let src = self.r#in as i128 + (rel as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
+        let src = self.r#in as i128
+            + (rel as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
         let src = src as i64;
         if !self.looped {
             return src;
         }
-        let (ls, le) = self.source.loop_region.unwrap_or((0, self.source.duration()));
+        let (ls, le) = self
+            .source
+            .loop_region
+            .unwrap_or((0, self.source.duration()));
         if le <= ls || src < le {
             return src;
         }
@@ -198,7 +214,8 @@ impl Strip {
     /// Whether the strip's end is its source's own end, where it needs no fade.
     fn ends_at_source_end(&self) -> bool {
         let dur = self.source.duration();
-        let end = self.r#in as i128 + (self.span as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
+        let end = self.r#in as i128
+            + (self.span as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
         let end = end as i64;
         if !self.looped {
             return end >= dur;
@@ -211,8 +228,12 @@ impl Strip {
     }
 
     fn fade_lengths(&self) -> (i64, Curve, i64, Curve) {
-        let (mut fi, ci) = self.fade_in.map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
-        let (mut fo, co) = self.fade_out.map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
+        let (mut fi, ci) = self
+            .fade_in
+            .map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
+        let (mut fo, co) = self
+            .fade_out
+            .map_or((0, Curve::EqualPower), |f| (f.length, f.curve));
         if self.r#in != 0 {
             fi = fi.max(MIN_FADE);
         }
@@ -398,12 +419,25 @@ impl Mix {
         // Latencies, in order: a bus's inputs arrive at the latest of theirs.
         let (mut arrival, mut latency) = (vec![0i64; n], vec![0i64; n]);
         for &b in &order {
-            latency[b] = arrival[b] + buses[b].processors.iter().map(|p| p.kind.latency(rate)).sum::<i64>();
+            latency[b] = arrival[b]
+                + buses[b]
+                    .processors
+                    .iter()
+                    .map(|p| p.kind.latency(rate))
+                    .sum::<i64>();
             for &j in &feeds[b] {
                 arrival[j] = arrival[j].max(latency[b]);
             }
         }
-        Ok(Mix { rate, strips, buses, order, master, arrival, latency })
+        Ok(Mix {
+            rate,
+            strips,
+            buses,
+            order,
+            master,
+            arrival,
+            latency,
+        })
     }
 
     /// Flicks per sample.
@@ -444,6 +478,14 @@ pub struct Planted {
     pub sends_tap_post: bool,
     /// #1818: a delay empties its line when a seek restores it.
     pub delay_empties_at_seek: bool,
+    /// #204: synth strips reach the output after the master's limiter.
+    pub synth_around_master: bool,
+    /// #204: a synth's block grid starts at each seek, not at the graph's sample 0.
+    pub synth_grid_at_seek: bool,
+    /// #204: past its budget a synth's ring drops its oldest checkpoint.
+    pub synth_ring_drops_oldest: bool,
+    /// #204: an export renders its synths on 64-sample blocks.
+    pub synth_block_64: bool,
 }
 
 /// A processor as it runs.
@@ -484,10 +526,16 @@ impl Unit {
         match kind {
             ProcKind::Eq(bands) => Unit::Eq(eq::Eq::new(bands, rate)),
             ProcKind::Reverb(spec) => Unit::Reverb(Reverb::new(*spec, rate)),
-            ProcKind::Compressor(spec, _) => Unit::Compressor(Compressor::new(*spec, rate, planted.hard_knee)),
-            ProcKind::Limiter(spec) => Unit::Limiter(Limiter::new(*spec, rate, planted.limiter_sample_peaks)),
+            ProcKind::Compressor(spec, _) => {
+                Unit::Compressor(Compressor::new(*spec, rate, planted.hard_knee))
+            }
+            ProcKind::Limiter(spec) => {
+                Unit::Limiter(Limiter::new(*spec, rate, planted.limiter_sample_peaks))
+            }
             ProcKind::Delay(spec) => Unit::Delay(Delay::new(*spec, rate)),
-            ProcKind::Pitch(spec) => Unit::Pitch(Pitch::new(*spec, rate, planted.pitch_ignores_semitones)),
+            ProcKind::Pitch(spec) => {
+                Unit::Pitch(Pitch::new(*spec, rate, planted.pitch_ignores_semitones))
+            }
         }
     }
     fn process(&mut self, block: &mut [f32], key: Option<&[f32]>) {
@@ -514,12 +562,20 @@ impl Unit {
         match (self, s) {
             (Unit::Eq(e), UnitState::Eq(s)) => e.state.clone_from(s),
             (Unit::Reverb(r), UnitState::Reverb(s)) => {
-                r.state = if planted.restores_without_tail { s.without_tail() } else { s.clone() }
+                r.state = if planted.restores_without_tail {
+                    s.without_tail()
+                } else {
+                    s.clone()
+                }
             }
             (Unit::Compressor(c), UnitState::Compressor(s)) => c.state = *s,
             (Unit::Limiter(l), UnitState::Limiter(s)) => l.state.clone_from(s),
             (Unit::Delay(d), UnitState::Delay(s)) => {
-                d.state = if planted.delay_empties_at_seek { s.emptied() } else { s.clone() }
+                d.state = if planted.delay_empties_at_seek {
+                    s.emptied()
+                } else {
+                    s.clone()
+                }
             }
             (Unit::Pitch(p), UnitState::Pitch(s)) => p.state.clone_from(s),
             _ => {}
@@ -551,7 +607,10 @@ struct Line {
 
 impl Line {
     fn new(frames: i64) -> Line {
-        Line { buf: vec![0.0; 2 * frames.max(0) as usize], at: 0 }
+        Line {
+            buf: vec![0.0; 2 * frames.max(0) as usize],
+            at: 0,
+        }
     }
 
     /// Delays `block` in place by the line's length.
@@ -579,7 +638,11 @@ struct Own {
 
 impl Own {
     fn bytes(&self) -> usize {
-        self.lines.iter().map(|l| 4 * l.buf.len() + 8).sum::<usize>() + self.end.bytes()
+        self.lines
+            .iter()
+            .map(|l| 4 * l.buf.len() + 8)
+            .sum::<usize>()
+            + self.end.bytes()
     }
 }
 
@@ -606,6 +669,17 @@ pub struct Report {
     /// Its spacing, in flicks, and each checkpoint's t and bytes.
     pub spacing: i64,
     pub checkpoints: Vec<(i64, usize)>,
+}
+
+/// #204: a synth strip's report.
+pub struct SynthReport {
+    pub id: String,
+    pub preset: String,
+    pub voices: usize,
+    pub tail: i64,
+    /// The host clock's units its voices took to render.
+    pub spent: u64,
+    pub ring: Report,
 }
 
 /// Where each edge's delay line is, and how far a bus's strips are delayed.
@@ -641,14 +715,21 @@ impl Edges {
                 let d = delay(mix.arrival[o] - mix.latency[b]);
                 (d > 0).then(|| line(d))
             }));
-            sends.push(bus.sends.iter().map(|s| line(delay(mix.arrival[s.to] - mix.latency[b]))).collect());
+            sends.push(
+                bus.sends
+                    .iter()
+                    .map(|s| line(delay(mix.arrival[s.to] - mix.latency[b])))
+                    .collect(),
+            );
         }
         let mut keys = Vec::new();
         for &b in &mix.order {
             let mut before = 0;
             for p in &mix.buses[b].processors {
                 keys.push(match p.kind {
-                    ProcKind::Compressor(_, Some(k)) => Some((k, line(delay(mix.arrival[b] + before - mix.latency[k])))),
+                    ProcKind::Compressor(_, Some(k)) => {
+                        Some((k, line(delay(mix.arrival[b] + before - mix.latency[k]))))
+                    }
                     _ => None,
                 });
                 before += p.kind.latency(rate);
@@ -661,7 +742,11 @@ impl Edges {
             keys,
             strips: mix.arrival.iter().map(|a| delay(*a)).collect(),
             lengths,
-            lead: if comp { mix.latency[mix.master] + end } else { end },
+            lead: if comp {
+                mix.latency[mix.master] + end
+            } else {
+                end
+            },
         }
     }
 }
@@ -688,20 +773,95 @@ pub struct Player {
     pre: Vec<f32>,
     edge: Vec<f32>,
     planted: Planted,
+    /// #204: each synth strip's index and its voice as it plays.
+    synths: Vec<(usize, crate::synth::play::Live)>,
+    /// #204: each synth strip's node taps, `<strip ID>/<node ID>`, by its place in `synths`.
+    synth_taps: Vec<Vec<(String, sha2::Sha256)>>,
+    /// #204: a host's clock, read around each synth block for its report; never for its sound.
+    pub clock: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
+    /// #204: what the planted synths routed around the master add after its limiter.
+    around: Vec<f32>,
     taps: Vec<sha2::Sha256>,
     /// #502: an export's delivery gain, as an amplitude, on the master ahead of its end limiter.
     pub delivery: f64,
+    /// #509: each bus's power bake, its output after its fader and ducking, then the master's own
+    /// strips; made only by [`Player::tapped`].
+    power: Option<Vec<crate::analysis::loudness::Power>>,
+    /// #525: strips a live play adds as it goes, rendered after the mix's own, in their order.
+    added: Vec<Strip>,
 }
 
 impl Player {
     pub fn new(mix: Arc<Mix>, planted: Planted) -> Player {
+        Player::built(mix, planted, false)
+    }
+
+    /// #509: a player that keeps each bus's power bake from sample 0 as it renders: one entry per
+    /// bus, then one for the strips that play straight on the master.
+    pub fn tapped(mix: Arc<Mix>, planted: Planted) -> Player {
+        Player::built(mix, planted, true)
+    }
+
+    /// The power bakes [`Player::tapped`] keeps.
+    pub fn power(&self) -> Option<&[crate::analysis::loudness::Power]> {
+        self.power.as_deref()
+    }
+
+    /// Each bus's ID, and the index of the bus its output feeds.
+    pub fn routes(&self) -> Vec<(String, Option<usize>)> {
+        self.mix
+            .buses
+            .iter()
+            .map(|b| (b.id.clone(), b.out))
+            .collect()
+    }
+
+    fn built(mix: Arc<Mix>, planted: Planted, tapped: bool) -> Player {
         let mut units = Vec::new();
         let mut rings = Vec::new();
         for (b, p) in mix.processors() {
-            units.push((b, p.id.clone(), p.every.max(1), Unit::new(&p.kind, mix.rate, &planted)));
-            rings.push(Ring::new(p.budget.unwrap_or(RING_BUDGET), planted.ring_drops_oldest));
+            units.push((
+                b,
+                p.id.clone(),
+                p.every.max(1),
+                Unit::new(&p.kind, mix.rate, &planted),
+            ));
+            rings.push(Ring::new(
+                p.budget.unwrap_or(RING_BUDGET),
+                planted.ring_drops_oldest,
+            ));
         }
         let n = 2 * BLOCK as usize;
+        let (mix_buses, rate) = (mix.buses.len(), mix.rate);
+        let synths = mix
+            .strips
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| {
+                s.synth.as_ref().map(|sp| {
+                    (
+                        i,
+                        crate::synth::play::Live::new(
+                            sp,
+                            mix.rate,
+                            planted.synth_ring_drops_oldest,
+                        ),
+                    )
+                })
+            })
+            .collect();
+        let synth_taps = mix
+            .strips
+            .iter()
+            .filter_map(|s| s.synth.as_ref().map(|sp| (s, sp)))
+            .map(|(s, sp)| {
+                sp.preset
+                    .nodes
+                    .iter()
+                    .map(|n| (format!("{}/{}", s.id, n.id), sha2::Sha256::default()))
+                    .collect()
+            })
+            .collect();
         let edges = Edges::new(&mix, &planted);
         let lead = edges.lead;
         let mut p = Player {
@@ -709,7 +869,11 @@ impl Player {
             taps: units.iter().map(|_| sha2::Sha256::default()).collect(),
             buses: vec![vec![0.0; n]; mix.buses.len()],
             lines: edges.lengths.iter().map(|l| Line::new(*l)).collect(),
-            end: Limiter::new(LimiterSpec::default(), mix.rate, planted.limiter_sample_peaks),
+            end: Limiter::new(
+                LimiterSpec::default(),
+                mix.rate,
+                planted.limiter_sample_peaks,
+            ),
             end_spec: LimiterSpec::default(),
             own: Ring::new(RING_BUDGET, planted.ring_drops_oldest),
             edges,
@@ -722,7 +886,17 @@ impl Player {
             edge: vec![0.0; n],
             read: n,
             planted,
+            synth_taps,
+            synths,
+            clock: None,
+            around: vec![0.0; n],
             delivery: 1.0,
+            power: tapped.then(|| {
+                (0..=mix_buses)
+                    .map(|_| crate::analysis::loudness::Power::new(rate, 2))
+                    .collect()
+            }),
+            added: Vec::new(),
         };
         p.seek_graph(lead);
         p.take_taps();
@@ -746,9 +920,28 @@ impl Player {
                     tap.update(x.to_le_bytes());
                 }
             }
+            for (taps, (_, live)) in self.synth_taps.iter_mut().zip(&self.synths) {
+                for ((_, tap), o) in taps.iter_mut().zip(&live.nodes) {
+                    for x in &o[self.read / 2..(self.read + n) / 2] {
+                        tap.update(x.to_le_bytes());
+                    }
+                }
+            }
             self.read += n;
             at += n;
         }
+    }
+
+    /// #525: the strips a live play has added so far, in place of those it added before; a strip
+    /// sounds only in blocks rendered after it is added.
+    pub fn set_added(&mut self, strips: Vec<Strip>) {
+        self.added = strips;
+    }
+
+    /// #525: how far past the sample read next the graph has rendered, at most, in samples: a
+    /// strip must be added before the play reads within this of its start.
+    pub fn ahead(&self) -> i64 {
+        self.edges.lead + BLOCK
     }
 
     /// #157: sets the master's end limiter to an export's ceiling, dBTP (a profile's
@@ -756,7 +949,11 @@ impl Player {
     /// seeks.
     pub fn set_ceiling(&mut self, dbtp: f64) {
         self.end_spec.ceiling = dbtp;
-        self.end = Limiter::new(self.end_spec, self.mix.rate, self.planted.limiter_sample_peaks);
+        self.end = Limiter::new(
+            self.end_spec,
+            self.mix.rate,
+            self.planted.limiter_sample_peaks,
+        );
     }
 
     /// #502: whether the master's end limiter has cut since the last seek.
@@ -767,12 +964,16 @@ impl Player {
     /// Each processor's ID and the SHA-256 of its output read since the last call.
     pub fn take_taps(&mut self) -> Vec<(String, String)> {
         use sha2::Digest;
-        let ids = self.units.iter().map(|u| u.1.clone());
-        let taps = self.taps.iter_mut().map(|t| {
+        let hex = |t: &mut sha2::Sha256| {
             let d = std::mem::take(t).finalize();
             d.iter().map(|b| format!("{b:02x}")).collect::<String>()
-        });
-        ids.zip(taps).collect()
+        };
+        let ids = self.units.iter().map(|u| u.1.clone());
+        let mut out: Vec<(String, String)> = ids.zip(self.taps.iter_mut().map(hex)).collect();
+        for (id, t) in self.synth_taps.iter_mut().flatten() {
+            out.push((id.clone(), hex(t)));
+        }
+        out
     }
 
     /// Moves to `sample`: restores the latest checkpoint at or before it that every processor's
@@ -780,6 +981,15 @@ impl Player {
     pub fn seek(&mut self, sample: i64) -> Vec<(String, Sought)> {
         let sought = self.seek_graph(sample + self.edges.lead);
         self.end.cut = false;
+        // #204: the planted grid starts at the seek, each synth reading its params that far off it.
+        let shift = if self.planted.synth_grid_at_seek {
+            (sample + self.edges.lead).rem_euclid(BLOCK) * self.mix.step()
+        } else {
+            0
+        };
+        for (_, live) in &mut self.synths {
+            live.shift = shift;
+        }
         sought
     }
 
@@ -795,6 +1005,11 @@ impl Player {
             .zip(&self.units)
             .map(|(r, u)| r.at_or_before(target * BLOCK).map(|(slot, _)| slot * u.2))
             .chain(std::iter::once(own))
+            .chain(
+                self.synths
+                    .iter()
+                    .map(|(_, l)| l.ring.at_or_before(target * BLOCK).map(|(slot, _)| slot)),
+            )
             .collect();
         let second = best.and_then(|b| b.into_iter().min()).filter(|s| {
             self.own.get(*s).is_some()
@@ -803,6 +1018,7 @@ impl Player {
                     .iter()
                     .zip(&self.units)
                     .all(|(r, u)| s % u.2 == 0 && r.get(s / u.2).is_some())
+                && self.synths.iter().all(|(_, l)| l.ring.get(*s).is_some())
         });
         let rate = self.mix.rate;
         let from_block = match second {
@@ -816,6 +1032,11 @@ impl Player {
                     self.lines.clone_from(&o.lines);
                     self.end.state.clone_from(&o.end);
                 }
+                for (_, live) in &mut self.synths {
+                    if let Some(st) = live.ring.get(s).cloned() {
+                        live.restore(&st);
+                    }
+                }
                 (s * rate).div_euclid(BLOCK) + i64::from((s * rate).rem_euclid(BLOCK) != 0)
             }
             None => {
@@ -825,6 +1046,11 @@ impl Player {
                 }
                 self.lines = self.edges.lengths.iter().map(|l| Line::new(*l)).collect();
                 self.end = Limiter::new(self.end_spec, rate, self.planted.limiter_sample_peaks);
+                for (i, live) in &mut self.synths {
+                    if let Some(sp) = &mix.strips[*i].synth {
+                        live.reset(sp, rate);
+                    }
+                }
                 0
             }
         };
@@ -849,7 +1075,15 @@ impl Player {
             restored: second.map(|s| s * FLICKS),
             rendered_from: second.unwrap_or(0) * FLICKS,
         };
-        self.units.iter().map(|u| (u.1.clone(), sought)).collect()
+        let synths = self
+            .synths
+            .iter()
+            .map(|(i, _)| (self.mix.strips[*i].id.clone(), sought));
+        self.units
+            .iter()
+            .map(|u| (u.1.clone(), sought))
+            .chain(synths)
+            .collect()
     }
 
     /// Each processor's report.
@@ -877,6 +1111,49 @@ impl Player {
             .collect()
     }
 
+    /// #204: each synth strip's report: its preset, voices, derived tail, ring, and the host clock's
+    /// reading of what its voices took to render.
+    pub fn synth_reports(&self) -> Vec<SynthReport> {
+        self.synths
+            .iter()
+            .filter_map(|(i, live)| {
+                let s = &self.mix.strips[*i];
+                let sp = s.synth.as_ref()?;
+                Some(SynthReport {
+                    id: s.id.clone(),
+                    preset: sp.name.clone(),
+                    voices: sp.keys.len(),
+                    tail: sp.tail,
+                    spent: live.spent,
+                    ring: Report {
+                        id: s.id.clone(),
+                        kind: "synth",
+                        tail: sp.tail,
+                        latency: 0,
+                        budget: live.ring.budget(),
+                        bytes: live.ring.bytes(),
+                        peak: live.ring.peak(),
+                        spacing: live.ring.every() * FLICKS,
+                        checkpoints: live
+                            .ring
+                            .kept()
+                            .into_iter()
+                            .map(|(slot, b)| (slot * FLICKS, b))
+                            .collect(),
+                    },
+                })
+            })
+            .collect()
+    }
+
+    /// #204: renders forward from where it is to graph sample `to` without output, filling the
+    /// checkpoint rings (a synth's bake at check).
+    pub fn bake(&mut self, to: i64) {
+        while self.block * BLOCK < to {
+            self.render_block();
+        }
+    }
+
     /// The whole second whose checkpoint block `k` is, if any: the first block boundary at or
     /// after each whole second.
     fn second_of(&self, k: i64) -> Option<i64> {
@@ -896,9 +1173,19 @@ impl Player {
                 }
             }
             if self.own.wants(s) {
-                let st = Own { lines: self.lines.clone(), end: self.end.state.clone() };
+                let st = Own {
+                    lines: self.lines.clone(),
+                    end: self.end.state.clone(),
+                };
                 let bytes = st.bytes();
                 self.own.put(s, k * BLOCK, st, bytes);
+            }
+            for (_, live) in &mut self.synths {
+                if live.ring.wants(s) {
+                    let st = live.checkpoint();
+                    let bytes = st.bytes();
+                    live.ring.put(s, k * BLOCK, st, bytes);
+                }
             }
         }
         let mix = self.mix.clone();
@@ -906,11 +1193,50 @@ impl Player {
         for b in &mut self.buses {
             b.iter_mut().for_each(|x| *x = 0.0);
         }
-        for s in &mix.strips {
+        self.around.iter_mut().for_each(|x| *x = 0.0);
+        let added = std::mem::take(&mut self.added);
+        let mut live_at = 0;
+        for (si, s) in mix.strips.iter().chain(&added).enumerate() {
             // A bus's strips arrive as late as its latest input.
             let t0 = (k * BLOCK - self.edges.strips[s.bus]) * step;
+            // A synth's voices are the mix's own strips'; a strip added live (#525) plays none.
+            let synth = match &s.synth {
+                Some(sp) if si < mix.strips.len() => {
+                    while self.synths[live_at].0 != si {
+                        live_at += 1;
+                    }
+                    Some((sp, live_at))
+                }
+                _ => None,
+            };
             if s.start + s.span <= t0 || s.start >= t0 + BLOCK * step {
+                if let Some((_, l)) = synth {
+                    self.synths[l].1.silent();
+                }
                 continue;
+            }
+            if let Some((sp, l)) = synth {
+                // The planted steal takes on the stolen voice's filters as it starts.
+                if let (false, Some(victim)) = (self.synths[l].1.started, sp.inherits) {
+                    if let Some(v) = self.synths.iter().position(|(i, _)| *i == victim) {
+                        let (a, b) = if v < l {
+                            let (x, y) = self.synths.split_at_mut(l);
+                            (&mut y[0].1, &x[v].1)
+                        } else {
+                            let (x, y) = self.synths.split_at_mut(v);
+                            (&mut x[l].1, &y[0].1)
+                        };
+                        if let (Some(a), Some(b)) = (a.voices.first_mut(), b.voices.first()) {
+                            a.keep_filters_of(b);
+                        }
+                    }
+                }
+                let part = self.planted.synth_block_64.then_some(64);
+                let before = self.clock.as_ref().map(|c| c());
+                self.synths[l].1.block(sp, t0, step, s.start, part);
+                if let (Some(c), Some(t)) = (&self.clock, before) {
+                    self.synths[l].1.spent += c().saturating_sub(t);
+                }
             }
             let fades = s.fade_lengths();
             let (eg0, eg1, pan) = match &s.emitter {
@@ -921,11 +1247,19 @@ impl Player {
                 }
                 None => (1.0, 1.0, (s.pan, s.pan)),
             };
-            let mono = s.source.channels == 1;
-            let out = &mut self.buses[s.bus];
+            let mono = s.source.channels == 1 || synth.is_some();
+            let out = if synth.is_some() && self.planted.synth_around_master {
+                &mut self.around
+            } else {
+                &mut self.buses[s.bus]
+            };
             for i in 0..BLOCK {
                 let t = t0 + i * step;
-                let gain_t = if self.planted.holds_gain_per_block { t0 } else { t };
+                let gain_t = if self.planted.holds_gain_per_block {
+                    t0
+                } else {
+                    t
+                };
                 let env = s.envelope(t, gain_t, fades);
                 if env == 0.0 {
                     continue;
@@ -933,7 +1267,13 @@ impl Player {
                 let x = i as f64 / BLOCK as f64;
                 let g = env * (eg0 + (eg1 - eg0) * x);
                 let p = pan.0 + (pan.1 - pan.0) * x;
-                let (l, r) = s.source.read(s.source_at(t - s.start));
+                let (l, r) = match synth {
+                    Some((_, li)) => {
+                        let x = self.synths[li].1.out[i as usize] as f32;
+                        (x, x)
+                    }
+                    None => s.source.read(s.source_at(t - s.start)),
+                };
                 let (gl, gr) = if mono || s.emitter.is_some() {
                     let (pl, pr) = emitter::pan_gains(p);
                     let m = if mono { l } else { (l + r) * 0.5 };
@@ -946,10 +1286,17 @@ impl Player {
                 out[2 * i as usize + 1] += gr;
             }
         }
+        self.added = added;
+        if let Some(power) = self.power.as_mut() {
+            let at = k * BLOCK - self.edges.strips[mix.master];
+            power[mix.buses.len()].push(at, &self.buses[mix.master]);
+        }
         for &b in &mix.order {
             let bus = &mix.buses[b];
             let mut block = std::mem::take(&mut self.buses[b]);
-            for (u, ((ub, _, _, unit), o)) in self.units.iter_mut().zip(self.outs.iter_mut()).enumerate() {
+            for (u, ((ub, _, _, unit), o)) in
+                self.units.iter_mut().zip(self.outs.iter_mut()).enumerate()
+            {
                 if *ub != b {
                     continue;
                 }
@@ -996,7 +1343,11 @@ impl Player {
                 }
             }
             for (send, &l) in bus.sends.iter().zip(&self.edges.sends[b]) {
-                let tap = if send.pre && !self.planted.sends_tap_post { &self.pre } else { &block };
+                let tap = if send.pre && !self.planted.sends_tap_post {
+                    &self.pre
+                } else {
+                    &block
+                };
                 let g = amp(send.gain_db);
                 for (e, x) in self.edge.iter_mut().zip(tap) {
                     *e = (f64::from(*x) * g) as f32;
@@ -1005,6 +1356,9 @@ impl Player {
                 for (d, x) in self.buses[send.to].iter_mut().zip(&self.edge) {
                     *d += x;
                 }
+            }
+            if let Some(power) = self.power.as_mut() {
+                power[b].push(k * BLOCK - mix.latency[b], &block);
             }
             self.buses[b] = block;
         }
@@ -1016,6 +1370,11 @@ impl Player {
             }
         }
         self.end.process(&mut self.buf);
+        if self.planted.synth_around_master {
+            for (o, x) in self.buf.iter_mut().zip(&self.around) {
+                *o += x;
+            }
+        }
         self.read = 0;
         self.block = k + 1;
     }
@@ -1023,11 +1382,25 @@ impl Player {
     /// An emitter's gain and pan at `t`.
     fn emit_gain(&self, e: &Emit, t: i64) -> (f64, f64) {
         let p = (e.place)(t);
-        let d = [p.source[0] - p.listener[0], p.source[1] - p.listener[1], p.source[2] - p.listener[2]];
+        let d = [
+            p.source[0] - p.listener[0],
+            p.source[1] - p.listener[1],
+            p.source[2] - p.listener[2],
+        ];
         let dist = ops::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-        let model = if self.planted.inverse_only { Model::Inverse } else { e.distance.model };
+        let model = if self.planted.inverse_only {
+            Model::Inverse
+        } else {
+            e.distance.model
+        };
         let g = emitter::distance_gain(&e.distance, dist, model)
-            * emitter::cone_gain(&e.cone, p.forward, p.source, p.listener, self.planted.cone_reversed);
+            * emitter::cone_gain(
+                &e.cone,
+                p.forward,
+                p.source,
+                p.listener,
+                self.planted.cone_reversed,
+            );
         // W3C PannerNode's equal-power azimuth: in the listener's horizontal plane, a source behind
         // pans as its mirror in front, and the pan is azimuth ÷ 90°.
         let ahead = [p.right[2], 0.0, -p.right[0]];
@@ -1037,7 +1410,13 @@ impl Player {
             0.0
         } else {
             let az = ops::deg(ops::atan2(x, z));
-            let az = if az > 90.0 { 180.0 - az } else if az < -90.0 { -180.0 - az } else { az };
+            let az = if az > 90.0 {
+                180.0 - az
+            } else if az < -90.0 {
+                -180.0 - az
+            } else {
+                az
+            };
             az / 90.0
         };
         (g, pan)
@@ -1052,10 +1431,16 @@ fn balance(l: f32, r: f32, pan: f64) -> (f32, f32) {
     let pan = pan.clamp(-1.0, 1.0);
     if pan <= 0.0 {
         let x = (pan + 1.0) * ops::PI / 2.0;
-        ((l as f64 + r as f64 * ops::cos(x)) as f32, (r as f64 * ops::sin(x)) as f32)
+        (
+            (l as f64 + r as f64 * ops::cos(x)) as f32,
+            (r as f64 * ops::sin(x)) as f32,
+        )
     } else {
         let x = pan * ops::PI / 2.0;
-        ((l as f64 * ops::cos(x)) as f32, (r as f64 + l as f64 * ops::sin(x)) as f32)
+        (
+            (l as f64 * ops::cos(x)) as f32,
+            (r as f64 + l as f64 * ops::sin(x)) as f32,
+        )
     }
 }
 
@@ -1075,7 +1460,12 @@ mod tests {
                 [v, v]
             })
             .collect();
-        let source = Arc::new(Source { rate, channels: 2, samples, loop_region: None });
+        let source = Arc::new(Source {
+            rate,
+            channels: 2,
+            samples,
+            loop_region: None,
+        });
         let span = source.duration();
         let strip = Strip {
             id: "tone".into(),
@@ -1093,9 +1483,22 @@ mod tests {
             bus: 0,
             disabled: Vec::new(),
             emitter: None,
+            synth: None,
         };
-        let master = Bus { id: "master".into(), gain_db: 0.0, pan: 0.0, mute: false, processors: Vec::new(), out: None, sends: Vec::new(), duck: None };
-        let mut player = Player::new(Arc::new(Mix::new(rate, vec![strip], vec![master]).unwrap()), Planted::default());
+        let master = Bus {
+            id: "master".into(),
+            gain_db: 0.0,
+            pan: 0.0,
+            mute: false,
+            processors: Vec::new(),
+            out: None,
+            sends: Vec::new(),
+            duck: None,
+        };
+        let mut player = Player::new(
+            Arc::new(Mix::new(rate, vec![strip], vec![master]).unwrap()),
+            Planted::default(),
+        );
         if let Some(c) = ceiling {
             player.set_ceiling(c);
         }
@@ -1108,8 +1511,14 @@ mod tests {
     #[test]
     fn an_exports_ceiling_holds_the_masters_true_peak_under_it() {
         let set = master_true_peak(Some(-1.67));
-        assert!(set <= -1.67 + 0.05, "with the export's ceiling of −1.67 dBTP the master reads {set} dBTP");
+        assert!(
+            set <= -1.67 + 0.05,
+            "with the export's ceiling of −1.67 dBTP the master reads {set} dBTP"
+        );
         let default = master_true_peak(None);
-        assert!(default <= -1.0 + 0.05 && default > -1.67 + 0.05, "without it the master reads {default} dBTP");
+        assert!(
+            default <= -1.0 + 0.05 && default > -1.67 + 0.05,
+            "without it the master reads {default} dBTP"
+        );
     }
 }

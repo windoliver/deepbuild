@@ -253,6 +253,7 @@ impl Hub<'_> {
                     blocks: g.blocks,
                     rotate: g.rotate,
                     outlines: outlines.clone(),
+                    fills: self.startup.sealed.fills.clone(),
                     clock: None,
                 };
                 let ctx = Ctx {
@@ -295,6 +296,23 @@ impl Hub<'_> {
             deep_canvas_scene3d::scene::placed_at(&doc, t)
                 .map(|p| p.into_iter().map(|(id, _, m)| (id, m)).collect())
                 .unwrap_or_default();
+        // #226: a point's row is where the frame draws it, after its modifiers and its parents.
+        let pointed = ids.iter().any(|id| {
+            items
+                .get(id)
+                .and_then(|i| i.get("kind"))
+                .and_then(Value::as_str)
+                == Some("mark.point@1")
+        });
+        let points = if pointed {
+            let sealed = &self.startup.sealed;
+            match crate::scene3d::points_at(&doc, t, &self.look.light, sealed, planted.as_deref()) {
+                Ok(points) => points,
+                Err(u) => return json!({"code": u.code, "path": u.path}),
+            }
+        } else {
+            Default::default()
+        };
         let mut out = Vec::new();
         let node_of = |id: &str| {
             nodes
@@ -302,6 +320,10 @@ impl Hub<'_> {
                 .find(|n| BUILD_OPS.contains(&n.operator.as_str()) && n.item.as_deref() == Some(id))
         };
         for id in &ids {
+            if let Some(pos) = points.get(id) {
+                out.push(json!({"id": id, "kind": "mark.point@1", "pos": pos}));
+                continue;
+            }
             // A mesh-edge line answers the segments it draws (#440).
             if let Some(line) = items.get(id).filter(|i| {
                 i.get("kind").and_then(Value::as_str) == Some("mark.line@1")
@@ -314,10 +336,7 @@ impl Hub<'_> {
                     .and_then(|n| n.values.first())
                     .and_then(Val::as_typed::<Built>)
                     .and_then(|b| b.mesh.clone());
-                let (Some(mesh), Some(kind)) = (
-                    mesh,
-                    EdgeKind::read(edges).ok(),
-                ) else {
+                let (Some(mesh), Some(kind)) = (mesh, EdgeKind::read(edges).ok()) else {
                     return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/edges/of")});
                 };
                 let place = placement(items.get(target).unwrap_or(&Value::Null));
@@ -401,6 +420,7 @@ impl Hub<'_> {
                         blocks: g.blocks,
                         rotate: g.rotate,
                         outlines: outlines.clone(),
+                        fills: self.startup.sealed.fills.clone(),
                         clock: g.timings.then_some(now_ms as fn() -> f64),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;

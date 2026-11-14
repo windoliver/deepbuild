@@ -718,7 +718,9 @@ fn warm_up(
         if crate::flat::is_flat(&doc) {
             continue;
         }
-        let Ok(mut frames) = Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels)) else {
+        let Ok(mut frames) =
+            Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels))
+        else {
             continue;
         };
         for (j, t) in crate::warm::times(&doc).into_iter().enumerate() {
@@ -2168,7 +2170,6 @@ impl Live {
                     operator_pipelines,
                 });
             }
-            timer.resolve(&mut encoder);
             let cpu_ms = began.elapsed().as_secs_f64() * 1e3;
             deep_gpu::alloc::outside(|| self.device.queue.submit([encoder.finish()]));
             for &s in &drew {
@@ -2220,6 +2221,7 @@ impl Live {
                     self.raised(of, Some(s), vec![("validation".to_string(), e.to_string())]);
                 }
             }
+            timer.resolve_after(&self.device);
             timer.read(&self.device);
             let views_end = self.views.len();
             for ses in &mut self.sessions {
@@ -2284,7 +2286,8 @@ impl Live {
                         .and_then(|ses| ses.view.as_ref())
                         .and_then(|v| v.ops.pass_of(m.name))
                     {
-                        self.pass_ops.insert(self.passes.len(), (key, members.to_vec()));
+                        self.pass_ops
+                            .insert(self.passes.len(), (key, members.to_vec()));
                     }
                     self.passes.push(PassRow {
                         name: m.name,

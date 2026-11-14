@@ -10,13 +10,12 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { validate } from '@deepbuild/contracts';
+import { isRecord as isObj, validate } from '@deepbuild/contracts';
 import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
 import type { Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /** A call as a planted call or twin names it: the call fields of an agent's PreToolUse payload. */
 interface Call { tool_name: string; tool_input: Obj; cwd?: string }
 const isCall = (v: unknown): v is Call => isObj(v) && typeof v.tool_name === 'string' && isObj(v.tool_input);

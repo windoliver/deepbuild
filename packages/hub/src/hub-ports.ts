@@ -61,7 +61,6 @@ export interface AnswerDeliveryPort {
   prompts: Set<string>;
   answers: Answers;
   binds: Map<string, string>;
-  tokenBound: Set<string>;
   answerWaiting: Set<string>;
   typedAt: Map<string, number>;
   promises: Map<string, PromiseState & { timer?: NodeJS.Timeout | undefined; asked?: boolean; handed?: boolean }>;
@@ -72,15 +71,13 @@ export interface AnswerDeliveryPort {
   promised(meta: HookMeta): Promise<void>;
   promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt?: string): Promise<string | undefined>;
   promiseDueFor(session: string): boolean;
-  restorePromises(): Promise<void>;
+  restore(): Promise<void>;
   appNotes(drafts: Draft[], session: string): void;
   noteText(notes: Note[]): string;
-  note(params: Obj): Obj;
+  note(params: Obj): Promise<Obj>;
   routesOf(session: string, cwd?: string): Routes;
   track(meta: HookMeta): void;
   cap(): number;
-  waitingFor(session: string, scope?: string): Promise<Answer[]>;
-  outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting'): Promise<void>;
   deliver(rows: Answer[], via: 'next_prompt' | 'stop_hold', hook?: { session: string; id: string }): Promise<string | undefined>;
   heardBy(ask: string): Promise<void>;
   answered(delivery: Delivery): void;
@@ -239,7 +236,7 @@ export interface SessionStatePort {
   startOf(pid: number, fresh?: boolean): Promise<string | undefined>;
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null>;
+  mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }>;
   sessionRows(seen?: string): Promise<Record<string, unknown>[]>;
   rowsSeen(role: string, detail: boolean): Promise<Obj>;
   renameSession(params: Obj): Promise<Obj>;

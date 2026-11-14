@@ -39,13 +39,14 @@ import { Jobs } from './jobs.js';
 import { Libraries } from './libraries.js';
 
 import { refuse, Refused, refusal, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
-import type { CallContext, Routes, CutOff, Note } from './session-types.js';
+import type { CallContext, Routes, CutOff, Note, Session } from './session-types.js';
+import { parents } from './children.js';
 
 import { TranscriptReader } from './transcript-reader.js';
 import { letters, ghToken, WAKE_GRACE, SHOWN_SOON, said, FOREIGN, placesItself, type Obj, isObj, asRefused, effectEntries, callOf, sendKey, PULL_LOOKUP_MS, OWN_TURN, continueText } from "./hub-shared.js";
 
 export interface AnswerDeliveryOptions {
-  settings: CoreOptions;
+  settings: CoreOptions & { forge: string };
   services: {
     readonly now: () => number;
     readonly asks: Asks;
@@ -59,7 +60,7 @@ export interface AnswerDeliveryOptions {
     readonly transcriptReader: TranscriptReader;
     readonly holds: Holds;
   };
-  state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "turnsStarted">;
+  state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "startOf" | "turnsStarted">;
   mcp: () => Pick<McpOperationsPort, "pinOf">;
   judging: () => Pick<StopJudgingPort, "delivery" | "landedLine" | "lineStanding" | "openedPr">;
   control: () => Pick<HubControlPort, "trusted">;
@@ -118,7 +119,6 @@ export class AnswerDelivery {
 
   /** paseo's plugin (#55): the token each agent's DeepBuild MCP server binds by, to the agent's own session. */
   readonly binds = new Map<string, string>();
-  readonly tokenBound = new Set<string>();
 
   /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not a terminal. */
   private readonly inPaseo = new Set<string>();
@@ -293,8 +293,14 @@ export class AnswerDelivery {
     await this.options.state().attention(session, agent, 'stuck');
   }
 
+  /** What the record holds for delivery after a restart: the promises that still wait, and your notes no turn carried. */
+  async restore(): Promise<void> {
+    await this.restorePromises().catch(() => undefined);
+    await this.restoreNotes().catch(() => undefined);
+  }
+
   /** The promises the record holds that still wait, after a restart: each set one is armed again, each due one waits for its hook. */
-  async restorePromises(): Promise<void> {
+  private async restorePromises(): Promise<void> {
     const rows = (await this.options.services.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
     const handedAt = new Map<string, number>();
     for (const row of rows) {
@@ -314,6 +320,16 @@ export class AnswerDelivery {
       if (p.status === 'set') this.armPromise(session);
       else if (p.status === 'due' && p.handed) this.armPromiseGrace(session, p, WAKE_GRACE - (this.options.services.now() - (handedAt.get(session) ?? this.options.services.now())));
       else if (p.status === 'due') this.options.schedule.askingSoon();
+    }
+  }
+
+  /** Your words the record holds that no turn has carried yet, after a restart: each waits for its session's next route (#1577). */
+  private async restoreNotes(): Promise<void> {
+    const raw = this.options.services.record.raw;
+    const carried = new Set(((await raw(`SELECT json_extract(data, '$.request') AS request FROM events WHERE kind = 'user.ask' AND json_extract(data, '$.from') = 'app'`)) as { request: string | null }[]).map((r) => r.request));
+    for (const { data } of (await raw(`SELECT data FROM events WHERE kind = 'session.note' ORDER BY log_pos`)) as { data: string }[]) {
+      const note = JSON.parse(data) as Note;
+      if (!carried.has(note.request)) this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), note]);
     }
   }
 
@@ -370,21 +386,37 @@ export class AnswerDelivery {
     }
   }
 
+  /**
+   * The notes a prompt's reply carries, once (#340): those its hook recorded; or, while the prompt is set aside for its
+   * transcript entry (#567), those waiting for its session, recorded with that prompt as they would be when it's placed,
+   * so a note the record held across a restart goes with the first prompt after it (#1577).
+   */
+  takeCarried(session: string, held?: Draft[]): Note[] | undefined {
+    if (held && !this.carried.has(session)) this.appNotes(held, session);
+    const notes = this.carried.get(session);
+    this.carried.delete(session);
+    return notes;
+  }
+
   /** The notes as the agent reads them, each labelled as yours, sent from the app, with its request ID. */
   noteText(notes: Note[]): string {
     return `DeepBuild delivers your words, sent from the app:\n${notes.map((n) => `(request ${n.request}) ${n.text}`).join('\n')}`;
   }
 
   /** session.note, from the app: your words into a session, by the route its flags allow, as an answer goes (#25). */
-  note(params: Obj): Obj {
+  async note(params: Obj): Promise<Obj> {
     const { session, text, request } = params;
     if (typeof session !== 'string' || !session) throw refuse('type', '/params/session', 'Name the session by its ID, as its hooks carry it.', session);
     if (typeof text !== 'string' || !text.trim() || text.length > 8192) throw refuse('type', '/params/text', 'Send the note\'s words as a string of 1 to 8192 characters.', text);
     if (typeof request !== 'string' || !/^[0-9A-Za-z_-]{1,64}$/.test(request)) throw refuse('type', '/params/request', 'Give the delivery\'s request ID: 1 to 64 letters, digits, - or _.', request);
     if (!this.options.state().live.has(session)) throw refuse('not_found', '/params/session', `No session ${session} has reached the hub; send the note to one deep status lists.`, session);
-    // A request ID applies once: a retried send changes nothing.
-    const known = [...(this.notes.get(session) ?? []), ...this.handedNotes.values()].some((n) => n.request === request);
-    if (!known) {
+    // A request ID applies once: a retried send changes nothing, after delivery too, as the record keeps every note (#1577).
+    const known = await this.options.services.record.raw(`SELECT 1 FROM events WHERE kind = 'session.note' AND json_extract(data, '$.request') = ? LIMIT 1`, [request]);
+    if (!known.length) {
+      // Your words are in the record before the hub says it has them, and a write that fails refuses the send.
+      const ts = this.options.services.now();
+      await this.options.events.append(this.options.events.connection('app'), { v: 1, id: ulid(ts), kind: 'session.note', ts, data: { session, text: scrubText(text, { held: this.options.settings.held }), request } })
+        .catch((error: unknown) => { throw refuse('unavailable', '/params/text', `Your words weren't saved, so they weren't sent: ${error instanceof Error ? error.message : String(error)}. Send them again.`, request, true); });
       this.notes.set(session, [...(this.notes.get(session) ?? []), { session, text, request }]);
       // Your words, sent while a turn runs or between turns: the next green turn end starts a loop's held checks (#965).
       if (this.options.settings.plant !== 'words-only-at-turn-start') this.options.state().live.get(session)!.words = 'words';
@@ -461,27 +493,9 @@ export class AnswerDelivery {
     return isObj(continuation) && typeof continuation.cap === 'number' ? continuation.cap : CONTINUATION_CAP;
   }
 
-  /**
-   * The answers waiting for a session: answered asks of its thread (its ID and those `/clear`, `/compact` or a fork
-   * joined to it) not yet delivered, nor handed to its waiter and not yet seen in a turn; or, with `scope`, the
-   * answered asks it names.
-   */
-  async waitingFor(session: string, scope?: string): Promise<Answer[]> {
-    return this.answers.waitingFor(session, scope);
-  }
-
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
     return answerText(rows, (ask) => this.switches.get(ask));
-  }
-
-  async outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting'): Promise<void> {
-    return this.answers.outcome(ask, via, outcome);
-  }
-
-  /** An answer to a Codex session that ended waits on its task, and only the same thread's resume hears it (#39). */
-  private async waitsOnTask(delivery: Delivery): Promise<void> {
-    await this.answers.waitsOnTask(delivery);
   }
 
   /**
@@ -493,7 +507,7 @@ export class AnswerDelivery {
     if (!rows.length) return undefined;
     // The planted wrong program records the answer delivered as the hub writes its reply.
     if (!hook || this.options.settings.plant === 'delivered-when-written') {
-      for (const row of rows) await this.outcome(row.id, via, 'delivered');
+      for (const row of rows) await this.answers.outcome(row.id, via, 'delivered');
       return this.answerText(rows);
     }
     // The planted wrong program keeps no answer in flight, so each later route sends it again without reading the session.
@@ -502,13 +516,13 @@ export class AnswerDelivery {
     // delivered as written, and one deep-hook had already given up on reads stalled and goes by the next route.
     if (this.options.state().sessions.get(hook.session)?.agent === 'codex') {
       const outcome = this.options.schedule.abandoned.has(hook.id) ? 'stalled' : 'delivered';
-      for (const row of rows) await this.outcome(row.id, via, outcome);
+      for (const row of rows) await this.answers.outcome(row.id, via, outcome);
       return outcome === 'delivered' ? this.answerText(rows) : undefined;
     }
     const shown = await this.shown(hook.session, rows.map((row) => said(row.id)));
     const fresh: Answer[] = [];
     for (const row of rows) {
-      if (shown?.has(said(row.id))) await this.outcome(row.id, via, 'delivered');
+      if (shown?.has(said(row.id))) await this.answers.outcome(row.id, via, 'delivered');
       else fresh.push(row);
     }
     if (!fresh.length) return undefined;
@@ -525,7 +539,7 @@ export class AnswerDelivery {
   async heardBy(ask: string): Promise<void> {
     const id = ask.replace(/^ask:/, '');
     if (this.handed.has(id) || (await this.options.services.record.raw(`SELECT 1 FROM deliveries WHERE delivery = ? AND outcome = 'delivered' LIMIT 1`, [id])).length) return;
-    await this.outcome(id, 'next_prompt', 'delivered');
+    await this.answers.outcome(id, 'next_prompt', 'delivered');
   }
 
   /** Answers still in flight that a turn now shows: delivered; the rest stay in flight (#906). */
@@ -535,7 +549,7 @@ export class AnswerDelivery {
       if (!handed || !await this.woken(handed.session, said(ask))) continue;
       clearTimeout(handed.timer);
       this.handed.delete(ask);
-      await this.outcome(ask, handed.via === 'wake' ? 'next_prompt' : handed.via, 'delivered');
+      await this.answers.outcome(ask, handed.via === 'wake' ? 'next_prompt' : handed.via, 'delivered');
     }
   }
 
@@ -553,7 +567,7 @@ export class AnswerDelivery {
     this.options.services.tasks.answered(delivery);
     this.options.services.acceptance?.answered(delivery);
     this.options.judging().delivery(delivery);
-    void this.waitsOnTask(delivery).catch(() => undefined);
+    void this.answers.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.options.state().sessions.get(delivery.session);
     if (placesItself(asker?.agent) || this.routes.get(delivery.session)?.places) return void this.options.schedule.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     // Inside paseo, with neither deep-hook's waiter nor paseo's plugin there to take it, the answer waits on the row (#55).
@@ -597,7 +611,7 @@ export class AnswerDelivery {
         await this.options.events.appendReading(session, agent, 'The promised check\'s wake-up is handed to this session\'s waiter.').catch(() => undefined);
         return this.handPromise(session, p, r);
       }
-      const rows = await this.waitingFor(session);
+      const rows = await this.answers.waitingFor(session);
       const notes = this.notes.get(session) ?? [];
       if (!rows.length && !notes.length && !r.later.length) return;
       if (this.options.settings.plant === 'waiter-checks-every-5s') {
@@ -618,7 +632,7 @@ export class AnswerDelivery {
         this.handedNotes.set(note.request, { ...note, timer: setTimeout(() => void this.options.schedule.queue(async () => this.notWoken(note.request)).catch(() => undefined), WAKE_GRACE) });
       }
       if (this.options.settings.plant === 'delivered-on-waiter-exit' || this.options.settings.plant === 'wake-assumed' || this.options.settings.plant === 'delivered-to-dead-waiter') {
-        for (const row of rows) await this.outcome(row.id, 'next_prompt', 'delivered');
+        for (const row of rows) await this.answers.outcome(row.id, 'next_prompt', 'delivered');
         return;
       }
       // Delivered only once a turn shows it: the wake's prompt carries it, or the transcript does.
@@ -630,7 +644,7 @@ export class AnswerDelivery {
   /** The answers waiting for a session deep-hook gates inside paseo, handed to paseo's plugin, which prompts it once it reads idle. */
   private async relayAnswers(session: string, r: Routes): Promise<void> {
     const relay = r.relay;
-    const rows = (await this.waitingFor(session)).filter((row) => !this.handed.has(row.id));
+    const rows = (await this.answers.waitingFor(session)).filter((row) => !this.handed.has(row.id));
     if (!relay || !rows.length) return;
     r.relay = undefined;
     this.answerWaiting.delete(session);
@@ -759,7 +773,7 @@ export class AnswerDelivery {
       const [row] = (await this.options.services.record.raw(`SELECT branch FROM sessions WHERE id = ?`, [meta.session])) as { branch: string | null }[];
       const branch = row?.branch || await new Promise<string | undefined>((done) => execFile('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: meta.cwd, timeout: 2000 }, (error, out) => done(error ? undefined : out.trim())));
       if (!repo || !branch) return undefined;
-      const forge = new Forge(this.options.settings.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+      const forge = new Forge(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
       return forge.pullFor(repo, branch);
     };
     // Well inside the gate's hold, so the reply is never late for this: past it the result is unknown.
@@ -817,14 +831,14 @@ export class AnswerDelivery {
     if (woken) {
       const r = this.routes.get(session);
       if (r && wake) r.wakes = true;
-      return this.outcome(ask, via, 'delivered');
+      return this.answers.outcome(ask, via, 'delivered');
     }
     // A session that can't be read proves nothing either way (#27): timed out, and the next prompt reads it first.
     if (woken === undefined) {
       this.unread.set(ask, session);
-      return this.outcome(ask, via, 'timed_out');
+      return this.answers.outcome(ask, via, 'timed_out');
     }
-    await this.outcome(ask, via, 'stalled');
+    await this.answers.outcome(ask, via, 'stalled');
     if (!wake) {
       await this.options.events.appendReading(session, this.options.state().sessions.get(session)?.agent ?? 'claude-code', `DeepBuild's ${via === 'stop_hold' ? 'stop' : 'prompt'} reply carrying your answer to ask:${ask} didn't reach the agent: deep-hook had given up on it. The answer goes by the session's next route.`).catch(() => undefined);
       return;
@@ -844,7 +858,7 @@ export class AnswerDelivery {
       if (handed.session !== session) continue;
       clearTimeout(handed.timer);
       this.handed.delete(ask);
-      await this.outcome(ask, handed.via === 'stop_hold' ? 'stop_hold' : 'next_prompt', 'replaced');
+      await this.answers.outcome(ask, handed.via === 'stop_hold' ? 'stop_hold' : 'next_prompt', 'replaced');
     }
   }
 
@@ -910,9 +924,9 @@ export class AnswerDelivery {
     }
     if (params.poll === true) {
       // The planted Node waiter (waiter-polls) asks each time instead of being told.
-      const rows = !r.holding ? await this.options.schedule.queue(() => this.waitingFor(session)) : [];
+      const rows = !r.holding ? await this.options.schedule.queue(() => this.answers.waitingFor(session)) : [];
       if (!rows.length) return {};
-      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'delivered');
+      for (const row of rows) await this.answers.outcome(row.id, 'next_prompt', 'delivered');
       return { session, text: this.answerText(rows) };
     }
     return new Promise((give) => {
@@ -946,12 +960,12 @@ export class AnswerDelivery {
     // A refusal is final: a session resumed later doesn't take what was refused for it.
     const refused = (await this.options.services.record.raw(`SELECT delivery FROM deliveries WHERE outcome = 'replaced'`)) as { delivery: string }[];
     // Its own: a fork shares its thread, and only the session that asked takes an answer or reports on it.
-    const rows = (await this.waitingFor(session)).filter((row) => row.session === session && !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
+    const rows = (await this.answers.waitingFor(session)).filter((row) => row.session === session && !this.askWaits.has(row.id) && !refused.some((d) => d.delivery === row.id));
     if (!rows.length) return;
     const successor = await this.replacedBy(session);
     const r = this.routes.get(successor && piAcceptsReplaced() ? successor : session);
     if (successor && !piAcceptsReplaced()) {
-      for (const row of rows) await this.outcome(row.id, 'next_prompt', 'replaced');
+      for (const row of rows) await this.answers.outcome(row.id, 'next_prompt', 'replaced');
       return;
     }
     if (!r?.places || !r.waiter) return;
@@ -984,7 +998,7 @@ export class AnswerDelivery {
       this.askWaits.delete(ask);
       const [done] = (await this.options.services.record.raw(`SELECT 1 AS yes FROM deliveries WHERE delivery = ? AND outcome IN ('delivered', 'replaced')`, [ask])) as unknown[];
       if (done) continue;
-      await this.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
+      await this.answers.outcome(ask, via as 'steer' | 'next_prompt', outcome as 'delivered' | 'replaced');
     }
     return { reported: asks.length };
   }
@@ -1060,16 +1074,58 @@ export class AnswerDelivery {
 
   /**
    * Who gates a session paseo's plugin sends a line for (#55): the adapter that bound its session ID first, deep-hook
-   * or the pi package, or null when that is the plugin. Its MCP server's token binds to the session either way.
+   * or the pi package, or null when that is the plugin. Its MCP server's token binds to the session either way, from
+   * a line checked against that session (#2070): one the core verified for a session the plugin gates, or, for one
+   * another adapter gates, a line from its folder whose process that session's agent runs under. A token maps once.
    */
   paseoOwner(meta: HookMeta): Promise<string | null> {
     return this.options.schedule.queue(async () => {
-      if (meta.paseo?.bind && meta.session) { this.binds.set(meta.paseo.bind, meta.session); this.tokenBound.add(meta.session); }
       const session = this.options.state().sessions.get(meta.session);
       const owner = session && session.agent !== 'paseo' ? session.agent : null;
       if (owner) this.inPaseo.add(meta.session);
+      const bind = owner ? meta.paseo?.bind : undefined;
+      // Each line, token and process is read once: a process the agent doesn't run under never comes to be above it.
+      const key = `${bind}\0${meta.session}\0${meta.ppid}`;
+      if (bind && !this.binds.has(bind) && !this.notUnder.has(key) && meta.cwd === session!.cwd) {
+        const under = await this.runsUnder(session!, meta.ppid);
+        if (under) this.binds.set(bind, meta.session);
+        else if (under === false) this.notUnder.add(key);
+      }
       return owner;
     });
+  }
+  /** Tokens, sessions and processes a line named whose session's agent doesn't run under that process. */
+  private readonly notUnder = new Set<string>();
+
+  /**
+   * Whether a paseo line names a bind token another session holds (#2070): the token stays with that session, and the
+   * line is recorded unverified, with one reading per pair naming both sessions.
+   */
+  async tokenTaken(meta: HookMeta): Promise<boolean> {
+    const holder = meta.agent === 'paseo' && meta.session && meta.paseo?.bind ? this.binds.get(meta.paseo.bind) : undefined;
+    if (holder === undefined || holder === meta.session) return false;
+    if (!this.takenRead.has(`${meta.session}\0${holder}`)) {
+      this.takenRead.add(`${meta.session}\0${holder}`);
+      await this.options.events.appendReading(meta.session, meta.agent, `A paseo line for session ${meta.session} named the bind token session ${holder} holds: the token stays with ${holder}, binds nothing to ${meta.session}, and the line is recorded unverified.`).catch(() => undefined);
+    }
+    return true;
+  }
+  private readonly takenRead = new Set<string>();
+  /** A paseo line the core checked against its session maps the bind token it carries there, once (#2070); `verified` passes through. */
+  checked(meta: HookMeta, verified: boolean): boolean {
+    if (verified && meta.agent === 'paseo' && meta.session && meta.paseo?.bind && !this.binds.has(meta.paseo.bind)) this.binds.set(meta.paseo.bind, meta.session);
+    return verified;
+  }
+
+  /** Whether a session's agent process, by PID and start time, runs under process `pid`; undefined when `ps` can't say. */
+  private async runsUnder(session: Session, pid: number): Promise<boolean | undefined> {
+    const start = await this.options.state().startOf(session.pid, true);
+    if (start === undefined) return undefined;
+    if (start !== session.start) return false;
+    const up = await parents();
+    if (!up.size) return undefined;
+    for (let at = up.get(session.pid), n = 0; at !== undefined && at > 1 && n < 64; at = up.get(at), n++) if (at === pid) return true;
+    return false;
   }
 
   /**

@@ -31,7 +31,7 @@ pub struct Spec {
     pub fixture: Value,
 }
 
-fn p(
+pub(crate) fn p(
     name: &'static str,
     ty: &'static str,
     unit: &'static str,
@@ -58,8 +58,8 @@ fn ranged(mut p: P, min: f64, max: f64) -> P {
     p
 }
 
-const G: &str = "geometry";
-const S: &str = "shading";
+pub(crate) const G: &str = "geometry";
+pub(crate) const S: &str = "shading";
 
 fn paint() -> P {
     p(
@@ -116,7 +116,7 @@ fn shade() -> P {
 }
 
 /// Every mark in 3D's common fields (Marks in 3D: common fields).
-fn common(mut params: Vec<P>) -> Vec<P> {
+pub(crate) fn common(mut params: Vec<P>) -> Vec<P> {
     params.push(p(
         "size_space",
         "screen | world",
@@ -148,7 +148,7 @@ fn common(mut params: Vec<P>) -> Vec<P> {
     params
 }
 
-fn item(kind: &str, params: Value) -> Value {
+pub(crate) fn item(kind: &str, params: Value) -> Value {
     json!({"kind": kind, "params": params})
 }
 
@@ -277,11 +277,35 @@ fn extras(kind: &str) -> Vec<P> {
             ),
         ],
         "plate@1" => vec![
-            p("height", "field, m", "m", Value::Null, G, json!(0), json!({"wave": {"amplitude": 0.1, "wavelength": 1}})),
+            p(
+                "height",
+                "field, m",
+                "m",
+                Value::Null,
+                G,
+                json!(0),
+                json!({"wave": {"amplitude": 0.1, "wavelength": 1}}),
+            ),
             // #2014: a terrain plate's height field, size and spacing (Builder plate: terrain).
-            p("terrain", "terrain", "m", Value::Null, G, json!({"height": 0, "size": [4, 4]}), json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5})),
+            p(
+                "terrain",
+                "terrain",
+                "m",
+                Value::Null,
+                G,
+                json!({"height": 0, "size": [4, 4]}),
+                json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5}),
+            ),
             // #537: a terrain plate's overlays tint its cover and rebuild nothing (Builder plate: terrain overlays).
-            p("overlays", "[overlay] ≤ 2", "", Value::Null, S, Value::Null, json!([])),
+            p(
+                "overlays",
+                "[overlay] ≤ 2",
+                "",
+                Value::Null,
+                S,
+                Value::Null,
+                json!([]),
+            ),
         ],
         _ => Vec::new(),
     }
@@ -391,6 +415,17 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("miter"),
                 json!("round"),
             ),
+            // #450: the path of the item it names, in place of points; the sweep leaves it unset,
+            // since the fixture holds no source.
+            p(
+                "trail",
+                "{of, span, segments, width, taper, fade, space, window, rate, max_points}",
+                "",
+                Value::Null,
+                G,
+                Value::Null,
+                Value::Null,
+            ),
         ])),
         reads: None,
         fixture: json!({"it": item("mark.line@1", json!({"points": [[0, 0, 0], [1, 1, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}}))}),
@@ -407,24 +442,6 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             "it": item("mark.line@1", json!({"points": [[0, 0, 0], [1, 1, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}})),
         });
         line
-    };
-    let point = || Spec {
-        kind: "mark.point@1",
-        module: "scene3d",
-        params: common(vec![
-            p("size", "px", "px", json!(4), G, json!(4), json!(6)),
-            p(
-                "shape",
-                "dot | square | diamond",
-                "",
-                json!("dot"),
-                S,
-                json!("dot"),
-                json!("square"),
-            ),
-        ]),
-        reads: None,
-        fixture: json!({"it": item("mark.point@1", json!({"size": 4, "paint": {"fill": {"role": "ink"}}}))}),
     };
     let text = || Spec {
         kind: "mark.text@1",
@@ -811,7 +828,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             solid(SCENE3D.iter().find(|k| **k == kind)?)
         }
         "mark.line@1" => edged(),
-        "mark.point@1" => point(),
+        "mark.point@1" => crate::cloud::spec(),
         "mark.text@1" => text(),
         "light.sun@1" => sun(),
         "light.point@1" => local("light.point@1", false),

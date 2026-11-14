@@ -282,7 +282,10 @@ impl Hub<'_> {
         at: [f64; 2],
     ) -> (Option<String>, Option<String>) {
         let empty = Map::new();
-        let items = doc.get("items").and_then(Value::as_object).unwrap_or(&empty);
+        let items = doc
+            .get("items")
+            .and_then(Value::as_object)
+            .unwrap_or(&empty);
         let order = |id: &str| {
             let item = items.get(id);
             let order = item.and_then(|i| i.get("order")).and_then(Value::as_str);
@@ -367,8 +370,7 @@ impl Hub<'_> {
             sized["size"] = json!(size);
             let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
             let mut labels = deep_canvas_scene3d::label::Labels::new();
-            if let Ok(scene) = deep_canvas_scene3d::scene::evaluate(&sized, t, &look, &mut labels)
-            {
+            if let Ok(scene) = deep_canvas_scene3d::scene::evaluate(&sized, t, &look, &mut labels) {
                 quote = scene
                     .boxes()
                     .into_iter()
@@ -379,7 +381,10 @@ impl Hub<'_> {
                     .find_map(|(id, _)| text_of(&id));
             }
         }
-        let top = hits.into_iter().max_by(|a, b| a.0.cmp(&b.0)).map(|(_, id)| id);
+        let top = hits
+            .into_iter()
+            .max_by(|a, b| a.0.cmp(&b.0))
+            .map(|(_, id)| id);
         (top, quote)
     }
 
@@ -414,8 +419,16 @@ impl Hub<'_> {
         let Some(document) = self.revision(doc, rev) else {
             return refused("unknown_revision");
         };
-        // A 3D revision is evaluated whole: its materials, cameras and meshes are items too.
+        // A 3D revision is evaluated whole: its materials, cameras and meshes are items too. The
+        // current revision draws each item where its world's outputs put it at `t`, as deep_show
+        // draws it (#2293); an earlier one's worlds were baked into a form no longer held.
         if crate::probe::draws_3d(&document) {
+            let current = self.rev_at(doc, i64::MAX) == Some(rev);
+            let document = if current && document.get("worlds").is_some() {
+                self.with_outputs(doc, &document)
+            } else {
+                document
+            };
             return self.render_back_3d(session, rev, &document, t, size, probes);
         }
         let shown = crate::shared::drawable(&document);

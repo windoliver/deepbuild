@@ -1,0 +1,34 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8J2",
+  "kind": "workspace.task",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017211123,
+  "data": {
+    "workspace": "Clientreport3fa9c1d2",
+    "task": 3,
+    "step": "filed",
+    "source_id": "Clientreport3fa9c1d2#3",
+    "link": "https://github.com/acme/report/issues/101",
+    "title": "Write part 3 of the client report",
+    "body": "task:Clientreport3fa9c1d2#3",
+    "criteria": [
+      "Part 3 of the client report is written"
+    ],
+    "authors": [
+      {
+        "handle": "you",
+        "role": "owner"
+      }
+    ],
+    "updated": "2026-11-13T11:00:00.000Z",
+    "blocked_by": [
+      1
+    ],
+    "issue": 101,
+    "commit": null,
+    "kept": null
+  }
+}
