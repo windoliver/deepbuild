@@ -150,3 +150,4 @@ A separate agent reviewed the branch's diff against main after the merges of #53
   - `each` readings past four steps' worth are not dropped with `reading.overflow`; that rule is #210's.
   - Export, the film viewer and the film audit inline vectors but not logic programs.
   - A second `eval` at the same time returns no issues; seen while testing the trap fix, not traced.
+  - `logic.step`'s node key in an `eval` reply differs from run to run, and with it the key of what reads its arrays; the arrays and hashes don't. #538 inlines each bake's compare timings into the drawn form, and `logic.step` reads the whole form. So a rerun of `outputs.sh` differs from the committed `no-physics.out.json` in its timing fields and in those keys.
