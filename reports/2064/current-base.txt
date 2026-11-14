@@ -1,0 +1,32 @@
+#2064 current-base verification
+Base: bfe8c8a5e
+Built: npm run build --workspaces; cargo build --locked --offline -p deep-hook (both exit 0)
+Runner: node scripts/affected.mjs tests/acceptance/2064/gate.test.ts tests/acceptance/2064/passed.test.ts tests/acceptance/2064/record.test.ts
+Test subprocess: 6 intended assertion failures, 2 passing twins.
+Pending lint jobs were stopped by their recorded PIDs after test completion; this is not a complete affected PASS.
+
+FAIL: AC6 #2064.2afeb0df with the record's read of the issue's task failing inside the rule, gh pr create saying Closes #7 is denied naming the error
+`gh pr create --title t --body "Closes #7"` ran though the rule's own read threw; an error inside the rule must refuse the call: expected false to be true // Object.is equality
+
+FAIL: the Closes rule on a task with R2 unproven › AC1 #2064.715f176e a joined command's gh pr create saying Closes #7 is denied naming R2, with its body in a heredoc, and each pull request command of a joined line is read
+`git push -u origin b && gh pr create --title t --body "Closes #7"` ran; it must be denied naming R2: expected false to be true // Object.is equality
+
+PASS: AC4 #2064.ab3e665d with every requirement passed, gh pr create and gh pr edit saying Closes #7 run, alone, joined, from a heredoc, a body file and --fill
+
+FAIL: the Closes rule on a task with R2 unproven › AC2 #2064.9e9dae21 a body file, --fill and an edit's body file saying Closes #7 or Fixes #7 are each denied naming R2
+each of these must be denied naming R2:
+body file: `gh pr create --title t --body-file pr.md` was allowed: 
+body file after a push: `git push -u origin b && gh pr create --title t --body-file pr.md` was allowed: 
+edit with a body file: `gh pr edit 3 --body-file pr.md` was allowed: 
+fill, one commit saying Fixes #7: `gh pr create --fill` was allowed: : expected [ …(4) ] to deeply equal []
+
+FAIL: AC7 #2064.20caa9d6 against a stand-in forge, the pull request a joined git push && gh pr create opened is recorded as the session's, with its link, though the command's output holds none
+`git push -u origin b && gh pr create --title t --body "Part of #7"` opened https://github.com/acme/shop/pull/1 on the forge but no reading of the session records it: []: expected false to be true // Object.is equality
+
+FAIL: the Closes rule on a task with R2 unproven › AC3 #2064.c8d25a38 in a checkout of acme/shop, Closes acme/shop#7 is denied naming R2, and another repo's issue 7 is not this task's
+`gh pr create --title t --body "Closes acme/shop#7"` ran; the form owner/repo#n names the session's own repo and must be read as closing #7: expected false to be true // Object.is equality
+
+PASS: the Closes rule on a task with R2 unproven › AC4 #2064.ab3e665d the twins run: each form saying Part of #7 with R2 listed under it
+
+FAIL: the Closes rule on a task with R2 unproven › AC5 #2064.80da88e3 a body file that is missing is denied naming the file
+`gh pr create --title t --body-file missing.md` ran; a body it can't read must be refused: expected false to be true // Object.is equality
