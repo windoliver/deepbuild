@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The numbers check plug-in (#87): check kind `numbers` re-runs the query behind each number a claim states, and its independent recount where one exists, failing with both values shown when they differ; runs each scoring term, filter, input or data source a change adds on a read-only sample of real data, failing one that changes nothing there; and `checkSpeed` re-runs a stated speed through the timing check behind it, on cold caches against a named baseline. Its default export is the plug-in's register function; `tests/acceptance/87/numbers` drives it.
+The numbers check plug-in (#87): check kind `numbers` re-runs the query behind each number a claim states, and its independent recount where one exists, failing with both values shown when they differ; runs each scoring term, filter, input or data source a change adds on a read-only sample of real data, failing one that changes nothing there; and `checkSpeed` re-runs a stated speed through the timing check behind it, on cold caches against a named baseline. Its default export is the plug-in's register function; `tests/acceptance/87/numbers` drives it. The hub holds the kind in its kind table (`packages/hub/src/kinds.ts`, #1537) and runs it on a claim's numbers.
 
 ## Where new code goes
 

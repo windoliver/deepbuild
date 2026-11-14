@@ -10,21 +10,13 @@ import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import type { Row, Why } from './rows.js';
+import { SECTION } from './sections.js';
 import { visible } from './visible.js';
 
 /** What deep status shows under a session's row (status.ts: StatusRow, less what the row holds). */
 export interface Detail { note?: string; verdict?: string; readings?: string[]; calls?: string[]; commits?: string[]; turn?: { calls: number; failed: number } }
 /** A read of the list: its rows at a log_pos, each session's detail when asked, and when the hub stopped answering if it did. */
 interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why }
-
-/**
- * The list's sections, as deep status has always listed them (#19): what needs you, is stuck or is flagged, then what
- * works, then what finished, then the quiet ones, so no number of working sessions pushes one that needs you down.
- */
-export const SECTION: Record<string, number> = {
-  'needs you': 0, stuck: 0, flagged: 0, BLOCKED: 0, INVALID: 0, INCONCLUSIVE: 0, stale: 0,
-  'sent back': 1, 'says done': 1, working: 1, queued: 1, PASS: 2, finished: 2, quiet: 3,
-};
 
 /** The one count sentence, as the app says it (crates/deep-app/src/views.rs: asks_need_you). */
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);

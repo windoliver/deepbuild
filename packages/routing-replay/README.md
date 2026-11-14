@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The ask router's routing replay (#1980): the recorded nixpkgs Hydra failures, fetched once from public build history into a snapshot kept by its SHA-256, replayed on the virtual clock through the asks core, one ask per cause. It runs on the reference Mac in the local preflight, never in CI, starts no agent session and sends nothing anywhere: asks go to the replay's own record and their placeholder owners.
+The ask router's routing replay (#1980): the recorded nixpkgs Hydra failures, fetched once from public build history into a snapshot kept by its SHA-256, replayed on the virtual clock through the asks core, one ask per cause. It runs on the reference Mac in the local preflight, never in CI, starts no agent session and sends nothing anywhere: asks go to the replay's own record and their placeholder owners. Its callers are its own tests and `tests/acceptance/1980`; nothing in the hub or the CLI runs it.
 
 - **The snapshot** (`snapshot/<SNAPSHOT>.json.gz`, the JSON whose SHA-256 is `SNAPSHOT`): the 107 evaluations of the trunk jobset `nixpkgs:unstable` from 3 September to 11 October 2026 (`window: true`), then the 39 evaluations of the 15 days after (`window: false`), which carry only the jobs that build again. Each window evaluation holds its failures as their build records give them:
   - **Newly failing**: a job whose build succeeded in the evaluation before and whose own build failed or timed out in this one (`status` `failed` or `timed out`). It names the merge it came in with (`merge: {commit, owner}`). A build the builder stopped (aborted, cancelled, past its log or output limit) is no failure of the job's own.
