@@ -2,7 +2,7 @@
   "core": {
     "version": "0.0.0",
     "digest": "f54a7b72c2a3e9c792a2449c7293f7f7af83c0016db833ce2e5f776ed30c1bed",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -11,7 +11,7 @@
       "order": "PASS",
       "schedule": "PASS",
       "repair_loop": "PASS",
-      "time_order": "FAIL",
+      "time_order": "PASS",
       "catalog": "PASS",
       "registries": "PASS"
     }
@@ -212,7 +212,7 @@
   "motion": {
     "version": "1.0.0",
     "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -222,7 +222,7 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "FAIL",
+      "catalog": "PASS",
       "migration": "PASS",
       "registries": "PASS"
     }
@@ -317,14 +317,14 @@
   "text": {
     "version": "1.0.0",
     "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "read_set": "PASS",
       "order": "PASS",
-      "schedule": "FAIL",
+      "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"

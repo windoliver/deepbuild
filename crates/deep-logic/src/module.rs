@@ -95,6 +95,8 @@ fn planted(r: &mut Registrar, code: &str, body: &str) {
         },
     });
     r.fixture(&format!("logic-{}", &code[6..]), doc, None)
+        // Planted: the kit runs it, and the `fixtures` call leaves it out (#2085, #2362).
+        .planted()
         // The kit seals this module alone, so the core's check finds logic@1 an unknown kind.
         .sidecar(json!({"codes": [code, "unknown_kind"], "checks": [{"kind": code}]}))
         .fixture_assets(vec![program]);
