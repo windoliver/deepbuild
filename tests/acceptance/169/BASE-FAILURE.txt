@@ -1,0 +1,58 @@
+#169: why every test fails at the base 23baa43b4 ("Merge pull request #2453"). A note, not a run.
+
+The suite was not run at the base: the surface it enters plainly doesn't exist there, and the machine is shared and
+loaded, so deep-show was not built. What each test meets first was read from the base's code, not observed. The type
+check passes (`node node_modules/typescript/bin/tsc -p tests/acceptance/169/tsconfig.json`: exit 0) and `vitest list
+--root tests/acceptance/169` collects 17 tests in 7 files.
+
+What the base has, from its code:
+- crates/deep-show/src/export.rs: `parse` reads `video.codec` and ignores `video.page`; `Job::target` maps a codec it
+  doesn't know to a target of the same name, so `page` is looked up in the sealed `export.target@1` registry, which
+  holds no `page`, and `export_inner` answers `{"outcome": "refused", "code": "unknown_target", "target": "page",
+  "codec": "page"}` before anything is written (the scratch folder beside `out` is removed). No page, manifest,
+  player, receipt `states`/`edges`/`bytes`/`warnings`/`redaction`/`files` exists.
+- crates/deep-show/src/main.rs: `eval` reads `doc`, `t`, `pixels`, `film`, `size`, `arrays`, `paths`, `track`,
+  `texts` and the rest, and no `carried`, so its reply has no `carried`. An unknown scenario `planted` name answers the
+  scenario `{"ok": false, "code": "bad_input"}`; `page_keys_by_picture` and `page_targets_on_image` are unknown there,
+  while `sends_without_approval` (#105) is known.
+- crates/deep-show/Cargo.toml has `test-leave-out-logic` and `test-leave-out-physics` but no `test-page-latch`, and
+  crates/deep-canvas-test-modules has no `test.latch`.
+- benchmarks/budgets.json has no task naming #169.e6c2fc38; docs/evidence/169/ doesn't exist.
+- What the tests lean on and the base has: `deep show`, the png_seq still export with `track` (#501, #544) and #507's
+  waiting path, `see` with target nodes `<control>/<option>` (#504), `input` control events, `send` and `approve`
+  (#105), `registry`. If the base's document check refused one of the fixtures, the test would fail earlier, at
+  "… is presented"; none of them uses a field the base is known to refuse.
+
+Per test:
+
+- walkthrough.test.ts (build `full`)
+  - AC1 "the page holds 24 states …": `walkPage()` fails at `pageReceiptOf`: "the walkthrough page is exported:
+    expected 'refused' to be 'exported'" (unknown_target).
+  - AC1 "in a browser with networking off …": the same, at `walkPage()`, before any browser starts.
+  - AC7 "in every state every target is reachable by Tab …": the same, at `walkPage()`.
+  - AC7 "a page whose targets are only boxes on an image …": the app's trees run first (the base has `see` and target
+    nodes, so this run is expected to pass its fixture check); then the planted run fails at "deep-show run takes the
+    scenario (planted page_targets_on_image)": the base answers bad_input for the unknown name.
+- refusals.test.ts (build `full`)
+  - AC2 "the dial sampled 65 times …": the base refuses with unknown_target and writes nothing, so `refusedUnwritten`
+    passes; it fails at "the refusal names the control dial" (the refusal names only `page`).
+  - AC2 "the plate with the status binding lamp_status …": as above, at "the refusal names the binding lamp_status"
+    (the unbound plate's export, which the base would also refuse, is not reached).
+  - AC2 "the grid of 5 × 13 places …": as above, at "the refusal names the control ctl_rows".
+- quiz.test.ts (build `full`)
+  - AC3: fails at "the quiz page is exported: expected 'refused' to be 'exported'".
+- bound.test.ts (build `full`)
+  - AC4 "the bound reading's page …": fails at "the bound reading's page is exported", before any browser starts.
+  - AC4 "the photo's page …": fails in its first run at "the photo's page: the export is exported"; the planted run is
+    not reached.
+- budgets.test.ts (build `full`)
+  - AC5 "the perf lane has a task …": fails at "benchmarks/budgets.json has a task naming #169.e6c2fc38".
+  - AC5 "the walkthrough's page carries a player under 100 KB": fails at "the walkthrough page at 320 × 180 is
+    exported".
+  - AC5 "on the reference Mac …": INCONCLUSIVE off a reference Mac or in an unfit state (never a pass); on a reference
+    Mac in a fit state, the warm-up fails at "the walkthrough page at 1080p30, run 0 is exported".
+- carried.test.ts (build `full,test-leave-out-logic,test-leave-out-physics,test-page-latch`)
+  - All three tests fail at "the binary builds: deep-show with features full,test-leave-out-logic,
+    test-leave-out-physics,test-page-latch": cargo refuses the unknown feature `test-page-latch`.
+- taste.test.ts
+  - AC8: INCONCLUSIVE: docs/evidence/169/ holds none of the six files.
