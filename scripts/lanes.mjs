@@ -395,6 +395,8 @@ timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
 // #1936's files each build deep-show.
 alone.push('tests/acceptance/1936/');
+// #1935's files each build deep-show.
+alone.push('tests/acceptance/1935/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
