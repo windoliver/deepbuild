@@ -13,19 +13,23 @@
 // walking the tree for a `.sh` file holding the check's words, so its text spells no path under `.deepbuild/`: what
 // the guard sees is a command, and what it writes is decided only when it runs.
 //
+// The criterion's "each spec" is not driven here (AC12-REDRAFT.md): this file covers the drafted check and the
+// expected output it references. The approved bytes are not the commit's: the base commit holds earlier drafts of R1's check and its expected
+// output that judge the other way, so only the hub's copy by digest gives the runs this file requires.
+//
 // The world (helpers.ts): R1, "An expired token is rejected with 401", judged by the drafted check
 // `.deepbuild/checks/expired-status.sh`, which compares the status `src/auth.js` gives with the expected output it
 // references, `.deepbuild/checks/expired-token.expected` (`401`). At the base `rejectsExpired` is false, so the
 // approved check fails; FLAG makes it pass.
 import { ok } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AC12, BEHAVIOR, EXPECTED_BYTES, EXPECTED_FILE, FIX, FLAG, REF_CHECK_BYTES, REF_CHECK_FILE, byId, childEnv, claimsOf, cleanup, control, decision,
-  expectTask, failureOf, lastPos, listed, lockedFor, makeWorld, proposalsNaming, replyText, req, runOf, runsOf, Session, settle, sha256, shown,
-  startHub, stopHub, taskVerdicts, trustRepo, verdict, type Draft, type Ev, type Hub, type Line,
+  expectTask, failureOf, git, lastPos, listed, lockedFor, makeWorld, proposalsNaming, replyText, req, runOf, runsOf, Session, settle, sha256, shown,
+  startHub, stopHub, taskVerdicts, trustRepo, verdict, type Draft, type Ev, type Hub, type Line, type World,
 } from './helpers.ts';
 
 // The criterion's assertions are node:assert's, so a failing one is the framework's own assertion failure, thrown in
@@ -56,6 +60,34 @@ interface Rewrite { file: string; after: string; command: string; how: string }
 const CHECK_TO_EXIT_0: Rewrite = { file: REF_CHECK_FILE, after: REWRITTEN, command: REWRITE_CHECK, how: 'rewritten on disk to `exit 0`' };
 const EXPECTED_TO_200: Rewrite = { file: EXPECTED_FILE, after: '200\n', command: REWRITE_EXPECTED, how: 'with its expected output rewritten on disk to `200`, the status the unfixed code gives,' };
 
+/**
+ * What the repo's base commit holds at R1's check and its expected output: earlier drafts you never approved, each
+ * judging the other way from the bytes you approve. The committed check passes while rejectsExpired is false and fails
+ * once FLAG is made; the committed expected output is a status the code never gives. So a gate that takes a file from
+ * the commit (`git show <base>:<path>`), not from the hub's copy by digest, runs something that is neither the approved
+ * bytes nor the file on disk, and its runs come out differently. The spec is as helpers.ts commits it.
+ */
+const COMMITTED: Record<string, string> = {
+  [REF_CHECK_FILE]: '#!/bin/sh\n# An earlier draft, never approved.\nnode -e "process.exit(require(\'./src/auth.js\').rejectsExpired ? 1 : 0)"\n',
+  [EXPECTED_FILE]: '403\n',
+};
+/** What you approve: the bytes each drafted file holds in the working tree when the definition locks. */
+const APPROVED: Record<string, string> = { [REF_CHECK_FILE]: REF_CHECK_BYTES, [EXPECTED_FILE]: EXPECTED_BYTES };
+
+/**
+ * The world: the base commit holds COMMITTED, and the working tree holds APPROVED before the project is trusted, the
+ * hub starts or a session opens. A commit that holds the approved bytes after all is BLOCKED: the three copies must differ.
+ */
+function world(): World {
+  const w = makeWorld({ drafts: [DRAFT], files: { ...COMMITTED } });
+  for (const [file, bytes] of Object.entries(APPROVED)) {
+    writeFileSync(join(w.repo, file), bytes);
+    const committed = git(w.tmp, w.repo, ['show', `${w.base}:${file}`]);
+    if (committed !== COMMITTED[file]!.trim()) throw Error(`BLOCKED: the base commit must hold the earlier draft of ${file}, not the approved bytes: it holds ${JSON.stringify(committed.slice(0, 200))}`);
+  }
+  return w;
+}
+
 const HEX64 = /\b[0-9a-f]{64}\b/g;
 const r1Run = (r: { started: Ev }): boolean => runOf(REF_CHECK_FILE)(r) || runOf('R1')(r);
 const finishedR1 = (events: Ev[], ref: string, since: number) => runsOf(events, ref, since).find((r) => r1Run(r) && r.finished !== undefined);
@@ -66,7 +98,7 @@ const finishedR1 = (events: Ev[], ref: string, since: number) => runsOf(events, 
  * the approved bytes and fails. Throws an Error naming the criterion at the first assertion that doesn't hold.
  */
 async function scenario(plant?: string, rw: Rewrite = CHECK_TO_EXIT_0): Promise<{ hub: Hub; s: Session; ref: string }> {
-  const w = makeWorld({ drafts: [DRAFT] });
+  const w = world();
   await trustRepo(w, true);
   const hub = await startHub(w, { plant });
   const s = new Session(w);
@@ -123,28 +155,36 @@ async function scenario(plant?: string, rw: Rewrite = CHECK_TO_EXIT_0): Promise<
   return { hub, s, ref };
 }
 
+/**
+ * Control for a drafted-file arm: the approved bytes are what runs and they can pass. With FLAG made the approved
+ * check's status is the approved expected output, 401, so R1's run passes on the next claim, whatever the rewritten
+ * file holds on disk and whatever the base commit holds.
+ */
+async function passesOnceFlagged(hub: Hub, s: Session, ref: string): Promise<void> {
+  const since = await lastPos(hub);
+  await s.edit(FLAG.file, FLAG.from, FLAG.to);
+  await s.stop('The middleware now says it rejects expired tokens.');
+  const events = await settle(hub, (all) => finishedR1(all, ref, since) !== undefined, 150_000);
+  const run = finishedR1(events, ref, since);
+  must(run?.finished?.data.outcome === 'passed', `${AC12} control: with FLAG made, R1's approved check ${REF_CHECK_FILE} passes on the next claim: ${JSON.stringify(run?.finished?.data ?? 'no finished run')}`);
+}
+
 describe(`${AC12} the gate runs drafted checks from the bytes you approved, kept by digest, and an unrecognized write becomes a proposal`, () => {
   it(`${AC12} with ${REF_CHECK_FILE} rewritten to exit 0 by a write the guard didn't recognize, the claim runs the approved bytes and the edit becomes a proposal naming the file`, async (ctx) => {
     await verdict(ctx, async () => {
       const { hub, s, ref } = await scenario();
-      // Control: the approved bytes are what runs and they can pass. With FLAG made the approved check's status is the
-      // expected 401, so R1's run passes, the rewritten file on disk notwithstanding.
-      const since = await lastPos(hub);
-      await s.edit(FLAG.file, FLAG.from, FLAG.to);
-      await s.stop('The middleware now says it rejects expired tokens.');
-      const events = await settle(hub, (all) => finishedR1(all, ref, since) !== undefined, 150_000);
-      const run = finishedR1(events, ref, since);
-      must(run?.finished?.data.outcome === 'passed', `${AC12} control: with FLAG made, R1's approved check ${REF_CHECK_FILE} passes on the next claim: ${JSON.stringify(run?.finished?.data ?? 'no finished run')}`);
+      await passesOnceFlagged(hub, s, ref);
       await stopHub(hub);
     });
   }, 480_000);
 
   it(`${AC12} with ${EXPECTED_FILE} rewritten to 200 by a write the guard didn't recognize, the claim runs the approved expected output, its hash differs from the lock's and the edit becomes a proposal naming the file`, async (ctx) => {
     await verdict(ctx, async () => {
-      const { hub } = await scenario(undefined, EXPECTED_TO_200);
+      const { hub, s, ref } = await scenario(undefined, EXPECTED_TO_200);
+      await passesOnceFlagged(hub, s, ref);
       await stopHub(hub);
     });
-  }, 300_000);
+  }, 480_000);
 
   for (const rw of [CHECK_TO_EXIT_0, EXPECTED_TO_200]) {
     it(`${AC12} a hub whose definition hash leaves out the checks' bytes and references (DEEP_HUB_PLANT=hash-check-paths) fails at the recomputed hash, naming ${rw.file}`, async (ctx) => {

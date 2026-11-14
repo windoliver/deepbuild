@@ -1,9 +1,10 @@
 #322 acceptance suite on the base commit 69803b94 (origin/main), 2026-11-03 10:37-10:54 UTC, before any #322 code.
 Run: npx vitest run --root tests/acceptance/322 --no-file-parallelism   (Node 24.22.0, Linux; 1-minute load 30 falling
 to 12 on the machine's cores during the run)
-Result: Test Files 13 failed (13); Tests 24 failed (24); 983 s for the first run of 23 failures plus the rerun of
-approved.test.ts below. Every test fails at a named assertion, or BLOCKED on a plant the base doesn't list. None
-crashes the runner. Trimmed to each test's failing assertion.
+Result: Test Files 13 failed (13); Tests 24 failed (24); 983 s. Those are that run's counts as recorded. They include
+the first draft of AC12's test, approved.test.ts, and the time of its rerun; that file and its output were removed
+later (see AC12 below), so its lines are no longer listed here. Every test listed fails at a named assertion, or
+BLOCKED on a plant that commit doesn't list. None crashes the runner. Trimmed to each test's failing assertion.
 
 What the base does: at a stop that did work it makes a claim (claim.made) for the session's open task whether or not
 a definition is locked, runs only the locked definition's drafted checks (`sh <file>` from the approved bytes), and
@@ -11,14 +12,25 @@ never a check of the repo's .deepbuild/done.yaml; it locks a handed definition a
 the project's trust; it reads no `criteria`, has no GitHub source and no `automated` author (work.item@1 refuses the
 field); it allows `gh pr create` with any body; its send-back names the check that failed and not the requirement;
 it keeps a drafted check's bytes by digest but nothing a check references; it locks a check at any path under the
-folder; and it lists none of this suite's plants.
+folder; and of the plants this suite names it lists only the two that came with #303, runs-disk-bytes and
+hash-check-paths (AC12's wrong programs), and none of the others.
 
 AC12's tests are the blind redraft, approved-redraft.test.ts (AC12-REDRAFT.md); the first draft and its run here were
-removed. The redraft was not run on 69803b94. Its fail-first evidence is its wrong programs, both of which the base
-lists, run 2026-11-09 with the product code of 414947b4 (branch head 2728e6c5):
+removed. The redraft was not run on 69803b94. It was last run 2026-11-14 on the product code of ef869ad8, the merge
+base of its branch with origin/main (main's history was rewritten 2026-11-09, so the hashes earlier notes gave,
+414947b4 and 2728e6c5, are from before the rewrite):
 npx vitest run tests/acceptance/322/approved-redraft.test.ts --no-file-parallelism: Test Files 1 passed (1); Tests 6
-passed (6); about 10 s. The correct hub holds both arms (the check rewritten to `exit 0`, with its FLAG control; the
-expected output rewritten to `200`), and each plant arm requires the scenario to fail with these messages:
+passed (6); about 10 s. The unplanted hub holds both arms (the check rewritten to `exit 0`; the expected output
+rewritten to `200`; each with its FLAG control), with the base commit holding earlier drafts that are neither the
+approved bytes nor the rewritten ones. Their fail-first evidence is the wrong programs, runs-disk-bytes and
+hash-check-paths, both of which ef869ad8 lists: each of the four plant arms requires the scenario to fail with the
+messages below.
+
+AC12's "each spec" clause is NOT covered by this suite, so AC12 stays partly proven. The hub at ef869ad8 keeps no
+copy of .deepbuild/done.yaml by digest (evidence.read of its SHA-256 answers not_found) and runs the spec of the
+claim's snapshot, so a spec rewritten by a write the guard didn't recognize is the one that runs. The two tests
+drafted for the clause fail here for that reason and are held outside the repo until the product change lands
+(approved-spec.test.ts; follow-up issue: #1864).
 
 approved-redraft.test.ts (AC12 #322.0cd8cc47), the wrong programs
   DEEP_HUB_PLANT=runs-disk-bytes, the check rewritten to exit 0
