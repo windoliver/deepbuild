@@ -1,0 +1,10 @@
+// A test package from outside DeepBuild's signed release (#350 AC4, blind redraft), sandboxed: a tool.before handler
+// and an action, enabled and disabled again and again. Each load draws its own number, and its handler's block
+// carries that number and how many times this load's handler ran, so a block says which load answered and whether
+// it was asked once.
+export default function (deep: any): void {
+  const load = 1 + Math.floor(Math.random() * 1_000_000_000);
+  let beat = 0;
+  deep.on('tool.before', async () => ({ context: { template: 'beat', values: { load, beat: ++beat } } }));
+  deep.registerAction('ext.pulse.ping', { declares: 'read', input: { type: 'object' } }, async () => ({ load, beat }));
+}

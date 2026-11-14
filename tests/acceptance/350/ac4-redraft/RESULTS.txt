@@ -1,0 +1,170 @@
+#350 AC4 blind redraft: 5 runs of
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/350/ac4-redraft
+Linux (bubblewrap sandbox), node v24.22.0, command sandbox off. Paths: the checkout is <checkout>.
+
+===== run 1: exit 1; /proc/loadavg before: 4.51 5.38 8.48 3/3700 2938660
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/350/ac4-redraft
+
+ ❯ ac4.test.ts (7 tests | 1 failed) 3532ms
+   ❯ AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement (7)
+     × AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement 284ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4.test.ts > AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement > AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement
+AssertionError: the removed version's late reply reaches no agent: {"order":["deepbuild/swap"],"bound":10000,"denies":[],"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"failed":[]}: expected '{"context":[{"extension":"deepbuild/s…' not to contain 'late handler reply'
+
+Expected: "late handler reply"
+Received: "{"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"denies":[]}"
+
+ ❯ ac4.test.ts:334:133
+    332|     expect(done(cameCall), `the removed version's late call delivers n…
+    333|     if (cameHook.state === 'value') {
+    334|       expect(agentSees(cameHook.value), `the removed version's late re…
+       |                                                                                                                                     ^
+    335|       expect(blocksOf(cameHook.value, SWAP).filter((b) => b.text.inclu…
+    336|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:52:11
+   Duration  3.71s (tests 97%, transform 2%, import 1%)
+
+
+===== run 2: exit 1; /proc/loadavg before: 4.95 5.46 8.49 5/3654 2939484
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/350/ac4-redraft
+
+ ❯ ac4.test.ts (7 tests | 1 failed) 3660ms
+   ❯ AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement (7)
+     × AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement 311ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4.test.ts > AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement > AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement
+AssertionError: the removed version's late reply reaches no agent: {"order":["deepbuild/swap"],"bound":10000,"denies":[],"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"failed":[]}: expected '{"context":[{"extension":"deepbuild/s…' not to contain 'late handler reply'
+
+Expected: "late handler reply"
+Received: "{"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"denies":[]}"
+
+ ❯ ac4.test.ts:334:133
+    332|     expect(done(cameCall), `the removed version's late call delivers n…
+    333|     if (cameHook.state === 'value') {
+    334|       expect(agentSees(cameHook.value), `the removed version's late re…
+       |                                                                                                                                     ^
+    335|       expect(blocksOf(cameHook.value, SWAP).filter((b) => b.text.inclu…
+    336|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:52:15
+   Duration  3.88s (tests 96%, transform 2%, import 2%)
+
+
+===== run 3: exit 1; /proc/loadavg before: 5.12 5.49 8.48 7/3753 2941033
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/350/ac4-redraft
+
+ ❯ ac4.test.ts (7 tests | 1 failed) 3541ms
+   ❯ AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement (7)
+     × AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement 319ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4.test.ts > AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement > AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement
+AssertionError: the removed version's late reply reaches no agent: {"order":["deepbuild/swap"],"bound":10000,"denies":[],"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"failed":[]}: expected '{"context":[{"extension":"deepbuild/s…' not to contain 'late handler reply'
+
+Expected: "late handler reply"
+Received: "{"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"denies":[]}"
+
+ ❯ ac4.test.ts:334:133
+    332|     expect(done(cameCall), `the removed version's late call delivers n…
+    333|     if (cameHook.state === 'value') {
+    334|       expect(agentSees(cameHook.value), `the removed version's late re…
+       |                                                                                                                                     ^
+    335|       expect(blocksOf(cameHook.value, SWAP).filter((b) => b.text.inclu…
+    336|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:52:19
+   Duration  3.74s (tests 97%, import 2%, transform 1%)
+
+
+===== run 4: exit 1; /proc/loadavg before: 5.12 5.49 8.48 4/3776 2942178
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/350/ac4-redraft
+
+ ❯ ac4.test.ts (7 tests | 1 failed) 3516ms
+   ❯ AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement (7)
+     × AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement 283ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4.test.ts > AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement > AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement
+AssertionError: the removed version's late reply reaches no agent: {"order":["deepbuild/swap"],"bound":10000,"denies":[],"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"failed":[]}: expected '{"context":[{"extension":"deepbuild/s…' not to contain 'late handler reply'
+
+Expected: "late handler reply"
+Received: "{"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"denies":[]}"
+
+ ❯ ac4.test.ts:334:133
+    332|     expect(done(cameCall), `the removed version's late call delivers n…
+    333|     if (cameHook.state === 'value') {
+    334|       expect(agentSees(cameHook.value), `the removed version's late re…
+       |                                                                                                                                     ^
+    335|       expect(blocksOf(cameHook.value, SWAP).filter((b) => b.text.inclu…
+    336|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:52:23
+   Duration  3.76s (tests 96%, transform 2%, import 2%)
+
+
+===== run 5: exit 1; /proc/loadavg before: 4.95 5.45 8.45 3/3737 2942978
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/350/ac4-redraft
+
+ ❯ ac4.test.ts (7 tests | 1 failed) 3631ms
+   ❯ AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement (7)
+     × AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement 304ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac4.test.ts > AC4 #350.43f82359 An extension that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; and a call from a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement > AC4 a removed version's call that finishes after its replacement is active delivers nothing: no output from its action, no block from its handler, and nothing run on the replacement
+AssertionError: the removed version's late reply reaches no agent: {"order":["deepbuild/swap"],"bound":10000,"denies":[],"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"failed":[]}: expected '{"context":[{"extension":"deepbuild/s…' not to contain 'late handler reply'
+
+Expected: "late handler reply"
+Received: "{"context":[{"extension":"deepbuild/swap","text":"swap 1.0.0 late handler reply"}],"denies":[]}"
+
+ ❯ ac4.test.ts:334:133
+    332|     expect(done(cameCall), `the removed version's late call delivers n…
+    333|     if (cameHook.state === 'value') {
+    334|       expect(agentSees(cameHook.value), `the removed version's late re…
+       |                                                                                                                                     ^
+    335|       expect(blocksOf(cameHook.value, SWAP).filter((b) => b.text.inclu…
+    336|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  22:52:27
+   Duration  3.85s (tests 97%, transform 2%, import 2%)
+
+
+tsc -p tests/acceptance/350/ac4-redraft/tsconfig.json: exit 0
