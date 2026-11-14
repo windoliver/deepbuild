@@ -158,8 +158,8 @@ export interface Asks {
    * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
    */
   notifications(off: boolean): Promise<void>;
-  /** Your next batch time after now, or null with no batches declared, from your settings as they are now: the hub's beat ticks then, with nothing else due. */
-  nextBatch(): Promise<number | null>;
+  /** Whether one of your batch times has come since the asks were last shown, by your settings as they are now: the hub's beat ticks then, with nothing else due. */
+  batchDue(): Promise<boolean>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -681,15 +681,13 @@ class AsksCore implements Asks {
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
       // A card with a target only the agent read saves your answer for this ask only (#1098).
       const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
-      // The answer and its decision are appended in one turn, so the record makes them durable in one commit (#22).
-      const answered = this.options.record.append(asCore(connection), {
+      await Promise.all([this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
         },
-      });
-      await Promise.all([answered, scope === null ? undefined : this.saveAt(connection, ask, scope, chosen!.id)]);
+      }), scope === null ? undefined : this.saveAt(connection, ask, scope, chosen!.id)]); // one turn, so one durable commit holds both (#22)
       await this.sync();
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
@@ -743,12 +741,7 @@ class AsksCore implements Asks {
     });
   }
 
-  nextBatch(): Promise<number | null> {
-    return this.exclusive(async () => {
-      const batches = this.showing.batches();
-      return batches ? (Math.floor(this.options.now() / batches.every) + 1) * batches.every : null;
-    });
-  }
+  batchDue(): Promise<boolean> { return this.exclusive(async () => this.showing.batchDue(this.options.now())); }
 
   card(handle: string): Promise<Card> {
     return this.exclusive(async () => {
@@ -1117,11 +1110,7 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const id = ulid(now);
     const as = asCore(connection);
-    // Appended in one turn, in this order, so they are durable in one commit (#22).
-    await Promise.all([
-      this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }),
-      ...contradicted.map((d) => this.options.record.append(as, { v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } })),
-    ]);
+    await Promise.all([{ v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }, ...contradicted.map((d) => ({ v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } }))].map((event) => this.options.record.append(as, event))); // one turn, in this order: durable in one commit (#22)
     await this.sync();
     return `decision:${id}`;
   }
@@ -2060,7 +2049,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), nextBatch: core.nextBatch.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), batchDue: core.batchDue.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),

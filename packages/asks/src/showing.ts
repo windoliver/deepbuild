@@ -29,6 +29,9 @@ export class Showing {
   /** Each ask shown in a batch of several, and the batch's asks in order: what an approval's `steps` index (#327). */
   private readonly batchOf = new Map<string, string[]>();
 
+  /** When the asks were last shown. */
+  private shownAt = 0;
+
   constructor(private readonly options: ShowingOptions) {}
 
   /**
@@ -36,10 +39,16 @@ export class Showing {
    * to wait for the only other time to show it is its deadline. Batches are your visits, one schedule across every
    * repo, so a repo's done.yaml doesn't change them.
    */
-  batches(): Batches | undefined {
+  private batches(): Batches | undefined {
     const batch = this.options.settings().batch;
     const every = isObj(batch) ? duration(batch.every) : undefined;
     return every && isObj(batch) && typeof batch.cap === 'number' ? { every, cap: batch.cap } : undefined;
+  }
+
+  /** Whether one of your batch times has come since the asks were last shown, by your batches as they are now. */
+  batchDue(now: number): boolean {
+    const batches = this.batches();
+    return !!batches && Math.floor(now / batches.every) > Math.floor(this.shownAt / batches.every);
   }
 
   members(handle: string): string[] { return this.batchOf.get(handle) ?? []; }
@@ -141,6 +150,7 @@ export class Showing {
     // A Later that ends shows its ask again, recorded like any showing; so does one that an ask joining the
     // exception since would outlast.
     const now = this.options.now();
+    this.shownAt = now;
     let acted = await this.showNow(this.options.open().filter((a) => a.later !== undefined && !a.theirs && (a.later <= now || this.dueBy(a) <= a.later)));
     const batches = this.batches();
     // With no batches declared, nothing waits for one.
