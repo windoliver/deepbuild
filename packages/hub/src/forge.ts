@@ -80,8 +80,12 @@ function isPrCommand(command: string, verb: 'create' | 'edit'): boolean {
   }
   return quote === undefined && pending === undefined;
 }
-/** The issue a PR body closes: `#n` after any of GitHub's closing keywords (close, fix, resolve and their forms). */
-const closes = (body: string): number | undefined => { const m = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)/i.exec(body); return m ? Number(m[1]) : undefined; };
+/** Each issue a body closes, bare or qualified by this repo, after GitHub's close, fix or resolve keywords. */
+export function closingIssues(body: string, repo?: string): number[] {
+  return [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/gi)]
+    .filter((m) => !m[1] || m[1].toLowerCase() === repo?.toLowerCase()).map((m) => Number(m[2]));
+}
+const closes = (body: string): number | undefined => closingIssues(body)[0];
 /** The issue a `gh pr create` or `gh pr edit` command's body says it closes, by `Closes #n` in the command's text (#322); undefined when it says none. */
 export const closesIssue = (command: string): number | undefined => closes(command);
 /** The issue a `gh pr create` or `gh pr edit` command's body says it is part of, by `Part of #n` (#82); undefined when it says none. */

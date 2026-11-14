@@ -936,6 +936,8 @@ impl Renderer {
                     tabular: spec.bound,
                     mask: false,
                     spans: &spec.spans,
+                    gap: spec.gap as f32,
+                    indent: spec.indent as f32,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
@@ -1064,10 +1066,13 @@ impl Renderer {
         units: Option<&[[f64; 2]]>,
     ) {
         let paint = |g: &deep_text::Glyph| scene::run_paint(runs, g.grapheme, None, c).1;
+        // #1966: a dimmed code line's glyphs at its run's opacity.
+        let alpha_of = |g: &deep_text::Glyph| scene::run_opacity(runs, g.grapheme);
         if let Some(units) = units {
             for (g, unit) in shaped.glyphs.iter().zip(units) {
                 let [lift, opacity] = *unit;
                 let c = paint(g);
+                let opacity = opacity * alpha_of(g);
                 let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
                 ctx.set_paint(AlphaColor::from_rgba8(c[0], c[1], c[2], alpha));
                 ctx.set_transform(at * Affine::translate((origin[0], origin[1] + lift)));
@@ -1098,9 +1103,10 @@ impl Renderer {
                         && g.size == first.size
                         && g.skew == first.skew
                         && paint(g) == paint(first)
+                        && alpha_of(g) == alpha_of(first)
                 })
                 .count();
-            ctx.set_paint(color(paint(first)));
+            ctx.set_paint(color(paint(first)).with_alpha(alpha_of(first) as f32));
             let glyphs = shaped.glyphs[start..start + run]
                 .iter()
                 .map(|g| vello_cpu::Glyph {
@@ -1118,7 +1124,8 @@ impl Renderer {
         }
         // #1964: underlines and strikes over the glyphs, in their span's color.
         for d in &shaped.decorations {
-            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1));
+            let alpha = scene::run_opacity(runs, d.grapheme) as f32;
+            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1).with_alpha(alpha));
             let [x, y, w, h] = d.rect.map(f64::from);
             ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
         }

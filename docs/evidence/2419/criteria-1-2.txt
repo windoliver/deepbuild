@@ -1,0 +1,26 @@
+# Linux arm64, main 0329cec8e, /usr/bin/python3 -> Python 3.12.3 first on PATH
+# tests/acceptance/351/guide.test.ts tests/acceptance/348/jsonrpc.test.ts --reporter=verbose, run 1 of 4 (all 8 of 8)
+ ✓ tests/acceptance/348/jsonrpc.test.ts > AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check > AC4 the Python package passes conformance, loads out of process in the sandbox, and its check kind ext.pycheck.lint is in use 366
+ ✓ tests/acceptance/351/guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished
+ ✓ tests/acceptance/348/jsonrpc.test.ts > AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check > AC4 running ext.pycheck.lint through the host reaches the Python runner: its result names Python 3 and the command passed 71ms
+ ✓ tests/acceptance/351/guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished
+ ✓ tests/acceptance/351/guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished
+ ✓ tests/acceptance/351/guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished
+ ✓ tests/acceptance/351/guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished
+ ✓ tests/acceptance/351/guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+
+# git bisect, fails=284a5852 passes=0329cec8e, the walk-through in linux-e2e.txt as the test (true=examples that passed conformance)
+4f2377e7d true=2 false=0
+18bd97aba true=2 false=0
+7c5e1cc8d true=2 false=0
+cd3aa6251 true=2 false=0
+ad13e0495 true=2 false=0
+44cef58e3 true=2 false=0
+0b3d42387 true=2 false=0
+add319a76 true=1 false=1
+20f19f16c true=2 false=0
+3aba6de72 true=2 false=0
+9b9532449 true=2 false=0
+9b953244999b35a6bcdd8937e0449ab89a72987a is the first passes commit
