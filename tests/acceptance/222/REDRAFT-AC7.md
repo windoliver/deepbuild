@@ -20,3 +20,5 @@ The dispute went to a blind redraft, `tests/acceptance/222-redraft-ac7/` (b35d94
 design, base `f6d811c7`, this suite and the dispute alone. It keeps the criterion's numbers and films, runs each film
 in its own process, and counts only frame-phase work. The original file stays as it is; the lanes run the redraft in
 its place once the owner approves the swap.
+
+The owner approved the swap on Nov 14, 2026, in the building session ("Yes, swap it"); the lanes commit that makes it is ffd5aa9bc.
