@@ -1,0 +1,11 @@
+start; cc --version exit 0 13:31:34 load { 2.25 2.90 4.88 } free KB 64652444
+caffeinate pid 31465 keeps the display awake; screen unlocked 13:31:34 load { 2.25 2.90 4.88 } free KB 64652436
+main head b1a1ff86234e7e080e0e339774ac12ad05813e9b 13:31:38 load { 2.63 2.97 4.89 } free KB 64182436
+setup exit=0 13:32:33 load { 14.05 6.08 5.93 } free KB 63115304
+tests/acceptance/1454/answer.test.ts exit=1 13:41:14 load { 25.93 28.32 19.19 } free KB 56369208
+tests/acceptance/1454/shown.test.ts exit=1 13:41:37 load { 27.33 28.50 19.47 } free KB 56342312
+tests/acceptance/1462/real.test.ts exit=1 13:43:45 load { 22.81 27.44 20.38 } free KB 55956532
+tests/acceptance/1462-redraft-ac2/ac2-real.test.ts exit=1 13:44:30 load { 13.97 24.50 19.67 } free KB 55424192
+tests/acceptance/1459/identifier.test.ts exit=0 13:46:18 load { 19.62 23.98 20.04 } free KB 54386792
+tests/acceptance/1459/panel.test.ts exit=0 13:47:14 load { 9.29 20.26 18.92 } free KB 54340588
+secret scan hits=0 13:47:18 load { 9.29 20.26 18.92 } free KB 54340364

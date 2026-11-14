@@ -200,8 +200,8 @@ The first attempt read BLOCKED on every part. It wasn't the code: the Spark's sc
 ### The 28 app suite files, one at a time
 
 `2-app-suites.txt`, exits in `exits.txt`: 9 files pass, 19 fail (at 8c3c19ee, with the Mac's compiler broken, 5 passed;
-none that passed then fails now). Main's side was **not run**: the Mac fell under 30 GB free. A separate agent read each
-failure against the diff and main's code, with no run:
+none that passed then fails now). Main's side wasn't run then: the Mac fell under 30 GB free. A separate agent read each
+failure against the diff and main's code, with no run; six of the files ran on main later (next section):
 
 | Files | Reading |
 |---|---|
@@ -211,12 +211,30 @@ failure against the diff and main's code, with no run:
 | 1172/shell, 1172/popout | every ask is in the list; they fail on clipped row text, an open card and a missing status item, none of it in the diff |
 | 1454/commands, panel, panel-redraft/refused | the board fixture imports `gpui-kit`, which main refuses since #1425; some launches SIGKILLed before the window |
 | 1454/canvas, 1459/voiceover | `deep-app exited (SIGKILL) before its window`, empty stderr: the criterion is unjudged |
-| 1454/answer, 1454/shown, 1462-redraft-ac2 | **undecided**: a press or Return on the card recorded no answer |
-| 1462/real | **undecided**: keys do nothing (AC2, AC10), no status item (AC13, AC22) |
-| 1459/identifier, 1459/panel | **undecided**: no row label starts with the question; the `asks` panel's window was gone |
+| 1454/answer, 1454/shown, 1462/real, 1462-redraft-ac2 | **main's**: they fail the same way on main on this Mac (below) |
+| 1459/identifier, 1459/panel | **undecided**: no row label starts with the question; the `asks` panel's window was gone. Both pass on main (below) |
 
-None is proven to be this change's, and six stay undecided until the same files run on main on the Mac. None of the 28
-appends a bare `ask.created`: each raises through the asks core or a live `deep_ask`, with no batches declared.
+None of the 28 appends a bare `ask.created`: each raises through the asks core or a live `deep_ask`, with no batches
+declared.
+
+### Six of them on main
+
+`mac-b1a1ff86-main/` is the same Mac's run of six of those files at main b1a1ff86, one at a time, 46 minutes later
+(`3-main-suites.txt`, `exits.txt`; load 9 to 27).
+
+| File | On main | Reading |
+|---|---|---|
+| 1454/answer | fails, 2 of 3, the same two tests | main's: a press on the card's option records no answer |
+| 1454/shown | fails, `BLOCKED: deep-app has no window` | main's |
+| 1462/real | fails, 4 of 4 | main's: the card takes no key (#1842), no status item |
+| 1462-redraft-ac2 | fails, 1 of 1 | main's (#1842) |
+| 1459/identifier | passes | not shown independent of this change: one failing run here, one passing run on main |
+| 1459/panel | passes | the same |
+
+The run at 093c5bc8 had `deep-app exited (SIGKILL) before its window` in five other files and the run on main had none,
+and a dead app gives exactly the two #1459 messages; the diff has no path to either that a reading found. That is a
+reading, not proof: the two files run again at the head, with a probe of the app's life and its accessibility texts.
+The 13 files of the table's first six rows were read against the code, never run on main.
 
 ## #83's status file, redrafted
 

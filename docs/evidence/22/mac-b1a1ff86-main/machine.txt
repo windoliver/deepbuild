@@ -1,0 +1,8 @@
+Mac15,12
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+Now drawing from 'AC Power'
+          Resolution: 2560 x 1664 Retina
+start 2026-11-14 13:31:34 13:31  up 1 day,  6:33, 6 users, load averages: 2.25 2.90 4.88
+end 2026-11-14 13:47:18 13:47  up 1 day,  6:49, 2 users, load averages: 9.29 20.26 18.92
