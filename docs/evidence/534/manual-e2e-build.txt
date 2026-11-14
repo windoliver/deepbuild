@@ -1,5 +1,7 @@
-$ cargo build --locked --bin deep-logic -v   (at 4f2377e7d, just before the run)
+$ cargo build --locked --bin deep-logic -v   (at 628b16976, right before the run; the last two lines of its output, the repo's path shown as <repo>. 628b16976 changes only manual-e2e.mjs, so the binary built at 52df92e86 is still Fresh)
        Fresh deep-logic v0.0.0 (<repo>/crates/deep-logic)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s
-$ sha256sum target/debug/deep-logic
-1e05fd4a531e08207c197ddf994d88ce769fdc5a13e7f772f477dc0d60058aa9  target/debug/deep-logic
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+$ sha256sum target/debug/deep-logic target/acceptance-534-wat/debug/acceptance-534-wat   (the runner, and the suite's wat assembler the script's second argument names)
+40ffc8779a67e82e5d1df026b0d33bfda7ef335007a9c8fc6d1fe61b0fe33094  target/debug/deep-logic
+04fb7cf367728ca97db292667092fd0a81dc06bbfa4f4c69eb34d64adfeb8726  target/acceptance-534-wat/debug/acceptance-534-wat
+# screens/e2e.html is manual-e2e.txt, one <div> a line; the two JPEGs are the built-in browser's screenshots of it in a 1600x1308 viewport at zoom 1.6, stored at half size (800x654): the first from the top, the second scrolled to step 3.
