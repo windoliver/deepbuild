@@ -1,0 +1,238 @@
+{
+  "id": "notebook_pencil",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "Colored pencil on ruled paper: a cream page with blue rules and a red margin, graphite lines with a gentle wobble and a boil between drawings, hatched fills and a handwriting face; at night the page goes dark and the pencil light.",
+  "palette": {
+    "cream": "#fbf7ea",
+    "graphite": "#2e3a59",
+    "hatch": "#c6d4ea",
+    "pink": "#e35d9c",
+    "rule_blue": "#a9c3e8",
+    "margin_red": "#e8a3a3",
+    "night_paper": "#101318",
+    "chalk_white": "#ece6d2",
+    "night_hatch": "#2d3448",
+    "night_pink": "#f28cbe",
+    "night_rule": "#283247",
+    "night_margin": "#4a2a33",
+    "pencil_violet": "#4f2a80",
+    "pencil_blue": "#1f3f7d",
+    "pencil_teal": "#0a4452",
+    "pencil_green": "#1d451b",
+    "pencil_red": "#861a3c",
+    "pencil_brown": "#673410",
+    "night_violet": "#c9a8f5",
+    "night_blue": "#9dbcf2",
+    "night_teal": "#7fd6d0",
+    "night_green": "#a8d69a",
+    "night_rose": "#f2a0a8",
+    "night_tan": "#c4a878"
+  },
+  "roles": {
+    "ground": "cream",
+    "ink": "graphite",
+    "muted": "hatch",
+    "accent": "pink",
+    "rule": "rule_blue",
+    "margin": "margin_red",
+    "body": "hand",
+    "math": "math",
+    "code_keyword": "pencil_violet",
+    "code_type": "pencil_blue",
+    "code_function": "pencil_teal",
+    "code_string": "pencil_green",
+    "code_number": "pencil_red",
+    "code_comment": "pencil_brown",
+    "diff_added": "pencil_green",
+    "diff_removed": "pencil_red",
+    "diff_changed": "pencil_blue"
+  },
+  "themes": {
+    "light": {},
+    "dark": {
+      "roles": {
+        "ground": "night_paper",
+        "ink": "chalk_white",
+        "muted": "night_hatch",
+        "accent": "night_pink",
+        "rule": "night_rule",
+        "margin": "night_margin",
+        "code_keyword": "night_violet",
+        "code_type": "night_blue",
+        "code_function": "night_teal",
+        "code_string": "night_green",
+        "code_number": "night_rose",
+        "code_comment": "night_tan",
+        "diff_added": "night_green",
+        "diff_removed": "night_rose",
+        "diff_changed": "night_blue"
+      }
+    }
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "code": {
+    "keyword": "code_keyword",
+    "type": "code_type",
+    "function": "code_function",
+    "variable": "ink",
+    "string": "code_string",
+    "number": "code_number",
+    "comment": "code_comment",
+    "operator": "ink",
+    "punctuation": "ink",
+    "plain": "ink"
+  },
+  "diff": {
+    "added": "diff_added",
+    "removed": "diff_removed",
+    "changed": "diff_changed"
+  },
+  "lines": {
+    "line": {
+      "kind": "pencil",
+      "width": 2,
+      "wobble_px": 0.8,
+      "segment_px": 12,
+      "passes": 2,
+      "opacity": 0.9
+    }
+  },
+  "fills": {
+    "fill": {
+      "kind": "hatch",
+      "seed": "item"
+    }
+  },
+  "ground": {
+    "kind": "paper",
+    "params": {
+      "role": "ground",
+      "rules": {
+        "pitch": 24,
+        "first": 48,
+        "width": 1,
+        "role": "rule",
+        "opacity": 0.8
+      },
+      "margin": {
+        "x": 56,
+        "width": 1,
+        "role": "margin",
+        "opacity": 0.8
+      },
+      "spine": {
+        "kind": "none"
+      },
+      "grid": null,
+      "seed": "document"
+    }
+  },
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "math": {
+      "family": "STIX Two Math",
+      "file": "STIXTwoMath-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "cjk": {
+      "family": "Noto Sans SC",
+      "file": "NotoSansSC-Regular.otf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "arabic": {
+      "family": "Noto Sans Arabic",
+      "file": "NotoSansArabic-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "emoji": {
+      "family": "Noto Emoji",
+      "file": "NotoEmoji-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "hand": {
+      "family": "Caveat",
+      "file": "Caveat-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "fallback": [
+    "cjk",
+    "arabic",
+    "emoji"
+  ],
+  "time": {
+    "state": {
+      "span": "0.25s",
+      "interp": {
+        "ease": {
+          "name": "in_out_cubic"
+        }
+      }
+    },
+    "boil": {
+      "hz": 8,
+      "amount_px": 0.6,
+      "scope": "lines",
+      "while": "always",
+      "cycle": 3,
+      "seed": "document"
+    }
+  },
+  "finish": []
+}

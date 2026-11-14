@@ -187,7 +187,14 @@ fn lit(v: &mut View<'_>, tie: Tie) -> Result<(), OpError> {
         .collect();
     let doc = v.document()?;
     let look = crate::look::Look3::from_roles(roles);
-    let scene = crate::scene::evaluate(doc, t, &look, &mut crate::scene::Labels::new())
+    let fills = crate::contributed::Fills {
+        outlines: v.outlines(),
+        module: v.fills(),
+        planted: v.planted(),
+        memo: None,
+    };
+    let labels = &mut crate::scene::Labels::new();
+    let scene = crate::scene::evaluate_any(doc, t, &look, labels, None, fills)
         .map_err(|r| OpError::new(r.code, r.path))?;
     let policy = light::policy_by(&scene.lights, &scene.camera, tie);
     v.write(
@@ -240,7 +247,12 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.kind(
         kind(
             "point",
-            common(vec![json_param("size"), str_param("shape", "dot")]),
+            common(vec![
+                json_param("size"),
+                str_param("shape", "dot"),
+                // A set from a depth video's frame at t (Marks in 3D: from video; #503).
+                json_param("from"),
+            ]),
         ),
         &[],
         "",

@@ -1133,6 +1133,7 @@ impl crate::hub::Hub<'_> {
         if !you {
             return json!({"outcome": "refused", "code": "not_your_decision", "writer": writer});
         }
+        self.heard_restore();
         let prefix = format!("{claim}/{requirement}/");
         let open: Vec<String> = self
             .audit_asks
@@ -1145,6 +1146,7 @@ impl crate::hub::Hub<'_> {
         }
         for k in &open {
             self.audit_asks.insert(k.clone(), Some(yes));
+            self.heard_journal(k, Some(yes));
         }
         json!({"outcome": "answered", "asks": open, "answer": if yes { "yes" } else { "no" }})
     }

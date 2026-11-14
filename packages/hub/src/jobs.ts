@@ -8,7 +8,10 @@
 // outputs and starts no process. On a miss the tool runs once, and its outputs reach the store, the cache and so an
 // item only once every output check of the kind passes; a failed check returns that failure, naming the check, and
 // keeps nothing. A paid tool's call waits for one authority ask, whose yes covers that call, or your standing rule for
-// that tool up to a price per run.
+// that tool up to a price per run; the list names each tool's price (#509). After that gate the run reserves its price
+// against every budget that covers it, its tool's budget among them, and is charged once its call starts; a covering
+// budget without room holds it BLOCKED with that budget's raise ask. A run its tool's host holds, such as a word an
+// engine can't say, is BLOCKED with the host's cause and no ask: you change its inputs, not the host.
 //
 // A tool that runs off the machine (#1924) takes files only by hash from the evidence store, never by path, under each
 // file's origin rule: one an agent put there waits for one ask naming its hash and the tool's host, asked once for that
@@ -26,10 +29,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import type { PlanInput } from '@deepbuild/asks';
+import type { PlanInput, PlanStep } from '@deepbuild/asks';
+import type { BudgetInput, Outcome, RunRequest } from '@deepbuild/budget';
 import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
+import { ulid } from '@deepbuild/record';
 import type { RunningJob } from './rows.js';
 
 type Obj = Record<string, unknown>;
@@ -46,6 +51,8 @@ const HASH = /^[0-9a-f]{64}$/;
 const DAY = 86_400_000;
 /** How long the kind's output checks may take, each. */
 const CHECK_MS = 60_000;
+/** The planted hub job-speech-tools-enum's list of speech's tools in code (#509): the three first-party names, no other. */
+const SPEECH_ENUM = ['kokoro@0.9.4', 'platform-say@1.0.0', 'azure-speech@1.0.0'];
 
 export interface JobDeps {
   /** The hub's folder: jobs.json keeps the cache, by key, and your standing rules. */
@@ -66,6 +73,12 @@ export interface JobDeps {
   raise(source: 'job.paid' | 'job.send' | 'job.unblock', ask: Obj, plan?: PlanInput): Promise<string>;
   /** Shows a running job's row as it now reads (#1925), or takes it off the list once its tool's run has ended. */
   row(job: RunningJob, running: boolean): void;
+  /** The ledger's reserve of a paid run's price against every budget that covers it (#509), none when none does. */
+  reserve(run: RunRequest, usd: number, step: PlanStep): Promise<Outcome>;
+  /** The ledger's charge of a reserved run's price, once its call starts. */
+  charge(run: string, usd: number): Promise<void>;
+  /** Your yes to a paid run's ask, approving a budget of that run's price for its tool (#509). */
+  approve(ask: string, budget: BudgetInput): Promise<unknown>;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -92,6 +105,14 @@ export class Jobs {
   private readonly running = new Map<string, Running>();
   /** How each waiting request leaves its job when its caller cancels. */
   private readonly leaving = new Map<string, () => void>();
+  /**
+   * A paid run's ledger run by its key until its call starts, so the room your yes to a raise holds is its own, and the
+   * raise ask it waits on until you answer it, so a retry asks nothing again.
+   */
+  private readonly spending = new Map<string, { run: string; ask?: string; budget?: string }>();
+  /** Each paid ask's tool and price, and the budget your yes to it is approving, by key, until the run reserves. */
+  private readonly paidAsks = new Map<string, { tool: string; usd: number }>();
+  private readonly approving = new Map<string, Promise<unknown>>();
   private anonymous = 0;
 
   constructor(private readonly d: JobDeps) {
@@ -104,9 +125,14 @@ export class Jobs {
     renameSync(`${file}.tmp`, file);
   }
 
-  /** deep_job's list: each kind, the package that holds it, and its tools, each with its package and build. */
+  /** deep_job's list: each kind, the package that holds it, and its tools, each with its package, build and price per run (#509), 0 when free. */
   list(): Obj {
-    return { kinds: (this.d.host()?.jobs() ?? []).map((k) => ({ kind: k.kind, plugin: k.plugin, tools: k.tools.map((t) => ({ tool: t.tool, plugin: t.plugin, build: t.build })) })) };
+    return { kinds: this.kinds().map((k) => ({ kind: k.kind, plugin: k.plugin, tools: k.tools.map((t) => ({ tool: t.tool, plugin: t.plugin, build: t.build, cost: { usd: t.descriptor.cost?.usd ?? 0 } })) })) };
+  }
+  /** The kinds installed packages hold, with their qualified tools; the planted hub keeps speech's as a list in code. */
+  private kinds(): ReturnType<Host['jobs']> {
+    const all = this.d.host()?.jobs() ?? [];
+    return this.d.plant === 'job-speech-tools-enum' ? all.map((k) => (k.kind === 'speech' ? { ...k, tools: k.tools.filter((t) => SPEECH_ENUM.includes(t.tool)) } : k)) : all;
   }
   /** `job.rule`: your standing rule for a paid tool, the most a run of it may cost with no ask. */
   rule(tool: string, usd: number): Obj {
@@ -123,11 +149,23 @@ export class Jobs {
       (decision === 'allow' ? this.sendYes : this.sendNo).add(pair);
       return true;
     }
+    // A raise a paid run waits on: the ledger reads your answer from the record, and the run's retry reserves again.
+    const raised = [...this.spending.values()].find((s) => s.ask === ask);
+    if (raised) {
+      delete raised.ask;
+      return true;
+    }
     const key = this.held.get(ask);
     if (key === undefined) return false;
     this.held.delete(ask);
     this.asked.delete(key);
     if (decision === 'allow') this.allowed.add(key);
+    // #509: your yes to a paid run approves a budget of its price for its tool, one run, which its reserve then holds.
+    const paid = this.paidAsks.get(ask);
+    this.paidAsks.delete(ask);
+    if (paid && decision === 'allow') {
+      this.approving.set(key, this.d.approve(ask, { scope: { kind: 'resource', ref: paid.tool }, runs: 1, cap_usd: paid.usd, ends: this.d.now() + DAY }).catch(() => undefined));
+    }
     return true;
   }
 
@@ -150,7 +188,7 @@ export class Jobs {
     const refused = (reason: string): Obj => ({ status: 'refused', reason });
     if (!host) return refused('the hub has no extension host yet; try again once it is ready');
     const { kind, tool, params: text, inputs } = args;
-    const held = host.jobs().find((k) => k.kind === kind);
+    const held = this.kinds().find((k) => k.kind === kind);
     if (typeof kind !== 'string' || !held) return refused(`no installed package registers the job kind ${String(kind)}`);
     const pinned = held.tools.find((t) => t.tool === tool);
     if (typeof tool !== 'string' || !PINNED.test(tool) || !pinned) {
@@ -226,11 +264,6 @@ export class Jobs {
       sent = gate.sent;
     }
 
-    const usd = pinned.descriptor.cost?.usd ?? 0;
-    if (usd > 0 && !((this.saved.rules[tool] ?? -1) >= usd)) {
-      if (!this.allowed.delete(key)) return { status: 'held', ask: this.asked.get(key) ?? (await this.ask(kind, tool, usd, key)) };
-    }
-
     const needs = pinned.descriptor.needs ?? [];
     if (url && (weights?.length || needs.length) && this.d.plant !== 'job-weights-call-anyway') {
       let report: Awaited<ReturnType<Host['jobHostReport']>>;
@@ -272,8 +305,24 @@ export class Jobs {
       }
     }
 
+    // The paid gate comes after the host's report, so your yes isn't spent on a call that can't start; it is spent
+    // only once the call does, after its price is reserved.
+    const usd = pinned.descriptor.cost?.usd ?? 0;
+    let spend: { run: string; usd: number } | undefined;
+    if (usd > 0) {
+      const ruled = (this.saved.rules[tool] ?? -1) >= usd;
+      if (!ruled && !this.allowed.has(key)) return { status: 'held', ask: this.asked.get(key) ?? (await this.ask(kind, tool, usd, key)) };
+      await this.approving.get(key);
+      this.approving.delete(key);
+      const reserved = await this.reserve(kind, tool, usd, key);
+      if ('reply' in reserved) return reserved.reply;
+      if (!ruled) this.allowed.delete(key);
+      // A run no budget covers has nothing reserved, so nothing to charge.
+      if (reserved.reserved) spend = { run: reserved.run, usd };
+    }
+
     const stop = new AbortController();
-    const job: Running = { callers: new Set(), stop, result: this.call(host, held, pinned, key, params, bytes, receipt, done, stop.signal) };
+    const job: Running = { callers: new Set(), stop, result: this.call(host, held, pinned, key, params, bytes, receipt, done, stop.signal, spend) };
     this.running.set(key, job);
     void job.result.finally(() => { if (this.running.get(key) === job) this.running.delete(key); });
     return this.wait(job, caller, false);
@@ -302,8 +351,34 @@ export class Jobs {
     }
     return made;
   }
+  /**
+   * A paid run's price reserved by the ledger against every budget that covers it (#509): a run names its tool as its
+   * resource, so a budget for that tool covers it, and it keeps one ledger run for its key until its call starts. A
+   * covering budget without room holds it BLOCKED with that budget's raise ask, asked once.
+   */
+  private async reserve(kind: string, tool: string, usd: number, key: string): Promise<{ run: string; reserved: boolean } | { reply: Obj }> {
+    const spend = this.spending.get(key) ?? { run: `run:${ulid(this.d.now())}` };
+    this.spending.set(key, spend);
+    const short = (budget: string | undefined, ask: string): Obj => ({ status: 'BLOCKED', cause: `${tool}'s price, $${usd} a run, doesn't fit what's left of the budget ${budget ?? 'that covers it'}, counting what's reserved and not yet charged; nothing was sent`, budget: budget ?? null, ask });
+    if (spend.ask) return { reply: short(spend.budget, spend.ask) };
+    let out: Outcome;
+    try {
+      out = await this.d.reserve({ run: spend.run, check: `${kind} on ${tool}`, inputs: key, issue: `deep_job ${kind}`, resource: tool }, usd, { does: `Run the paid tool ${tool} once for ${kind}, at $${usd}`, changes: [], undo: null, public: false, cost: usd });
+    } catch (e) {
+      return { reply: { status: 'refused', reason: `${tool}'s price couldn't be reserved: ${message(e)}; nothing ran` } };
+    }
+    if (out.status === 'started') {
+      this.spending.delete(key);
+      return { run: spend.run, reserved: out.reserved.length > 0 };
+    }
+    if (out.status === 'BLOCKED' && out.cause === 'budget') {
+      Object.assign(spend, { ask: out.ask, budget: out.budget });
+      return { reply: short(out.budget, out.ask) };
+    }
+    return { reply: { status: 'BLOCKED', cause: `${tool}'s price wasn't reserved: ${JSON.stringify(out)}; nothing was sent`, ...('ask' in out ? { ask: out.ask } : {}) } };
+  }
   /** The tool's one run for a key, its outputs held until the kind's output checks pass, then kept and cached. */
-  private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array | Uint8Array[]>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
+  private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array | Uint8Array[]>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal, spend?: { run: string; usd: number }): Promise<Obj> {
     const { kind } = held;
     const { tool } = pinned;
     // While its tool runs, the job has a row that counts from the tool's own counters (#1925). Nothing here waits on
@@ -312,12 +387,19 @@ export class Jobs {
     this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
     try {
+      // A paid call is charged its price as it starts: from here it may be spent, whatever it answers.
+      if (spend) await this.d.charge(spend.run, spend.usd);
       wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop, (counter) => {
         job.counter = counter;
         job.at = this.d.now();
         this.d.row(job, true);
       });
     } catch (e) {
+      // The host holds the run on its inputs (#509), such as a word its engine can't say: BLOCKED with its cause, no ask.
+      const blocked = e instanceof Error && e.name === 'JobBlocked' ? (e as { blocked?: unknown }).blocked : undefined;
+      if (isObj(blocked)) return { status: 'BLOCKED', cause: blocked, receipt: receipt(pinned.build, 'miss') };
+      // An input the tool refuses, such as an unknown voice: refused, naming it.
+      if (e instanceof Error && e.name === 'JobRefused') return { status: 'refused', reason: e.message, receipt: receipt(pinned.build, 'miss') };
       return { status: 'failed', reason: `${tool} failed: ${message(e)}; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
     } finally {
       this.d.row(job, false);
@@ -414,6 +496,7 @@ export class Jobs {
     }, { steps: [{ does: `Run the paid tool ${tool} once for ${kind}, at $${usd}`, changes: [], undo: null, public: false, cost: usd }], diff: key });
     this.asked.set(key, ask);
     this.held.set(ask, key);
+    this.paidAsks.set(ask, { tool, usd });
     return ask;
   }
   /** The folder a job's output checks run in: the hub's jobs folder, which holds none of the outputs' bytes. */

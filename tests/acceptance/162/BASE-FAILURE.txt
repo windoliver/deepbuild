@@ -1,0 +1,79 @@
+#162: why each test fails at the base 53c0e72a3 ("Merge pull request #2356"), from a run of each file there.
+
+Run on November 12, 2026, one file at a time, through scripts/lease, with `node node_modules/vitest/vitest.mjs run
+--root tests/acceptance/162 <file> --testTimeout=600000`, CARGO_INCREMENTAL=0 and CARGO_PROFILE_DEV_DEBUG=0, after
+`npm ci`, `npm run build --workspaces`, `cargo build --locked -p deep-hook` and `cargo build --locked --bin deep-show
+--no-default-features --features full` (and atomic.test.ts's own `full,test-export-guards` build). 24 tests in 10 files;
+all 24 fail. `tsc -p tests/acceptance/162/tsconfig.json` exits 0.
+
+What the base has: #501's delivery `export`, #157's guards and its test module `test.guards`, and export.target@1 with
+`video` and `png` only, so `video.codec: lottie` names no target: every Lottie export answers `{"outcome":
+"refused", "code": "unknown_target", "target": "lottie", "codec": "lottie"}`. The scenario's `planted` knows none of
+this suite's four names, so every planted test's run answers `{"ok": false, "code": "bad_input"}`. The claim's
+requirement `{kind: "export"}` is BLOCKED with `module_missing` (the export module doesn't exist). There is no
+`packages/jobs/import`. Every fixture document is presented at the base with no issue (checked before the runs), so each
+test fails at its first missing surface, after its document is shown:
+
+warnings.test.ts (4 failed)
+- AC2, the glow pass, the inset and the sound strip: "the document with a glow pass, an inset and a sound strip is
+  exported: {"code":"unknown_target","target":"lottie",…}: expected 'refused' to be 'exported'".
+- AC2, the status binding: refused, but for the target: "the document with a status binding: the refusal names the
+  bound item, plate: expected '{"code":"unknown_target","target":"lo…' to contain 'plate'".
+- AC8: "the unbound plate is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+- AC7: "the driven title is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+
+atomic.test.ts (2 failed; built full and full,test-export-guards)
+- AC4, stopped part way: "the export stops: {"code":"unknown_target",…}: expected 'refused' to be 'stopped'" (the
+  title with test.device_loss@1 is presented by the guards build).
+- AC4, twice: "export 1 is delivered: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+
+repeater.test.ts (1 failed)
+- AC6: "the repeater and the twist is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+
+claim.test.ts (4 failed)
+- AC9, the glow pass in a claim: "the export check fails: {"id":"req:01JB162Q000000000000000001","kind":"export",
+  "issues":[],…,"result":"BLOCKED","blocked":[{"code":"module_missing","kind":"export","ids":[],"module":"export"}]}:
+  expected 'BLOCKED' to be 'FAIL'".
+- AC9, outside a claim: "the title with a glow pass, outside a claim is exported: {"code":"unknown_target",…}: expected
+  'refused' to be 'exported'".
+- AC9, the glow let go: "the export check passes: {…"result":"BLOCKED",…"module_missing"…}: expected 'BLOCKED' to be
+  'PASS'".
+- AC9, the spring: the same BLOCKED row: "expected 'BLOCKED' to be 'PASS'".
+
+text.test.ts (1 failed)
+- AC10: "HELLO is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+
+fidelity.test.ts (4 failed)
+- AC14, the empty warnings and the fidelity frames: "the title holds nothing Lottie lists: the title: the export isn't
+  delivered: {"code":"unknown_target",…}: expected [ Array(1) ] to deeply equal []".
+- AC14, planted lottie_writer_lists_mask: "deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+- AC11, 20 frames at the floor: "the title is exported: {"code":"unknown_target",…}: expected 'refused' to be
+  'exported'".
+- AC11, planted lottie_writer_drops_mask: "deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+
+spin.test.ts (2 failed)
+- AC12: "the spinner is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+- AC12, planted lottie_wraps_rotation: "deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+
+budgets.test.ts (3 failed)
+- AC13, the perf lane: "benchmarks/budgets.json has a task whose reason names #162.30ea626f: expected false to be
+  true".
+- AC13, the export's budget and the import's: "INCONCLUSIVE: the budgets count only on a reference Mac in a fit state,
+  so the runs aren't made here: the thermal state is fair, not nominal; this is not a pass" (this Mac is a reference Mac
+  by model; its thermal state read fair). On a fit reference Mac the export leg fails at "the 200-item title is
+  exported" and the import leg at "the import plug-in is at packages/jobs/import".
+
+markers.test.ts (2 failed)
+- AC15: "the loading button is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'" (the import
+  is never reached; at the base it would fail at "the import plug-in is at packages/jobs/import").
+- AC15, planted lottie_writer_drops_markers: "deep-show run answers the scenario ok; got {"ok":false,"code":
+  "bad_input"}".
+
+taste.test.ts (1 failed)
+- AC16: "INCONCLUSIVE: the check run's pictures are not in docs/evidence/162/: title-from-lottie.png,
+  title-own-render.png, title-motion.apng; this is not a pass".
+
+What the runs didn't reach: no hub was started (each hub test fails before it, at the export), so #1922's world was
+not exercised by this suite at the base; the suite's Lottie reader, its arc length and its OKLab ramp were checked on
+the spec's examples and the corpus by hand while it was written (a two-stop ramp from the accent to the ink is 0.028
+ΔEOK off at worst, so a writer that adds no stops fails AC10; four stops are 0.004).
