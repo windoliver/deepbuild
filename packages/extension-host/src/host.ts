@@ -2725,13 +2725,13 @@ class Host implements ExtensionHost {
         // An error's text is the package's own words: only a release package's reaches the reply.
         return fail(`${id}'s ${kind} handler failed${ext.released ? `: ${message(e)}` : ''}`);
       }
-      if (this.exts.get(id) !== ext || !ext.live) return fail(`${id} was removed while its ${kind} handler ran`); // its late reply goes nowhere
       const replier = { id, firstParty: ext.released, templates: ext.manifest.templates ?? [] };
       const context: string[] = [];
       let deny: { reason: string } | undefined;
       // Late by the host's own clock, whatever the package's said: the grace is for the trip back, so what came after
-      // the deadline fails and its context goes, though a deny it carries still stands.
-      let failure: string | undefined = performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      // the deadline fails and its context goes, though a deny it carries still stands. The same for a version removed
+      // or replaced while its handler ran: its context reaches no one, and its deny still stops the call.
+      let failure: string | undefined = this.exts.get(id) !== ext || !ext.live ? `${id} was removed while its ${kind} handler ran` : performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
       for (const reply of Array.isArray(replies) ? replies : [replies]) {
         // The runtime's marker for one handler that threw or missed the deadline: it fails, its siblings still count.
         const marker = typeof reply === 'object' && reply !== null && Object.keys(reply).length === 1 ? (reply as { $handler?: unknown }).$handler : undefined;
