@@ -1,0 +1,92 @@
+How the #506 acceptance suite fails at the base, ef869ad87 (main).
+
+Not run against a binary. The surfaces these tests drive plainly don't exist at the base, so no GPU build was made
+just to watch them fail; each line below is read from the base's code. The type check passes:
+
+  $ npx tsc -p tests/acceptance/506/tsconfig.json
+  (no output, exit 0)
+
+What the base has and lacks, read from its code:
+
+- No inset kind. `inset@1` is registered by no canvas module (crates/deep-canvas-scene3d/src/spec.rs has none;
+  `display@1`'s `screen` param only names an inset ID). The document check keeps an item of an unknown kind and skips
+  it with the notice `unknown_kind` (crates/deep-canvas/src/document/check.rs, "the item is skipped"), so a scene draws
+  as if the inset weren't there.
+- No item-level `anchors`: `anchors` isn't in ITEM_KEYS (crates/deep-canvas/src/document/mod.rs), so a document whose
+  item carries it is refused by the check.
+- No `overlay.view@1`: skipped as an unknown kind.
+- `overlay.frame@1` is placed at its anchor's projection (crates/deep-canvas-scene3d/src/scene.rs, `overlay`), but
+  `view3d` paints it only into a window (crates/deep-gpu-layer/src/view3d.rs: `p.overlays.insert` under `args.window`),
+  never into the final target, and its frame draws only `circle@1` and `rect@1` children; `view3d` has no `overlays`
+  reply field.
+- No `camera.framing`: registered by no module at the base (#1938 is open), so a requirement naming it is BLOCKED
+  `module_missing`.
+- The scope's Return acts only on a focused pick target (crates/deep-canvas/src/scope.rs: `done.pick =
+  self.focused_target(doc)`); a control's own Tab stop takes no Enter.
+- `deep-gpu run --planted <name>` with a name `Planted::parse` doesn't know prints {"ok": false, "code": "bad_input"}
+  and exits 2 (crates/deep-gpu-layer/src/main.rs: `bad_input`).
+
+Where each test fails (on macOS with cargo; elsewhere every GPU test is INCONCLUSIVE first, and with no cargo BLOCKED):
+
+ac1-screen-masked.test.ts
+  AC1 #506.ed43cc07 the screen's content stays inside its window …
+    The inset is skipped, so the window shows the display's white face: at frame 0 the assertion
+    "frame 0 (…): 0 of the N pixels inside the window show the content, under 98%" fails (none(...)).
+  AC1 #506.ed43cc07 the second-camera inset shows the rolling ball …
+    The window shows no picture: "frame 0 (t = 0.00 s): the window shows no ball (red weight 0.00) …" for every frame.
+
+ac2-terrain-heatmap.test.ts
+  AC2 #506.9d6f96ee every cell lands within a texel …
+    The fixture guards pass (relief 39.994 m, steepest 59.99°). The heatmap is skipped, so every judged pixel shows the
+    lit terrain: "view A, sun at 45°, the look's exposure: N of N judged pixels are off their cell's swatch by more than
+    1 code value; first pixel (…) in cell (…) reads (…), its swatch heat-k is (…)", in every render.
+
+ac3-drape-defaults.test.ts
+  AC3 #506.fad8bc6e given only its content and size it drapes onto its parent …
+    The drape is skipped: the lid shows its own grey, so "content with no data (lit) on the lid: … pixels are off the lid
+    painted in tint …" and "content with data (unlit) on the lid: … off the tint swatch …" fail.
+  AC3 #506.fad8bc6e a document that shows 9 projected insets in one view is refused …
+    The nine patches are skipped and the floor draws: "nine projected insets in one view is refused at check with a
+    code: expected 'undefined' to be 'string'".
+
+ac4-view-overlay.test.ts
+  AC4 #506.2393e811 the overlay in the bottom-right quarter …
+    The nested film isn't refused (pip and pip2 are skipped): "a view overlay asked inside another view is refused at
+    check with a code" fails first. (Past it, the rect shows the main view, not pip-cam's.)
+  AC4 #506.2393e811 camera.framing finds the main shot's kept item clear …
+    "the film: camera.framing is BLOCKED, not PASS" and "the film whose hero wanders under the rect: camera.framing is
+    BLOCKED, not FAIL" (module_missing).
+
+ac5-lamp-card.test.ts
+  AC5 #506.f7b7c9cf the card draws over the sofa … at 120 times of a 360° orbit
+    `overlays` is not a view3d field: "orbit frame 0: the reply reports no overlays" for all 120 frames, and the card's
+    spot reads the sofa ("the sofa hides the card").
+  AC5 #506.f7b7c9cf the card hides … fly-through
+    "fly-through frame 0: the reply reports no overlays" for all 60 frames.
+  AC5 #506.f7b7c9cf the card's close button is reached by Tab and closes the card on Enter
+    Tab reaches `close-card` (every control is a Tab stop at the base). The card isn't drawn by the panel's view and
+    Return does nothing on a control: it fails at "the view shows the card before Enter (pixels of the card's
+    background)", or, where the view draws the card, at "Enter on the close button … closes the card".
+
+ac6-eye-inset.test.ts
+  AC6 #506.0c1bce3a from three cameras the eye inset …
+    The wall's `anchors` is refused by the document check: "the eye inset was drawn, not refused: {"code": …}". (Past
+    it, the inset is skipped and the window shows the white wall: "… the window shows no ball …".)
+  AC6 #506.0c1bce3a the planted eye inset with a centred frustum …
+    `deep-gpu run --planted eye_inset_centred_frustum` exits 2 with bad_input: "deep-gpu run --planted
+    eye_inset_centred_frustum exited 0" fails.
+
+ac7-view-state.test.ts
+  AC7 #506.1bab76b5 the overlay's rect equals the figure rendered alone …
+    The guards pass where the base cuts each view to 32 lights. `pip` is skipped, so the rect shows the main view:
+    "the figure with pip: view pip: … pixels where its … shows are off its render alone by more than one code value".
+
+ac8-straight-alpha.test.ts
+  AC8 #506.2b4f3d4f the white disc at alpha 0.5 …
+    The panel's `anchors` is refused: "the disc inset was drawn, not refused: {"code": …}". (Past it, the inset is
+    skipped and the face reads black: "inset disc-inset: … pixels at the disc's edge are off the disc drawn directly".)
+
+taste.test.ts
+  AC9 #506.58529d4d the run writes …
+    Draws the scenes as the base can (no inset, no overlays), writes the six files, then, with no TASTE.json,
+    "INCONCLUSIVE: no taste call is recorded …; this is not a pass".
