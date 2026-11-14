@@ -1,0 +1,70 @@
+Base of tests/acceptance/223 at 65f383b3f ("motion(#222): cues@1's param declares its form, so main builds again"),
+main with no implementation of #223.
+
+NOT RUN. The machine was shared and at load ~300, and this job was told not to build cargo binaries or run the suites,
+so no binary was built and no test ran. Where each test fails was reasoned from the base's code, not observed. The
+type-check was run, on a copy of the two folders outside the repo with the root tsconfig.json's options and
+TypeScript 5.9.3: `tsc -p tests/acceptance/223/tsconfig.json` exits 0.
+
+What the base lacks (read from its code):
+- group@1 has no param schema (no kind entry in crates/deep-canvas/src/kinds.rs nor in marks2d's registrations), so the
+  check never reads `params.warp`, and every warped item draws as if unwarped.
+- The path fn has no `grid` form: crates/deep-canvas-marks/src/function.rs `Form::read` finds no `zero`, `x`/`y` or `y`
+  and no `over`, and refuses ("over is [a, b], or the x scale's domain"); deep-marks-render lowers formulas at check
+  (src/lib.rs, `formulas::lower` at t = 0), so a document holding `fn.grid` is refused by `check`, `path` and `raster`.
+- `path` frames carry no `outline` on an end and no `warp_points` or `warp_ms`; `raster::planted_path` knows no
+  `warp_maps_anchors_only` (bad_input).
+- deep-show's `path` takes no `t` and draws only the item's own fn or `d` (function.rs `path_reply`); there is no
+  scenario plant `flow_by_vector_field_kind`, no cargo feature `test-swirl`, no kind `test.swirl@1`, no `streams@1` in
+  `data.layout@1`.
+- packs/verbs-1.0.0 has no `warp` entry, and the cue kit's planted list (crates/deep-canvas-motion/src/cues/kit.rs) is
+  indicate, fade_in, nudge, shuffle and fade_out.
+
+Where each test fails, expected:
+
+ac1-grid.test.ts (AC1 #223.532d1014)
+- "the grid fn's 42 lines warped …": at `the grid warped by cmul(z, z): the check raises no error` (the fn grid's
+  refusal).
+- "a planted warp that maps only the original anchors …": at `path the grid, plain and under warp_maps_anchors_only
+  (line 0) is accepted` (the plain grid's fn is refused before the plant is read).
+
+ac2-plane.test.ts (AC2 #223.48c2501c)
+- "times i sends (100, 0) u …": the check passes (the warp is unread); fails at `with y up, times i sends (100, 0) u to
+  (0, −100) u, a quarter turn counterclockwise on screen; it lands at (100, 0)`.
+- "two lines crossing at (1, 1) …": the lines cross unwarped at (500, 200); fails at `they cross at e^(1 + i),
+  (…) u, not at (500, 200)`, the image lying at about (546.9, 71.3) u.
+
+ac3-linear.test.ts (AC3 #223.9d800d51)
+- fails at `[[0, −1], [1, 0]] at mix 0.5 maps (1, 0) to (0.5, 0.5) within 1e-9; it gives (1, 0)`.
+
+ac4-homotopy.test.ts (AC4 #223.bd85dee7)
+- "seeked to 1,000 random times …": the warp is unread, so the line never moves and every hash is the same: every seek
+  equals its play and the test fails at `the homotopy moves: its 1,000 played frames give 1 distinct hashes, not at
+  least 990`. (If the base's `deep show` check refused the film instead, it fails earlier, at `the homotopy film is
+  presented`.)
+- "its 4 px stroke measures 4 ± 0.1 px everywhere": the line is drawn straight at Y = 300, so columns are centred off
+  the image and read 4 ÷ √(1 + s²) across; fails at `the warped stroke keeps its 4 px width everywhere` (the first
+  failure: column 120 at 0.4 s, centred at Y 300 against the image near Y 359).
+
+ac5-arrow.test.ts (AC5 #223.3a3308e4)
+- "with ends: redraw …": fails at `the redrawn tip sits at the sheared end (500, 200), not (400, 200)`.
+- "with ends: warp …": fails at `the plain arrow: the head reports its drawn outline (ends.end.outline), at least three
+  corners`.
+
+ac6-flow.test.ts (AC6 #223.bc85d7ee), both tests
+- fail at `the binary builds: cargo build --locked --bin deep-show --no-default-features --features
+  full,test-leave-out-data,test-swirl` (cargo: the package has no feature `test-swirl`).
+
+ac7-budgets.test.ts (AC7 #223.955a0bbf), both tests
+- fail at `path the moving warp (line 0) is accepted` and `path the still warp (line 0) is accepted` (the grid's fn is
+  refused), before any machine check; on every machine.
+
+ac8-cue.test.ts (AC8 #223.7ab209fd)
+- "a warp cue over a group …": fails at `the film playing the warp cue is presented` (its cue's kind `warp` is no entry
+  of cue.kind@1, and its grid's fn is refused).
+- "the cue kit refuses a planted warp verb …": fails at `cue.kind@1 lists a planted entry warp; it lists indicate,
+  fade_in, nudge, shuffle, fade_out`.
+
+ac9-taste.test.ts (AC9 #223.85ce0afe)
+- fails at `raster grid-z-squared at 0 s (0 flicks) refused` (the grid's fn), before any record is read. After the
+  implementation it stays INCONCLUSIVE until you record the call.
