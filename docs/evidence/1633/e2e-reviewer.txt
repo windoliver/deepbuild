@@ -1,61 +1,61 @@
-hub pid 3786293; task task:item7; definition locked
+hub pid 1806061; task task:item7; definition locked
 gh pr create: allowed
 
 == Claim 1: GitHub says T is unresolved
-stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B20BAJ3EC4978C8RWSPK7
+stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAE3H1T2XSTGJ6ED1QQDXJ
 DeepBuild: https://github.com/acme/shop/pull/21 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.
-https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B20BAJ3EC4978C8RWSPK7
+https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAE3H1T2XSTGJ6ED1QQDXJ
 verdict: BLOCKED; reasons ["review: inherited: also fails on the merge base: review: run"]; requirements req:taskitem7#R1 PASS
 T's open-item events so far:
-  log_pos 23 id 01M77B20BY9BV1Z4QWXG4QZ8WP open_item.opened@2 {"item":"97260a212301","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-ask.created events for T so far: 1: ask:01M77B20C9RQ47M742KJFFEWPS at log_pos 24
+  log_pos 21 id 01M7CAE3HVX0JE2HSRT80XYA7M open_item.opened@2 {"item":"b7a24e913676","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+ask.created events for T so far: 1: ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8 at log_pos 24
 
 $ deep inbox   # after claim 1
-Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”  exception  no repo    5s  If you don't answer: Keep it open, on Fri 13 Nov at 23:37  ask:01M77B20C9RQ47M742KJFFEWPS
+Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”  exception  no repo    5s  If you don't answer: Keep it open, on Sun 15 Nov at 22:03  ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8
 1 ask needs you
 
 $ gh pr edit 21 --body "Closes #7"   # T open
   REFUSED: DeepBuild blocked this: the pull request can't say Closes #7 while a review note on it is neither fixed nor accepted. Fix each, or have it accepted through its ask, and say Part of #7 until then: Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”.
 
 == Claim 2: GitHub says T is resolved by maya
-stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B25B1FB28B9E6A0GXHEJX
+stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAE9AFY6S5EZ91RVW1GEB6
 DeepBuild: https://github.com/acme/shop/pull/21 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.
-https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B25B1FB28B9E6A0GXHEJX
+https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAE9AFY6S5EZ91RVW1GEB6
 verdict: BLOCKED; reasons ["review: inherited: also fails on the merge base: review: run"]; requirements req:taskitem7#R1 PASS
 T's open-item events so far:
-  log_pos 23 id 01M77B20BY9BV1Z4QWXG4QZ8WP open_item.opened@2 {"item":"97260a212301","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 110 id 01M77B25BG8TXEE2YW1RT1XKSC open_item.closed@2 {"item":"97260a212301","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-ask.created events for T so far: 1: ask:01M77B20C9RQ47M742KJFFEWPS at log_pos 24
+  log_pos 21 id 01M7CAE3HVX0JE2HSRT80XYA7M open_item.opened@2 {"item":"b7a24e913676","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 97 id 01M7CAE9B2V03A83DXAKSDSBE1 open_item.closed@2 {"item":"b7a24e913676","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+ask.created events for T so far: 1: ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8 at log_pos 24
 
 $ deep inbox   # after claim 2
-Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”  exception  no repo    10s  If you don't answer: Keep it open, on Fri 13 Nov at 23:37  ask:01M77B20C9RQ47M742KJFFEWPS
+Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”  exception  no repo    11s  If you don't answer: Keep it open, on Sun 15 Nov at 22:03  ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8
 1 ask needs you
 
 == Claim 3: GitHub says T is unresolved
-stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B2AQJ1A288MZZ0143CN6Z
+stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAEEFVJ6N2JR752JADA7F2
 DeepBuild: https://github.com/acme/shop/pull/21 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.
-https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B2AQJ1A288MZZ0143CN6Z
+https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAEEFVJ6N2JR752JADA7F2
 verdict: BLOCKED; reasons ["review: inherited: also fails on the merge base: review: run"]; requirements req:taskitem7#R1 PASS
 T's open-item events so far:
-  log_pos 23 id 01M77B20BY9BV1Z4QWXG4QZ8WP open_item.opened@2 {"item":"97260a212301","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 110 id 01M77B25BG8TXEE2YW1RT1XKSC open_item.closed@2 {"item":"97260a212301","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 178 id 01M77B2AR35M5PPJ3G8CDZZJ6M open_item.opened@4 {"item":"97260a212301","from":"review_thread","replaces":"01M77B25BG8TXEE2YW1RT1XKSC","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-ask.created events for T so far: 1: ask:01M77B20C9RQ47M742KJFFEWPS at log_pos 24
+  log_pos 21 id 01M7CAE3HVX0JE2HSRT80XYA7M open_item.opened@2 {"item":"b7a24e913676","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 97 id 01M7CAE9B2V03A83DXAKSDSBE1 open_item.closed@2 {"item":"b7a24e913676","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 169 id 01M7CAEEGFQGMVRM6K9HJ05EZW open_item.opened@4 {"item":"b7a24e913676","from":"review_thread","replaces":"01M7CAE9B2V03A83DXAKSDSBE1","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+ask.created events for T so far: 1: ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8 at log_pos 24
 
 $ deep inbox   # after claim 3
-Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”  exception  no repo    15s  If you don't answer: Keep it open, on Fri 13 Nov at 23:37  ask:01M77B20C9RQ47M742KJFFEWPS
+Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”  exception  no repo    16s  If you don't answer: Keep it open, on Sun 15 Nov at 22:03  ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8
 1 ask needs you
 
 $ gh pr edit 21 --body "Closes #7"   # T reopened
   REFUSED: DeepBuild blocked this: the pull request can't say Closes #7 while a review note on it is neither fixed nor accepted. Fix each, or have it accepted through its ask, and say Part of #7 until then: Review thread PRRT_kwDOAcmeE2E01 on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r77001, first comment by maya: “Name the reason a token was rejected in the 401 body.”.
 
-$ deep inbox answer ask:01M77B20C9RQ47M742KJFFEWPS accept
-  exit 0 ask:01M77B20C9RQ47M742KJFFEWPS answered accept; no decision saved
+$ deep inbox answer ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8 accept
+  exit 0 ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8 answered accept; no decision saved
 T's open-item events:
-  log_pos 23 id 01M77B20BY9BV1Z4QWXG4QZ8WP open_item.opened@2 {"item":"97260a212301","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 110 id 01M77B25BG8TXEE2YW1RT1XKSC open_item.closed@2 {"item":"97260a212301","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 178 id 01M77B2AR35M5PPJ3G8CDZZJ6M open_item.opened@4 {"item":"97260a212301","from":"review_thread","replaces":"01M77B25BG8TXEE2YW1RT1XKSC","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 250 id 01M77B2FQ53GP207PZ7ZNHDMTA open_item.closed@2 {"item":"97260a212301","by":"your answer: accepted, closed without a fix","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 21 id 01M7CAE3HVX0JE2HSRT80XYA7M open_item.opened@2 {"item":"b7a24e913676","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 97 id 01M7CAE9B2V03A83DXAKSDSBE1 open_item.closed@2 {"item":"b7a24e913676","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 169 id 01M7CAEEGFQGMVRM6K9HJ05EZW open_item.opened@4 {"item":"b7a24e913676","from":"review_thread","replaces":"01M7CAE9B2V03A83DXAKSDSBE1","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 239 id 01M7CAEKTPQAAM86CKQFT7W3YB open_item.closed@2 {"item":"b7a24e913676","by":"your answer: accepted, closed without a fix","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
 
 $ gh pr edit 21 --body "Closes #7"   # T accepted
   ALLOWED
@@ -64,16 +64,16 @@ $ deep inbox   # after the answer
 Nothing needs you
 
 == Claim 4: GitHub says T is unresolved
-stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B2K5C74A2FY3KTJ7WQAH8
+stop reply: https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAEQNV058RGAF2T213S0ZD
 DeepBuild: https://github.com/acme/shop/pull/21 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.
-https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/8d2a94df/01M77B2K5C74A2FY3KTJ7WQAH8
+https://github.com/acme/shop/pull/21 · Part of · BLOCKED 1/1 · 2 tests · next: you · session/a9b23d91/01M7CAEQNV058RGAF2T213S0ZD
 verdict: BLOCKED; reasons ["review: inherited: also fails on the merge base: review: run"]; requirements req:taskitem7#R1 PASS
 T's open-item events so far:
-  log_pos 23 id 01M77B20BY9BV1Z4QWXG4QZ8WP open_item.opened@2 {"item":"97260a212301","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 110 id 01M77B25BG8TXEE2YW1RT1XKSC open_item.closed@2 {"item":"97260a212301","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 178 id 01M77B2AR35M5PPJ3G8CDZZJ6M open_item.opened@4 {"item":"97260a212301","from":"review_thread","replaces":"01M77B25BG8TXEE2YW1RT1XKSC","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-  log_pos 250 id 01M77B2FQ53GP207PZ7ZNHDMTA open_item.closed@2 {"item":"97260a212301","by":"your answer: accepted, closed without a fix","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
-ask.created events for T so far: 1: ask:01M77B20C9RQ47M742KJFFEWPS at log_pos 24
+  log_pos 21 id 01M7CAE3HVX0JE2HSRT80XYA7M open_item.opened@2 {"item":"b7a24e913676","from":"review_thread","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 97 id 01M7CAE9B2V03A83DXAKSDSBE1 open_item.closed@2 {"item":"b7a24e913676","by":"review thread PRRT_kwDOAcmeE2E01 resolved by maya","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 169 id 01M7CAEEGFQGMVRM6K9HJ05EZW open_item.opened@4 {"item":"b7a24e913676","from":"review_thread","replaces":"01M7CAE9B2V03A83DXAKSDSBE1","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+  log_pos 239 id 01M7CAEKTPQAAM86CKQFT7W3YB open_item.closed@2 {"item":"b7a24e913676","by":"your answer: accepted, closed without a fix","text":"Review thread PRRT_kwDOAcmeE2E01 on https://github.c…"}
+ask.created events for T so far: 1: ask:01M7CAE3JQDS7Q2GVNQ4NZ38B8 at log_pos 24
 
 $ deep inbox   # after claim 4: T still unresolved, accepted
 Nothing needs you

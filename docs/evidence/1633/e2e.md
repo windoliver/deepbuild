@@ -1,6 +1,6 @@
 # Manual e2e for #1633
 
-The run, on d48117c9 (this PR's head), 2026-11-11:
+The run, on 2eb06e04 (PR #2416's branch with main merged in), 2026-11-13. It repeats the 2026-11-11 run on d48117c9, with the same driver and the same results:
 
 - Node 24.22.0, Linux aarch64 (Spark).
 - The real hub runs as a process, with the real deep-hook (an `env-plants` debug build) for every Claude Code hook.
@@ -74,3 +74,11 @@ The fix: the driver now prints the full reply, each event's ID, the verdict's ou
 - The refusal's `”.` punctuation.
 - "next: you" in the stop reply, which comes from the inherited `review` check.
 - The driver's deliberate "…" shortening of each item's text.
+
+**Round 4, on the 2eb06e04 run.** The transcripts and screenshots here are from this run. Two fresh agents again each checked one scenario, seeing only the images and the expected behaviour. Both passed every expectation, with nothing contradicted and no personal data on screen. Their remarks are the ones above, plus these, none of them part of this change:
+- "Closes ALLOWED" is the hook's answer to the `gh pr edit` command. The recorded GitHub answers keep the PR body, so claim 4's reply still says "Part of".
+- No verdict is printed between the answer and the next claim.
+- The first opening and the closings are `@2`, which is what main writes; only a reopening is `@4`.
+- "no decision saved" means the answer applies to that one ask.
+- The event lists are the driver's filter of the record for T, not the raw log.
+
