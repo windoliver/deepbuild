@@ -1,0 +1,48 @@
+Base run of the #1633 acceptance tests, on base commit ede4b367 (main), Node 24.22.0, vitest 5.0.5, Linux arm64
+(load average 31-37 on the machine during the run), after `npm ci`, `npm run build --workspaces` and
+`cargo build --locked -q -p deep-hook`, from the worktree root:
+
+  npx vitest run tests/acceptance/1633 --no-file-parallelism --testTimeout=600000
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Duration  175.04s
+
+What the base does: claim 1 opens T's item and raises its accept ask; claim 2, with T resolved by maya, closes it
+("review thread PRRT_kwDOAcme1633a resolved by maya"); claim 3, with T unresolved again, finds the same text and so
+the same item ID, and `atClaim` skips it because the record holds it, closed. No `open_item.opened` comes after
+claim 3. An item your answer closed (accepted or waived) also stays closed, which is why AC2 and AC3's main test pass.
+The hub knows no plant `reopens-every-item`. In every scenario the setup held: the definition locked, `gh pr create`
+was allowed, and claim 1 opened T's item.
+
+reopened.test.ts > AC1 #1633.4b7df9d5
+  x Error: AC1 #1633.4b7df9d5 claim 3 sees PRRT_kwDOAcme1633a unresolved again, so its item
+    3af0b20cc495e014c1b1b41803f7ef6eb7d00bdffe72cc0e9d05976bd54443e0 is open after claim 3: it stays closed, by
+    "review thread PRRT_kwDOAcme1633a resolved by maya" (open_item.closed at log_pos 94 {"task_ref":"task:item7",
+    "text":"Review thread PRRT_kwDOAcme1633a on https://github.com/acme/shop/pull/21 (src/auth.js:3),
+    https://github.com/acme/shop/pull/21#discussion_r16331, first comment by maya: “Name the reason a token was
+    rejected in the 401 body.”","item":"3af0b20cc495e014c1b1b41803f7ef6eb7d00bdffe72cc0e9d05976bd54443e0",
+    "by":"review thread PRRT_kwDOAcme1633a resolved by maya"}); T's items after claim 3: none
+  (At reopened.test.ts:148, the first assertion after the shared sequence: the merge base leaves the item closed,
+  naming T, as the criterion says. The assertions after it (the reopening cites the closing, Closes refused naming T,
+  one accept ask open) were not reached. A diagnostic run of the same scenario on the base, not kept, showed what
+  they would read there: `gh pr edit 21 --body "Closes #7"` allowed, with R1 PASS on claim 3's verdict, and claim
+  1's accept ask for T still open, unanswered.)
+
+reopened.test.ts > AC2 #1633.216b72d6
+  ✓ passes on the base: your accept closes T's item after claim 1, and claim 3 leaves it closed and raises no ask.
+
+reopened.test.ts > AC3 #1633.54f387d7 (main)
+  ✓ passes on the base: the waived "Not verified" item, raised again at claims 2 and 3, stays closed by the waiver.
+
+reopened.test.ts > AC3 #1633.54f387d7 (wrong program, DEEP_HUB_PLANT=reopens-every-item)
+  x Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=reopens-every-item did not start:
+    file://~/deepbuild/.claude/worktrees/issue-1633-reopened-review-thread-3bc754/packages/hub/dist/plant.js:91
+    Error: DEEP_HUB_PLANT=reopens-every-item names no planted program
+  (At reopened.test.ts:75, the hub's start: the plant doesn't exist at the base; the implementer adds it.)
+
+Two earlier runs while this suite was being written failed in setup, and the suite was fixed: `gh pr create` saying
+only "Part of #7" was refused by #82's rule while R1's runs were still to come (the body now lists R1), and, once the
+machine's load fell, refused by #84's `pr-needs-ask` default because the prompt "Fix <link>" names no pull request
+(the prompt now says "and open a pull request"). Under heavier load, earlier, the hook had let it through. The run
+above is the one after those fixes.

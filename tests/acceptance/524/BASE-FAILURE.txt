@@ -1,0 +1,55 @@
+The #524 suite run once at base commit e0c90a5a5 ("Merge pull request #2455 …"; no implementation of #524; #522's,
+#523's and #525's merges are there), on macOS 27.2 arm64 (a Mac17,10, not a reference Mac; rustc 1.99.1, vitest
+5.0.5), the checkout's path redacted to <checkout>. The machine was shared and heavily loaded (load average 195 to 305
+on 18 cores) with six builds queued ahead in the throttle's one build slot, so no binary was built for this run: cargo
+was made to refuse every build at once (CARGO_BUILD_JOBS=0, "error: jobs may not be 0"), and each file ran its tests as
+far as they go without one:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_BUILD_JOBS=0 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- sh scripts/lease \
+    npx vitest run --root tests/acceptance/524 --testTimeout=600000 --no-file-parallelism
+
+`scripts/lease` found no hub token and ran unleased, as it says. Run: 22 of 22 tests fail, none passes, none is BLOCKED
+or INCONCLUSIVE. Test Files 9 failed (9), Tests 22 failed (22), Duration 38.75 s.
+
+Seven tests fail at their own named assertion, before any binary is needed, because the surface is absent at the base:
+
+- ac1 (#524.98cf72b1), 3 tests, and ac3 (#524.4c32c52f), 1 test, and ac8 (#524.b97ba86d), 1 test: no lab document
+  exists.
+    AssertionError: the bridge lab is a document at packs/examples/labs/rope-bridge.json: expected false to be true
+     ❯ labOf helpers.ts:419:78
+     ❯ ac1-labs.test.ts:30:24 (and :53:24, :64:24; ac3-solver-swap.test.ts:27:31; ac8-taste.test.ts)
+- ac7 (#524.584c6e80), 1 test: benchmarks/budgets.json holds no physics task.
+    AssertionError: benchmarks/budgets.json records physics-module for the budget window:
+      benchmarks/budgets.json has no task physics-module: expected [ Array(1) ] to deeply equal []
+- ac9 (#524.d7f0282a), 1 test:
+    AssertionError: benchmarks/budgets.json records physics-soft-labs for the budget window:
+      benchmarks/budgets.json has no task physics-soft-labs: expected [ Array(1) ] to deeply equal []
+
+Fifteen tests, every test of ac2 (2), ac4 (4), ac5 (3) and ac6 (6), stopped at the build of deep-physics, the first thing
+each does ("deep-physics builds (cargo build --locked --bin deep-physics): expected 'cargo build --locked --bin
+deep-physi…' to be ''"), so their base failure wasn't observed in this run: it was skipped as the expensive part, since
+the surface plainly doesn't exist at the base. What they meet there, read from the base's own source:
+
+- `crates/deep-canvas-physics/src/doc.rs`'s WORLD_KEYS has no `soft`, so every world here is refused at check with
+  `unknown_field` at path `soft`: `check` answers {"ok": true, "issues": [an error]} and every `bake`, `seek` and
+  `golden` of such a world {"ok": false, "issues": […]}. ac2's first test and ac5's and ac6's first tests fail at
+  `builtOf`'s "is admitted: no error issue"; ac2's second test at "the balloons without a pressure is admitted" (and its
+  error's path is `soft`, never soft/b12/pressure); ac4's first three tests, ac5's last two and ac6's second to fourth
+  at the bake's `ok` (`particlesOf`'s "ran (ok: true)" or `hashesOf`'s "answers ok"); ac4's last test and ac6's fifth
+  at "is admitted".
+- `crates/deep-canvas-physics/src/doc/reads.rs` refuses an output's `read: "particle_positions"` and `to: {skin}` with
+  physics.unsupported ("#1786 brings it"), so deep-show would refuse every skinned document too.
+- `crates/deep-physics-rapier/src/runner.rs`'s PLANTED has no `volume_without_constraint` (ac6's sixth test: `--planted
+  volume_without_constraint` writes {"ok":false,"code":"bad_input"} and exits 2, failing "exits 0"); its calls have no
+  `audit` (bad_input), `check` answers no `soft` or `backend`, `bake` and `seek` no `particles`, and `runtime` no
+  `soft_solver`.
+- `cargo metadata --locked --no-deps` lists deep-physics-rapier's features as default, enhanced-determinism,
+  serde-serialize, test-count-calls, test-leaks-rapier and test-reverse-pairs: no `test-swap-soft-solver`, so ac3's
+  swapped build would fail at "deep-physics builds (… --features test-swap-soft-solver)" once the labs exist.
+
+Not run at the base: deep-show and deep-gpu (no test reaches them before its first failure), and no timing (this Mac is
+not a reference Mac; the budget tests fail at their record first).
+
+The type-check, `npx tsc -p tests/acceptance/524/tsconfig.json`, exits 0. `node scripts/public-text.mjs` reads the
+added files and the open issues and finds no studied name.

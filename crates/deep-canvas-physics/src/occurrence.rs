@@ -55,6 +55,11 @@ pub enum Payload {
         force: f32,
         torque: f32,
     },
+    /// #524: `tear {edges}`: each edge a step tore, by its two particles' addresses, the lower
+    /// first, sorted, each once.
+    Tear {
+        edges: Vec<[String; 2]>,
+    },
     /// #523: `fault {kind}`, one of [`FAULTS`].
     Fault {
         kind: &'static str,
@@ -109,11 +114,15 @@ pub fn built_order(w: &World) -> Vec<&String> {
 }
 
 /// Each ID's rank in canonical order, (priority, ID) over the world's bodies, then its joints by
-/// ID (A timeline as data over a pinned backend: order is canonical by (priority, ID)).
+/// ID, then its soft bodies by ID (A timeline as data over a pinned backend: order is canonical by
+/// (priority, ID)).
 pub fn ranks(w: &World) -> BTreeMap<String, u32> {
     let mut bodies: Vec<&String> = w.bodies.keys().collect();
     bodies.sort_by_key(|id| (w.bodies[*id].priority, id_order(id)));
-    let ids = bodies.into_iter().chain(w.joints.keys());
+    let ids = bodies
+        .into_iter()
+        .chain(w.joints.keys())
+        .chain(w.soft.keys());
     ids.enumerate()
         .map(|(i, id)| (id.clone(), i as u32))
         .collect()
@@ -137,6 +146,7 @@ fn canonical(mut raw: Raw, rank: &BTreeMap<String, u32>) -> Raw {
         Payload::Contact { normal, .. } | Payload::Hit { normal, .. } => *normal = flip(*normal),
         Payload::None
         | Payload::Break { .. }
+        | Payload::Tear { .. }
         | Payload::Fault { .. }
         | Payload::Crossing { .. } => {}
     }
@@ -207,6 +217,13 @@ pub fn bytes(rows: &[Row], rank: &BTreeMap<String, u32>) -> Vec<u8> {
                 }
             }
             Payload::Break { force, torque } => f32s(&mut out, &[*force, *torque]),
+            Payload::Tear { edges } => {
+                out.extend_from_slice(&(edges.len() as u32).to_le_bytes());
+                for a in edges.iter().flatten() {
+                    out.extend_from_slice(&(a.len() as u32).to_le_bytes());
+                    out.extend_from_slice(a.as_bytes());
+                }
+            }
             Payload::Fault { kind } => {
                 out.push(FAULTS.iter().position(|f| f == kind).unwrap_or(0) as u8)
             }
@@ -272,6 +289,9 @@ pub fn json(row: &Row) -> Value {
             m.insert("force".into(), json!(f64::from(*force)));
             m.insert("torque".into(), json!(f64::from(*torque)));
         }
+        Payload::Tear { edges } => {
+            m.insert("edges".into(), json!(edges));
+        }
         Payload::Fault { kind } => {
             m.insert("fault".into(), json!({ "kind": kind }));
         }
@@ -324,6 +344,18 @@ pub fn row(v: &Value) -> Option<Row> {
         Payload::Break {
             force: f("force")?,
             torque: f("torque")?,
+        }
+    } else if let Some(edges) = v.get("edges").and_then(Value::as_array) {
+        let pair = |e: &Value| -> Option<[String; 2]> {
+            let a = e.as_array().filter(|a| a.len() == 2)?;
+            Some([a[0].as_str()?.into(), a[1].as_str()?.into()])
+        };
+        Payload::Tear {
+            edges: edges.iter().map(pair).collect::<Option<_>>()?,
+        }
+    } else if let Some(k) = v.pointer("/fault/kind").and_then(Value::as_str) {
+        Payload::Fault {
+            kind: FAULTS.iter().find(|f| **f == k)?,
         }
     } else {
         Payload::None

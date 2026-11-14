@@ -490,6 +490,9 @@ impl<'a> Iterator for BatchIterator<'a> {
             PrimitiveKind::Chrome => { // DeepBuild patch (windoliver/deepbuild#1434): one at a time
                 self.chrome_iter.next();
                 self.chrome_start += 1;
+                #[cfg(not(target_os = "macos"))] // DeepBuild patch (windoliver/deepbuild#2471): only Metal draws one
+                return self.next();
+                #[cfg(target_os = "macos")]
                 Some(PrimitiveBatch::Chrome(self.chrome_start - 1))
             }
         }
@@ -524,6 +527,7 @@ pub enum PrimitiveBatch {
         range: Range<usize>,
     },
     Surfaces(Range<usize>),
+    #[cfg(target_os = "macos")] // DeepBuild patch (windoliver/deepbuild#2471): the registry renderers match without it
     Chrome(usize), // DeepBuild patch (windoliver/deepbuild#1434)
 }
 
@@ -557,6 +561,7 @@ impl PrimitiveBatch {
                 )
             }
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
+            #[cfg(target_os = "macos")] // DeepBuild patch (windoliver/deepbuild#2471)
             Self::Chrome(index) => format!("chrome {index}"), // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }

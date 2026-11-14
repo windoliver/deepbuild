@@ -152,6 +152,10 @@ export class HubCanvas {
       if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
       return this.canvasCall({ ...call, rev, session: as.session });
     }
+    // A diagnostic mode of the current revision is a render-back too: the session's own (#411).
+    if (typeof call.mode === 'string' && !('document' in call) && !('patch' in call) && !('session' in as && as.session)) {
+      return { outcome: 'refused', code: 'no_session', mode: call.mode, issues: [], snapshots: [], drawn: [] };
+    }
     if (isObj(call.document)) {
       const held = await this.preparePackAssets(call.document);
       if (held) return held;
@@ -219,6 +223,16 @@ export class HubCanvas {
     const modules = isObj(requires.modules) ? requires.modules : {};
     const needs = 'scene3d' in modules ? requires : { ...requires, modules: { ...modules, scene3d: '^1' } };
     return { call: { ...call, document: { ...doc, requires: needs, items } }, assets };
+  }
+
+  /**
+   * deep_query (#411, #1725): a revision's evaluated rows, its summary or the why behind a value, read by the session
+   * the call binds to, as deep_show binds; bound to none, the canvas core answers no_session.
+   */
+  async query(session: string | null, args: Obj): Promise<Obj> {
+    const call: Obj = { call: 'deep_query', session };
+    for (const [k, v] of Object.entries(args)) if (v !== null && v !== undefined) call[k] = v;
+    return this.canvasCall(call);
   }
 
   /**

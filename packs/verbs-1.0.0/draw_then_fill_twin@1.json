@@ -1,0 +1,29 @@
+{
+  "id": "verbs.draw_then_fill_twin",
+  "version": "1.0",
+  "title": "Draw then fill, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of draw_then_fill: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "draw": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/ops/0/trim/end": 0
+        },
+        "until": 0.5
+      }
+    },
+    "fill": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/brightness": 0
+        },
+        "at": 0.25
+      }
+    }
+  }
+}
