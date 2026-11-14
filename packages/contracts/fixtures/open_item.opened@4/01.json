@@ -1,0 +1,16 @@
+{
+  "v": 4,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7X",
+  "kind": "open_item.opened",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013452123,
+  "data": {
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "text": "Review thread PRRT_kwDOAcme0021a on https://github.com/acme/shop/pull/21 (src/auth.js:2), first comment by maya: “Compare with >= here.”",
+    "item": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "from": "review_thread",
+    "replaces": "01K74FKZVK8Q2X5R7M3N9P4T6W"
+  }
+}

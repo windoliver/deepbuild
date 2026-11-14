@@ -1,0 +1,65 @@
+{
+  "id": "verbs.indicate",
+  "version": "1.0",
+  "title": "Indicate",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An emphasis: each target swells by `scale` at the middle of its window and its fill takes the role `role`, then is back as it was.",
+  "inputs": {
+    "scale": {
+      "type": "number",
+      "default": 1.2,
+      "min": 0,
+      "about": "how much it swells at the middle of its window"
+    },
+    "role": {
+      "type": "text",
+      "default": "accent",
+      "about": "the look's role its fill takes while it's indicated"
+    }
+  },
+  "steps": {
+    "swell": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/scale": {
+            "pulse": {
+              "amount": [
+                "now[0] * (scale - 1)",
+                "now[1] * (scale - 1)",
+                0
+              ]
+            }
+          }
+        }
+      }
+    },
+    "role_on": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/paint/fill/role": "role"
+        },
+        "ease": "hold",
+        "until": 0.1,
+        "type": {
+          "params/paint/fill/role": "enum"
+        }
+      }
+    },
+    "role_off": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/paint/fill/role": "role"
+        },
+        "ease": "hold",
+        "at": 0.9,
+        "type": {
+          "params/paint/fill/role": "enum"
+        }
+      }
+    }
+  }
+}
