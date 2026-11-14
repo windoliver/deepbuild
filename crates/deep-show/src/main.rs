@@ -725,6 +725,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
+                carried: flag("carried")?,
             })));
         }
         "frames" => {
@@ -1941,6 +1942,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-scatter",
     feature = "test-tick",
     feature = "test-held",
+    feature = "test-page-latch",
     feature = "test-frame-cache",
     feature = "test-kit",
     feature = "test-leave-out-look",
@@ -2167,6 +2169,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::tick());
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
+    #[cfg(feature = "test-page-latch")]
+    out.push(deep_canvas_test_modules::latch());
     #[cfg(feature = "test-frame-cache")]
     out.push(deep_canvas_test_modules::cache());
     #[cfg(feature = "test-a")]

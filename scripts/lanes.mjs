@@ -621,6 +621,10 @@ timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budge
 slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
 // #507's files each build deep-show with cargo; ac6 reads PDFs with poppler, ac3 renders a 50 s session's sound.
 alone.push('tests/acceptance/507/', 'tests/acceptance/507-oracle/');
+// #169's files each build deep-show with cargo and export through the GPU; two drive Chrome, and budgets.test.ts times
+// the walkthrough's exports on the reference Mac.
+alone.push('tests/acceptance/169/');
+timed.push('tests/acceptance/169/budgets.test.ts');
 // #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
 // ac7-budgets judges the task's budgets on the reference Mac.
 alone.push('tests/acceptance/226/');
