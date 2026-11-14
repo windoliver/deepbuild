@@ -1,0 +1,9 @@
+ProductName:		macOS
+ProductVersion:		14.7.7
+BuildVersion:		23H723
+Mac15,12
+Apple M3
+Now drawing from 'AC Power'
+ lowpowermode         0
+start 2026-11-11 23:53:48 23:53  up 44 days,  2:19, 2 users, load averages: 3.69 8.29 6.04
+end 2026-11-12 00:02:08  0:02  up 44 days,  2:27, 2 users, load averages: 6.74 6.66 6.05

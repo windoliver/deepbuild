@@ -6,7 +6,7 @@
 // deep-hook's hooks, and the CLI's reads through remoteCall.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import tls from 'node:tls';
+import type tls from 'node:tls';
 import { refusedGeneration } from './generations.js';
 import { identityAt, idOf } from './identity.js';
 import { forgeIdentity, forgeOf, installedRoot } from './paths.js';
@@ -42,12 +42,13 @@ export function joinedFor(cwd: string): Joined | undefined {
  * A TLS connection to the hub at `address`, proving this machine's key for `hub`: it resolves only once the hub's
  * certificate carries the key `hub` names and its hello names a writer generation this machine may write to.
  */
-function open(address: string, hub: string): Promise<{ sock: tls.TLSSocket; lines: () => Promise<Obj> }> {
+async function open(address: string, hub: string): Promise<{ sock: tls.TLSSocket; lines: () => Promise<Obj> }> {
   const m = /^(.*):(\d{1,5})$/.exec(address);
   if (!m) return Promise.reject(Error(`${address} isn't <host>:<port>`));
   const key = identityAt(keyFile(hub), 'deep-client');
+  const { connect } = await import('node:tls');
   return new Promise((resolve, reject) => {
-    const sock = tls.connect({ host: m[1]!.replace(/^\[|\]$/g, ''), port: Number(m[2]), key: key.key, cert: key.cert, rejectUnauthorized: false, minVersion: 'TLSv1.3', checkServerIdentity: () => undefined, timeout: 15_000 });
+    const sock = connect({ host: m[1]!.replace(/^\[|\]$/g, ''), port: Number(m[2]), key: key.key, cert: key.cert, rejectUnauthorized: false, minVersion: 'TLSv1.3', checkServerIdentity: () => undefined, timeout: 15_000 });
     let buffer = '';
     const waiting: ((o: Obj) => void)[] = [];
     const queued: Obj[] = [];

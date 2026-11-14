@@ -1,0 +1,163 @@
+# Before: the three test files on the base's sources and build.
+# Base: 41d712bf93d0b6b393d9ca1002f5e5a3fa13dc63 (origin/main 9b77cd2cd merged into PR #2334's branch), every file under packages/*/src as that commit holds it.
+# node node_modules/vitest/vitest.mjs run packages/cli/test/loads.test.ts packages/hub/test/clock.test.ts packages/hub/test/hub-waits.test.ts --testTimeout=600000 --reporter=verbose
+
+
+ RUN  v5.0.5 <base>
+
+ × packages/cli/test/loads.test.ts > deep inbox loads none of the YAML parser, SQLite, the gate, the record or the contracts 233ms
+   → expected [ Array(1) ] to deeply equal []
+ ✓ packages/cli/test/loads.test.ts > deep lease,--,true loads none of the YAML parser, SQLite, the gate, the record or the contracts 282ms
+ × packages/cli/test/loads.test.ts > deep, in a folder that joined no project's hub, loads neither TLS nor the contracts 245ms
+   → expected [ …(2) ] to deeply equal []
+ × packages/cli/test/loads.test.ts > deep status, in a folder that joined no project's hub, loads neither TLS nor the contracts 264ms
+   → expected [ …(2) ] to deeply equal []
+ × packages/cli/test/loads.test.ts > deep hub status, which only asks the hub on its socket, loads none of the hub's own server 295ms
+   → expected [ Array(1) ] to deeply equal []
+ × packages/hub/test/hub-waits.test.ts > deep hub start returns within 20 ms of the hub's socket answering, not at the next 100 ms step 3041ms
+   → expected 'pending' to be +0 // Object.is equality
+ × packages/hub/test/hub-waits.test.ts > deep hub stop returns within 20 ms of the hub going, and never while its socket still answers 3303ms
+   → expected 'pending' to be +0 // Object.is equality
+ ✓ packages/hub/test/hub-waits.test.ts > a hub that never answers still fails deep hub start at 15 s, naming its socket and its log 253ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week America/Los_Angeles changes its clocks reads as the locale's formatter writes it 9170ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week Europe/London changes its clocks reads as the locale's formatter writes it 8154ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week Australia/Lord_Howe changes its clocks reads as the locale's formatter writes it 9335ms
+ ✓ packages/hub/test/clock.test.ts > every day of two years in Asia/Kathmandu names its weekday and month as the locale's formatter does 293ms
+ ✓ packages/hub/test/clock.test.ts > every day of two years in Pacific/Kiritimati names its weekday and month as the locale's formatter does 385ms
+ ✓ packages/hub/test/clock.test.ts > every day of two years in UTC names its weekday and month as the locale's formatter does 280ms
+ ✓ packages/hub/test/clock.test.ts > a time that is no time reads as the locale's formatter writes it 0ms
+ × packages/hub/test/clock.test.ts > deep status with the hub down says since when in a clock time, and constructs no date formatter to say it 829ms
+   → expected [ 'toLocaleTimeString' ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/cli/test/loads.test.ts > deep inbox loads none of the YAML parser, SQLite, the gate, the record or the contracts
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "file://<base>/packages/contracts/dist/index.js",
++ ]
+
+ ❯ packages/cli/test/loads.test.ts:33:45
+     31|   const urls = loaded(args);
+     32|   expect(urls.some((u) => u.endsWith('/packages/cli/dist/main.js')), '…
+     33|   expect(urls.filter((u) => heavy.test(u))).toEqual([]);
+       |                                             ^
+     34| });
+     35|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  packages/cli/test/loads.test.ts > deep, in a folder that joined no project's hub, loads neither TLS nor the contracts
+ FAIL  packages/cli/test/loads.test.ts > deep status, in a folder that joined no project's hub, loads neither TLS nor the contracts
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "file://<base>/packages/contracts/dist/index.js",
++   "node:tls",
++ ]
+
+ ❯ packages/cli/test/loads.test.ts:39:65
+     37|   const urls = loaded(args);
+     38|   expect(urls.some((u) => u.endsWith('/packages/hub/dist/list.js')), '…
+     39|   expect(urls.filter((u) => u === 'node:tls' || heavy.test(u))).toEqua…
+       |                                                                 ^
+     40| });
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  packages/cli/test/loads.test.ts > deep hub status, which only asks the hub on its socket, loads none of the hub's own server
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "file://<base>/packages/contracts/dist/index.js",
++ ]
+
+ ❯ packages/cli/test/loads.test.ts:45:91
+     43|   const urls = loaded(['hub', 'status']);
+     44|   expect(urls.some((u) => u.endsWith('/packages/hub/dist/service.js'))…
+     45|   expect(urls.filter((u) => heavy.test(u) || u.endsWith('/packages/hub…
+       |                                                                                           ^
+     46| });
+     47|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  packages/hub/test/clock.test.ts > deep status with the hub down says since when in a clock time, and constructs no date formatter to say it
+AssertionError: expected [ 'toLocaleTimeString' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "toLocaleTimeString",
++ ]
+
+ ❯ packages/hub/test/clock.test.ts:100:90
+     98|     expect(result.stdout, result.stderr).toContain(`The hub isn't answ…
+     99|     expect(result.status).toBe(3);
+    100|     expect(existsSync(log) ? readFileSync(log, 'utf8').split('\n').fil…
+       |                                                                                          ^
+    101|   } finally {
+    102|     rmSync(home, { recursive: true, force: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  packages/hub/test/hub-waits.test.ts > deep hub start returns within 20 ms of the hub's socket answering, not at the next 100 ms step
+AssertionError: expected 'pending' to be +0 // Object.is equality
+
+- Expected:
+0
+
++ Received:
+"pending"
+
+ ❯ packages/hub/test/hub-waits.test.ts:77:21
+     75|   await vi.advanceTimersByTimeAsync(20);
+     76|   await until(() => started() !== 'pending', 2_000);
+     77|   expect(started()).toBe(0);
+       |                     ^
+     78| });
+     79|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  packages/hub/test/hub-waits.test.ts > deep hub stop returns within 20 ms of the hub going, and never while its socket still answers
+AssertionError: expected 'pending' to be +0 // Object.is equality
+
+- Expected:
+0
+
++ Received:
+"pending"
+
+ ❯ packages/hub/test/hub-waits.test.ts:94:21
+     92|   await vi.advanceTimersByTimeAsync(20);
+     93|   await until(() => stopped() !== 'pending', 2_000);
+     94|   expect(stopped()).toBe(0);
+       |                     ^
+     95| });
+     96|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed | 9 passed (16)
+   Start at  14:18:46
+   Duration  29.90s (tests 96%, transform 3%)
+

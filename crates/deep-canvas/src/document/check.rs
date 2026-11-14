@@ -190,6 +190,10 @@ fn check_by(
             // checks and the budget as any item does.
             issues.extend(packs::driven_counts(doc, items, &resolved));
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            // A canvas module's own kinds expanded at check, after recipes (#222).
+            let planted = packs.planted.expander;
+            let module = super::expands::run(doc, items, sealed, &resolved, planted, &mut issues);
+            expansions.extend(module);
             // A broken-out item its instance's version no longer derives stays the writer's
             // own, and the load says so (Pack: migrations as data; #1961).
             for e in &expansions {
@@ -305,6 +309,7 @@ fn check_by(
             }
         }
     }
+    super::expands::merge(&mut lowered, &expansions);
 
     // The module checks, the budget estimate and the document checks read the lowered document
     // alone: a big document's estimate runs on its own thread, beside the others, and the
@@ -441,7 +446,8 @@ fn copy_of(doc: &Value) -> Value {
 pub const FRAME_CPU_MS: f64 = 16.0;
 
 /// The checks canvas modules register over their kinds' items, and the budget estimate over
-/// the costs they register: a module's code carries its catalog's fix, and the estimate past
+/// the costs they register, and in a document with no budget class over what operators declare
+/// on the items they apply to: a module's code carries its catalog's fix, and the estimate past
 /// the frame's CPU is `over_budget`, naming the items that cost.
 fn module_checks(
     lowered: &Value,
@@ -520,6 +526,26 @@ fn module_checks(
             if ms > 0.0 {
                 cost += ms;
                 costly.push(id.clone());
+            }
+        }
+    }
+    // What an operator declares on each item it applies to counts too (#1417), a graph's layout,
+    // in a document no budget class judges: one that names a class is held to its own caps.
+    let unbudgeted = crate::budget::of(lowered).is_none();
+    for o in sealed.ops.iter().filter(|_| unbudgeted) {
+        let Some(c) = o.op.cost else {
+            continue;
+        };
+        for (id, item) in items {
+            if !o.op.applies.is_none_or(|a| a(lowered, id, item)) {
+                continue;
+            }
+            let ms = c(item);
+            if ms > 0.0 {
+                cost += ms;
+                if !costly.contains(id) {
+                    costly.push(id.clone());
+                }
             }
         }
     }
@@ -612,15 +638,29 @@ fn budget_check(
     if over.is_empty() {
         return;
     }
+    // Each operator's share of the CPU, and the costliest by name when the CPU is past its cap
+    // (#1417).
+    let operators: Map<String, Value> = e
+        .by_op
+        .iter()
+        .filter(|(_, ms)| *ms > 0.0)
+        .map(|(key, ms)| (key.clone(), json!(ms)))
+        .collect();
+    let costliest = e
+        .costliest_op()
+        .filter(|_| limits.cpu_ms.is_some_and(|c| e.cpu_ms > c))
+        .map(|(key, ms)| format!("; the costliest operator is {key} at {ms:.3} ms"))
+        .unwrap_or_default();
     let mut issue = Issue::envelope(
         "over_budget",
         "budget".into(),
         json!({
             "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "operators": operators,
             "fingerprint": coefficients.fingerprint,
         }),
         &format!(
-            "the document's estimate per frame passes its {} class: {}",
+            "the document's estimate per frame passes its {} class: {}{costliest}",
             class.name(),
             over.join(", ")
         ),
@@ -740,12 +780,22 @@ fn recheck_by(
             .and_then(Value::as_object)
             .is_none_or(Map::is_empty)
     });
-    // The budget estimate sums the whole document, so a build whose modules cost needs it whole;
-    // a document that names packs expands at check, so a patch to it re-expands whole.
+    // The budget estimate and the frame's warning sum the whole document, so a build whose modules
+    // cost needs it whole, as does a document holding an item an operator declares a cost on
+    // (#1417); a document that names packs expands at check, so a patch to it re-expands whole.
     let packed = member(doc, "packs")
         .and_then(Value::as_array)
         .is_some_and(|p| !p.is_empty());
-    if !maps_empty || sealed.has_costs() || packed {
+    let costly = member(doc, "items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| {
+            sealed.ops.iter().filter(|o| o.op.cost.is_some()).any(|o| {
+                items
+                    .iter()
+                    .any(|(id, item)| o.op.applies.is_none_or(|a| a(doc, id, item)))
+            })
+        });
+    if !maps_empty || sealed.has_costs() || costly || packed {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
@@ -1398,7 +1448,10 @@ fn check_item(
     // build without the module has the name to refuse with.
     if let Some(module) = facts.module {
         let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
-        if !ctx.declared.contains(module) && !by_pack {
+        // #222: an item its module expands at check never reaches a frame; what it expands to
+        // (channels, markers) needs no declaration, so neither does it.
+        let expanded = super::expands::expanded(ctx.sealed, text);
+        if !ctx.declared.contains(module) && !by_pack && !expanded {
             issues.push(Issue::error(
                 "out_of_range",
                 key,
@@ -1933,8 +1986,13 @@ fn check_params(
             }
         }
         match param.ty {
-            // The kind's own reader checks the value's shape when it evaluates the item.
-            ParamType::Json => {}
+            // The forms the kind's reader declares (#1973): a value none takes is refused here,
+            // naming the form it expected and the one it got; the reader checks the rest.
+            ParamType::Json(declared) => {
+                if let Some(issue) = form_issue(key, name, param.unit, declared, value) {
+                    issues.push(issue);
+                }
+            }
             ParamType::Str => {
                 if !value.is_string() {
                     // The closed code list has no type code; a value of another type is out of
@@ -2009,6 +2067,27 @@ fn check_params(
     for (name, n) in converted {
         params.insert(name, json!(n));
     }
+}
+
+/// A structured value no declared form takes, as `out_of_range` at its path: `size takes 3
+/// numbers in m; got 2 numbers`, with the forms it takes. A declaration the form language can't
+/// read refuses nothing here; the kit refuses it (#1973).
+fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) -> Option<Issue> {
+    let form = crate::form::parse(declared).ok()?;
+    let got = form.miss(value)?;
+    let gist = form.gist(unit);
+    let forms: Vec<String> = form.alternatives().iter().map(|f| f.print()).collect();
+    Some(Issue {
+        fix: format!("Write {name} as {}: {gist}.", forms.join(" or ")),
+        forms,
+        ..Issue::error(
+            "out_of_range",
+            key,
+            format!("items/{key}/params/{name}"),
+            value.clone(),
+            &format!("{name} takes {gist}; got {got}"),
+        )
+    })
 }
 
 /// A document's design size, as `fw` and `fh` read it.
@@ -2855,6 +2934,16 @@ pub(crate) fn resolve(
         ["path"] if matches!(kind_text(target), Some("path@1" | "vector@1")) => Ok(()),
         // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
         // holds: no kind gives a param's parts a schema in this slice.
+        // #222: a path build keys a trim as the next op of a drawn item, where it lists none
+        // there yet; the frame starts the op (`ops/<n>/trim/end`).
+        ["params", "ops", i, "trim", "start" | "end" | "offset"]
+            if i.parse::<usize>().ok()
+                == member(target, "params")
+                    .and_then(Value::as_object)
+                    .map(|p| p.get("ops").and_then(Value::as_array).map_or(0, Vec::len)) =>
+        {
+            Ok(())
+        }
         ["params", name, rest @ ..] if !rest.is_empty() => {
             let mut cursor = member(target, "params").and_then(|p| member(p, name));
             for field in rest {

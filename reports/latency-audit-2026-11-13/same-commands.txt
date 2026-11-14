@@ -1,0 +1,7 @@
+## the two commands index.ts now loads on use, base against work: same output and exit (no deep-show is built in either tree)
+{"deep":"kinds --dump /tmp/deep-lat-A.Uc6UbP/dump","rounds":3,"base":{"instrM":444.7,"minM":442.2,"maxM":445.8,"peakMB":18.7,"exit":"1"},"work":{"instrM":442.9,"minM":435.4,"maxM":445.1,"peakMB":19.1,"exit":"1"},"change":"-0.4%","sameOutputAndExit":false}
+{"deep":"export","rounds":3,"base":{"instrM":443.5,"minM":437.7,"maxM":448.5,"peakMB":18.7,"exit":"2"},"work":{"instrM":443,"minM":436.9,"maxM":445.3,"peakMB":18.7,"exit":"2"},"change":"-0.1%","sameOutputAndExit":true}
+{"deep":"export --bogus x","rounds":3,"base":{"instrM":443.9,"minM":443.1,"maxM":445.2,"peakMB":18.9,"exit":"2"},"work":{"instrM":441.2,"minM":439.4,"maxM":443.4,"peakMB":18.9,"exit":"2"},"change":"-0.6%","sameOutputAndExit":true}
+{"deep":"hub bogus","rounds":3,"base":{"instrM":458.4,"minM":456.2,"maxM":465.4,"peakMB":19.4,"exit":"2"},"work":{"instrM":396.4,"minM":390.1,"maxM":396.5,"peakMB":18.2,"exit":"2"},"change":"-13.5%","sameOutputAndExit":true}
+{"deep":"hub use","rounds":3,"base":{"instrM":458.2,"minM":458.1,"maxM":463,"peakMB":19.5,"exit":"2"},"work":{"instrM":394.2,"minM":387.5,"maxM":394.7,"peakMB":17.7,"exit":"2"},"change":"-14.0%","sameOutputAndExit":true}
+{"deep":"join","rounds":3,"base":{"instrM":505,"minM":501.1,"maxM":506.8,"peakMB":20.5,"exit":"2"},"work":{"instrM":386.7,"minM":382.8,"maxM":398.1,"peakMB":17.7,"exit":"2"},"change":"-23.4%","sameOutputAndExit":true}

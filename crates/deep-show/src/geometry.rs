@@ -199,6 +199,13 @@ impl Hub<'_> {
             Ok(t) => t,
             Err(code) => return json!({"code": code}),
         };
+        // #524: a soft body's skin draws its item where its particles are at `t`.
+        if self
+            .played_form(&g.doc)
+            .is_some_and(|f| deep_canvas_physics::skin::writes(&f))
+        {
+            self.load_frame(&g.doc, t);
+        }
         let planted = self.scenario.module_planted.clone();
         let outlines = self.startup.sealed.outlines.clone();
         let Some(session) = self.sessions.get(&g.doc) else {

@@ -14,7 +14,7 @@ The effects module's render side on the GPU layer (#380): each shipped operator'
 
 ## What it may import
 
-A render crate on the GPU layer: deep-canvas-effects, deep-gpu and deep-scene3d-render through their crate roots, plus naga, wgpu, wgpu-profiler and serde_json. No GPUI and no app crate.
+A render crate on the GPU layer: deep-canvas-effects, deep-gpu and deep-scene3d-render through their crate roots, deep-canvas-motion for the motion program a document's composed operators are evaluated with (`src/docops.rs`), plus naga, wgpu, wgpu-profiler and serde_json. No GPUI and no app crate.
 
 ## Deviations
 

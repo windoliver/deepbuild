@@ -1,0 +1,16 @@
+# #350 AC9's wrong-program test, 10 runs at b57b55367b16 (the plant fix), 2026-11-09T15:08:29Z, Linux arm64, load 3.47 (a spine judge running beside it)
+$ for i in $(seq 10); do node node_modules/vitest/vitest.mjs run tests/acceptance/350/ac9-redraft; done
+run 1:       Tests  2 passed (2)
+run 2:       Tests  2 passed (2)
+run 3:       Tests  2 passed (2)
+run 4:       Tests  2 passed (2)
+run 5:       Tests  2 passed (2)
+run 6:       Tests  2 passed (2)
+run 7:       Tests  2 passed (2)
+run 8:       Tests  2 passed (2)
+run 9:       Tests  2 passed (2)
+run 10:       Tests  2 passed (2)
+failed 0 of 10
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/350 --no-file-parallelism
+ Test Files  6 passed (6)
+      Tests  22 passed (22)

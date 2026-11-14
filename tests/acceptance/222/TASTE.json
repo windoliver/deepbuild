@@ -1,0 +1,16 @@
+{
+  "issue": 222,
+  "criterion": "#222.3e28e7f1",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-13T23:44:48Z",
+  "screenshots": {
+    "explainer-cue-01.png": "fc95c8c15143b77789dce0330bf39e113a49bc9fabdeb0fea65054ca96960b13",
+    "explainer-cue-10.png": "a9aca7414a872736e226b7396b3284b0341a74aba4fe1bbbb0769b3a5d3ecf88",
+    "explainer-cue-20.png": "bb868fd39c928d20be1af3dd602a2aa86c88f71ba919f67e79ede2ba7293a2b6",
+    "explainer-cue-30.png": "bb868fd39c928d20be1af3dd602a2aa86c88f71ba919f67e79ede2ba7293a2b6",
+    "explainer-cue-40.png": "d950867c34abd70730e0d4fb9ebf18d524e0b5b7337ad20ab228266cc366a41c",
+    "explainer.apng": "38adc3bc4b2288aea99c4b7cfacd979bed3caa69953bdd6ade0c8b2514612e7c"
+  },
+  "note": "Looked at the five stills and frames inside the recording. Cue 1: the triangle drawn whole by create. Cue 10: the three squares grown and spun in, their labels and the title in, a indicated and back. Cues 20 and 30: the formula in, the counter at 25 after count_to; flash's rays, broadcast's outlines, the swap and the morph read clearly mid-cue in the recording. Cue 40: everything faded out but the formula, indicated and back. The explainer's texts fade rather than write: frames don't yet draw a text's channel-driven reveal (filed as a follow-up); the write verbs' data passes their fixtures."
+}

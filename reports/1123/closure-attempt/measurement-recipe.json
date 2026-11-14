@@ -1,0 +1,24 @@
+{
+  "sourceCommit": "63e11e81a883c0fdaa8d54788114ff400e08e191",
+  "beforeOverlay": [
+    "scripts/lanes.mjs",
+    "scripts/affected.mjs",
+    "scripts/proof-runs.mjs"
+  ],
+  "overlaySource": "092754bb1",
+  "notes": [
+    "All test/helper bytes are the same on both sides, including adopted redrafts. Before has pre-mechanism scripts; no test is weakened for a measurement.",
+    "TypeScript builds copied per package from the same source commit/check-out. Cargo targets are not relocated or shared.",
+    "before alone contains 374/375; after removes only those two. Readings require complete actual lane commands."
+  ],
+  "before": {
+    "scripts/lanes.mjs": "d8287004b6ce54eb5e3a343552c326058334fb493dcf09914c6f45aea7d667c9",
+    "scripts/affected.mjs": "4d032ab31a661713d43672ce8be8de777ee65bd046fe376c951a126213b3d834",
+    "scripts/proof-runs.mjs": "48da92cd833f86f1f302ee60dc1910d4dcff65025bf4dfda5ac90586e9201d96"
+  },
+  "after": {
+    "scripts/lanes.mjs": "1a80626cf0e7712534222517ff1e2fe6d4ae4e6ff203f0143adec07a5386520f",
+    "scripts/affected.mjs": "9765f567e4f7964c65d4bbdbb115c816d14861da5220b3acccbb6fedac12ea05",
+    "scripts/proof-runs.mjs": "7a471a51944235d5669413a3ec1c6f35b219f52a4c62e12531489831c16782c6"
+  }
+}

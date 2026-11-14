@@ -4,10 +4,11 @@
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
 import { refuse } from './wire.js';
-import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
+// Its own guard: `deep mcp` loads this file in every agent session, and the contracts' entry would come with it.
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const str = (description?: string, pattern?: string): Schema => ({ type: 'string', ...(pattern ? { pattern } : {}), ...(description ? { description } : {}) });
 const maybe = (schema: Schema): Schema => ({ ...schema, type: [schema.type as string, 'null'] });
@@ -27,6 +28,8 @@ const LOCATOR = object({
   text: maybe(str('The innermost element whose drawn text is exactly this.')),
   label: maybe(str('The form control whose accessible name, or else visible label, is this.')),
 });
+/** deep_show's diagnostic modes, the canvas core's closed list (crates/deep-show/src/modes.rs, MODES; #411, #427). */
+const MODES = ['lighting_only', 'overdraw', 'normals', 'cascade_splits', 'shadow_atlas', 'luminance_false_color', 'lights_per_cluster', 'lod_per_item', 'receivers_casters', 'skeleton', 'lights_cameras', 'bounds', 'physics_shapes', 'uv_checker', 'deviation', 'tangents', 'probes', 'sound_sources', 'motion_paths', 'pick_hierarchy'] as const;
 /** The same fields where another locator goes: every session loads this schema, so they are described once, above. */
 const LOCATOR_BARE = object(Object.fromEntries(Object.keys(LOCATOR.properties as object).map((field) => [field, maybe(str())])));
 
@@ -83,6 +86,27 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
     camera: maybe(str('With no document or patch, render a 3D revision back through this camera@1 item, by its ID; null for its own camera.')),
     probes: maybe({ type: 'array', items: { type: 'array', items: INT }, description: 'With no document or patch, up to 64 pixels [x, y] of a 3D snapshot, x right and y down; the reply\'s hits says what lies under each, nearest first, at most 8 a pixel. Display only, never evidence. null for none.' }),
+    sheet: maybe({ ...object({ views: { type: 'array', items: { type: 'string', enum: ['front', 'back', 'left', 'right', 'top', 'three_quarter'] }, description: 'The named views, each framing the whole scene.' } }), description: 'With no document or patch, a contact sheet of a 3D revision in one call: one snapshot per view, each with its view and its own visible table. Display only, never evidence. null for one frame through its camera.' }),
+    mode: oneOf([...MODES], 'A diagnostic mode: the same frame at t drawn as a view in place of the look, with what it drew as numbers in drawn; with no document or patch, of the current revision. Display only, never evidence. null for none.'),
+    cursor: maybe(str('mode: where the readings an earlier page cut left off, as its next gave it.')),
+    item: maybe(str('mode deviation: the item measured, by its ID.')),
+    reference: maybe(str('mode deviation: the reference asset, by its SHA-256.', '^[0-9a-f]{64}$')),
+    select: maybe({ type: 'array', items: str(), description: 'mode motion_paths: the items whose paths it draws, by ID.' }),
+    span: maybe({ type: 'array', items: str(), description: 'mode motion_paths: [from, to] in the time grammar.' }),
+    depth: maybe({ type: 'integer', description: 'mode pick_hierarchy: the deepest level drawn, the root\'s 0.' }),
+  }),
+  deep_query: object({
+    doc: str('The document, by its doc ID.', '^[0-9A-Za-z]{26}$'),
+    what: oneOf(['rows', 'summary', 'why'], 'rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path. null for rows.'),
+    rev: maybe({ type: 'integer', description: 'The revision read; null for the current one.' }),
+    items: maybe({ type: 'array', items: str(), description: 'rows: only these items, by ID; null for every item.' }),
+    paths: maybe({ type: 'array', items: str(), description: 'rows: values read at items/<id>/<field>, such as items/door/params/open or items/<id>/modifiers/<k>#out; null for none.' }),
+    at: maybe({ type: 'array', items: str(), description: 'rows: the times paths are read at, in the time grammar, such as 0s or 1.5s; null for 0s.' }),
+    cap: maybe({ type: 'integer', description: 'rows: at most this many rows, cut depth first; null for 200.' }),
+    cursor: maybe(str('Where an earlier answer cut left off, as its next gave it.')),
+    expect: maybe(object({ none: object({ kind: str('The kind no row should be of.') }) })),
+    path: maybe(str('why: the value, items/<id>/<field>.')),
+    t: maybe(str('why: the time, in the time grammar; null for 0s.')),
   }),
   deep_drive: object({
     call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },

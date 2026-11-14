@@ -3,6 +3,8 @@
 //! `<body>#*` output's columns go into the document's `arrays`; every frame writes them into its
 //! instancers at the frame's time (deep-canvas-physics: written.rs), so hundreds of bodies draw as
 //! one instanced draw per prototype and material and a frame uploads only the rows that moved.
+//! #524: an output to an item path writes the channels deep_show writes for it (deep-physics-
+//! rapier: channels.rs), and a skin's array draws its soft body (deep-canvas-physics: skin.rs).
 
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
@@ -12,10 +14,8 @@ use deep_canvas_physics::written;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
-use crate::refused;
-
-/// Bakes each world `doc` lists into the arrays its `<body>#*` outputs write; a world the physics
-/// module refuses, or an output to an item path, which this view doesn't draw, refuses the call.
+/// Bakes each world `doc` lists into the arrays its `<body>#*` outputs and skins write and the
+/// channels its outputs to item paths write; a world the physics module refuses refuses the call.
 pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
     let Some(worlds) = doc.get("worlds").and_then(Value::as_object).cloned() else {
         return Ok(());
@@ -29,7 +29,7 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
         .cloned()
         .unwrap_or(json!([60, 1]));
     let run = Run::new(None).expect("the unplanted runner");
-    let mut arrays = Map::new();
+    let (mut arrays, mut channels) = (Map::new(), Map::new());
     // #449: each world's occurrence list, as the column view reads it, for particles' bursts.
     let mut lists = Map::new();
     for (id, world) in &worlds {
@@ -39,14 +39,6 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
                 let issues: Vec<Value> = e.iter().map(|r| json!({"code": r.code, "path": r.path, "what": r.what})).collect();
                 json!({"code": "physics_refused", "reason": format!("worlds/{id}"), "issues": issues})
             })?;
-        if let Some((oid, _)) = w
-            .outputs
-            .iter()
-            .find(|(_, o)| o.to.is_some() && !o.from.ends_with("#*"))
-        {
-            let what = format!("worlds/{id}/outputs/{oid}: view3d draws a world's <body>#* outputs; one to an item path is drawn by deep_show");
-            return Err(refused("physics.unsupported", what));
-        }
         let step = step_flicks(&w);
         let call = json!({"call": "bake", "scene": doc, "world": id, "steps": (span + step - 1) / step, "frame_rate": rate});
         let reply = run.answer(&call).unwrap_or(Value::Null);
@@ -56,11 +48,37 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
             );
         }
         arrays.extend(written::arrays(id, &w, doc, &reply["bodies"]));
+        // #524: an output to an item path draws as the channels deep_show writes for it.
+        let frame = deep_canvas_physics::bake::frame_rate(&rate).map_or(step, |(_, f)| f);
+        let frames: Vec<i64> = (0..)
+            .map(|f: i64| f * frame)
+            .take_while(|t| *t <= span)
+            .collect();
+        deep_physics_rapier::channels::output_channels(
+            id,
+            &w,
+            &reply["bodies"],
+            &frames,
+            false,
+            &mut channels,
+        )
+        .map_err(
+            |e| json!({"code": "physics_refused", "reason": format!("worlds/{id}"), "what": e}),
+        )?;
+        arrays.extend(deep_canvas_physics::skin::arrays(
+            id,
+            &w,
+            &reply["particles"],
+        ));
         let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
         lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
     }
     if let Some(doc) = doc.as_object_mut() {
-        for (key, add) in [("arrays", arrays), ("occurrences", lists)] {
+        for (key, add) in [
+            ("arrays", arrays),
+            ("occurrences", lists),
+            ("channels", channels),
+        ] {
             if let Some(all) = doc.entry(key).or_insert_with(|| json!({})).as_object_mut() {
                 all.extend(add);
             }

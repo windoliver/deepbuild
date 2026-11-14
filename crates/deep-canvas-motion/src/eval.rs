@@ -362,8 +362,16 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     };
     let mut at = item;
     for (depth, name) in rest.iter().enumerate() {
-        if depth == 3 && rest[0] == "params" && rest[1] == "ops" {
+        // `ops/<i>/end` reaches through the op's one key; `ops/<i>/trim/end` names it (#222).
+        let named = at
+            .as_object()
+            .is_some_and(|m| m.contains_key(name.as_str()));
+        if depth == 3 && rest[0] == "params" && rest[1] == "ops" && !named {
             at = through_op(at);
+        }
+        // #222: an index into a list the item doesn't hold yet starts that list.
+        if at.is_null() && name.parse::<usize>().is_ok() {
+            *at = Value::Array(Vec::new());
         }
         at = match at {
             Value::Array(list) => match name.parse::<usize>() {
@@ -525,6 +533,17 @@ pub fn items_where(
 /// item is the document's own with `at` from its slots, which a reader can take from the state
 /// without copying the item.
 pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    written_with(doc, program, state, |_| false)
+}
+
+/// [`written`] with the items `also` takes too, each as [`items`] gives it: #462's motifs move
+/// the items a scene binds, so a 3D frame reads them as evaluated copies.
+pub fn written_with(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    also: impl Fn(&str) -> bool,
+) -> Map<String, Value> {
     let named: BTreeSet<&str> = program
         .fields
         .iter()
@@ -535,7 +554,7 @@ pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Ma
     let items = match doc.get("items") {
         Some(Value::Object(items)) => items
             .iter()
-            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item))
+            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item) || also(id))
             .map(|(id, item)| (id.clone(), item.clone()))
             .collect(),
         _ => Map::new(),
