@@ -1,0 +1,206 @@
+First run before fixture review-boundary correction. Test SHA-256: 6261933b939ea4093d19e8674cbb1019a4d0b3d2dc0e07a7471df8c3c0380d75
+deep lease: DeepBuild isn't set up here (no hub token), so `<node24> node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2067-redraft-ac1/trunk.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+stdout | tests/acceptance/2067-redraft-ac1/trunk.test.ts > AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight
+AC1 #2067.97392e0a observation
+{
+  "branches": [
+    "refs/heads/fix",
+    "refs/heads/trunk"
+  ],
+  "remoteHead": "refs/remotes/origin/trunk",
+  "controls": [
+    {
+      "tree": "trunk",
+      "code": 0
+    },
+    {
+      "tree": "head",
+      "code": 0
+    },
+    {
+      "tree": "merge",
+      "code": 1
+    }
+  ],
+  "ordinaryStop": "allow",
+  "prStop": "deny",
+  "verdict": {
+    "outcome": "BLOCKED",
+    "reasons": [
+      "review: inherited: also fails on the merge base: review: run",
+      ".deepbuild/checks/expired-token.sh carried run:01M7DTWP7G47DFJ2MANXZDF07C from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71",
+      "unit carried run:01M7DTWP62RTP1J3P76RYYSSVN from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71",
+      ".deepbuild/checks/expired-token.sh carried its base run run:01M7DTX03QZZDQEQNXZS792FH3 from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71"
+    ]
+  },
+  "runs": [
+    {
+      "check": "review",
+      "outcome": "failed",
+      "commit": "head"
+    },
+    {
+      "check": "review",
+      "outcome": "failed",
+      "commit": "other"
+    }
+  ],
+  "releaseRunsInRecord": 0,
+  "closes": {
+    "decision": "allow",
+    "reason": "",
+    "forgeWrites": 2
+  }
+}
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2067-redraft-ac1/trunk.test.ts > AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight
+AssertionError: AC1 #2067.97392e0a: preflight must make the trunk PR FAIL; {
+  "branches": [
+    "refs/heads/fix",
+    "refs/heads/trunk"
+  ],
+  "remoteHead": "refs/remotes/origin/trunk",
+  "controls": [
+    {
+      "tree": "trunk",
+      "code": 0
+    },
+    {
+      "tree": "head",
+      "code": 0
+    },
+    {
+      "tree": "merge",
+      "code": 1
+    }
+  ],
+  "ordinaryStop": "allow",
+  "prStop": "deny",
+  "verdict": {
+    "outcome": "BLOCKED",
+    "reasons": [
+      "review: inherited: also fails on the merge base: review: run",
+      ".deepbuild/checks/expired-token.sh carried run:01M7DTWP7G47DFJ2MANXZDF07C from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71",
+      "unit carried run:01M7DTWP62RTP1J3P76RYYSSVN from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71",
+      ".deepbuild/checks/expired-token.sh carried its base run run:01M7DTX03QZZDQEQNXZS792FH3 from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71"
+    ]
+  },
+  "runs": [
+    {
+      "check": "review",
+      "outcome": "failed",
+      "commit": "head"
+    },
+    {
+      "check": "review",
+      "outcome": "failed",
+      "commit": "other"
+    }
+  ],
+  "releaseRunsInRecord": 0,
+  "closes": {
+    "decision": "allow",
+    "reason": "",
+    "forgeWrites": 2
+  }
+}: expected 'BLOCKED' to be 'FAIL' // Object.is equality
+
+Expected: "FAIL"
+Received: "BLOCKED"
+
+ ❯ tests/acceptance/2067-redraft-ac1/trunk.test.ts:112:100
+    110|
+    111|   // asserts: these five lines carry AC1; fixture checks above only qu…
+    112|   expect.soft(verdict?.data.outcome, `${AC1}: preflight must make the …
+       |                                                                                                    ^
+    113|   expect.soft(JSON.stringify(verdict?.data.reasons), `${AC1}: FAIL mus…
+    114|   expect.soft(releaseRuns.some((r) => r.finished?.data.outcome === 'fa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2067-redraft-ac1/trunk.test.ts > AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight
+AssertionError: AC1 #2067.97392e0a: FAIL must name preflight: expected '["review: inherited: also fails on th…' to match /\bpreflight\b/
+
+- Expected:
+/\bpreflight\b/
+
++ Received:
+"[\"review: inherited: also fails on the merge base: review: run\",\".deepbuild/checks/expired-token.sh carried run:01M7DTWP7G47DFJ2MANXZDF07C from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71\",\"unit carried run:01M7DTWP62RTP1J3P76RYYSSVN from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DTX03QZZDQEQNXZS792FH3 from claim:01M7DTWNS7S4GBQZZ5HGZZ1WS0 in session:9137ac63f5bd4d58b541428b14dc7c71\"]"
+
+ ❯ tests/acceptance/2067-redraft-ac1/trunk.test.ts:113:90
+    111|   // asserts: these five lines carry AC1; fixture checks above only qu…
+    112|   expect.soft(verdict?.data.outcome, `${AC1}: preflight must make the …
+    113|   expect.soft(JSON.stringify(verdict?.data.reasons), `${AC1}: FAIL mus…
+       |                                                                                          ^
+    114|   expect.soft(releaseRuns.some((r) => r.finished?.data.outcome === 'fa…
+    115|   expect.soft(decision(closes.before), `${AC1}: gh pr create saying Cl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2067-redraft-ac1/trunk.test.ts > AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight
+AssertionError: AC1 #2067.97392e0a: preflight must run and fail on the merge, not disappear: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2067-redraft-ac1/trunk.test.ts:114:146
+    112|   expect.soft(verdict?.data.outcome, `${AC1}: preflight must make the …
+    113|   expect.soft(JSON.stringify(verdict?.data.reasons), `${AC1}: FAIL mus…
+    114|   expect.soft(releaseRuns.some((r) => r.finished?.data.outcome === 'fa…
+       |                                                                                                                                                  ^
+    115|   expect.soft(decision(closes.before), `${AC1}: gh pr create saying Cl…
+    116|   expect.soft(replyText(closes.before), `${AC1}: Closes refusal must n…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2067-redraft-ac1/trunk.test.ts > AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight
+AssertionError: AC1 #2067.97392e0a: gh pr create saying Closes must be refused for preflight: expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ tests/acceptance/2067-redraft-ac1/trunk.test.ts:115:108
+    113|   expect.soft(JSON.stringify(verdict?.data.reasons), `${AC1}: FAIL mus…
+    114|   expect.soft(releaseRuns.some((r) => r.finished?.data.outcome === 'fa…
+    115|   expect.soft(decision(closes.before), `${AC1}: gh pr create saying Cl…
+       |                                                                                                            ^
+    116|   expect.soft(replyText(closes.before), `${AC1}: Closes refusal must n…
+    117| }, 360_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2067-redraft-ac1/trunk.test.ts > AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight
+AssertionError: AC1 #2067.97392e0a: Closes refusal must name preflight: expected '' to match /\bpreflight\b/
+
+- Expected:
+/\bpreflight\b/
+
++ Received:
+""
+
+ ❯ tests/acceptance/2067-redraft-ac1/trunk.test.ts:116:87
+    114|   expect.soft(releaseRuns.some((r) => r.finished?.data.outcome === 'fa…
+    115|   expect.soft(decision(closes.before), `${AC1}: gh pr create saying Cl…
+    116|   expect.soft(replyText(closes.before), `${AC1}: Closes refusal must n…
+       |                                                                                       ^
+    117| }, 360_000);
+    118|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:09:56
+   Duration  16.50s (tests 99%)
+

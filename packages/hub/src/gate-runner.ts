@@ -40,6 +40,8 @@ export interface ClaimCheck {
   references?: { path: string; sha256: string }[];
   /** False for a result that is never a send-back: the definition still to lock, or held by a cause outside the code. */
   holds?: boolean;
+  /** A release prerequisite checked before a command can run (#2067): missing input blocks; a merge conflict fails. */
+  prerequisite?: { outcome: 'missing' | 'failed'; cause: string };
   /**
    * The commit it runs on instead of the claim's snapshot (#325): a release check's, the PR's head merged with main.
    * It runs in the slow lane, once per commit: a later claim on the same commit reuses its run.
@@ -653,15 +655,31 @@ export class GateRunner {
       for (const o of older.filter((x) => x.claim < r.claim)) { const e = o.entries.get(c.check); if (e) { e.stale = true; if (changed) e.newer ??= r.claim; } }
     }
     // A snapshot that changed no check's inputs reuses results and runs nothing (#82; design: Held time is counted):
-    // each check that ended on the last claim of the same tree carries its result to this one.
+    // each check that ended on the last claim of the same tree carries its result to this one. Release checks have
+    // another input, the main line, so their pinned commit must match too; an ordinary run never substitutes.
     const same = changed || tree === undefined || this.o.plant === 'empty-commit-run-alone' ? [] : older.filter((o) => o.tree === tree).reverse();
-    const toRun = r.checks.filter((c) => {
-      const carried = same.map((o) => o.entries.get(c.check)).find(ended);
-      if (!carried) return true;
+    const toRun: ClaimCheck[] = [];
+    for (const c of r.checks) {
+      if (c.prerequisite) {
+        const { outcome, cause } = c.prerequisite;
+        const ts = this.o.now(), run = `run:${ulid(ts)}`;
+        const commit = c.commit && /^[0-9a-f]{40}$/.test(c.commit) ? c.commit : snapshot;
+        // Record the attempt too: the receipt reads runs, and nothing absent may look like a pass. No tests ran.
+        await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.started', ts, subject: run, data: { run, check: c.check, claim: r.claim, commit } });
+        await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.finished', ts, subject: run, data: {
+          run, check: c.check, outcome, tests_run: 0, passed: 0, runs: 0, evidence: [], assertion: null, expected: null, actual: null, step: null,
+          points_to: null, findings: [outcome === 'missing' ? `${cause}, owner you` : cause], environment: `${process.platform}-${process.arch}`,
+        } });
+        const record = missingRun(run, cause);
+        this.records.set(run, { ...record, outcome, failures: record.failures.map((f) => ({ ...f, test: outcome === 'failed' ? `${c.check}: ${cause}` : c.check })) });
+        claim.entries.set(c.check, { check: c, claim: r.claim, commit, lane: 'slow', runs: [run], base: null, outcome, running: false, stale: false });
+        continue;
+      }
+      const carried = same.map((o) => o.entries.get(c.check)).find((e) => ended(e) && e?.check.commit === c.commit && e?.check.prerequisite === undefined);
+      if (!carried) { toRun.push(c); continue; }
       const { newer: _newer, ...kept } = carried;
       claim.entries.set(c.check, { ...kept, check: c, claim: r.claim, runs: [...carried.runs], stale: false });
-      return false;
-    });
+    }
     // The fast lane: on_base fails first, then the rest, each group shortest first, ties in the definition's order.
     const timed = await Promise.all(toRun.map(async (c, i) => ({ c, i, ms: (c.expected_ms ?? (await this.expectedMs(c.check)) ?? 0) + (checkout && c.depth === 'journey' ? (await this.o.stackStart?.(checkout, r.cwd)) ?? 0 : 0) })));
     timed.sort((a, b) => (a.c.on_base === 'fails' ? 0 : 1) - (b.c.on_base === 'fails' ? 0 : 1) || a.ms - b.ms || a.i - b.i);
