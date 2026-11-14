@@ -51,8 +51,12 @@ export function ownChanges(changes: { changed: readonly string[]; configs: Reado
 /** Whether a path is a test runner's config, whose text names the files the tool loads. */
 export const runnerConfig = (path: string): boolean => LOADED_BY_TOOL.test(path) && !path.endsWith('conftest.py');
 
-/** What a script target runs, from a file's text: a package.json script, or a Makefile or justfile recipe. */
-function targetBody(file: string, text: string | null, target: string): string | null {
+/**
+ * What a script target runs, from a file's text: a package.json script, or a Makefile or justfile rule, from the line
+ * that names the target, alone or among several, to the end of its recipe. The gate's one reader of a command's script
+ * (#1888): whose checks count reads it here, and the floor's mask reading in floor.ts.
+ */
+export function targetBody(file: string, text: string | null, target: string): string | null {
   if (text === null) return null;
   if (file.endsWith('package.json')) {
     try { return (JSON.parse(text) as { scripts?: Record<string, string> }).scripts?.[target] ?? null; } catch { return null; }
