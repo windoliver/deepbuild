@@ -446,4 +446,3 @@ AssertionError: a scheduled prompt wrote a guard entry: expected [ 'word:zqkafka
       Tests  8 failed (8)
    Start at  11:44:08
    Duration  36.26s (tests 99%, transform 1%)
-

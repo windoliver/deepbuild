@@ -54,4 +54,3 @@ AssertionError: session Y (session:beb9d6fc-58f1-494b-b349-64fbbc1096b4) hears t
       Tests  2 failed | 1 passed (3)
    Start at  11:50:33
    Duration  7.48s (tests 76%, transform 22%, import 2%)
-

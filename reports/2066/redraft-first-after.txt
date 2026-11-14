@@ -8,4 +8,3 @@ deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar
       Tests  2 passed (2)
    Start at  12:01:30
    Duration  2.90s (tests 97%, transform 2%)
-
