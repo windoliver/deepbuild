@@ -263,12 +263,16 @@ export class StopJudging {
   /** The done gate's asks, with their original action and the answer the record accepted. */
   private async gateAsks(ask?: string): Promise<GateAsk[]> {
     const rows = (await this.options.services.record.raw(`SELECT e.id, e.data, e.session_id AS session, e.agent, a.status,
-      COALESCE(a.answer, (SELECT d.answer FROM events applied JOIN decisions d ON 'decision:' || d.id = json_extract(applied.data, '$.decision')
-        WHERE applied.kind = 'decision.applied' AND json_extract(applied.data, '$.ask') = 'ask:' || e.id ORDER BY applied.log_pos DESC LIMIT 1)) AS answer
+      CASE a.status WHEN 'answered' THEN
+        (SELECT CASE WHEN answered.v >= 6 THEN json_extract(answered.data, '$.option')
+          WHEN json_extract(answered.data, '$.words') IS NULL AND json_extract(answered.data, '$.image') IS NULL THEN json_extract(answered.data, '$.answer') END
+          FROM events answered WHERE answered.kind = 'ask.answered' AND answered.writer = 'core' AND answered.subject = 'ask:' || e.id ORDER BY answered.log_pos DESC LIMIT 1)
+        WHEN 'defaulted' THEN json_extract(a.answer, '$')
+        WHEN 'decided' THEN (SELECT json_extract(d.answer, '$') FROM events applied JOIN decisions d ON 'decision:' || d.id = json_extract(applied.data, '$.decision')
+          WHERE applied.kind = 'decision.applied' AND json_extract(applied.data, '$.ask') = 'ask:' || e.id ORDER BY applied.log_pos DESC LIMIT 1) END AS answer
       FROM events e JOIN asks a ON a.id = e.id WHERE e.kind = 'ask.created' AND e.writer = 'core' AND json_extract(e.data, '$.action') IS NOT NULL
       ${ask ? 'AND e.id = ?' : ''} ORDER BY e.log_pos`, ask ? [ask.slice(4)] : [])) as { id: string; data: string; session: string | null; agent: string | null; status: string; answer: string | null }[];
-    return rows.map((r) => ({ ask: `ask:${r.id}`, action: (JSON.parse(r.data) as { action: GateAction }).action, session: r.session ?? '', agent: r.agent ?? 'deep', status: r.status,
-      answer: ['answered', 'defaulted', 'decided'].includes(r.status) && r.answer !== null ? JSON.parse(r.answer) as string : null }));
+    return rows.map((r) => ({ ask: `ask:${r.id}`, action: (JSON.parse(r.data) as { action: GateAction }).action, session: r.session ?? '', agent: r.agent ?? 'deep', status: r.status, answer: r.answer }));
   }
 
   /** Your answer is interpreted from the recorded ask, never a process-local association (#2065). */
