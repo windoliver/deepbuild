@@ -168,13 +168,18 @@ fn time(
     planted: Option<&str>,
 ) -> Result<Vec<Cue>, Refusal> {
     let at = format!("items/{id}/params/cues");
-    let Some(list) = item.pointer("/params/cues").and_then(Value::as_array) else {
-        return Err(refused(
-            "bad_doc",
-            at,
-            Value::Null,
-            "a cue list holds `cues`, a list".into(),
-        ));
+    // #1974: `cues` left out is its listed default, no cues.
+    let none = Vec::new();
+    let list = match item.pointer("/params/cues") {
+        None => &none,
+        Some(v) => v.as_array().ok_or_else(|| {
+            refused(
+                "bad_doc",
+                at.clone(),
+                Value::Null,
+                "a cue list holds `cues`, a list".into(),
+            )
+        })?,
     };
     if list.len() > MAX_CUES {
         return Err(refused(
@@ -838,7 +843,10 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
                 minor: 0,
                 params: vec![Param {
                     name: "cues",
-                    ty: ParamType::Json,
+                    // The cue the expander reads (Cue list `cues@1`), declared as #1973's forms.
+                    ty: ParamType::Json(
+                        "[{id: ID, when?: after | with | {at: time | flick}, gap?: flick | time, span?: flick | time, ease?: ease, lag?: ratio | flick | time, order?: `index` | reverse | seeded, targets?: [ID | collection], set?, kind?: name, params?}] ≤ 512",
+                    ),
                     unit: "",
                     default: json!([]),
                     min: None,
