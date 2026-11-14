@@ -18,6 +18,7 @@ pub mod flare;
 mod glass;
 pub mod held;
 pub mod history;
+pub mod exposure;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -8257,6 +8258,21 @@ impl Renderer {
             .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
             .collect();
         Some((floats, ids))
+    }
+
+    /// #2513: what render.exposure's reduction reads of the last frame: the linear image the
+    /// output pass read (as [`Self::read_pre_tone`] reads it), its object-ID target, their size.
+    pub fn light_source(&self) -> Option<(&wgpu::TextureView, &wgpu::TextureView, [u32; 2])> {
+        let t = self.targets.as_ref()?;
+        let pre_tone = self.pre_tone.as_ref().unwrap_or(&t.linear_view);
+        Some((pre_tone, &t.ids_view, t.size))
+    }
+
+    /// The frame's object-ID target alone, each pixel's u32 in little-endian bytes, rows top-down
+    /// (#1939); `None` on a backend with no pixels.
+    pub fn read_ids(&self, device: &Device) -> Option<Vec<u8>> {
+        let t = self.targets.as_ref()?;
+        read_texture(device, &t.ids, t.size, 4)
     }
 
     /// The depth target, f32 per pixel (reversed Z: larger is nearer), which a 3D pick's ties

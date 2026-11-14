@@ -183,8 +183,8 @@ export class SessionMemory {
   }
 
   /** At a prompt: a new set (a rule typed anywhere, a slice entry) is carried and recorded; after a compaction or a resume, every rule you typed. */
-  async promptRules(meta: HookMeta, prompt: string): Promise<Piece[] | undefined> {
-    const typedNow = await this.saveTyped(prompt);
+  async promptRules(meta: HookMeta, prompt: string, from: string | undefined): Promise<Piece[] | undefined> {
+    const typedNow = from === 'person' ? await this.saveTyped(prompt) : new Set<string>();
     const st = this.ruleStateOf(meta.session);
     const set = await this.startSet(meta.session, meta.cwd, meta.agent);
     const fresh = set.handles.filter((h) => !st.given.has(h));
