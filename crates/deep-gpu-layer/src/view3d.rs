@@ -941,8 +941,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let started = std::time::Instant::now();
     let mut args = parse(call)?;
     // #462: the looks shots and regions name, and the document's shots that name them.
-    let named = crate::regions::looks_of(call, &args.theme)?;
-    let timeline = crate::regions::Timeline::of(&args.doc, &named)?;
+    let mut named = crate::regions::looks_of(call, Some(&args.theme))?;
+    // #462: under reduced motion every look's motifs hold still.
+    let reduced_motion = call["reduced_motion"] == true;
+    args.look.reduced_motion = reduced_motion;
+    for n in named.values_mut() {
+        n.look.reduced_motion = reduced_motion;
+    }
+    let timeline = crate::regions::Timeline::of(&args.doc, |n| named.get(n).map(|x| &x.json))?;
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
     let packs = install(&args.packs)?;
@@ -1141,7 +1147,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         tl.check(|t| {
             let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)
                 .map_err(|r| refused(r.code, r.path))?;
-            Ok((sc.camera, sc.volumes))
+            Ok((crate::regions::Seen::Camera(sc.camera), sc.volumes))
         })?;
     }
     let (doc_look, doc_look_json) = (args.look.clone(), args.look_json.clone());
@@ -1799,7 +1805,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut region_depth: Option<Vec<u8>> = None;
             if let (Some(sides), false) = (&sides, noop) {
                 let base_key = sides[0].look.map(str::to_string);
-                for key in crate::regions::keys_in_view(sides, &scene.camera, &scene.volumes)? {
+                let seen = crate::regions::Seen::Camera(scene.camera.clone());
+                for key in crate::regions::keys_in_view(sides, &seen, &scene.volumes)? {
                     if key == base_key {
                         continue;
                     }
@@ -1956,33 +1963,48 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 "drawn": drawn_samples,
                 "settling": settling_now && drawn_samples < looks.export,
             });
-            // #462: the frame mixed from its looks' renders by their coverage.
+            // #462: the frame mixed from its looks' renders by their coverage, on the device.
             if let (Some(tl), Some(sides), Some(bytes)) = (&timeline, &sides, drawn.bytes.as_mut())
             {
                 if !others.is_empty() {
-                    let depth = region_depth
-                        .as_deref()
-                        .filter(|d| d.len() == 4 * size[0] as usize * size[1] as usize);
-                    let cov = crate::regions::coverage(
+                    let seen = crate::regions::Seen::Camera(scene.camera.clone());
+                    let mix = crate::regions::mix(
                         tl,
                         sides,
-                        &scene.camera,
-                        depth,
+                        &seen,
                         &scene.volumes,
-                        size,
+                        t,
                         app.planted == Some(Planted::RegionSidesClipIndependently),
                     )?;
-                    let base = bytes.clone();
+                    let depth = region_depth
+                        .take()
+                        .filter(|d| d.len() == 4 * size[0] as usize * size[1] as usize);
                     let base_key = sides[0].look.map(str::to_string);
-                    let renders: Vec<&[u8]> = cov
+                    let renders: Vec<Vec<u8>> = mix
                         .keys
                         .iter()
                         .map(|k| match others.iter().find(|(o, _)| o == k) {
-                            Some((_, b)) if *k != base_key => b.as_slice(),
-                            _ => base.as_slice(),
+                            Some((_, b)) if *k != base_key => b.clone(),
+                            _ => bytes.clone(),
                         })
                         .collect();
-                    crate::regions::composite(&cov, &renders, bytes);
+                    let mixed = app
+                        .worker
+                        .call(move |state| {
+                            let d = state.gpu.device();
+                            let refs: Vec<&[u8]> = renders.iter().map(Vec::as_slice).collect();
+                            crate::regions::mix_read_back(
+                                &d.device,
+                                &d.queue,
+                                state.regions.get_or_insert_with(Default::default),
+                                &mix,
+                                &refs,
+                                depth.as_deref(),
+                                size,
+                            )
+                        })
+                        .map_err(|e| refused("render_failed", e))?;
+                    *bytes = mixed;
                 }
             }
             let scene_bytes = drawn.bytes.clone();

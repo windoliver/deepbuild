@@ -8325,6 +8325,12 @@ impl Renderer {
         Some(out)
     }
 
+    /// #462: the depth target the last frame drew, reversed Z, and its size, which look regions'
+    /// composite reads each pixel's view depth from.
+    pub fn depth_target(&self) -> Option<(&wgpu::TextureView, [u32; 2])> {
+        self.targets.as_ref().map(|t| (&t.depth_view, t.size))
+    }
+
     /// Whether depth reads nearer as it grows: reversed Z, unless the planted forward Z.
     pub fn depth_grows_nearer(&self) -> bool {
         !self.planted.forward_z
