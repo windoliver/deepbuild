@@ -1,0 +1,12 @@
+wrappers-red-affected:
+NEW FAIL packages/hub/test/pr-wrappers.test.ts › recognizes a PR in shell groups and conditional/loop bodies: git push && { gh pr create --title t --body 'Closes #7'; }: expected [] to deeply equal [ 'Closes #7' ]
+NEW FAIL packages/hub/test/pr-wrappers.test.ts › reads literal wrappers without executing them: time gh pr create --title t --body 'Closes #7': expected [] to deeply equal [ 'Closes #7' ]
+
+context-red-affected:
+NEW FAIL packages/hub/test/pr-context.test.ts › matches the qualified issue to the PR working directory after cd: expected undefined to be 'R2 unproven' // Object.is equality
+
+postcall-red-affected:
+NEW FAIL packages/hub/test/pr-after-lookup-error.test.ts › keeps the completed joined call when lookup of the current branch throws: tool.after is recorded even when SELECT branch fails: expected undefined to be defined
+
+fill-overrides-red:
+NEW FAIL packages/hub/test/pr-fill-overrides.test.ts › still judges the filled closing subject with an explicit body or body file unless the title is also replaced: --body "Part of #7 R2": expected undefined to be 'R2 unproven' // Object.is equality
