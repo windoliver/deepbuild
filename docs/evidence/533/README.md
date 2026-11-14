@@ -30,7 +30,7 @@ Two players each press at step 3 with the same seq. The piece's `first` item wri
 |---|---|
 | `full` (`seal-shipped.out.json`) | logic@1, digest `ef1f7274…`, implementation logic 1.0.0, bit, canonical, wasmtime `=49.0.5` (sandbox@1's pin since #2324; the issue's `=49.0.2`). Kit PASS on every part that ran. `contribution` and `migration` run no case for logic, and the kit reports `interface: {truth: false, missing: ["logic@1"]}`: no logic fixture has an outside expected value (`expected_from`). This is the kit's interface-truth report, not a failed part. |
 | `full,test-logic-patch` (`seal-patch.out.json`) | Implementation 1.0.1 seals with the same digest `ef1f7274…`. Kit PASS, including the `bit` part. |
-| `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | Implementation 1.0.0, the reference's own version, still seals. Every interface digest changes, since the twin hashes the version, and logic@1's becomes `9ac613af…`. |
+| `full --planted digest_covers_version` (`seal-shipped-planted.out.json`) | Implementation 1.0.0, the reference's own version, still seals. Every interface digest changes, since the twin hashes the version, and logic@1's becomes `24c85eff…`. |
 | `full,test-logic-patch --planted digest_covers_version` (`seal-patch-planted.out.json`) | Exits 2: `seal_refused`, `interface_digest`, naming logic@1 ("version differs from the reference"). |
 
 ## Criterion 4 (`#533.6d69e833`): logic before physics, and builds without physics
@@ -147,6 +147,12 @@ This evidence does not show the time order of logic and physics steps. The issue
   - It found no personal paths or secrets. Its four notes on this file are fixed here: the commit the outputs were last made on, the outputs not being recommitted, a pointer to a round that wasn't written yet, and the second review's sentence on seeks.
   - Its review of `93cec98a8` found the checkpoints and their errors kept, cleared and reset together, and a checkpoint taken after its own flick's step. It found the seek test would pass on a build whose seek never touched the errors; the test now also seeks to a flick after the start, where the checkpoint holds none, and fails on that mutant. An unreachable fallback is gone. Those two changes came after the pictures and change no behaviour: the binaries were not rebuilt for them.
 - **After merging main through `c56fe5407` (`862df4e73`):** the merged tree didn't compile until the logic kind's params declared their forms (#1973). The binaries were rebuilt and everything made again: 13 terminal captures and the six frames byte-identical, the four seal captures changed in the digest alone, and the four registry outputs recommitted. The assembler's lock file is fixed in this head (`f7592bd99`, approved by the owner), so the committed suite passes 10/10 with nothing added locally. Round 13 checks the four changed captures.
+- **Round 13, on `61e5d3490`:** one agent, on binaries from `862df4e73`, with the worktree untouched during its run.
+  - The four changed seal captures are legible and complete: the shipped and patch builds show the same digest `ef1f7274…`, the planted control another (`24c85eff…`), and the planted patch is still refused, naming logic@1. All 17 terminal images recapture byte-identical, and the frames match the manifest.
+  - Unfiltered, every kit part passes with declared == ran; the shipped and patch builds' 21 registry digests are equal, and all 21 differ under the planted control.
+  - The forms refuse no valid value it tried, and each of eleven invalid ones is refused naming its form.
+  - It found no personal paths or secrets. The criterion 3 table still gave the planted control's old digest; fixed here.
+  - It found, as before this round, that a logic item naming `clock` or `due` is refused by the document check with `unknown_field`: the canvas kind declares ten params and those aren't among them. No criterion of #533 runs a turn clock in the canvas; listed below.
 
 ## The second code review, and its failing output
 
@@ -167,4 +173,5 @@ A separate agent reviewed the branch's diff against main after the merges of #53
   - `each` readings past four steps' worth are not dropped with `reading.overflow`; that rule is #210's.
   - Export, the film viewer and the film audit inline vectors but not logic programs.
   - A second `eval` at the same time returns no issues; seen while testing the trap fix, not traced.
+  - The canvas kind doesn't declare `clock` and `due`, so a turn-clock item is refused in a document (the `deep-logic` process runs one); nor the fields logic@1 doesn't build yet.
   - `logic.step`'s node key in an `eval` reply differs from run to run, and with it the key of what reads its arrays; the arrays and hashes don't. #538 inlines each bake's compare timings into the drawn form, and `logic.step` reads the whole form. So a rerun of `outputs.sh` differs from the committed `no-physics.out.json` in its timing fields and in those keys.
