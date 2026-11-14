@@ -54867,7 +54867,7 @@ pub struct OpenItemOpenedV4Data {
 impl Contract for OpenItemOpenedV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text", "item", "from", "resolved_by", "replaces"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_134)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_141)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
         deep_contracts::check_member(members, at, "item", &RULE_83)?;
         deep_contracts::check_member(members, at, "resolved_by", &RULE_6)?;
