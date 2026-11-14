@@ -1,0 +1,16 @@
+# with -w: the kit's test file
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+
+# node scripts/slots-check.mjs
+PASS slots: 16 slots from the published API, each with one row, a frozen interface, a kit and a planted fill it refuses
+
+# tests/acceptance/349/slot-table.test.ts tests/acceptance/2147 packages/conformance/src/slots
+ FAIL  packages/conformance/src/slots/environment.test.ts > the environment kit and the process table > asks a down that threw once more at the case's end, so the fill's failure leaves nothing it can stop
+ FAIL  packages/conformance/src/slots/environment.test.ts > the environment kit and the process table > leaves no helper of its own when its fixture server cannot bind the leased port
+ FAIL  packages/conformance/src/slots/environment.test.ts > the environment kit and the process table > has its fixture server end the helper it started when the ready marker cannot be written
+ FAIL  packages/conformance/src/slots/environment.test.ts > the environment kit and the process table > reads BLOCKED, with the environment still taken down, when a fill's down never settles
+ FAIL  packages/conformance/src/slots/environment.test.ts > the environment kit and the process table > reads BLOCKED when a down that threw is asked again and the second asking never settles
+ FAIL  packages/conformance/src/slots/environment.test.ts > the environment kit and the process table > reads BLOCKED when a case refused before its down step has a down that never settles
+ Test Files  1 failed | 3 passed (4)
+      Tests  6 failed | 34 passed (40)

@@ -1,0 +1,13 @@
+# main 0329cec8e with the new test, before the fix: packages/conformance/src/slots/environment.test.ts -t lsof
+     × still names a planted fill's own fault when lsof warns of a mount it can't stat, as it does beside docker or a remote desktop 1418ms
+AssertionError: expected [ 'BLOCKED', 'listeners_unknown' ] to deeply equal [ 'FAIL', 'process_left' ]
+- Expected
++ Received
+-   "FAIL",
+-   "process_left",
++   "BLOCKED",
++   "listeners_unknown",
+      Tests  1 failed | 1 passed | 22 skipped (24)
+
+# node scripts/slots-check.mjs at main on this machine (3 runs of 3 alike, 2026-11-14)
+FAIL slots: deep.registerEnvironment, - (planted leaves-grandchild): deep.registerEnvironment's kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown" not with its own message "left its process running after down"

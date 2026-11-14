@@ -40,6 +40,27 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('still names a planted fill\'s own fault when lsof warns of a mount it can\'t stat, as it does beside docker or a remote desktop', async () => {
+    const k = kit();
+    const planted = k.planted.find((p) => p.name === 'leaves-grandchild')!;
+    // The real lsof behind one that warns on every call unless -w asks it not to, as lsof does of such a mount.
+    const dir = mkdtempSync(join(tmpdir(), 'deep-env-lsof-'));
+    writeFileSync(join(dir, 'lsof'), `#!/bin/sh
+case " $* " in *" -w "*) ;; *) printf '%s\\n' "lsof: WARNING: can't stat() nsfs file system /run/docker/netns/default" '      Output information may be incomplete.' >&2 ;; esac
+PATH=/bin:/usr/bin:/usr/sbin exec lsof "$@"
+`);
+    chmodSync(join(dir, 'lsof'), 0o755);
+    process.env.PATH = `${dir}:/bin:/usr/bin:/usr/sbin`;
+    try {
+      // What it leaves running listens on nothing: lsof then ends with 1, and the warning is all it wrote.
+      const report = await runKit(k, planted.fill, { parts: ['fixed'] });
+      const first = report.cases.find((c) => c.outcome !== 'PASS')!;
+      expect([first.outcome, ...first.codes]).toEqual(['FAIL', ...planted.codes]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it('reads BLOCKED, not PASS, when ps starts and then hangs', async () => {
     const k = kit();
     const [fill] = cleanFills(k);
