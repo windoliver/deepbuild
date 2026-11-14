@@ -1,0 +1,7 @@
+8c30188b7a93ca98bedc988a13401dbfb7e0d104c90f089fa3c5f3bbfb751183  packages/hub/src/ask-tasks.ts
+86991e4e088cb9b51115a143e9e105be6c85349138c743a7b713f6ecd80cc42f  packages/hub/src/core.ts
+f478d9e2389f0e15f51f3cca36c232911aa4b312141c503ce28515e339d97dea  packages/hub/src/github-source.ts
+636e8424560329e757c9c1565b28e40878ea376e86b5c5cdd08a5f8b462503e4  packages/hub/src/hub-shared.ts
+49178b22361291d823d8edade4ee2fea0eab52a7e73d94fcf1630a44a125b1d5  packages/hub/src/prompt-items.ts
+efc82c6e3e1fcf478e3b65d447c84fdcf0563855de521e7823280ff2664dc7d1  packages/hub/src/rows.ts
+81e03cf33c233c392c17b5e0a9df6898509cc651833b1bb41da8239299bcbb36  scripts/size-ceilings.json
