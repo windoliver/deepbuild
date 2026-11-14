@@ -47,9 +47,9 @@ pub fn module() -> Module {
 fn register(r: &mut Registrar) {
     // #548: deep_run's logic kinds (Check input: logic kinds), each on the lowered document's
     // logic items, their programs read from the assets the check names.
-    r.check("logic.determinism", "any", &["logic.determinism"], no_issues)
+    r.check("logic.determinism", "any", &["logic.determinism"], |d, i| issues(determinism(d, i)))
         .check_report(determinism);
-    r.check("logic.budget", "any", &["logic.budget"], no_issues)
+    r.check("logic.budget", "any", &["logic.budget"], |d, i| issues(budget(d, i)))
         .check_report(budget);
     r.code(
         "logic.determinism",
@@ -63,6 +63,10 @@ fn register(r: &mut Registrar) {
         "Split the work across steps with its progress in memory.",
         false,
     );
+    // Each code's planted fixture (#138's kit): a program that traps at step 0, which fails the
+    // determinism check that ran it, and one whose every step spends most of its fuel.
+    planted(r, "logic.determinism", "(unreachable)");
+    planted(r, "logic.budget", "(local $i i32) (loop $l (local.set $i (i32.add (local.get $i) (i32.const 1))) (br_if $l (i32.lt_u (local.get $i) (i32.const 200000))))");
     let frames = json!([[0, 0, 0], [0, 5, 0], [0, 5, 7]]);
     let changed = json!([handed(&[]), handed(&[[1, 2]]), handed(&[[2, 3]])]);
     r.entry(
@@ -75,9 +79,30 @@ fn register(r: &mut Registrar) {
     );
 }
 
-/// The kinds report what they raise; their check over items raises nothing of its own.
-fn no_issues(_: &Value, _: &Value) -> Vec<(String, Raised)> {
-    Vec::new()
+/// The fixture that raises exactly `code`: a figure of one logic item whose step is `body`, its
+/// program a fixture asset, since a kit fixture has no evidence store. It names no other module's
+/// kind, which the kit's seal of this module alone would refuse as unknown.
+fn planted(r: &mut Registrar, code: &str, body: &str) {
+    let text = format!(r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
+        (global (export "writes_at") i32 (i32.const 1024)) (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#);
+    let program = wat::parse_str(text).expect("a planted program");
+    let sha = deep_canvas::canon::sha256_hex(&program);
+    let doc = json!({
+        "format": 1, "profile": "figure", "title": code, "description": format!("The logic module's planted {code}."), "size": [320, 180],
+        "seed": 1, "transport": {"span": "1s", "frame_rate": [60, 1]}, "requires": {"modules": {"logic": "^1"}},
+        "items": {
+            "rules": {"id": "rules", "kind": "logic@1", "name": "Rules", "order": "a1", "params": {"program": sha, "writes": {"n": {"type": "i32"}}}},
+        },
+    });
+    r.fixture(&format!("logic-{}", &code[6..]), doc, None)
+        // The kit seals this module alone, so the core's check finds logic@1 an unknown kind.
+        .sidecar(json!({"codes": [code, "unknown_kind"], "checks": [{"kind": code}]}))
+        .fixture_assets(vec![program]);
+}
+
+/// What a report raises, as a check over items gives it.
+fn issues(report: Report) -> Vec<(String, Raised)> {
+    report.raised.into_iter().map(|(id, r, _)| (id, r)).collect()
 }
 
 /// The lowered document's logic items as one checked piece, its input track, and the steps its
@@ -148,10 +173,21 @@ fn determinism(doc: &Value, input: &Value) -> Report {
     if at.is_empty() {
         at.push((steps / 2).max(1));
     }
+    // A trap in any run fails the check that ran it (Check input: logic kinds).
+    let mut rec = Record::default();
+    match World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) {
+        Ok(mut w) => w.run(steps, &mut rec, &mut |_, _| {}),
+        Err(e) => {
+            out.blocked.push(e);
+            return out;
+        }
+    }
+    let mut failures: Vec<Value> = rec.traps.iter().map(|t| json!({"rule": "trap", "item": t["item"], "trap": t})).collect();
     match crate::checks::determinism(&piece, &entries, steps, &at, Default::default()) {
-        Ok(v) => out.raised = raised("logic.determinism", v["failures"].as_array().map_or(&[][..], Vec::as_slice), &piece),
+        Ok(v) => failures.extend(v["failures"].as_array().cloned().unwrap_or_default()),
         Err(e) => out.blocked.push(e),
     }
+    out.raised = raised("logic.determinism", &failures, &piece);
     match input.get("compare").and_then(Value::as_str) {
         Some(c @ ("cross_machine" | "web")) => out.blocked.push(json!({"compare": c, "ask": format!("logic.determinism {c} replays the golden on another host; it hasn't run")})),
         _ => {}
