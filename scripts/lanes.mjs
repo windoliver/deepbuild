@@ -622,6 +622,12 @@ byHand.push('tests/acceptance/226-oracle/');
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
 // #2073's file starts a real hub and an agent stand-in with its deep mcp for each test.
 alone.push('tests/acceptance/2073/');
+// #2073 has deep_run ask the project's trust first and run on the claim's commit as a claim's checks run, so the older
+// tests that call it in a fixture no trust record covers are their blind redrafts' since (each folder's REDRAFT.md);
+// the first drafts are kept as written, by hand only.
+alone.push('tests/acceptance/26-redraft-2073/', 'tests/acceptance/19-redraft-2073/');
+slow.push('tests/acceptance/326-redraft-2073/click.test.ts');
+byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
