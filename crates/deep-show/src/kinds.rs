@@ -61,6 +61,8 @@ pub enum Planted {
     FieldObjectByName,
     /// #1973: the line `op: field` answers for `slab@1.size` prints its type, `json`, and no form.
     FieldSizeJsonAlone,
+    /// #548: the bindings generator orders each region's fields by name before laying them out.
+    BindingsByName,
 }
 
 impl Planted {
@@ -81,6 +83,7 @@ impl Planted {
             "field_line_600_bytes" => Planted::FieldLine600Bytes,
             "field_object_by_name" => Planted::FieldObjectByName,
             "field_size_json_alone" => Planted::FieldSizeJsonAlone,
+            "bindings_fields_by_name" => Planted::BindingsByName,
             _ => return None,
         })
     }
@@ -140,6 +143,15 @@ const INSTALLED: &[(&str, &str)] = &[
         include_str!("../gallery/familiar-names.md"),
     ),
     ("logic.md", include_str!("../gallery/logic.md")),
+    // #548: logic@1's example, and its program's source.
+    (
+        "logic-counter.json",
+        include_str!("../gallery/logic-counter.json"),
+    ),
+    (
+        "logic-counter.wat",
+        include_str!("../gallery/logic-counter.wat"),
+    ),
 ];
 
 /// One example of the gallery, as its index records it.
@@ -150,6 +162,8 @@ struct Example {
     title: String,
     steps: u64,
     words: Vec<String>,
+    /// #548: the file holding the source of the program it runs, served beside it.
+    source: Option<String>,
 }
 
 /// The guides and gallery a call reads: the installed corpus, or a scenario's folder.
@@ -189,6 +203,7 @@ impl Corpus {
                             .collect()
                     })
                     .unwrap_or_default(),
+                source: e.get("source").and_then(Value::as_str).map(str::to_string),
             })
             .collect();
         let guides = index["guides"]
@@ -637,6 +652,19 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             push(kind.to_string(), module.into(), None, &mut out);
         }
     }
+    // #548: logic@1, with its exports, the one subset and its budgets, and its gallery example.
+    if drawn_by("logic") && !named.iter().any(|n| n == "logic@1") {
+        named.push("logic@1".into());
+        push("logic@1".into(), "logic".into(), None, &mut out);
+        if let Some(row) = out.last_mut() {
+            let text = INSTALLED.iter().find(|(f, _)| *f == "logic-counter.json").map(|(_, t)| t.to_string());
+            if let (Some(o), Value::Object(l)) = (row.entry.as_object_mut(), deep_logic::piece::listing()) {
+                o.extend(l);
+            }
+            row.entry["example"] = json!(text.as_deref().map(|t| sha256_hex(t.as_bytes())));
+            row.example = text;
+        }
+    }
     if drawn_by("scene3d") {
         let more = deep_canvas_scene3d::scene::KINDS
             .iter()
@@ -841,10 +869,11 @@ impl Hub<'_> {
                 "gallery" => &["cursor"],
                 "sheet" | "step_ceilings" => &[],
                 "field" => &["path"],
+                "bindings" => &["doc", "item", "language"],
                 _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings or field.",
+                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field or bindings.",
                     op,
                 ),
             };
@@ -907,12 +936,35 @@ impl Hub<'_> {
                     "",
                 ),
             },
+            "bindings" => self.kinds_bindings(text("doc"), text("item"), text("language")),
             // The logic module's step ceilings (Logic: work across steps, #546).
             "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
                 self.kinds_planted() == Some(Planted::StepCeilingsCap)
             )}),
             _ => self.kinds_sheet(),
         }
+    }
+
+    /// `op: bindings` (#548): a document's logic item's typed bindings in the pinned language, Rust,
+    /// from its region map in declaration order, which its declarations alone give, so a program
+    /// is built against them before it exists.
+    fn kinds_bindings(&self, doc: Option<&str>, item: Option<&str>, language: Option<&str>) -> Value {
+        if language != Some("rust") {
+            return refused("enum", "/language", "Give language as rust, the pinned language.", language.unwrap_or_default());
+        }
+        let (Some(doc), Some(item)) = (doc, item) else {
+            return refused("required", "/item", "Give doc and item, the logic item whose bindings these are.", "");
+        };
+        let Some(form) = self.forms.get(doc) else {
+            return refused("ref_unresolved", "/doc", "Give doc, a document the hub holds.", doc);
+        };
+        let maps = crate::logic::piece_json(form)
+            .map(|p| deep_logic::piece::region_maps(&p, &Default::default()));
+        let Some((_, layout, emits)) = maps.and_then(Result::ok).and_then(|m| m.into_iter().find(|(id, _, _)| id == item)) else {
+            return refused("ref_unresolved", "/item", "Give item, a logic item of the document that check admits.", item);
+        };
+        let by_name = self.kinds_planted() == Some(Planted::BindingsByName);
+        json!({"bindings": deep_logic::bindings::rust(item, &layout, &emits, by_name)})
     }
 
     /// `op: field` (#1971): one line per field, printed from the listing's kind entry: the field's
@@ -1172,7 +1224,13 @@ impl Hub<'_> {
         let bytes = corpus.as_ref().and_then(|c| c.bytes(&e.file));
         match bytes {
             Some(b) if sha256_hex(&b) == hash => match String::from_utf8(b) {
-                Ok(text) => json!({"example": hash, "title": e.title, "text": text}),
+                Ok(text) => {
+                    let mut out = json!({"example": hash, "title": e.title, "text": text});
+                    if let Some(s) = e.source.as_ref().and_then(|f| corpus.as_ref()?.bytes(f)) {
+                        out["source"] = json!({"file": e.source, "text": String::from_utf8_lossy(&s)});
+                    }
+                    out
+                }
                 Err(_) => refused("unavailable", "/example", "The example isn't UTF-8 text; it is not served.", hash),
             },
             _ => refused(
