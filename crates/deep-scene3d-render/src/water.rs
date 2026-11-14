@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas_scene3d::scene::{Scene, Shape};
 use deep_canvas_scene3d::water::{Water, MAX_WAKE, MAX_WAVES};
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 
@@ -106,9 +107,10 @@ pub struct Waterer {
     /// The pass copying the depth target into the bed's depth, and its layout.
     bed_copy: wgpu::RenderPipeline,
     bed_layout: wgpu::BindGroupLayout,
-    /// Each sample's IDs and depth, for the shading pass, and this frame's bind group of them.
+    /// Each sample's IDs and depth, for the shading pass, and their bind group with the two
+    /// targets it binds.
     samples_layout: wgpu::BindGroupLayout,
-    samples: Option<wgpu::BindGroup>,
+    samples: Option<([wgpu::TextureView; 2], wgpu::BindGroup)>,
     sampler: wgpu::Sampler,
     /// The bed: copies of the opaque scene's color and depth at the targets' size.
     bed: Option<Bed>,
@@ -121,6 +123,11 @@ pub struct Waterer {
     meshes: BTreeMap<u64, (wgpu::Buffer, wgpu::Buffer, u32)>,
     /// The planted foam's running values.
     kept: wgpu::Buffer,
+    /// The wake's path, written where a frame's differs from the last one's.
+    path: wgpu::Buffer,
+    path_written: Written,
+    /// Each part's uniform and bind group, in the order the parts draw.
+    parts: Vec<Part>,
     /// This frame's parts: each one's bind group and rest mesh.
     draws: Vec<(wgpu::BindGroup, wgpu::Buffer, wgpu::Buffer, u32)>,
     /// Where on the targets the parts can draw this frame: [x, y, width, height] in px.
@@ -150,6 +157,14 @@ fn screen_rect(clip: &[f64; 16], [lo, hi]: [[f64; 3]; 2], size: [u32; 2]) -> [u3
     let (a, b) = (clamp(x0.floor() - 2.0, w), clamp(y0.floor() - 2.0, h));
     let (c, d) = (clamp(x1.ceil() + 2.0, w), clamp(y1.ceil() + 2.0, h));
     [a, b, c.saturating_sub(a), d.saturating_sub(b)]
+}
+
+/// One water part's uniform, written where a frame's differs from the last one's, and its bind
+/// group with the six targets it binds.
+struct Part {
+    uniform: wgpu::Buffer,
+    written: Written,
+    bind: Option<([wgpu::TextureView; 6], wgpu::BindGroup)>,
 }
 
 #[derive(Clone)]
@@ -426,6 +441,12 @@ impl Waterer {
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
+        let path = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(WATER_PASS),
+            size: (MAX_WAKE * std::mem::size_of::<[f32; 2]>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         Waterer {
             layout,
             ids,
@@ -441,6 +462,9 @@ impl Waterer {
             no_field,
             meshes: BTreeMap::new(),
             kept,
+            path,
+            path_written: Written::default(),
+            parts: Vec::new(),
             draws: Vec::new(),
             rect: [0; 4],
         }
@@ -495,20 +519,28 @@ impl Waterer {
         let Some(bed) = self.bed.clone() else {
             return;
         };
-        self.samples = Some(d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(WATER_PASS),
-            layout: &self.samples_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(ids_ms),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(depth_ms),
-                },
-            ],
-        }));
+        let sampled = [ids_ms, depth_ms];
+        if !self
+            .samples
+            .as_ref()
+            .is_some_and(|(held, _)| held.iter().eq(sampled))
+        {
+            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(WATER_PASS),
+                layout: &self.samples_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(ids_ms),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(depth_ms),
+                    },
+                ],
+            });
+            self.samples = Some((sampled.map(Clone::clone), bind));
+        }
         let mut dirs = [[0f32; 4]; MAX_WAVES];
         let mut amps = [[0f32; 4]; MAX_WAVES];
         for (i, w) in water.waves.iter().take(MAX_WAVES).enumerate() {
@@ -530,10 +562,10 @@ impl Waterer {
                 .collect(),
             None => vec![[0.0; 2]; 2],
         };
-        let path_buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(WATER_PASS),
-            contents: bytemuck::cast_slice(&path),
-            usage: wgpu::BufferUsages::STORAGE,
+        deep_gpu::alloc::outside(|| {
+            device
+                .queue
+                .write_changed(&self.path, &self.path_written, bytemuck::cast_slice(&path))
         });
         let (cell, slot, back) = water.rain_grid();
         let flip = 2.0 * scene.camera.centre[0] / f64::from(scene.size[0]);
@@ -717,52 +749,78 @@ impl Waterer {
                 shore: shore_params,
                 shore_dims,
             };
-            let uniform = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(WATER_PASS),
-                contents: bytemuck::bytes_of(&params),
-                usage: wgpu::BufferUsages::UNIFORM,
+            if self.parts.len() == self.draws.len() {
+                self.parts.push(Part {
+                    uniform: d.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some(WATER_PASS),
+                        size: std::mem::size_of::<Params>() as u64,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }),
+                    written: Written::default(),
+                    bind: None,
+                });
+            }
+            let part = &mut self.parts[self.draws.len()];
+            deep_gpu::alloc::outside(|| {
+                device.queue.write_changed(
+                    &part.uniform,
+                    &part.written,
+                    bytemuck::bytes_of(&params),
+                )
             });
             let picture = frame.mirror.map_or(&self.stub, |(p, _)| p);
             let views = [
-                (1, &bed.color_view),
-                (2, &bed.depth_view),
-                (3, picture),
-                (7, ids),
-                (8, depth),
-                (9, &field_view),
+                &bed.color_view,
+                &bed.depth_view,
+                picture,
+                ids,
+                depth,
+                &field_view,
             ];
-            let mut entries: Vec<wgpu::BindGroupEntry<'_>> = views
-                .iter()
-                .map(|(binding, view)| wgpu::BindGroupEntry {
-                    binding: *binding,
-                    resource: wgpu::BindingResource::TextureView(view),
-                })
-                .collect();
-            entries.extend([
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: path_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: self.kept.as_entire_binding(),
-                },
-            ]);
-            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(WATER_PASS),
-                layout: &self.layout,
-                entries: &entries,
-            });
+            // A frame whose targets hold binds as the last one did.
+            let bind = match &part.bind {
+                Some((held, bind)) if held.iter().eq(views) => bind.clone(),
+                _ => {
+                    let mut entries: Vec<wgpu::BindGroupEntry<'_>> = [1, 2, 3, 7, 8, 9]
+                        .into_iter()
+                        .zip(views)
+                        .map(|(binding, view)| wgpu::BindGroupEntry {
+                            binding,
+                            resource: wgpu::BindingResource::TextureView(view),
+                        })
+                        .collect();
+                    entries.extend([
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: part.uniform.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::Sampler(&self.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: self.path.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 6,
+                            resource: self.kept.as_entire_binding(),
+                        },
+                    ]);
+                    let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some(WATER_PASS),
+                        layout: &self.layout,
+                        entries: &entries,
+                    });
+                    part.bind = Some((views.map(Clone::clone), bind.clone()));
+                    bind
+                }
+            };
             self.draws.push((bind, vertices, indices, count));
         }
+        // A part that went lets go of its uniform and of the targets its bind group holds.
+        self.parts.truncate(self.draws.len());
         self.rect = screen_rect(frame.camera, bounds, size);
     }
 
@@ -785,7 +843,7 @@ impl Waterer {
         let shade = self.shade
             [usize::from(t.reflection.is_some()) | (2 * usize::from(t.foam.is_some()))]
         .clone();
-        let samples = self.samples.clone()?;
+        let samples = self.samples.as_ref()?.1.clone();
         let extent = crate::extent([w, h]);
         let origin = wgpu::Origin3d { x, y, z: 0 };
 

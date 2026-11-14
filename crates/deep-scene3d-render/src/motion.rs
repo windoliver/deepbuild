@@ -6,6 +6,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::scene::{Affine3, Camera, Depth, Motion, Scene, Shape};
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 
 use crate::mesh::{Mesh, FLOATS};
@@ -99,11 +100,82 @@ pub struct TargetFrame {
     draws: Vec<Draw>,
 }
 
+/// A velocity draw's uniform and instances, kept from frame to frame and written where a
+/// frame's differ from the last one's.
+struct Held {
+    uniform: wgpu::Buffer,
+    written: Written,
+    /// The instances' buffer and how many it has room for.
+    instances: Option<(wgpu::Buffer, usize)>,
+    instances_written: Written,
+}
+
+impl Held {
+    fn new(d: &deep_gpu::counted::Wgpu, label: &str) -> Held {
+        Held {
+            uniform: d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: std::mem::size_of::<Uniform>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            written: Written::default(),
+            instances: None,
+            instances_written: Written::default(),
+        }
+    }
+
+    /// Writes this frame's uniform and instances, and gives the instances' buffer: a new one
+    /// only when the frame has more than the last one has room for.
+    fn write(
+        &mut self,
+        device: &Device,
+        label: &str,
+        uniform: &Uniform,
+        instances: &[Instance],
+    ) -> wgpu::Buffer {
+        let buffer = match &self.instances {
+            Some((buffer, room)) if *room >= instances.len() => buffer.clone(),
+            _ => {
+                let room = instances.len().next_power_of_two();
+                let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(label),
+                    size: (room * std::mem::size_of::<Instance>()) as u64,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                self.instances = Some((buffer.clone(), room));
+                buffer
+            }
+        };
+        deep_gpu::alloc::outside(|| {
+            let q = &device.queue;
+            q.write_changed(&self.uniform, &self.written, bytemuck::bytes_of(uniform));
+            q.write_changed(
+                &buffer,
+                &self.instances_written,
+                bytemuck::cast_slice(instances),
+            );
+        });
+        buffer
+    }
+}
+
 #[derive(Default)]
 pub struct MotionPass {
     pipes: Option<Pipes>,
     target: Option<wgpu::RenderPipeline>,
     targets: Option<Targets>,
+    /// The blur's uniform and instances, and its draw's and its three computes' bind groups
+    /// with the velocity and linear targets they bind.
+    blur: Option<Held>,
+    binds: Option<(
+        [wgpu::TextureView; 2],
+        wgpu::BindGroup,
+        [wgpu::BindGroup; 3],
+    )>,
+    /// The velocity target's uniform and instances, and its draw's bind group.
+    travel: Option<(Held, wgpu::BindGroup)>,
     /// Pipelines this pass compiled, by name, for the frame's report.
     pub compiled: Vec<&'static str>,
 }
@@ -353,15 +425,29 @@ impl MotionPass {
         self.pipes.as_ref().expect("built above")
     }
 
-    /// The core velocity target's draw for `scene` at `size` (#431), from `motion`'s evaluations.
+    /// The core velocity target's draw for `scene` at `size` (#431), from the scene's evaluations
+    /// at t ± s/2, or no travel where it has none; `None`, letting go of the draw's buffers, in a
+    /// frame where nothing reads the target (`wanted`).
     pub fn target_frame(
         &mut self,
         device: &Device,
         scene: &Scene,
-        motion: &Motion,
+        wanted: bool,
         meshes: &std::collections::BTreeMap<Shape, Mesh>,
         size: [u32; 2],
-    ) -> TargetFrame {
+    ) -> Option<TargetFrame> {
+        if !wanted {
+            self.travel = None;
+            return None;
+        }
+        let still;
+        let motion = match &scene.velocity {
+            Some(m) => m.as_ref(),
+            None => {
+                still = crate::still_motion(scene);
+                &still
+            }
+        };
         let d = &device.device;
         if self.target.is_none() {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -429,30 +515,25 @@ impl MotionPass {
         let pipe = self.target.clone().expect("built above");
         let (draws, instances) = draw_list(device, scene, motion, meshes);
         let uniform = uniform_of(scene, motion, size, 1, size);
-        let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("scene3d.velocity uniform"),
-            contents: bytemuck::bytes_of(&uniform),
-            usage: wgpu::BufferUsages::UNIFORM,
+        let (held, bind) = self.travel.get_or_insert_with(|| {
+            let held = Held::new(d, "scene3d.velocity uniform");
+            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("scene3d.velocity"),
+                layout: &pipe.get_bind_group_layout(0),
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: held.uniform.as_entire_binding(),
+                }],
+            });
+            (held, bind)
         });
-        let instances = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("scene3d.velocity instances"),
-            contents: bytemuck::cast_slice(&instances),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene3d.velocity"),
-            layout: &pipe.get_bind_group_layout(0),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        });
-        TargetFrame {
+        let instances = held.write(device, "scene3d.velocity instances", &uniform, &instances);
+        Some(TargetFrame {
             pipe,
-            bind,
+            bind: bind.clone(),
             instances,
             draws,
-        }
+        })
     }
 
     /// The frame's velocity pass and resolve for `scene` drawn at `size`, its solids' meshes at t
@@ -461,11 +542,17 @@ impl MotionPass {
         &mut self,
         device: &Device,
         scene: &Scene,
-        motion: &Motion,
         meshes: &std::collections::BTreeMap<Shape, Mesh>,
         linear: &wgpu::TextureView,
         size: [u32; 2],
     ) -> Option<Frame> {
+        // A frame that doesn't blur lets go of the blur's buffers and of the targets its bind
+        // groups hold, and compiles nothing.
+        let Some(motion) = scene.motion.as_deref() else {
+            self.blur = None;
+            self.binds = None;
+            return None;
+        };
         let d = &device.device;
         let pipes = self.pipes(d);
         let (draw_pipe, computes) = (
@@ -476,16 +563,11 @@ impl MotionPass {
         let tile = motion.tile_px.max(1);
         let tiles = [size[0].div_ceil(tile), size[1].div_ceil(tile)];
         let uniform = uniform_of(scene, motion, size, tile, tiles);
-        let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("scene3d.motion uniform"),
-            contents: bytemuck::bytes_of(&uniform),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let instances = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("scene3d.motion instances"),
-            contents: bytemuck::cast_slice(&instances),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let held = self
+            .blur
+            .get_or_insert_with(|| Held::new(d, "scene3d.motion uniform"));
+        let instances = held.write(device, "scene3d.motion instances", &uniform, &instances);
+        let buffer = held.uniform.clone();
         if !self
             .targets
             .as_ref()
@@ -538,49 +620,60 @@ impl MotionPass {
         let tg = self.targets.as_ref().expect("made above");
         let (velocity_view, tile_view, near_view, resolved_view) =
             (&tg.velocity, &tg.tile_max, &tg.near, &tg.resolved_view);
-        let group = |pipe: &wgpu::ComputePipeline, entries: &[(u32, wgpu::BindingResource)]| {
-            d.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("scene3d.motion"),
-                layout: &pipe.get_bind_group_layout(0),
-                entries: &entries
-                    .iter()
-                    .map(|(b, r)| wgpu::BindGroupEntry {
-                        binding: *b,
-                        resource: r.clone(),
+        // The targets are made together, so a frame whose velocity and linear targets hold
+        // binds as the last one did.
+        let bound = [velocity_view, linear];
+        let (draw_bind, binds) = match &self.binds {
+            Some((held, draw, binds)) if held.iter().eq(bound) => (draw.clone(), binds.clone()),
+            _ => {
+                let group = |pipe: &wgpu::ComputePipeline,
+                             entries: &[(u32, wgpu::BindingResource)]| {
+                    d.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("scene3d.motion"),
+                        layout: &pipe.get_bind_group_layout(0),
+                        entries: &entries
+                            .iter()
+                            .map(|(b, r)| wgpu::BindGroupEntry {
+                                binding: *b,
+                                resource: r.clone(),
+                            })
+                            .collect::<Vec<_>>(),
                     })
-                    .collect::<Vec<_>>(),
-            })
+                };
+                use wgpu::BindingResource::TextureView as Tv;
+                let u = buffer.as_entire_binding();
+                let binds = [
+                    group(
+                        &computes[0],
+                        &[(0, u.clone()), (1, Tv(velocity_view)), (2, Tv(tile_view))],
+                    ),
+                    group(
+                        &computes[1],
+                        &[(0, u.clone()), (3, Tv(tile_view)), (4, Tv(near_view))],
+                    ),
+                    group(
+                        &computes[2],
+                        &[
+                            (0, u.clone()),
+                            (1, Tv(velocity_view)),
+                            (5, Tv(near_view)),
+                            (6, Tv(linear)),
+                            (7, Tv(resolved_view)),
+                        ],
+                    ),
+                ];
+                let draw_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("scene3d.motion velocity"),
+                    layout: &draw_pipe.get_bind_group_layout(0),
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: u,
+                    }],
+                });
+                self.binds = Some((bound.map(Clone::clone), draw_bind.clone(), binds.clone()));
+                (draw_bind, binds)
+            }
         };
-        use wgpu::BindingResource::TextureView as Tv;
-        let u = buffer.as_entire_binding();
-        let binds = [
-            group(
-                &computes[0],
-                &[(0, u.clone()), (1, Tv(velocity_view)), (2, Tv(tile_view))],
-            ),
-            group(
-                &computes[1],
-                &[(0, u.clone()), (3, Tv(tile_view)), (4, Tv(near_view))],
-            ),
-            group(
-                &computes[2],
-                &[
-                    (0, u.clone()),
-                    (1, Tv(velocity_view)),
-                    (5, Tv(near_view)),
-                    (6, Tv(linear)),
-                    (7, Tv(resolved_view)),
-                ],
-            ),
-        ];
-        let draw_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene3d.motion velocity"),
-            layout: &draw_pipe.get_bind_group_layout(0),
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: u,
-            }],
-        });
         Some(Frame {
             pipes: [draw_pipe],
             computes,

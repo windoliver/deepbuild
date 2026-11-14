@@ -4579,13 +4579,10 @@ impl Renderer {
         }
         self.update_culls(device);
         self.ensure_casters(device, scene);
-        self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
-            (Some(m), Some(t)) => {
-                self.motion
-                    .prepare(device, scene, m, &self.meshes, &t.linear_view, t.size)
-            }
-            _ => None,
-        };
+        self.motion_frame = self.targets.as_ref().and_then(|t| {
+            self.motion
+                .prepare(device, scene, &self.meshes, &t.linear_view, t.size)
+        });
         self.prepare_core(device, scene);
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
@@ -4776,18 +4773,10 @@ impl Renderer {
             return;
         };
         self.core.ensure(&device.device, size);
-        self.velocity_frame = self.core.velocity.is_some().then(|| {
-            let still;
-            let motion = match &scene.velocity {
-                Some(m) => m.as_ref(),
-                None => {
-                    still = still_motion(scene);
-                    &still
-                }
-            };
-            self.motion
-                .target_frame(device, scene, motion, &self.meshes, size)
-        });
+        let wanted = self.core.velocity.is_some();
+        self.velocity_frame = self
+            .motion
+            .target_frame(device, scene, wanted, &self.meshes, size);
         let draws: Vec<targets::EmissionDraw> = self
             .order
             .iter()

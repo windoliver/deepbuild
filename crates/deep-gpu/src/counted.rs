@@ -269,6 +269,9 @@ impl Wgpu {
     }
 }
 
+/// A uniform's row, in 4-byte words: a vec4.
+const ROW: usize = 4;
+
 /// What [`Queue::write_changed`] last wrote to one buffer.
 #[derive(Debug, Default)]
 pub struct Written(std::sync::Mutex<Option<(wgpu::Buffer, Vec<u8>)>>);
@@ -300,7 +303,9 @@ impl Queue {
 
     /// Writes `data` at the buffer's start, but only the 4-byte words that differ from what this
     /// call last wrote to the same buffer, as `written` holds it: a uniform rewritten each frame
-    /// uploads what changed (#1903: at most 1 KB a frame while only the camera moves).
+    /// uploads what changed (#1903: at most 1 KB a frame while only the camera moves). Changed
+    /// words with at most a row of unchanged ones between them go up in one write, the unchanged
+    /// ones as the buffer holds them: wgpu stages every write in a buffer of its own.
     pub fn write_changed(&self, buffer: &wgpu::Buffer, written: &Written, data: &[u8]) {
         let mut kept = written.0.lock().unwrap_or_else(|e| e.into_inner());
         let last = match &mut *kept {
@@ -320,12 +325,18 @@ impl Queue {
                 continue;
             }
             let from = w * 4;
-            while w < words && data[span(w)] != last[span(w)] {
-                w += 1;
+            // One past the run's last changed word, and the next word to look at.
+            let (mut end, mut next) = (w + 1, w + 1);
+            while next < words && next - end <= ROW {
+                if data[span(next)] != last[span(next)] {
+                    end = next + 1;
+                }
+                next += 1;
             }
-            let to = (w * 4).min(data.len());
+            let to = (end * 4).min(data.len());
             self.write_buffer(buffer, from as u64, &data[from..to]);
             last[from..to].copy_from_slice(&data[from..to]);
+            w = end;
         }
     }
 
