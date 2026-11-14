@@ -2035,10 +2035,7 @@ fn build_path(
         let tolerance = warp.tolerance / gplace.size();
         let to = |p: [f64; 2]| gplace.back(place.at(p)).unwrap_or(p);
         let from = |p: [f64; 2]| place.back(gplace.at(p)).unwrap_or(p);
-        let carry = |verbs: &[Verb]| {
-            let (out, n, points) = warp.carry(&crate::warp::pointwise(verbs, to), tolerance);
-            (crate::warp::pointwise(&out, from), n, points)
-        };
+        let carry = |verbs: &[Verb]| warp.carry(verbs, tolerance, to, from);
         if warp.ends == crate::warp::Ends::Warp {
             if let Some(e) = &ends {
                 let mut hs = Vec::new();

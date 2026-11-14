@@ -485,31 +485,41 @@ impl Warp {
         }
     }
 
-    /// `verbs` in the group's space carried through the warp, with `tolerance` already in that
-    /// space's u: the carried verbs, the cut count and the points they hold.
-    pub fn carry(&self, verbs: &[Verb], tolerance: f64) -> (Vec<Verb>, usize, u64) {
-        let subs = subs(verbs);
+    /// `verbs` carried through the warp in the group's space: `to` takes their points into the
+    /// group's space and `from` back, both affine, so each carries a curve by its control points;
+    /// `tolerance` is in the group's u. The carried verbs, the cut count and the points they hold.
+    pub fn carry(
+        &self,
+        verbs: &[Verb],
+        tolerance: f64,
+        to: impl Fn(P) -> P,
+        from: impl Fn(P) -> P,
+    ) -> (Vec<Verb>, usize, u64) {
         let points = |out: &[Verb]| out.iter().map(|v| verb_points(v) as u64).sum();
         if self.is_identity() {
             return (verbs.to_vec(), 1, points(verbs));
         }
         if matches!(self.map, Map2::Linear(_)) && self.flow.is_none() || self.anchors_only {
-            let out = pointwise(verbs, |p| self.point(p));
+            let out = pointwise(verbs, |p| from(self.point(to(p))));
             let n = points(&out);
             return (out, 1, n);
         }
+        let path = Subs::of(verbs, &to);
+        let (mut starts, mut pieces) = (Vec::new(), Vec::new());
         let mut n = 1;
-        let pieces = loop {
-            match self.cut(&subs, n, tolerance, n >= MAX_CUTS) {
-                Some(p) => break p,
-                None => n *= 2,
+        while !self.cut(&path, n, tolerance, (&mut starts, &mut pieces)) {
+            n *= 2;
+        }
+        let mut out = Vec::with_capacity(pieces.len() + 2 * path.subs.len());
+        let mut at = 0;
+        for (&(_, end, closed), start) in path.subs.iter().zip(&starts) {
+            out.push(Verb::Move(from(*start)));
+            let to_end = (end * n).min(pieces.len());
+            for c in &pieces[at..to_end] {
+                out.push(Verb::Cubic(from(c[0]), from(c[1]), from(c[2])));
             }
-        };
-        let mut out = Vec::new();
-        for (s, (start, ps)) in subs.iter().zip(&pieces) {
-            out.push(Verb::Move(*start));
-            out.extend(ps.iter().map(|c| Verb::Cubic(c[0], c[1], c[2])));
-            if s.closed {
+            at = to_end;
+            if closed {
                 out.push(Verb::Close);
             }
         }
@@ -517,36 +527,40 @@ impl Warp {
         (out, n, count)
     }
 
-    /// Every sub-path's start mapped and its cubics cut `n` ways and mapped, or `None` where a
-    /// piece strays past `tolerance` (unless `last`, which keeps them all).
+    /// Every sub-path's start mapped into `starts` and its cubics cut `n` ways and mapped into
+    /// `pieces`; false where a piece strays past `tolerance` or folds, unless `n` is the most cuts,
+    /// which keeps them all.
     fn cut(
         &self,
-        subs: &[Sub],
+        path: &Subs,
         n: usize,
         tolerance: f64,
-        last: bool,
-    ) -> Option<Vec<(P, Vec<[P; 3]>)>> {
-        let mut out = Vec::with_capacity(subs.len());
-        for s in subs {
-            let mut ps = Vec::with_capacity(s.segs.len() * n);
-            let first = self.point(s.start);
+        (starts, pieces): (&mut Vec<P>, &mut Vec<[P; 3]>),
+    ) -> bool {
+        let last = n >= MAX_CUTS;
+        starts.clear();
+        pieces.clear();
+        pieces.reserve(path.segs.len() * n);
+        let mut seg = 0;
+        for &(first, end, _) in &path.subs {
             // Each cubic starts where the one before it ends, so its start is mapped once.
-            let mut start = first;
-            for c in &s.segs {
+            let mut start = self.point(first);
+            starts.push(start);
+            for c in &path.segs[seg..end] {
                 for k in 0..n {
                     let piece = piece_of(c, k, n);
                     let end = self.point(piece[3]);
                     let m = self.mapped(&piece, start, end);
                     if !last && (folds(&m, tolerance) || self.strays(&piece, &m, tolerance)) {
-                        return None;
+                        return false;
                     }
-                    ps.push([m[1], m[2], m[3]]);
+                    pieces.push([m[1], m[2], m[3]]);
                     start = end;
                 }
             }
-            out.push((first, ps));
+            seg = end;
         }
-        Some(out)
+        true
     }
 
     /// The cubic through the images of a piece's ends along its tangents' images.
@@ -637,11 +651,11 @@ fn folds(m: &[P; 4], tolerance: f64) -> bool {
     d(m[0], m[3]) <= tolerance && d(m[0], m[1]).max(d(m[0], m[2])) > tolerance
 }
 
-/// A sub-path as cubics `[start, c1, c2, end]`; a line is a cubic with its handles at its thirds.
-struct Sub {
-    start: P,
+/// A path as cubics `[start, c1, c2, end]` in one list, a line a cubic with its handles at its
+/// thirds, and each sub-path as its start, the end of its run of cubics and whether it closes.
+struct Subs {
     segs: Vec<[P; 4]>,
-    closed: bool,
+    subs: Vec<(P, usize, bool)>,
 }
 
 fn line(a: P, b: P) -> [P; 4] {
@@ -649,72 +663,65 @@ fn line(a: P, b: P) -> [P; 4] {
     [a, at(1.0 / 3.0), at(2.0 / 3.0), b]
 }
 
-fn subs(verbs: &[Verb]) -> Vec<Sub> {
-    let mut out: Vec<Sub> = Vec::new();
-    let mut at = [0.0, 0.0];
-    for v in verbs {
-        match *v {
-            Verb::Move(p) => {
-                out.push(Sub {
-                    start: p,
-                    segs: Vec::new(),
-                    closed: false,
-                });
-                at = p;
+impl Subs {
+    /// `verbs` with each point taken through `to`.
+    fn of(verbs: &[Verb], to: &impl Fn(P) -> P) -> Subs {
+        let mut segs = Vec::with_capacity(verbs.len());
+        let mut subs: Vec<(P, usize, bool)> = Vec::new();
+        let mut at = to([0.0, 0.0]);
+        let open = |subs: &mut Vec<(P, usize, bool)>, at: P, n: usize| {
+            if subs.is_empty() {
+                subs.push((at, n, false));
             }
-            Verb::Line(p) => {
-                if out.is_empty() {
-                    out.push(Sub {
-                        start: at,
-                        segs: Vec::new(),
-                        closed: false,
-                    });
+        };
+        for v in verbs {
+            match *v {
+                Verb::Move(p) => {
+                    at = to(p);
+                    subs.push((at, segs.len(), false));
                 }
-                out.last_mut().map(|s| s.segs.push(line(at, p)));
-                at = p;
-            }
-            Verb::Quad(c, p) => {
-                if out.is_empty() {
-                    out.push(Sub {
-                        start: at,
-                        segs: Vec::new(),
-                        closed: false,
-                    });
+                Verb::Line(p) => {
+                    open(&mut subs, at, segs.len());
+                    let p = to(p);
+                    segs.push(line(at, p));
+                    at = p;
                 }
-                let c1 = [
-                    at[0] + 2.0 / 3.0 * (c[0] - at[0]),
-                    at[1] + 2.0 / 3.0 * (c[1] - at[1]),
-                ];
-                let c2 = [
-                    p[0] + 2.0 / 3.0 * (c[0] - p[0]),
-                    p[1] + 2.0 / 3.0 * (c[1] - p[1]),
-                ];
-                out.last_mut().map(|s| s.segs.push([at, c1, c2, p]));
-                at = p;
-            }
-            Verb::Cubic(a, b, p) => {
-                if out.is_empty() {
-                    out.push(Sub {
-                        start: at,
-                        segs: Vec::new(),
-                        closed: false,
-                    });
+                Verb::Quad(c, p) => {
+                    open(&mut subs, at, segs.len());
+                    let (c, p) = (to(c), to(p));
+                    let c1 = [
+                        at[0] + 2.0 / 3.0 * (c[0] - at[0]),
+                        at[1] + 2.0 / 3.0 * (c[1] - at[1]),
+                    ];
+                    let c2 = [
+                        p[0] + 2.0 / 3.0 * (c[0] - p[0]),
+                        p[1] + 2.0 / 3.0 * (c[1] - p[1]),
+                    ];
+                    segs.push([at, c1, c2, p]);
+                    at = p;
                 }
-                out.last_mut().map(|s| s.segs.push([at, a, b, p]));
-                at = p;
-            }
-            Verb::Close => {
-                if let Some(s) = out.last_mut() {
-                    if at != s.start {
-                        s.segs.push(line(at, s.start));
+                Verb::Cubic(a, b, p) => {
+                    open(&mut subs, at, segs.len());
+                    let p = to(p);
+                    segs.push([at, to(a), to(b), p]);
+                    at = p;
+                }
+                Verb::Close => {
+                    if let Some(s) = subs.last_mut() {
+                        if at != s.0 {
+                            segs.push(line(at, s.0));
+                        }
+                        s.2 = true;
+                        at = s.0;
                     }
-                    s.closed = true;
-                    at = s.start;
                 }
+            }
+            if let Some(s) = subs.last_mut() {
+                s.1 = segs.len();
             }
         }
+        Subs { segs, subs }
     }
-    out
 }
 
 fn lerp(a: P, b: P, s: f64) -> P {
@@ -915,6 +922,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn id(p: P) -> P {
+        p
+    }
+
     fn warp(w: Value) -> Warp {
         let params = json!({"warp": w});
         Warp::read(
@@ -997,21 +1008,19 @@ mod tests {
 
     /// The densest deviation of each carried piece from the true image, in u.
     fn worst(w: &Warp, verbs: &[Verb], out: &[Verb]) -> f64 {
-        let truth = subs(verbs);
-        let got = subs(out);
+        let truth = Subs::of(verbs, &id);
+        let got = Subs::of(out, &id);
+        let n = got.segs.len() / truth.segs.len();
         let mut worst: f64 = 0.0;
-        for (t, g) in truth.iter().zip(&got) {
-            let n = g.segs.len() / t.segs.len();
-            for (i, c) in t.segs.iter().enumerate() {
-                for k in 0..n {
-                    let piece = piece_of(c, k, n);
-                    let m = g.segs[i * n + k];
-                    for j in 0..=64 {
-                        let s = j as f64 / 64.0;
-                        let a = w.point(bezier(&piece, s));
-                        let b = bezier(&m, s);
-                        worst = worst.max(deep_canvas::ops::hypot(a[0] - b[0], a[1] - b[1]));
-                    }
+        for (i, c) in truth.segs.iter().enumerate() {
+            for k in 0..n {
+                let piece = piece_of(c, k, n);
+                let m = got.segs[i * n + k];
+                for j in 0..=64 {
+                    let s = j as f64 / 64.0;
+                    let a = w.point(bezier(&piece, s));
+                    let b = bezier(&m, s);
+                    worst = worst.max(deep_canvas::ops::hypot(a[0] - b[0], a[1] - b[1]));
                 }
             }
         }
@@ -1041,9 +1050,9 @@ mod tests {
         for m in &maps {
             let w = warp(m.clone());
             for verbs in &paths {
-                let (out, n, _) = w.carry(verbs, 0.5);
+                let (out, n, _) = w.carry(verbs, 0.5, id, id);
                 assert!(n.is_power_of_two() && n <= MAX_CUTS, "{m}: {n}");
-                let segs: usize = subs(verbs).iter().map(|s| s.segs.len()).sum();
+                let segs = Subs::of(verbs, &id).segs.len();
                 let cubics = out.iter().filter(|v| matches!(v, Verb::Cubic(..))).count();
                 assert_eq!(cubics, segs * n, "{m}: every cubic is cut {n} ways");
                 if n < MAX_CUTS {
@@ -1062,14 +1071,20 @@ mod tests {
         // z² takes the imaginary axis to the negative reals, out to 0 and back to −1.
         let w = warp(json!({"map": {"complex": {"f": "cmul(z, z)"}}}));
         let verbs = vec![Verb::Move([0.0, -100.0]), Verb::Line([0.0, 100.0])];
-        let (out, n, _) = w.carry(&verbs, 0.5);
-        assert!(n >= 2, "the folded line is cut, not drawn as one cubic back onto its start");
+        let (out, n, _) = w.carry(&verbs, 0.5, id, id);
+        assert!(
+            n >= 2,
+            "the folded line is cut, not drawn as one cubic back onto its start"
+        );
         let mut at = [0.0, 0.0];
         for v in &out {
             match *v {
                 Verb::Move(p) => at = p,
                 Verb::Cubic(a, b, p) => {
-                    assert!(!folds(&[at, a, b, p], 0.5), "a piece folds back: {at:?} → {p:?}");
+                    assert!(
+                        !folds(&[at, a, b, p], 0.5),
+                        "a piece folds back: {at:?} → {p:?}"
+                    );
                     at = p;
                 }
                 _ => {}
@@ -1089,7 +1104,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let verbs = vec![Verb::Move([100.0, -200.0]), Verb::Line([100.0, 200.0])];
-        let (out, n, _) = w.carry(&verbs, 0.5);
+        let (out, n, _) = w.carry(&verbs, 0.5, id, id);
         assert_eq!(n, 1);
         assert!(
             matches!(out[1], Verb::Line(_)),
