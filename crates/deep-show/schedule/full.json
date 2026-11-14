@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "a9313100d5ed948e43047dabddec4d52ce02f4a3a0c12e19cb488d808955d67b",
+  "set_digest": "46d5f73fe3b2ce1cbdde2c372f4524bea2f3ae8170a9381e7552cbea923d7887",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
+      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+      "digest": "1ebdcefc8290db2e30a4eb0d13c4e43564a2e62c534d73c2b3f0c33092264beb",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -232,7 +232,17 @@
       "implementation": {
         "name": "logic",
         "version": "1.0.0",
-        "pins": {},
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.5",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
         "equivalence": "bit",
         "state": "canonical"
       }
@@ -376,6 +386,35 @@
       "module": "motion",
       "implementation": {
         "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "net@1": {
+      "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+      "reference": "net",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "net",
+      "implementation": {
+        "name": "net",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -747,6 +786,21 @@
           "scene3d.scattered"
         ],
         "per": "item"
+      }
+    ],
+    "simulate": [
+      {
+        "operator": "logic.step",
+        "module": "logic",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "logic.state"
+        ],
+        "per": "document",
+        "step": 11760000
       }
     ],
     "items": [

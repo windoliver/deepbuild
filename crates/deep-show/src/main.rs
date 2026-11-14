@@ -1952,6 +1952,9 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-prog-registry",
     feature = "test-sandbox-needs-logic",
     feature = "test-sandbox-alt",
+    feature = "test-logic-patch",
+    feature = "test-leave-out-physics",
+    feature = "test-logic-needs-physics",
     feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
@@ -2042,8 +2045,11 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_media::module::module()
         });
-        // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
-        out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
+        // Issue #308: controls and the input track's handling, with control@1.
+        out.extend([
+            deep_canvas_input::module::module(),
+            deep_canvas_export::module::module(),
+        ]);
         out.extend(physics::module());
         // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
         out.push(net::module());
@@ -2066,8 +2072,28 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_sandbox::module::module()
         });
     }
+    // Issue #533: the logic module, on sandbox, its arrays column sources (#535); `test-logic-patch` seals a patch release of the
+    // shipped implementation in its place, and `test-logic-needs-physics` plants a manifest that
+    // requires physics.
+    if set >= BuildSet::Full {
+        let logic = if cfg!(feature = "test-logic-patch") {
+            deep_logic::module::implementation(
+                deep_canvas::registry::Semver::parse("1.0.1").expect("a version"),
+            )
+        } else if cfg!(feature = "test-logic-needs-physics") {
+            logic_needs_physics()
+        } else {
+            deep_logic::module::module()
+        };
+        // A build without physics refuses the logic items that need it (#533).
+        out.push(match physics::module() {
+            Some(_) => logic,
+            None => deep_logic::module::without_physics(logic),
+        });
+    }
+    // The logic module runs on sandbox, so a build without sandbox holds no logic either (#533).
     #[cfg(feature = "test-leave-out-sandbox")]
-    out.retain(|m| m.manifest.name != "sandbox");
+    out.retain(|m| m.manifest.name != "sandbox" && m.manifest.name != "logic");
     #[cfg(feature = "test-mesh-item")]
     out.push(deep_canvas_test_modules::sandbox::mesh());
     #[cfg(feature = "test-prog-registry")]
@@ -2194,6 +2220,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[cfg(feature = "test-sim")]
     out.extend(test_sim::modules());
     out.extend(kit::modules::built());
+    // #403: a build without the logic module.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the
@@ -2247,6 +2274,20 @@ pub fn sandbox_needs_logic() -> Module {
     m
 }
 
+/// #533: a logic module whose manifest declares physics among its required dependencies, which
+/// the seal refuses in a build without the physics module, naming both.
+pub fn logic_needs_physics() -> Module {
+    let mut m = deep_logic::module::module();
+    m.manifest.depends_on.insert(
+        "physics".into(),
+        deep_canvas::registry::Dependency {
+            range: deep_canvas::registry::Range::parse("^1").expect("a range"),
+            optional: false,
+        },
+    );
+    m
+}
+
 /// The seams' backends this build ships, each `seam.<seam>`, an implementation of its seam's
 /// interface the seal holds beside the build set's canvas modules (#185), and under
 /// `test-gpu-second-backend` a second GPU backend beside the first, which the seal refuses.
@@ -2290,6 +2331,9 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             // holds, and its kit holds sandbox@1's own part.
             let interface = m.manifest.implements.clone();
             let sandbox = interface == deep_canvas_sandbox::module::INTERFACE;
+            // #533: logic@1's reference is the shipped implementation, whichever a test build
+            // holds.
+            let logic = interface == deep_logic::module::INTERFACE;
             let mut parts = kit.clone();
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
@@ -2298,6 +2342,7 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             // references are the shipped modules, whichever a test build holds.
             let reference = match interface.as_str() {
                 _ if sandbox => deep_canvas_sandbox::module::module(),
+                _ if logic => deep_logic::module::module(),
                 "look@1" => deep_canvas_marks::modules::look(),
                 "data@1" => deep_canvas_marks::modules::data(),
                 "graph@1" => deep_canvas_graph::module::module(),
@@ -3032,6 +3077,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "digest_covers_pins" => Ok(StartPlanted::Seal(Fault::DigestCoversPins)),
+        "digest_covers_version" => Ok(StartPlanted::Seal(Fault::DigestCoversVersion)),
         "runtime_digest_omits_physics" => Ok(StartPlanted::Seal(Fault::RuntimeOmitsPhysics)),
         "runtime_digest_hashes_only_shapes" => Ok(StartPlanted::Seal(Fault::RuntimeOnlyShapes)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),

@@ -181,6 +181,12 @@ pub struct Region {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Read {
     Control,
+    /// A reading (Logic: readings): with `each`, every value recorded since the step before, at
+    /// most `max` a step, any more waiting; else the last value recorded.
+    Reading {
+        each: bool,
+        max: u32,
+    },
     /// Another item's array: its index in the piece, and the bytes of its write region it is.
     Array {
         item: usize,
@@ -346,6 +352,8 @@ pub struct Piece {
     pub class: Class,
     /// Each control by ID, with its slot's size and type in a read region ([`form`]).
     pub controls: BTreeMap<String, (u32, &'static str)>,
+    /// The sources its items' readings come from, each `reading:<source>`.
+    pub sources: BTreeMap<String, Read>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
 }
@@ -793,6 +801,15 @@ pub fn check_in(
         .and_then(Value::as_object)
         .map(|c| c.iter().map(|(k, v)| (k.clone(), form(v))).collect())
         .unwrap_or_default();
+    let mut sources = BTreeMap::new();
+    for (name, src) in piece
+        .get("sources")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        sources.insert(format!("reading:{name}"), source(name, src)?);
+    }
     let asset = |sha: &str| -> Option<Vec<u8>> {
         let bytes = stored(sha)?;
         (hash(&bytes) == sha).then_some(bytes)
@@ -879,6 +896,11 @@ pub fn check_in(
         for r in &d.reads {
             let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
                 (*size, ty.to_string(), Read::Control)
+            } else if let Some(read) = sources.get(r) {
+                let Read::Reading { max, .. } = read else {
+                    unreachable!()
+                };
+                (8 + max * 16, "reading".to_string(), read.clone())
             } else if let Some((other, "hover")) =
                 r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
             {
@@ -1126,9 +1148,39 @@ pub fn check_in(
         seed,
         class,
         controls,
+        sources,
         tour: piece.get("tour").cloned(),
         items,
     })
+}
+
+/// A source as the piece declares it (Logic: readings): scalar values, delivered `latest` (a
+/// step reads the last one) or `each` (every one since the step before, at most `max_per_step`).
+fn source(name: &str, src: &Value) -> Result<Read, Refused> {
+    let refused = |what: String| {
+        Refused(json!({"ok": false, "code": "bad_input", "what": what, "source": name}))
+    };
+    if src.get("shape").map_or(Some("scalar"), Value::as_str) != Some("scalar") {
+        return Err(refused(format!(
+            "{name}: only scalar sources are built yet"
+        )));
+    }
+    let max = src
+        .get("max_per_step")
+        .map_or(Some(PER_STEP as u64), Value::as_u64)
+        .filter(|n| (1..=PER_STEP as u64).contains(n))
+        .ok_or_else(|| refused(format!("{name}: max_per_step is 1 to {PER_STEP}")))?;
+    match src.get("delivery").map_or(Some("latest"), Value::as_str) {
+        Some("latest") => Ok(Read::Reading {
+            each: false,
+            max: 1,
+        }),
+        Some("each") => Ok(Read::Reading {
+            each: true,
+            max: max as u32,
+        }),
+        _ => Err(refused(format!("{name}: delivery is latest or each"))),
+    }
 }
 
 /// Each active data segment's bytes in memory, `[start, end)`.

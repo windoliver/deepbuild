@@ -1,6 +1,6 @@
 //! The parts an interface adds to the kit (issue #185; canvas primitives: Canvas module: interface
 //! and implementation). `bit`: an implementation that declares itself bit, and isn't its
-//! interface's reference, gives the reference's hashes on every kit fixture, compared in a build
+//! interface's reference or is another release of it (#533), gives the reference's hashes on every kit fixture, compared in a build
 //! that holds the reference in its place. `behavior`: a measured implementation lands within the
 //! interface's tolerances on every fixture of its behavior part, and one whose interface has no
 //! behavior part fails, since only the reference and bit implementations are admitted then.
@@ -41,8 +41,14 @@ pub fn bit(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let sealed = &hub.startup.sealed;
     let module = ctx.module;
     let iface = sealed.interface_of(module)?;
+    // The reference itself needs no comparison; another release of it does (#533).
+    let reference_version = crate::interfaces()
+        .into_iter()
+        .find(|i| i.name == iface.name)
+        .map(|i| i.reference.manifest.implementation.version);
     if iface.implementation.equivalence != Equivalence::Bit
-        || iface.implementation.name == iface.reference
+        || (iface.implementation.name == iface.reference
+            && reference_version == Some(iface.implementation.version))
     {
         return None;
     }

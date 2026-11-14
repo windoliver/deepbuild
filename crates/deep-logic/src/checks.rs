@@ -64,6 +64,8 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
                 value,
                 writer: "you".into(),
                 player: 1,
+                as_of: None,
+                arrived: 0,
             };
             (control, vec![entry])
         })

@@ -52,6 +52,8 @@ pub struct Planted {
     pub restore_keeps_regions_only: bool,
     pub restore_copies_assets: bool,
     pub simulate_runs_all_steps: bool,
+    pub read_region_orders_by_arrival: bool,
+    pub read_region_drops_player: bool,
     pub replay_changes_step_37: bool,
     pub budget_counts_lane_reading: bool,
     pub seek_repeats_occurrences: bool,
@@ -78,6 +80,8 @@ impl Planted {
         let p = &mut self;
         match name {
             "check_compares_step_hashes" => p.check_step_hashes_only = true,
+            "read_region_orders_by_arrival" => p.read_region_orders_by_arrival = true,
+            "read_region_drops_player" => p.read_region_drops_player = true,
             "budget_sums_fuel_only" => p.budget_sums_only_fuel = true,
             "checkpoint_drops_globals" => p.checkpoint_drops_globals = true,
             "restore_keeps_regions_only" => p.restore_keeps_regions_only = true,
@@ -272,6 +276,8 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
                             value: (*value).into(),
                             writer: "tour".into(),
                             player: 1,
+                            as_of: None,
+                            arrived: 0,
                         });
                         seq += 1;
                     }
@@ -518,6 +524,7 @@ impl Logic {
             Some("frame") => self.frame(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
+            Some("append") => self.append(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),
         }
     }
@@ -928,6 +935,10 @@ impl Logic {
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
         let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        // The web runner fills no reading's slot yet: a plan it would run short is refused.
+        if !piece.sources.is_empty() {
+            return Err(bad("the web player doesn't read readings yet"));
+        }
         let items: Vec<Value> = piece
             .items
             .iter()
@@ -940,6 +951,7 @@ impl Logic {
                     .map(|e| {
                         let (kind, from, offset) = match &e.read {
                             piece::Read::Control => ("control", Value::Null, 0),
+                            piece::Read::Reading { .. } => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::None => ("write", Value::Null, 0),
@@ -1107,7 +1119,33 @@ impl Logic {
         let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
-        Ok(json!({"ok": true, "step": to, "failed": w.failed(), "deep_hash": w.deep_hashes()}))
+        let track: Vec<Value> = w.entries().iter().map(Entry::to_json).collect();
+        Ok(json!({
+            "ok": true,
+            "step": to,
+            "failed": w.failed(),
+            "steps": rec.steps_json(&w.piece),
+            "track": track,
+            "deep_hash": w.deep_hashes(),
+        }))
+    }
+
+    /// An entry joining a session's track as it arrives: a test writer's control entry as
+    /// stamped, or a value a reading's source delivers, `{reading, value, as_of}`, which the
+    /// logic module stamps (Logic: readings).
+    fn append(&mut self, line: &Value) -> Result<Value, Value> {
+        let s = line
+            .get("session")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("session"))?;
+        let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
+        let mut e = line.get("entry").cloned().ok_or_else(|| bad("entry"))?;
+        if e.get("reading").is_some() {
+            e["t"] = json!(0);
+            e["writer"] = json!("plugin");
+        }
+        let e = Entry::parse(&e).ok_or_else(|| bad("entry"))?;
+        Ok(json!({"ok": true, "entry": w.append(e)?.to_json()}))
     }
 
     /// A session's seek to the state after step `to`: the nearest checkpoint its ring holds or
@@ -1158,6 +1196,7 @@ mod tests {
                 seed: 0,
                 class: deep_canvas::budget::Class::Figure,
                 controls: Default::default(),
+                sources: Default::default(),
                 tour: Some(json!({"idle_after": 0, "keys": {"a": [[-1, 1]]}})),
                 items: Vec::new(),
             };
@@ -1167,6 +1206,165 @@ mod tests {
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));
         assert_eq!(got, Ok(vec![(-F, world::Given::Number(1.0))]));
+    }
+
+    #[test]
+    fn a_reading_waits_for_its_readers_alone() {
+        // `r` reads the feed at 60 Hz and `s` reads nothing at 15 Hz, so after step 3 `s` has run
+        // to 12/60 s while `r` next runs step 4: the reading is stamped at 4/60 s, and taken.
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let item = |hz: i64, reads: Value| {
+            json!({"kind": "logic@1", "params": {"program": sha, "step_rate": hz, "reads": reads,
+                "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}})
+        };
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each"}},
+            "items": {"r": item(60, json!(["reading:feed"])), "s": item(15, json!([]))}, "assets": assets});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 3}));
+        let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+        let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+        assert_eq!(got["entry"]["t"], json!(4 * F / 60), "{got}");
+    }
+
+    /// #533: entries a slow item reads in one step keep the track's order, by time first, then
+    /// player and seq. A 15 Hz item's step 1 takes the stamps 1/60 s to 4/60 s: player 2's entry
+    /// at 1/60 s comes before player 1's at 2/60 s, whichever arrived first.
+    #[test]
+    fn a_slow_items_step_reads_its_entries_by_time_then_player_and_seq() {
+        // Writes the [player, value] of the first two entries of `press` in its read region.
+        let bytes = wat::parse_str(
+            r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
+            (global (export "writes_at") i32 (i32.const 4096)) (func (export "init") (param $seed i64))
+            (func (export "step") (param $k i64)
+              (f64.store (i32.const 4096) (f64.convert_i32_u (i32.load (i32.const 8))))
+              (f64.store (i32.const 4104) (f64.load (i32.const 16)))
+              (f64.store (i32.const 4112) (f64.convert_i32_u (i32.load (i32.const 24))))
+              (f64.store (i32.const 4120) (f64.load (i32.const 32)))))"#,
+        )
+        .expect("the program assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "controls": {"press": {"kind": "slider"}}, "assets": assets,
+            "items": {"order": {"kind": "logic@1", "params": {"program": sha, "step_rate": 15,
+                "reads": ["press"], "writes": {"order": {"type": "f64", "count": 4}}}}}});
+        let order = |first: (i64, i64, i64), second: (i64, i64, i64)| {
+            let mut logic = Logic::new(Planted::default());
+            let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+            let session = opened["session"].as_str().expect("a session").to_string();
+            for (sixtieths, player, value) in [first, second] {
+                let entry = json!({"t": sixtieths * F / 60, "seq": 0, "control": "press",
+                    "value": value, "writer": "you", "player": player});
+                let got =
+                    logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+                assert_eq!(got["ok"], json!(true), "{got}");
+            }
+            let ran = logic.handle(&json!({"call": "step", "session": session, "to": 1}));
+            ran["steps"][1]["arrays"]["order.order"].clone()
+        };
+        let wanted = json!([2.0, 21.0, 1.0, 12.0]);
+        assert_eq!(
+            order((1, 2, 21), (2, 1, 12)),
+            wanted,
+            "the earlier entry arriving first"
+        );
+        assert_eq!(
+            order((2, 1, 12), (1, 2, 21)),
+            wanted,
+            "the earlier entry arriving last"
+        );
+    }
+
+    /// #533: two items read one feed at 60 Hz and 15 Hz. After step 3 of each, `s` has read to
+    /// 12/60 s, so the reading is stamped at the first step either runs after that, 13/60 s.
+    #[test]
+    fn a_reading_two_rates_read_is_stamped_after_what_both_have_read() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let item = |hz: i64| {
+            json!({"kind": "logic@1", "params": {"program": sha, "step_rate": hz, "reads": ["reading:feed"],
+                "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}})
+        };
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each"}},
+            "items": {"r": item(60), "s": item(15)}, "assets": assets});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 3}));
+        let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+        let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+        assert_eq!(got["entry"]["t"], json!(13 * F / 60), "{got}");
+    }
+
+    /// #533: an item on a turn clock runs the step a reading it reads is recorded at (Logic:
+    /// turn clock), and no other.
+    #[test]
+    fn a_reading_wakes_the_turn_clock_item_that_reads_it() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        for delivery in ["each", "latest"] {
+            let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": delivery}}, "assets": assets,
+                "items": {"r": {"kind": "logic@1", "params": {"program": sha, "clock": "on_input", "reads": ["reading:feed"],
+                    "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}}}});
+            let mut logic = Logic::new(Planted::default());
+            let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+            let session = opened["session"].as_str().expect("a session").to_string();
+            logic.handle(&json!({"call": "step", "session": session, "to": 2}));
+            let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+            let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+            let at = got["entry"]["t"].as_i64().expect("a stamp") / (F / 60);
+            let ran = logic.handle(&json!({"call": "step", "session": session, "to": 9}));
+            let steps: Vec<i64> = ran["steps"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| s["step"].as_i64())
+                .collect();
+            assert_eq!(
+                steps,
+                vec![at],
+                "{delivery}: the steps run after the reading: {ran}"
+            );
+        }
+    }
+
+    /// #533: values past an `each` reading's `max_per_step` wait for the next step, and that wait
+    /// asks a turn-clock item for the step: three values at one a step run three steps.
+    #[test]
+    fn readings_still_waiting_ask_a_turn_clock_item_for_its_next_step() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each", "max_per_step": 1}},
+            "assets": assets, "items": {"r": {"kind": "logic@1", "params": {"program": sha, "clock": "on_input",
+                "reads": ["reading:feed"], "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}}}});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 2}));
+        for _ in 0..3 {
+            let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+            let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+            assert_eq!(got["ok"], json!(true), "{got}");
+        }
+        let ran = logic.handle(&json!({"call": "step", "session": session, "to": 9}));
+        let steps: Vec<i64> = ran["steps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["step"].as_i64())
+            .collect();
+        assert_eq!(steps, vec![3, 4, 5], "{ran}");
     }
 
     /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The

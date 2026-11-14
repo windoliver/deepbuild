@@ -243,7 +243,15 @@ impl Hub<'_> {
             .into_iter()
             .flatten()
             .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-            .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
+            .map(|(id, i)| {
+                // Without the program the hub inlined as `wasm` for the module's steps (#533):
+                // the check reads it from the store by `program`.
+                let mut params = i.get("params").cloned().unwrap_or(json!({}));
+                if let Some(p) = params.as_object_mut() {
+                    p.remove("wasm");
+                }
+                (id.clone(), json!({"kind": "logic@1", "params": params}))
+            })
             .collect();
         if items.is_empty() {
             return Ok(None);

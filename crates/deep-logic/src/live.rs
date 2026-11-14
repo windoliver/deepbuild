@@ -159,6 +159,8 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
                 value: value.into(),
                 writer: "you".into(),
                 player: 1,
+                as_of: None,
+                arrived: 0,
             };
             stamped = e.to_json();
             world.fork_track(k, &[e]);
@@ -268,6 +270,8 @@ fn logic(line: Value, planted: Planted, inbox: Receiver<Latched>, up: Sender<Up>
                     value: value.into(),
                     writer: "you".into(),
                     player: 1,
+                    as_of: None,
+                    arrived: 0,
                 };
                 took = Some((e.to_json(), k * len));
                 world.fork_track(k, &[e]);

@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <repo>/docs/evidence/533/e2e
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:55:30
+   Duration  11.19s (tests 100%)
+

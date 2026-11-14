@@ -1,0 +1,5 @@
+{"call":"open","piece":{"seed":53302,"controls":{"press":{"kind":"slider"}},"items":{"first":{"kind":"logic@1","params":{"program":"bf69cd68fd501becbfe039b8e26b206f551280907d1d8444eb44bf23f2d5b014","writes":{"first":{"type":"i32"},"n":{"type":"i32"}},"reads":["press"]}}},"assets":{"bf69cd68fd501becbfe039b8e26b206f551280907d1d8444eb44bf23f2d5b014":"AGFzbQEAAAABBQFgAX4AAwMCAAAFBAEBAQEGDAJ/AEEAC38AQYAgCwcvBQZtZW1vcnkCAAhyZWFkc19hdAMACXdyaXRlc19hdAMBBGluaXQAAARzdGVwAAEKKAICAAsjAEGIIEEAKAIANgIAQYAgQQgoAgBBAEEAKAIAQQBHGzYCAAsAJARuYW1lAQ0CAARpbml0AQRzdGVwAg4CAAEABHNlZWQBAQABaw=="}},"track":[]}
+{"call":"step","session":"s1","to":2}
+{"call":"append","session":"s1","entry":{"t":35280000,"seq":1,"control":"press","value":1,"writer":"you","player":1}}
+{"call":"append","session":"s1","entry":{"t":35280000,"seq":1,"control":"press","value":1,"writer":"peer","player":2}}
+{"call":"step","session":"s1","to":5}

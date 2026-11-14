@@ -1,0 +1,257 @@
+# #533 acceptance suite at the base: this worktree's HEAD 6042ef5a ("Merge pull request #1728 …"), clean but for
+# tests/acceptance/533 added. Linux aarch64 (the Spark), load average about 25 on 20 cores during the run (no timing
+# criterion here).
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/533 --no-file-parallelism
+# Result: 10 of 10 tests fail (4 of 4 files), every one for the missing surface. Nothing is BLOCKED. The base's
+# deep-logic and deep-show `full` build and run, and answer:
+#   - ac01: `check` refuses the item reading `reading:feed` (logic_refused, "reading:feed names no control or logic
+#     item of this piece"): the base has no readings;
+#   - ac02: `append` answers {"ok":false,"code":"bad_input"}; each planted name (read_region_orders_by_arrival,
+#     read_region_drops_player) exits 2 after one bad_input line;
+#   - ac03: `full`'s schedule has no interfaces["logic@1"] (no logic module in the build); `--planted
+#     digest_covers_version` refuses to start (unknown name);
+#   - ac04: cargo refuses the features test-leave-out-physics and test-logic-needs-physics (the package has no such
+#     feature).
+# Before this run the harness was checked against the base's real components (README: Run them).
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/533
+
+ ❯ ac03-seal.test.ts (3 tests | 3 failed) 2121ms
+   ❯ #533.40063163 logic@1: the shipped implementation, bit and canonical, and a patch release of it that seals in its place (3)
+     × #533.40063163 the shipped set seals with the logic module implementing logic@1, bit and canonical, its engine sandbox@1's pin, its kit every part of the canvas kit with no behavior part, passed 142ms
+     × #533.40063163 a test implementation that changes only its own patch version passes the logic kit bit for bit and seals in the shipped one's place with logic@1's digest unchanged 109ms
+     × #533.40063163 a planted interface digest that also covers the implementation's version (digest_covers_version) refuses the patch at the seal, naming logic@1, while the shipped build still seals 9ms
+ ❯ ac04-no-physics.test.ts (3 tests | 3 failed) 813ms
+   ❯ #533.6d69e833 a build with the logic module and without the physics module (3)
+     × #533.6d69e833 the build seals with logic and without physics, and plays the flock and the quiz: each frame reads the arrays the logic module's own bake gives at that step 701ms
+     × #533.6d69e833 a document whose logic item reads lab.occurrences, and one whose item fires lab's input, are refused with module_missing naming physics; the flock and the quiz are not 2ms
+     × #533.6d69e833 a planted logic module that declares physics among its dependencies is refused at the seal of the build without physics, naming physics 60ms
+ ❯ ac01-readings.test.ts (1 test | 1 failed) 725ms
+   ❯ #533.1487ce3d a reading's values are recorded as input entries at the first step not yet run, and replay without the hub (1)
+     × #533.1487ce3d five delivered values, a repeated one included, are five entries stamped at the first step not yet run; the item reads them there, and a bake of the recorded track with nothing delivering reads the same values at the same steps 89ms
+ ❯ ac02-players.test.ts (3 tests | 3 failed) 809ms
+   ❯ #533.cbdc85ec every player's entries reach the read region in step, player and seq order, never by arrival (3)
+     × #533.cbdc85ec player 2's press then player 1's, and the other order, both give first = 1 at step 3 with equal step hashes at every step 122ms
+     × #533.cbdc85ec a planted read region that orders entries by arrival (read_region_orders_by_arrival) fails, naming step 3 13ms
+     × #533.cbdc85ec a planted read region that leaves out the player (read_region_drops_player) fails, naming step 3 10ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-readings.test.ts > #533.1487ce3d a reading's values are recorded as input entries at the first step not yet run, and replay without the hub > #533.1487ce3d five delivered values, a repeated one included, are five entries stamped at the first step not yet run; the item reads them there, and a bake of the recorded track with nothing delivering reads the same values at the same steps
+AssertionError: check admits the layout probe's piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"read","what":"reading:feed names no control or logic item of this piece","read":"reading:feed"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ layoutFor helpers.ts:240:92
+    238| export function layoutFor(spec: ItemSpec, extra: Omit<PieceSpec, 'seed…
+    239|   const [reply] = onLogic([checkCall(piece({ seed: 533, ...extra, item…
+    240|   expect(reply!['ok'], `check admits the layout probe's piece (ok: tru…
+       |                                                                                            ^
+    241|   return layoutOf(obj(obj(reply!['items'], 'check: items')['probe'], '…
+    242| }
+ ❯ ac01-readings.test.ts:32:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  ac02-players.test.ts > #533.cbdc85ec every player's entries reach the read region in step, player and seq order, never by arrival > #533.cbdc85ec player 2's press then player 1's, and the other order, both give first = 1 at step 3 with equal step hashes at every step
+AssertionError: append of player 2's press: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac02-players.test.ts:32:119
+     30|   const rs = onLogic(calls, planted);
+     31|   expect(rs[0]!['ok'], `open admits the piece: ${show(rs[0])}`).toBe(t…
+     32|   rs.slice(2, 2 + order.length).forEach((r, i) => expect(r['ok'], `app…
+       |                                                                                                                       ^
+     33|   const a = stepped(rs[1]!, `step to ${AT - 1}`);
+     34|   const b = stepped(rs[rs.length - 1]!, `step to ${LAST}`);
+ ❯ run ac02-players.test.ts:32:33
+ ❯ ac02-players.test.ts:55:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  ac02-players.test.ts > #533.cbdc85ec every player's entries reach the read region in step, player and seq order, never by arrival > #533.cbdc85ec a planted read region that orders entries by arrival (read_region_orders_by_arrival) fails, naming step 3
+AssertionError: deep-logic --planted read_region_orders_by_arrival exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:134:138
+    132| export function replies(s: Started, calls: JsonValue[], what: string):…
+    133|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    134|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    135|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    136|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onLogic helpers.ts:184:10
+ ❯ run ac02-players.test.ts:30:14
+ ❯ ac02-players.test.ts:69:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  ac02-players.test.ts > #533.cbdc85ec every player's entries reach the read region in step, player and seq order, never by arrival > #533.cbdc85ec a planted read region that leaves out the player (read_region_drops_player) fails, naming step 3
+AssertionError: deep-logic --planted read_region_drops_player exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:134:138
+    132| export function replies(s: Started, calls: JsonValue[], what: string):…
+    133|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    134|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    135|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    136|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onLogic helpers.ts:184:10
+ ❯ run ac02-players.test.ts:30:14
+ ❯ ac02-players.test.ts:69:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  ac03-seal.test.ts > #533.40063163 logic@1: the shipped implementation, bit and canonical, and a patch release of it that seals in its place > #533.40063163 the shipped set seals with the logic module implementing logic@1, bit and canonical, its engine sandbox@1's pin, its kit every part of the canvas kit with no behavior part, passed
+AssertionError: full: schedule.interfaces["logic@1"] (the interfaces are ["building@1","cells@1","data@1","effects@1","graph@1","input@1","look@1","loop@1","marks2d@1","media@1","motion@1","record@1","sandbox@1","scene3d@1","sheet@1","text@1","vector@1"]) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:58:71
+     56| export const show = (v: JsonValue | undefined): string => JSON.stringi…
+     57| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     58|   expect(isObject(value), `${what} is an object, got ${show(value)}`).…
+       |                                                                       ^
+     59|   return value as JsonObject;
+     60| }
+ ❯ build ac03-seal.test.ts:29:17
+ ❯ ac03-seal.test.ts:51:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  ac03-seal.test.ts > #533.40063163 logic@1: the shipped implementation, bit and canonical, and a patch release of it that seals in its place > #533.40063163 a test implementation that changes only its own patch version passes the logic kit bit for bit and seals in the shipped one's place with logic@1's digest unchanged
+AssertionError: full: schedule.interfaces["logic@1"] (the interfaces are ["building@1","cells@1","data@1","effects@1","graph@1","input@1","look@1","loop@1","marks2d@1","media@1","motion@1","record@1","sandbox@1","scene3d@1","sheet@1","text@1","vector@1"]) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:58:71
+     56| export const show = (v: JsonValue | undefined): string => JSON.stringi…
+     57| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     58|   expect(isObject(value), `${what} is an object, got ${show(value)}`).…
+       |                                                                       ^
+     59|   return value as JsonObject;
+     60| }
+ ❯ build ac03-seal.test.ts:29:17
+ ❯ ac03-seal.test.ts:75:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  ac03-seal.test.ts > #533.40063163 logic@1: the shipped implementation, bit and canonical, and a patch release of it that seals in its place > #533.40063163 a planted interface digest that also covers the implementation's version (digest_covers_version) refuses the patch at the seal, naming logic@1, while the shipped build still seals
+AssertionError: the shipped build seals under the planted digest (it is the reference): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac03-seal.test.ts:104:148
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  ac04-no-physics.test.ts > #533.6d69e833 a build with the logic module and without the physics module > #533.6d69e833 the build seals with logic and without physics, and plays the flock and the quiz: each frame reads the arrays the logic module's own bake gives at that step
+AssertionError: deep-show builds (cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-physics): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-physics failed:
++ error: none of the selected packages contains this feature: test-leave-out-physics
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-canvas-drawn, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-canvas-effects, deep-canvas-motion, deep-scene3d-render, deep-canvas-scene3d, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-marks-render, deep-marks-vello, deep-replica, deep-motion, deep-input, deep-canvas-loop, deep-sandbox-wasmtime, deep-logic, deep-show, deep-text-render
++
+
+ ❯ buildBin helpers.ts:113:159
+    111|     built.set(key, made);
+    112|   }
+    113|   expect(made.error, `${binName} builds (cargo build --locked --bin ${…
+       |                                                                                                                                                               ^
+    114|   return made.bin;
+    115| }
+ ❯ deepShow helpers.ts:281:62
+ ❯ ac04-no-physics.test.ts:56:60
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  ac04-no-physics.test.ts > #533.6d69e833 a build with the logic module and without the physics module > #533.6d69e833 a document whose logic item reads lab.occurrences, and one whose item fires lab's input, are refused with module_missing naming physics; the flock and the quiz are not
+AssertionError: deep-show builds (cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-physics): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-physics failed:
++ error: none of the selected packages contains this feature: test-leave-out-physics
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-canvas-drawn, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-canvas-effects, deep-canvas-motion, deep-scene3d-render, deep-canvas-scene3d, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-marks-render, deep-marks-vello, deep-replica, deep-motion, deep-input, deep-canvas-loop, deep-sandbox-wasmtime, deep-logic, deep-show, deep-text-render
++
+
+ ❯ buildBin helpers.ts:113:159
+    111|     built.set(key, made);
+    112|   }
+    113|   expect(made.error, `${binName} builds (cargo build --locked --bin ${…
+       |                                                                                                                                                               ^
+    114|   return made.bin;
+    115| }
+ ❯ deepShow helpers.ts:281:62
+ ❯ ac04-no-physics.test.ts:76:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  ac04-no-physics.test.ts > #533.6d69e833 a build with the logic module and without the physics module > #533.6d69e833 a planted logic module that declares physics among its dependencies is refused at the seal of the build without physics, naming physics
+AssertionError: deep-show builds (cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-physics,test-logic-needs-physics): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-physics,test-logic-needs-physics failed:
++ error: none of the selected packages contains these features: test-leave-out-physics, test-logic-needs-physics
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-canvas-drawn, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-canvas-effects, deep-canvas-motion, deep-scene3d-render, deep-canvas-scene3d, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-marks-render, deep-marks-vello, deep-replica, deep-motion, deep-input, deep-canvas-loop, deep-sandbox-wasmtime, deep-logic, deep-show, deep-text-render
++
+
+ ❯ buildBin helpers.ts:113:159
+    111|     built.set(key, made);
+    112|   }
+    113|   expect(made.error, `${binName} builds (cargo build --locked --bin ${…
+       |                                                                                                                                                               ^
+    114|   return made.bin;
+    115| }
+ ❯ deepShow helpers.ts:281:62
+ ❯ ac04-no-physics.test.ts:86:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  10 failed (10)
+   Start at  01:29:40
+   Duration  4.97s (tests 97%, transform 1%, import 1%)
+

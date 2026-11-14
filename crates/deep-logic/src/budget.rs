@@ -78,6 +78,7 @@ fn fuel_of(item: &Item) -> i64 {
         seed: 0,
         class: Class::Figure,
         controls: Default::default(),
+        sources: Default::default(),
         tour: None,
         items: vec![item.clone()],
     });
@@ -127,6 +128,7 @@ fn frame_ns(base: &Item, n: usize, frames: i64) -> f64 {
         seed: 0,
         class: Class::Figure,
         controls: Default::default(),
+        sources: Default::default(),
         tour: None,
         items,
     });

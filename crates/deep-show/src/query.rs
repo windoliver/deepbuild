@@ -250,12 +250,14 @@ impl Hub<'_> {
     }
 
     /// What a document draws: its recipe instances expanded and kept, items of a kind this build
-    /// doesn't know left out, and its tables and vectors inlined; with its expansions.
+    /// doesn't know left out, and its tables, vectors and logic programs inlined; with its
+    /// expansions.
     pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
         let (mut drawn, expansions) = self.drawing_form(document);
         self.keep_instances(document, &expansions, &mut drawn);
         let _ = self.inline_tables(&mut drawn);
         let _ = self.inline_vectors(&mut drawn);
+        self.inline_programs(&mut drawn);
         (drawn, expansions)
     }
 

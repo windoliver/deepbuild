@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "0eb468e0c093c3b119d333cc3d060e9dd65967d041f8f7f70244bda804ff5b7d",
+    "digest": "46d5f73fe3b2ce1cbdde2c372f4524bea2f3ae8170a9381e7552cbea923d7887",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -129,12 +129,20 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+    "digest": "1ebdcefc8290db2e30a4eb0d13c4e43564a2e62c534d73c2b3f0c33092264beb",
     "verdict": "PASS",
     "parts": {
+      "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
-      "schedule": "PASS"
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "carried_state": "PASS",
+      "late_entry": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
     }
   },
   "look": {
@@ -220,6 +228,16 @@
       "migration": "PASS"
     }
   },
+  "net": {
+    "version": "1.0.0",
+    "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS"
+    }
+  },
   "physics": {
     "version": "1.0.0",
     "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
@@ -300,14 +318,14 @@
   "text": {
     "version": "1.0.0",
     "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
-    "verdict": "PASS",
+    "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "read_set": "PASS",
       "order": "PASS",
-      "schedule": "PASS",
+      "schedule": "FAIL",
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"
@@ -328,16 +346,6 @@
       "time_order": "PASS",
       "contribution": "PASS",
       "catalog": "PASS"
-    }
-  },
-  "net": {
-    "version": "1.0.0",
-    "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
-    "verdict": "PASS",
-    "parts": {
-      "clean_rebuild": "PASS",
-      "patch_fuzz": "PASS",
-      "schedule": "PASS"
     }
   }
 }

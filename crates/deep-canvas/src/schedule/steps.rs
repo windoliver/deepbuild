@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 use super::view::StepCtx;
-use super::{Mode, Report, Run, Scheduler, Session, StepLog, Val};
+use super::{Bound, Key, Mode, OpError, Report, Run, Scheduler, Session, StepLog, Val};
 use crate::registry::Sealed;
 use crate::time::CHECKPOINT_EVERY;
 
@@ -31,6 +31,13 @@ pub(super) struct Steps {
     checkpoints: BTreeMap<i64, BTreeMap<String, Val>>,
     /// The last checkpoint flick taken, so the next frame takes the ones after it.
     checkpointed: Option<i64>,
+    /// The revision the steps ran on: its document's key and the keys of the tables they read.
+    inputs: Vec<Key>,
+    /// Each stepping node's error from its last step, which its node reports until a step of
+    /// its own succeeds or the steps start again.
+    failed: BTreeMap<usize, OpError>,
+    /// `failed` as of each checkpoint, which a seek onto it restores with the arrays.
+    failed_at: BTreeMap<i64, BTreeMap<usize, OpError>>,
 }
 
 impl Steps {
@@ -43,6 +50,7 @@ impl Steps {
         };
         while c <= upto {
             self.checkpoints.insert(c, self.values.clone());
+            self.failed_at.insert(c, self.failed.clone());
             self.checkpointed = Some(c);
             c += CHECKPOINT_EVERY;
         }
@@ -99,7 +107,8 @@ impl Session {
             if run == Run::Ran {
                 report.ran += 1;
             }
-            self.settle(s, n, key, out, None, run, frame, report);
+            let err = self.steps.failed.get(&n).cloned();
+            self.settle(s, n, key, out, err, run, frame, report);
         }
     }
 
@@ -138,11 +147,28 @@ impl Session {
                 .find(|m| &m.name == module)
                 .is_some_and(|m| m.shapes.carried.iter().any(|c| c.kind == "checkpoint"))
         });
-        if self.mode == Mode::Clean {
-            // A clean evaluation steps from the start; the frame stays, since it is the guard
-            // that runs the steps once a frame for every stepping operator.
+        // The revision the steps run on: its document and each table a stepper reads. Never a
+        // view or another array, which change from frame to frame without a new revision.
+        let mut inputs: Vec<Key> = Vec::new();
+        if let Some(l) = &self.loaded {
+            inputs.push(l.doc_key);
+            for (n, _, _) in &steppers {
+                self.tables_of(s, *n);
+                for b in &l.nodes[*n].reads {
+                    if let Bound::Table(name) = b {
+                        inputs.push(s.tables.get(name).map(|(_, k)| *k).unwrap_or_default());
+                    }
+                }
+            }
+        }
+        if self.mode == Mode::Clean || self.steps.inputs != inputs {
+            // A clean evaluation steps from the start, and so does a revision whose steps read
+            // something else (design: Saves; anything not carried on restarts at step 0). The
+            // frame stays, since it is the guard that runs the steps once a frame for every
+            // stepping operator.
             self.steps = Steps {
                 frame: self.steps.frame,
+                inputs,
                 ..Steps::default()
             };
         } else if self.steps.at.is_some_and(|at| at > to) {
@@ -153,14 +179,17 @@ impl Session {
                 .filter(|_| checkpoints)
             {
                 Some(c) => {
+                    self.steps.failed = self.steps.failed_at[&c].clone();
                     self.steps.values = self.steps.checkpoints[&c].clone();
                     self.steps.at = Some(c);
                     self.steps.checkpointed = Some(c);
                 }
                 None => {
+                    self.steps.failed.clear();
                     self.steps.at = None;
                     self.steps.values.clear();
                     self.steps.checkpoints.clear();
+                    self.steps.failed_at.clear();
                     self.steps.checkpointed = None;
                 }
             }
@@ -192,9 +221,11 @@ impl Session {
                     earlier: &earlier,
                 };
                 let (out, err, noted, tails) = self.call(s, *n, Some(ctx), report);
-                if err.is_some() {
+                if let Some(e) = err {
+                    self.steps.failed.insert(*n, e);
                     continue;
                 }
+                self.steps.failed.remove(n);
                 self.tails.extend(tails);
                 let op = self.loaded.as_ref().expect("loaded").nodes[*n].op;
                 for (w, v) in sealed.ops[op].op.writes.iter().zip(out) {

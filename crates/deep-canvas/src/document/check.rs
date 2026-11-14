@@ -1325,6 +1325,10 @@ struct ItemContext<'a> {
     facts: &'a BTreeMap<String, KindFacts<'a>>,
 }
 
+/// The canvas modules whose kinds a document uses without naming the module in
+/// `requires.modules`.
+const UNDECLARED_MODULES: &[&str] = &["logic"];
+
 /// What the build says about one kind text, worked out once per check: a document holds few
 /// kinds and many items.
 struct KindFacts<'a> {
@@ -1440,8 +1444,9 @@ fn check_item(
         return false;
     }
     // A document declares the canvas modules its kinds need (Document envelope), so a
-    // build without the module has the name to refuse with.
-    if let Some(module) = facts.module {
+    // build without the module has the name to refuse with. Logic `logic@1` items need no
+    // declaration (Document envelope: `requires`); one the build lacks is refused above.
+    if let Some(module) = facts.module.filter(|m| !UNDECLARED_MODULES.contains(m)) {
         let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
         if !ctx.declared.contains(module) && !by_pack {
             issues.push(Issue::error(

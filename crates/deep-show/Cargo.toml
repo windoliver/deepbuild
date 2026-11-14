@@ -74,6 +74,11 @@ test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #533: the logic module's test builds (the #533 acceptance README: Test features of
+# deep-show): a patch release of the shipped logic implementation in its place, and a planted
+# logic module that requires physics; #1919's `test-leave-out-physics` is the full set without it.
+test-logic-patch = []
+test-logic-needs-physics = []
 # Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
 plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
