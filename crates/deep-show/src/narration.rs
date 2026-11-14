@@ -522,6 +522,7 @@ impl Hub<'_> {
                 bus,
                 disabled: Vec::new(),
                 emitter: None,
+                synth: None,
             });
         }
         Ok(out)

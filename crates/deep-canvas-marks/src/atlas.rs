@@ -186,6 +186,22 @@ impl Grid {
         }
     }
 
+    /// #540: the cell whose area holds point `p` in the set's u, in cell units: a square's by the
+    /// floor of the position over the cell, an isometric cell's diamond by its two axes. The
+    /// position in cell units is what a path drag's segments are traversed in. `None` on a hex
+    /// grid, whose cell a point control doesn't take yet.
+    pub fn cell_at(&self, p: [f64; 2]) -> Option<[f64; 2]> {
+        let [w, h] = self.cell;
+        match self.shape {
+            Shape::Square => Some([p[0] / w, p[1] / h]),
+            Shape::Isometric => {
+                let (u, v) = (p[0] / (w / 2.0), p[1] / (h / 2.0));
+                Some([(u + v) / 2.0, (v - u) / 2.0])
+            }
+            Shape::Hex { .. } => None,
+        }
+    }
+
     /// #536: a hex cell's six neighbours, the cells at distance 1 in cube coordinates, edge 0 to 5
     /// counterclockwise on screen from the one facing +x (pointy) or between +x and −y (flat);
     /// `None` off a hex grid.

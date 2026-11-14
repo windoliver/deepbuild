@@ -1,0 +1,33 @@
+At base 9b77cd2cd (an arm64 Mac, 18 cores), on 2026-11-13, run once:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease npx vitest run --root tests/acceptance/226-oracle-redraft --no-file-parallelism --testTimeout=600000
+
+Observed: Test Files 1 failed (1), Tests 2 failed (2), 288.83 s. `cargo build --locked --bin deep-show
+--no-default-features --features full` built. In each test the judge's self-check (judgeFailsItsPlants) ran first and
+passed: the right linear and log placements pass, a point left at its numbers fails naming `point at (2, 3, 1)`, math
+y taken to world +Z fails at `along_y`, and log scales read as linear fail at `along_x`. Each test then failed at its
+named assertion that the show is presented, before any position was read:
+
+- three-scales.test.ts, "#226.c218cc0a linear: ..."
+  - Fails at: "the linear axes and their points is presented" (helpers.ts `presented`, three-scales.test.ts:92; the run
+    reported :93).
+  - deep_show answered outcome "refused", with:
+    - notice `unknown_kind` at items/axes/kind: "kind `axes3d@1` is not registered in this build; the item is skipped";
+    - error `bad_scale` at items/sx/params/range, items/sy/params/range and items/sz/params/range (data.scale: the base
+      reads a scale's range as two numbers or palette roles, so `x`, `y` and `z` are refused);
+    - error `ref_unresolved` at items/along_x/parent (the axes item was skipped, so `parent: axes` names nothing).
+
+- three-scales.test.ts, "#226.c218cc0a log twin: ..."
+  - Fails at: "the log axes and their points is presented" (helpers.ts `presented`, three-scales.test.ts:100; the run
+    reported :101).
+  - The same refusal: `unknown_kind` for `axes3d@1`; `bad_scale` at each scale's range; `ref_unresolved` at
+    items/along_x/parent.
+
+Behind those, read from the base's code: the `geometry` call has no row for a `mark.point@1` (a point has no build node,
+so it answers `ref_unresolved`), and no `mod.axes@1` is in scene3d's modifier list.
+
+After the run, one line of the test file's header comment was dropped (the upstream file's path, for the public-text
+rule), so each assertion sits one line higher than the run reported; no code changed.
+
+Type-check (observed, on the final files): `npx tsc -p tests/acceptance/226-oracle-redraft/tsconfig.json` exits 0.

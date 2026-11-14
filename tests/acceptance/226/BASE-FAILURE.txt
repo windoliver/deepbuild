@@ -1,0 +1,76 @@
+Base commit: 9b77cd2cd ("Merge pull request #2438 from windoliver/docs/cross-reference-design-lines-1112")
+Machine: macOS on Apple silicon (Mac17,10), the Metal device; the shared Mac this job ran on, one-minute load 250 to
+         340 on 18 cores throughout, so no timing could be judged here.
+Setup: npm ci and npm run build --workspaces (exit 0). Builds, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, the pinned
+       1.99.1 toolchain, all exit 0: cargo build --locked --bin deep-gpu (about 33 min under that load); --bin deep-show
+       --no-default-features --features full; the same with --features full,test-leave-out-data; --bin
+       deep-canvas-render. Each test file then built what it uses again (a no-op or a relink) and copied it out.
+Command, one file at a time, each file once:
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/226 --no-file-parallelism --testTimeout=600000 <file>
+  (scripts/lease: "DeepBuild isn't set up here (no hub token)", so each ran unleased.)
+Type-check: npx tsc -p tests/acceptance/226/tsconfig.json passes (exit 0, no output).
+
+Result: 8 files, 13 tests, all failed, each at a named assertion; none at a load error, a TypeError or a crash outside
+the code under test.
+
+ac1-point-at-its-numbers.test.ts
+  AC1 #226.c218cc0a with domains [−4, 4], lengths [8, 8, 8] m and up: z, the point ... sits at world (2, 1, −3) ...
+    AssertionError: the point on the axes: the frame's `world` (README: Assumed surfaces 3) is an object, got
+    undefined
+    (view3d drew the frame and answered; it has no `world` report)
+
+ac2-labels-face-camera.test.ts
+  AC2 #226.1adcd447 at each of 36 azimuths through a 360° orbit every tick label faces the camera ...
+    AssertionError: frame 0 (azimuth 0°): the frame's `axes` (README: Assumed surfaces 2) is an array, got undefined
+
+ac3-log-z-refuses-zero.test.ts
+  AC3 #226.88f58ce5 a point set on axes with a log z scale is refused for its row at z = 0, naming the row ...
+    AssertionError: an error issue names the row r3 of pts: [the refusal's errors are bad_scale on
+    items/xs|ys|zs/params/range: the base's scale@1 takes no range x, y or z]
+
+ac4-move-with-axes.test.ts
+  AC4 #226.a8945cc1 moving the axes by 1 m moves the surface and the point parented to them by 1 m ...
+    AssertionError: the move: view3d is answered, not refused: {"code":"out_of_range","reason":
+    "items/surface/modifiers/0/kind"}  (mod.axes@1 is no modifier kind at the base)
+  AC4 #226.a8945cc1 a planted mod.axes@1 that applies the axes' transform as well as their scales ...
+    AssertionError: deep-gpu run --planted axes_mod_applies_transform exits 0 (no signal); stdout:
+    {"ok":false,"code":"bad_input"}  (the base doesn't know the planted name)
+
+ac5-no-edge-scene3d-to-data.test.ts (redrafted once before commit, then run once more; see below)
+  AC5 #226.58ad6172 a build with scene3d and without data seals, and scene3d's interface digest is the same ...
+    AssertionError: the full build's data module fills mod.axes@1 in the core's modifier@1: expected [] to deeply
+    equal [ 'data' ]
+    (before it: the build without data sealed with scene3d and without data, and the full build holds data)
+  AC5 #226.58ad6172 a document with axes3d@1 on the build without data is refused with module_missing, naming data
+    AssertionError: an error issue on the axes item is module_missing, naming data: [the errors are module_missing on
+    items/xs|ys|zs/kind, "kind `scale@1` is evaluated by the data module, which this build lacks"; the axes item
+    itself is skipped as an unknown kind]
+  The first draft asked only for "an error issue that is module_missing, naming data", and at the base the scales'
+  own module_missing met it, so that test failed later, at the full build's control (axes3d@1 skipped as
+  unknown_kind). The redraft asks that the module_missing issue be on the axes item (its ids or path), so a wrong
+  program that refuses only the scales fails; this commit holds the redraft, and the line above is its run.
+
+ac6-ticks-as-2d-axis.test.ts
+  AC6 #226.86722d38 at 20 sampled times the axes' x ticks and opacities equal a 2D axis@1's ...
+    AssertionError: t = 1/20 s: the frame's `axes` (README: Assumed surfaces 2) is an array, got undefined
+  AC6 #226.86722d38 a planted axes3d with a tick rule of its own ...
+    AssertionError: deep-gpu run --planted axes3d_own_tick_rule exits 0 (no signal); stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac7-budgets.test.ts
+  AC7 #226.6a40f5c8 an item carrying mod.axes@1 maps through its scales only in frames where it or a scale changes ...
+    AssertionError: the still axes: view3d is answered, not refused: {"code":"out_of_range","reason":
+    "items/surface/modifiers/0/kind"}
+  AC7 #226.6a40f5c8 the budgets, recorded against the merge base and judged on the reference Mac ...
+    AssertionError: benchmarks/budgets.json has the task canvas-axes3d: expected undefined to be defined
+
+ac8-taste.test.ts
+  AC8 #226.6f3a3161 the run writes the axes at four azimuths, a tick entering the x domain ...
+    AssertionError: the orbit: view3d is answered, not refused: {"code":"out_of_range","reason":
+    "items/surface/modifiers/0/kind"}
+    (nothing was written; the empty docs/evidence/226/ folder the test made was removed, since this job commits
+    nothing outside its folders)
+
+Not run here: the timings of ac7-budgets (this machine can't judge one under its load, and the base has no task) and
+the planted programs' failures (the base knows none of the three names). Nothing in this suite was observed passing on
+the base beyond the preconditions named above.

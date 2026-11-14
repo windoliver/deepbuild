@@ -59,7 +59,7 @@ fn label_vs(
 fn label_fs(in: LabelOut) -> @location(0) vec4<f32> {
     let first = round(in.uv * vec2<f32>(textureDimensions(label_atlas).xy));
     let t = vec2<i32>(first + floor(in.pos.xy - in.corner));
-    let a = textureLoad(label_atlas, t, i32(in.page), 0).r;
+    let a = textureLoad(label_atlas, t, i32(in.page), 0).r * unpack4x8unorm(in.color).a;
     if a <= 0.0 || hidden(in.pos.xy, in.pos.z) {
         discard;
     }

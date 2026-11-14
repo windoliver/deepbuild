@@ -42,7 +42,8 @@ pub struct Host {
     validated: BTreeMap<(String, String), Value>,
     /// A planted wrong first-party layout (#415).
     planted: Planted,
-    /// Each admitted pack's layouts as `data.layout@1` entries, origin `pack` (#415).
+    /// Each admitted pack's layouts as `data.layout@1` entries, origin `pack` (#415), and its
+    /// synth presets as `synth.preset@1` entries (#204).
     pub layout_entries: Vec<SealedEntry>,
 }
 
@@ -264,6 +265,27 @@ impl Host {
                 });
             }
             rows.push(json!({"name": name, "state": if admitted { "admitted" } else { "refused" }, "twins": judged}));
+        }
+        // #204: each preset in the pack's `presets` is an entry of `synth.preset@1`, named as a
+        // document names it, `<pack>.<name>@<major>`; the media module's field check admitted it.
+        if let Some(reg) = sealed.registry(deep_canvas_media::synth::REGISTRY) {
+            let pack_name = manifest["name"].as_str().unwrap_or_default();
+            for (key, preset) in manifest["presets"].as_object().into_iter().flatten() {
+                let name = format!("{pack_name}.{key}");
+                let since = "R6".to_string();
+                entries.push(SealedEntry {
+                    kit: reg.def.run_kit(&name, preset),
+                    registry: reg.def.name.clone(),
+                    origin: "pack",
+                    module: String::new(),
+                    pack: pack.id.text(),
+                    digest: entry_digest(&reg.def.name, &name, preset, &since),
+                    value: preset.clone(),
+                    name,
+                    since,
+                    twin: None,
+                });
+            }
         }
         for e in &pack.entries {
             let Some(role) = sealed.registry(&e.registry).and_then(|r| r.def.program) else {

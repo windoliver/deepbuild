@@ -11,7 +11,7 @@ use serde_json::Value;
 /// A baked scalar output: the step length in flicks, whether it blends, and each step that wrote
 /// it with the value written, in step order.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Read {
+pub struct Read {
     every: i64,
     linear: bool,
     steps: Vec<(i64, f64)>,
@@ -19,7 +19,7 @@ pub(crate) struct Read {
 
 impl Read {
     /// The bake's `column`, or `None` where it isn't one scalar f64.
-    pub(crate) fn of(column: &Value) -> Option<Read> {
+    pub fn of(column: &Value) -> Option<Read> {
         if column.get("type")? != "f64" || column.get("count")?.as_u64() != Some(1) {
             return None;
         }
@@ -47,7 +47,7 @@ impl Read {
     }
 
     /// Its value at document time `t` (flicks): 0 before its first write.
-    pub(crate) fn at(&self, t: i64) -> f64 {
+    pub fn at(&self, t: i64) -> f64 {
         let k = t.div_euclid(self.every);
         let i = self.steps.partition_point(|s| s.0 <= k);
         let Some(&(step, v)) = i.checked_sub(1).map(|i| &self.steps[i]) else {
@@ -58,6 +58,11 @@ impl Read {
         }
         let before = i.checked_sub(2).map_or(0.0, |j| self.steps[j].1);
         before + (t - k * self.every) as f64 / self.every as f64 * (v - before)
+    }
+
+    /// #204: its step, in flicks.
+    pub fn every(&self) -> i64 {
+        self.every
     }
 
     /// Every value it takes: the hull of 0 and what it wrote.
