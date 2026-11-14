@@ -1,0 +1,33 @@
+# The #548 acceptance suite's Rust logic program (criterion 6): the flock item's program as an agent builds it, for
+# wasm32-unknown-unknown, against the item's bindings that deep_kinds writes. It ships without them: helpers.ts copies
+# this folder to target/acceptance-548-flock/<tag>/, writes the bindings deep_kinds gave as src/regions.rs and runs
+#   cargo build --locked --release --target wasm32-unknown-unknown [--features wrong_score]
+# there. Test tooling only, outside the workspace (the empty [workspace] table), no dependencies, sharing nothing with
+# the code under test. The feature `wrong_score` adds the line that reads `score` as f64, which must not build.
+[package]
+name = "acceptance-548-flock"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+wrong_score = []
+
+[profile.release]
+opt-level = 1
+debug = 0
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+strip = false
+lto = false
+codegen-units = 1
+incremental = false
+
+[workspace]
