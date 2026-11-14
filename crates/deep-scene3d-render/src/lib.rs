@@ -33,6 +33,7 @@ pub mod status;
 pub mod surface;
 mod sway;
 pub mod targets;
+mod ties;
 mod tint;
 pub mod water;
 
@@ -297,6 +298,10 @@ pub struct Counts {
     pub local_maps: Vec<local::Report>,
     /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
     pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
+    /// #538: per instancer fed by logic and per plate with overlays, the CPU time in ms from the
+    /// start of writing this frame's changed slot records (or overlay cells) to the return of the
+    /// queue's write of them: a proof reading of the upload's cost.
+    pub upload_ms: BTreeMap<String, f64>,
 }
 
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
@@ -839,7 +844,12 @@ struct SegmentRecord {
     flags: u32,
     /// A mesh-edge line's dash and gap in its size space, as two f16 (#1640), or 0.
     dash: u32,
+    /// Its alpha at each end, as two f16: a trail's fade (#450), else 1 and 1.
+    fade: u32,
 }
+
+/// Two f16 ones: a segment drawn at its full alpha.
+const OPAQUE_ENDS: u32 = 0x3c00_3c00;
 
 /// `x` ≥ 0 as an IEEE half's bits, its mantissa cut toward zero and capped at the largest half;
 /// 0 below the smallest normal half, which `unpack2x16float` reads back.
@@ -963,77 +973,6 @@ fn solid_record(
         specular,
         op,
     }
-}
-
-/// Each solid's tie rank (#421, #428): only solids whose bounds overlap can share a face, so
-/// each takes, in ID order, the least rank no overlapping solid of an earlier ID holds. Two
-/// solids that could tie always differ and keep their order every frame, while the depth push
-/// stays a few ranks deep, so a thin part just in front of another is never pushed behind it.
-fn tie_ranks<'a>(solids: impl Iterator<Item = &'a Solid>) -> BTreeMap<String, u32> {
-    const TOUCH: f64 = 1e-5;
-    let mut list: Vec<(&str, [f64; 3], [f64; 3])> = solids
-        .map(|s| {
-            let corners = match &s.mesh {
-                Some(m) => {
-                    let [lo, hi] = m.bounds();
-                    (0..8)
-                        .map(|c| {
-                            let p = [0, 1, 2].map(|k| if c >> k & 1 == 0 { lo[k] } else { hi[k] });
-                            [0, 1, 2].map(|r| {
-                                let m = &s.model[r];
-                                m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3]
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                }
-                None => deep_canvas_scene3d::scene::corners(&s.model),
-            };
-            let mut lo = [f64::INFINITY; 3];
-            let mut hi = [f64::NEG_INFINITY; 3];
-            for c in corners {
-                for k in 0..3 {
-                    lo[k] = lo[k].min(c[k] - TOUCH);
-                    hi[k] = hi[k].max(c[k] + TOUCH);
-                }
-            }
-            (s.id.as_str(), lo, hi)
-        })
-        .collect();
-    list.sort_unstable_by(|a, b| a.0.cmp(b.0));
-    let n = list.len();
-    let mut by_x: Vec<usize> = (0..n).collect();
-    by_x.sort_unstable_by(|a, b| list[*a].1[0].total_cmp(&list[*b].1[0]));
-    let mut earlier: Vec<Vec<usize>> = vec![Vec::new(); n];
-    let mut active: Vec<usize> = Vec::new();
-    for &i in &by_x {
-        active.retain(|&j| list[j].2[0] >= list[i].1[0]);
-        for &j in &active {
-            if (1..3).all(|k| list[i].1[k] <= list[j].2[k] && list[j].1[k] <= list[i].2[k]) {
-                earlier[i.max(j)].push(i.min(j));
-            }
-        }
-        active.push(i);
-    }
-    let mut ranks = vec![0u32; n];
-    let mut used = Vec::new();
-    for i in 0..n {
-        used.clear();
-        used.extend(earlier[i].iter().map(|&j| ranks[j]));
-        used.sort_unstable();
-        let mut r = 0;
-        for &u in &used {
-            if u == r {
-                r += 1;
-            } else if u > r {
-                break;
-            }
-        }
-        ranks[i] = r;
-    }
-    list.iter()
-        .zip(ranks)
-        .map(|((id, ..), r)| (id.to_string(), r))
-        .collect()
 }
 
 /// A record's flag: a cast-only level drawn inside its surface by its inset (#425).
@@ -1168,6 +1107,12 @@ fn drawn_lobes(s: &Solid, l: &light::Lobes) -> light::Lobes {
 
 fn pack(c: [u8; 3]) -> u32 {
     u32::from_le_bytes([c[0], c[1], c[2], 255])
+}
+
+/// [`pack`] with the opacity a mark is faded to in its alpha byte (#226), 255 when it isn't.
+fn faded_pack(c: [u8; 3], opacity: Option<&f64>) -> u32 {
+    let a = opacity.map_or(255, |o| (o.clamp(0.0, 1.0) * 255.0).round() as u8);
+    u32::from_le_bytes([c[0], c[1], c[2], a])
 }
 
 fn v4(v: [f64; 3], w: f64) -> [f32; 4] {
@@ -1811,8 +1756,9 @@ pub struct Renderer {
     /// a frame draws a per-pixel item.
     oit: oit::Oit,
     oit_pipelines: Option<[wgpu::RenderPipeline; 2]>,
-    /// Each solid's rank by ID; and which way the planted ties_by_submission submits this frame.
-    ties: BTreeMap<String, u32>,
+    /// Each solid's rank by ID (#421), ranked again each frame (#450); and which way the planted
+    /// ties_by_submission submits this frame.
+    ties: crate::ties::Ties,
     flip: bool,
     tone_buffer: wgpu::Buffer,
     /// What each per-frame uniform last uploaded (#1903).
@@ -2164,8 +2110,8 @@ const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
 ];
 /// A line's segment records, with its dash (#1640).
-const LINE: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
-    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32
+const LINE: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32, 6 => Uint32
 ];
 const POINT: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
@@ -3300,7 +3246,7 @@ impl Renderer {
             sheen_written: false,
             oit,
             oit_pipelines: None,
-            ties: BTreeMap::new(),
+            ties: Default::default(),
             flip: false,
             tone_buffer,
             written: Uniforms::default(),
@@ -4311,6 +4257,7 @@ impl Renderer {
                     pick: 0,
                     flags,
                     dash: 0,
+                    fade: OPAQUE_ENDS,
                 };
                 set.push(&s.id, bytemuck::bytes_of(&record));
             }
@@ -4561,20 +4508,10 @@ impl Renderer {
             self.names
                 .extend(["scene3d.resolve", "scene3d.per_pixel_sorted"]);
         }
-        // Each solid's rank by ID across the frame: coplanar opaque ties go to the first (#421).
-        // Ranked again only when the frame's solids change, so a frame that moves them allocates
-        // nothing.
-        // A culled batch's elements tie by index order alone, the later on top (#484).
-        let solids = scene
-            .layers
-            .iter()
-            .flat_map(|l| &l.solids)
-            .filter(|s| s.batch == 0);
-        let same = solids.clone().count() == self.ties.len()
-            && solids.clone().all(|s| self.ties.contains_key(&s.id));
-        // Under a drawn look a rank reads the frame alone, so seeking equals playing (#149).
-        if (!same || look.drawn.is_some()) && !self.planted.ties_by_submission {
-            self.ties = tie_ranks(solids);
+        // Each solid's rank by ID across the frame: coplanar opaque ties go to the first (#421),
+        // ranked from where the solids stand this frame, so seeking equals playing (#149, #450).
+        if !self.planted.ties_by_submission {
+            self.ties.rank(scene, None);
         }
         self.flip = !self.flip;
         self.adjusts.clear();
@@ -4605,6 +4542,7 @@ impl Renderer {
         if self.tints.upload(device, &scene.tints, keep) {
             self.rebind_lights(device);
         }
+        self.counts.upload_ms.extend(self.tints.upload_ms.clone());
         for layer in &scene.layers {
             self.prepare_batch(device, layer, &scene.camera);
         }
@@ -5103,27 +5041,11 @@ impl Renderer {
         {
             return self.prepare(device, scene, look);
         }
-        // Under a drawn look a tie rank is a function of the frame, so a part the move changed
-        // rewrites too, and a frame draws the same however it was reached (#149).
+        // A tie rank is a function of the frame, so a part whose rank the move changed rewrites
+        // too, and a frame draws the same however it was reached (#149, #450).
         let mut moved = moved.to_vec();
-        let ties = look.drawn.as_ref().map(|_| {
-            tie_ranks(
-                scene
-                    .layers
-                    .iter()
-                    .flat_map(|l| &l.solids)
-                    .filter(|s| s.batch == 0),
-            )
-        });
-        if let Some(ties) = ties.filter(|t| *t != self.ties) {
-            for (l, layer) in scene.layers.iter().enumerate() {
-                for (i, s) in layer.solids.iter().enumerate() {
-                    if ties.get(&s.id) != self.ties.get(&s.id) && !moved.contains(&(l, i)) {
-                        moved.push((l, i));
-                    }
-                }
-            }
-            self.ties = ties;
+        if !self.planted.ties_by_submission {
+            self.ties.rank(scene, Some(&mut moved));
         }
         let moved = moved.as_slice();
         // A moved part keeps its lobes' entry in the frame's lobe table (#428); one whose lobes
@@ -5161,7 +5083,7 @@ impl Renderer {
             else {
                 continue;
             };
-            let tie = self.ties.get(&s.id).copied().unwrap_or(0);
+            let tie = self.ties.ranks.get(&s.id).copied().unwrap_or(0);
             if let Some(set) = batch.solids.get_mut(&set_key) {
                 let record = solid_record(
                     s,
@@ -6019,7 +5941,7 @@ impl Renderer {
                 Some(m) => self.built_mesh(device, s.shape, m),
                 None => self.mesh(device, s.shape),
             }
-            let tie = self.ties.get(&s.id).copied().unwrap_or(0);
+            let tie = self.ties.ranks.get(&s.id).copied().unwrap_or(0);
             // A see-through part blends through its material operator (#431); the other
             // see-through kinds still refuse one.
             let op = self.material_op(
@@ -6282,7 +6204,13 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            let started = std::time::Instant::now();
             set.finish(device, &mut next, &mut written);
+            if layer.fed.contains_key(&key.3) {
+                let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
+                let ms = started.elapsed().as_secs_f64() * 1000.0;
+                *self.counts.upload_ms.entry(owner.to_string()).or_default() += ms;
+            }
             for (item, e) in set.uploaded_elements().filter(|_| key.3 != 0) {
                 // #537: a fed slot whose parts sit in several batches is one element.
                 if layer.fed.contains_key(&key.3) {
@@ -6347,7 +6275,7 @@ impl Renderer {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
                     b: v4(seg.b, seg.wb),
-                    color: pack(l.color),
+                    color: faded_pack(l.color, layer.fades.get(&l.id)),
                     pick: picks[&l.id],
                     // A mesh-edge line sits a hair toward the camera, so the faces whose
                     // edges it draws don't hide it; one drawn over everything skips depth.
@@ -6359,6 +6287,11 @@ impl Renderer {
                         | (u32::from(seg.hidden) << 5)
                         | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
+                    fade: l
+                        .trail
+                        .as_ref()
+                        .and_then(|d| d.alpha.get(k))
+                        .map_or(OPAQUE_ENDS, |a| half_bits(a[0]) | (half_bits(a[1]) << 16)),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }
@@ -6411,7 +6344,7 @@ impl Renderer {
                     uv: [texel(a.x), texel(a.y), texel(a.x + a.w), texel(a.y + a.h)],
                     right: v4(l.axes[0], half[0]),
                     up: v4(l.axes[1], half[1]),
-                    color: pack(l.color),
+                    color: faded_pack(l.color, layer.fades.get(&l.id)),
                     pick: picks[&l.id],
                     flags: u32::from(l.world)
                         | (facing << 1)

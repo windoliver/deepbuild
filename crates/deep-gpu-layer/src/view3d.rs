@@ -121,6 +121,9 @@ struct Args {
     /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
     /// (#2016).
     sway: Vec<String>,
+    /// #226: each frame reports the 3D axes' ticks, and the drawn vertices of these items.
+    axes: bool,
+    world: Vec<String>,
     /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
@@ -383,7 +386,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
             None => return Err(bad("sway lists item IDs")),
         }
     }
+    let world = call["world"].as_array().into_iter().flatten();
+    let world: Option<Vec<String>> = world.map(|v| v.as_str().map(str::to_string)).collect();
     Ok(Args {
+        axes: call["axes"].as_bool().unwrap_or(false),
+        world: world.ok_or_else(|| bad("world lists item IDs"))?,
         packs,
         evaluate,
         sway,
@@ -1014,6 +1021,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         p.ui = Some(ui.clone());
     }
     let mut labels = Labels::new();
+    // #226: what the axes' deform mapped, kept between frames; the planted host keeps nothing.
+    let memo = std::cell::RefCell::new(deep_canvas_scene3d::contributed::Memo::default());
+    let mut axes_mapped: Vec<String> = Vec::new();
     labels.fixed_em = app.planted == Some(Planted::LabelMask);
     let mut frames = Vec::new();
     // Whether any frame drew an object's outline.
@@ -1179,10 +1189,33 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             deep_canvas_physics::written::write(&mut composed, t);
             baked.settle(&mut composed, t);
-            let outlines = &pack_sealed()?.outlines;
+            let mut frame_extra = Map::new();
+            if app.planted == Some(Planted::AxesModMapsEveryFrame) {
+                *memo.borrow_mut() = Default::default();
+            }
+            let plant = crate::axes::plant_name(app.planted);
+            let outlines = deep_canvas_scene3d::contributed::Fills {
+                memo: Some(&memo),
+                ..deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant)
+            };
             let mut scene =
                 evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
                     .map_err(|r| refused(r.code, r.path))?;
+            // #450: mesh particles draw through an instancer's columns, read off the scene.
+            if let Some(fed) =
+                crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
+            {
+                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
+            }
+            axes_mapped = memo.borrow_mut().take_mapped();
+            if args.axes {
+                let axes = crate::axes::report(&scene, &composed, t, plant)?;
+                frame_extra.insert("axes".into(), axes);
+            }
+            if !args.world.is_empty() {
+                frame_extra.insert("world".into(), crate::axes::world(&scene, &args.world));
+            }
             if drops_dispersion {
                 scene.plant_drops_dispersion();
             }
@@ -1304,6 +1337,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .iter()
                 .flat_map(|l| &l.solids)
                 .any(|s| s.stroke.is_some());
+            // #450: the planted trail, then each asked trail as it draws.
+            crate::trails::plant(&mut scene, app.planted, t);
+            let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
@@ -1835,6 +1871,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 });
             }
             let mut frame = Map::new();
+            frame.extend(frame_extra);
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
             // What each stepped operator's carried output holds as this frame drew (#252).
@@ -1847,6 +1884,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             if args.timings {
                 frame.insert("wall_ms".into(), json!(wall_ms));
+                // #538: each fed instancer's and overlaid plate's upload time this frame.
+                frame.insert("upload_ms".into(), json!(drawn.counts.upload_ms));
             }
             frame.insert("samples".into(), samples_report);
             frame.insert(
@@ -1879,6 +1918,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("values".into(), values);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            frame.extend(trails.map(|p| ("trails".to_string(), p)));
             frame.insert("selection".into(), presented);
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
@@ -2071,6 +2111,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("axes_mapped".into(), json!(axes_mapped));
                 frame.insert(
                     "terrain_tiles_selected".into(),
                     json!(selection.tiles_selected),
