@@ -30,7 +30,19 @@ const UNITS: u8 = 128;
 pub const MAX_UNITS: usize = 256;
 
 /// The record's length.
-const SIZE: usize = 248;
+pub const SIZE: usize = 248;
+
+/// A point control's hover as a preview reads it (Logic: preview): a point entry's record, flags
+/// bit 0 set for a cell, x and y the cell's; none is 248 zero bytes.
+pub fn hover(cell: Option<[f64; 2]>) -> Vec<u8> {
+    let mut b = vec![0u8; SIZE];
+    if let Some([cx, cy]) = cell {
+        b[3] = 1;
+        b[8..16].copy_from_slice(&cx.to_le_bytes());
+        b[16..24].copy_from_slice(&cy.to_le_bytes());
+    }
+    b
+}
 
 /// One point entry's value, as its JSON form holds it: absent keys and nulls are none.
 #[derive(Clone, Debug, PartialEq)]

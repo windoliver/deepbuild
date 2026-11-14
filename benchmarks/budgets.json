@@ -1517,6 +1517,19 @@
       ]
     },
     {
+      "id": "page-export",
+      "command": [
+        "node",
+        "benchmarks/page.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #169 first measurement (#169.e6c2fc38): the merge base has no playable page. One `deep-show run` exports a 2D walkthrough of four stages, an explode toggle and three finishes (24 states, 144 edges) as a page at 320 × 180 and 30 fps, each state's still and each edge's clip rendered through the export; it prints the receipt's timing.wall and bytes. The criterion's limits (the 1080p30 walkthrough under 4 minutes and 250 MB, the player under 100 KB) are judged by tests/acceptance/169/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#169.e6c2fc38"
+      ]
+    },
+    {
       "id": "physics-module",
       "command": [
         "node",
@@ -1553,6 +1566,26 @@
       "initialReason": "Issue #524 first measurement: the merge base steps no soft body and has no lab documents or such task. Release deep-physics times each of the rope bridge and banner labs' 600 steps, the steps their goldens record, on its own clock, the 95th percentile a run, one warm-up and five runs each in a fresh process. physics.mjs judge holds each target on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#524.d7f0282a"
+      ]
+    },
+    {
+      "id": "canvas-logic-budgets",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "logic-budgets"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "occurrences_64_ms": 0.05,
+        "linear_1000_vec3_ms": 0.1,
+        "preview_4mib_ms": 1,
+        "checkpoint_3_pages_ms": 0.5
+      },
+      "initialReason": "Issue #548 first measurement (#548.154ef157): the merge base has no previews, reports no checkpoint store time and has no such task. One long-lived release deep-logic per run reads 600 steps of an item emitting 64 occurrence rows a step less 600 of its twin with the same stores and no rows, per step; the median frame of a 10 Hz swarm's live view writing 1,000 vec3 elements linear less the same swarm held; the median frame of a hover change on a 4 MiB item's preview less a still frame's, no step in either; and the median store time the ring reports of a 480-step bake's checkpoints of 3 written pages of a 32 MiB memory. Five runs after a warm-up one; canvas.mjs judge holds each reading to its target on a reference Mac. The counters (an idle turn-clock item and a piece using none of these do no work per frame) are tests/acceptance/548's. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#548.154ef157"
       ]
     }
   ]
