@@ -17,6 +17,7 @@ mod determinism;
 mod efficiency;
 mod evidence;
 mod export;
+mod extended;
 mod familiar;
 mod film;
 mod film_audit;
@@ -47,6 +48,7 @@ mod net;
 mod packs;
 mod physics;
 mod picks;
+mod pixels;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -829,7 +831,17 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "kit" => return Some(Call::Kit(Box::new(kit::KitCall::parse(c)?))),
         "manifest" => return Some(Call::Manifest),
         "catalog" => return Some(Call::Catalog),
-        "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
+        "verdict" => {
+            // #1938: `against`, a verdict another run made on the claim, is an object or absent.
+            let against = match c.get("against") {
+                None => None,
+                Some(v) => Some(v.as_object().map(|_| v.clone())?),
+            };
+            return Some(Call::Verdict(
+                c.get("claim")?.as_str()?.to_string(),
+                against,
+            ));
+        }
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
         "answer" => {
             return Some(Call::Answer {
@@ -1328,6 +1340,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
                 "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
                 "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
+                "pixel_checks_hold_anywhere" => Planted::PixelChecksHoldAnywhere,
+                "regression_asks_every_verdict" => Planted::RegressionAsksEveryVerdict,
+                "loop_checks_cached_by_doc" => Planted::LoopChecksCachedByDoc,
+                "stale_fix_never_rebases" => Planted::StaleFixNeverRebases,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,

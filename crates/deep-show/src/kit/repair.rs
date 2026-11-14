@@ -3,7 +3,9 @@
 //! fix}` runs fault, issue, apply, rerun and PASS; a stale fix rebases when no ID it touches
 //! changed since its base; a fix after another writer changed another path of the same item is a
 //! conflict naming both writers; the second of two fixes on one base is refused naming both
-//! writers; and a fix that fails its dry run is refused with its code, changing nothing.
+//! writers; and a fix that fails its dry run is refused with its code, changing nothing. A fault
+//! a check kind names is judged by a verdict on that check (#1941), and its fix, applied and
+//! then undone by its fault planted back, stops the loop with one ask.
 
 use serde_json::{json, Value};
 
@@ -55,8 +57,10 @@ pub fn play_scene(hub: &Hub<'_>, scene: &Value) -> Vec<Value> {
         doc_entry["document"] = d.clone();
     }
     input["docs"] = json!({ DOC: doc_entry });
-    if let Some(q) = scene.get("quotas") {
-        input["quotas"] = q.clone();
+    for key in ["quotas", "claims"] {
+        if let Some(v) = scene.get(key).filter(|v| !v.is_null()) {
+            input[key] = v.clone();
+        }
     }
     // The packs a scene installs before its first call, each folder under this crate (#402: the
     // core's `derived_item` fixture patches a derived item of an installed pack's recipe).
@@ -114,8 +118,25 @@ fn send(by: &str, n: u32, base: u64, ops: &Value, dry_run: bool) -> Value {
     c
 }
 
-fn read() -> Value {
-    json!({"call": "read", "doc": DOC})
+/// The claim a check-kind fault is judged on: the scene's document, its one requirement the
+/// fixture's own check (#1941).
+const CLAIM: &str = "claim:01JB1941K000000000000001";
+
+/// The rerun after a call: the revision's validation issues, or, for a check-kind fault, a verdict.
+fn rerun(f: &Fault) -> Value {
+    match f.check {
+        Some(_) => json!({"call": "verdict", "claim": CLAIM}),
+        None => json!({"call": "read", "doc": DOC}),
+    }
+}
+
+/// A rerun's reply as a read's: a verdict's requirement's issues and its revision.
+fn seen(reply: &Value) -> Value {
+    if reply.get("requirements").is_none() {
+        return reply.clone();
+    }
+    let rev = &reply["key"]["revisions"][0];
+    json!({"issues": reply["requirements"][0]["issues"], "rev": rev["rev"], "hash": rev["hash"]})
 }
 
 /// The planted fault a module's repair loop runs: its document, with every item in alpha's
@@ -128,6 +149,8 @@ struct Fault {
     fix: Value,
     /// Another field of the fault's item, which you change in `stale_same_item`.
     other: (String, Value),
+    /// The fixture's own check, when a check kind names the fault and its fix (#1941).
+    check: Option<Value>,
 }
 
 /// The layers every repair document holds.
@@ -175,12 +198,43 @@ fn fault_of(hub: &mut Hub<'_>, ctx: &Ctx<'_>) -> Option<Fault> {
             continue;
         }
         let issues = fixture_issues(hub, f);
-        let Some(issue) = issues.iter().find(|i| i.get("fix_ops").is_some()) else {
+        // A validation issue, which a `read` reruns, or one of a check kind the fixture names
+        // that judges evaluated data, which a verdict reruns (#1941); a pixel check's frames
+        // need a GPU the kit may not have.
+        let sealed = &hub.startup.sealed;
+        let check_of = |i: &Value| {
+            f.checks()
+                .into_iter()
+                .find(|c| c.get("kind") == Some(&i["check"]))
+                .filter(|c| {
+                    c.get("kind")
+                        .and_then(Value::as_str)
+                        .and_then(|k| sealed.check_kind(k))
+                        .is_some_and(|(_, k)| k.frames.is_none())
+                })
+                .map(|c| Value::Object(c.clone()))
+        };
+        let Some((issue, check)) = issues.iter().find_map(|i| {
+            if i.get("fix_ops").is_none() {
+                return None;
+            }
+            if i["check"] == deep_canvas::document::CHECK {
+                return Some((i, None));
+            }
+            check_of(i).map(|c| (i, Some(c)))
+        }) else {
             continue;
         };
-        let item = issue["ids"][0].as_str().unwrap_or("").to_string();
+        // The item the fix writes, which may not be the one the issue names (a camera framing
+        // a box).
+        let item = issue["fix_ops"][0]["id"]
+            .as_str()
+            .or(issue["ids"][0].as_str())
+            .unwrap_or("")
+            .to_string();
         let path = issue["path"].as_str().unwrap_or("").to_string();
-        let other = other_field(&f.document["items"][&item], &path);
+        let written = issue["fix_ops"][0]["path"].as_str().unwrap_or(&path);
+        let other = other_field(&f.document["items"][&item], written);
         return Some(Fault {
             doc: shared_doc(&f.document),
             item,
@@ -188,6 +242,7 @@ fn fault_of(hub: &mut Hub<'_>, ctx: &Ctx<'_>) -> Option<Fault> {
             code: issue["code"].as_str().unwrap_or("").to_string(),
             fix: issue["fix_ops"].clone(),
             other,
+            check,
         });
     }
     let sealed = &hub.startup.sealed;
@@ -234,6 +289,7 @@ fn fault_of(hub: &mut Hub<'_>, ctx: &Ctx<'_>) -> Option<Fault> {
         code,
         fix,
         other: (format!("items/{item}/name"), json!("Renamed by you")),
+        check: None,
     })
 }
 
@@ -283,7 +339,15 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let f = fault_of(hub, ctx)?;
     let module = ctx.module;
     let fault_json = json!({"path": f.path, "code": f.code, "fix": f.fix});
-    let scene = |calls: Vec<Value>| json!({"document": f.doc, "calls": calls});
+    let claims = f.check.as_ref().map(|c| {
+        json!({ CLAIM: {"session": "sess-alpha", "deliverables": [DOC],
+                        "requirements": [{"id": "req:01JB1941K000000000000001", "check": c}]} })
+    });
+    let scene = |calls: Vec<Value>| json!({"document": f.doc, "calls": calls, "claims": claims});
+    // Each rerun's reply read as a `read`'s.
+    let play = |hub: &Hub<'_>, calls: Vec<Value>| -> Vec<Value> {
+        play_scene(hub, &scene(calls)).iter().map(seen).collect()
+    };
     let you_box = json!([{"op": "set", "id": "kit-yours", "path": "items/kit-yours/params/box", "value": [0, 0, 28, 24]}]);
     let other = json!([{"op": "set", "id": f.item, "path": f.other.0, "value": f.other.1}]);
     let delete = json!([{"op": "delete", "id": f.item, "cascade": true}]);
@@ -307,9 +371,9 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     };
 
     // apply: fault, issue, apply, rerun, PASS.
-    let r = play_scene(
+    let r = play(
         hub,
-        &scene(vec![read(), send("alpha", 1, 0, &f.fix, false), read()]),
+        vec![rerun(&f), send("alpha", 1, 0, &f.fix, false), rerun(&f)],
     );
     let mut steps = vec!["fault"];
     let mut problems = Vec::new();
@@ -337,13 +401,13 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     judge("apply", problems, Some(steps));
 
     // stale_rebase: you change your own box; alpha's fix on base 0 rebases and applies.
-    let r = play_scene(
+    let r = play(
         hub,
-        &scene(vec![
+        vec![
             send("you", 1, 0, &you_box, false),
             send("alpha", 2, 0, &f.fix, false),
-            read(),
-        ]),
+            rerun(&f),
+        ],
     );
     let mut problems = Vec::new();
     if r[0]["outcome"] != "applied" {
@@ -362,14 +426,14 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
 
     // stale_same_item: you change another path of the fault's item; alpha's fix is a conflict
     // naming alpha and you, and leaves the document as it was.
-    let r = play_scene(
+    let r = play(
         hub,
-        &scene(vec![
+        vec![
             send("you", 1, 0, &other, false),
-            read(),
+            rerun(&f),
             send("alpha", 2, 0, &f.fix, false),
-            read(),
-        ]),
+            rerun(&f),
+        ],
     );
     let mut problems = Vec::new();
     if r[2]["outcome"] != "conflict" {
@@ -386,14 +450,14 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     judge("stale_same_item", problems, None);
 
     // conflicting: alpha's fix applies; bravo's on the same base is refused naming both.
-    let r = play_scene(
+    let r = play(
         hub,
-        &scene(vec![
+        vec![
             send("alpha", 1, 0, &f.fix, false),
-            read(),
+            rerun(&f),
             send("bravo", 2, 0, &f.fix, false),
-            read(),
-        ]),
+            rerun(&f),
+        ],
     );
     let mut problems = Vec::new();
     if r[0]["outcome"] != "applied" {
@@ -413,14 +477,14 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     judge("conflicting", problems, None);
 
     // dry_run_refused: with the item gone, the fix's dry run is refused with its code.
-    let r = play_scene(
+    let r = play(
         hub,
-        &scene(vec![
+        vec![
             send("you", 1, 0, &delete, false),
-            read(),
+            rerun(&f),
             send("alpha", 2, 1, &f.fix, true),
-            read(),
-        ]),
+            rerun(&f),
+        ],
     );
     let mut problems = Vec::new();
     if r[2]["outcome"] != "refused" {
@@ -441,7 +505,62 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     }
     judge("dry_run_refused", problems, None);
 
-    let mut run = PartRun::new(5);
+    // returned (#1941): the fix applied, then its fault planted back; the verdict finding it
+    // again stops the loop with one ask and no fix as patch ops, and the next one asks no more.
+    let back = f
+        .check
+        .as_ref()
+        .and(f.fix.as_array())
+        .filter(|ops| ops.len() == 1 && ops[0]["op"] == "set")
+        .and_then(|ops| {
+            let path = ops[0]["path"].as_str()?;
+            let was = f.doc.pointer(&format!("/{path}"))?;
+            Some(json!([{"op": "set", "id": ops[0]["id"], "path": path, "value": was}]))
+        });
+    if let Some(back) = back {
+        let r = play_scene(
+            hub,
+            &scene(vec![
+                rerun(&f),
+                send("alpha", 1, 0, &f.fix, false),
+                rerun(&f),
+                send("alpha", 2, 1, &back, false),
+                rerun(&f),
+                rerun(&f),
+            ]),
+        );
+        let mut problems = Vec::new();
+        if r[1]["outcome"] != "applied" || r[3]["outcome"] != "applied" {
+            problems.push(format!(
+                "the fix was {} and the fault planted back {}",
+                r[1]["outcome"], r[3]["outcome"]
+            ));
+        }
+        if has_fault(&seen(&r[2]), &f) {
+            problems.push("the rerun after the fix still raises the fault".into());
+        }
+        let asks = r[4]["asks"].as_array().map_or(0, Vec::len);
+        if asks != 1 {
+            problems.push(format!(
+                "the verdict finding the fixed fault again asks {asks} times, not once"
+            ));
+        }
+        let ops = r[4]["requirements"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|q| q["issues"].as_array().into_iter().flatten())
+            .any(|i| i["fix_ops"].is_array() || i["fix"].is_array());
+        if ops {
+            problems.push("the stopped loop still names a fix as patch ops".into());
+        }
+        if r[5].get("asks").is_some() {
+            problems.push("the next verdict asks again".into());
+        }
+        judge("returned", problems, None);
+    }
+
+    let mut run = PartRun::new(cases.len() as u64);
     run.cases = cases;
     run.failures = failures;
     Some(run)

@@ -1,0 +1,53 @@
+At base 7002c04af ("Merge the #1938 branch (PR #2467) as #1941's base"), on 2026-11-14, on an arm64 Mac with 18 cores and Metal (one-minute load about 210), deep-show was built at the base and every file was run there. Lines marked "observed" are what ran here.
+
+The commands the implementing session runs, at the base and after (from <worktree>):
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1941 --no-file-parallelism --testTimeout=600000
+  npx tsc -p tests/acceptance/1941/tsconfig.json
+
+Observed: `npx tsc -p tests/acceptance/1941/tsconfig.json` exits 0 (TypeScript and vitest 5.0.5 at the repo's pins, after `npm ci --ignore-scripts`). `cargo build --locked --bin deep-show --no-default-features --features full` finished in 10 min 20 s from a warm cache. The whole suite ran in 130 s: "Tests 6 failed | 8 passed (14)". No test skipped. `spans` reads all 14 test names with their IDs.
+
+Observed at the base, each test's first failing assertion:
+
+fix.test.ts (#1941.7c623121), 9 tests: 2 fail, 7 pass
+
+- "a missing texture: …" fails at its first assertion, "a missing texture: its named fix applied, document.validate passes and no other loop check regresses":
+    document.validate on a missing texture after its fix is FAIL, not PASS: {… "code":"asset_missing", "ids":[], "path":"assets/crate-texture/sha256", "what":"the asset 9c594c92… isn't in the evidence store" …}
+    document.validate on a missing texture after its fix raises document.validate asset_missing [] (error): …
+  The fix (unset the material's map) is applied as revision 1 and render-back presents it, but the envelope's `assets` still lists the texture, and document.validate reports it missing. The other eight loop checks don't regress.
+- "an item floating 0.2 m above the floor: …" passes its own assertion (the vase lowered onto the floor, the audit passes, nothing regresses), then fails at the first planted run (fix.test.ts:114, fixLoop's first `run`):
+    deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+  `loop_checks_cached_by_doc` and `floating_fix_deletes_item` are not planted names at the base.
+- The other seven (cut subject, clipped highlights, text under 4.5:1, two crates, 20 m door, reseeding fill, scene over its class) pass: each fix applied passes its check on the next render-back, and nothing regresses.
+
+stale.test.ts (#1941.2a9a26f0), 2 tests: 2 fail
+
+- "… where no ID it touches changed, rebases …" passes its own assertions (your recolour applied as revision 1, the fix applied on top as revision 2, both in the document, the audit passing), then fails at the planted run (stale.test.ts:87):
+    deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+  `stale_fix_never_rebases` is not a planted name at the base.
+- "… where an ID it touches changed, is refused as a conflict …" passes its own assertions (conflict naming alpha, you and the vase; the same revision 1, hash and document before and after; the rerun on revision 1 names (0, 0.4, 0), which, applied by you, passes) and the `rebase_by_path` check (under it the stale fix is applied), then fails at the `loop_checks_cached_by_doc` run (stale.test.ts:122):
+    deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+
+loop.test.ts (#1941.b8b6c42f), 2 tests: 1 fails, 1 passes
+
+- "a fix that brings back an issue the loop already fixed stops the loop with one ask …" fails at its first assertion after the loop's steps (loop.test.ts:123):
+    the verdict that finds the fixed issue back carries exactly one ask: []: expected +0 to be 1
+  The loop's steps hold: framing's fix applied, framing passing at revision 1, scale's fix applied, framing's loop.framing [door] back at revision 2, and no ask before it; the base raises none then either.
+- "two fixes for one revision that touch the camera apply one at a time …" passes at the base: #96's stale-base rule refuses the second fix as a conflict naming alpha and `cam`, and its fresh fix applies on revision 1. It fails on `rebase_by_path` (the base's own planted program), under which the second fix is applied, not a conflict, as the test checks.
+
+taste.test.ts (#1941.afbf01b2), 1 test: fails INCONCLUSIVE
+
+- Every scene is drawn before and after its applied fix and the 28 PNGs are written to docs/evidence/1941/ with their SHA-256s printed; then (taste.test.ts:79):
+    INCONCLUSIVE: no taste call is recorded: show the owner … and record the answer in tests/acceptance/1941/TASTE.json (README: The taste call); this is not a pass
+  The pictures this run wrote were removed from the worktree after the run (they aren't this job's to commit).
+
+Where a test's main assertions hold at the base, the base already does what the criterion asks there: #1938's checks name fixes that cure eight of the nine faults, and #96's stale-base rule rebases a stale patch, or refuses it as a conflict naming both writers with the document unchanged. Those tests fail on the base only at a planted program the base doesn't have (a scenario naming an unknown `planted` is refused `bad_input`), and each fails on the wrong program it names, as the test itself checks. The two-fixes test passes at the base; it fails on `rebase_by_path`, which the base has, as the test checks.
+
+Fixtures, as observed at the base (a scratch script outside the repo, not kept, ran each fixture by every loop check):
+- each of the nine faults FAILs its own check at revision 0 with a fix as patch ops: framing `set items/cam/params/position` (pulled back to (0, 1.978, 7.389)); exposure `set items/cam/params/exposure` 4.26; contrast `set items/caption/params/paint/fill/role` "ink"; overlap `set items/crate-b/at/pos` (0.5, 0.5, 0); floating `set items/vase/at/pos` (0, 0.3, 0); scale `set items/door/params/height` 2.4; missing texture `unset items/crate-mat/params/maps/base_color`; noise a `create` of `grain-still` and `set items/grain/visible` false; over class a `delete` of most specks;
+- every other loop check passes, or is BLOCKED where it can't judge the fixture (render.contrast `no_subject` on the 3D scenes; camera.framing `ref_unresolved` camera, render.exposure `out_of_range` subject and document.budget `not_run` on the boards), except the cut cube's render.exposure (FAIL, part of the cube in frame) and the over-class scene's rows, which all carry the document's own `over_budget`;
+- the stale fix: after you recolour the floor it is applied as revision 2; after you make the vase 0.8 m tall it is `conflict` with `conflict: {ids: [vase], writers: [{kind: agent, id: thread-alpha}, {kind: you, id: you}]}`, the read hash unchanged, and the rerun names `set items/vase/at/pos` (0, 0.4, 0); alpha's patch of it is refused `not_your_layer` (your patch took the vase), yours is applied and the audit passes; under `rebase_by_path` the stale fix is applied and the audit raises geometry.overlap [floor, vase];
+- the two fixes: the second is `conflict` naming alpha and `cam`; exposure's fix on revision 1 is the same 4.24 EV and is applied; both pass;
+- the door loop: framing's fix pulls the camera back to (0, 4.40, 96.02); at revision 2, after the door is set to 2.4 m, framing raises loop.framing [door] again with a fix that moves the camera in; no verdict carries an ask;
+- every scene draws: the screenshots were looked at for that only (not for the taste call). texture-missing's before and after are the same bytes (the renderer draws a missing map as the base colour), as are coincident-walls' (one wall drawn twice in one place); seam-moved's and grid-off's after are the same room.
