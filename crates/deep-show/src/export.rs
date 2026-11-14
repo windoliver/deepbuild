@@ -320,6 +320,9 @@ pub struct Job {
     pub notes: bool,
     /// #169: `page: {sample, orbit, still}` (or `video.page`), the playable page's options.
     pub page: Value,
+    /// #169: the page's own clips are tagged with their pixels' transfer, sRGB, so a browser
+    /// draws them as it draws the page's stills; never read from a request.
+    pub srgb: bool,
 }
 
 impl Default for Job {
@@ -350,6 +353,7 @@ impl Default for Job {
             lottie: Value::Null,
             notes: false,
             page: Value::Null,
+            srgb: false,
         }
     }
 }
@@ -518,6 +522,7 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .or_else(|| video.and_then(|v| v.get("page")))
             .cloned()
             .unwrap_or(Value::Null),
+        srgb: false,
     })
 }
 

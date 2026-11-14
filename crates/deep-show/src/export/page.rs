@@ -537,6 +537,7 @@ impl Hub<'_> {
             },
             loudness_profile: job.loudness_profile.clone(),
             session: job.session.clone(),
+            srgb: codec == "h264",
             ..Job::default()
         };
         let reply = self.export_doc(&one, form.clone());

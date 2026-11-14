@@ -232,6 +232,10 @@ impl<'a> Encoder<'a> {
                 6 => kCVImageBufferColorPrimaries_SMPTE_C,
                 _ => kCVImageBufferColorPrimaries_ITU_R_709_2,
             };
+            let transfer = match s.colr.transfer {
+                13 => kCVImageBufferTransferFunction_sRGB,
+                _ => kCVImageBufferTransferFunction_ITU_R_709_2,
+            };
             let matrix = match s.colr.matrix {
                 6 => kCVImageBufferYCbCrMatrix_ITU_R_601_4,
                 _ => kCVImageBufferYCbCrMatrix_ITU_R_709_2,
@@ -260,7 +264,7 @@ impl<'a> Encoder<'a> {
                 (
                     "TransferFunction",
                     kVTCompressionPropertyKey_TransferFunction,
-                    kCVImageBufferTransferFunction_ITU_R_709_2,
+                    transfer,
                 ),
                 ("YCbCrMatrix", kVTCompressionPropertyKey_YCbCrMatrix, matrix),
             ];
