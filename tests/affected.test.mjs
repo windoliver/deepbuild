@@ -69,6 +69,15 @@ test('a test starting a package\'s build sees that package and the ones it depen
   assert.deepEqual(fixture.none, ['packages/a/notes.txt']);
 });
 
+test('a test the change deletes is left out of the run, and the tests naming it still run', (t) => {
+  const { root, files } = repo(t, {
+    'tests/acceptance/10/names.test.mjs': "import test from 'node:test';\nimport { existsSync } from 'node:fs';\ntest('gone', () => existsSync('tests/acceptance/10/gone.test.ts'));\n",
+  });
+  const { tests } = select(root, ['tests/acceptance/10/gone.test.ts'], { files, workspace: [] });
+  assert.deepEqual(tests, ['tests/acceptance/10/names.test.mjs']);
+  assert.deepEqual(plan(root, tests).blocks.parallel.node, ['tests/acceptance/10/names.test.mjs']);
+});
+
 const cargo = {
   'Cargo.toml': '[workspace]\nmembers = ["crates/r1", "crates/r2", "crates/r3"]\nresolver = "2"\n',
   'crates/r1/Cargo.toml': '[package]\nname = "r1"\nversion = "0.0.0"\nedition = "2021"\n',

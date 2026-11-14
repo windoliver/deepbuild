@@ -18,7 +18,7 @@
 // the selection without running it. --wide also runs the suites that see the change only through another package's
 // process (select, below). --record, run on main, writes what failed into known-failures.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -247,7 +247,8 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
       const folder = path.match(/^(?:tests\/acceptance\/[^/]+|packages\/[^/]+\/test|tests)\//)?.[0];
       found = folder ? all.filter((file) => file.startsWith(folder) && isTestFile(file)) : [];
     }
-    for (const node of found) (node.startsWith('crate:') ? reached : tests).add(node.replace(/^crate:/, ''));
+    // A test the change deletes has nothing to run.
+    for (const node of found) if (node.startsWith('crate:') || existsSync(join(cwd, node))) (node.startsWith('crate:') ? reached : tests).add(node.replace(/^crate:/, ''));
     for (const node of far) wide.add(node.replace(/^crate:/, 'cargo test -p '));
     if (!found.length && !far.length && !path.endsWith('.md') && !EVERY.includes(path)) none.push(path);
   }
