@@ -769,3 +769,15 @@ mod tests {
         );
     }
 }
+
+/// #538: a cell grid row's tracking, so each glyph advances one cell whatever the mono face's own
+/// advance at `size`; none where they already match.
+pub(crate) fn cell_spacing(text: &str, cell: f64, size: f64) -> Vec<deep_text::Span> {
+    let advance = deep_text::shape::advance_em(deep_text::Role::Mono.family()).map_or(cell, |em| f64::from(em) * size);
+    let tracking = (cell - advance) as f32;
+    if tracking.abs() < 1e-3 {
+        return Vec::new();
+    }
+    let to = text.chars().count();
+    vec![deep_text::Span { from: 0, to, family: None, weight: None, italic: None, size: None, tracking: Some(tracking), shift: None, underline: false, strike: false }]
+}

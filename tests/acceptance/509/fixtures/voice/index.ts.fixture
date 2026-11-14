@@ -1,0 +1,25 @@
+// A test plug-in that adds one tool to the speech kind through deep.registerJobTool (#509 AC9 and AC13; README: The
+// test speech tool). probe.json names the tool, and for the paid one its price per run in USD; the tool is the program
+// in ./tool, which the hub runs. The helpers write probe.json, the tool's voice.json and its line.wav at test time.
+import { readFileSync } from 'node:fs';
+
+interface Probe { tool: string; cost?: { usd: number } }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+/** The speech kind's params, as the design gives them: {say, voice, rate = 1}, rate 0.5 to 2. */
+const PARAMS = {
+  type: 'object',
+  properties: { say: { type: 'string' }, voice: { type: 'string' }, rate: { type: 'number', minimum: 0.5, maximum: 2, default: 1 } },
+  required: ['say'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool('speech', {
+    tool: probe.tool,
+    params: PARAMS,
+    run: { dir: 'tool', entry: 'speak.mjs' },
+    qualification: { same_bytes: true },
+    ...(probe.cost ? { cost: probe.cost } : {}),
+  });
+}

@@ -9,7 +9,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
-import { list, object, word } from './shared.js';
+import { after, list, object, word } from './shared.js';
 
 const CHANNEL = 'channel@1';
 
@@ -19,7 +19,8 @@ export interface ChannelItem {
 }
 export interface ChannelRequest { method: 'GET' | 'POST'; path: string; body?: unknown }
 export interface ChannelReply { status: number; body: unknown }
-export interface ChannelCtx { settings: Record<string, unknown>; fetch(request: ChannelRequest): Promise<ChannelReply> }
+/** The hub's provider call; the kit's provider answers at once, so the preflight's synchronous kit check can drive a fill. */
+export interface ChannelCtx { settings: Record<string, unknown>; fetch(request: ChannelRequest): Promise<ChannelReply> | ChannelReply }
 export type Delivered = { outcome: 'delivered'; ack: string } | { outcome: 'stalled' } | { outcome: 'timed_out' } | { outcome: 'conflict'; conflict: string };
 export interface ChannelAnswer { thread_key: string; answer: string; signature?: unknown; account_link_id?: string }
 export interface Received { answers: ChannelAnswer[]; seen: string[]; conflict: string | null }
@@ -45,7 +46,7 @@ function provider(input: Input): { ctx: ChannelCtx; acks: Map<string, string> } 
   let n = 0;
   const ctx: ChannelCtx = {
     settings: { api: 'http://127.0.0.1:9' },
-    fetch: async (request) => {
+    fetch: (request) => {
       const ack = `kit-ack-${++n}`;
       acks.set(ack, JSON.stringify(request.body ?? null));
       const answers = [{ thread_key: input.item.thread_key, answer: input.answer }];
@@ -55,27 +56,30 @@ function provider(input: Input): { ctx: ChannelCtx; acks: Map<string, string> } 
   return { ctx, acks };
 }
 
-type Fault = 'none' | 'no-ack' | 'signs';
+type Fault = 'none' | 'no-ack' | 'signs' | 'shape';
 function reference(fault: Fault = 'none'): ChannelFill {
   let cursor: string | undefined;
   return {
     slot: CHANNEL, revision: 1, kind: 'chat',
-    async deliver(item, ctx) {
+    deliver(item, ctx) {
       if (fault === 'no-ack') return { outcome: 'delivered' } as unknown as Delivered;
-      const reply = await ctx.fetch({ method: 'POST', path: '/messages', body: { to: ctx.settings.to ?? null, item } });
-      const ack = (reply.body as { ack?: unknown } | null)?.ack;
-      if (reply.status === 200 && typeof ack === 'string' && ack) return { outcome: 'delivered', ack };
-      return { outcome: 'stalled' };
+      if (fault === 'shape') return { outcome: 'sent' } as unknown as Delivered;
+      return after(ctx.fetch({ method: 'POST', path: '/messages', body: { to: ctx.settings.to ?? null, item } }), (reply): Delivered => {
+        const ack = (reply.body as { ack?: unknown } | null)?.ack;
+        if (reply.status === 200 && typeof ack === 'string' && ack) return { outcome: 'delivered', ack };
+        return { outcome: 'stalled' };
+      });
     },
-    async receive(ctx) {
-      const reply = await ctx.fetch({ method: 'GET', path: `/answers${cursor === undefined ? '' : `?after=${cursor}`}` });
-      const body = reply.body as { answers?: ChannelAnswer[]; seen?: string[]; cursor?: string };
-      cursor = body.cursor ?? cursor;
-      const answers = (body.answers ?? []).map((a) => ({ thread_key: a.thread_key, answer: a.answer }));
-      if (fault === 'signs') {
-        return { answers: answers.map((a) => ({ ...a, signature: { signed: { device: 'device:01KIT', ask: a.thread_key, answer: a.answer }, sig: '' } })), seen: [], conflict: null };
-      }
-      return { answers, seen: body.seen ?? [], conflict: null };
+    receive(ctx) {
+      return after(ctx.fetch({ method: 'GET', path: `/answers${cursor === undefined ? '' : `?after=${cursor}`}` }), (reply): Received => {
+        const body = reply.body as { answers?: ChannelAnswer[]; seen?: string[]; cursor?: string };
+        cursor = body.cursor ?? cursor;
+        const answers = (body.answers ?? []).map((a) => ({ thread_key: a.thread_key, answer: a.answer }));
+        if (fault === 'signs') {
+          return { answers: answers.map((a) => ({ ...a, signature: { signed: { device: 'device:01KIT', ask: a.thread_key, answer: a.answer }, sig: '' } })), seen: [], conflict: null };
+        }
+        return { answers, seen: body.seen ?? [], conflict: null };
+      });
     },
   };
 }
@@ -84,6 +88,7 @@ const plant = (name: string, breaks: keyof typeof RULES, codes: string[], fill: 
 const plantedFills = (): PlantedFill<ChannelFill>[] => [
   plant('delivered-without-ack', 'acked', ['delivered_without_ack'], reference('no-ack')),
   plant('signed-without-signature', 'proof', ['proof_not_carried'], reference('signs')),
+  plant('answers-out-of-shape', 'shape', ['answer_unshaped'], reference('shape')),
 ];
 
 const item = (key: string, summary: string): ChannelItem => ({
@@ -104,7 +109,7 @@ function* judge(fill: ChannelFill, c: SlotCase): Generator<() => unknown, void, 
   const key = input.item.thread_key;
   const { ctx, acks } = provider(input);
   const sent = object('deliver\'s answer', yield () => fill.deliver(structuredClone(input.item), ctx));
-  if (!OUTCOMES.includes(sent.outcome as string)) throw fail(RULES.shape.message, ['enum'], `deliver of ${key} said ${JSON.stringify(sent)}`);
+  if (!OUTCOMES.includes(sent.outcome as string)) throw fail(RULES.shape.message, ['answer_unshaped'], `deliver of ${key} said ${JSON.stringify(sent)}`);
   if (sent.outcome === 'delivered') {
     const carried = typeof sent.ack === 'string' ? acks.get(sent.ack) : undefined;
     if (carried === undefined || !carried.includes(key)) {
