@@ -990,9 +990,12 @@ impl<'a> Hub<'a> {
             .flatten()
             .map(|(_, v)| v)
         {
-            if let Some(sha) = item.pointer("/params/sha256").and_then(Value::as_str) {
-                if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
-                    out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
+            // #548: a logic item's program and its debug sidecar, beside a media item's bytes.
+            for at in ["/params/sha256", "/params/program", "/params/debug"] {
+                if let Some(sha) = item.pointer(at).and_then(Value::as_str) {
+                    if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
+                        out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
+                    }
                 }
             }
         }

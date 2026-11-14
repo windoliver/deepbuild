@@ -1,0 +1,1200 @@
+#548 acceptance suite at the base: 13 of 13 tests fail, 0 pass, 0 skipped (7 of 7 files fail).
+
+Base: 54d307821f08b9aaf670a183e791ee26bc9f7d8a ("Merge pull request #2459 from windoliver/worktree-github-issue-222-725c66"),
+this worktree's HEAD, with only tests/acceptance/548/ added (untracked).
+Machine: Mac17,10, macOS arm64, under a load of 200 to 300 on 18 cores (shared).
+Command (from the checkout root, inside a throttle test grant):
+  export PATH=/opt/homebrew/opt/rustup/bin:$PATH
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/548 --testTimeout=600000 --no-file-parallelism
+  npx tsc -p tests/acceptance/548/tsconfig.json   -> exit 0
+
+A defect of the base itself, not of this suite: deep-show doesn't compile at 54d307821.
+  error[E0308]: mismatched types --> crates/deep-canvas-motion/src/cues.rs:841:25
+      ty: ParamType::Json,   (deep-canvas's kinds.rs made it `Json(&'static str)`; #222's cue lists and #1973 merged apart)
+deep-logic builds (it doesn't depend on deep-canvas-motion). So criteria 4, 5 and 6, which drive deep-show, fail at the
+base on deep-show's build, before reaching their own reason. To show those tests' own reasons, the suite was also run
+once on a throwaway `git archive` of the base under target/acceptance-548-probe/ with that one line patched to
+`ParamType::Json("[cue]")` (nothing in the worktree's sources was changed); that run is summarized under "Patched base".
+
+Why each test fails at the base (the true base run below):
+
+ac1-preview-copy.test.ts (3 tests: #548.1e9cd89b)
+  1. hovering 40 hexes ...                     check of the hex board's item is refused: logic_refused, field preview,
+                                               "preview isn't built yet in logic@1": the base has no preview.
+  2. a preview that loops forever ...          the same refusal.
+  3. an export's frames ...                    the same refusal (the board's program is built against check's layout first).
+ac2-ai-move.test.ts (1 test: #548.9932c4df)    the same refusal: no preview.
+ac3-budgets.test.ts (4 tests: #548.154ef157)
+  1. an idle item on the turn clock ...        every frame lacks `previews` and `blends` ("previews null, not 0"); the idle
+                                               item's steps are already right (no step after frame 1), so only the new
+                                               counters fail; the merge base isn't built.
+  2. a piece that uses none of these ...       the plain piece's frames lack `previews` and `blends`.
+  3. benchmarks/budgets.json ...               no task's criteria name #548.154ef157.
+  4. 64 occurrence rows ... (timings)          its guards: the emitter's bake (64 rows a step, its twin none) passes at the
+                                               base; the swarm's frames lack `blends` ("blends null, not 1,000"), so it
+                                               fails there, before any timing.
+ac4-query-arrays.test.ts (2 tests: #548.3c7384fe)   deep-show doesn't build (above). Patched base: the scenario is
+                                               refused bad_input: deep_query has no `what: "logic"` (and `logic` no `track`).
+ac5-region-map.test.ts (1 test: #548.eec090d8)      deep-show doesn't build. Patched base: bad_input, no deep_query logic read.
+ac6-bindings.test.ts (1 test: #548.d9cc61ff)        deep-show doesn't build. Patched base: bad_input, no deep_query logic read
+                                               (deep_kinds has no `bindings` op either).
+ac7-taste.test.ts (1 test: #548.7c091366)      check of the hex board's item is refused: no preview. (With a preview the
+                                               run would write the pictures and fail INCONCLUSIVE: no TASTE.json.)
+
+Patched base (target/acceptance-548-probe/, the cues.rs line patched; same command with --root on the copy): 13 of 13
+fail. ac1, ac2, ac3, ac7 as above; ac4's two tests, ac5 and ac6 each fail with
+  "deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}"
+because the base's deep_query takes `what` only as rows, summary or why.
+
+Harness checks made at the base before these runs (a throwaway probe test outside the suite, real components only):
+every program in programs.ts assembles with #544's assembler; the flock's check layout is reads wind 0 (264), gust 264
+(264), seed 528 (8), writes pos 0 (2,400), vel 2,400 (1,600), score 4,000 (4), digest d3498fd1f0344d24; its bake runs
+720 steps without a trap, 21,762 fuel at step 600 and 321 crossing rows; `judge` traps at step 412, kind divide,
+function 2, inputs exactly the trigger entry at 412 (t 4,845,120,000, value 0); `game` (its preview left out) moves the
+unit from (12, 12) to (13, 12) at step 120 and lights one `here` cell; a view of it lands frame n at n/60 s with n + 1
+steps (`play: true`), and a seek to 1.5 s lands at 91 steps; the 66 hexes 11 from the unit are all on the board, the
+route to the first hovered hex is 12 cells starting at the unit; `big` (4 MiB) runs; `pages3` with a 256 MiB ring keeps
+checkpoints 0 and 480 whole and 60 to 420 each of pages [0, 200, 400]; the hex board document (its preview and route
+set left out) is presented in deep-show (patched), a pointer move over the first hovered hex, a `view` snapshot and a
+png_seq export of 16 frames all answer; the flock and judge documents are presented and replayed by `logic`; flock-rs
+builds against a hand-written sample of the bindings (README: Sample bindings), exports regions_digest as an i32 data
+address holding the digest, and its `wrong_score` build fails "error[E0308] ... --> src/lib.rs:45:29 ... score"; the
+base's check refuses that Rust program: "regions_digest is an immutable i64 global" (README: regions_digest).
+
+Not checked at the base: anything of the preview, the frame counters, `baked`, deep_query's logic read, deep_kinds'
+bindings, the planted twins (none exists), the merge base's frames (never reached), the timings (this Mac is loaded far
+past its cores, so judgeLimit answers INCONCLUSIVE before anything is timed), deep-show screen.
+
+---------------------------------------------------------------------------------------------------------------
+The true base run's output:
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/548
+
+ ❯ ac7-taste.test.ts (1 test | 1 failed) 11577ms
+   ❯ #548.7c091366 the check run's pictures of the previewed route, and the one taste call on them (1)
+     × #548.7c091366 the check run takes the screenshots and the recording from the app at the reference window, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS 896ms
+ ❯ ac4-query-arrays.test.ts (2 tests | 2 failed) 11197ms
+   ❯ #548.3c7384fe deep_query reads a logic item's arrays, fuel and trap from its bake, and deep_show replays to the trap (2)
+     × #548.3c7384fe deep_query of the 100-boid flock at step 600 (and 300) returns its arrays and per-step fuel equal to its bake's 2689ms
+     × #548.3c7384fe for a program that traps at step 412, deep_query returns the trap's step, kind, function and the entries that step read, and deep_show replays to that step and no further 34ms
+ ❯ ac5-region-map.test.ts (1 test | 1 failed) 10866ms
+   ❯ #548.eec090d8 deep_query returns the flock's region map in declaration order with check's layout digest (1)
+     × #548.eec090d8 each read, write and emit entry with its offset, size and type in declaration order and check's digest; the planted region_map_reads_by_name fails, naming wind 1040ms
+ ❯ ac6-bindings.test.ts (1 test | 1 failed) 11093ms
+   ❯ #548.d9cc61ff the flock item's Rust bindings, a program built against them, and the refusals (1)
+     × #548.d9cc61ff the bindings list each read, write and emit at deep_query's offsets and types; a program built against them exports the layout digest, reads and writes by name; score as f64 fails to build naming the field and the line; another layout's program is refused at check naming wind; the planted bindings_fields_by_name fails, naming wind 1211ms
+ ❯ ac1-preview-copy.test.ts (3 tests | 3 failed) 12113ms
+   ❯ #548.1e9cd89b the hex board's preview runs on a throwaway copy: hovering changes nothing that is hashed, baked or recorded (3)
+     × #548.1e9cd89b hovering 40 hexes in turn changes no full-state hash, step hash, bake byte or input-track entry; the planted preview_writes_item_memory fails, naming checkpoint 120 960ms
+     × #548.1e9cd89b a preview that loops forever traps with kind fuel, its arrays clear, and the item plays on 7ms
+     × #548.1e9cd89b an export's frames draw the route array at its default, empty, while the live view draws it under the pointer 7ms
+ ❯ ac3-budgets.test.ts (4 tests | 4 failed) 2554ms
+   ❯ #548.154ef157 budgets on the reference Mac in the local preflight, compared with the merge base (4)
+     × #548.154ef157 an idle item on the turn clock adds no work per frame: no step after step 0, no preview, no blend, as the merge base 1065ms
+     × #548.154ef157 a piece that uses none of these gains no work per frame against the merge base 60ms
+     × #548.154ef157 benchmarks/budgets.json holds a task naming this criterion with its four limits, so the budget window measures it against the merge base 7ms
+     × #548.154ef157 64 occurrence rows under 0.05 ms a step, 1,000 linear vec3 elements under 0.1 ms a frame, a 4 MiB preview under 1 ms, a checkpoint of 3 written pages of 32 MiB under 0.5 ms 227ms
+ ❯ ac2-ai-move.test.ts (1 test | 1 failed) 2340ms
+   ❯ #548.9932c4df the AI's move recomputes the previewed route in its step's first frame, and a seek before it shows the earlier route (1)
+     × #548.9932c4df with the pointer still, frame 120 draws the route from the moved unit and the seek to 1.5 s the route from its earlier cell; the planted preview_runs_on_hover_only keeps the old route and fails, naming the frame 917ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-preview-copy.test.ts > #548.1e9cd89b the hex board's preview runs on a throwaway copy: hovering changes nothing that is hashed, baked or recorded > #548.1e9cd89b hovering 40 hexes in turn changes no full-state hash, step hash, bake byte or input-track entry; the planted preview_writes_item_memory fails, naming checkpoint 120
+AssertionError: check of the hex board's item (its preview included) admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"game","refusals":[{"rule":"field","what":"preview isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"preview"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:385:78
+    383| /** The layouts a `check` reply admitted, by item. */
+    384| export function admitted(reply: JsonObject, what: string): Record<stri…
+    385|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    386|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    387| }
+ ❯ program ac1-preview-copy.test.ts:36:13
+ ❯ ac1-preview-copy.test.ts:114:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  ac1-preview-copy.test.ts > #548.1e9cd89b the hex board's preview runs on a throwaway copy: hovering changes nothing that is hashed, baked or recorded > #548.1e9cd89b a preview that loops forever traps with kind fuel, its arrays clear, and the item plays on
+AssertionError: check of the hex board's item (its preview included) admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"game","refusals":[{"rule":"field","what":"preview isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"preview"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:385:78
+    383| /** The layouts a `check` reply admitted, by item. */
+    384| export function admitted(reply: JsonObject, what: string): Record<stri…
+    385|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    386|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    387| }
+ ❯ program ac1-preview-copy.test.ts:36:13
+ ❯ ac1-preview-copy.test.ts:138:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  ac1-preview-copy.test.ts > #548.1e9cd89b the hex board's preview runs on a throwaway copy: hovering changes nothing that is hashed, baked or recorded > #548.1e9cd89b an export's frames draw the route array at its default, empty, while the live view draws it under the pointer
+AssertionError: check of the hex board's item (its preview included) admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"game","refusals":[{"rule":"field","what":"preview isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"preview"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:385:78
+    383| /** The layouts a `check` reply admitted, by item. */
+    384| export function admitted(reply: JsonObject, what: string): Record<stri…
+    385|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    386|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    387| }
+ ❯ program ac1-preview-copy.test.ts:36:13
+ ❯ ac1-preview-copy.test.ts:164:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  ac2-ai-move.test.ts > #548.9932c4df the AI's move recomputes the previewed route in its step's first frame, and a seek before it shows the earlier route > #548.9932c4df with the pointer still, frame 120 draws the route from the moved unit and the seek to 1.5 s the route from its earlier cell; the planted preview_runs_on_hover_only keeps the old route and fails, naming the frame
+AssertionError: check of the hex board's item (its preview included) admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"game","refusals":[{"rule":"field","what":"preview isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"preview"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:385:78
+    383| /** The layouts a `check` reply admitted, by item. */
+    384| export function admitted(reply: JsonObject, what: string): Record<stri…
+    385|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    386|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    387| }
+ ❯ play ac2-ai-move.test.ts:29:14
+ ❯ ac2-ai-move.test.ts:60:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  ac3-budgets.test.ts > #548.154ef157 budgets on the reference Mac in the local preflight, compared with the merge base > #548.154ef157 an idle item on the turn clock adds no work per frame: no step after step 0, no preview, no blend, as the merge base
+AssertionError: the idle item's frames:
+  the idle turn-clock item, frame 1: previews null, not 0
+  the idle turn-clock item, frame 1: blends null, not 0
+  the idle turn-clock item, frame 2: previews null, not 0
+  the idle turn-clock item, frame 2: blends null, not 0
+  the idle turn-clock item, frame 3: previews null, not 0
+  the idle turn-clock item, frame 3: blends null, not 0
+  the idle turn-clock item, frame 4: previews null, not 0
+  the idle turn-clock item, frame 4: blends null, not 0
+  the idle turn-clock item, frame 5: previews null, not 0
+  the idle turn-clock item, frame 5: blends null, not 0
+  the idle turn-clock item, frame 6: previews null, not 0
+  the idle turn-clock item, frame 6: blends null, not 0
+  the idle turn-clock item, frame 7: previews null, not 0
+  the idle turn-clock item, frame 7: blends null, not 0
+  the idle turn-clock item, frame 8: previews null, not 0
+  the idle turn-clock item, frame 8: blends null, not 0
+  the idle turn-clock item, frame 9: previews null, not 0
+  the idle turn-clock item, frame 9: blends null, not 0
+  the idle turn-clock item, frame 10: previews null, not 0
+  the idle turn-clock item, frame 10: blends null, not 0
+  the idle turn-clock item, frame 11: previews null, not 0
+  the idle turn-clock item, frame 11: blends null, not 0
+  the idle turn-clock item, frame 12: previews null, not 0
+  the idle turn-clock item, frame 12: blends null, not 0
+  the idle turn-clock item, frame 13: previews null, not 0
+  the idle turn-clock item, frame 13: blends null, not 0
+  the idle turn-clock item, frame 14: previews null, not 0
+  the idle turn-clock item, frame 14: blends null, not 0
+  the idle turn-clock item, frame 15: previews null, not 0
+  the idle turn-clock item, frame 15: blends null, not 0
+  the idle turn-clock item, frame 16: previews null, not 0
+  the idle turn-clock item, frame 16: blends null, not 0
+  the idle turn-clock item, frame 17: previews null, not 0
+  the idle turn-clock item, frame 17: blends null, not 0
+  the idle turn-clock item, frame 18: previews null, not 0
+  the idle turn-clock item, frame 18: blends null, not 0
+  the idle turn-clock item, frame 19: previews null, not 0
+  the idle turn-clock item, frame 19: blends null, not 0
+  the idle turn-clock item, frame 20: previews null, not 0
+  the idle turn-clock item, frame 20: blends null, not 0: expected [ …(240) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the idle turn-clock item, frame 1: previews null, not 0",
++   "the idle turn-clock item, frame 1: blends null, not 0",
++   "the idle turn-clock item, frame 2: previews null, not 0",
++   "the idle turn-clock item, frame 2: blends null, not 0",
++   "the idle turn-clock item, frame 3: previews null, not 0",
++   "the idle turn-clock item, frame 3: blends null, not 0",
++   "the idle turn-clock item, frame 4: previews null, not 0",
++   "the idle turn-clock item, frame 4: blends null, not 0",
++   "the idle turn-clock item, frame 5: previews null, not 0",
++   "the idle turn-clock item, frame 5: blends null, not 0",
++   "the idle turn-clock item, frame 6: previews null, not 0",
++   "the idle turn-clock item, frame 6: blends null, not 0",
++   "the idle turn-clock item, frame 7: previews null, not 0",
++   "the idle turn-clock item, frame 7: blends null, not 0",
++   "the idle turn-clock item, frame 8: previews null, not 0",
++   "the idle turn-clock item, frame 8: blends null, not 0",
++   "the idle turn-clock item, frame 9: previews null, not 0",
++   "the idle turn-clock item, frame 9: blends null, not 0",
++   "the idle turn-clock item, frame 10: previews null, not 0",
++   "the idle turn-clock item, frame 10: blends null, not 0",
++   "the idle turn-clock item, frame 11: previews null, not 0",
++   "the idle turn-clock item, frame 11: blends null, not 0",
++   "the idle turn-clock item, frame 12: previews null, not 0",
++   "the idle turn-clock item, frame 12: blends null, not 0",
++   "the idle turn-clock item, frame 13: previews null, not 0",
++   "the idle turn-clock item, frame 13: blends null, not 0",
++   "the idle turn-clock item, frame 14: previews null, not 0",
++   "the idle turn-clock item, frame 14: blends null, not 0",
++   "the idle turn-clock item, frame 15: previews null, not 0",
++   "the idle turn-clock item, frame 15: blends null, not 0",
++   "the idle turn-clock item, frame 16: previews null, not 0",
++   "the idle turn-clock item, frame 16: blends null, not 0",
++   "the idle turn-clock item, frame 17: previews null, not 0",
++   "the idle turn-clock item, frame 17: blends null, not 0",
++   "the idle turn-clock item, frame 18: previews null, not 0",
++   "the idle turn-clock item, frame 18: blends null, not 0",
++   "the idle turn-clock item, frame 19: previews null, not 0",
++   "the idle turn-clock item, frame 19: blends null, not 0",
++   "the idle turn-clock item, frame 20: previews null, not 0",
++   "the idle turn-clock item, frame 20: blends null, not 0",
++   "the idle turn-clock item, frame 21: previews null, not 0",
++   "the idle turn-clock item, frame 21: blends null, not 0",
++   "the idle turn-clock item, frame 22: previews null, not 0",
++   "the idle turn-clock item, frame 22: blends null, not 0",
++   "the idle turn-clock item, frame 23: previews null, not 0",
++   "the idle turn-clock item, frame 23: blends null, not 0",
++   "the idle turn-clock item, frame 24: previews null, not 0",
++   "the idle turn-clock item, frame 24: blends null, not 0",
++   "the idle turn-clock item, frame 25: previews null, not 0",
++   "the idle turn-clock item, frame 25: blends null, not 0",
++   "the idle turn-clock item, frame 26: previews null, not 0",
++   "the idle turn-clock item, frame 26: blends null, not 0",
++   "the idle turn-clock item, frame 27: previews null, not 0",
++   "the idle turn-clock item, frame 27: blends null, not 0",
++   "the idle turn-clock item, frame 28: previews null, not 0",
++   "the idle turn-clock item, frame 28: blends null, not 0",
++   "the idle turn-clock item, frame 29: previews null, not 0",
++   "the idle turn-clock item, frame 29: blends null, not 0",
++   "the idle turn-clock item, frame 30: previews null, not 0",
++   "the idle turn-clock item, frame 30: blends null, not 0",
++   "the idle turn-clock item, frame 31: previews null, not 0",
++   "the idle turn-clock item, frame 31: blends null, not 0",
++   "the idle turn-clock item, frame 32: previews null, not 0",
++   "the idle turn-clock item, frame 32: blends null, not 0",
++   "the idle turn-clock item, frame 33: previews null, not 0",
++   "the idle turn-clock item, frame 33: blends null, not 0",
++   "the idle turn-clock item, frame 34: previews null, not 0",
++   "the idle turn-clock item, frame 34: blends null, not 0",
++   "the idle turn-clock item, frame 35: previews null, not 0",
++   "the idle turn-clock item, frame 35: blends null, not 0",
++   "the idle turn-clock item, frame 36: previews null, not 0",
++   "the idle turn-clock item, frame 36: blends null, not 0",
++   "the idle turn-clock item, frame 37: previews null, not 0",
++   "the idle turn-clock item, frame 37: blends null, not 0",
++   "the idle turn-clock item, frame 38: previews null, not 0",
++   "the idle turn-clock item, frame 38: blends null, not 0",
++   "the idle turn-clock item, frame 39: previews null, not 0",
++   "the idle turn-clock item, frame 39: blends null, not 0",
++   "the idle turn-clock item, frame 40: previews null, not 0",
++   "the idle turn-clock item, frame 40: blends null, not 0",
++   "the idle turn-clock item, frame 41: previews null, not 0",
++   "the idle turn-clock item, frame 41: blends null, not 0",
++   "the idle turn-clock item, frame 42: previews null, not 0",
++   "the idle turn-clock item, frame 42: blends null, not 0",
++   "the idle turn-clock item, frame 43: previews null, not 0",
++   "the idle turn-clock item, frame 43: blends null, not 0",
++   "the idle turn-clock item, frame 44: previews null, not 0",
++   "the idle turn-clock item, frame 44: blends null, not 0",
++   "the idle turn-clock item, frame 45: previews null, not 0",
++   "the idle turn-clock item, frame 45: blends null, not 0",
++   "the idle turn-clock item, frame 46: previews null, not 0",
++   "the idle turn-clock item, frame 46: blends null, not 0",
++   "the idle turn-clock item, frame 47: previews null, not 0",
++   "the idle turn-clock item, frame 47: blends null, not 0",
++   "the idle turn-clock item, frame 48: previews null, not 0",
++   "the idle turn-clock item, frame 48: blends null, not 0",
++   "the idle turn-clock item, frame 49: previews null, not 0",
++   "the idle turn-clock item, frame 49: blends null, not 0",
++   "the idle turn-clock item, frame 50: previews null, not 0",
++   "the idle turn-clock item, frame 50: blends null, not 0",
++   "the idle turn-clock item, frame 51: previews null, not 0",
++   "the idle turn-clock item, frame 51: blends null, not 0",
++   "the idle turn-clock item, frame 52: previews null, not 0",
++   "the idle turn-clock item, frame 52: blends null, not 0",
++   "the idle turn-clock item, frame 53: previews null, not 0",
++   "the idle turn-clock item, frame 53: blends null, not 0",
++   "the idle turn-clock item, frame 54: previews null, not 0",
++   "the idle turn-clock item, frame 54: blends null, not 0",
++   "the idle turn-clock item, frame 55: previews null, not 0",
++   "the idle turn-clock item, frame 55: blends null, not 0",
++   "the idle turn-clock item, frame 56: previews null, not 0",
++   "the idle turn-clock item, frame 56: blends null, not 0",
++   "the idle turn-clock item, frame 57: previews null, not 0",
++   "the idle turn-clock item, frame 57: blends null, not 0",
++   "the idle turn-clock item, frame 58: previews null, not 0",
++   "the idle turn-clock item, frame 58: blends null, not 0",
++   "the idle turn-clock item, frame 59: previews null, not 0",
++   "the idle turn-clock item, frame 59: blends null, not 0",
++   "the idle turn-clock item, frame 60: previews null, not 0",
++   "the idle turn-clock item, frame 60: blends null, not 0",
++   "the idle turn-clock item, frame 61: previews null, not 0",
++   "the idle turn-clock item, frame 61: blends null, not 0",
++   "the idle turn-clock item, frame 62: previews null, not 0",
++   "the idle turn-clock item, frame 62: blends null, not 0",
++   "the idle turn-clock item, frame 63: previews null, not 0",
++   "the idle turn-clock item, frame 63: blends null, not 0",
++   "the idle turn-clock item, frame 64: previews null, not 0",
++   "the idle turn-clock item, frame 64: blends null, not 0",
++   "the idle turn-clock item, frame 65: previews null, not 0",
++   "the idle turn-clock item, frame 65: blends null, not 0",
++   "the idle turn-clock item, frame 66: previews null, not 0",
++   "the idle turn-clock item, frame 66: blends null, not 0",
++   "the idle turn-clock item, frame 67: previews null, not 0",
++   "the idle turn-clock item, frame 67: blends null, not 0",
++   "the idle turn-clock item, frame 68: previews null, not 0",
++   "the idle turn-clock item, frame 68: blends null, not 0",
++   "the idle turn-clock item, frame 69: previews null, not 0",
++   "the idle turn-clock item, frame 69: blends null, not 0",
++   "the idle turn-clock item, frame 70: previews null, not 0",
++   "the idle turn-clock item, frame 70: blends null, not 0",
++   "the idle turn-clock item, frame 71: previews null, not 0",
++   "the idle turn-clock item, frame 71: blends null, not 0",
++   "the idle turn-clock item, frame 72: previews null, not 0",
++   "the idle turn-clock item, frame 72: blends null, not 0",
++   "the idle turn-clock item, frame 73: previews null, not 0",
++   "the idle turn-clock item, frame 73: blends null, not 0",
++   "the idle turn-clock item, frame 74: previews null, not 0",
++   "the idle turn-clock item, frame 74: blends null, not 0",
++   "the idle turn-clock item, frame 75: previews null, not 0",
++   "the idle turn-clock item, frame 75: blends null, not 0",
++   "the idle turn-clock item, frame 76: previews null, not 0",
++   "the idle turn-clock item, frame 76: blends null, not 0",
++   "the idle turn-clock item, frame 77: previews null, not 0",
++   "the idle turn-clock item, frame 77: blends null, not 0",
++   "the idle turn-clock item, frame 78: previews null, not 0",
++   "the idle turn-clock item, frame 78: blends null, not 0",
++   "the idle turn-clock item, frame 79: previews null, not 0",
++   "the idle turn-clock item, frame 79: blends null, not 0",
++   "the idle turn-clock item, frame 80: previews null, not 0",
++   "the idle turn-clock item, frame 80: blends null, not 0",
++   "the idle turn-clock item, frame 81: previews null, not 0",
++   "the idle turn-clock item, frame 81: blends null, not 0",
++   "the idle turn-clock item, frame 82: previews null, not 0",
++   "the idle turn-clock item, frame 82: blends null, not 0",
++   "the idle turn-clock item, frame 83: previews null, not 0",
++   "the idle turn-clock item, frame 83: blends null, not 0",
++   "the idle turn-clock item, frame 84: previews null, not 0",
++   "the idle turn-clock item, frame 84: blends null, not 0",
++   "the idle turn-clock item, frame 85: previews null, not 0",
++   "the idle turn-clock item, frame 85: blends null, not 0",
++   "the idle turn-clock item, frame 86: previews null, not 0",
++   "the idle turn-clock item, frame 86: blends null, not 0",
++   "the idle turn-clock item, frame 87: previews null, not 0",
++   "the idle turn-clock item, frame 87: blends null, not 0",
++   "the idle turn-clock item, frame 88: previews null, not 0",
++   "the idle turn-clock item, frame 88: blends null, not 0",
++   "the idle turn-clock item, frame 89: previews null, not 0",
++   "the idle turn-clock item, frame 89: blends null, not 0",
++   "the idle turn-clock item, frame 90: previews null, not 0",
++   "the idle turn-clock item, frame 90: blends null, not 0",
++   "the idle turn-clock item, frame 91: previews null, not 0",
++   "the idle turn-clock item, frame 91: blends null, not 0",
++   "the idle turn-clock item, frame 92: previews null, not 0",
++   "the idle turn-clock item, frame 92: blends null, not 0",
++   "the idle turn-clock item, frame 93: previews null, not 0",
++   "the idle turn-clock item, frame 93: blends null, not 0",
++   "the idle turn-clock item, frame 94: previews null, not 0",
++   "the idle turn-clock item, frame 94: blends null, not 0",
++   "the idle turn-clock item, frame 95: previews null, not 0",
++   "the idle turn-clock item, frame 95: blends null, not 0",
++   "the idle turn-clock item, frame 96: previews null, not 0",
++   "the idle turn-clock item, frame 96: blends null, not 0",
++   "the idle turn-clock item, frame 97: previews null, not 0",
++   "the idle turn-clock item, frame 97: blends null, not 0",
++   "the idle turn-clock item, frame 98: previews null, not 0",
++   "the idle turn-clock item, frame 98: blends null, not 0",
++   "the idle turn-clock item, frame 99: previews null, not 0",
++   "the idle turn-clock item, frame 99: blends null, not 0",
++   "the idle turn-clock item, frame 100: previews null, not 0",
++   "the idle turn-clock item, frame 100: blends null, not 0",
++   "the idle turn-clock item, frame 101: previews null, not 0",
++   "the idle turn-clock item, frame 101: blends null, not 0",
++   "the idle turn-clock item, frame 102: previews null, not 0",
++   "the idle turn-clock item, frame 102: blends null, not 0",
++   "the idle turn-clock item, frame 103: previews null, not 0",
++   "the idle turn-clock item, frame 103: blends null, not 0",
++   "the idle turn-clock item, frame 104: previews null, not 0",
++   "the idle turn-clock item, frame 104: blends null, not 0",
++   "the idle turn-clock item, frame 105: previews null, not 0",
++   "the idle turn-clock item, frame 105: blends null, not 0",
++   "the idle turn-clock item, frame 106: previews null, not 0",
++   "the idle turn-clock item, frame 106: blends null, not 0",
++   "the idle turn-clock item, frame 107: previews null, not 0",
++   "the idle turn-clock item, frame 107: blends null, not 0",
++   "the idle turn-clock item, frame 108: previews null, not 0",
++   "the idle turn-clock item, frame 108: blends null, not 0",
++   "the idle turn-clock item, frame 109: previews null, not 0",
++   "the idle turn-clock item, frame 109: blends null, not 0",
++   "the idle turn-clock item, frame 110: previews null, not 0",
++   "the idle turn-clock item, frame 110: blends null, not 0",
++   "the idle turn-clock item, frame 111: previews null, not 0",
++   "the idle turn-clock item, frame 111: blends null, not 0",
++   "the idle turn-clock item, frame 112: previews null, not 0",
++   "the idle turn-clock item, frame 112: blends null, not 0",
++   "the idle turn-clock item, frame 113: previews null, not 0",
++   "the idle turn-clock item, frame 113: blends null, not 0",
++   "the idle turn-clock item, frame 114: previews null, not 0",
++   "the idle turn-clock item, frame 114: blends null, not 0",
++   "the idle turn-clock item, frame 115: previews null, not 0",
++   "the idle turn-clock item, frame 115: blends null, not 0",
++   "the idle turn-clock item, frame 116: previews null, not 0",
++   "the idle turn-clock item, frame 116: blends null, not 0",
++   "the idle turn-clock item, frame 117: previews null, not 0",
++   "the idle turn-clock item, frame 117: blends null, not 0",
++   "the idle turn-clock item, frame 118: previews null, not 0",
++   "the idle turn-clock item, frame 118: blends null, not 0",
++   "the idle turn-clock item, frame 119: previews null, not 0",
++   "the idle turn-clock item, frame 119: blends null, not 0",
++   "the idle turn-clock item, frame 120: previews null, not 0",
++   "the idle turn-clock item, frame 120: blends null, not 0",
++ ]
+
+ ❯ none helpers.ts:88:73
+     86| /** No failures; the message lists them. */
+     87| export function none(failures: readonly string[], what: string): void {
+     88|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     89| }
+     90| /** A planted program's run: this suite's judgement fails it, and some…
+ ❯ ac3-budgets.test.ts:57:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  ac3-budgets.test.ts > #548.154ef157 budgets on the reference Mac in the local preflight, compared with the merge base > #548.154ef157 a piece that uses none of these gains no work per frame against the merge base
+AssertionError: the plain piece's frames:
+  the plain piece, frame 1: previews null, not 0
+  the plain piece, frame 1: blends null, not 0
+  the plain piece, frame 2: previews null, not 0
+  the plain piece, frame 2: blends null, not 0
+  the plain piece, frame 3: previews null, not 0
+  the plain piece, frame 3: blends null, not 0
+  the plain piece, frame 4: previews null, not 0
+  the plain piece, frame 4: blends null, not 0
+  the plain piece, frame 5: previews null, not 0
+  the plain piece, frame 5: blends null, not 0
+  the plain piece, frame 6: previews null, not 0
+  the plain piece, frame 6: blends null, not 0
+  the plain piece, frame 7: previews null, not 0
+  the plain piece, frame 7: blends null, not 0
+  the plain piece, frame 8: previews null, not 0
+  the plain piece, frame 8: blends null, not 0
+  the plain piece, frame 9: previews null, not 0
+  the plain piece, frame 9: blends null, not 0
+  the plain piece, frame 10: previews null, not 0
+  the plain piece, frame 10: blends null, not 0
+  the plain piece, frame 11: previews null, not 0
+  the plain piece, frame 11: blends null, not 0
+  the plain piece, frame 12: previews null, not 0
+  the plain piece, frame 12: blends null, not 0
+  the plain piece, frame 13: previews null, not 0
+  the plain piece, frame 13: blends null, not 0
+  the plain piece, frame 14: previews null, not 0
+  the plain piece, frame 14: blends null, not 0
+  the plain piece, frame 15: previews null, not 0
+  the plain piece, frame 15: blends null, not 0
+  the plain piece, frame 16: previews null, not 0
+  the plain piece, frame 16: blends null, not 0
+  the plain piece, frame 17: previews null, not 0
+  the plain piece, frame 17: blends null, not 0
+  the plain piece, frame 18: previews null, not 0
+  the plain piece, frame 18: blends null, not 0
+  the plain piece, frame 19: previews null, not 0
+  the plain piece, frame 19: blends null, not 0
+  the plain piece, frame 20: previews null, not 0
+  the plain piece, frame 20: blends null, not 0: expected [ …(240) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the plain piece, frame 1: previews null, not 0",
++   "the plain piece, frame 1: blends null, not 0",
++   "the plain piece, frame 2: previews null, not 0",
++   "the plain piece, frame 2: blends null, not 0",
++   "the plain piece, frame 3: previews null, not 0",
++   "the plain piece, frame 3: blends null, not 0",
++   "the plain piece, frame 4: previews null, not 0",
++   "the plain piece, frame 4: blends null, not 0",
++   "the plain piece, frame 5: previews null, not 0",
++   "the plain piece, frame 5: blends null, not 0",
++   "the plain piece, frame 6: previews null, not 0",
++   "the plain piece, frame 6: blends null, not 0",
++   "the plain piece, frame 7: previews null, not 0",
++   "the plain piece, frame 7: blends null, not 0",
++   "the plain piece, frame 8: previews null, not 0",
++   "the plain piece, frame 8: blends null, not 0",
++   "the plain piece, frame 9: previews null, not 0",
++   "the plain piece, frame 9: blends null, not 0",
++   "the plain piece, frame 10: previews null, not 0",
++   "the plain piece, frame 10: blends null, not 0",
++   "the plain piece, frame 11: previews null, not 0",
++   "the plain piece, frame 11: blends null, not 0",
++   "the plain piece, frame 12: previews null, not 0",
++   "the plain piece, frame 12: blends null, not 0",
++   "the plain piece, frame 13: previews null, not 0",
++   "the plain piece, frame 13: blends null, not 0",
++   "the plain piece, frame 14: previews null, not 0",
++   "the plain piece, frame 14: blends null, not 0",
++   "the plain piece, frame 15: previews null, not 0",
++   "the plain piece, frame 15: blends null, not 0",
++   "the plain piece, frame 16: previews null, not 0",
++   "the plain piece, frame 16: blends null, not 0",
++   "the plain piece, frame 17: previews null, not 0",
++   "the plain piece, frame 17: blends null, not 0",
++   "the plain piece, frame 18: previews null, not 0",
++   "the plain piece, frame 18: blends null, not 0",
++   "the plain piece, frame 19: previews null, not 0",
++   "the plain piece, frame 19: blends null, not 0",
++   "the plain piece, frame 20: previews null, not 0",
++   "the plain piece, frame 20: blends null, not 0",
++   "the plain piece, frame 21: previews null, not 0",
++   "the plain piece, frame 21: blends null, not 0",
++   "the plain piece, frame 22: previews null, not 0",
++   "the plain piece, frame 22: blends null, not 0",
++   "the plain piece, frame 23: previews null, not 0",
++   "the plain piece, frame 23: blends null, not 0",
++   "the plain piece, frame 24: previews null, not 0",
++   "the plain piece, frame 24: blends null, not 0",
++   "the plain piece, frame 25: previews null, not 0",
++   "the plain piece, frame 25: blends null, not 0",
++   "the plain piece, frame 26: previews null, not 0",
++   "the plain piece, frame 26: blends null, not 0",
++   "the plain piece, frame 27: previews null, not 0",
++   "the plain piece, frame 27: blends null, not 0",
++   "the plain piece, frame 28: previews null, not 0",
++   "the plain piece, frame 28: blends null, not 0",
++   "the plain piece, frame 29: previews null, not 0",
++   "the plain piece, frame 29: blends null, not 0",
++   "the plain piece, frame 30: previews null, not 0",
++   "the plain piece, frame 30: blends null, not 0",
++   "the plain piece, frame 31: previews null, not 0",
++   "the plain piece, frame 31: blends null, not 0",
++   "the plain piece, frame 32: previews null, not 0",
++   "the plain piece, frame 32: blends null, not 0",
++   "the plain piece, frame 33: previews null, not 0",
++   "the plain piece, frame 33: blends null, not 0",
++   "the plain piece, frame 34: previews null, not 0",
++   "the plain piece, frame 34: blends null, not 0",
++   "the plain piece, frame 35: previews null, not 0",
++   "the plain piece, frame 35: blends null, not 0",
++   "the plain piece, frame 36: previews null, not 0",
++   "the plain piece, frame 36: blends null, not 0",
++   "the plain piece, frame 37: previews null, not 0",
++   "the plain piece, frame 37: blends null, not 0",
++   "the plain piece, frame 38: previews null, not 0",
++   "the plain piece, frame 38: blends null, not 0",
++   "the plain piece, frame 39: previews null, not 0",
++   "the plain piece, frame 39: blends null, not 0",
++   "the plain piece, frame 40: previews null, not 0",
++   "the plain piece, frame 40: blends null, not 0",
++   "the plain piece, frame 41: previews null, not 0",
++   "the plain piece, frame 41: blends null, not 0",
++   "the plain piece, frame 42: previews null, not 0",
++   "the plain piece, frame 42: blends null, not 0",
++   "the plain piece, frame 43: previews null, not 0",
++   "the plain piece, frame 43: blends null, not 0",
++   "the plain piece, frame 44: previews null, not 0",
++   "the plain piece, frame 44: blends null, not 0",
++   "the plain piece, frame 45: previews null, not 0",
++   "the plain piece, frame 45: blends null, not 0",
++   "the plain piece, frame 46: previews null, not 0",
++   "the plain piece, frame 46: blends null, not 0",
++   "the plain piece, frame 47: previews null, not 0",
++   "the plain piece, frame 47: blends null, not 0",
++   "the plain piece, frame 48: previews null, not 0",
++   "the plain piece, frame 48: blends null, not 0",
++   "the plain piece, frame 49: previews null, not 0",
++   "the plain piece, frame 49: blends null, not 0",
++   "the plain piece, frame 50: previews null, not 0",
++   "the plain piece, frame 50: blends null, not 0",
++   "the plain piece, frame 51: previews null, not 0",
++   "the plain piece, frame 51: blends null, not 0",
++   "the plain piece, frame 52: previews null, not 0",
++   "the plain piece, frame 52: blends null, not 0",
++   "the plain piece, frame 53: previews null, not 0",
++   "the plain piece, frame 53: blends null, not 0",
++   "the plain piece, frame 54: previews null, not 0",
++   "the plain piece, frame 54: blends null, not 0",
++   "the plain piece, frame 55: previews null, not 0",
++   "the plain piece, frame 55: blends null, not 0",
++   "the plain piece, frame 56: previews null, not 0",
++   "the plain piece, frame 56: blends null, not 0",
++   "the plain piece, frame 57: previews null, not 0",
++   "the plain piece, frame 57: blends null, not 0",
++   "the plain piece, frame 58: previews null, not 0",
++   "the plain piece, frame 58: blends null, not 0",
++   "the plain piece, frame 59: previews null, not 0",
++   "the plain piece, frame 59: blends null, not 0",
++   "the plain piece, frame 60: previews null, not 0",
++   "the plain piece, frame 60: blends null, not 0",
++   "the plain piece, frame 61: previews null, not 0",
++   "the plain piece, frame 61: blends null, not 0",
++   "the plain piece, frame 62: previews null, not 0",
++   "the plain piece, frame 62: blends null, not 0",
++   "the plain piece, frame 63: previews null, not 0",
++   "the plain piece, frame 63: blends null, not 0",
++   "the plain piece, frame 64: previews null, not 0",
++   "the plain piece, frame 64: blends null, not 0",
++   "the plain piece, frame 65: previews null, not 0",
++   "the plain piece, frame 65: blends null, not 0",
++   "the plain piece, frame 66: previews null, not 0",
++   "the plain piece, frame 66: blends null, not 0",
++   "the plain piece, frame 67: previews null, not 0",
++   "the plain piece, frame 67: blends null, not 0",
++   "the plain piece, frame 68: previews null, not 0",
++   "the plain piece, frame 68: blends null, not 0",
++   "the plain piece, frame 69: previews null, not 0",
++   "the plain piece, frame 69: blends null, not 0",
++   "the plain piece, frame 70: previews null, not 0",
++   "the plain piece, frame 70: blends null, not 0",
++   "the plain piece, frame 71: previews null, not 0",
++   "the plain piece, frame 71: blends null, not 0",
++   "the plain piece, frame 72: previews null, not 0",
++   "the plain piece, frame 72: blends null, not 0",
++   "the plain piece, frame 73: previews null, not 0",
++   "the plain piece, frame 73: blends null, not 0",
++   "the plain piece, frame 74: previews null, not 0",
++   "the plain piece, frame 74: blends null, not 0",
++   "the plain piece, frame 75: previews null, not 0",
++   "the plain piece, frame 75: blends null, not 0",
++   "the plain piece, frame 76: previews null, not 0",
++   "the plain piece, frame 76: blends null, not 0",
++   "the plain piece, frame 77: previews null, not 0",
++   "the plain piece, frame 77: blends null, not 0",
++   "the plain piece, frame 78: previews null, not 0",
++   "the plain piece, frame 78: blends null, not 0",
++   "the plain piece, frame 79: previews null, not 0",
++   "the plain piece, frame 79: blends null, not 0",
++   "the plain piece, frame 80: previews null, not 0",
++   "the plain piece, frame 80: blends null, not 0",
++   "the plain piece, frame 81: previews null, not 0",
++   "the plain piece, frame 81: blends null, not 0",
++   "the plain piece, frame 82: previews null, not 0",
++   "the plain piece, frame 82: blends null, not 0",
++   "the plain piece, frame 83: previews null, not 0",
++   "the plain piece, frame 83: blends null, not 0",
++   "the plain piece, frame 84: previews null, not 0",
++   "the plain piece, frame 84: blends null, not 0",
++   "the plain piece, frame 85: previews null, not 0",
++   "the plain piece, frame 85: blends null, not 0",
++   "the plain piece, frame 86: previews null, not 0",
++   "the plain piece, frame 86: blends null, not 0",
++   "the plain piece, frame 87: previews null, not 0",
++   "the plain piece, frame 87: blends null, not 0",
++   "the plain piece, frame 88: previews null, not 0",
++   "the plain piece, frame 88: blends null, not 0",
++   "the plain piece, frame 89: previews null, not 0",
++   "the plain piece, frame 89: blends null, not 0",
++   "the plain piece, frame 90: previews null, not 0",
++   "the plain piece, frame 90: blends null, not 0",
++   "the plain piece, frame 91: previews null, not 0",
++   "the plain piece, frame 91: blends null, not 0",
++   "the plain piece, frame 92: previews null, not 0",
++   "the plain piece, frame 92: blends null, not 0",
++   "the plain piece, frame 93: previews null, not 0",
++   "the plain piece, frame 93: blends null, not 0",
++   "the plain piece, frame 94: previews null, not 0",
++   "the plain piece, frame 94: blends null, not 0",
++   "the plain piece, frame 95: previews null, not 0",
++   "the plain piece, frame 95: blends null, not 0",
++   "the plain piece, frame 96: previews null, not 0",
++   "the plain piece, frame 96: blends null, not 0",
++   "the plain piece, frame 97: previews null, not 0",
++   "the plain piece, frame 97: blends null, not 0",
++   "the plain piece, frame 98: previews null, not 0",
++   "the plain piece, frame 98: blends null, not 0",
++   "the plain piece, frame 99: previews null, not 0",
++   "the plain piece, frame 99: blends null, not 0",
++   "the plain piece, frame 100: previews null, not 0",
++   "the plain piece, frame 100: blends null, not 0",
++   "the plain piece, frame 101: previews null, not 0",
++   "the plain piece, frame 101: blends null, not 0",
++   "the plain piece, frame 102: previews null, not 0",
++   "the plain piece, frame 102: blends null, not 0",
++   "the plain piece, frame 103: previews null, not 0",
++   "the plain piece, frame 103: blends null, not 0",
++   "the plain piece, frame 104: previews null, not 0",
++   "the plain piece, frame 104: blends null, not 0",
++   "the plain piece, frame 105: previews null, not 0",
++   "the plain piece, frame 105: blends null, not 0",
++   "the plain piece, frame 106: previews null, not 0",
++   "the plain piece, frame 106: blends null, not 0",
++   "the plain piece, frame 107: previews null, not 0",
++   "the plain piece, frame 107: blends null, not 0",
++   "the plain piece, frame 108: previews null, not 0",
++   "the plain piece, frame 108: blends null, not 0",
++   "the plain piece, frame 109: previews null, not 0",
++   "the plain piece, frame 109: blends null, not 0",
++   "the plain piece, frame 110: previews null, not 0",
++   "the plain piece, frame 110: blends null, not 0",
++   "the plain piece, frame 111: previews null, not 0",
++   "the plain piece, frame 111: blends null, not 0",
++   "the plain piece, frame 112: previews null, not 0",
++   "the plain piece, frame 112: blends null, not 0",
++   "the plain piece, frame 113: previews null, not 0",
++   "the plain piece, frame 113: blends null, not 0",
++   "the plain piece, frame 114: previews null, not 0",
++   "the plain piece, frame 114: blends null, not 0",
++   "the plain piece, frame 115: previews null, not 0",
++   "the plain piece, frame 115: blends null, not 0",
++   "the plain piece, frame 116: previews null, not 0",
++   "the plain piece, frame 116: blends null, not 0",
++   "the plain piece, frame 117: previews null, not 0",
++   "the plain piece, frame 117: blends null, not 0",
++   "the plain piece, frame 118: previews null, not 0",
++   "the plain piece, frame 118: blends null, not 0",
++   "the plain piece, frame 119: previews null, not 0",
++   "the plain piece, frame 119: blends null, not 0",
++   "the plain piece, frame 120: previews null, not 0",
++   "the plain piece, frame 120: blends null, not 0",
++ ]
+
+ ❯ none helpers.ts:88:73
+     86| /** No failures; the message lists them. */
+     87| export function none(failures: readonly string[], what: string): void {
+     88|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     89| }
+     90| /** A planted program's run: this suite's judgement fails it, and some…
+ ❯ ac3-budgets.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  ac3-budgets.test.ts > #548.154ef157 budgets on the reference Mac in the local preflight, compared with the merge base > #548.154ef157 benchmarks/budgets.json holds a task naming this criterion with its four limits, so the budget window measures it against the merge base
+AssertionError: a budgets.json task's criteria name #548.154ef157: expected undefined to be defined
+ ❯ ac3-budgets.test.ts:78:66
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  ac3-budgets.test.ts > #548.154ef157 budgets on the reference Mac in the local preflight, compared with the merge base > #548.154ef157 64 occurrence rows under 0.05 ms a step, 1,000 linear vec3 elements under 0.1 ms a frame, a 4 MiB preview under 1 ms, a checkpoint of 3 written pages of 32 MiB under 0.5 ms
+AssertionError: the swarm's blends:
+  linear, frame 7: blends null, not 1,000
+  linear, frame 8: blends null, not 1,000
+  linear, frame 9: blends null, not 1,000
+  linear, frame 10: blends null, not 1,000
+  linear, frame 11: blends null, not 1,000
+  linear, frame 12: blends null, not 1,000
+  linear, frame 13: blends null, not 1,000
+  linear, frame 14: blends null, not 1,000
+  linear, frame 15: blends null, not 1,000
+  linear, frame 16: blends null, not 1,000
+  linear, frame 17: blends null, not 1,000
+  linear, frame 18: blends null, not 1,000
+  linear, frame 19: blends null, not 1,000
+  linear, frame 20: blends null, not 1,000
+  linear, frame 21: blends null, not 1,000
+  linear, frame 22: blends null, not 1,000
+  linear, frame 23: blends null, not 1,000
+  linear, frame 24: blends null, not 1,000
+  linear, frame 25: blends null, not 1,000
+  linear, frame 26: blends null, not 1,000
+  linear, frame 27: blends null, not 1,000
+  linear, frame 28: blends null, not 1,000
+  linear, frame 29: blends null, not 1,000
+  linear, frame 30: blends null, not 1,000
+  hold, frame 1: blends null, not 0
+  hold, frame 2: blends null, not 0
+  hold, frame 3: blends null, not 0
+  hold, frame 4: blends null, not 0
+  hold, frame 5: blends null, not 0
+  hold, frame 6: blends null, not 0
+  hold, frame 7: blends null, not 0
+  hold, frame 8: blends null, not 0
+  hold, frame 9: blends null, not 0
+  hold, frame 10: blends null, not 0
+  hold, frame 11: blends null, not 0
+  hold, frame 12: blends null, not 0
+  hold, frame 13: blends null, not 0
+  hold, frame 14: blends null, not 0
+  hold, frame 15: blends null, not 0
+  hold, frame 16: blends null, not 0: expected [ …(54) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "linear, frame 7: blends null, not 1,000",
++   "linear, frame 8: blends null, not 1,000",
++   "linear, frame 9: blends null, not 1,000",
++   "linear, frame 10: blends null, not 1,000",
++   "linear, frame 11: blends null, not 1,000",
++   "linear, frame 12: blends null, not 1,000",
++   "linear, frame 13: blends null, not 1,000",
++   "linear, frame 14: blends null, not 1,000",
++   "linear, frame 15: blends null, not 1,000",
++   "linear, frame 16: blends null, not 1,000",
++   "linear, frame 17: blends null, not 1,000",
++   "linear, frame 18: blends null, not 1,000",
++   "linear, frame 19: blends null, not 1,000",
++   "linear, frame 20: blends null, not 1,000",
++   "linear, frame 21: blends null, not 1,000",
++   "linear, frame 22: blends null, not 1,000",
++   "linear, frame 23: blends null, not 1,000",
++   "linear, frame 24: blends null, not 1,000",
++   "linear, frame 25: blends null, not 1,000",
++   "linear, frame 26: blends null, not 1,000",
++   "linear, frame 27: blends null, not 1,000",
++   "linear, frame 28: blends null, not 1,000",
++   "linear, frame 29: blends null, not 1,000",
++   "linear, frame 30: blends null, not 1,000",
++   "hold, frame 1: blends null, not 0",
++   "hold, frame 2: blends null, not 0",
++   "hold, frame 3: blends null, not 0",
++   "hold, frame 4: blends null, not 0",
++   "hold, frame 5: blends null, not 0",
++   "hold, frame 6: blends null, not 0",
++   "hold, frame 7: blends null, not 0",
++   "hold, frame 8: blends null, not 0",
++   "hold, frame 9: blends null, not 0",
++   "hold, frame 10: blends null, not 0",
++   "hold, frame 11: blends null, not 0",
++   "hold, frame 12: blends null, not 0",
++   "hold, frame 13: blends null, not 0",
++   "hold, frame 14: blends null, not 0",
++   "hold, frame 15: blends null, not 0",
++   "hold, frame 16: blends null, not 0",
++   "hold, frame 17: blends null, not 0",
++   "hold, frame 18: blends null, not 0",
++   "hold, frame 19: blends null, not 0",
++   "hold, frame 20: blends null, not 0",
++   "hold, frame 21: blends null, not 0",
++   "hold, frame 22: blends null, not 0",
++   "hold, frame 23: blends null, not 0",
++   "hold, frame 24: blends null, not 0",
++   "hold, frame 25: blends null, not 0",
++   "hold, frame 26: blends null, not 0",
++   "hold, frame 27: blends null, not 0",
++   "hold, frame 28: blends null, not 0",
++   "hold, frame 29: blends null, not 0",
++   "hold, frame 30: blends null, not 0",
++ ]
+
+ ❯ none helpers.ts:88:73
+     86| /** No failures; the message lists them. */
+     87| export function none(failures: readonly string[], what: string): void {
+     88|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     89| }
+     90| /** A planted program's run: this suite's judgement fails it, and some…
+ ❯ ac3-budgets.test.ts:94:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  ac4-query-arrays.test.ts > #548.3c7384fe deep_query reads a logic item's arrays, fuel and trap from its bake, and deep_show replays to the trap > #548.3c7384fe deep_query of the 100-boid flock at step 600 (and 300) returns its arrays and per-step fuel equal to its bake's
+AssertionError: deep-show builds on this host (cargo build --locked --bin deep-show): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show failed:
++ warning: unused variable: `diagnostic_key`
++     --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
++      |
++ 8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
++      |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
++      |
++      = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
++
++ warning: function `apply_stress_gc_after_validation` is never used
++     --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
++      |
++ 1387 | fn apply_stress_gc_after_validation(
++      |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
++
++ warning: field `machine_disassembly` is never read
++     --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
++      |
++ 1974 | pub struct RelocatableCode {
++      |            --------------- field in this struct
++ ...
++ 1985 |     machine_disassembly: Option<String>,
++      |     ^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
++
++ warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
++ error[E0308]: mismatched types
++    --> crates/deep-canvas-motion/src/cues.rs:841:25
++     |
++ 841 |                     ty: ParamType::Json,
++     |                         ^^^^^^^^^^^^^^^ expected `ParamType`, found enum constructor
++     |
++     = note:          expected enum `ParamType`
++             found enum constructor `fn(&'static str) -> ParamType {deep_canvas::kinds::ParamType::Json}`
++ help: use parentheses to construct this tuple variant
++     |
++ 841 |                     ty: ParamType::Json(/* &'static str */),
++     |                                        ++++++++++++++++++++
++
++ For more information about this error, try `rustc --explain E0308`.
++ error: could not compile `deep-canvas-motion` (lib) due to 1 previous error
++
+
+ ❯ binOf helpers.ts:141:117
+    139|   }
+    140|   if (/cargo could not run/.test(b.error)) blocked(`${b.error}: this m…
+    141|   expect(b.error, `${name} builds on this host (cargo build --locked${…
+       |                                                                                                                     ^
+    142|   return b.bin;
+    143| }
+ ❯ showBin helpers.ts:145:38
+ ❯ runShow helpers.ts:534:23
+ ❯ ac4-query-arrays.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  ac4-query-arrays.test.ts > #548.3c7384fe deep_query reads a logic item's arrays, fuel and trap from its bake, and deep_show replays to the trap > #548.3c7384fe for a program that traps at step 412, deep_query returns the trap's step, kind, function and the entries that step read, and deep_show replays to that step and no further
+AssertionError: deep-show builds on this host (cargo build --locked --bin deep-show): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show failed:
++ warning: unused variable: `diagnostic_key`
++     --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
++      |
++ 8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
++      |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
++      |
++      = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
++
++ warning: function `apply_stress_gc_after_validation` is never used
++     --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
++      |
++ 1387 | fn apply_stress_gc_after_validation(
++      |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
++
++ warning: field `machine_disassembly` is never read
++     --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
++      |
++ 1974 | pub struct RelocatableCode {
++      |            --------------- field in this struct
++ ...
++ 1985 |     machine_disassembly: Option<String>,
++      |     ^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
++
++ warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
++ error[E0308]: mismatched types
++    --> crates/deep-canvas-motion/src/cues.rs:841:25
++     |
++ 841 |                     ty: ParamType::Json,
++     |                         ^^^^^^^^^^^^^^^ expected `ParamType`, found enum constructor
++     |
++     = note:          expected enum `ParamType`
++             found enum constructor `fn(&'static str) -> ParamType {deep_canvas::kinds::ParamType::Json}`
++ help: use parentheses to construct this tuple variant
++     |
++ 841 |                     ty: ParamType::Json(/* &'static str */),
++     |                                        ++++++++++++++++++++
++
++ For more information about this error, try `rustc --explain E0308`.
++ error: could not compile `deep-canvas-motion` (lib) due to 1 previous error
++
+
+ ❯ binOf helpers.ts:141:117
+    139|   }
+    140|   if (/cargo could not run/.test(b.error)) blocked(`${b.error}: this m…
+    141|   expect(b.error, `${name} builds on this host (cargo build --locked${…
+       |                                                                                                                     ^
+    142|   return b.bin;
+    143| }
+ ❯ showBin helpers.ts:145:38
+ ❯ runShow helpers.ts:534:23
+ ❯ ac4-query-arrays.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  ac5-region-map.test.ts > #548.eec090d8 deep_query returns the flock's region map in declaration order with check's layout digest > #548.eec090d8 each read, write and emit entry with its offset, size and type in declaration order and check's digest; the planted region_map_reads_by_name fails, naming wind
+AssertionError: deep-show builds on this host (cargo build --locked --bin deep-show): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show failed:
++ warning: unused variable: `diagnostic_key`
++     --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
++      |
++ 8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
++      |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
++      |
++      = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
++
++ warning: function `apply_stress_gc_after_validation` is never used
++     --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
++      |
++ 1387 | fn apply_stress_gc_after_validation(
++      |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
++
++ warning: field `machine_disassembly` is never read
++     --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
++      |
++ 1974 | pub struct RelocatableCode {
++      |            --------------- field in this struct
++ ...
++ 1985 |     machine_disassembly: Option<String>,
++      |     ^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
++
++ warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
++ error[E0308]: mismatched types
++    --> crates/deep-canvas-motion/src/cues.rs:841:25
++     |
++ 841 |                     ty: ParamType::Json,
++     |                         ^^^^^^^^^^^^^^^ expected `ParamType`, found enum constructor
++     |
++     = note:          expected enum `ParamType`
++             found enum constructor `fn(&'static str) -> ParamType {deep_canvas::kinds::ParamType::Json}`
++ help: use parentheses to construct this tuple variant
++     |
++ 841 |                     ty: ParamType::Json(/* &'static str */),
++     |                                        ++++++++++++++++++++
++
++ For more information about this error, try `rustc --explain E0308`.
++ error: could not compile `deep-canvas-motion` (lib) due to 1 previous error
++
+
+ ❯ binOf helpers.ts:141:117
+    139|   }
+    140|   if (/cargo could not run/.test(b.error)) blocked(`${b.error}: this m…
+    141|   expect(b.error, `${name} builds on this host (cargo build --locked${…
+       |                                                                                                                     ^
+    142|   return b.bin;
+    143| }
+ ❯ showBin helpers.ts:145:38
+ ❯ runShow helpers.ts:534:23
+ ❯ mapOf ac5-region-map.test.ts:67:13
+ ❯ ac5-region-map.test.ts:74:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  ac6-bindings.test.ts > #548.d9cc61ff the flock item's Rust bindings, a program built against them, and the refusals > #548.d9cc61ff the bindings list each read, write and emit at deep_query's offsets and types; a program built against them exports the layout digest, reads and writes by name; score as f64 fails to build naming the field and the line; another layout's program is refused at check naming wind; the planted bindings_fields_by_name fails, naming wind
+AssertionError: deep-show builds on this host (cargo build --locked --bin deep-show): expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show failed:
++ warning: unused variable: `diagnostic_key`
++     --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
++      |
++ 8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
++      |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
++      |
++      = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
++
++ warning: function `apply_stress_gc_after_validation` is never used
++     --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
++      |
++ 1387 | fn apply_stress_gc_after_validation(
++      |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
++
++ warning: field `machine_disassembly` is never read
++     --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
++      |
++ 1974 | pub struct RelocatableCode {
++      |            --------------- field in this struct
++ ...
++ 1985 |     machine_disassembly: Option<String>,
++      |     ^^^^^^^^^^^^^^^^^^^
++      |
++      = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
++
++ warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
++ error[E0308]: mismatched types
++    --> crates/deep-canvas-motion/src/cues.rs:841:25
++     |
++ 841 |                     ty: ParamType::Json,
++     |                         ^^^^^^^^^^^^^^^ expected `ParamType`, found enum constructor
++     |
++     = note:          expected enum `ParamType`
++             found enum constructor `fn(&'static str) -> ParamType {deep_canvas::kinds::ParamType::Json}`
++ help: use parentheses to construct this tuple variant
++     |
++ 841 |                     ty: ParamType::Json(/* &'static str */),
++     |                                        ++++++++++++++++++++
++
++ For more information about this error, try `rustc --explain E0308`.
++ error: could not compile `deep-canvas-motion` (lib) due to 1 previous error
++
+
+ ❯ binOf helpers.ts:141:117
+    139|   }
+    140|   if (/cargo could not run/.test(b.error)) blocked(`${b.error}: this m…
+    141|   expect(b.error, `${name} builds on this host (cargo build --locked${…
+       |                                                                                                                     ^
+    142|   return b.bin;
+    143| }
+ ❯ showBin helpers.ts:145:38
+ ❯ runShow helpers.ts:534:23
+ ❯ read ac6-bindings.test.ts:39:13
+ ❯ ac6-bindings.test.ts:76:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  ac7-taste.test.ts > #548.7c091366 the check run's pictures of the previewed route, and the one taste call on them > #548.7c091366 the check run takes the screenshots and the recording from the app at the reference window, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: check of the hex board's item admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"game","refusals":[{"rule":"field","what":"preview isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"preview"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:385:78
+    383| /** The layouts a `check` reply admitted, by item. */
+    384| export function admitted(reply: JsonObject, what: string): Record<stri…
+    385|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    386|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    387| }
+ ❯ ac7-taste.test.ts:41:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  13 failed (13)
+   Start at  03:12:00
+   Duration  62.59s (tests 100%)
+
+exit 1

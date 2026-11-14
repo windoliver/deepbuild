@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "aa64f7a8dc380d3f36a8ed2b0e0200ab437b51ee9e73ba4abec902ed26176182",
+  "set_digest": "b12857d4486079d9285a9bc357a5b547a13f6ff000eac565fe2a1105c328c565",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
@@ -122,7 +122,7 @@
       }
     },
     "motion@1": {
-      "digest": "60741d47421f3eee8b4cc622915d44dc0b73af1cd0671f740de22c0f1f7052ad",
+      "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
       "reference": "motion",
       "kit": [
         "fixtures",
