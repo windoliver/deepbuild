@@ -120,6 +120,10 @@ fn keyed_build(doc: &Value, _: &str, item: &Value, planted: Option<&str>) -> Val
     if let Some(reads) = crate::contributed::keyed(doc, item) {
         key["reads"] = reads;
     }
+    // #524: a skin's positions move its vertices, so they key its build.
+    if let Some(skin) = item.get("skin") {
+        key["skin"] = skin.clone();
+    }
     key
 }
 
@@ -297,6 +301,7 @@ pub fn built(
     let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
     let (last, rows) = stack::apply(mesh.clone(), item, doc, id, t, run)?;
+    let last = crate::skin::applied(last, item)?;
     let declared = stack::estimate(counts, item, &|k| {
         Ok(stack::apply(mesh.clone(), &stack::prefix(item, k), doc, id, t, run)?.0)
     })?;

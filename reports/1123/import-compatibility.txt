@@ -1,0 +1,23 @@
+BEFORE (existing tests unchanged; expected failure):
+✖ #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command (173.504916ms)
+✖ the unit lane runs only test files inside the declared test paths, which perf sets apart (267.785875ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+✖ failing tests:
+✖ #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command (173.504916ms)
+  AssertionError [ERR_ASSERTION]: events:
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typescript' imported from <scratch>/repo/scripts/proof-binaries.mjs
+✖ the unit lane runs only test files inside the declared test paths, which perf sets apart (267.785875ms)
+  AssertionError [ERR_ASSERTION]: failed to load config from <scratch>/vitest.config.ts
+AFTER:
+✔ #1113.a0183037 a lane command waits up to 30 minutes for its grant, as build for an unlisted command (721.885292ms)
+✔ the unit lane runs only test files inside the declared test paths, which perf sets apart (336.970833ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 769.647833

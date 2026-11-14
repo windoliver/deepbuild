@@ -1,0 +1,28 @@
+{
+  "id": "verbs.shrink",
+  "version": "1.0",
+  "title": "Shrink",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An exit: each target shrinks to nothing at its bounds' center over its window.",
+  "inputs": {},
+  "steps": {
+    "shrink": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/scale": [
+            0,
+            0,
+            "now[2]"
+          ],
+          "at/pos": [
+            "cx",
+            "cy",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

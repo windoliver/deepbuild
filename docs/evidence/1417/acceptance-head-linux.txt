@@ -1,0 +1,43 @@
+# #1417 AC1 (redraft), AC2 and AC4 acceptance tests at the head, each file run alone, verbose reporter. Paths under ~ redacted.
+== HEAD 131354fe1829ff9117c13374be790e38fc30c7d0 (evidence files uncommitted; no code changed)
+== tests/acceptance/1417/layered.test.ts
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1523-1eb658
+
+stdout | tests/acceptance/1417/layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 its layout is the base's, byte for byte
+#1417.e58ee238: the layered board's layout memory: {"build":[1,0,0.0,80.0],"plan":[0,0,12.0,0.0],"ship":[3,0,12.0,240.0],"test":[2,0,12.0,160.0]}
+
+ ✓ tests/acceptance/1417/layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 passes: the graph module's kit passes, every case on layered with it, and the board passes the check 79336ms
+ ✓ tests/acceptance/1417/layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 its layout is the base's, byte for byte 315ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:16:46
+   Duration  81.48s (tests 100%)
+
+== tests/acceptance/1417/planted.test.ts
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1523-1eb658
+
+stdout | tests/acceptance/1417/planted.test.ts > #1417.b17a643a a planted layout that declares no cost > #1417.b17a643a fails the graph module's kit, naming graph.layout, while the shipped graph module passes it
+#1417.b17a643a: the kit's failures on the plant: [{"part":"","failure":{"code":"failed_case","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes"}},{"part":"fixtures","failure":{"code":"unexpected_codes","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes","fixture":"parity/graph/over_budget.board","extra":[],"missing":["over_budget"],"operators":{"cells.grid":0,"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"look.finish":0,"motion.arrangelive":0,"motion.channels":0,"building.build":0,"building.shade":0,"data.decimate":0,"data.scale":0,"graph.layout":0.010792,"motion.placed":0,"core.world":0.0001614,"record.salience":0,"scene3d.build":0,"scene3d.mark":0,"scene3d.rebuild":0,"scene3d.shade":0,"scene3d.stack":0,"sheet.place":0,"text.counter":0,"text.shape":0,"marks2d.place":0,"text.animate":0,"vector.glyphs":0,"vector.paint":0,"marks2d.item":0,"marks2d.frame":0.011159239999999999}}},{"part":"fixtures","failure":{"code":"unexpected_codes","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes","fixture":"parity/graph/over_budget.board","extra":[],"missing":["over_budget"],"operators":{"cells.grid":0,"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"look.finish":0,"motion.arrangelive":0,"motion.channels":0,"building.build":0,"building.shade":0,"data.decimate":0,"data.scale":0,"graph.layout":0.010792,"motion.placed":0,"core.world":0.0001614,"record.salience":0,"scene3d.build":0,"scene3d.mark":0,"scene3d.rebuild":0,"scene3d.shade":0,"scene3d.stack":0,"sheet.place":0,"text.counter":0,"text.shape":0,"marks2d.place":0,"text.animate":0,"vector.glyphs":0,"vector.paint":0,"marks2d.item":0,"marks2d.frame":0.011159239999999999}}}]
+
+ ✓ tests/acceptance/1417/planted.test.ts > #1417.b17a643a a planted layout that declares no cost > #1417.b17a643a fails the graph module's kit, naming graph.layout, while the shipped graph module passes it 148882ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  00:18:08
+   Duration  150.15s (tests 100%)
+
+== tests/acceptance/1417-redraft-ac1/over-budget.test.ts
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1523-1eb658
+
+ ✓ tests/acceptance/1417-redraft-ac1/over-budget.test.ts > #1417.52357c9c a 100,000-node graph against its class's budget > #1417.52357c9c is refused at check with over_budget, naming the operator graph.layout and its estimate 2487ms
+ ✓ tests/acceptance/1417-redraft-ac1/over-budget.test.ts > #1417.52357c9c a 100,000-node graph against its class's budget > #1417.52357c9c on main the same document passes the check 4375ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:20:39
+   Duration  8.33s (tests 100%)
+

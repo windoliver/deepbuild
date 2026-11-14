@@ -147,9 +147,15 @@ pub(crate) fn values(
         // #1921: a field the core's lowered form doesn't hold, such as a 3D kind's params, reads
         // as the frame's document holds it, an instancer's columns a world writes included.
         let drawn = || at_field(s.document()?.get("items")?.get(id)?, field).cloned();
+        // #222: a path channel's target `path` reads as what the item draws, its `d`.
+        let outline = || {
+            let (v, _) = item_value(sched, s, id, "params")?;
+            v.get("d").or_else(|| v.pointer("/outline/d")).cloned()
+        };
         item_value(sched, s, id, field)
             .map(|(v, _)| v)
             .or_else(drawn)
+            .or_else(|| (field == "path").then(outline).flatten())
     };
     Value::Object(
         paths

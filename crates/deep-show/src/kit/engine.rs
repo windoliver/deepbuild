@@ -479,7 +479,7 @@ pub fn param_value(p: &deep_canvas::kinds::Param, rng: &mut Rng, invalid: bool) 
                 json!(format!("s{}", rng.below(100)))
             }
         }
-        ParamType::Json => {
+        ParamType::Json(_) => {
             if p.name == "box" {
                 json!([
                     rng.range(0.0, 100.0).round(),

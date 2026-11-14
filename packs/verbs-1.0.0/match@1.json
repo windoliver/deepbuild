@@ -1,0 +1,39 @@
+{
+  "id": "verbs.match",
+  "version": "1.0",
+  "title": "Match",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A change: each target's outline becomes the outline of the item `to` names over its window, its parts paired as `by` says.",
+  "inputs": {
+    "to": {
+      "type": "ID",
+      "default": "",
+      "about": "the item whose outline it becomes"
+    },
+    "by": {
+      "type": "choice",
+      "options": [
+        "id",
+        "shape"
+      ],
+      "default": "shape",
+      "about": "how parts pair: by their IDs, or by area and centroid"
+    }
+  },
+  "steps": {
+    "morph": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "path": {
+            "of": "to"
+          }
+        },
+        "type": {
+          "path": "path"
+        }
+      }
+    }
+  }
+}

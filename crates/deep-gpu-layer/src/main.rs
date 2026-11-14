@@ -54,6 +54,7 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
+mod regions;
 mod scene;
 mod seam;
 mod session3;
@@ -248,6 +249,13 @@ pub enum Planted {
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
+    /// #462's wrong programs (tests/acceptance/462/README.md: Planted programs): strokes drawn
+    /// where the previous frame's camera put them; each side of a region's edge clipped by its own
+    /// copy of the edge; status drawn in the look under it; motifs written into the document.
+    StrokesFromPreviousFrame,
+    RegionSidesClipIndependently,
+    StatusInLook,
+    MotifsWriteDocument,
     /// #421's wrong programs (tests/acceptance/421/README.md: Planted programs): front faces
     /// chosen without the world determinant; coplanar ties left to a submission order that turns
     /// over each frame; a spot's lumens spread over its cone; status outlines tone mapped.
@@ -567,6 +575,10 @@ impl Planted {
             "edges_dash_other_space" => Planted::EdgesDashOtherSpace,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
+            "strokes_from_previous_frame" => Planted::StrokesFromPreviousFrame,
+            "region_sides_clip_independently" => Planted::RegionSidesClipIndependently,
+            "status_in_look" => Planted::StatusInLook,
+            "motifs_write_document" => Planted::MotifsWriteDocument,
             "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
             "ties_by_submission" => Planted::TiesBySubmission,
             "spot_counts_cone" => Planted::SpotCountsCone,
