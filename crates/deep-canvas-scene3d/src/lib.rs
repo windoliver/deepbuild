@@ -44,6 +44,7 @@ pub mod scene;
 pub mod sets;
 pub mod shapes;
 pub mod shore;
+pub mod skin;
 pub mod sky;
 pub mod slots;
 pub mod spatial;
