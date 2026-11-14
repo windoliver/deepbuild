@@ -4,7 +4,7 @@
 
 All four original, independently drafted #2068 acceptance cases passed unchanged in a serial run. The same files fail on the merge base at the required wait/fallback assertions; the instant-source guard passes there. The author-role scenarios reused from #322 pass. **The final parallel affected run leaves AC1 INCONCLUSIVE again** (the forge request began after B arrived), and inherited cleanup/repository-wide findings remain red. The PR therefore stays **Part of #2068**, not a closure claim. No test or known-failure entry was weakened to get these results.
 
-Merge base tested: `5c92a77023e251385c6b9c7727d103ec5ed61a0e`. Initial drafting base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`. The timing test prints the initial baseline as metadata on both sides; `final-timings.json` names the actual comparison base. `acceptance.sha256` pins the original delivered tests; `source.sha256` pins the tested source and added regressions.
+Before/after comparison base tested: `5c92a77023e251385c6b9c7727d103ec5ed61a0e`. The PR was then rebased onto `a12be6c8c426e4ea9d87292cef42f12c564527f3` to resolve main's row-import change. On the rebased head the workspace build, all four serial acceptance cases, and all ten added regressions passed (`rebased-*.txt`). The new merge base itself and a full affected run on that final rebase are unrun, so the closure claim stays open. Initial drafting base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`. The timing test prints the initial baseline as metadata on both sides; `final-timings.json` names the actual comparison base. `acceptance.sha256` pins the original delivered tests; `source.sha256` pins the tested source and added regressions.
 
 ## Requirement → change → proof
 
