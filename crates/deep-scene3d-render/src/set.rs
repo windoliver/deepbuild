@@ -250,6 +250,49 @@ impl Set {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use deep_gpu::device::{Backend, Gpu};
+
+    /// #2496: item-0000 moves half a metre against item-0001, the next record, which takes tie
+    /// rank 1. A frame's diff and the moved path each upload the two words that changed, the
+    /// mover's x and the neighbour's rank, not the two 144-byte records.
+    #[test]
+    fn a_move_and_the_rank_it_changes_upload_their_words() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let solid = |x: f32, tie| crate::SolidRecord {
+            rows: [
+                [1.0, 0.0, 0.0, x],
+                [0.0, 1.0, 0.0, 0.5],
+                [0.0, 0.0, 1.0, 0.0],
+            ],
+            tie,
+            ..bytemuck::Zeroable::zeroed()
+        };
+        let apart = [solid(-59.25, 0), solid(-57.75, 0)];
+        let together = [solid(-58.75, 0), solid(-57.75, 1)];
+        let (mut set, mut generation, mut written) = (Set::default(), 0, 0);
+        let mut uploads = |records: &[crate::SolidRecord; 2], moved_path: bool| {
+            let before = device.device.counts().read();
+            if moved_path {
+                for (i, r) in records.iter().enumerate() {
+                    set.write(&device, i, bytemuck::bytes_of(r), &mut written);
+                }
+                set.flush(&device);
+            } else {
+                set.begin();
+                for (i, r) in records.iter().enumerate() {
+                    set.push(&format!("item-000{i}"), bytemuck::bytes_of(r));
+                }
+                set.finish(&device, &mut generation, &mut written);
+            }
+            let made = device.device.counts().read().since(before);
+            (made.writes, made.uploaded)
+        };
+        uploads(&apart, false);
+        assert_eq!(uploads(&together, false), (2, 8), "a frame's diff");
+        uploads(&apart, true);
+        assert_eq!(uploads(&together, true), (2, 8), "the moved path");
+    }
 
     /// Two records pushed out of slot order land at their slots among four, the rest zero, and
     /// the owners name each slot; laid again the same way, the members hold.
