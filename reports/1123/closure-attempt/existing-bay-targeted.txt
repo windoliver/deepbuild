@@ -1,0 +1,12 @@
+✔ a holder's death stops the command it left running in the pair before the next claim replaces the bay (13131.75475ms)
+✔ a proof's death stops the command it left running in its bay before the next claim replaces the bay (17390.613ms)
+✔ a proof's bay commands write the bay's own target, whatever CARGO_TARGET_DIR the proof was given (12057.630542ms)
+✔ a bay command killed by a signal Node lives through, as SIGPIPE, never reads as having exited 0 (10295.554084ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57980.542583

@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "4645e952d354d5c52f87ecd7f07253c72ca6d5339c5cb0b45ef8512c38019133",
+    "digest": "b0f2033bd812cbe5c7ad4fa519a5f21651d2ff9c98fbd0795d121f7949f19065",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -129,7 +129,7 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "ef1f7274459753d0ed6f1eec5052056f249db6112a61698e06f8c383c02ea421",
+    "digest": "e2e4c4f2c84a1b95e267a5a4ad7c5b103178f76d7dadc4ae1960476c7a1c9c87",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -163,7 +163,7 @@
   },
   "loop": {
     "version": "1.0.0",
-    "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+    "digest": "a2170e271ea157eb8d9812dc2b8aebf969ec56e3f81fdaf7112b2e4f0f419b47",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -213,7 +213,7 @@
   },
   "motion": {
     "version": "1.0.0",
-    "digest": "27a25f69d76019d98ec386c96bda4437a7bfd2363517578cf55100e9d4dbe8d8",
+    "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -225,7 +225,8 @@
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "FAIL",
-      "migration": "PASS"
+      "migration": "PASS",
+      "registries": "PASS"
     }
   },
   "net": {
@@ -285,7 +286,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "9edd239b48ca54a24b54998ca5f2208381bdc9cac8792e7e473ffc5dd17d94d4",
+    "digest": "e42321e652963fe4899a25a7ca6c068fa2e06b6460d85deca6859cd5ccfb3740",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -318,14 +319,14 @@
   "text": {
     "version": "1.0.0",
     "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "read_set": "PASS",
       "order": "PASS",
-      "schedule": "FAIL",
+      "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
       "catalog": "PASS"

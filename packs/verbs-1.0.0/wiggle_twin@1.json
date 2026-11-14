@@ -1,0 +1,63 @@
+{
+  "id": "verbs.wiggle_twin",
+  "version": "1.0",
+  "title": "Wiggle, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of wiggle: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "scale": {
+      "type": "number",
+      "default": 1.1,
+      "min": 0,
+      "about": "how much it swells"
+    },
+    "angle": {
+      "type": "number",
+      "default": 3.6,
+      "about": "the angle in degrees it rocks through"
+    },
+    "count": {
+      "type": "integer",
+      "default": 6,
+      "min": 1,
+      "max": 64,
+      "about": "how many times it rocks"
+    }
+  },
+  "steps": {
+    "swell": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/scale": {
+            "pulse": {
+              "amount": [
+                "now[0] * (scale - 1)",
+                "now[1] * (scale - 1)",
+                0
+              ]
+            }
+          }
+        }
+      }
+    },
+    "rock": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/rot/2": {
+            "pulse": {
+              "amount": "angle",
+              "shape": {
+                "wiggle": {
+                  "count": "count / 2"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

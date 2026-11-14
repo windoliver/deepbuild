@@ -15,6 +15,7 @@ mod canonical;
 pub mod clock;
 pub mod constraint;
 mod cue;
+pub mod cues;
 pub mod curve;
 pub mod doc;
 pub mod eval;

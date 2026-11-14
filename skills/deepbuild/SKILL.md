@@ -107,6 +107,7 @@ Never: Run in the canvas core or a frame, change a document, count as a verdict,
 ## Canvas
 
 - deep_kinds. Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.
+- deep_query. Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; or the why behind one value, naming the canvas module, operator and document paths that made it. It reads only what your session may read.
 
 Never: Drawn outside its panel or over the question card.
 

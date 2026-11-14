@@ -141,7 +141,7 @@ impl BuildSet {
 
 /// The module kinds the design names without a family, with the module each is: the cell grid
 /// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
-/// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
+/// `hull`, #440; Builder `surface`, #224) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
     // #540: a lockstep match, Net `net@1`.
@@ -155,6 +155,7 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("plate", "scene3d"),
     ("display", "scene3d"),
     ("hull", "scene3d"),
+    ("surface", "scene3d"),
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
@@ -175,6 +176,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("effect", "scene3d"),
     // #1732: placement by relation in 3D is the motion module's.
     ("arrange", "motion"),
+    // #222: a cue list is the motion module's, expanded at check.
+    ("cues", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -714,6 +717,8 @@ pub struct Registrar {
     pub costs: Vec<(String, Cost)>,
     /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
     pub elements: Vec<(String, Elements)>,
+    /// Its kinds expanded at check, by kind (`family.name`; #222).
+    pub expands: Vec<(String, crate::document::expands::Expand)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).

@@ -219,6 +219,8 @@ fn register_compiling(
     .run(channels);
     register_arrange(r);
     register_score(r);
+    // #222: cue lists, expanded at check through the verbs of `cue.kind@1`.
+    crate::cues::register(r);
     // #538: a flip by array in the frame the hub draws.
     crate::held::register(r);
     r.code(

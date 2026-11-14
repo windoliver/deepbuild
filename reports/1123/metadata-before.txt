@@ -1,0 +1,11 @@
+✖ metadata-only scope check does not build an unused helper binary (5320.196125ms)
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5436.252
+✖ failing tests:
+✖ metadata-only scope check does not build an unused helper binary (5320.196125ms)
+  AssertionError [ERR_ASSERTION]: exit 1

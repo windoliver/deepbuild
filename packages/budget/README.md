@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The kernel's Budget (#86): the one ledger of the spending you approved. A paid run reserves its price against every budget that covers it before it starts, and is charged when its cost reading lands; a run that doesn't fit, or whose price nobody knows, is BLOCKED. The hub opens it (`openLedger`) and hands the ledger to the runner, buying and resolver-decisions.
+The kernel's Budget (#86): the one ledger of the spending you approved. A paid run reserves its price against every budget that covers it before it starts, and is charged when its cost reading lands; a run that doesn't fit, or whose price nobody knows, is BLOCKED. The hub opens it (`openLedger`) and hands the ledger to the runner and resolver-decisions. `@deepbuild/buying` takes the same ledger from whatever opens it, which the hub doesn't yet (#1982).
 
 ## Where new code goes
 

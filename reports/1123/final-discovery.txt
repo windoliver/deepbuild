@@ -1,0 +1,19 @@
+✔ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (11933.742333ms)
+✔ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (16541.650333ms)
+✔ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (14046.374667ms)
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (427.742334ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (406.165333ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (423.543084ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+✔ named helper imports do not build unused binary exports (1807.548375ms)
+✔ named helper imports build only their used binary (3416.985417ms)
+✔ path-skipped lane ignores an actual binary prerequisite; a planted selector is rejected (3970.260292ms)
+✔ Vitest exclude ignores an actual binary prerequisite; a planted selector is rejected (21496.82075ms)
+✔ metadata-only scope check does not build an unused helper binary (7740.258417ms)
+ℹ tests 11
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 83203.031833

@@ -1,0 +1,42 @@
+Merge base: b1a1ff86234e7e080e0e339774ac12ad05813e9b, after the fourth merge of main.
+.deepbuild/approvers at the merge base holds one key, JingW6's. Each tag is SSH-signed with a key on that list, sits on the exact commit, and names every file the commit touches. The commits below are the ones `node scripts/proof.mjs guard` names; regenerate this list if any is rewritten.
+
+Commit 76ddd340bd040f0f295d350d38444dbf2c8305e3 fix(proof): build per-run binary snapshots for each checkout
+Approves: reports/1123/base-capture-current.txt
+Approves: reports/1123/base-mechanism-current.txt
+Approves: reports/1123/capture-first-draft.txt
+Approves: reports/1123/demand-before.txt
+Approves: reports/1123/gaps-before.txt
+Approves: reports/1123/shard-release-before.txt
+Approves: scripts/affected.mjs
+Approves: scripts/lanes.mjs
+Approves: scripts/proof-binaries.mjs
+Approves: scripts/proof-runs.mjs
+
+Commit 33a859a1ff430d48c9ad299e1224e808822bd89b fix(proof): keep lane definitions independent of binary build tooling
+Approves: reports/1123/import-compatibility.txt
+Approves: reports/1123/status.md
+Approves: scripts/lanes.mjs
+
+Commit 63e11e81a883c0fdaa8d54788114ff400e08e191 fix(proof): supervise builds and parallelize two proven binary suites
+Approves: scripts/lanes.mjs
+Approves: scripts/proof-bin-build.mjs
+Approves: scripts/proof-binaries.mjs
+
+Commit 2edfcdbbe8adc5abc5291c8963637530772e2a54 fix(proof): await recorded build cleanup before reclaiming bays
+Approves: scripts/bays.mjs
+Approves: scripts/proof-bin-build.mjs
+
+Commit 7e5f7555600e06d7aec183019733ecade0f0974d fix(proof): batch ownership scans and reject malformed process evidence
+Approves: scripts/proof-bin-build.mjs
+Approves: tests/proof-binaries-malformed-scan.test.mjs
+
+Commit 6c6cc8a31423b031ce3126adf73c5ce60ed63b9d Merge remote-tracking branch 'origin/main' into fix/1123-run-private-binaries
+The merge's one conflict: this branch's runLanes, with main's #12 lines carried into it.
+Approves: scripts/lanes.mjs
+
+Commit 3db311796a06052265941358fb5ddc43404e6181 Merge remote-tracking branch 'origin/main' into fix/1123-run-private-binaries
+The merge's one conflict: main's first `alone` line, with tests/acceptance/374/ and tests/acceptance/375/ left out of it.
+Approves: scripts/lanes.mjs
+
+No longer listed: 57d96a3f2bfc1fb88c2934165c48071c27c390dc (the #374 and #375 helpers). The guard runs of 2026-11-13 and 14 name no file of it.

@@ -177,7 +177,8 @@ pub fn job_words(row: &Value, now: u64) -> String {
         Some(progress) => format!("{title} · {progress}"),
         None => {
             let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
-            format!("{title} · running {}", span(ran))
+            // A job's own word, such as a new project's working (#1342); running for one that names none.
+            format!("{title} · {} {}", row["word"].as_str().unwrap_or("running"), span(ran))
         }
     }
 }

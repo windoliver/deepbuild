@@ -1,0 +1,35 @@
+{
+  "id": "verbs.spin_in_twin",
+  "version": "1.0",
+  "title": "Spin in, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of spin_in: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "angle": {
+      "type": "number",
+      "default": 90,
+      "about": "the turn in degrees it spins in through"
+    }
+  },
+  "steps": {
+    "spin": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "at/scale": [
+            0,
+            0,
+            "now[2]"
+          ],
+          "at/rot/2": "now + angle",
+          "at/pos": [
+            "cx",
+            "cy",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

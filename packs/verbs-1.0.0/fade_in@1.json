@@ -1,0 +1,79 @@
+{
+  "id": "verbs.fade_in",
+  "version": "1.0",
+  "title": "Fade in",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's opacity rises from 0, from an offset, a point or a scale back to where it is.",
+  "inputs": {
+    "shift": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "about": "the offset each target fades in from, back to where it is"
+    },
+    "from": {
+      "type": "ID",
+      "default": "none",
+      "about": "an item each target fades in from, in place of shift"
+    },
+    "scale": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "about": "the scale each target fades in from, as a share of its own"
+    }
+  },
+  "steps": {
+    "fade": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/opacity": 0
+        }
+      }
+    },
+    "slide": {
+      "op": "cue",
+      "when": "(shift[0] != 0 || shift[1] != 0 || shift[2] != 0) && from == none",
+      "params": {
+        "from": {
+          "at/pos": [
+            "now[0] - shift[0]",
+            "now[1] - shift[1]",
+            "now[2] - shift[2]"
+          ]
+        }
+      }
+    },
+    "point": {
+      "op": "cue",
+      "when": "from != none",
+      "params": {
+        "from": {
+          "at/pos": [
+            "from_now[0]",
+            "from_now[1]",
+            "now[2]"
+          ]
+        }
+      }
+    },
+    "zoom": {
+      "op": "cue",
+      "when": "scale != 1",
+      "params": {
+        "from": {
+          "at/scale": [
+            "now[0] * scale",
+            "now[1] * scale",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "verbs.spin_in",
+  "version": "1.0",
+  "title": "Spin in",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target grows from nothing at its center while it turns through `angle` degrees.",
+  "inputs": {
+    "angle": {
+      "type": "number",
+      "default": 90,
+      "about": "the turn in degrees it spins in through"
+    }
+  },
+  "steps": {
+    "spin": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "at/scale": [
+            0,
+            0,
+            "now[2]"
+          ],
+          "at/rot/2": "now - angle",
+          "at/pos": [
+            "cx",
+            "cy",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

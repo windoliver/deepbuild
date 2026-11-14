@@ -1,0 +1,54 @@
+✖ blank arm losing its window after warm-up returns explicit INCONCLUSIVE within its 30 s watchdog (31510.480833ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31512.582667
+
+✖ failing tests:
+
+test at tests/benchmark-arm-progress.test.mjs:11:1
+✖ blank arm losing its window after warm-up returns explicit INCONCLUSIVE within its 30 s watchdog (31510.480833ms)
+  AssertionError [ERR_ASSERTION]: owned window was actually hidden after warm-up
+
+  'false' !== 'true'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/benchmark-arm-progress.test.mjs:21:54)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'false',
+    expected: 'true',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+✖ blank real-window arm finishes, with measured frames or explicit INCONCLUSIVE (30830.818417ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30832.639458
+
+✖ failing tests:
+
+test at tests/acceptance/1123/benchmark-unblock/blank.test.mjs:12:1
+✖ blank real-window arm finishes, with measured frames or explicit INCONCLUSIVE (30830.818417ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: the real window did not finish in 30 s: 2 renders, 0 counted paints, 0 return frames; drawing may be hidden, locked or stalled; completion observed, measurement NOT proven
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1123/benchmark-unblock/blank.test.mjs:54:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }

@@ -1,0 +1,19 @@
+{
+  "id": "verbs.cycle",
+  "version": "1.0",
+  "title": "Cycle",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A move: each target moves to where the next target in the cue's list is, the last to the first's place.",
+  "inputs": {},
+  "steps": {
+    "cycle": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/pos": "next_now"
+        }
+      }
+    }
+  }
+}
