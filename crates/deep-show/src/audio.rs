@@ -799,7 +799,7 @@ impl Hub<'_> {
                 let Some(deep) = deep else {
                     return refused("not_reached");
                 };
-                let rows = l.rec.steps_json(&l.piece);
+                let rows = l.rec.steps_json(&l.piece, None);
                 let arrays = rows
                     .as_array()
                     .and_then(|r| r.iter().find(|r| r["step"].as_i64() == Some(step - 1)))

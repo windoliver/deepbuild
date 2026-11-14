@@ -19,6 +19,7 @@ use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
 
+pub(crate) mod cast;
 mod derive;
 mod kit;
 pub(crate) use derive::{parse, Bake};
@@ -44,6 +45,7 @@ pub(crate) fn module() -> Option<Module> {
         m.register = |r| {
             (deep_canvas_physics::module::module(&deep_physics_rapier::build()).register)(r);
             kit::register(r);
+            cast::register(r);
         };
         if cfg!(feature = "test-physics-needs-logic") {
             let range = deep_canvas::registry::Range::parse("^1").expect("a range");
@@ -82,12 +84,18 @@ pub enum Planted {
     WholeTransform,
     /// A `<body>#*` output writes, at each frame, the columns of the frame its session drew before.
     PreviousColumns,
+    /// #213: physics.cast@1 answers from each world after its next step.
+    CastAnswersLate,
+    /// #213: the logic module writes services' results after the checkpoint that follows a step.
+    ResultsAfterCheckpoint,
 }
 
 pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
     Some(crate::hub::Planted::Physics(match name {
         "output_writes_whole_transform" => Planted::WholeTransform,
         "output_keeps_previous_columns" => Planted::PreviousColumns,
+        "cast_answers_after_next_step" => Planted::CastAnswersLate,
+        "results_after_checkpoint" => Planted::ResultsAfterCheckpoint,
         _ => return None,
     }))
 }

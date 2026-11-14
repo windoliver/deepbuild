@@ -1497,6 +1497,25 @@
       "criteria": [
         "#538.ed6f8052"
       ]
+    },
+    {
+      "id": "logic-between-steps",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "between-steps"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "cast_256_ms": 1.3,
+        "mirror_1pct_ms": 0.1,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #213 first measurement: the merge base has no between-step services or mirror reads and no such task. Release deep-show's logic call reads each step's service_ns, the CPU time physics.cast@1 took answering a logic item's 256 rays in a level of 300 static boxes (cast_256_ms, the median of steps 0 to 58); release deep-logic's bake reads each step's mirror_ns, the time updating a mirror of a 1,000,000-element f64 array whose writer changed 1% in 64 runs (mirror_1pct_ms, the median of steps 1 to 63); and an item with neither counts its steps that read either time (idle_work). Five runs after a warm-up one; canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#213.16543e66"
+      ]
     }
   ]
 }

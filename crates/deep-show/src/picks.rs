@@ -133,12 +133,18 @@ impl Viewer {
     }
 }
 
-/// `logic`: the document's logic items stepped from 0 to `steps` − 1 on its input track.
+/// `logic`: the document's logic items stepped from 0 to `steps` − 1 on its input track; #213:
+/// with `seeks` (`[{to}]`), each a restore of the nearest checkpoint run through step `to`; with
+/// `regions`, each step's services regions as the step read them; `at_times` (s), the steps
+/// logic.determinism samples.
 #[derive(Debug)]
 pub struct LogicCall {
     pub doc: String,
     pub steps: i64,
     pub check: bool,
+    pub seeks: Vec<i64>,
+    pub regions: bool,
+    pub at_times: Option<Vec<f64>>,
 }
 
 pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
@@ -150,11 +156,78 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         .get("steps")?
         .as_i64()
         .filter(|n| (1..=100_000).contains(n))?;
+    let seeks = match c.get("seeks") {
+        None => Vec::new(),
+        Some(v) => v
+            .as_array()?
+            .iter()
+            .map(|s| s.get("to")?.as_i64().filter(|k| (0..steps).contains(k)))
+            .collect::<Option<_>>()?,
+    };
+    let at_times = match c.get("at_times") {
+        None => None,
+        Some(v) => Some(
+            v.as_array()?
+                .iter()
+                .map(Value::as_f64)
+                .collect::<Option<_>>()?,
+        ),
+    };
     Some(LogicCall {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps,
         check,
+        seeks,
+        regions: c.get("regions").and_then(Value::as_bool).unwrap_or(false),
+        at_times,
     })
+}
+
+/// #213: a seek to step `to` of `world`'s run: the nearest checkpoint at or before it restored
+/// and run through `to`, with the services regions step `to` read, each item's step hashes from
+/// `to` on, and the first checkpoint after it.
+fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, Value> {
+    let from = world.nearest(to).ok_or_else(
+        || json!({"code": "bad_input", "what": format!("no checkpoint at or before step {to}")}),
+    )?;
+    let mut w = world.restore(from, None)?;
+    let mut r = Record::default();
+    r.regions = regions.then(Default::default);
+    let mut until = to + 1;
+    w.run(until, &mut r, &mut |_, _| {});
+    let ids: Vec<String> = w.piece.items.iter().map(|i| i.id.clone()).collect();
+    let after = |r: &Record| {
+        ids.iter()
+            .filter_map(|id| r.deep(id).into_iter().find(|(k, _)| *k > to))
+            .next()
+    };
+    while after(&r).is_none() && until < steps {
+        until += 1;
+        w.run(until, &mut r, &mut |_, _| {});
+    }
+    let mut hashes = Map::new();
+    for id in &ids {
+        let list: Vec<Value> = r
+            .rows()
+            .range(to..)
+            .filter_map(|(_, (items, _))| items.get(id)?.get("hash").cloned())
+            .collect();
+        hashes.insert(id.clone(), json!(list));
+    }
+    let checkpoint = after(&r).map(|(k, _)| {
+        let deep: Map<String, Value> = ids
+            .iter()
+            .filter_map(|id| {
+                Some((
+                    id.clone(),
+                    json!(r.deep(id).into_iter().find(|(s, _)| *s == k)?.1),
+                ))
+            })
+            .collect();
+        json!({"step": k, "deep_hash": deep})
+    });
+    let read = r.regions.as_ref().and_then(|m| m.get(&to).cloned());
+    Ok(json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint}))
 }
 
 /// Whether a logic item of `form` reads control `c`.
@@ -577,20 +650,27 @@ impl Hub<'_> {
         let Some(form) = self.forms.get(&l.doc).cloned() else {
             return json!({"code": "no_revision"});
         };
-        let piece = match self.logic_piece(&form) {
+        let held = self.track_json(&l.doc);
+        let read = self.track_read(&l.doc);
+        let piece = match self.logic_piece(&form, &read) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let held = self.track_json(&l.doc);
-        let read = self.track_read(&l.doc);
         let entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
+        let planted = deep_logic::Planted {
+            services_after_checkpoint: self.planted(crate::hub::Planted::Physics(
+                crate::physics::Planted::ResultsAfterCheckpoint,
+            )),
+            ..Default::default()
+        };
         let mut rec = Record::default();
+        rec.regions = l.regions.then(Default::default);
         let mut world = match World::new(
             piece.clone(),
             track_of(&entries),
-            false,
-            Default::default(),
+            !l.seeks.is_empty(),
+            planted,
             &mut rec,
             None,
         ) {
@@ -602,11 +682,15 @@ impl Hub<'_> {
         for k in 0..l.steps {
             world.run(k + 1, &mut rec, &mut |_, _| {});
             let row = rec.rows().get(&k).map(|r| &r.0);
-            let hash: Map<String, Value> = piece
-                .items
-                .iter()
-                .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get("hash")?.clone())))
-                .collect();
+            let field = |f: &str| -> Map<String, Value> {
+                piece
+                    .items
+                    .iter()
+                    .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
+                    .collect()
+            };
+            let (hash, fuel) = (field("hash"), field("fuel"));
+            let (service_ns, mirror_ns) = (field("service_ns"), field("mirror_ns"));
             let mut arrays = Map::new();
             for (n, item) in piece.items.iter().enumerate() {
                 let region = world.write_region(n);
@@ -622,26 +706,45 @@ impl Hub<'_> {
                     arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
                 }
             }
-            steps.push(json!({"step": k, "t": k * len, "hash": hash, "arrays": arrays}));
+            let mut step = json!({"step": k, "t": k * len, "hash": hash, "fuel": fuel, "service_ns": service_ns,
+                                  "mirror_ns": mirror_ns, "arrays": arrays});
+            if let Some(r) = rec.regions.as_ref() {
+                step["regions"] = json!(r.get(&k).cloned().unwrap_or_default());
+            }
+            steps.push(step);
         }
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
-        let mut out = json!({"steps": steps, "track": held});
+        let mut out = json!({"steps": steps, "track": held, "traps": rec.traps, "checkpoints": rec.checkpoints,
+                             "handles": crate::physics::cast::handles(&form)});
+        if !l.seeks.is_empty() {
+            let mut seeks = Vec::new();
+            for &to in &l.seeks {
+                match seek_to(&world, to, l.steps, l.regions) {
+                    Ok(s) => seeks.push(s),
+                    Err(e) => return e,
+                }
+            }
+            out["seeks"] = json!(seeks);
+        }
         if l.check {
-            let at = [l.steps / 2];
-            let (verdict, mut failures) = match deep_logic::checks::determinism(
-                &piece,
-                &entries,
-                l.steps,
-                &at,
-                Default::default(),
-            ) {
-                Ok(v) => (
-                    "PASS",
-                    v["failures"].as_array().cloned().unwrap_or_default(),
-                ),
-                Err(e) => ("BLOCKED", vec![e]),
+            let at: Vec<i64> = match &l.at_times {
+                Some(ts) => ts
+                    .iter()
+                    .map(|t| {
+                        (t * deep_canvas::grammar::FLICKS_PER_SECOND as f64).round() as i64 / len
+                    })
+                    .collect(),
+                None => vec![l.steps / 2],
             };
+            let (verdict, mut failures) =
+                match deep_logic::checks::determinism(&piece, &entries, l.steps, &at, planted) {
+                    Ok(v) => (
+                        "PASS",
+                        v["failures"].as_array().cloned().unwrap_or_default(),
+                    ),
+                    Err(e) => ("BLOCKED", vec![e]),
+                };
             failures.extend(replay);
             let verdict = if verdict == "PASS" && !failures.is_empty() {
                 "FAIL"

@@ -11,7 +11,7 @@ use deep_canvas::registry::{
 };
 use serde_json::json;
 
-use crate::world::handed;
+use crate::bake::handed;
 
 /// The interface this module implements.
 pub const INTERFACE: &str = "logic@1";

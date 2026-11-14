@@ -143,7 +143,7 @@ impl Hub<'_> {
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
     fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
         self.inline_worlds(form, track)?;
-        let Some(piece) = self.logic_piece(form)? else {
+        let Some(piece) = self.logic_piece(form, track)? else {
             return Ok(());
         };
         let entries: Vec<Entry> = track
@@ -234,8 +234,14 @@ impl Hub<'_> {
     }
 
     /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
-    /// each program read from the evidence store; none when it has no logic item.
-    pub(crate) fn logic_piece(&self, form: &Value) -> Result<Option<Piece>, Box<Issue>> {
+    /// each program read from the evidence store, with the between-step services this build binds
+    /// answering on `form`'s worlds and the core input track `track` (#213); none when it has no
+    /// logic item.
+    pub(crate) fn logic_piece(
+        &self,
+        form: &Value,
+        track: &[Value],
+    ) -> Result<Option<Piece>, Box<Issue>> {
         let items: Map<String, Value> = form
             .get("items")
             .and_then(Value::as_object)
@@ -253,9 +259,20 @@ impl Hub<'_> {
             "items": items,
         });
         let root = &self.scenario.evidence;
-        let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| {
-            crate::evidence::read(root, sha)
-        })
+        let piece = check_in(
+            &piece,
+            &Default::default(),
+            &mut History::new(),
+            &|sha| crate::evidence::read(root, sha),
+            &crate::physics::cast::services(
+                &self.startup.sealed,
+                form,
+                track,
+                self.planted(crate::hub::Planted::Physics(
+                    crate::physics::Planted::CastAnswersLate,
+                )),
+            ),
+        )
         .map_err(|r| refused(r.0))?;
         Ok(Some(piece))
     }

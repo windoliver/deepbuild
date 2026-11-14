@@ -15,7 +15,7 @@ use crate::scene::Scene;
 use crate::{fp, Rapier};
 use base64::Engine;
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Input, Query, ShapeRef, Targets, FIELDS,
+    Backend, BodyState, Canonical, Checkpoint, Hit, Input, Query, ShapeRef, Targets, FIELDS,
 };
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -1435,5 +1435,27 @@ impl Live {
         self.steps = k;
         let rows = occurrence::sorted(k as u32, self.b.occurrences(), &self.rank);
         Ok(occurrence::timed(&occurrence::listed(&rows), &self.w))
+    }
+
+    /// #213: what `q` meets among `groups` in the state the last step left, through the backend
+    /// interface's `query()`, each hit with its body's rank (the u32 ID occurrence rows name it by)
+    /// and its shape use, sorted by distance, then ID, then shape use.
+    pub fn cast(&self, q: &Query, groups: u32) -> Vec<(u32, u32, Hit)> {
+        let mut out: Vec<(u32, u32, Hit)> = self
+            .b
+            .query(q, groups)
+            .into_iter()
+            .map(|h| {
+                let id = self.rank.get(&h.shape.body).copied().unwrap_or(u32::MAX);
+                (id, h.shape.index as u32, h)
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            a.2.distance
+                .total_cmp(&b.2.distance)
+                .then(a.0.cmp(&b.0))
+                .then(a.1.cmp(&b.1))
+        });
+        out
     }
 }

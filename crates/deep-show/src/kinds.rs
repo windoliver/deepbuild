@@ -1148,7 +1148,7 @@ fn listing(
                            "value": value, "since": core_name(),
                            "digest": entry_digest(name.as_str().unwrap_or_default(), &entry_name, &value, ""),
                            "kit": p["kit"]});
-                list.push(e);
+                list.push(crate::registries::fill_checked(e, &head));
             }
             if planted == Some(Planted::ListingWithoutPackEntries) {
                 list.retain(|e| e["origin"] != "pack" && e["origin"] != "agent");

@@ -1504,6 +1504,7 @@ workloads['lottie-export'] = () => {
 };
 // #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
 workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
+workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
