@@ -1,0 +1,79 @@
+{
+  "id": "verbs.fade_out",
+  "version": "1.0",
+  "title": "Fade out",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An exit: each target's opacity falls to 0, to an offset, a point or a scale, over its window.",
+  "inputs": {
+    "shift": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "about": "the offset each target fades out to"
+    },
+    "to": {
+      "type": "ID",
+      "default": "none",
+      "about": "an item each target fades out to, in place of shift"
+    },
+    "scale": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "about": "the scale each target fades out to, as a share of its own"
+    }
+  },
+  "steps": {
+    "fade": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/opacity": 0
+        }
+      }
+    },
+    "slide": {
+      "op": "cue",
+      "when": "(shift[0] != 0 || shift[1] != 0 || shift[2] != 0) && to == none",
+      "params": {
+        "set": {
+          "at/pos": [
+            "now[0] + shift[0]",
+            "now[1] + shift[1]",
+            "now[2] + shift[2]"
+          ]
+        }
+      }
+    },
+    "point": {
+      "op": "cue",
+      "when": "to != none",
+      "params": {
+        "set": {
+          "at/pos": [
+            "to_now[0]",
+            "to_now[1]",
+            "now[2]"
+          ]
+        }
+      }
+    },
+    "zoom": {
+      "op": "cue",
+      "when": "scale != 1",
+      "params": {
+        "set": {
+          "at/scale": [
+            "now[0] * scale",
+            "now[1] * scale",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

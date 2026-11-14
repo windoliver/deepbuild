@@ -1,0 +1,162 @@
+{
+  "verb": "count_to",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Count to fixture",
+    "description": "Count to fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "num": {
+        "id": "num",
+        "kind": "text@1",
+        "name": "Text num",
+        "order": "cnum",
+        "params": {
+          "text": "",
+          "font": "body",
+          "size": 32
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "count_to",
+              "targets": [
+                "num"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s",
+              "params": {
+                "value": 10
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Count to fixture written by hand",
+    "description": "Count to fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "num": {
+        "id": "num",
+        "kind": "text@1",
+        "name": "Text num",
+        "order": "cnum",
+        "params": {
+          "text": "",
+          "font": "body",
+          "size": 32
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "count": {
+        "target": "items/num/params/text",
+        "type": "enum",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": "0",
+            "interp": "hold"
+          },
+          "k1": {
+            "t": 554665173,
+            "value": "1",
+            "interp": "hold"
+          },
+          "k2": {
+            "t": 609540855,
+            "value": "2",
+            "interp": "hold"
+          },
+          "k3": {
+            "t": 646711907,
+            "value": "3",
+            "interp": "hold"
+          },
+          "k4": {
+            "t": 677383703,
+            "value": "4",
+            "interp": "hold"
+          },
+          "k5": {
+            "t": 705600000,
+            "value": "5",
+            "interp": "hold"
+          },
+          "k6": {
+            "t": 733816297,
+            "value": "6",
+            "interp": "hold"
+          },
+          "k7": {
+            "t": 764488093,
+            "value": "7",
+            "interp": "hold"
+          },
+          "k8": {
+            "t": 801659145,
+            "value": "8",
+            "interp": "hold"
+          },
+          "k9": {
+            "t": 856534827,
+            "value": "9",
+            "interp": "hold"
+          },
+          "k10": {
+            "t": 1058400000,
+            "value": "10",
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/num/params/text"
+  ]
+}

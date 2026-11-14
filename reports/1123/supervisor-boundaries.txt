@@ -1,0 +1,12 @@
+✖ killing the recorded supervisor wrapper cannot strand Cargo (2623.9435ms)
+✔ successful build leader cannot leave a writer behind (3666.241ms)
+ℹ tests 2
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6541.023042
+✖ failing tests:
+✖ killing the recorded supervisor wrapper cannot strand Cargo (2623.9435ms)
+  AssertionError [ERR_ASSERTION]: cancelled build removes only its run root after workers stop
