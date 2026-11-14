@@ -30,6 +30,9 @@ pub struct Latched {
     /// The playhead, in flicks.
     pub t: i64,
     pub set: Option<(String, f64)>,
+    /// The view and viewer values a preview reads (Logic: preview), by read name, when they
+    /// changed this frame: session state, never stamped on the track.
+    pub view: Option<Map<String, Value>>,
 }
 
 /// A view's render worker: its thread owns the piece's world, or for a pipelined piece talks to
@@ -147,7 +150,11 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
     let mut fork_at: Option<i64> = None;
     // The most CPU one step (with its checkpoint) has taken: what the next one may take.
     let mut step_ns = 0u64;
-    for Latched { t, set } in inbox {
+    let mut view = Map::new();
+    for Latched { t, set, view: seen } in inbox {
+        if let Some(v) = seen {
+            view = v;
+        }
         let at = world.at().unwrap_or(0);
         let mut stamped = Value::Null;
         if let Some((control, value)) = set {
@@ -204,8 +211,13 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
             world.run(want, &mut Record::default(), &mut |_, _| {});
         }
         let eval_ns = cpu_ns() - start;
+        // At most one preview an item a frame, on a copy of the state this frame draws.
+        let start = cpu_ns();
+        let (previewed, preview_traps) = world.preview(&view);
+        let preview_ns = cpu_ns() - start;
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
+            "previewed": previewed, "preview_ns": preview_ns, "previews": world.previews(), "preview_traps": preview_traps,
             "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
             "draws": world.drawn(t), "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) },
             "drawn": hashes(at - 1, &world.arrays())});
@@ -256,7 +268,7 @@ fn logic(line: Value, planted: Planted, inbox: Receiver<Latched>, up: Sender<Up>
                 Err(_) => return,
             }
         };
-        if let Some(Latched { t, set }) = latched {
+        if let Some(Latched { t, set, .. }) = latched {
             let at = world.at().unwrap_or(0);
             let mut took = None;
             if let Some((control, value)) = set {
@@ -336,9 +348,9 @@ fn front(
     // Each ended step's full-state hashes and what a frame draws from it, until a reset drops it.
     let mut ended: BTreeMap<i64, (Map<String, Value>, Vec<Shown>)> = BTreeMap::new();
     let mut fork_at: Option<i64> = None;
-    for Latched { t, set } in inbox {
+    for Latched { t, set, view } in inbox {
         let mut took = set.is_none().then_some(None);
-        if to.send(Latched { t, set }).is_err() {
+        if to.send(Latched { t, set, view }).is_err() {
             return;
         }
         let start = cpu_ns();

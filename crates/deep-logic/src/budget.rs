@@ -195,7 +195,8 @@ pub fn ceiling(class: Class, step: i64, host: &str) -> i64 {
 /// k, a linear write drawing one step late. Every write is linear or hold, the only two
 /// `interpolate` takes; a turn clock's steps run only when asked, so they stay on the frame.
 pub fn pipelined(item: &Item) -> bool {
-    item.step >= 2 * FRAME && !item.turn
+    // A preview reads the state the render worker draws, so an item with one steps there (#548).
+    item.step >= 2 * FRAME && !item.turn && item.preview.is_none()
 }
 
 /// What an item's steps are held to on `host`: its class's ceiling, twice the 60 Hz one when it

@@ -10,6 +10,7 @@
 //! and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
 
 pub mod bake;
+pub mod bindings;
 pub mod budget;
 pub mod checks;
 pub mod judder;
@@ -70,6 +71,14 @@ pub struct Planted {
     pub ring_drops_oldest: bool,
     pub keyframes_held_in_ring: bool,
     pub store_fails_at_step_120: bool,
+    /// #548: a preview that runs on the item's own instance rather than a throwaway copy.
+    pub preview_on_own_memory: bool,
+    /// #548: a preview that runs only when a control it reads changes, not after a step or seek.
+    pub preview_on_hover_only: bool,
+    /// #548: a region map that lays the reads out by name rather than in declaration order.
+    pub map_reads_by_name: bool,
+    /// #548: a bindings generator that orders each region's fields by name.
+    pub bindings_by_name: bool,
 }
 
 impl Planted {
@@ -107,6 +116,10 @@ impl Planted {
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
             "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
             "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
+            "preview_on_own_memory" => p.preview_on_own_memory = true,
+            "preview_on_hover_only" => p.preview_on_hover_only = true,
+            "map_reads_by_name" => p.map_reads_by_name = true,
+            "bindings_by_name" => p.bindings_by_name = true,
             _ => return None,
         }
         Some(self)
@@ -1048,8 +1061,14 @@ impl Logic {
                     .ok_or_else(|| bad("set"))?,
             )),
         };
+        // #548: the view and viewer values a preview reads, by read name, held until changed.
+        let view = match line.get("view") {
+            None => None,
+            Some(Value::Object(m)) => Some(m.clone()),
+            Some(_) => return Err(bad("view")),
+        };
         let mut ui_ns = budget::cpu_ns() - ui;
-        let mut out = v.frame(live::Latched { t: v.t, set }).ok_or_else(
+        let mut out = v.frame(live::Latched { t: v.t, set, view }).ok_or_else(
             || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
         )?;
         let ui = budget::cpu_ns();

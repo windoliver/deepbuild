@@ -30,7 +30,7 @@ const UNITS: u8 = 128;
 pub const MAX_UNITS: usize = 256;
 
 /// The record's length.
-const SIZE: usize = 248;
+pub const SIZE: usize = 248;
 
 /// One point entry's value, as its JSON form holds it: absent keys and nulls are none.
 #[derive(Clone, Debug, PartialEq)]
