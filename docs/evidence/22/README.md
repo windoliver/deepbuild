@@ -212,7 +212,7 @@ failure against the diff and main's code, with no run; six of the files ran on m
 | 1454/commands, panel, panel-redraft/refused | the board fixture imports `gpui-kit`, which main refuses since #1425; some launches SIGKILLed before the window |
 | 1454/canvas, 1459/voiceover | `deep-app exited (SIGKILL) before its window`, empty stderr: the criterion is unjudged |
 | 1454/answer, 1454/shown, 1462/real, 1462-redraft-ac2 | **main's**: they fail the same way on main on this Mac (below) |
-| 1459/identifier, 1459/panel | **undecided**: no row label starts with the question; the `asks` panel's window was gone. Both pass on main (below) |
+| 1459/identifier, 1459/panel | they pass on main and, run again at the head, pass twice each (below): that run's, not this change's |
 
 None of the 28 appends a bare `ask.created`: each raises through the asks core or a live `deep_ask`, with no batches
 declared.
@@ -228,13 +228,32 @@ declared.
 | 1454/shown | fails, `BLOCKED: deep-app has no window` | main's |
 | 1462/real | fails, 4 of 4 | main's: the card takes no key (#1842), no status item |
 | 1462-redraft-ac2 | fails, 1 of 1 | main's (#1842) |
-| 1459/identifier | passes | not shown independent of this change: one failing run here, one passing run on main |
+| 1459/identifier | passes | passes at the head too when run again (next section) |
 | 1459/panel | passes | the same |
 
-The run at 093c5bc8 had `deep-app exited (SIGKILL) before its window` in five other files and the run on main had none,
-and a dead app gives exactly the two #1459 messages; the diff has no path to either that a reading found. That is a
-reading, not proof: the two files run again at the head, with a probe of the app's life and its accessibility texts.
-The 13 files of the table's first six rows were read against the code, never run on main.
+### The two #1459 files again, and seven more on main
+
+`mac-07587e38/` is the Mac's run at 07587e38, whose `crates/` and `packages/` equal 093c5bc8's (`exits.txt`).
+
+- `tests/acceptance/1459/identifier.test.ts` and `1459/panel.test.ts` pass, twice each (`1-` to `4-*.txt`): once at
+  load 25 to 34 and once at load 6 to 7. The failures at 093c5bc8 didn't come back.
+- The probe between them (`probe1459.test.ts`, output in `probe/probe1459.txt`) read the app every 3 s for 33 s, plain
+  and with `--panel asks`: alive throughout (no exit code, no signal, 24 readings), one window, and each of the three
+  questions on a row label an assistive client reads, the panel reading "Needs you 3".
+- So the two failures at 093c5bc8 were that run's, most likely an app killed before or after its window as in five
+  other files of that run; the cause of those kills isn't traced. Nothing in this change was altered between the
+  failing and the passing runs.
+
+Then, at main b1a1ff86 (`5-main-13.txt`, load 34 to 74), the files so far only read against the code:
+
+| File | On main |
+|---|---|
+| 1002 and 994 `first-screen-redraft/shown` | fail, the same `BLOCKED: the window didn't take 1512 × 982` |
+| 1172/shown, 1172/popout | fail, `BLOCKED: deep-app has no window` |
+| 1172/shell | fails, 4 of 4 (2 of 4 at the head) |
+| 1457/budgets | fails, the same two INCONCLUSIVE tests for `BASE_BIN_*` |
+| 41/app/screens | **no result**: the runner stopped it when the Mac fell under 20 GB free |
+| 41/app/finder, 1454/commands, 1454/panel, 1454/panel-redraft/refused, 1454/canvas, 1459/voiceover | **not run** on main: read against the code only |
 
 ## #83's status file, redrafted
 
@@ -261,3 +280,40 @@ test files; a separate agent ran each on main b1a1ff86 in its own worktree:
 - Of the lint lines, `packages/asks/src/index.ts` over its ceiling was this change's and is fixed in 093c5bc8 (2059 of
   2059); `packages/hub/src/core.ts` is at main's own 2639. `crates/deep-app/src/views.rs` is over a ceiling main already
   exceeds, and this change adds 70 lines to it.
+
+## The budgets at the head, on the Mac
+
+`mac-07587e38/budgets.txt`: #319's budgets at 07587e38 on the Mac15,12, on AC power with `thermalState 0` at the start
+and the end. Load averages were 3.30 → 3.76, higher than the 2.33 of the run at 25f35437, after a 10-minute wait for
+the Mac to settle.
+
+| Budget | Five runs after a warm-up | Limit | Result |
+|---|---|---|---|
+| create an ask, p50 | 0.986, 0.872, 0.914, 1.089, 1.251 ms | 5 ms | PASS |
+| answer an ask, p50 | 2.196, 2.982, 2.982, 2.035, 2.199 ms | 5 ms | PASS |
+| inbox of 10,000 asks | 1.185, 0.854, 0.685, 0.582, 0.571 ms | 100 ms | PASS |
+
+#319's whole suite passed right after, 20 of 20 in 7 files (`suite-319.txt`).
+
+## `tests/acceptance/84/reach/switch.test.ts`: a race in main's check controls
+
+It failed 3 of 7 runs in the working checkout at the head (and once inside the `affected.mjs` run), all within six
+minutes, and passed 8 of 8 in clean worktrees of the branch and 5 of 5 on main. A separate agent traced it:
+
+- **The race** (`packages/checks-command/src/controls.ts` and `index.ts:302`, the same on main, untouched by this
+  change): a claim's three checks run at once in one temporary checkout. Each plants a control test in every test file
+  and records its line (7, 9, 11), and removes its own when it ends. When the first run ends before the third has read
+  its file, the third's control sits at :9 and the run is refused: "failed at session-store.test.cjs:9, not at :11".
+  Stop D's claim goes INVALID, nothing runs it again, and no PASS comes in the test's 60 s.
+- **Proof**, in a probe worktree at 31b5fd54 with its own install and build, with logging and a delay before the third
+  run's start patched into its `dist` only: failed 0 of 10 with no delay, 3 of 6 at 40 ms, 4 of 4 at 80 ms, 3 of 3 at
+  200 ms, each with the saved message. The log showed the three plants 35 to 90 ms apart and the first removal a median
+  180 ms after the third plant.
+- **Not this change's:** with main's `dist` of asks, hub and record in the probe, 0 of 6 failed with no delay and 2 of 6
+  at 40 ms, the same error.
+- **Not the checkout's:** its `dist` equals the clean worktree's, the helpers use only `target/debug/deep-hook`, and
+  each of its five debug builds passed 4 of 4 in the probe. It has passed 9 of 9 since. What differed on the machine in
+  those six minutes wasn't found.
+
+The probe's raw outputs were in a scratch folder the Spark's reboot at 14:52 on 2026-11-14 cleared; the counts above
+are from the agent's report. A fix belongs in `checks-command`, outside this change.

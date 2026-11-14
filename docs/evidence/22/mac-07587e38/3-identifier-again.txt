@@ -1,0 +1,16 @@
+== head 07587e38b594f97a7c3098dc10df8104813f7525 tests/acceptance/1459/identifier.test.ts
+== start 2026-11-14 14:48:32 load { 7.65 45.82 44.72 } thermal 0
+
+ RUN  v5.0.5 ~/private/dbc-22l
+
+ ✓ tests/acceptance/1459/identifier.test.ts (1 test) 22621ms
+   ✓ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     ✓ AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 22508ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:48:33
+   Duration  22.78s (tests 100%)
+
+== end 2026-11-14 14:48:56 load { 6.80 43.15 43.79 } thermal 0
+vitest exit=0

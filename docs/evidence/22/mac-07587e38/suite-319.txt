@@ -1,0 +1,46 @@
+== head 07587e38b594f97a7c3098dc10df8104813f7525 tests/acceptance/319 whole suite
+== start 2026-11-14 14:34:29 14:34  up 1 day,  7:36, 2 users, load averages: 3.76 8.23 10.21 thermalState 0
+
+ RUN  v5.0.5 ~/private/dbc-22l/tests/acceptance/319
+
+ ✓ deadlines.test.ts > #319.466f1905 for one person, an authority ask past its 1-day deadline takes no at that deadline, recorded as defaulted, never as escalated 163ms
+ ✓ timing.test.ts > #319.ed496876 asks beyond the day's cap wait for the next batch, unless a session is held on one or its deadline would pass first 194ms
+ ✓ restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with room in the day's cap 228ms
+ ✓ fold.test.ts > #319.e94e8d14 a sixth open ask from one session lands inside one "this session keeps asking" exception, and answering it in bulk closes all six 262ms
+ ✓ deadlines.test.ts > #319.ba0ff138 at its deadline an ask takes its default, announced to the agent and undoable from Needs you 163ms
+ ✓ settings.test.ts > #319.49a0402f setup drafts each kind's deadline and default, and at its deadline each ask takes what setup drafted 270ms
+ ✓ timing.test.ts > #319.eaa6ea10 with batches 8 hours apart and the day's cap reached, an early question raised just after a batch shows at once, a taste call waits, and no ask takes its default before it has shown 220ms
+ ✓ settings.test.ts > #319.d452dc28 in a repo whose done.yaml sets deadlines only for taste and authority, a choice ask takes the choice deadline and default from your own settings 137ms
+ ✓ fold.test.ts > #319.b1bf1877 an authority ask folded into the exception, and one held for a message the agent hasn't read, show at once when the deadline would pass before the next batch, and that ask alone takes no 164ms
+ ✓ deadlines.test.ts > #319.ba0ff138 anything irreversible defaults to no, and a default never makes a claim pass 119ms
+ ✓ deadlines.test.ts > #319.ba0ff138 Later hides an ask until a time you pick and never past its deadline 42ms
+ ✓ deadlines.test.ts > #319.3699b37e no ask is ever closed silently: past its deadline each goes to its fallback, then its announced default, and each step is recorded 105ms
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub
+warm-up: create 1.102 ms, answer 3.400 ms at p50 (discarded)
+
+ ✓ plants.test.ts > #319.1ad1ab09 fails on a hub that waits for the next batch after its start, naming the ask 5234ms
+ ✓ plants.test.ts > #319.466f1905 fails on a hub that records the defaulted authority ask as escalated with nobody to take it, naming the ask 54ms
+ ✓ plants.test.ts > #319.d452dc28 fails on a hub that takes the repo's asks block in place of your settings, naming the choice ask 41ms
+ ✓ restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > a hub that waits for the next batch fails, naming each such ask, with room in the day's cap 5139ms
+ ✓ restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > each open ask whose deadline comes before the next batch shows in Needs you within 5 s of the hub's start, with the day's cap reached 140ms
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub
+#319 create an ask, p50 (ms): 1.272, 1.355, 1.413, 1.260, 1.261 against 5 (margin 12%)
+#319 answer an ask, p50 (ms): 3.228, 2.352, 3.157, 2.130, 3.150 against 5 (margin 52%)
+
+ ✓ budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 creating or answering an ask takes under 5 ms in the hub 6120ms
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms
+warm-up: 2.0 ms (discarded)
+
+stdout | budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms
+#319 inbox with 10,000 asks (ms): 1.124, 1.008, 1.115, 1.335, 0.915 against 100 (margin 46%)
+
+ ✓ budgets.test.ts > #319.43d13eb3 budgets on the reference Mac > #319.43d13eb3 the inbox projection with 10,000 asks loads in under 100 ms 1320ms
+ ✓ restart-redraft/restart.test.ts > #319: the hub stopped across a batch time > a hub that waits for the next batch fails, naming each such ask, with the day's cap reached 5098ms
+
+ Test Files  7 passed (7)
+      Tests  20 passed (20)
+   Start at  14:34:29
+   Duration  10.86s (tests 96%, import 2%, transform 2%)
+
+== end 2026-11-14 14:34:40 14:34  up 1 day,  7:36, 2 users, load averages: 4.24 8.12 10.13 thermalState 0
+vitest exit=0
