@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The proof check plug-in (#685): it registers check kind `proof` through `deep.registerCheck`, running a machine-checked proof (Lean 4 through `lake comparator`, or Kani for a Rust crate) as a check that returns a closed run outcome, never a verdict. Its default export is the plug-in's register function; `tests/acceptance/685` drives it.
+The proof check plug-in (#685): it registers check kind `proof` through `deep.registerCheck`, running a machine-checked proof (Lean 4 through `lake comparator`, or Kani for a Rust crate) as a check that returns a closed run outcome, never a verdict. Its default export is the plug-in's register function; `tests/acceptance/685` drives it. Beyond its tests nothing calls it yet: the hub's kind table (`packages/hub/src/kinds.ts`) holds no `proof` kind, so no gate run reaches one.
 
 ## Where new code goes
 

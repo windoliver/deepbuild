@@ -72,6 +72,9 @@ pub struct Type {
     /// #1965: the look's code roles, the role each token class draws in (Look `look@1`: `code`);
     /// empty for a look that gives none, where every token draws in plain.
     pub code: BTreeMap<String, String>,
+    /// #1966: the look's diff roles, the role each gutter mark (added, removed, changed) draws
+    /// in (Look `look@1`: `diff`); empty for a look that gives none.
+    pub diff: BTreeMap<String, String>,
     /// #149: the look's drawn fields, when marks are dressed by them.
     pub drawn: Option<Arc<deep_canvas_drawn::spec::Look>>,
     /// #149's wrong programs: only a look's first rim, and every ink fill flat.
@@ -630,6 +633,15 @@ pub struct TextRun {
     pub to: usize,
     pub role: String,
     pub color: Rgb,
+    /// #1966: the opacity its glyphs draw at, 1 but on a code line a highlight dims.
+    pub opacity: f64,
+}
+
+/// #1966: the opacity a text's grapheme draws at: its run's, else 1.
+pub fn run_opacity(runs: &[TextRun], grapheme: usize) -> f64 {
+    runs.get(runs.partition_point(|r| r.to <= grapheme))
+        .filter(|r| r.from <= grapheme)
+        .map_or(1.0, |r| r.opacity)
 }
 
 /// The role and color a text's grapheme is painted in: its run's, else the item's.
@@ -671,6 +683,7 @@ fn text_runs(
             to,
             color: role(palette, run.get("role"), &at)?,
             role: name.clone(),
+            opacity: 1.0,
         });
     }
     crate::code::runs((palette, ty), params, code, path, out)
@@ -823,6 +836,10 @@ pub struct TextSpec {
     pub bound: bool,
     /// #1964: `runs`' styled spans of the one shaped run.
     pub spans: Vec<deep_text::Span>,
+    /// #1966: a list's `gap`, the space after each of its items, and its `indent`, where its
+    /// lines start.
+    pub gap: f64,
+    pub indent: f64,
 }
 
 impl TextSpec {
@@ -856,6 +873,9 @@ impl TextSpec {
         k.int(self.align as i64);
         if !self.spans.is_empty() {
             k.text(&format!("{:?}", self.spans));
+        }
+        if self.gap > 0.0 || self.indent > 0.0 {
+            k.text("list").number(self.gap).number(self.indent);
         }
         k.finish()
     }
@@ -923,7 +943,12 @@ fn text_spec_of(
         .map(f64::round)
         .filter(|w| (1.0..=1000.0).contains(w))
         .map_or(400, |w| w as u16);
+    let size = num(params.get("size")).unwrap_or(13.0);
+    // #1966: a list's items start `indent` in from its box's edge, `gap` apart.
+    let list = crate::lines::list(params, size, &path)?;
     Ok(TextSpec {
+        gap: list.map_or(0.0, |l| l.gap),
+        indent: list.map_or(0.0, |l| l.indent),
         spans: text_spans(params, &path, ty, (ty.family(&font), weight))?,
         text,
         family: ty
@@ -932,7 +957,7 @@ fn text_spec_of(
         fallback: ty.fallback.clone(),
         lang,
         font,
-        size: num(params.get("size")).unwrap_or(13.0),
+        size,
         weight,
         width: params.get("box").and_then(|b| num(b.get("w"))),
         max_lines: match params.get("max_lines") {
@@ -982,6 +1007,8 @@ impl TextSpec {
             tabular: self.bound,
             mask: self.mask,
             spans: &self.spans,
+            gap: self.gap as f32,
+            indent: self.indent as f32,
         })
     }
 }
@@ -1318,6 +1345,7 @@ impl Mark {
                 for r in runs {
                     k.int(r.from as i64).int(r.to as i64);
                     color(k, &r.color);
+                    k.number(r.opacity);
                 }
             }
             Mark::Image {
@@ -1482,6 +1510,11 @@ fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
         Some(Value::Array(a)) if a.len() >= 2 => Some([num(a.first())?, num(a.get(1))?]),
         _ => None,
     }
+}
+
+/// A circle's `center`, at its listed default `[0, 0]` when left out (#1974).
+pub(crate) fn circle_center(v: Option<&Value>) -> Option<[f64; 2]> {
+    v.map_or(Some([0.0, 0.0]), |c| pair(Some(c)))
 }
 
 fn role(palette: &Palette, name: Option<&Value>, path: &str) -> Result<Rgb, Refused> {
@@ -2589,7 +2622,20 @@ pub fn path_report(
         verbs
     };
     let place = Place::of(item);
-    let paint = object_or_empty(params.get("paint"));
+    // #466: a build draws its strokes on in turn, and its fill when its fill says.
+    let build = crate::build::read(params).map_err(|f| Refused {
+        code: "out_of_range",
+        path: format!("{path}/params/{f}"),
+    })?;
+    let verbs: Vec<Verb> = match &build {
+        Some(b) => b.drawn(&verbs, id),
+        None => verbs,
+    };
+    let unfilled: Option<Map<String, Value>> = build
+        .as_ref()
+        .filter(|b| !b.fills())
+        .map(|_| without_fill(params));
+    let paint = object_or_empty(unfilled.as_ref().unwrap_or(params).get("paint"));
     let built = build_path(&ctx, id, verbs, params, paint, place)?;
     let has_repeater = pathops::read(params.get("ops"), "")
         .map(|ops| ops.iter().any(|o| matches!(o, pathops::Op::Repeater(_))))
@@ -2633,6 +2679,15 @@ pub fn path_report(
         digest: built.digest,
         built: Some(built),
     }))
+}
+
+/// A path's params with its paint's fill taken off (#466: a build's fill before it draws).
+fn without_fill(params: &Map<String, Value>) -> Map<String, Value> {
+    let mut p = params.clone();
+    if let Some(Value::Object(paint)) = p.get_mut("paint") {
+        paint.remove("fill");
+    }
+    p
 }
 
 /// The segments the ops of `id` declare, for a refusal that names the count.
@@ -2700,7 +2755,55 @@ fn boxes_of(frame: &Frame, items: &Map<String, Value>) -> BTreeMap<String, [f64;
                 .and_then(Value::as_str);
         }
     }
+    text_boxes(frame, items, &mut out);
     out
+}
+
+/// #1966: each text's box where its shaped run draws, and each of its read-only anchors a path
+/// attaches to (`<id>#line:n`, `<id>#tok:k`), the line's or token's box. A text's box joins no
+/// parent's, as before.
+fn text_boxes(frame: &Frame, items: &Map<String, Value>, out: &mut BTreeMap<String, [f64; 4]>) {
+    let mut parts: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for item in items.values() {
+        let attach = item.get("params").and_then(|p| p.get("attach"));
+        for end in ["start", "end"] {
+            let target = attach.and_then(|a| a.get(end)).and_then(Value::as_str);
+            if let Some((id, part)) = target.and_then(|t| t.split_once('#')) {
+                parts.entry(id).or_default().push(part);
+            }
+        }
+    }
+    for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
+        let Mark::Text {
+            item, spec, origin, ..
+        } = &drawn.mark
+        else {
+            continue;
+        };
+        if item.contains('#') {
+            continue;
+        }
+        let Some(shaped) = shaped_text(spec) else {
+            continue;
+        };
+        let w = f64::from(shaped.width);
+        let at = match (spec.align, spec.width) {
+            (Align::Center, Some(box_w)) => (box_w - w) / 2.0,
+            (Align::End, Some(box_w)) => box_w - w,
+            _ => 0.0,
+        };
+        out.insert(
+            item.clone(),
+            [origin[0] + at, origin[1], w, f64::from(shaped.height)],
+        );
+        let params = object_or_empty(items.get(item).and_then(|i| i.get("params")));
+        for part in parts.get(item.as_str()).into_iter().flatten() {
+            if let Some(b) = crate::lines::anchor_box(params, &shaped, part) {
+                let placed = [origin[0] + b[0], origin[1] + b[1], b[2], b[3]];
+                out.insert(format!("{item}#{part}"), placed);
+            }
+        }
+    }
 }
 
 /// A format's notation (Bound value: `fixed | compact | percent | duration`).
@@ -3452,7 +3555,7 @@ fn status_box(kind: &str, item: &Value, params: Option<&Value>) -> Option<([f64;
             ))
         }
         "circle@1" => {
-            let c = pair(p("center"))?;
+            let c = circle_center(p("center"))?;
             let r = num(p("r"))?;
             Some(([c[0] + pos[0] - r, c[1] + pos[1] - r, 2.0 * r, 2.0 * r], r))
         }
@@ -4356,9 +4459,13 @@ pub(crate) fn item_pos(item: &Value) -> [f64; 2] {
     pair(item.pointer("/at/pos")).unwrap_or([0.0, 0.0])
 }
 
-/// `items` with each one anchored to a mark set's `#head` moved there (Item and kind: `at.anchor`:
-/// "with an anchor, pos offsets from that point"). A head with no row yet leaves it where it is.
-fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Value>>, Refused> {
+/// `items` with each one anchored to a mark set's or a revealed text's `#head` moved there (Item
+/// and kind: `at.anchor`: "with an anchor, pos offsets from that point"). A head with no row yet
+/// leaves it where it is.
+fn anchored<'a>(
+    items: Cow<'a, Map<String, Value>>,
+    ty: &Type,
+) -> Result<Cow<'a, Map<String, Value>>, Refused> {
     let mut moves = Vec::new();
     for (id, item) in items.iter() {
         let anchor = item.pointer("/at/anchor").and_then(Value::as_str);
@@ -4382,7 +4489,11 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
         let Some(source) = items.get(set) else {
             return refuse("ref_unresolved", format!("items/{id}/at/anchor"));
         };
-        if let Some(point) = data::head_place(set, source, &items)? {
+        let head = match source.get("kind").and_then(Value::as_str) {
+            Some("text@1") => text_head(set, source, ty)?,
+            _ => data::head_place(set, source, &items)?,
+        };
+        if let Some(point) = head {
             moves.push((id.clone(), point));
         }
     }
@@ -4398,6 +4509,23 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
         item["at"]["pos"] = json!([pos[0] + point[0], pos[1] + point[1], 0.0]);
     }
     Ok(Cow::Owned(items))
+}
+
+/// #1969: a revealed text's `#head` in document u (Text `text@1`): the caret its reveal publishes,
+/// from where the text draws; `None` for a text with no reveal.
+fn text_head(id: &str, item: &Value, ty: &Type) -> Result<Option<[f64; 2]>, Refused> {
+    let params = object_or_empty(item.get("params"));
+    if !params.contains_key("reveal") {
+        return Ok(None);
+    }
+    let code = crate::code::read(params, &format!("items/{id}"))?.map(|d| d.text);
+    let spec = text_spec_of(id, params, None, ty, code)?;
+    let Some(shaper) = spec.shaper_spec() else {
+        return Ok(None);
+    };
+    let run = LAYOUT_SHAPER.with(|s| s.borrow_mut().shape(&shaper));
+    let at = Place::of(item).offset;
+    Ok(crate::animator::head(params, &run, id)?.map(|c| [at[0] + c[0], at[1] + c[1]]))
 }
 
 /// An item's place in its layer's draw order (#160): by z, then by the tree, each level as its
@@ -4604,7 +4732,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
             num(params.get("radius")).unwrap_or(0.0),
         ),
         "circle@1" => outline::circle(
-            pair(params.get("center"))?,
+            circle_center(params.get("center"))?,
             num(params.get("r")).unwrap_or(0.0),
             num(params.get("inner_r")).unwrap_or(0.0),
         ),
@@ -4736,6 +4864,104 @@ struct ItemCtx<'a> {
 }
 
 /// What `item` draws; `None` for an item that draws nothing.
+/// A text@1 item's marks at `pos`, and (#1966) what its lines add: the parts a highlight dims,
+/// each with its opacity, and how far a code item's gutter reaches left of its text.
+struct TextMarks {
+    marks: Vec<Mark>,
+    fades: Vec<(String, f64)>,
+    reach: f64,
+}
+
+/// [`TextMarks`] of the text@1 item `id`: its text, set in its fill's role (a stale bound value's
+/// greyed), a code item's tokens as runs; and a code item's gutter and highlights, the bands
+/// under its text and the rest over it, its runs on the lines a highlight dims at 40%.
+fn text_marks(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+    params: &Map<String, Value>,
+    path: &str,
+    pos: [f64; 2],
+    fill: Option<&Map<String, Value>>,
+) -> Result<TextMarks, Refused> {
+    let shown = ctx.bound.get(id);
+    // A stale value greys out (Bound value).
+    let color_role = if shown.is_some_and(|s| s.stale) {
+        Value::String("muted".into())
+    } else {
+        fill.and_then(|f| f.get("role"))
+            .cloned()
+            .unwrap_or(Value::String("ink".into()))
+    };
+    let code = crate::code::read(params, path)?;
+    let text = code.as_ref().map(|d| d.text.clone());
+    // Tokens land on the display text, which a code item shows where nothing else does.
+    let tokened = code
+        .as_ref()
+        .filter(|_| shown.is_none() && !params.contains_key("text"));
+    let spec = text_spec_of(id, params, shown, ctx.ty, text)?;
+    let color = role(
+        ctx.palette,
+        Some(&color_role),
+        &format!("{path}/params/paint/fill/role"),
+    )?;
+    let name = color_role.as_str().map(str::to_string);
+    let mut runs = text_runs((ctx.palette, ctx.ty), params, path, tokened)?;
+    let mut out = TextMarks {
+        marks: Vec::new(),
+        fades: Vec::new(),
+        reach: 0.0,
+    };
+    let lines = match &code {
+        Some(d) => Some(crate::lines::read(
+            params,
+            d.text.split('\n').count(),
+            path,
+        )?),
+        None => None,
+    };
+    // #1966: each item of a list marked before its text, which its run sets `indent` in.
+    let list = crate::lines::list(params, spec.size, path)?;
+    let marked = list.filter(|l| l.marker != crate::lines::Marker::None);
+    let shaped = (lines.is_some() || marked.is_some())
+        .then(|| shaped_text(&spec))
+        .flatten();
+    let mut over = Vec::new();
+    if let (Some(l), Some(shaped)) = (marked, &shaped) {
+        over = crate::lines::markers(id, (&spec, &**shaped, pos), l, (name.as_deref(), color));
+    }
+    if let (Some(lines), Some(shaped)) = (&lines, shaped) {
+        let g = crate::lines::gutter(
+            id,
+            (&spec, &*shaped, pos),
+            lines,
+            (ctx.palette, ctx.ty),
+            (name.as_deref(), color),
+        )?;
+        runs = crate::lines::dimmed(runs, &g.dim, (name.as_deref().unwrap_or_default(), color));
+        out.marks = g.under;
+        over.extend(g.over);
+        out.fades = g.fades;
+        out.reach = g.reach;
+    }
+    out.marks.push(Mark::Text {
+        item: id.to_string(),
+        spec,
+        origin: pos,
+        color,
+        role: name,
+        runs,
+    });
+    out.marks.extend(over);
+    Ok(out)
+}
+
+/// `spec`'s shaped run, through the shaped-run cache the renderers share; `None` for a font
+/// nothing bundles.
+fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
+    let s = spec.shaper_spec()?;
+    Some(LAYOUT_SHAPER.with(|shaper| shaper.borrow_mut().shape(&s)))
+}
+
 fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>, Refused> {
     let path = format!("items/{id}");
     if item.get("visible") == Some(&Value::Bool(false)) {
@@ -4752,7 +4978,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let stroke = paint.get("stroke").and_then(Value::as_object);
     let paint_path = format!("{path}/params/paint");
     let center = || {
-        pair(params.get("center")).ok_or(Refused {
+        let c = params.get("center");
+        let at = if item.get("kind").and_then(Value::as_str) == Some("circle@1") {
+            circle_center(c)
+        } else {
+            pair(c)
+        };
+        at.ok_or(Refused {
             code: "bad_doc",
             path: format!("{path}/params/center"),
         })
@@ -4823,6 +5055,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let mut after: Vec<Mark> = Vec::new();
     // The rows a transform left below full opacity, each through its own pass.
     let mut fades: BTreeMap<String, f64> = BTreeMap::new();
+    // #1966: how far a code item's gutter reaches left of its text, inside its mask.
+    let mut reach = 0.0;
     let mut marks: Vec<Mark> = match kind {
         // A scale draws only its legend. A mask and a group draw nothing themselves, and a
         // camera is the view a document is seen through, not a mark (#378: a 3D figure's
@@ -5065,6 +5299,12 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 turn,
             }]
         }
+        "text@1" => {
+            let drawn = text_marks(ctx, id, params, &path, pos, fill)?;
+            fades.extend(drawn.fades);
+            reach = drawn.reach;
+            drawn.marks
+        }
         _ => vec![match kind {
             "rect@1" => {
                 let Some(Value::Array(b)) = params.get("box") else {
@@ -5125,35 +5365,6 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     color,
                 }
             }
-            "text@1" => {
-                let shown = ctx.bound.get(id);
-                // A stale value greys out (Bound value).
-                let color_role = if shown.is_some_and(|s| s.stale) {
-                    Value::String("muted".into())
-                } else {
-                    fill.and_then(|f| f.get("role"))
-                        .cloned()
-                        .unwrap_or(Value::String("ink".into()))
-                };
-                let code = crate::code::read(params, &path)?;
-                let text = code.as_ref().map(|d| d.text.clone());
-                // Tokens land on the display text, which a code item shows where nothing else does.
-                let tokened = code
-                    .as_ref()
-                    .filter(|_| shown.is_none() && !params.contains_key("text"));
-                Mark::Text {
-                    item: id.clone(),
-                    spec: text_spec_of(id, params, shown, ctx.ty, text)?,
-                    origin: pos,
-                    color: role(
-                        ctx.palette,
-                        Some(&color_role),
-                        &format!("{path}/params/paint/fill/role"),
-                    )?,
-                    role: color_role.as_str().map(str::to_string),
-                    runs: text_runs((ctx.palette, ctx.ty), params, &path, tokened)?,
-                }
-            }
             // A 2D layer's pass runs on the target of a group that names it, and draws nothing.
             "gpu.pass@1" => return Ok(None),
             _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
@@ -5164,8 +5375,15 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     if childless_backdrop(id, item, ctx.items) {
         scopes.extend(ancestor_scope(id, item, ctx.items, ctx.palette)?);
     }
-    // Masked text draws whole, clipped to its box: its width, and its height or its line limit's.
-    if let [Mark::Text { spec, origin, .. }] = marks.as_slice() {
+    // Masked text draws whole, clipped to its box: its width, and its height or its line limit's;
+    // a code item's gutter (#1966) inside it, left of its text.
+    let text = marks.iter().find_map(|m| match m {
+        Mark::Text {
+            item, spec, origin, ..
+        } if item == id => Some((spec, origin)),
+        _ => None,
+    });
+    if let (Some((spec, origin)), "text@1") = (text, kind) {
         let side = |k: &str| params.get("box").and_then(|b| num(b.get(k)));
         let lines = spec
             .max_lines
@@ -5174,7 +5392,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         if let (true, Some(w), Some(h)) = (spec.mask, side("w"), side("h").or(lines)) {
             scopes.push(Scope::Clip {
                 item: format!("{id}#box"),
-                rect: [origin[0], origin[1], w, h],
+                rect: [origin[0] - reach, origin[1], w + reach, h],
                 radius: 0.0,
             });
         }
@@ -5572,6 +5790,8 @@ pub fn item_placed(
         || item.get("parent").is_some()
         || item.pointer("/at/anchor").is_some()
         || reads_anchor(item)
+        // #1969: a revealed text publishes `#head`, which the frame's anchor pass reads from it.
+        || item.pointer("/params/reveal").is_some_and(|r| !r.is_null())
     {
         return None;
     }
@@ -5673,7 +5893,7 @@ fn build(
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
     let items = laid_out(doc, items)?;
-    let items = &*anchored(items)?;
+    let items = &*anchored(items, ty)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),

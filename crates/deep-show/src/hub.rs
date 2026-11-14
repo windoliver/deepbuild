@@ -68,6 +68,9 @@ pub enum Planted {
     ReadsWasmBytes,
     /// #670: render-back adds noise to each snapshot, seeded from the clock.
     SeedsNoiseFromClock,
+    /// #1938: the loop's pixel checks hold on any machine: a verdict read against another
+    /// machine's keeps their PASS or FAIL.
+    PixelChecksHoldAnywhere,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.
@@ -98,6 +101,10 @@ pub enum Planted {
     PartRunsHalf,
     /// #138: `schedule` exits 0 with a failed case in its results.
     ExitZeroWithFailedCase,
+    /// #1972: a path such as `at/pos` is refused with a fix naming `items/at/pos`, without the ID.
+    PatchFixPathWithoutId,
+    /// #1972: a bare op list is refused with a fix naming the envelope without `reason`.
+    PatchFixEnvelopeWithoutReason,
     /// #138: the kit counts a case's declared coverage as reached.
     CountsDeclaredAsReached,
     /// #138: the kit passes a snapshot case without comparing its pixels.
@@ -914,8 +921,9 @@ pub enum Call {
     Manifest,
     /// The check catalog (#138).
     Catalog,
-    /// Judges a claim on its deliverables' current revisions and records the verdict (#403).
-    Verdict(String),
+    /// Judges a claim on its deliverables' current revisions and records the verdict (#403);
+    /// with a verdict another run made on it, as that verdict reads here (#1938).
+    Verdict(String, Option<Value>),
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
     /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
@@ -2033,7 +2041,7 @@ impl<'a> Hub<'a> {
             } => self.render_back(session, doc, *t, *rev, *size, probes),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
-            Call::Verdict(claim) => self.verdict_call(claim),
+            Call::Verdict(claim, against) => self.verdict_call(claim, against.as_ref()),
             Call::Verdicts(claim) => self.verdicts_call(claim),
             Call::Answer {
                 via,
@@ -2412,6 +2420,8 @@ impl<'a> Hub<'a> {
             }
             issues.extend(self.inline_vectors(form));
             issues.extend(crate::picks::check(form));
+            // #466: an operator transition's pass, checked before any frame draws it.
+            issues.extend(crate::film_operator::check(form));
             issues.extend(deep_canvas_input::point::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.

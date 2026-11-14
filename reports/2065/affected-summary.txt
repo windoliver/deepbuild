@@ -1,0 +1,9 @@
+HEAD
+parallel vitest: packages/budget/test/approval-restart.test.ts packages/gate/test/stall-key.test.ts packages/hub/test/gate-answer-origin.test.ts packages/hub/test/gate-recovery.test.ts packages/hub/test/stall-progress.test.ts packages/hub/test/stall-receipt.test.ts packages/hub/test/stall-recovery.test.ts packages/hub/test/switch-asks.test.ts packages/record/test/gate-actions.test.ts tests/acceptance/1906/exit/children-at-exit.test.ts tests/acceptance/1906/exit/sync-children-at-exit.test.ts tests/acceptance/2065/restart.test.ts
+FAIL affected: 155 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 26 passed, in 126 s at load 273; raw logs retained locally
+
+BASE
+parallel vitest: tests/acceptance/2065/restart.test.ts
+FAIL affected: 167 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 395 s at load 316; raw logs retained locally
+
+No WIDE or INCONCLUSIVE line in either focused run. Aggregate FAIL includes existing repo lint failures; the frozen AC2 setup failed in the concurrent run on both sides and was isolated unchanged (base-ac2.txt / head-ac2.txt). No failures or baseline entries were suppressed. Production-path selection was listed separately: 1,551 regular TypeScript/Node test files, 110 timed, 46 slow, five Rust crates, plus manual lanes. The full selection was not run: INCONCLUSIVE for that coverage.

@@ -1,0 +1,23 @@
+$ git rev-parse --short HEAD   # PR #2091 head, script as on main
+acbfbf3a8
+$ git diff --name-status origin/main...HEAD | grep ^D
+D	tests/acceptance/303/checkfile.test.ts
+D	tests/acceptance/322/approved.test.ts
+$ node scripts/affected.mjs --list
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '<worktree, redacted>/tests/acceptance/303/checkfile.test.ts'
+    at readFileSync (node:fs:483:20)
+    at plan (file://<worktree, redacted>/scripts/affected.mjs:275:200)
+    at main (file://<worktree, redacted>/scripts/affected.mjs:385:67)
+    at file://<worktree, redacted>/scripts/affected.mjs:499:82 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '<worktree, redacted>/tests/acceptance/303/checkfile.test.ts'
+}
+
+Node.js v24.22.0
+[exit 1]

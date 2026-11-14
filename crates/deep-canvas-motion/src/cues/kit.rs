@@ -370,6 +370,22 @@ fn planted(name: &str, class: &str, inputs: Value, params: Value) -> Value {
                            "steps": {"s": {"op": "cue", "params": params}}}})
 }
 
+/// #1969: a `type` that types `t` as the first-party verb does, but keys its cursor's anchor one
+/// flick past its span.
+fn typed_late() -> Value {
+    let past = "1 + 1 / (d * 705600000)";
+    json!({"name": "type", "class": "enter", "recipe": "planted.type@1", "joins": ["cursor"],
+           "kit": {"targets": ["t"], "params": {"cursor": "b"}},
+           "recipe_body": {"id": "planted.type", "version": "1.0",
+                           "inputs": {"cursor": {"type": "ID", "default": "b"}},
+                           "steps": {
+                               "keys": {"op": "cue", "params": {"from": {"params/reveal/progress": 0},
+                                                               "set": {"params/reveal/progress": {"typed": true}}}},
+                               "cursor": {"op": "cue", "params": {"on": "cursor", "set": {"at/anchor": "head"},
+                                                                 "type": {"at/anchor": "enum"},
+                                                                 "at": past, "until": past}}}}})
+}
+
 /// The registry motion declares: `{owner: motion, fill: [first_party_pack, pack], resolve:
 /// check}`, its kit's five rules and a planted wrong entry breaking each alone.
 pub fn registry() -> RegistryDef {
@@ -399,7 +415,9 @@ pub fn registry() -> RegistryDef {
         .planted("shuffle", planted("shuffle", "move", none.clone(),
             json!({"set": {"at/pos/0": "now + seed % 7 + 1"}})))
         // A `fade_out` that stops at opacity 0.5.
-        .planted("fade_out", planted("fade_out", "exit", none, json!({"set": {"adjust/opacity": 0.5}})));
+        .planted("fade_out", planted("fade_out", "exit", none, json!({"set": {"adjust/opacity": 0.5}})))
+        // #1969: a `type` whose cursor is keyed one flick past its span.
+        .planted("type", typed_late());
     def.resolve = "check";
     def
 }

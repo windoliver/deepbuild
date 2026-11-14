@@ -831,6 +831,83 @@
     }
   },
   {
+    "source": "brief.approve",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "# Plan a five-day trip for four people under $4,000\n\n**What it makes:** a plan, in a folder of its own.\n\n**Tasks:**\n1. Draft the day-by-day route\n2. Price every day (after Draft the day-by-day route)\n\n**Held for you, asked when it is due:**\n- Book the rail passes ($1240.00), after Price every day\n",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Make it and start",
+            "decision": "allow"
+          },
+          {
+            "id": "there",
+            "label": "Add it to Trips instead",
+            "decision": "allow"
+          },
+          {
+            "id": "deny",
+            "label": "Don't",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "deny",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "brief.held",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Buy four Lisboa Cards, for $240 at https://shop.example/buy, due 2026-11-20T10:00:00.000Z. It's due now for \"plan a five-day trip to Lisbon\". Your yes to its brief didn't cover it, so nothing is bought, booked, posted or sent until you say so here; you pay or send it yourself.",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Go ahead",
+            "decision": "allow"
+          },
+          {
+            "id": "deny",
+            "label": "Not now",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "deny",
+        "provisional": false,
+        "owner": "you",
+        "key": "3b5d7f9a1c3e5a7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "work.breaker",
     "kind": "exception",
     "fixture": {

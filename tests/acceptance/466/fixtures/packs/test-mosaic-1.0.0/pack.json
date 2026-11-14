@@ -1,0 +1,44 @@
+{
+  "name": "mosaic",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the films-in-time acceptance suite: one composed pass graph, a mosaic dissolve that a transition of kind operator names. Each of a 64 by 64 grid of cells shows the incoming side once a seeded draw falls under the square of the progress, so its coverage of the picture runs as progress squared, not as progress.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "effects": ">=0.0.0"
+    }
+  },
+  "operators": {
+    "mosaic.dissolve@1": {
+      "id": "mosaic.dissolve@1", "kind": "pass", "origin": "pack", "grow": 0,
+      "about": "Mosaic dissolve: the picture as a grid of cells, each the outgoing side's color at its centre until a draw seeded from the cell falls under progress squared, then the incoming side's; coverage is one where the incoming side shows.",
+      "inputs": {
+        "outgoing": {"type": "texture", "from": {"transition": "outgoing"}},
+        "incoming": {"type": "texture", "from": {"transition": "incoming"}},
+        "progress": {"type": "f32", "unit": "ratio", "from": {"transition": "progress"}, "range": [0.0, 1.0], "default": 0.0}
+      },
+      "steps": {
+        "uv": {"op": "screen_uv@1"},
+        "s": {"op": "mul@1", "args": {"a": "uv", "b": 64.0}},
+        "f": {"op": "floor@1", "args": {"x": "s"}},
+        "fx": {"op": "split@1", "args": {"x": "f", "pick": "x"}},
+        "fy": {"op": "split@1", "args": {"x": "f", "pick": "y"}},
+        "ix": {"op": "convert@1", "args": {"x": "fx", "to": "u32"}},
+        "iy": {"op": "convert@1", "args": {"x": "fy", "to": "u32"}},
+        "h": {"op": "hash@1", "args": {"a": "ix", "b": "iy"}},
+        "r": {"op": "rand@1", "args": {"key": "h"}},
+        "p2": {"op": "mul@1", "args": {"a": "progress", "b": "progress"}},
+        "show": {"op": "lt@1", "args": {"a": "r", "b": "p2"}},
+        "c": {"op": "add@1", "args": {"a": "f", "b": 0.5}},
+        "at": {"op": "div@1", "args": {"a": "c", "b": 64.0}},
+        "o": {"op": "sample@1", "args": {"tex": "outgoing", "uv": "at", "lod": 0.0}},
+        "i": {"op": "sample@1", "args": {"tex": "incoming", "uv": "at", "lod": 0.0}},
+        "out": {"op": "select@1", "args": {"f": "o", "t": "i", "cond": "show"}},
+        "cov": {"op": "select@1", "args": {"f": 0.0, "t": 1.0, "cond": "show"}}
+      },
+      "outputs": {"color": "out", "coverage": "cov", "blend": "replace"},
+      "cost": {"ns_per_px": 0.015}, "resolution": "full"
+    }
+  }
+}

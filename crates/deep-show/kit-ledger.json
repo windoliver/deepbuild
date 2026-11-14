@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "d4c5dc0315da832b9637a679646b1268312f07fd80d71ed91a99f203c5ffd9ca",
+    "digest": "8146dec15a1857b96e79b4ad8b83a9259b723995ee1952a07f3e83fdf433ad95",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -66,7 +66,7 @@
   },
   "effects": {
     "version": "1.0.0",
-    "digest": "728754098ff7e4fa72004323be2f19eb772021f76c26ca3a01930aa343f6e2af",
+    "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -161,7 +161,7 @@
   },
   "loop": {
     "version": "1.0.0",
-    "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+    "digest": "9fc00a319de12e9ec0058e38ed76d6a18251e71677be2e61548b1536daf5ed84",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -239,7 +239,7 @@
   },
   "physics": {
     "version": "1.0.0",
-    "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
+    "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -284,7 +284,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "9edd239b48ca54a24b54998ca5f2208381bdc9cac8792e7e473ffc5dd17d94d4",
+    "digest": "d5a6bb2f51c1086a157667d2e775a9aebe6308d1196cebe5e4e9e4c09a5d3306",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
