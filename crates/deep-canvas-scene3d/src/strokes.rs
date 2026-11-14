@@ -583,7 +583,8 @@ pub fn lay(scene: &Scene, s: &Strokes, place: &Camera) -> Vec<Dab> {
                         near,
                         angle: base + jitter,
                         length: size,
-                        width: size * (0.4 + 0.6 * s.size[0] / s.size[1]),
+                        // A wide size range draws long brush strokes; an even one round dots.
+                        width: size * (0.3 + 0.7 * s.size[0] / s.size[1]),
                         color,
                         shade,
                         layer,
