@@ -305,10 +305,17 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
 fn checkpoint_hashes(checkpoints: &Value) -> Value {
     let hashes = |list: &Value| -> Option<Value> {
         let list = list.as_array()?.iter();
-        Some(list.map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]})).collect())
+        Some(
+            list.map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
+                .collect(),
+        )
     };
     let items = checkpoints.as_object().into_iter().flatten();
-    Value::Object(items.filter_map(|(id, list)| Some((id.clone(), hashes(list)?))).collect())
+    Value::Object(
+        items
+            .filter_map(|(id, list)| Some((id.clone(), hashes(list)?)))
+            .collect(),
+    )
 }
 
 /// The runtime digest a golden carries: the seal's, of the set this crate's runner holds, the
@@ -1389,7 +1396,12 @@ mod tests {
             Logic::default().handle(&line)
         };
         let golden = call("golden", None)["golden"].clone();
-        let steps: Vec<&Value> = golden["checkpoint_hashes"]["e"].as_array().expect("checkpoints").iter().map(|c| &c["step"]).collect();
+        let steps: Vec<&Value> = golden["checkpoint_hashes"]["e"]
+            .as_array()
+            .expect("checkpoints")
+            .iter()
+            .map(|c| &c["step"])
+            .collect();
         assert_eq!(steps, [0, 60, 120]);
         let again = call("golden", None)["golden"].clone();
         assert_eq!(again["checkpoint_hashes"], golden["checkpoint_hashes"]);
