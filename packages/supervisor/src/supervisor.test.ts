@@ -117,6 +117,8 @@ test('a cleaned run has no scan of its sandbox still running', async () => {
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
   const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
   try {
+    // An earlier test's child may still be closing: the count this test measures from is one that has stopped moving.
+    for (let seen = -1; seen !== children();) { seen = children(); await new Promise((resolve) => setTimeout(resolve, 50)); }
     quiet = children();
     const left: number[] = [];
     for (let i = 0; i < 5; i++) {
