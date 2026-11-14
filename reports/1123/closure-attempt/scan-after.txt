@@ -1,0 +1,11 @@
+✔ a failed process scan cannot turn a build with a live descendant into a successful result (10319.849417ms)
+✔ killing the recorded supervisor wrapper cannot strand Cargo (1167.976667ms)
+✔ successful build leader cannot leave a writer behind (2215.197166ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14097.376458

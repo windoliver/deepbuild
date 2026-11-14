@@ -4,18 +4,26 @@
 // any text: every size a test compares with comes from the binaries or from the fixtures' own fields.
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+// Adapted from ../375/helpers.ts (Apache-2.0; repository LICENSE).
+import { accessSync, constants, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeAll, beforeEach, expect } from 'vitest';
+import { afterAll, beforeAll, expect } from 'vitest';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** The checkout root (tests/acceptance/375 is three levels down). */
+/** The checkout root (this suite is three levels down). */
 export const REPO = join(HERE, '..', '..', '..');
-const exe = (name: string): string => join(REPO, 'target', 'debug', process.platform === 'win32' ? `${name}.exe` : name);
+const supplied = process.env.DEEP_BIN_DIR;
+if (supplied !== undefined && supplied.trim() === '') throw Error('BLOCKED: DEEP_BIN_DIR is empty');
+// Vitest isolates modules per file. Never build into, or copy from, the checkout's target.
+const privateTarget = supplied === undefined ? mkdtempSync(join(tmpdir(), 'deep-375-')) : undefined;
+const binDir = supplied === undefined ? join(privateTarget!, 'debug') : resolve(supplied);
+if (privateTarget) afterAll(() => { rmSync(privateTarget, { recursive: true, force: true }); });
+const exe = (name: string): string => join(binDir, process.platform === 'win32' ? `${name}.exe` : name);
 /** The marks2d module's auto layout: `solve`. */
 export const LAYOUT_BIN = exe('deep-layout');
 /** The canvas's one shaper (#390): `fit`. */
@@ -116,20 +124,30 @@ export function boxOf(boxes: Record<string, Box>, id: string, what: string): Box
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The binaries: built once per file, driven by JSON lines on stdin, one JSON line out per line in.
+// The binaries: consume DEEP_BIN_DIR exactly, or build once per file into a private target.
 
-/** Builds one binary by name across the workspace; returns '' or the build's error text. */
-export function buildBinary(name: string): string {
-  const run = spawnSync('cargo', ['build', '--locked', '--bin', name], { cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (run.error) return `cargo could not run: ${run.error.message}`;
-  return run.status === 0 ? '' : `cargo build --bin ${name} failed:\n${run.stderr.split('\n').filter((l) => !/Blocking waiting/.test(l)).join('\n')}`;
+function requireBinary(name: string): void {
+  try {
+    if (!statSync(exe(name)).isFile()) throw Error('not a file');
+    accessSync(exe(name), constants.X_OK);
+  } catch {
+    throw Error(`BLOCKED: ${name} is missing or not executable in ${supplied === undefined ? 'the test-private build' : 'DEEP_BIN_DIR'}`);
+  }
 }
 
-/** Builds the named binaries once per file and fails every test of the file when one can't be built. */
+/** Missing supplied binaries never fall back to cargo or to target/debug. */
 export function useBinaries(...names: string[]): void {
-  let error = '';
-  beforeAll(() => { error = names.map(buildBinary).filter((e) => e !== '').join('\n'); }, 900_000);
-  beforeEach(() => { expect(error, `the binaries build: ${names.join(', ')}`).toBe(''); });
+  beforeAll(() => {
+    if (supplied === undefined) {
+      const env = { ...process.env };
+      delete env.CARGO_TARGET_DIR;
+      const run = spawnSync('cargo', ['build', '--locked', '--target-dir', privateTarget!, ...names.flatMap((name) => ['--bin', name])], {
+        cwd: REPO, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+      });
+      if (run.error || run.status !== 0) throw Error(`BLOCKED: private cargo build failed: ${run.error?.message ?? run.stderr}`);
+    }
+    names.forEach(requireBinary);
+  }, 900_000);
 }
 
 /** Pipes every input line into one run of `<bin> <subcommand>` and returns the output lines as written. */

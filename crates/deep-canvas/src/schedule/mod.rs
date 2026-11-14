@@ -43,6 +43,7 @@ use crate::canon::{self, NoShape};
 use crate::registry::{Per, Sealed, TableValue};
 
 pub use bytes::Canonical;
+pub use steps::CarriedState;
 pub use tree::KeyTree;
 pub use view::View;
 
@@ -2703,6 +2704,7 @@ impl Session {
             step,
             forgets,
             s.options.planted.module.as_deref(),
+            s.options.pool.as_ref(),
         );
         let item = node.item.map(|i| l.items[i].id.as_str());
         if let Some(timing) = s.options.timing {

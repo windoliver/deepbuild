@@ -1,0 +1,1133 @@
+{
+  "verb": "flash",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Flash fixture",
+    "description": "Flash fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "flash",
+              "targets": [
+                "sq"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Flash fixture written by hand",
+    "description": "Flash fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list.v.ray.0": {
+        "id": "list.v.ray.0",
+        "kind": "rect@1",
+        "name": "list.v.ray.0",
+        "order": "csq0",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            0.0
+          ]
+        }
+      },
+      "list.v.ray.1": {
+        "id": "list.v.ray.1",
+        "kind": "rect@1",
+        "name": "list.v.ray.1",
+        "order": "csq1",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            30.0
+          ]
+        }
+      },
+      "list.v.ray.2": {
+        "id": "list.v.ray.2",
+        "kind": "rect@1",
+        "name": "list.v.ray.2",
+        "order": "csq2",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            60.0
+          ]
+        }
+      },
+      "list.v.ray.3": {
+        "id": "list.v.ray.3",
+        "kind": "rect@1",
+        "name": "list.v.ray.3",
+        "order": "csq3",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            90.0
+          ]
+        }
+      },
+      "list.v.ray.4": {
+        "id": "list.v.ray.4",
+        "kind": "rect@1",
+        "name": "list.v.ray.4",
+        "order": "csq4",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            120.0
+          ]
+        }
+      },
+      "list.v.ray.5": {
+        "id": "list.v.ray.5",
+        "kind": "rect@1",
+        "name": "list.v.ray.5",
+        "order": "csq5",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            150.0
+          ]
+        }
+      },
+      "list.v.ray.6": {
+        "id": "list.v.ray.6",
+        "kind": "rect@1",
+        "name": "list.v.ray.6",
+        "order": "csq6",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            180.0
+          ]
+        }
+      },
+      "list.v.ray.7": {
+        "id": "list.v.ray.7",
+        "kind": "rect@1",
+        "name": "list.v.ray.7",
+        "order": "csq7",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            210.0
+          ]
+        }
+      },
+      "list.v.ray.8": {
+        "id": "list.v.ray.8",
+        "kind": "rect@1",
+        "name": "list.v.ray.8",
+        "order": "csq8",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            240.0
+          ]
+        }
+      },
+      "list.v.ray.9": {
+        "id": "list.v.ray.9",
+        "kind": "rect@1",
+        "name": "list.v.ray.9",
+        "order": "csq9",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            270.0
+          ]
+        }
+      },
+      "list.v.ray.10": {
+        "id": "list.v.ray.10",
+        "kind": "rect@1",
+        "name": "list.v.ray.10",
+        "order": "csq10",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            300.0
+          ]
+        }
+      },
+      "list.v.ray.11": {
+        "id": "list.v.ray.11",
+        "kind": "rect@1",
+        "name": "list.v.ray.11",
+        "order": "csq11",
+        "params": {
+          "box": [
+            15.0,
+            -1.5,
+            15.0,
+            3
+          ],
+          "paint": {
+            "fill": {
+              "role": "accent"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "rot": [
+            0,
+            0,
+            330.0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "lift": {
+        "target": "items/sq/adjust/brightness",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 1,
+            "interp": "hold"
+          }
+        },
+        "modifiers": [
+          {
+            "kind": "pulse",
+            "at": 352800000,
+            "span": 705600000,
+            "amount": 0.3,
+            "ease": {
+              "name": "sigmoid",
+              "params": 10
+            }
+          }
+        ]
+      },
+      "out0": {
+        "target": "items/list.v.ray.0/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off0": {
+        "target": "items/list.v.ray.0/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out1": {
+        "target": "items/list.v.ray.1/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off1": {
+        "target": "items/list.v.ray.1/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out2": {
+        "target": "items/list.v.ray.2/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off2": {
+        "target": "items/list.v.ray.2/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out3": {
+        "target": "items/list.v.ray.3/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off3": {
+        "target": "items/list.v.ray.3/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out4": {
+        "target": "items/list.v.ray.4/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off4": {
+        "target": "items/list.v.ray.4/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out5": {
+        "target": "items/list.v.ray.5/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off5": {
+        "target": "items/list.v.ray.5/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out6": {
+        "target": "items/list.v.ray.6/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off6": {
+        "target": "items/list.v.ray.6/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out7": {
+        "target": "items/list.v.ray.7/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off7": {
+        "target": "items/list.v.ray.7/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out8": {
+        "target": "items/list.v.ray.8/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off8": {
+        "target": "items/list.v.ray.8/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out9": {
+        "target": "items/list.v.ray.9/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off9": {
+        "target": "items/list.v.ray.9/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out10": {
+        "target": "items/list.v.ray.10/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off10": {
+        "target": "items/list.v.ray.10/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "out11": {
+        "target": "items/list.v.ray.11/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "off11": {
+        "target": "items/list.v.ray.11/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 705600000,
+            "value": 1,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/sq/adjust/brightness",
+    "items/list.v.ray.0/at/scale",
+    "items/list.v.ray.0/adjust/opacity",
+    "items/list.v.ray.1/at/scale",
+    "items/list.v.ray.1/adjust/opacity",
+    "items/list.v.ray.2/at/scale",
+    "items/list.v.ray.2/adjust/opacity",
+    "items/list.v.ray.3/at/scale",
+    "items/list.v.ray.3/adjust/opacity",
+    "items/list.v.ray.4/at/scale",
+    "items/list.v.ray.4/adjust/opacity",
+    "items/list.v.ray.5/at/scale",
+    "items/list.v.ray.5/adjust/opacity",
+    "items/list.v.ray.6/at/scale",
+    "items/list.v.ray.6/adjust/opacity",
+    "items/list.v.ray.7/at/scale",
+    "items/list.v.ray.7/adjust/opacity",
+    "items/list.v.ray.8/at/scale",
+    "items/list.v.ray.8/adjust/opacity",
+    "items/list.v.ray.9/at/scale",
+    "items/list.v.ray.9/adjust/opacity",
+    "items/list.v.ray.10/at/scale",
+    "items/list.v.ray.10/adjust/opacity",
+    "items/list.v.ray.11/at/scale",
+    "items/list.v.ray.11/adjust/opacity"
+  ]
+}

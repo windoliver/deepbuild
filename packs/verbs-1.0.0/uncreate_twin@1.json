@@ -1,0 +1,19 @@
+{
+  "id": "verbs.uncreate_twin",
+  "version": "1.0",
+  "title": "Uncreate, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of uncreate: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "unbuild": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/ops/0/trim/end": 0.5
+        }
+      }
+    }
+  }
+}

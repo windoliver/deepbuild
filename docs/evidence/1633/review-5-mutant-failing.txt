@@ -1,0 +1,74 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1633-reopened-review-thread-3bc754
+
+ ❯ packages/hub/test/reopened-items.test.ts (6 tests | 1 failed | 5 skipped) 16186ms
+   ❯ #1633 review rounds: a reopened review note and its ask (6)
+     × a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask 16056ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask
+AssertionError: you answered its ask, so the same question never reaches you twice: expected [ { v: 1, …(10) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "data": {
++       "deadline": 1794349275460,
++       "default": "keep",
++       "fallback": "you",
++       "key": "3363946fc562ace2464a2a559309ca2924c8a34050ae8649fd7114bd0f8a37a4",
++       "kind": "exception",
++       "options": [
++         {
++           "decision": "none",
++           "id": "accept",
++           "label": "Accept it: close it without a fix",
++         },
++         {
++           "decision": "none",
++           "id": "keep",
++           "label": "Keep it open",
++         },
++       ],
++       "owner": "you",
++       "pinned_to": {
++         "kind": "commit",
++         "ref": "cbc96366181eab5e48cb73a8fbfec4d123a2554e",
++       },
++       "provisional": false,
++       "question": "Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”",
++       "recommended": "keep",
++     },
++     "evidence": [],
++     "id": "01M6YM0RA4BKTMYSDTH4ACQJ4Y",
++     "kind": "ask.created",
++     "log_pos": 187,
++     "scope": "you",
++     "ts": 1794176475460,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ packages/hub/test/reopened-items.test.ts:152:112
+    150|     const item = itemsOf(third.events, ref).find(namesT)!;
+    151|     expect(isOpen(third.events, item), 'a reviewer closed it, so unres…
+    152|     expect(asksForT(third.events, kept), 'you answered its ask, so the…
+       |                                                                                                                ^
+    153|   }, 900_000);
+    154| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  14:21:03
+   Duration  16.68s (tests 99%, transform 1%)
+

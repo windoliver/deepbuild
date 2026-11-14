@@ -162,6 +162,7 @@ extern "C" {
     static kCVPixelBufferHeightKey: CFTypeRef;
     static kCVImageBufferColorPrimaries_ITU_R_709_2: CFTypeRef;
     static kCVImageBufferTransferFunction_ITU_R_709_2: CFTypeRef;
+    static kCVImageBufferTransferFunction_sRGB: CFTypeRef;
     static kCVImageBufferYCbCrMatrix_ITU_R_709_2: CFTypeRef;
     fn CVPixelBufferGetBaseAddress(p: CFTypeRef) -> *const u8;
     fn CVPixelBufferGetBytesPerRow(p: CFTypeRef) -> usize;

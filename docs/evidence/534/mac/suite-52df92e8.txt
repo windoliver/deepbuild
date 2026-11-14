@@ -1,0 +1,162 @@
+== head 52df92e86faf6eb6a4e29fdfaacb7ab39b31c9ee (prebuild + cool-down)
+Mac15,12
+Apple M3
+27.2.1
+Now drawing from 'AC Power'
+start: Sat Nov 14 07:15:13 UTC 2026 | 23:15  up 16:17, 6 users, load averages: 13.26 17.64 12.87 | thermalState 0
+noop check: 0 Compiling lines
+
+
+ RUN  v5.0.5 ~/private/dbc-534/tests/acceptance/534
+
+ ❯ ac04-budgets.test.ts (5 tests | 4 failed) 4286ms
+   ❯ #534.e281f3dd the budgets on the reference Mac (5)
+     × #534.e281f3dd rewriting a 1 MB program takes under 200 ms, once at check 2571ms
+     × #534.e281f3dd a flock step takes under 0.5 ms of CPU with the metering 328ms
+     × #534.e281f3dd a checkpoint of a 4 MiB memory takes under 2 ms 515ms
+     × #534.e281f3dd a save of a 4 MiB memory reads back whole in under 50 ms, off the UI thread 359ms
+     ✓ #534.e281f3dd a piece without logic gains no work per frame 8ms
+ ❯ ac06-fixture-state.test.ts (2 tests | 2 failed) 1144ms
+   ❯ #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played (2)
+     × #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps 638ms
+     × #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame 14ms
+ ✓ ac03-program-change.test.ts (2 tests) 1864ms
+   ✓ #534.8e544563 a save under a changed program is refused without a migration and migrated with one (2)
+     ✓ #534.8e544563 opened after the program changed, with no migration declared, the save is refused, naming both program hashes 893ms
+     ✓ #534.8e544563 with a migration declared for that hash, the save opens through the migration and is written as a new save, while the old save's bytes stay as they were 485ms
+ ✓ ac02-written-whole.test.ts (2 tests) 2046ms
+   ✓ #534.a644d162 a save is written whole: a cut-short save is caught by its hash, and a killed write leaves the slot as it was (2)
+     ✓ #534.a644d162 a save cut short by one byte is caught by its hash on opening, named, and the slot's last good save opens instead, at the full-state hash recorded when it was written 1004ms
+     ✓ #534.a644d162 a save whose writing is killed before its rename leaves the slot's newest save as it was 530ms
+ ✓ ac01-dungeon-reopen.test.ts (4 tests) 2526ms
+   ✓ #534.facb3458 the dungeon saved at step 1,800, quit and reopened plays on as a run that never quit (4)
+     ✓ #534.facb3458 saved at 1,800, the app quit and reopened, the next 600 steps give the never-quit run's full-state hash at every checkpoint, its step hashes and its arrays 1099ms
+     ✓ #534.facb3458 on the reference Mac, the reopened run's frames for the next 600 steps equal the never-quit run's bit for bit 465ms
+ ✓ ac08-binding-decodes.test.ts (2 tests) 1439ms
+   ✓ #534.8a234a6f a save's binding fields decode without its state, and decide its fate (2)
+     ✓ #534.8a234a6f a save whose state no longer decodes is refused by its binding fields, naming the layout, and never reads as cut short 822ms
+ ✓ ac05-static-floor.test.ts (3 tests) 1854ms
+   ✓ #534.e4ecebfc a floor kept in an active data segment: saved, reopened, and refused under a changed program (3)
+     ✓ #534.e4ecebfc saved at 1,800 and opened under the same program, it matches the never-quit run by full-state hash at every checkpoint 1022ms
+ ✓ ac07-adapter-fingerprint.test.ts (1 test) 1221ms
+   ✓ #534.023b4bfb a save holding same-machine carried state binds the adapter that wrote it (1)
+     ✓ #534.023b4bfb opened on an adapter with another fingerprint the save is refused, naming both fingerprints, and it opens on the adapter that wrote it 750ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd rewriting a 1 MB program takes under 200 ms, once at check
+AssertionError: the first check of a 1 MB program, in ms: INCONCLUSIVE under 200 (runs [144.74470799999972,148.1824590000001,147.21579100000008,150.35916700000007,146.558], 8 cores): a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 12.60009765625 at a run's start or end is above the 8 cores: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "INCONCLUSIVE"
+
+ ❯ judge ac04-budgets.test.ts:31:160
+     29|   for (let i = 0; i < 5; i++) { const start = loadavg()[0]!; runs.push…
+     30|   const verdict = bench.judgeLimit({ limit, runs, fingerprint: bench.f…
+     31|   expect(verdict.status, `${what}: ${verdict.status} under ${limit} (r…
+       |                                                                                                                                                                ^
+     32| }
+     33|
+ ❯ ac04-budgets.test.ts:47:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a flock step takes under 0.5 ms of CPU with the metering
+AssertionError: the flock's simulate-phase CPU a step, in ms: INCONCLUSIVE under 0.5 (runs [0.027396076539101498,0.027187051580698837,0.027851359400998334,0.026804702163061564,0.027722407653910153], 8 cores): a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 12.60009765625 at a run's start or end is above the 8 cores: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "INCONCLUSIVE"
+
+ ❯ judge ac04-budgets.test.ts:31:160
+     29|   for (let i = 0; i < 5; i++) { const start = loadavg()[0]!; runs.push…
+     30|   const verdict = bench.judgeLimit({ limit, runs, fingerprint: bench.f…
+     31|   expect(verdict.status, `${what}: ${verdict.status} under ${limit} (r…
+       |                                                                                                                                                                ^
+     32| }
+     33|
+ ❯ ac04-budgets.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a checkpoint of a 4 MiB memory takes under 2 ms
+AssertionError: the slowest checkpoint of a 4 MiB memory, in ms: INCONCLUSIVE under 2 (runs [0.30075,0.339292,0.291167,0.312708,0.30425], 8 cores): a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 12.60009765625 at a run's start or end is above the 8 cores: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "INCONCLUSIVE"
+
+ ❯ judge ac04-budgets.test.ts:31:160
+     29|   for (let i = 0; i < 5; i++) { const start = loadavg()[0]!; runs.push…
+     30|   const verdict = bench.judgeLimit({ limit, runs, fingerprint: bench.f…
+     31|   expect(verdict.status, `${what}: ${verdict.status} under ${limit} (r…
+       |                                                                                                                                                                ^
+     32| }
+     33|
+ ❯ ac04-budgets.test.ts:79:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a save of a 4 MiB memory reads back whole in under 50 ms, off the UI thread
+AssertionError: a 4 MiB save until it read back whole, in ms: INCONCLUSIVE under 50 (runs [23.591208,13.120666,13.603042,13.182667,15.428208], 8 cores): a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 12.60009765625 at a run's start or end is above the 8 cores: expected 'INCONCLUSIVE' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "INCONCLUSIVE"
+
+ ❯ judge ac04-budgets.test.ts:31:160
+     29|   for (let i = 0; i < 5; i++) { const start = loadavg()[0]!; runs.push…
+     30|   const verdict = bench.judgeLimit({ limit, runs, fingerprint: bench.f…
+     31|   expect(verdict.status, `${what}: ${verdict.status} under ${limit} (r…
+       |                                                                                                                                                                ^
+     32| }
+     33|
+ ❯ ac04-budgets.test.ts:89:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  ac06-fixture-state.test.ts > #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played > #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps
+AssertionError: the never-quit run baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"fixture","refusals":[{"rule":"field","what":"pages isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"pages"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:387:77
+
+ ❯ neverQuit ac06-fixture-state.test.ts:54:42
+ ❯ ac06-fixture-state.test.ts:66:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  ac06-fixture-state.test.ts > #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played > #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame
+AssertionError: deep-logic --planted save_drops_linear_previous on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:178:138
+    176| export function replies(s: Started, calls: JsonValue[], what: string):…
+    177|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    178|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    179|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    180|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ run helpers.ts:205:10
+ ❯ saveAndOpen ac06-fixture-state.test.ts:58:20
+ ❯ ac06-fixture-state.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed | 6 passed (8)
+      Tests  6 failed | 15 passed (21)
+   Start at  23:15:15
+   Duration  16.95s (tests 99%)
+
+
+end: Sat Nov 14 07:15:32 UTC 2026 | 23:15  up 16:17, 6 users, load averages: 11.25 16.89 12.71 | thermalState 0
+vitest exit=1

@@ -1,0 +1,135 @@
+{
+  "verb": "rotate",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Rotate fixture",
+    "description": "Rotate fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "rotate",
+              "targets": [
+                "sq"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Rotate fixture written by hand",
+    "description": "Rotate fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "turn": {
+        "target": "items/sq/at/rot/2",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 90,
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/sq/at/rot/2"
+  ]
+}

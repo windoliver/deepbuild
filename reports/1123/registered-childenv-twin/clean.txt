@@ -1,0 +1,12 @@
+✔ #1123.cd6b3dd8 childEnv discards a shell binary directory (991.211125ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (1215.2815ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (1088.164083ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3442.493291

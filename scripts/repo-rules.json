@@ -1,4 +1,26 @@
 {
+  "advisories": {
+    "ignore": [
+      {
+        "id": "RUSTSEC-2026-0194",
+        "package": "quick-xml",
+        "why": "citationberg 0.7.0 requires ^0.38.1, holding quick-xml at 0.38.4 below fixed 0.41.0. Typst typeset input can pass inline CSL bytes to citationberg's NsReader deserializer, so quadratic attribute checking is reachable; this is a deferred fix, not a claim of safety.",
+        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
+      },
+      {
+        "id": "RUSTSEC-2026-0195",
+        "package": "quick-xml",
+        "why": "citationberg 0.7.0 requires ^0.38.1, holding quick-xml at 0.38.4 below fixed 0.41.0. Typst typeset input can pass inline CSL bytes to citationberg's NsReader deserializer, so namespace-allocation denial of service is reachable despite restricted file reads.",
+        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
+      },
+      {
+        "id": "RUSTSEC-2026-0235",
+        "package": "rkyv",
+        "why": "mitex-spec 0.2.7 requires ^0.7.42, holding rkyv at 0.7.46 below fixed 0.8.17. deep-typeset supplies no custom MiTeX spec; only the compiled-in default.rkyv is deserialized, with no document, pack or panel archive bytes accepted by this entry.",
+        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
+      }
+    ]
+  },
   "deps": {
     "lean-toolchain": {
       "toolchain": {
@@ -463,6 +485,10 @@
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
+        },
+        "@deepbuild/briefs": {
+          "spec": "0.0.0",
+          "why": "Issue #1342: your words, files and links read as one brief on one card with no model, the research job's draft held to its kept findings, and the brief's page and card."
         },
         "@deepbuild/budget": {
           "spec": "0.0.0",
@@ -2273,8 +2299,8 @@
           "why": "Issue #531: a logic item's fields and the binary's JSON lines; already in the tree."
         },
         "sha2": {
-          "spec": "^0.10",
-          "why": "Issue #531: an item's bake key and its step and state hashes; already in the tree."
+          "spec": "^0.11",
+          "why": "Issue #531: an item's bake key and its step and state hashes; issue #534 takes 0.11, already in the tree (deep-gpu-layer), whose SHA-256 uses the CPU's SHA instructions, for a 4 MiB checkpoint's and save's hashes."
         },
         "wat": {
           "spec": "=1.263.0",
@@ -2351,6 +2377,18 @@
         "typst-layout": {
           "spec": "=0.15.1",
           "why": "Issue #220: the paged document Typst 0.15.1 compiles to, whose frames the SVG and the probe are read from."
+        }
+      }
+    },
+    "tests/acceptance/534/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #534's blind suite: its own assembler for the fixtures, #532's renamed, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #534's blind suite: validates each fixture module before it is written."
         }
       }
     },

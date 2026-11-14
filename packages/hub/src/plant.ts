@@ -32,6 +32,9 @@ export type Plant =
   | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
   // #1347's: a run over a workspace's tasks that reads or writes a forge.
   | 'workspace-calls-forge'
+  // #1342's: a flow that asks whether the work is a workspace or a repo before its card, one that makes the project
+  // before its card is answered, a repo made public on an unchanged card, and a list with no row while the research runs.
+  | 'asks-which-home' | 'creates-before-approval' | 'repo-public-by-default' | 'empty-list-while-researching'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -204,6 +207,8 @@ export type Plant =
   // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
   // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
   | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
+  // #1633's: a gate that opens again any item raised again, whatever closed it, your waiver or acceptance too.
+  | 'reopens-every-item'
   // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
   // verdict behind it, and a status question sent on to the model.
   | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
@@ -337,6 +342,7 @@ const PLANTS: readonly string[] = [
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
+  'reopens-every-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
   'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',
@@ -351,6 +357,7 @@ const PLANTS: readonly string[] = [
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
   'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
   'workspace-calls-forge',
+  'asks-which-home', 'creates-before-approval', 'repo-public-by-default', 'empty-list-while-researching',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',

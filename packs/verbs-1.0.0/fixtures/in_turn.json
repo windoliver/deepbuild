@@ -1,0 +1,286 @@
+{
+  "verb": "in_turn",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "In turn fixture",
+    "description": "In turn fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "a": {
+        "id": "a",
+        "kind": "rect@1",
+        "name": "Square a",
+        "order": "ca",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            -60,
+            0,
+            0
+          ]
+        }
+      },
+      "b": {
+        "id": "b",
+        "kind": "rect@1",
+        "name": "Square b",
+        "order": "cb",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "c": {
+        "id": "c",
+        "kind": "rect@1",
+        "name": "Square c",
+        "order": "cc",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            60,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "in_turn",
+              "targets": [
+                "a",
+                "b",
+                "c"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s",
+              "lag": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "In turn fixture written by hand",
+    "description": "In turn fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "a": {
+        "id": "a",
+        "kind": "rect@1",
+        "name": "Square a",
+        "order": "ca",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            -60,
+            0,
+            0
+          ]
+        }
+      },
+      "b": {
+        "id": "b",
+        "kind": "rect@1",
+        "name": "Square b",
+        "order": "cb",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "c": {
+        "id": "c",
+        "kind": "rect@1",
+        "name": "Square c",
+        "order": "cc",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            60,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "in_a": {
+        "target": "items/a/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 705600000,
+            "value": 1,
+            "interp": "hold"
+          }
+        }
+      },
+      "in_b": {
+        "target": "items/b/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1411200000,
+            "value": 1,
+            "interp": "hold"
+          }
+        }
+      },
+      "in_c": {
+        "target": "items/c/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 1764000000,
+            "value": 0,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 2116800000,
+            "value": 1,
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/a/adjust/opacity",
+    "items/b/adjust/opacity",
+    "items/c/adjust/opacity"
+  ]
+}

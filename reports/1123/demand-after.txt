@@ -1,0 +1,18 @@
+✔ binary demand stays with its consumer instead of names in unrelated selected tests (2089.723333ms)
+✔ a binary consumer without a Cargo workspace is blocked before it executes (272.889833ms)
+✔ path-skipped lanes cannot add binary build prerequisites to the selected lane (1035.807ms)
+✔ Vitest excludes apply before binary demand is collected (1471.958958ms)
+✔ run-private directories disappear after the creating lane receives SIGTERM (772.541667ms)
+✔ run-private directories disappear after the creating lane receives SIGKILL (697.496833ms)
+✔ a JS-only test importing tooling does not build binaries merely mentioned in that tooling (1005.066709ms)
+✔ a lane respects a root-relative explicit Node test path (1992.917792ms)
+✔ runLanes builds no Rust for a JS-only consumer (1062.231292ms)
+✔ runLanes builds only the binary selected consumers and helpers read (1944.699208ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12677.961375
