@@ -411,6 +411,10 @@ if (help) {
 } else if (args[0] === 'run') {
   console.error('Usage: deep run --result <run.finished event file>\n       deep run follow <run>');
   process.exitCode = 2;
+} else if (/\s/.test(args[0]!.trim())) {
+  // Your own words, with any file or link after them (#1342): one input, as the app's box takes it.
+  const { wordsCommand } = await import('@deepbuild/hub');
+  process.exitCode = await wordsCommand(args);
 } else {
   unsupported(args[0]!);
 }

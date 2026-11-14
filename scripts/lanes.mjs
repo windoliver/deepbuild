@@ -594,6 +594,8 @@ alone.push('tests/acceptance/2144/');
 alone.push('tests/acceptance/1332/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
+// #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
+alone.push('tests/acceptance/1342/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
 alone.push('tests/acceptance/525/');
 // Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.

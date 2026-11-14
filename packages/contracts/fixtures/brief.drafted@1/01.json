@@ -1,0 +1,72 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8K4",
+  "kind": "brief.drafted",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017115123,
+  "data": {
+    "key": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4",
+    "ask": "ask:01K74FMXR4T6V8X0Z2B4D6F8K3",
+    "heading": "plan a five-day trip for four people under $4,000",
+    "brief": {
+      "makes": "plan",
+      "software": false,
+      "lines": [
+        {
+          "id": "L1",
+          "field": "holds",
+          "text": "A day-by-day plan",
+          "cites": [
+            {
+              "at": "words",
+              "quote": "plan a five-day trip"
+            }
+          ]
+        },
+        {
+          "id": "default:goes",
+          "field": "goes",
+          "text": "Kept in its own folder on this computer, where you open it.",
+          "cites": [],
+          "default": true
+        }
+      ],
+      "promises": [
+        {
+          "line": "L1",
+          "kind": "document"
+        }
+      ],
+      "tasks": [
+        {
+          "title": "Pick where to stay",
+          "serves": [
+            "L1"
+          ],
+          "criteria": [
+            "A day-by-day plan"
+          ],
+          "blocked_by": []
+        }
+      ],
+      "left_out": [
+        {
+          "title": "Learn twenty phrases",
+          "why": "it serves no line of the brief"
+        }
+      ],
+      "held": [
+        {
+          "does": "Buy four rail passes",
+          "usd": 240,
+          "due": "2026-11-20T10:00:00.000Z",
+          "at": "https://shop.example/buy"
+        }
+      ],
+      "fits": null,
+      "every": null
+    }
+  }
+}

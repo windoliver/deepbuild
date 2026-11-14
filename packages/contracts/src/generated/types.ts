@@ -4054,6 +4054,98 @@ export interface AttemptStarted {
   evidence?: Array<string>;
 }
 
+/** brief.drafted@1 */
+export interface BriefDrafted {
+  v: 1;
+  id: string;
+  kind: "brief.drafted";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    ask: string;
+    heading: string;
+    brief: {
+      makes: "document" | "deck" | "film" | "plan" | "budget" | "report" | "site" | "game" | "app";
+      software: boolean;
+      lines: Array<{
+        id: string;
+        field: "makes" | "for" | "holds" | "leaves_out" | "proves" | "goes" | "fact";
+        text: string;
+        cites: Array<{
+          at: string;
+          quote: string;
+        }>;
+        default?: boolean;
+      }>;
+      promises: Array<{
+        line: string;
+        kind: "document" | "data" | "message" | "money" | "code" | "taste";
+        recommended?: string;
+      }>;
+      tasks: Array<{
+        title: string;
+        serves: Array<string>;
+        criteria: Array<string>;
+        blocked_by: Array<string>;
+      }>;
+      left_out: Array<{
+        title: string;
+        why: string;
+      }>;
+      held: Array<{
+        does: string;
+        usd: number;
+        due: string | null;
+        at: string;
+      }>;
+      fits: string | null;
+      every: string | null;
+    };
+  };
+  evidence?: Array<string>;
+}
+
+/** brief.made@1 */
+export interface BriefMade {
+  v: 1;
+  id: string;
+  kind: "brief.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    step: "asked" | "refused" | "made" | "entered" | "applied" | "held" | "repeated";
+    key: string;
+    heading?: string;
+    words?: string;
+    links?: Array<string>;
+    files?: Array<string>;
+    reason?: string;
+    project?: string;
+    folder?: string;
+    repo?: string;
+    clone?: string;
+    there?: boolean;
+    title?: string;
+    number?: number;
+    tasks?: Array<number>;
+    index?: number;
+    ask?: string;
+    round?: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** build.rolled_back@1 */
 export interface BuildRolledBack {
   v: 1;

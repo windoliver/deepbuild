@@ -16,7 +16,9 @@ import { type Asks } from '@deepbuild/asks';
 
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import { type ExtensionHost, type ViewShown } from '@deepbuild/extension-host';
-import { type RecordStore } from '@deepbuild/record';
+import { type RecordStore, ulid } from '@deepbuild/record';
+import type { JsonValue } from '@deepbuild/contracts';
+import { orderOf } from './rows.js';
 
 import { type Checkouts } from '@deepbuild/gate';
 
@@ -45,7 +47,7 @@ import { Agents } from './agents.js';
 import { Box } from './box.js';
 
 import { Channels, type ChannelAsk } from './channels.js';
-import type { WorkspaceService } from './workspaces-port.js';
+import type { WorkspaceService, WorkspacesProvider } from './workspaces-port.js';
 import { Devices } from './trusted.js';
 
 import { OpenItems } from './open-items.js';
@@ -70,7 +72,9 @@ import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { Writes } from './receipts.js';
 
-import { type Obj } from "./hub-shared.js";
+import { ghToken, type Obj } from "./hub-shared.js";
+import type { Delivery } from '@deepbuild/asks';
+import type { IntakeService } from './intake-port.js';
 
 export interface HubControlOptions {
   settings: CoreOptions & { forge: string };
@@ -113,6 +117,8 @@ export interface HubControlOptions {
     readonly jobKinds: Jobs | undefined;
     readonly durable: Durable;
     readonly stacks: Stacks;
+    /** Builds the one input (#1342); the composition root holds the concrete intake. */
+    readonly intakeOf: WorkspacesProvider['intake'];
   };
   delivery: () => Pick<AnswerDeliveryPort, "note" | "openOffers" | "placed" | "saveOffered" | "sendBack" | "stopWaiting" | "switches" | "waitAnswer">;
   judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
@@ -200,7 +206,15 @@ export class HubControl {
       case 'staged.undo': return this.options.services.staging.undo(params, this.options.events.connection(context.role === 'app' ? 'app' : 'cli'));
       case 'agents.propose': await this.options.kernel.ready; return this.options.services.agents.propose(params);
       case 'agents.read': return this.options.services.agents.read();
-      case 'box.say': await this.options.kernel.ready; return this.options.services.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
+      case 'box.say': {
+        await this.options.kernel.ready;
+        const said = await this.options.services.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
+        // In the box with no project shown, words that ask for no change of the box's are the one input (#1342): a new
+        // project's brief, from you, never an agent.
+        if (said.other !== true || params.repo !== undefined) return said;
+        await this.options.state().notAnAgent(context, method);
+        return this.briefs().say(String(params.words ?? ''), Array.isArray(params.files) ? params.files.filter((s): s is string => typeof s === 'string') : []);
+      }
       case 'agents.restart': await this.options.kernel.ready; return this.options.services.agents.restart(params);
       case 'agents.undo': return this.options.services.agents.undo(params);
       case 'mcp.exec': return this.options.services.agents.exec(params);
@@ -378,6 +392,25 @@ export class HubControl {
   async health(): Promise<Obj> { return this.readings.health(); }
 
   async forgeRepos(): Promise<string[]> { return this.readings.forgeRepos(); }
+
+  /** The one input (#1342), built on first use. */
+  private intake: IntakeService | undefined;
+  private briefs(): IntakeService {
+    const s = this.options.services;
+    return this.intake ??= s.intakeOf({
+      root: s.root.dir, now: s.now, plant: this.options.settings.plant, forge: this.options.settings.forge,
+      token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      raw: s.raw, appendCore: (kind, data, extra) => this.options.events.appendCore(kind, data, extra), keep: (bytes, source) => this.keep(bytes, source),
+      runner: () => s.runner, asks: () => s.asks, spaces: () => s.spaces,
+      start: (ask, folder, scope) => s.work.under(ask, folder, scope),
+      row: async (id, row) => {
+        const ts = s.now();
+        await this.options.events.append(this.options.events.connection('core'), { v: 2, id: ulid(ts), kind: 'row.set', ts, data: row ? { listed: true, order: orderOf(row), ...row } as unknown as JsonValue : { id, listed: false } });
+      },
+    });
+  }
+  briefAnswered(delivery: Delivery): boolean { return this.briefs().answered(delivery); }
+  briefsDue(): Promise<void> { return this.briefs().due(); }
 
   async enteredProject(session: string, cwd: string): Promise<void> { return this.work.enteredProject(session, cwd); }
 

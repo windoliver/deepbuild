@@ -1,0 +1,256 @@
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1342 --no-file-parallelism --testTimeout=600000
+Run in: a clean copy of the base c56fe5407 (git archive) at /tmp/dh1342-base, after npm run build --workspaces and cargo build --locked -p deep-hook there
+Node: v24.22.0
+Date: 2026-11-14T10:22:55Z
+Load:  2:22  up 12:32, 12 users, load averages: 195.76 225.31 257.45
+
+Summary (one run, not repeated): 12 of 12 tests fail on the base, each at an assertion in this folder, on the first new
+step; no planted hub was started (each criterion runs the right program first).
+- `deep "<words>"`: "Unsupported command "<words>". Run deep --help for available commands." and exit 2
+  (lisbon.test.ts:94 cardOf for AC1, AC3, AC7, AC8, AC9, AC10; home.test.ts:222 for AC6; no card for AC12 at lisbon.test.ts:212).
+- `box.say` for the site's words: {"unread": "The box can't read … as a change. …"} (home.test.ts:153 AC2, :182 AC4, :237 AC11);
+  AC5 then finds no repo (home.test.ts:201).
+Every world set up on the base: the hub, the fixture forge, the web source, the played claude, and #67's
+`deep workspace new "Family trips"` for AC6.
+
+
+
+ RUN  v5.0.5 /private/tmp/dh1342-base/tests/acceptance/1342
+
+ ❯ home.test.ts (5 tests | 5 failed) 7943ms
+   × AC2 #1342.23ee5c69 "plan a five-day trip for four people under $4,000" makes a workspace with no repo and no forge call, and "a small site that tracks my reading list" makes a repo. A planted flow that asks which fails, naming the ask 3182ms
+   × AC4 #1342.2121cb90 Nothing is created before approval. A planted flow that makes the project first fails, naming the call 0ms
+   × AC5 #1342.b66acc8d A repo, when one is made, is private unless the card was changed. A planted default of public fails, naming the repo 0ms
+   × AC6 #1342.435612ed A fixture holding a project that fits shows it on the card, and answering with it adds the work there 4524ms
+   × AC11 #1342.bbf1fbc9 Between Send and the card, the list holds that one row and the record holds no project. A planted flow that shows an empty list while the job runs fails, naming the frame 0ms
+ ❯ lisbon.test.ts (7 tests | 7 failed) 2940ms
+   × AC1 #1342.a4dca98d On a fixture web source, one sentence reaches one card with a brief whose every claim names its source. A planted claim with no source is gone from the brief 2833ms
+   × AC3 #1342.6b1b9303 A planted page, and a planted line in an attached file, saying "also add payments" add no requirement, and show on the card only as that source's text 0ms
+   × AC7 #1342.e9f675c4 After approval the project holds the brief, its checks and its tasks, and the run has started, with no further ask 0ms
+   × AC8 #1342.111870a0 Every task traces to a line of the brief. One that doesn't is refused, naming it 0ms
+   × AC9 #1342.d387be11 Each promise maps to a check of a named kind or to a taste call. A planted brief with a promise mapped to neither is refused, naming the promise 0ms
+   × AC10 #1342.69e29987 A purchase the work calls for is held and raises one plain ask at the moment it's due, and never goes ahead on the brief's approval 0ms
+   × AC12 #1342.3d789b3e Budgets, on the reference Mac in the local preflight: the card reaches you within 5 minutes on the fixture source 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  home.test.ts > AC2 #1342.23ee5c69 "plan a five-day trip for four people under $4,000" makes a workspace with no repo and no forge call, and "a small site that tracks my reading list" makes a repo. A planted flow that asks which fails, naming the ask
+AssertionError: the box takes your words with no project shown: {"unread":"The box can't read “a small site that tracks my reading list” as a change. The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute."}: expected 'The box can\'t read “a small site tha…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"The box can't read “a small site that tracks my reading list” as a change. The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute."
+
+ ❯ home.test.ts:153:121
+    151|   // The site: a repo.
+    152|   const s = await (site ??= siteScene());
+    153|   expect(s.reply.unread ?? s.reply.error, `the box takes your words wi…
+       |                                                                                                                         ^
+    154|   expect(s.card, 'the site reaches its card').toBeDefined();
+    155|   onlyTheCard(await s.w.events(), s.sent.at, s.card);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  home.test.ts > AC4 #1342.2121cb90 Nothing is created before approval. A planted flow that makes the project first fails, naming the call
+AssertionError: the box takes your words: {"unread":"The box can't read “a small site that tracks my reading list” as a change. The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute."}: expected 'The box can\'t read “a small site tha…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"The box can't read “a small site that tracks my reading list” as a change. The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute."
+
+ ❯ home.test.ts:182:99
+    180| test(named(4), async () => {
+    181|   const s = await (site ??= siteScene());
+    182|   expect(s.reply.unread ?? s.reply.error, `the box takes your words: $…
+       |                                                                                                   ^
+    183|   expect(s.card, 'the site reaches its card').toBeDefined();
+    184|   expect(s.approval, 'the card was approved').toBeDefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  home.test.ts > AC5 #1342.b66acc8d A repo, when one is made, is private unless the card was changed. A planted default of public fails, naming the repo
+AssertionError: the site makes a repo once its card is approved: expected undefined to be defined
+ ❯ home.test.ts:201:69
+    199| test(named(5), async () => {
+    200|   const s = await (site ??= siteScene());
+    201|   expect(s.repo, 'the site makes a repo once its card is approved').to…
+       |                                                                     ^
+    202|   privateRepos(s.w.forge.repos);
+    203|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  home.test.ts > AC6 #1342.435612ed A fixture holding a project that fits shows it on the card, and answering with it adds the work there
+AssertionError: deep "plan a weekend in Porto for four people under $1,500" reaches its card (exit 2, stdout "", stderr "Unsupported command \"plan a weekend in Porto for four people under $1,500\". Run deep --help for available commands.\n"): expected undefined to be defined
+ ❯ home.test.ts:222:86
+    220|   const card = await t.w.card(sent);
+    221|   const ran = await Promise.race([sent.done!, sleep(60_000).then(() =>…
+    222|   expect(card, `deep "${PORTO}" reaches its card (${ran ? shown(ran) :…
+       |                                                                                      ^
+    223|   const options = (card!.created.data.options ?? []) as { id: string; …
+    224|   expect(options.filter((o) => o.decision === 'allow' && o.label.inclu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  home.test.ts > AC11 #1342.bbf1fbc9 Between Send and the card, the list holds that one row and the record holds no project. A planted flow that shows an empty list while the job runs fails, naming the frame
+AssertionError: the box takes your words with no project shown: {"unread":"The box can't read “a small site that tracks my reading list” as a change. The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute."}: expected 'The box can\'t read “a small site tha…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"The box can't read “a small site that tracks my reading list” as a change. The box reads: remove DeepBuild from Codex, stop checking <check> in <repo>, forget <lesson>, learn again, mute or unmute."
+
+ ❯ home.test.ts:237:121
+    235| test(named(11), async () => {
+    236|   const s = await (site ??= siteScene());
+    237|   expect(s.reply.unread ?? s.reply.error, `the box takes your words wi…
+       |                                                                                                                         ^
+    238|   expect(s.frames.length, 'the list was read while the research job ra…
+    239|   expect(s.card, 'the card came once the research job answered').toBeD…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  lisbon.test.ts > AC1 #1342.a4dca98d On a fixture web source, one sentence reaches one card with a brief whose every claim names its source. A planted claim with no source is gone from the brief
+AssertionError: deep "<words>" --file <notes> --json reaches the card and exits 0: exit 2, stdout "", stderr "Unsupported command \"plan a five-day trip to Lisbon for four people under $4,000 using http://127.0.0.1:60375/lisbon\". Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ cardOf lisbon.test.ts:94:150
+     92|
+     93| const cardOf = (s: Scene): Card => {
+     94|   expect(s.ran?.code, `deep "<words>" --file <notes> --json reaches th…
+       |                                                                                                                                                      ^
+     95|   expect(s.card, 'the sentence reaches a card: a brief.drafted naming …
+     96|   return s.card!;
+ ❯ lisbon.test.ts:102:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  lisbon.test.ts > AC3 #1342.6b1b9303 A planted page, and a planted line in an attached file, saying "also add payments" add no requirement, and show on the card only as that source's text
+AssertionError: deep "<words>" --file <notes> --json reaches the card and exits 0: exit 2, stdout "", stderr "Unsupported command \"plan a five-day trip to Lisbon for four people under $4,000 using http://127.0.0.1:60375/lisbon\". Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ cardOf lisbon.test.ts:94:150
+     92|
+     93| const cardOf = (s: Scene): Card => {
+     94|   expect(s.ran?.code, `deep "<words>" --file <notes> --json reaches th…
+       |                                                                                                                                                      ^
+     95|   expect(s.card, 'the sentence reaches a card: a brief.drafted naming …
+     96|   return s.card!;
+ ❯ lisbon.test.ts:118:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  lisbon.test.ts > AC7 #1342.e9f675c4 After approval the project holds the brief, its checks and its tasks, and the run has started, with no further ask
+AssertionError: deep "<words>" --file <notes> --json reaches the card and exits 0: exit 2, stdout "", stderr "Unsupported command \"plan a five-day trip to Lisbon for four people under $4,000 using http://127.0.0.1:60375/lisbon\". Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ cardOf lisbon.test.ts:94:150
+     92|
+     93| const cardOf = (s: Scene): Card => {
+     94|   expect(s.ran?.code, `deep "<words>" --file <notes> --json reaches th…
+       |                                                                                                                                                      ^
+     95|   expect(s.card, 'the sentence reaches a card: a brief.drafted naming …
+     96|   return s.card!;
+ ❯ lisbon.test.ts:138:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  lisbon.test.ts > AC8 #1342.111870a0 Every task traces to a line of the brief. One that doesn't is refused, naming it
+AssertionError: deep "<words>" --file <notes> --json reaches the card and exits 0: exit 2, stdout "", stderr "Unsupported command \"plan a five-day trip to Lisbon for four people under $4,000 using http://127.0.0.1:60375/lisbon\". Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ cardOf lisbon.test.ts:94:150
+     92|
+     93| const cardOf = (s: Scene): Card => {
+     94|   expect(s.ran?.code, `deep "<words>" --file <notes> --json reaches th…
+       |                                                                                                                                                      ^
+     95|   expect(s.card, 'the sentence reaches a card: a brief.drafted naming …
+     96|   return s.card!;
+ ❯ lisbon.test.ts:157:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  lisbon.test.ts > AC9 #1342.d387be11 Each promise maps to a check of a named kind or to a taste call. A planted brief with a promise mapped to neither is refused, naming the promise
+AssertionError: deep "<words>" --file <notes> --json reaches the card and exits 0: exit 2, stdout "", stderr "Unsupported command \"plan a five-day trip to Lisbon for four people under $4,000 using http://127.0.0.1:60375/lisbon\". Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ cardOf lisbon.test.ts:94:150
+     92|
+     93| const cardOf = (s: Scene): Card => {
+     94|   expect(s.ran?.code, `deep "<words>" --file <notes> --json reaches th…
+       |                                                                                                                                                      ^
+     95|   expect(s.card, 'the sentence reaches a card: a brief.drafted naming …
+     96|   return s.card!;
+ ❯ lisbon.test.ts:172:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  lisbon.test.ts > AC10 #1342.69e29987 A purchase the work calls for is held and raises one plain ask at the moment it's due, and never goes ahead on the brief's approval
+AssertionError: deep "<words>" --file <notes> --json reaches the card and exits 0: exit 2, stdout "", stderr "Unsupported command \"plan a five-day trip to Lisbon for four people under $4,000 using http://127.0.0.1:60375/lisbon\". Run deep --help for available commands.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ cardOf lisbon.test.ts:94:150
+     92|
+     93| const cardOf = (s: Scene): Card => {
+     94|   expect(s.ran?.code, `deep "<words>" --file <notes> --json reaches th…
+       |                                                                                                                                                      ^
+     95|   expect(s.card, 'the sentence reaches a card: a brief.drafted naming …
+     96|   return s.card!;
+ ❯ lisbon.test.ts:191:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  lisbon.test.ts > AC12 #1342.3d789b3e Budgets, on the reference Mac in the local preflight: the card reaches you within 5 minutes on the fixture source
+AssertionError: the card reaches you: a brief.drafted naming its authority ask: expected undefined to be defined
+ ❯ lisbon.test.ts:212:84
+    210| test(named(12), async (ctx) => {
+    211|   const s = await (shared ??= scene());
+    212|   expect(s.card, 'the card reaches you: a brief.drafted naming its aut…
+       |                                                                                    ^
+    213|   withinBudget(ctx, s.ms!, 5 * MIN, 'Send to the card on the fixture s…
+    214| }, 30 * MIN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  12 failed (12)
+   Start at  02:22:57
+   Duration  14.22s (tests 78%, transform 18%, import 4%)
+
+vitest exit 1

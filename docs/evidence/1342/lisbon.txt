@@ -1,0 +1,4 @@
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  08:11:46
+   Duration  736.04s (tests 100%)
