@@ -2,7 +2,7 @@
 
 ## Latest result
 
-All four original, independently drafted #2068 acceptance cases pass unchanged. The same files fail on the merge base at the required wait/fallback assertions; the instant-source guard passes there. The author-role scenarios reused from #322 pass. The **affected run is not green**: see inherited cleanup and repository-wide findings below. No test or known-failure entry was weakened to get these results.
+All four original, independently drafted #2068 acceptance cases passed unchanged in a serial run. The same files fail on the merge base at the required wait/fallback assertions; the instant-source guard passes there. The author-role scenarios reused from #322 pass. **The final parallel affected run leaves AC1 INCONCLUSIVE again** (the forge request began after B arrived), and inherited cleanup/repository-wide findings remain red. The PR therefore stays **Part of #2068**, not a closure claim. No test or known-failure entry was weakened to get these results.
 
 Merge base tested: `5c92a77023e251385c6b9c7727d103ec5ed61a0e`. Initial drafting base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`. The timing test prints the initial baseline as metadata on both sides; `final-timings.json` names the actual comparison base. `acceptance.sha256` pins the original delivered tests; `source.sha256` pins the tested source and added regressions.
 
@@ -26,10 +26,12 @@ The exact read duration is an implementation choice, not an issue-specified numb
 - A genuinely fresh hook after spool replay still processes queued words. `live-after-replay-before.txt`.
 - An authenticated app note carried by the prompt retains its prepared criteria. `app-before.txt` / `app-after.txt`.
 - A prompt whose transcript is written only after its reply still gets that reply; its late origin placement retains the issue definition.
+- An HTTP issue link retains its criteria when GitHub returns a canonical HTTPS URL. `canonical-before.txt` / `canonical-after.txt`.
+- Startup replay cannot await a live duplicate that itself waits for startup to finish. `start-replay-before.txt` / `regressions-pass.txt`.
 
-`regressions-pass.txt` records the final six prompt regressions and four existing replay cases passing (10 tests). `github-deadline.test.ts` proves cancellation at the external credential executable and unfinished-body boundaries. Its fake `gh` is the only executable on the child's PATH, returns no real credential and never reads login state; no authentication implementation or clock is mocked. Both tests fail at assertions on the merge base and pass on the fix.
+`regressions-pass.txt` records the final seven prompt regressions, startup replay case and four existing replay cases passing (12 tests). `adjacent-result.txt` records seven adjacent queue/source/deadline cases passing on the prior meaningful-change snapshot; the earlier cleanup failure remains disclosed. `github-deadline.test.ts` proves cancellation at the external credential executable and unfinished-body boundaries. Its fake `gh` is the only executable on the child's PATH, returns no real credential and never reads login state; no authentication implementation or clock is mocked. Both tests fail at assertions on the merge base and pass on the fix.
 
-An independent read-only review prompted these corrections. The shutdown wait now covers intake rather than a parked job's final settlement, so shutdown can reach runner cancellation. That path has code review/typecheck, not a dedicated end-to-end parked-job test.
+An independent read-only review prompted these corrections. For issue-bearing prompts, shutdown now waits for intake rather than a parked job's final settlement, so shutdown can reach runner cancellation. That path has code review/typecheck, not a dedicated end-to-end parked-job test. Two review findings predate this fix and remain separate: network-stop-only parked job hooks already blocked shutdown on the base, and prompts first discovered from the transcript queue or undelivered app-note queue after `enrich` already lacked a forge read on the base. This change prevents a pending ordinary prompt from being overtaken, and handles app-note wakes, but does not add source reads for those separate intake-created prompts.
 
 ## Checks and commands
 
@@ -50,7 +52,7 @@ node node_modules/vitest/vitest.mjs run \
 
 # Added regression protection
 node node_modules/vitest/vitest.mjs run \
-  packages/hub/test/prompt-items.test.ts packages/hub/test/replay.test.ts \
+  packages/hub/test/prompt-items.test.ts packages/hub/test/prompt-start-replay.test.ts packages/hub/test/replay.test.ts \
   --maxWorkers=1 --no-file-parallelism --reporter=verbose
 node node_modules/vitest/vitest.mjs run packages/hub/test/github-deadline.test.ts \
   --maxWorkers=1 --no-file-parallelism --reporter=verbose
@@ -65,14 +67,14 @@ The source-change `affected --list` reaches over 1,000 files plus a crate. No WI
 ```sh
 node scripts/affected.mjs \
   tests/acceptance/2068/forge-wait.test.ts tests/acceptance/322/github.test.ts \
-  packages/hub/test/prompt-items.test.ts packages/hub/test/github-deadline.test.ts \
+  packages/hub/test/prompt-items.test.ts packages/hub/test/prompt-start-replay.test.ts packages/hub/test/github-deadline.test.ts \
   packages/hub/test/github-source.test.ts packages/hub/test/prompt-flush.test.ts \
   packages/hub/test/queued.test.ts packages/hub/test/replay.test.ts
 ```
 
-`affected-result.txt`: **155 new/unlisted findings, 44 known on main, 24 passed** on that snapshot. No WIDE or INCONCLUSIVE line. Three failures were #322 negative controls' `afterEach` cleanup (`ENOTEMPTY`), not role assertions. Cleanup failures also occur on the unmodified merge base (`base-roles-result.txt`); these are inherited/flaky, not excused as passes. The normal owner/outside/bot/paged-membership scenarios pass. An earlier affected run also hit the same cleanup problem in prompt-flush; the subsequent meaningful-change run passed that file, so its history remains inconclusive, not retry-green proof.
+`affected-result.txt`: **154 new/unlisted findings, 44 known on main, 1 inconclusive, 27 passed** on the final source snapshot. No WIDE line. Its INCONCLUSIVE line is AC1: `no forge read in flight at B arrival; not proof of the wait`. All final added regressions pass; AC2, pagination and AC3 pass. Two failures were prompt-flush/#322 negative-control cleanup (`ENOTEMPTY`), not role assertions. Cleanup failures also occur on the unmodified merge base (`base-roles-result.txt`); these are inherited/flaky, not excused as passes. The normal owner/outside/bot/paged-membership scenarios pass. Prompt-flush has both passing serial evidence and cleanup failures; its history is not retry-green proof.
 
-The other unlisted findings concern unchanged repository files: stale dependency/size/vendor tables, an existing fixture home path, code mappings, record-reader/closure lints and expired known-failure entries. The last correction (fresh-hook handling after spool replay) was checked by the 10-test regression run and all four acceptance cases, not another whole affected run. **Full source-selected affected, timed/slow/by-hand lanes, full preflight, native UI rendering, mutation and static proof-trace lanes were not run.** The original blind tests use numbered AC names rather than static hash tags; the table above supplies the exact criterion mapping but is not a static trace PASS.
+The other unlisted findings concern unchanged repository files: stale dependency/size/vendor tables, an existing fixture home path, code mappings, record-reader/closure lints and expired known-failure entries. **Full source-selected affected, timed/slow/by-hand lanes, full preflight, native UI rendering, mutation and static proof-trace lanes were not run.** The original blind tests use numbered AC names rather than static hash tags; the table above supplies the exact criterion mapping but is not a static trace PASS.
 
 Measurements occurred on an arm64 Mac with Node v24.22.2, with load above its 18 cores. They establish the planted causal ordering, not a reference-Mac latency budget or a statistical speedup. Prior overloaded/inconclusive runs are preserved, not discarded.
 

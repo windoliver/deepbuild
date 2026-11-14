@@ -1188,7 +1188,7 @@ export class Core {
 
   async replayed(drafts: Draft[], meta: HookMeta, starting = false): Promise<void> {
     if (!starting) this.delivery.track(meta);
-    await this.promptItems.settling.get(meta.id);
+    if (this.opened) await this.promptItems.settling.get(meta.id);
     const known = await this.record.raw('SELECT 1 FROM events WHERE id = ? LIMIT 1', [meta.id]);
     const item = known.length ? undefined : this.promptItems.read(drafts, meta);
     const intake = Promise.all([starting ? undefined : this.promptItems.ordering.get(meta.session), item]).then(() => this.queue(() => this.handleHook(drafts, meta, 'hook', true), starting));
@@ -1200,7 +1200,7 @@ export class Core {
     this.delivery.track(meta);
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
-    const replayed = this.replaying;
+    const replayed = this.replaying ?? (!this.opened ? this.ready : undefined);
     // Network work runs before it queues, so it holds no other hook of any session (#85, #2068).
     const tried = this.tryNetwork(drafts, meta);
     const item = this.promptItems.read(drafts, meta), prior = this.promptItems.ordering.get(meta.session);
@@ -1509,7 +1509,7 @@ export class Core {
 
   private promptDraft(draft: Draft, meta: HookMeta, verified: boolean, data: Obj, count: Counter, live: Live, typed: { text: string; task: string | undefined }[], opens: Promise<void>[]): void {
         // A prompt you typed that asks for a change opens a task: the issue it names, or the message that asked for it.
-        const prepared = this.promptItems.items.get(draft), item = (data.from === 'person' || data.from === 'app') && prepared && String(data.text).includes(prepared.link) ? prepared : undefined;
+        const item = this.promptItems.item(draft);
         let tasks = this.tasks.tasksOf({ session: meta.session, msg: Number(data.msg), text: String(data.text), from: String(data.from), queued: draft.queued === true, first: data.msg === 0 });
         if (item && tasks.length) tasks = [`task:${letters(item.source_id)}`];
         // Kept on the draft too: the turn it opens reads its task there (#83).

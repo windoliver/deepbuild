@@ -94,6 +94,19 @@ it('processes a fresh hook normally after the spool it triggers, including queue
   } finally { await w?.stop(); await f.close(); }
 }, 60_000);
 
+it('retains criteria when GitHub returns a canonical HTTPS link for an HTTP prompt link', async () => {
+  const f = await forge('instant');
+  let w: World | undefined;
+  try {
+    w = await world(f);
+    const session = await w.startSession();
+    const sent = (await w.typed(session, prompt().replace('https:', 'http:'))).send();
+    await until(() => w!.events.some((e) => e.kind === 'definition.locked' && e.session === session.id), 5000);
+    expect(w.events.some((e) => e.id === sent.id), 'the HTTP issue prompt is recorded').toBe(true);
+    expect(w.events.find((e) => e.kind === 'definition.locked' && e.session === session.id), 'canonical response URLs must not discard prepared criteria').toBeDefined();
+  } finally { await w?.stop(); await f.close(); }
+}, 60_000);
+
 it('keeps issue criteria when an authenticated app note is carried by the prompt', async () => {
   const f = await forge('instant');
   let w: World | undefined;

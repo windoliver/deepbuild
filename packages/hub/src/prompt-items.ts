@@ -1,12 +1,14 @@
 // A prompt's work source is read before the hook joins the core's chain (#2068). Only data is prepared here:
 // the core still checks the prompt's origin and ownership before using it or opening a task.
 import type { WorkItem } from './ask-tasks.js';
+import { ISSUE_LINK } from './github-source.js';
 import { childPrompt, FOREIGN } from './hub-shared.js';
 import type { Draft, HookMeta } from './wire.js';
 
 export class PromptItems {
   /** Undefined means a read failed; no entry means this draft never requested one. */
   readonly items = new WeakMap<Draft, WorkItem | undefined>();
+  private readonly requested = new WeakMap<Draft, string>();
   /** A reply waits only for its own prompt's intake, never another session's read. */
   readonly replying = new Map<string, Promise<void>>();
   /** Later hooks in this session follow its pending prompt, outside the shared chain. */
@@ -22,8 +24,16 @@ export class PromptItems {
     const prompts = drafts.filter((d) => d.kind === 'user.ask' && (d.data.from === 'person' || d.data.from === 'app' || d.data.from === 'unknown') && /https?:\/\//.test(String(d.data.text)));
     if (!prompts.length) return undefined;
     return Promise.all(prompts.map(async (draft) => {
-      this.items.set(draft, await this.itemOf(String(draft.data.text)));
+      const text = String(draft.data.text);
+      this.requested.set(draft, ISSUE_LINK.exec(text)?.[0] ?? text);
+      this.items.set(draft, await this.itemOf(text));
     })).then(() => undefined);
+  }
+
+  /** App-note placement can replace the text: bind to the requested link, not GitHub's canonical response URL. */
+  item(draft: Draft): WorkItem | undefined {
+    const from = draft.data.from, requested = this.requested.get(draft);
+    return (from === 'person' || from === 'app') && requested && String(draft.data.text).includes(requested) ? this.items.get(draft) : undefined;
   }
 
   /** Keep network work through shutdown, but let a prompt awaiting its transcript entry receive its reply (#567). */
