@@ -1,0 +1,65 @@
+The #1940 suite run once at base commit c56fe5407 ("Merge pull request #2462 …"; no implementation of #1940), on macOS
+arm64 (rustc 1.99.1 from rust-toolchain.toml, Node 24.22.2, vitest 5.0.5), with `NO_COLOR=1 CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1940 --no-file-parallelism
+--testTimeout=600000` (scripts/lease found no `deep` on PATH and no built CLI, so the run was unleased, as it said; the
+checkout's path is redacted to `<checkout>`). The file's beforeAll built `full,test-leave-out-effects` cold in this
+worktree's target folder, on a Mac shared with other sessions' builds: the run took 2,596 s, nearly all of it that build.
+
+Result: 1 of 3 tests fails, at an assertion, because the planted build's feature is absent; 2 pass, because their
+clauses already hold at the base. None fails in the harness, none is BLOCKED or INCONCLUSIVE.
+
+- PASS  `#1940.44d6026c the loop module seals in a test build without the effects module`. At the base the loop module
+  (#453) requires scene3d and look only, and deep-show already has #200's `test-leave-out-effects`: the build starts and
+  its `registry` lists loop and not effects.
+- PASS  `#1940.44d6026c there, a check input naming effects.audit is BLOCKED with module_missing, naming the effects
+  module, never PASS`. At the base no module registers effects.audit, so the verdict lists the requirement BLOCKED with
+  `{code: "module_missing", kind: "effects.audit", module: "effects"}` (the module named from the kind's family, which
+  the build lacks; #403), and the claim is not PASS.
+- FAIL  `#1940.44d6026c a planted loop module that registers effects.audit itself, and so depends on effects
+  (test-effects-audit-in-loop), is refused at that build's seal, naming effects`, at the named assertion "the binary
+  builds: deep-show --no-default-features --features full,test-leave-out-effects,test-effects-audit-in-loop": cargo
+  answers "error: none of the selected packages contains this feature: test-effects-audit-in-loop".
+
+So at the base only the planted clause fails. The two passing tests prove nothing on the base; the wrong program the
+criterion names is the planted build, whose seal refusal is what clause 1's seal check fails on (README: Criteria to
+tests). Proving clause 2 against a wrong program needs a twin or a mutant the implementer's change provides.
+
+The type-check, `npx tsc -p tests/acceptance/1940/tsconfig.json`, exits 0.
+
+The run's output, as vitest printed it:
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1940
+
+ ❯ effects-audit.test.ts (3 tests | 1 failed) 2589058ms
+   ❯ #1940.44d6026c effects.audit is the effects module's: the loop module seals without it, and a loop module that registers it is refused (3)
+     × #1940.44d6026c a planted loop module that registers effects.audit itself, and so depends on effects (test-effects-audit-in-loop), is refused at that build's seal, naming effects 10ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  effects-audit.test.ts > #1940.44d6026c effects.audit is the effects module's: the loop module seals without it, and a loop module that registers it is refused > #1940.44d6026c a planted loop module that registers effects.audit itself, and so depends on effects (test-effects-audit-in-loop), is refused at that build's seal, naming effects
+AssertionError: the binary builds: deep-show --no-default-features --features full,test-leave-out-effects,test-effects-audit-in-loop: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-effects,test-effects-audit-in-loop failed:
++ error: none of the selected packages contains this feature: test-effects-audit-in-loop
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++
+
+ ❯ Object.bin helpers.ts:94:107
+     92|       const entry = made.get(features);
+     93|       if (!entry) throw Error(`the file didn't list the feature set ${…
+     94|       expect(entry.error, `the binary builds: ${SHOW_NAME} --no-defaul…
+       |                                                                                                           ^
+     95|       return entry.bin;
+     96|     },
+ ❯ effects-audit.test.ts:65:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  01:36:01
+   Duration  2596.47s (tests 100%)
