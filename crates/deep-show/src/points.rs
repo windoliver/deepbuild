@@ -714,7 +714,7 @@ impl Hub<'_> {
         let mut copies = Vec::new();
         for player in 1..=players {
             match crate::picks::stepped(&piece, &entries, steps) {
-                Ok(s) => copies.push(json!({"player": player, "steps": s, "track": track})),
+                Ok((s, _)) => copies.push(json!({"player": player, "steps": s, "track": track})),
                 Err(e) => return e,
             }
         }
