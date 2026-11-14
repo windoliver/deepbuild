@@ -119,6 +119,8 @@ test-tick = ["dep:deep-canvas-test-modules"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #497: a module stepping at its item's step_rate into a held array.
 test-held = ["dep:deep-canvas-test-modules"]
+# #169: test.latch, whose checkpoint keeps two plays that draw alike apart.
+test-page-latch = ["dep:deep-canvas-test-modules"]
 # Issue #388: test builds that leave look, or text, out of the build set's list; the seal
 # refuses each at startup, naming the module.
 test-leave-out-look = []
@@ -310,7 +312,7 @@ deep-text = { path = "../deep-text" }
 # Issue #402: a terminal's PTY (openpty, login_tty, the window size) and stopping what serve
 # started, by PID; already in the lockfile.
 libc = "0.2"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.

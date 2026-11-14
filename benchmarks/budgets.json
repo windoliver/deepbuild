@@ -1515,6 +1515,19 @@
       "criteria": [
         "#226.6a40f5c8"
       ]
+    },
+    {
+      "id": "page-export",
+      "command": [
+        "node",
+        "benchmarks/page.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #169 first measurement (#169.e6c2fc38): the merge base has no playable page. One `deep-show run` exports a 2D walkthrough of four stages, an explode toggle and three finishes (24 states, 144 edges) as a page at 320 × 180 and 30 fps, each state's still and each edge's clip rendered through the export; it prints the receipt's timing.wall and bytes. The criterion's limits (the 1080p30 walkthrough under 4 minutes and 250 MB, the player under 100 KB) are judged by tests/acceptance/169/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#169.e6c2fc38"
+      ]
     }
   ]
 }

@@ -995,6 +995,8 @@ pub struct Eval {
     pub track: Option<Vec<Value>>,
     /// #507: each text item's drawn string beside the frame.
     pub texts: bool,
+    /// #169: the core's carried-state list as the frame leaves it.
+    pub carried: bool,
 }
 
 pub struct Scenario {

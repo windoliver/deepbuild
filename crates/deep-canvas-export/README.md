@@ -8,7 +8,8 @@ The export canvas module, `export@1` (#162; design: Export: Lottie): the Lottie 
 
 - `src/module.rs`: the module's manifest, its `export.target@1` entry and the `export` check kind.
 - `src/lottie/mod.rs`: the writer's entry, its warnings and refusals, the markers; `keys.rs`: Lottie properties and keys, native or sampled; `layers.rs`: items as layers, groups and masks as precomps, mattes as track mattes; `shapes.rs`: geometry, path ops, repeater copies, baked output paths, drops, halos and ends; `paint.rs`: fills, strokes and gradients; `text.rs`: text as glyph groups per animated unit; `holds.rs`: what Lottie can't hold.
-- The acceptance tests are in `tests/acceptance/162` and `tests/acceptance/162-oracle`.
+- `src/page/list.rs` (#169; design: Export: playable page): a live piece's discrete states and the edges between them, its caps and refusals; `src/page/write.rs`: the page's manifest and index page; `web/`: the fixed player the page ships, the same bytes in every export. deep-show renders each state and edge through the export and writes the folder.
+- The acceptance tests are in `tests/acceptance/162`, `tests/acceptance/162-oracle` and `tests/acceptance/169`.
 
 ## What it may import
 

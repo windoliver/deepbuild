@@ -15,6 +15,7 @@ mod fidelity;
 mod frames;
 mod guards;
 mod lottie;
+mod page;
 mod pdf;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
@@ -60,6 +61,10 @@ pub enum Guard {
     WrapAgainstSecond,
     /// #507: the pdf handout's writer leaves stage 4's page out.
     PdfSkipsStage4,
+    /// #169: the page keys each state by its picture and its controls alone.
+    PageKeysByPicture,
+    /// #169: the page draws its targets only as boxes on each still.
+    PageTargetsOnImage,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -116,6 +121,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "blank_counts_dark_only" => Planted::Export(G::BlankDarkOnly),
         "wrap_compares_second_frame" => Planted::Export(G::WrapAgainstSecond),
         "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
+        "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
+        "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -311,6 +318,8 @@ pub struct Job {
     pub lottie: Value,
     /// #507: `pdf {notes}`: the handout prints each stage's notes under its still.
     pub notes: bool,
+    /// #169: `page: {sample, orbit, still}` (or `video.page`), the playable page's options.
+    pub page: Value,
 }
 
 impl Default for Job {
@@ -340,6 +349,7 @@ impl Default for Job {
             session: None,
             lottie: Value::Null,
             notes: false,
+            page: Value::Null,
         }
     }
 }
@@ -503,6 +513,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .and_then(|p| p.get("notes"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        page: c
+            .get("page")
+            .or_else(|| video.and_then(|v| v.get("page")))
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 
@@ -588,6 +603,10 @@ impl Hub<'_> {
         }
         if job.codec == "pdf" {
             return self.export_pdf(job, &doc);
+        }
+        // #169: the playable page, the export module's own writer outside export.target@1.
+        if job.codec == "page" {
+            return self.export_page(job, &doc);
         }
         let target = job.target().to_string();
         // The target, as this build sealed it.
@@ -696,7 +715,15 @@ impl Hub<'_> {
                     .markers
                     .get(id)
                     .ok_or_else(|| json!({"code": "unknown_marker", "marker": id}))?;
-                let k = clock::index(clock::film_time(m, 0, frame), frame);
+                // #169: on a track whose path holds or jumps, the still is the frame where the
+                // timeline first reaches the marker on that path.
+                let track = match job.track.is_empty() {
+                    true => self.track_json(&job.doc),
+                    false => job.track.clone(),
+                };
+                let played = crate::played::with_track(&doc, &track);
+                let at = crate::present::path_of(&played).clock_end(m).unwrap_or(m);
+                let k = clock::index(clock::film_time(at, 0, frame), frame);
                 k..k + 1
             }
         };
@@ -995,7 +1022,11 @@ impl Hub<'_> {
         for shard in &shards {
             self.export_frames(&doc, shard, &mut run, &mut sink)?;
         }
-        let looping = doc.pointer("/transport/loop").and_then(Value::as_str) == Some("wrap");
+        // #169: film.wrap holds an export of whole passes of the loop, not a part of one.
+        let passes = doc_span(&doc)
+            .is_some_and(|span| span > 0 && ((frames.end - frames.start) * frame) % span == 0);
+        let looping =
+            passes && doc.pointer("/transport/loop").and_then(Value::as_str) == Some("wrap");
         let seen = run.seen.take().ok_or_else(|| refuse("no_frames"))?;
         let (hashes, reads, wrap) = seen.finish(looping).map_err(|()| {
             stopped(

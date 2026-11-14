@@ -102,6 +102,7 @@ impl Hub<'_> {
                 paths: Vec::new(),
                 track: None,
                 texts: false,
+                carried: false,
             };
             let r = self.eval(&e);
             if r["outcome"] != "evaluated" {
