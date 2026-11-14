@@ -1,0 +1,57 @@
+# The same selection on the merge base f6d811c79 (node scripts/affected.mjs Cargo.lock scripts/repo-rules.json: exit 1),
+# against the run on the change, line for line. + is only on the change, - only on the merge base.
+NEW FAIL: change 142, merge base 137; only on the change 6, only on the merge base 1
+  + NEW FAIL tests/acceptance/2326-redraft-ac1/ac1.test.mjs › #2326.3ec6f925 Cargo.lock holds each of the eight at its first fixed version or later: not at the fixed version (a PR naming the dependent that holds one back is read by a person, see README):
+  + NEW FAIL tests/acceptance/2326/lock.test.mjs › Cargo.lock holds rsa at 0.10.0 or later, a final release, in place of 0.10.0-rc.18: rsa is locked at 0.10.0-rc.18, below the fixed release 0.10.0
+  + NEW FAIL tests/acceptance/2326/lock.test.mjs › the change against the base touches Cargo.lock and no Cargo manifest: the change edits Cargo manifests
+  + NEW FAIL slot kit environment@1: clean fill health-route: the kit's reference fill reads BLOCKED on health-route: the environment's working folders can't be read (lsof failed), so whether it started in its checkout is unknown
+  + NEW FAIL slot kit environment@1: clean fill status-route: the kit's reference fill reads BLOCKED on status-route: the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown
+  + NEW FAIL scripts/canvas-closures.mjs: exited 1: deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs closures` runs unleasFAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+  - NEW FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+KNOWN: change 44, merge base 44; only on the change 0, only on the merge base 0
+INCONCLUSIVE: change 2, merge base 2; only on the change 0, only on the merge base 0
+BLOCKED: change 0, merge base 0; only on the change 0, only on the merge base 0
+INVALID: change 0, merge base 0; only on the change 0, only on the merge base 0
+LISTED: change 0, merge base 0; only on the change 0, only on the merge base 0
+NOTE: change 5, merge base 0; only on the change 5, only on the merge base 0
+  + NOTE reports/2326/ac1.txt reaches no test
+  + NOTE reports/2326/ac2-light.txt reaches no test
+  + NOTE reports/2326/ac3-pixel-digests.txt reaches no test
+  + NOTE reports/2326/ac3-summary.json reaches no test
+  + NOTE reports/2326/compare-runtime.mjs reaches no test
+WIDE: change 0, merge base 0; only on the change 0, only on the merge base 0
+SKIP: change 0, merge base 0; only on the change 0, only on the merge base 0
+SHARD: change 0, merge base 0; only on the change 0, only on the merge base 0
+change: FAIL affected: 142 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 50 passed, in 329 s at load 110
+merge base: FAIL affected: 137 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 38 passed, in 121 s at load 83
+
+# node scripts/conformance-lint.mjs alone, three times on each side after the affected runs, 2026-11-13
+# every run: exit 1, 28 lines that do not pass, the same 28 on both sides, none naming lsof
+FAIL code mappings: doctor service_unpromoted maps to no verdict
+FAIL code mappings: verdict closed before the gate maps to no verdict
+FAIL code mappings: verdict closed maps to no verdict
+FAIL code mappings: verdict context full maps to no verdict
+FAIL code mappings: verdict crashed or interrupted maps to no verdict
+FAIL code mappings: verdict finished maps to no verdict
+FAIL code mappings: verdict flagged maps to no verdict
+FAIL code mappings: verdict gave up its slot maps to no verdict
+FAIL code mappings: verdict landed with the budget window open maps to no verdict
+FAIL code mappings: verdict needs you maps to no verdict
+FAIL code mappings: verdict none maps to no verdict
+FAIL code mappings: verdict plan window or spend cap maps to no verdict
+FAIL code mappings: verdict queued maps to no verdict
+FAIL code mappings: verdict quiet maps to no verdict
+FAIL code mappings: verdict replaced by you maps to no verdict
+FAIL code mappings: verdict running maps to no verdict
+FAIL code mappings: verdict says done maps to no verdict
+FAIL code mappings: verdict sent back maps to no verdict
+FAIL code mappings: verdict sent back past its rounds maps to no verdict
+FAIL code mappings: verdict stale maps to no verdict
+FAIL code mappings: verdict stalled maps to no verdict
+FAIL code mappings: verdict stuck maps to no verdict
+FAIL code mappings: verdict working maps to no verdict
+FAIL slot kit channel@1: clean fill choice-delivered-then-answered: the kit's reference fill reads BLOCKED on choice-delivered-then-answered: the fill answered with a promise, which the preflight's synchronous kit check can't await
+FAIL slot kit channel@1: clean fill task-delivered-then-done: the kit's reference fill reads BLOCKED on task-delivered-then-done: the fill answered with a promise, which the preflight's synchronous kit check can't await
+FAIL slot kit channel@1: planted proof delivered-without-ack: planted fill delivered-without-ack is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "reported delivered with no acknowledgement from its provider, so it is recorded stalled"
+FAIL slot kit channel@1: planted proof signed-without-signature: planted fill signed-without-signature is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "returned an answer marked as signed or linked that its provider never carried"
+FAIL slot kit channel@1: rule planted answers-in-shape: rule answers-in-shape ("deliver says delivered, stalled, timed_out or conflict; receive returns answers, seen and conflict.") has 0 planted fills; it needs exactly one that breaks it alone
