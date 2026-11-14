@@ -62,6 +62,8 @@ pub struct Run {
     /// A monotonic clock in milliseconds that times each step into its row (#2017): the
     /// `geometry` call's `timings` hand one in; no check runs with one.
     pub clock: Option<fn() -> f64>,
+    /// The host's worker threads and the thread count a builder may run its blocks on (#224).
+    pub pool: Option<(std::sync::Arc<dyn deep_canvas::schedule::Pool>, usize)>,
 }
 
 impl Run {
@@ -1386,6 +1388,7 @@ mod tests {
             plants: Default::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         builders::build("slab@1", &json!({"size": [1, 1, 1]}), &ctx).unwrap()
     }
@@ -1398,6 +1401,7 @@ mod tests {
             plants: Default::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         builders::build("plate@1", &json!({"grid": [2, 2], "size": [1, 1]}), &ctx).unwrap()
     }
@@ -1650,6 +1654,7 @@ mod tests {
             plants: Default::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         let d = builders::build("display@1", &json!({"size": [0.6, 0.4]}), &ctx).unwrap();
         let m = run(

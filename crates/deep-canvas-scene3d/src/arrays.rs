@@ -132,6 +132,8 @@ pub fn check(doc: &Value, entries: &[SealedEntry]) -> Vec<Issue> {
             issues.extend(crate::slots::check(id, &item["params"], &counts));
         }
     }
+    // #224: what each surface's build at the start drops or stops short of.
+    issues.extend(crate::surface::raised_at(doc, 0));
     issues
 }
 
@@ -143,6 +145,7 @@ pub fn raised_at(doc: &Value, t: i64) -> Vec<Issue> {
         return Vec::new();
     };
     let mut out = crate::tints::raised_at(doc, t);
+    out.extend(crate::surface::raised_at(doc, t));
     for (id, item) in items(doc) {
         for r in readers(id, item) {
             let Some(array) = baked(map, &r) else {

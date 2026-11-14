@@ -288,7 +288,11 @@ impl Issue {
         // overlay's its array, cell, value and step (#537); a bake's empty bands, theirs (#503).
         if matches!(
             self.code,
-            "column.out_of_range" | "terrain.overlay_range" | "spectrum_band_empty"
+            "column.out_of_range"
+                | "terrain.overlay_range"
+                | "spectrum_band_empty"
+                | "surface.nonfinite"
+                | "surface.coarse"
         ) {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {

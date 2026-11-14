@@ -12,7 +12,7 @@ use crate::curve::{self, Sampled};
 use crate::geom::{add, area2, cross, dot, length, scale, sub, triangulate, unit, Mesh, V2, V3};
 
 /// The builder kinds, as documents name them.
-pub const KINDS: [&str; 9] = [
+pub const KINDS: [&str; 10] = [
     "hull@1",
     "slab@1",
     "lathe@1",
@@ -22,6 +22,7 @@ pub const KINDS: [&str; 9] = [
     "coil@1",
     "plate@1",
     "display@1",
+    "surface@1",
 ];
 
 /// The builders with known charts, which emit uv1 analytically (Builder: uv; #440).
@@ -233,6 +234,8 @@ pub struct Ctx<'a> {
     pub outlines: &'a [deep_canvas::registry::SealedOutline],
     /// The planted wrong program by name, which an outline source may hold (#443).
     pub planted: Option<&'a str>,
+    /// The host's worker threads and their count, which an implicit surface meshes on (#224).
+    pub pool: Option<(&'a dyn deep_canvas::schedule::Pool, usize)>,
 }
 
 /// Builds `kind` from `params`, smooth or flat as `shade` says.
@@ -253,6 +256,13 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         "display@1" => display(params)?,
         "hull@1" => crate::hull::hull(&hull_points(params, ctx)?, ctx.plants.hull)
             .map_err(|code| code.to_string())?,
+        "surface@1" => crate::surface::built(
+            params,
+            ctx.planted
+                .and_then(crate::surface::Planted::named)
+                .unwrap_or_default(),
+            ctx.pool,
+        )?,
         _ => return Err("kind".into()),
     };
     m.orient();
@@ -453,6 +463,7 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
             let n = hull_count(params, ctx)?;
             (n, (2 * n).saturating_sub(4))
         }
+        "surface@1" => crate::surface::counts(params)?,
         _ => return Err("kind".into()),
     };
     let declared = if shade_flat(params)? && !ctx.plants.flat_as_smooth {
@@ -2262,6 +2273,7 @@ mod tests {
             plants: Plants::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         (
             build(kind, &p, &ctx).unwrap(),
@@ -2364,6 +2376,7 @@ mod tests {
             plants: Plants::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         for (kind, plain, p) in [
             (
@@ -2462,6 +2475,7 @@ mod tests {
                     plants: Plants::default(),
                     outlines: &[],
                     planted: None,
+                    pool: None,
                 },
             )
             .unwrap()
@@ -2498,6 +2512,7 @@ mod tests {
                 plants: Plants::default(),
                 outlines: &[],
                 planted: None,
+                pool: None,
             },
         )
         .unwrap();
@@ -2521,6 +2536,7 @@ mod tests {
             plants: Plants::default(),
             outlines: &[],
             planted: None,
+            pool: None,
         };
         let m = build("extrude@1", &p, &ctx).unwrap();
         assert_eq!(

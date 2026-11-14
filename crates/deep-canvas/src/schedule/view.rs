@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::core_ops::Edits;
 use super::{
-    view_input, Access, Bound, Key, Loaded, Node, OpError, Outside, Session, Tokens, Val,
+    view_input, Access, Bound, Key, Loaded, Node, OpError, Outside, Pool, Session, Tokens, Val,
     VIEW_INPUTS,
 };
 use crate::registry::{Sealed, SealedOp, TableValue};
@@ -44,6 +44,8 @@ pub struct View<'a> {
     forgets_changes: bool,
     /// A canvas module's planted wrong program by name.
     planted: Option<&'a str>,
+    /// The host's worker threads, which an operator may lend its own blocks (#224).
+    pool: Option<&'a Arc<dyn Pool>>,
 }
 
 /// What an operator left when its view finished: its writes, its reads, what a step noted and
@@ -67,6 +69,7 @@ impl<'a> View<'a> {
         step: Option<StepCtx<'a>>,
         forgets_changes: bool,
         planted: Option<&'a str>,
+        pool: Option<&'a Arc<dyn Pool>>,
     ) -> View<'a> {
         let sop = &sealed.ops[node.op];
         View {
@@ -84,7 +87,15 @@ impl<'a> View<'a> {
             tails: Vec::new(),
             forgets_changes,
             planted,
+            pool,
         }
+    }
+
+    /// The host's worker threads and the session's thread count, when the host lends a pool
+    /// (#224): an operator runs its own fixed blocks on them, joined in block order, so its
+    /// result never depends on the count.
+    pub fn pool(&self) -> Option<(Arc<dyn Pool>, usize)> {
+        self.pool.map(|p| (p.clone(), self.session.threads()))
     }
 
     /// The canvas module's planted wrong program, when one is: reachable only through a proof
