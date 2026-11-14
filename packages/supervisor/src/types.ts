@@ -119,8 +119,9 @@ export interface RunStatus { run: string; state: 'held' | 'running' | 'exited' |
 export type Plant = 'kept-in-service-cgroup' | 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask' | 'holds-lease-while-taken'
   // #1106's: the stand-in's value in the run's environment too, a filter that substitutes on every allowed host, the run's CA in the login keychain.
   | 'standin-value-in-env' | 'standin-every-host' | 'run-ca-in-login-keychain' | 'sandbox-any-loopback'
-  // The denial stream's: a macOS whose sandbox reports carry another subsystem than the stream's filter names.
-  | 'reports-other-subsystem';
+  // The denial stream's: a macOS whose sandbox reports carry another subsystem than the stream's filter names, and
+  // one where another process than the kernel writes them too.
+  | 'reports-other-subsystem' | 'reports-other-process';
 export interface SupervisorOptions {
   /** Ownership records, leases, denials and cleanup outcomes go here, written as `core`. */
   record: RecordStore;

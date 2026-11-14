@@ -232,14 +232,12 @@ class BudgetLedger implements Ledger {
       if (via === undefined) return undefined;
       const done = this.approvedOn.get(ask);
       if (done) return done;
-      const id = await this.approved(connection, input, via);
-      this.approvedOn.set(ask, id);
-      return id;
+      return this.approved(connection, input, via, ask);
     });
   }
 
   /** Appends a budget you approved on `via`, once its shape is checked. */
-  private async approved(connection: Connection, input: BudgetInput, via: 'card' | 'inbox'): Promise<string> {
+  private async approved(connection: Connection, input: BudgetInput, via: 'card' | 'inbox', ask?: string): Promise<string> {
     if (!isObj(input) || !isObj(input.scope) || !SCOPES.has(input.scope.kind as string) || !isText(input.scope.ref)) throw new BudgetRefused('a budget names its scope: an issue, a resource, a project or a kind of work');
     if (!isPrice(input.cap_usd)) throw new BudgetRefused('a budget has a cap in dollars, zero or more');
     if (input.runs !== undefined && !(Number.isSafeInteger(input.runs) && input.runs >= 1)) throw new BudgetRefused('a budget covers a whole number of runs, one or more');
@@ -247,7 +245,7 @@ class BudgetLedger implements Ledger {
     if (!Number.isSafeInteger(input.ends) || input.ends <= now) throw new BudgetRefused('a budget ends after it is approved');
     const id = ulid(now);
     await this.append(asCore(connection), {
-      v: 2, id, kind: 'spend.approved', ts: now,
+      v: ask ? 3 : 2, id, kind: 'spend.approved', ts: now, ...(ask ? { subject: ask } : {}),
       data: { scope: { kind: input.scope.kind, ref: input.scope.ref }, ...(input.runs === undefined ? {} : { runs: input.runs }), cap_usd: usd(microDown(input.cap_usd)), ends: input.ends, via },
     });
     return id;
@@ -487,6 +485,7 @@ class BudgetLedger implements Ledger {
     const d = isObj(e.data) ? e.data : {};
     switch (e.kind as Folded) {
       case 'spend.approved': {
+        if (e.subject?.startsWith('ask:')) this.approvedOn.set(e.subject, e.id);
         const scope = d.scope as { kind: ScopeKind; ref: string };
         this.budgets.set(e.id, {
           id: e.id, scope, cap: micro(d.cap_usd as number), ...(typeof d.runs === 'number' ? { runs: d.runs } : {}), started: new Set(), ends: d.ends as number, reserved: new Map(), held: new Set(), spent: 0,

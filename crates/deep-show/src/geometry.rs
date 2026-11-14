@@ -32,6 +32,12 @@ pub struct Geometry {
     pub rotate: usize,
     /// Each item built afresh, with its steps' CPU times in milliseconds (#2017).
     pub timings: bool,
+    /// #224: the input track for this call, inlined into the played form as `eval`'s is.
+    pub track: Option<Vec<Value>>,
+    /// #224: every frame from 0 to `t` played in order at this many frames a second through the
+    /// session's frame path, the rows read from the played frame at `t`; none is a clean
+    /// evaluation at `t` (a seek).
+    pub play: Option<i64>,
 }
 
 /// Milliseconds on a monotonic clock since its first reading in this process: what `timings`
@@ -84,7 +90,17 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
         None => false,
         Some(v) => v.as_bool()?,
     };
+    let track = match c.get("track") {
+        None => None,
+        Some(v) => Some(v.as_array()?.clone()),
+    };
+    let play = match c.get("play") {
+        None => None,
+        Some(v) => Some(v.get("fps")?.as_u64().filter(|f| (1..=240).contains(f))? as i64),
+    };
     Some(Geometry {
+        track,
+        play,
         at,
         blocks,
         rotate,
@@ -141,6 +157,10 @@ fn curve_row(
         .collect();
     let mut row = json!({"id": id, "kind": "curve@1", "key": key,
            "outputs": {"length": c.length, "closure": c.closure.to_degrees()}, "at": rows});
+    // #224: a curve from a formula answers the points it built.
+    if params.get("fn").is_some() {
+        row["points"] = json!(c.points);
+    }
     if let Some(ms) = arc_length_ms {
         row["arc_length_ms"] = json!(ms);
     }
@@ -195,6 +215,43 @@ fn placement(item: &Value) -> impl Fn([f64; 3]) -> [f64; 3] {
 
 impl Hub<'_> {
     pub(crate) fn geometry(&mut self, g: &Geometry) -> Value {
+        if g.track.is_none() && g.play.is_none() {
+            return self.geometry_rows(g);
+        }
+        let t = match self.resolve_time(&g.doc, &g.t) {
+            Ok(t) => t,
+            Err(code) => return json!({"code": code}),
+        };
+        if let Some(track) = &g.track {
+            self.load_with(&g.doc, track, t);
+        }
+        // #224: played, each frame from 0 through the session's own frame path, in order.
+        if let Some(fps) = g.play {
+            let step = deep_canvas::camera::FLICKS_PER_SECOND / fps;
+            if step <= 0 || t % step != 0 {
+                return json!({"code": "bad_input", "path": "t"});
+            }
+            for k in 0..=t / step {
+                match &g.track {
+                    Some(track) => self.load_with(&g.doc, track, k * step),
+                    None => self.load_frame(&g.doc, k * step),
+                }
+                let Some(session) = self.sessions.get_mut(&g.doc) else {
+                    return json!({"code": "no_revision"});
+                };
+                let view = session_view(session, &Map::new());
+                session.frame(&mut self.sched, k * step, &view);
+            }
+        }
+        let reply = self.geometry_rows(g);
+        // #504's rule: a call's own track lasts the call; the session goes back to the hub's.
+        if g.track.is_some() {
+            self.replay(&g.doc, t);
+        }
+        reply
+    }
+
+    fn geometry_rows(&mut self, g: &Geometry) -> Value {
         let t = match self.resolve_time(&g.doc, &g.t) {
             Ok(t) => t,
             Err(code) => return json!({"code": code}),
@@ -213,6 +270,11 @@ impl Hub<'_> {
         };
         let Some(doc) = session.document().cloned() else {
             return json!({"code": "no_revision"});
+        };
+        // #224: every formula's vars bound at t, as the build and the frame read them.
+        let doc = match deep_canvas_scene3d::vars::at(&doc, t, planted.as_deref()) {
+            Ok(lowered) => lowered.unwrap_or(doc),
+            Err(r) => return json!({"code": r.code, "path": r.path}),
         };
         let empty = Map::new();
         let items = doc
@@ -237,6 +299,7 @@ impl Hub<'_> {
                     .unwrap_or_default(),
                 outlines: &outlines,
                 planted: planted.as_deref(),
+                pool: None,
             };
             let mut out = Vec::new();
             for id in &ids {
@@ -262,6 +325,7 @@ impl Hub<'_> {
                     outlines: outlines.clone(),
                     fills: self.startup.sealed.fills.clone(),
                     clock: None,
+                    pool: None,
                 };
                 let ctx = Ctx {
                     id: id.as_str(),
@@ -292,8 +356,15 @@ impl Hub<'_> {
             return json!({"builds": 0, "items": out});
         }
         let view = session_view(session, &Map::new());
-        let scratch = session.clean(&mut self.sched, t, &view, None);
-        let nodes = scratch.nodes(&self.sched);
+        // #224: a played call reads the frame the session played to `t`; any other a clean one.
+        let scratch;
+        let evaluated = if g.play.is_some() {
+            session
+        } else {
+            scratch = session.clean(&mut self.sched, t, &view, None);
+            &scratch
+        };
+        let nodes = evaluated.nodes(&self.sched);
         let builds = nodes
             .iter()
             .filter(|n| BUILD_OPS.contains(&n.operator.as_str()))
@@ -429,11 +500,22 @@ impl Hub<'_> {
                         outlines: outlines.clone(),
                         fills: self.startup.sealed.fills.clone(),
                         clock: g.timings.then_some(now_ms as fn() -> f64),
+                        // #224: on the host's threads, as the frame's rebuild runs.
+                        pool: self
+                            .sched
+                            .options
+                            .pool
+                            .clone()
+                            .map(|p| (p, evaluated.threads())),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
-                    deep_canvas_scene3d::build::built(&doc, id, i, &run, seconds)
+                    let started = now_ms();
+                    let b = deep_canvas_scene3d::build::built(&doc, id, i, &run, seconds);
+                    (b, now_ms() - started)
                 });
-            let rebuilt = match rebuilt {
+            // #224: with timings, how long the build took, its stack and count included.
+            let build_ms = rebuilt.as_ref().filter(|_| g.timings).map(|(_, ms)| *ms);
+            let rebuilt = match rebuilt.map(|(b, _)| b) {
                 Some(Ok(b)) => Some(std::sync::Arc::new(b)),
                 Some(Err(path)) => {
                     return json!({"code": "out_of_range", "path": format!("items/{id}/{path}")})
@@ -442,7 +524,7 @@ impl Hub<'_> {
             };
             let Some(b) = rebuilt.or_else(|| node.values.first().and_then(Val::as_typed::<Built>))
             else {
-                let issue = scratch
+                let issue = evaluated
                     .report
                     .issues
                     .iter()
@@ -492,6 +574,7 @@ impl Hub<'_> {
                         .unwrap_or_default(),
                     outlines: &outlines,
                     planted: planted.as_deref(),
+                    pool: None,
                 };
                 builders::estimate(&b.kind, &params, &ctx).unwrap_or(b.declared)
             } else if let Some(m) = &asset {
@@ -508,6 +591,9 @@ impl Hub<'_> {
                                      }
                                      step
                                  }).collect::<Vec<_>>()});
+            if let Some(ms) = build_ms {
+                row["build_ms"] = json!(ms);
+            }
             if let Some(m) = mesh {
                 if let (Value::Object(r), Value::Object(mut mj)) = (&mut row, m.to_json()) {
                     // A sweep's or a tube's rings stand on the row itself (#441).
@@ -515,9 +601,52 @@ impl Hub<'_> {
                         .get_mut("outputs")
                         .and_then(Value::as_object_mut)
                         .and_then(|o| o.remove("rings"));
+                    // #224: a surface's grid lines stand on the row too.
+                    let grid = mj
+                        .get_mut("outputs")
+                        .and_then(Value::as_object_mut)
+                        .and_then(|o| o.remove("grid_lines"));
                     r.extend(mj);
                     if let Some(rings) = rings {
                         r.insert("rings".into(), rings);
+                    }
+                    if let Some(grid) = grid {
+                        r.insert("grid_lines".into(), grid);
+                    }
+                    // #224: its colors in OKLab, through the document's look's roles.
+                    let params = items
+                        .get(id)
+                        .and_then(|i| i.get("params"))
+                        .unwrap_or(&Value::Null);
+                    let look = self.look_of(&doc);
+                    let dark = doc.pointer("/look/theme").and_then(Value::as_str) == Some("dark");
+                    let roles = match &look {
+                        Some(l) if dark => &l.dark_oklab,
+                        Some(l) => &l.light_oklab,
+                        None => &self.look.light_oklab,
+                    };
+                    let role = |name: &str| {
+                        roles.get(name).map(|c| deep_canvas::color::Oklab {
+                            l: c[0],
+                            a: c[1],
+                            b: c[2],
+                        })
+                    };
+                    match deep_canvas_scene3d::surface::colors(m, params, &role) {
+                        Ok(Some(labs)) => {
+                            let values: Vec<[f64; 3]> =
+                                labs.iter().map(|c| [c.l, c.a, c.b]).collect();
+                            if let Some(Value::Object(a)) = r.get_mut("attributes") {
+                                a.insert(
+                                    "color".into(),
+                                    json!({"domain": "point", "type": "oklab", "values": values}),
+                                );
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(at) => {
+                            return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/{at}")})
+                        }
                     }
                     if let Some(w) = worlds.get(id.as_str()) {
                         r.insert("world".into(), json!(w));

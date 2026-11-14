@@ -3063,6 +3063,9 @@ pub(crate) fn evaluate_compiled(
     tones(map)?;
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
+    // #224: every formula's vars bound at t, so its builder reads numbers.
+    let lowered = crate::vars::lowered(map, program, &state, t, outlines.planted)?;
+    let map = lowered.as_ref().unwrap_or(map);
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     let empty = Map::new();
     let doc_items = map
@@ -3440,6 +3443,11 @@ pub(crate) fn evaluate_compiled(
                     if mesh.triangles() == 0 {
                         continue;
                     }
+                    // #224: a surface's per-vertex colors through the look.
+                    let mesh = match k {
+                        "surface@1" => crate::surface::tinted(mesh, params, look, &path)?,
+                        _ => mesh,
+                    };
                     let model = world(&items, id);
                     let [lo, hi] = mesh.bounds();
                     for c in 0..8 {
@@ -3462,7 +3470,13 @@ pub(crate) fn evaluate_compiled(
                         seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
                     });
                     let key = h.finish().0;
-                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let mut material = light::material(item, |m| items.get(m), look, id)?;
+                    // #224: a surface is two-sided unless it says not.
+                    if k == "surface@1" && params.get("two_sided") != Some(&Value::Bool(false)) {
+                        if let Some(m) = material.as_mut() {
+                            m.double_sided = true;
+                        }
+                    }
                     let maps = light::maps(item, |m| items.get(m))?;
                     let mut hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
@@ -3514,6 +3528,16 @@ pub(crate) fn evaluate_compiled(
                         row: 0,
                         sway,
                     });
+                    // #224: a surface's grid lines, along its mesh's edges.
+                    if k == "surface@1" {
+                        let solid = layer.solids.last().expect("just pushed");
+                        let built = solid.mesh.clone().expect("a built mesh");
+                        if let Some(l) =
+                            crate::surface::grid_line(id, &built, params, look, solid.model)?
+                        {
+                            layer.lines.push(l);
+                        }
+                    }
                     // #2017: a plate with levels draws as its tiles, each at the level its error
                     // projected at the view chooses.
                     if k == "plate@1" && uniform(&model) {
@@ -3624,7 +3648,9 @@ pub(crate) fn evaluate_compiled(
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
-                    layer.puffs.push(puff(id, params, origin(&m), &path)?);
+                    layer
+                        .puffs
+                        .push(puff(id, params, origin(&m), &path, outlines.planted)?);
                     puffs += 1;
                 }
                 "light.sun@1" if sun.is_none() => {
@@ -4209,8 +4235,16 @@ fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
     Some([num(a.first())?, num(a.get(1))?])
 }
 
-/// A `puff@1` at `pos` (#422).
-fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused> {
+/// A `puff@1` at `pos` (#422). #1974's planted `defaults_reader_falls_back_to_2`, reachable only
+/// through `deep-show kinds --defaults --planted`, takes 2 m for a radius left out where the
+/// kind's line says 1.
+fn puff(
+    id: &str,
+    params: &Value,
+    pos: Vec3,
+    path: &str,
+    planted: Option<&str>,
+) -> Result<Puff, Refused> {
     let field = |k: &str, default: f64, ok: fn(f64) -> bool| -> Result<f64, Refused> {
         match params.get(k) {
             None => Ok(default),
@@ -4220,7 +4254,12 @@ fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused
             }),
         }
     };
-    let radius = field("radius", 1.0, |r| r > 0.0)?;
+    let left_out = if planted == Some("defaults_reader_falls_back_to_2") {
+        2.0
+    } else {
+        1.0
+    };
+    let radius = field("radius", left_out, |r| r > 0.0)?;
     let light = params.get("light");
     let on = |k: &str, yes: &str| -> Result<bool, Refused> {
         match light.and_then(|l| l.get(k)) {

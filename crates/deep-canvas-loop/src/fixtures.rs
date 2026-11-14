@@ -8,8 +8,15 @@ use serde_json::{json, Value};
 use crate::KIND;
 
 /// A glTF of one node's mesh, one triangle primitive (positions, its normals where given, its
-/// indices), with a skin of one joint at its bind pose where `skinned`; its buffer inline.
-fn gltf(positions: &[[f32; 3]], normals: &[[f32; 3]], indices: &[u32], skinned: bool) -> Vec<u8> {
+/// UV sets in order, its indices), with a skin of one joint at its bind pose where `skinned`; its
+/// buffer inline.
+pub(crate) fn gltf(
+    positions: &[[f32; 3]],
+    normals: &[[f32; 3]],
+    uvs: &[&[[f32; 2]]],
+    indices: &[u32],
+    skinned: bool,
+) -> Vec<u8> {
     let mut bin: Vec<u8> = Vec::new();
     let mut views = Vec::new();
     let mut view = |bytes: Vec<u8>, bin: &mut Vec<u8>| {
@@ -34,6 +41,14 @@ fn gltf(positions: &[[f32; 3]], normals: &[[f32; 3]], indices: &[u32], skinned: 
                               "count": normals.len(), "type": "VEC3"}),
         );
         attributes["NORMAL"] = json!(1);
+    }
+    for (k, uv) in uvs.iter().enumerate() {
+        let bytes: Vec<u8> = uv.iter().flatten().flat_map(|f| f.to_le_bytes()).collect();
+        accessors.push(
+            json!({"bufferView": view(bytes, &mut bin), "componentType": 5126,
+                              "count": uv.len(), "type": "VEC2"}),
+        );
+        attributes[format!("TEXCOORD_{k}")] = json!(accessors.len() - 1);
     }
     let idx: Vec<u8> = indices.iter().flat_map(|i| i.to_le_bytes()).collect();
     accessors.push(
@@ -113,7 +128,7 @@ pub fn register(r: &mut Registrar) {
         r,
         "degenerate",
         "loop.degenerate",
-        Some(gltf(&tet, &[], &sliver, false)),
+        Some(gltf(&tet, &[], &[], &sliver, false)),
     );
     // One triangle wound up +Z, its normals down.
     let down = [[0.0, 0.0, -1.0]; 3];
@@ -121,7 +136,7 @@ pub fn register(r: &mut Registrar) {
         r,
         "flipped",
         "loop.flipped",
-        Some(gltf(&tri, &down, &[0, 1, 2], false)),
+        Some(gltf(&tri, &down, &[], &[0, 1, 2], false)),
     );
     // Two triangles that run their shared edge the same way.
     let quad = [
@@ -134,19 +149,40 @@ pub fn register(r: &mut Registrar) {
         r,
         "inconsistent",
         "loop.inconsistent",
-        Some(gltf(&quad, &[], &[0, 1, 2, 1, 2, 3], false)),
+        Some(gltf(&quad, &[], &[], &[0, 1, 2, 1, 2, 3], false)),
     );
     planted(
         r,
         "inward",
         "loop.normals_inward",
-        Some(gltf(&tet, &[], &inward, false)),
+        Some(gltf(&tet, &[], &[], &inward, false)),
     );
     // A skinned triangle: one triangle never pairs into a quad.
     planted(
         r,
         "quad-ratio",
         "loop.quad_ratio",
-        Some(gltf(&tri, &[], &[0, 1, 2], true)),
+        Some(gltf(&tri, &[], &[], &[0, 1, 2], true)),
     );
+    // One triangle whose uv1, which its material's base color map reads, reaches past the unit
+    // square; its uv0 may tile, so uv0 lies past it too and raises nothing.
+    planted(r, "uv", "loop.uv", Some(past_unit(Some(1))));
+}
+
+/// One triangle whose uv0 and uv1 reach past the unit square, its material's base color map
+/// reading set `map` where given (none: no material).
+pub(crate) fn past_unit(map: Option<u64>) -> Vec<u8> {
+    let tri = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+    let past = [[0.5, 0.5], [1.5, 0.5], [0.5, 1.5]];
+    let bytes = gltf(&tri, &[], &[&past, &past], &[0, 1, 2], false);
+    let Some(set) = map else {
+        return bytes;
+    };
+    let mut doc: Value = serde_json::from_slice(&bytes).expect("a glTF");
+    doc["meshes"][0]["primitives"][0]["material"] = json!(0);
+    doc["materials"] =
+        json!([{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0, "texCoord": set}}}]);
+    doc["textures"] = json!([{"source": 0}]);
+    doc["images"] = json!([{"uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="}]);
+    serde_json::to_vec(&doc).expect("a glTF")
 }

@@ -1,0 +1,37 @@
+{
+  "base": "f6d811c7947dea9d28bb64de8759dca02c1fa27c",
+  "change": "c6bfc4eb3381b08faa18d6fc8254c45b82ce5d90",
+  "machine": "Mac17,10",
+  "logic": {
+    "fixtures": 14,
+    "recordedSteps": 60,
+    "fullStateHashes": 47,
+    "digest": "10e0891b0d76ec6aeeefded3e7c4b45e580ee00e039b56ba25d91691f81ddd63",
+    "state": "PASS"
+  },
+  "sandbox": {
+    "digest": "0bcb74e71bc06c5e159668a2bce6142bc25aefa67dfc51ae0067390123c2004f",
+    "state": "PASS"
+  },
+  "runtimeSeal": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
+  "goldenResult": {
+    "ok": true,
+    "verdict": "FAIL",
+    "machines": "same",
+    "first_step": null,
+    "report": null,
+    "keys_match": false
+  },
+  "saveHashes": {
+    "steps": 120,
+    "fullStateHashes": 5,
+    "digest": "2d5e6b55cc64099495d32ab64f84e25538eaef3d54174a3d4413a4f86ee72fbd",
+    "state": "PASS"
+  },
+  "canvasGoldens": {
+    "fixtures": 8,
+    "compared": 16,
+    "failed": 0,
+    "blocked": 0
+  }
+}

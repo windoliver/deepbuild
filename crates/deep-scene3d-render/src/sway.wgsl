@@ -24,8 +24,8 @@ struct Params {
     counts: vec4<u32>,
 };
 
-// Floats per vertex: position, normal, uv0, uv1 and the tangent (mesh.rs).
-const FLOATS: u32 = 14u;
+// Floats per vertex: position, normal with a packed color, uv0, uv1 and the tangent (mesh.rs).
+const FLOATS: u32 = 15u;
 const TAU: f32 = 6.283185307179586;
 
 @group(0) @binding(0) var<uniform> params: Params;
