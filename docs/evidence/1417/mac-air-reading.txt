@@ -1,0 +1,43 @@
+# #1417 AC3 reading on the MacBook Air M3 (Mac15,12, Apple M3, 16 GB, 8 cores), not proof
+# Run by the Mac runner on 2026-11-09 at db54f8cbe1ae2a3fb95a879f1e2e53d8dc662ff2 (clean tree), AC power, Low Power Mode 0.
+# Load 1/5/15 min before 3.55 3.40 3.52 (02:43:07), after 10.10 9.87 8.34 (02:54:15, the suite's own builds).
+# estimate.test.ts skips as INCONCLUSIVE here: its gate takes only costs.json's Mac15,7 / M3 Pro / 36 GB / macOS 25G241.
+# Colour codes stripped; home paths were redacted on the Mac.
+
+== head db54f8cbe1ae2a3fb95a879f1e2e53d8dc662ff2
+Mac15,12
+Apple M3
+17179869184
+8
+ lowpowermode         0
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=<redacted>)	73%; charging; 2:51 remaining present: true
+before: 2026-11-09 02:43:07  2:43  up 41 days,  5:08, 1 user, load averages: 3.55 3.40 3.52
+
+
+ RUN  v5.0.5 ~/private/dbc-1417/tests/acceptance/1417
+
+stdout | estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 the estimate is within 2 times the measured layout time for 100, 1,000 and 10,000 nodes
+#1417.c04ec518: 100 nodes: estimate 0.0959 ms, measured 0.1476 ms (median of 0.162, 0.150, 0.148, 0.147, 0.145, 0.145), estimate/measured 0.650
+#1417.c04ec518: 1000 nodes: estimate 1.2650 ms, measured 1.9032 ms (median of 1.932, 1.916, 1.905, 1.889, 1.901, 1.887), estimate/measured 0.665
+#1417.c04ec518: 10000 nodes: estimate 16.5352 ms, measured 22.6484 ms (median of 22.704, 22.550, 22.569, 22.756, 22.637, 22.660), estimate/measured 0.730
+
+ ↓ estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 the estimate is within 2 times the measured layout time for 100, 1,000 and 10,000 nodes 3064ms [INCONCLUSIVE: the times are read only on a fit reference Mac (not the reference Mac {"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}: Mac15,12 / Apple M3 / 17179869184 bytes); this is not a pass]
+stdout | layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 its layout is the base's, byte for byte
+#1417.e58ee238: the layered board's layout memory: {"build":[1,0,0.0,80.0],"plan":[0,0,12.0,0.0],"ship":[3,0,12.0,240.0],"test":[2,0,12.0,160.0]}
+
+ ✓ layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 passes: the graph module's kit passes, every case on layered with it, and the board passes the check 131982ms
+ ✓ layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 its layout is the base's, byte for byte 563ms
+stdout | planted.test.ts > #1417.b17a643a a planted layout that declares no cost > #1417.b17a643a fails the graph module's kit, naming graph.layout, while the shipped graph module passes it
+#1417.b17a643a: the kit's failures on the plant: [{"part":"","failure":{"code":"failed_case","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes"}},{"part":"fixtures","failure":{"code":"unexpected_codes","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes","fixture":"parity/graph/over_budget.board","extra":[],"missing":["over_budget"],"operators":{"cells.grid":0,"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"look.finish":0,"motion.channels":0,"building.build":0,"building.shade":0,"core.world":0.0001614,"data.decimate":0,"data.scale":0,"graph.layout":0.010792,"record.salience":0,"scene3d.build":0,"scene3d.mark":0,"scene3d.rebuild":0,"scene3d.shade":0,"scene3d.stack":0,"sheet.place":0,"text.counter":0,"text.shape":0,"marks2d.place":0,"text.animate":0,"vector.paint":0,"marks2d.item":0,"marks2d.frame":0.011159239999999999}}},{"part":"fixtures","failure":{"code":"unexpected_codes","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes","fixture":"parity/graph/over_budget.board","extra":[],"missing":["over_budget"],"operators":{"cells.grid":0,"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"look.finish":0,"motion.channels":0,"building.build":0,"building.shade":0,"core.world":0.0001614,"data.decimate":0,"data.scale":0,"graph.layout":0.010792,"record.salience":0,"scene3d.build":0,"scene3d.mark":0,"scene3d.rebuild":0,"scene3d.shade":0,"scene3d.stack":0,"sheet.place":0,"text.counter":0,"text.shape":0,"marks2d.place":0,"text.animate":0,"vector.paint":0,"marks2d.item":0,"marks2d.frame":0.011159239999999999}}}]
+
+ ✓ planted.test.ts > #1417.b17a643a a planted layout that declares no cost > #1417.b17a643a fails the graph module's kit, naming graph.layout, while the shipped graph module passes it 261529ms
+
+ Test Files  3 passed (3)
+      Tests  3 passed | 1 skipped (4)
+   Start at  02:43:08
+   Duration  667.11s (tests 100%)
+
+
+after: 2026-11-09 02:54:15  2:54  up 41 days,  5:19, 1 user, load averages: 10.10 9.87 8.34
+vitest exit=0
