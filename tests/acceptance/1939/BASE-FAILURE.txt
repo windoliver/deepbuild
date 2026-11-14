@@ -1,0 +1,50 @@
+Base commit: d3aa7c11d ("Merge #2467 (#1938's render checks) as #1939's base"), main c56fe5407 with #1938's render checks
+Machine: macOS 27.2 on Apple silicon (Mac17,10, M5 Max, 64 GB, 18 cores), its GPU; the shared Mac this job ran on, one-
+         minute load 220 to 280 throughout and thermal state "fair", so no timing could be judged here.
+Builds: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+        CARGO_PROFILE_DEV_DEBUG=0, the pinned 1.99.1 toolchain: exit 0 (58 min 59 s under that load). npm ci and
+        npm run build --workspaces once (node_modules was missing), both exit 0.
+Command (from the worktree, one file at a time):
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1939 --no-file-parallelism --testTimeout=600000 <file>
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1939/tsconfig.json passes (exit 0, no output).
+
+Result (observed, one run of each final file): 2 test files, 2 tests, both failed at an assertion; none at a load
+error, none skipped, none INCONCLUSIVE.
+
+ac1-readings.test.ts (#1939.398baf58), 7.8 s
+  #1939.398baf58 the under-exposure fixture's snapshot reads render.exposure's clipped share, crushed share and key EV
+  on the same revision within 1e-6, the clean twin's key EV lies in [−0.5, 0.5], and a reply measured over the whole
+  frame fails, naming its snapshot
+    AssertionError: each snapshot of the under-exposed revision reads render.exposure's clipped share, crushed share
+    and key EV on that revision, within 1e-6:
+      snapshot 758672521d9c4a82140cdc2bae351a1df902a50008bd38527553bcb9ab6bea23 carries no readings (light: clipped,
+      crushed, key_ev): {"sha256":"758672521d9c4a82140cdc2bae351a1df902a50008bd38527553bcb9ab6bea23","w":320,"h":240}
+    (ac1-readings.test.ts:62)
+  Held before it, at the base: deep_show presented the under-exposed revision as rev 1 with one 320 × 240 snapshot;
+  the verdict's key named rev 1 with hash c4a25120…cb07, the hash `revisions` gives rev 1; render.exposure's row was
+  FAIL (machines same, fingerprint "gpu/Apple M5 Max/macos/") with results [{t: 0, subject: [subject], px: 9604,
+  clipped: 0, crushed: 0, key_ev: −3.017532997711359, exposure: 0.125, pass: false}] and loop.exposure's fix_ops
+  [{op: set, id: cam, path: items/cam/params/exposure, value: −0.28}]. The twin and the planted program aren't reached:
+  `light_from_whole_frame` isn't a planted name at the base (crates/deep-show/src/main.rs), so a scenario carrying it
+  is refused as bad input.
+
+ac2-budget.test.ts (#1939.9c67dc55), 9.0 s
+  #1939.9c67dc55 the readings add under 20 ms to a render-back at 1936 × 1584, on against off in one process, judged
+  on the reference Mac
+    AssertionError: the render-back of the kept cube at 1936 × 1584 carries readings:
+    {"sha256":"4951f25cdd6db7fc88e21a99d8846f6ef4c06528b9b17cd62c52b27c0eb98364","w":1936,"h":1584}: expected null
+    not to be null
+    (ac2-budget.test.ts:51)
+  Held before it, at the base: both render-backs presented with one 1936 × 1584 snapshot each, and the two snapshots
+  are one picture, SHA-256 4951f25cdd6db7fc88e21a99d8846f6ef4c06528b9b17cd62c52b27c0eb98364 (on keeping the cube, off
+  keeping the invisible stand-in).
+
+Observed at the base with a scratch file outside the repo (not kept), on the debug build:
+- The kept-open `deep-show run` loop of ac2-budget sends the on and off scenarios and reads their answers: three
+  rounds, each presented, 2.8 to 6.0 s a render-back at 1936 × 1584 under this load.
+- scripts/benchmark.mjs's judgeLimit here: INCONCLUSIVE, "thermal state is "fair", not "nominal"; load 233.17 at a
+  run's start or end is above the 18 cores". So on this machine ac2-budget's timing part ends INCONCLUSIVE before the
+  release build, once its structure holds.
+
+Not run here: the timing part of ac2-budget (this machine can't judge one now, and the base has no readings to time)
+and the planted program's failure (the base has no such plant).
