@@ -644,10 +644,7 @@ export class StopJudging {
     await this.options.events.appendReading(meta.session, meta.agent, `${claim} stalled (${rule}), so it isn't sent back again: it reaches you as one decision, ${ask}.`).catch(() => undefined);
   }
 
-  /**
-   * A pull request's claim runs the repo's release checks on the PR's commit merged with main (#325): each as a spec
-   * check pinned to that commit, in the slow lane, once per head; a conflict fails, and a missing prerequisite blocks.
-   */
+  /** Release checks run once per merged head in the slow lane (#325); conflicts fail, missing prerequisites block. */
   private async releaseChecks(cwd: string, head: string): Promise<ClaimCheck[]> {
     const names = releaseSpec(cwd).checks;
     if (!names.length) return [];
@@ -1046,8 +1043,7 @@ export class StopJudging {
       // What the claim leaves open becomes open items before any verdict is made on it (#323). Read beside the session's
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
       const spec = r.joins ? [] : this.specChecks(r.cwd);
-      const releaseNames = !r.joins && await this.prOf(r.session) ? releaseSpec(r.cwd).checks : [];
-      const hasSpec = spec.length > 0 || releaseNames.length > 0;
+      const releaseNames = !r.joins && await this.prOf(r.session) ? releaseSpec(r.cwd).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
       const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
       reads.catch(() => undefined);
       if (!r.joins) {
@@ -1115,6 +1111,7 @@ export class StopJudging {
       if (!r.joins) {
         const add = (check: string, spec: CheckSpec | undefined, command: string): void => {
           if (!spec) return;
+          while (checks.some((c) => c.check === check)) check = `PR ${check}`;
           checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec' });
           kinded.set(check, { spec, of });
         };

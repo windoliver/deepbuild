@@ -26,7 +26,7 @@ export function releaseSpec(cwd: string): ReleaseSpec {
 /** Git with none of this process's git settings, so a run reads the repo alone. */
 function git(cwd: string, args: string[], env: Record<string, string> = {}): Promise<{ ok: boolean; code: number | string | null; out: string }> {
   const base = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))) as Record<string, string>;
-  return new Promise((done) => execFile('git', ['-C', cwd, '-c', 'core.hooksPath=/dev/null', ...args], { env: { ...base, ...env }, timeout: 20_000 }, (error, out) => done({ ok: !error, code: error ? error.code ?? null : 0, out: String(out ?? '').trim() })));
+  return new Promise((done) => execFile('git', ['--no-lazy-fetch', '-C', cwd, '-c', 'core.hooksPath=/dev/null', ...args], { env: { ...base, ...env }, timeout: 20_000 }, (error, out) => done({ ok: !error, code: error ? error.code ?? null : 0, out: String(out ?? '').trim() })));
 }
 
 /** Local main/master first; otherwise origin's last-fetched default, then its main/master. Never fetch. */

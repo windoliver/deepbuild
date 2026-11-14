@@ -210,8 +210,8 @@ export class GateRunner {
   private readonly repos = new Map<string, Promise<string>>();
   /** Each claim whose definition is still to lock (#322): ends its hold's wait once the lock lands, or a fast check fails. */
   private readonly lockWaits = new Map<string, () => void>();
-  /** Each check pinned to a commit that ran, by commit and check: its run and outcome, which a later claim on the same commit reuses (#325). */
-  private readonly pinned = new Map<string, { run: string; outcome: string }>();
+  /** Each merged-head result, with the base proof that decides inheritance, keyed by commit, check and definition base. */
+  private readonly pinned = new Map<string, { run: string; outcome: string; base: string | null; baseFrom?: Source }>();
   constructor(private readonly o: GateOptions) {}
 
   /** A run's closed record, kept for the verdicts of the claim it ran for. */
@@ -697,8 +697,8 @@ export class GateRunner {
     for (const t of timed) {
       // A check pinned to a commit of its own runs in the slow lane, and only once per commit (#325).
       if (t.c.commit) {
-        const ran = this.pinned.get(`${t.c.commit}\0${t.c.check}`);
-        if (ran) claim.entries.set(t.c.check, { check: t.c, claim: r.claim, commit: t.c.commit, lane: 'slow', runs: [ran.run], base: null, outcome: ran.outcome, running: false, stale: false });
+        const ran = this.pinned.get(`${t.c.commit}\0${t.c.check}\0${claim.base}`);
+        if (ran) claim.entries.set(t.c.check, { check: t.c, claim: r.claim, commit: t.c.commit, lane: 'slow', runs: [ran.run], base: ran.base, ...(ran.baseFrom ? { baseFrom: ran.baseFrom } : {}), outcome: ran.outcome, running: false, stale: false });
         else slow.push(t.c);
         continue;
       }
@@ -1110,8 +1110,6 @@ export class GateRunner {
             started();
             const ended = await this.retried(c, e, cwd, await this.o.ended(id));
             e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
-            // A later claim on that commit gets the run that decided: the rerun alone, when the first ran under load (#352).
-            if (e.outcome === 'passed' || e.outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run: e.runs.at(-1)!, outcome: e.outcome });
           } finally {
             await this.o.checkouts().ended(pinned, token).catch(() => undefined);
           }
@@ -1123,6 +1121,8 @@ export class GateRunner {
           if (!e.runs.length) this.cantStart(e, error);
         }).then(async () => {
           await this.onBase(c, e);
+          // Cache only once inheritance is known; another session must not turn an inherited BLOCKED into FAIL.
+          if (pinned && (e.outcome === 'passed' || e.outcome === 'failed')) this.pinned.set(`${e.commit}\0${e.check.check}\0${c.base}`, { run: e.runs.at(-1)!, outcome: e.outcome, base: e.base, ...(e.baseFrom ? { baseFrom: e.baseFrom } : {}) });
           e.running = false;
           // Its result still reports, as that snapshot's; the readings count what outdated it (#45).
           const run = e.runs.at(-1);
