@@ -1,0 +1,83 @@
+Base commit: eee08d40a ("test(#1802): acceptance tests, written blind from the issue, the design and base 50cf3043c"):
+origin/main 1c4d1f0e2, plus the docs-only commit 50cf3043c that appends #1802's rule to docs/technical-design.md, plus
+#1802's own blind suite, tests/acceptance/1802/ (tests only). It holds no implementation of #1802.
+Date: 2026-11-12  darwin-arm64, Node 24.22.0
+
+Run: NOT RUN, and NOT type-checked. Nothing below was confirmed by a run. What stands in for one is the base's code and
+data as read.
+
+What was not run, and why:
+
+- `npm ci`, `npm run build --workspaces`, the typecheck (`npx tsc -p tests/acceptance/139-redraft-1802/tsconfig.json`)
+  and the vitest run (`npx vitest run --root tests/acceptance/139-redraft-1802 --testTimeout=600000
+  --no-file-parallelism`). The worktree was fresh (no node_modules, no dist), and every heavy step goes through the
+  repo's throttle. `node scripts/throttle.mjs build --wait 15 -- npm ci`, asked once, from 21:53:32Z to 22:08:33Z,
+  ended with exit 3 and:
+
+    INCONCLUSIVE no grant: no build grant came within 15 min
+      Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+
+  By this job's instructions nothing was run unthrottled and the wait was not repeated.
+- The base's contract step itself: it needs packages/contracts/dist, which is not built. No dry run of it on a stand-in
+  was made either.
+- What was run: `node --check tests/acceptance/139-redraft-1802/preview.test.ts`, exit 0. That is syntax only, by
+  Node's own type stripping. It says nothing of types or of behavior.
+
+The first thing to run on a machine with a grant:
+
+    npm ci && npm run build --workspaces
+    node node_modules/typescript/bin/tsc -p tests/acceptance/139-redraft-1802/tsconfig.json
+    NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/139-redraft-1802 --testTimeout=600000 --no-file-parallelism
+
+What each test is expected to do at the base, read from scripts/contract-diff.mjs and packages/contracts at eee08d40a:
+
+1. The base's step reads neither field. entriesOf keeps a row's since, stability, tracking, deprecated_since,
+   replaced_by and stops_serving and nothing else, and historyProblems has no rule for preview_since or decide_by. So
+   each redrafted test does at the base exactly what its original does there. These are #139's tests and the base is
+   #139's program, the right one for these criteria, so none of the four is expected to fail the base for want of
+   #1802. What they fail on are #139's wrong programs (REDRAFT.md, Wrong programs they still fail).
+
+2. On a scratch tree whose own entries pass the base's step, all four are expected to pass:
+
+   - #139.607ef4f7 AC3 a preview method reshaped ... (redraft 1802): breaksAgainst skips an entry that was or is a
+     preview, so R1_R2 holds no break for deep.preview. Exit 0, a PASS line, no FAIL line.
+   - #139.607ef4f7 AC3 (wrong program) ... (redraft 1802): DEEP_CONTRACTS_PLANT=diff-preview takes that skip out, the
+     retyped `type` is a break with no file, the step exits 1, and the scenario throws the message the test expects.
+   - #139.607ef4f7 AC3 a stable method that no shipped piece ... (redraft 1802): the stable deep.orphan gets
+     "FAIL contracts: api:deep.orphan: stable, and no shipped piece of R2 calls it ..."; called by a shipped piece it
+     passes; as a preview it is outside that rule, which is for stable entries, and passes.
+   - #139.b9c5c209 AC13 a preview entry with no tracking issue ... (redraft 1802): the untracked deep.untracked gets
+     "FAIL contracts: api:deep.untracked: a preview entry with no tracking issue (arrived in R2)"; tracked, it passes.
+
+3. As read, the scratch tree's own entries do not pass the base's step. scratch() copies packages/contracts/schemas and
+   packages/contracts/slots, and at the base 14 preview entries there carry no x-tracking:
+
+     schema:ask.answered@5       schema:ask.taken_over@1     schema:channel.answered@1   schema:channel.conflict@1
+     schema:channel.delivered@1  schema:channel.refused@1    schema:state.read@1         schema:work.delivery@1
+     schema:work.read@1          schema:workspace.created@1  schema:workspace.moved@1
+     interface:asset.library@1   interface:channel@1         interface:state-source@1
+
+   historyProblems fails each ("FAIL contracts: schema:ask.answered@5: a preview entry with no tracking issue (arrived
+   in R2)"), so `check` exits 1 on every scratch tree, whatever a test plants in it. Expected at the base, then:
+
+   x #139.607ef4f7 AC3 a preview method reshaped ... (redraft 1802)
+       fails: check R2 exits 1 on those 14 lines, and the scenario throws "a contract step that diffs preview entries
+       failed the reshaped preview method deep.preview with no break file", though no diff failed
+   ✓ #139.607ef4f7 AC3 (wrong program) ... (redraft 1802)
+       passes, on an exit 1 the right step gives on this tree too: at this base it can't tell the two apart
+   x #139.607ef4f7 AC3 a stable method that no shipped piece ... (redraft 1802)
+       its first assertion holds (a FAIL line names deep.orphan and "no shipped piece"); fails at "the same method
+       called by a shipped piece: the step exits 0"
+   x #139.b9c5c209 AC13 a preview entry with no tracking issue ... (redraft 1802)
+       its first assertion holds (a FAIL line names deep.untracked and "tracking"); fails at "the same preview entry
+       with its tracking issue: the step exits 0"
+
+   The four frozen originals are expected to do the same at the same assertions, for the same reason. It is not
+   #1802's doing and not this redraft's: the one entry checked, schema:ask.answered@5, arrived in 6598eb701 (#65,
+   2026-11-04), after the step did (90d426630, #139, 2026-10-30). Whether main lists these tests among its known
+   failures was not read.
+
+What the redraft leans on that nothing here confirmed: that the file type-checks; that vitest takes
+`../139/helpers.ts` from this root, as tests/acceptance/306-redraft-1958 takes `../306/helpers.ts` from its own; the
+base step's lines and exits as read above; and that a correct program after #1802 passes the scratch tree's own 118
+preview entries in R2 (REDRAFT.md, Readings, The scratch tree's own entries).

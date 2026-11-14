@@ -3,9 +3,13 @@
 //! rung its ladder holds, every pass timed by timestamp writes where the device has them and by
 //! its CPU encode time where it doesn't. Below internal scale 1 the frame renders smaller and
 //! the upscale's two passes bring it to the slot, then thin lines and outlines draw at full size
-//! (#386); frame history, when the look asks for it,
-//! resolves the window's frames into the linear target. What the view allocates is counted at
-//! the sizes the device reports. Once warm, a frame allocates nothing on the core's side.
+//! (#386); frame history, when the look asks for it, resolves a moving view's window of its own
+//! frames into the slot (#173, `history`). What the view allocates is counted at the sizes the
+//! device reports. Once warm, a frame allocates nothing on the core's side.
+
+mod history;
+
+pub use history::Live;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -13,24 +17,26 @@ use std::time::Instant;
 
 use deep_canvas::camera::Offsets;
 use deep_canvas_scene3d::frames::Frames;
+use deep_canvas_scene3d::history::Plan;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Labels, Refused};
 use deep_effects_render::docops::{item_of_mark, DocOps, Fusing, Pool, Rec, Row, Times};
-use deep_scene3d_render::created::Created;
 use deep_effects_render::runner::Frame;
 use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
 use deep_gpu::memory;
 use deep_gpu::meter::{Rung, MAX_PASSES};
 use deep_gpu::surface::{allocate, Handoff, Path};
+use deep_scene3d_render::created::Created;
 use deep_scene3d_render::surface::{Filter, Surface, LABEL_PASS, OUTLINE_PASS};
 pub use deep_scene3d_render::surface::{Upscale, SHARPEN_PASS as SHARPEN, UPSCALE_PASS as UPSCALE};
-use deep_scene3d_render::{Planted as Planted3, Renderer, LINEAR};
+#[cfg(feature = "test-meter")]
+use deep_scene3d_render::LINEAR;
+use deep_scene3d_render::{Planted as Planted3, Renderer};
 use serde_json::Value;
 
 pub const SLOTS: u32 = 3;
-pub const HISTORY: &str = "look.history";
 pub const PLACEHOLDER: &str = "surface.placeholder";
 
 /// The placeholder a view shows while its device is lost (#1413), drawn on the CPU since no
@@ -46,6 +52,7 @@ pub fn placeholder_picture(size: [u32; 2]) -> Vec<u8> {
     bgra
 }
 
+#[cfg(feature = "test-meter")]
 const SHADER: &str = include_str!("effects.wgsl");
 
 /// What every live view on the device shares: the effect shader's layouts and sampler, and the
@@ -54,11 +61,11 @@ pub struct Kit {
     /// Read by the test meter's effect pass alone (`testgpu.rs`).
     #[cfg_attr(not(feature = "test-meter"), allow(dead_code))]
     pub source: wgpu::BindGroupLayout,
-    history: wgpu::BindGroupLayout,
     /// Read by the test meter's effect pass alone (`testgpu.rs`).
     #[cfg_attr(not(feature = "test-meter"), allow(dead_code))]
     pub sampler: wgpu::Sampler,
-    resolve: wgpu::RenderPipeline,
+    /// Frame history's resolve (#173).
+    pub history: deep_scene3d_render::history::Kit,
     /// Adds an effect target into the linear target.
     #[cfg(feature = "test-meter")]
     pub composite: wgpu::RenderPipeline,
@@ -69,6 +76,7 @@ pub struct Kit {
     pub test: crate::testgpu::Pipes,
 }
 
+#[cfg(feature = "test-meter")]
 fn pipeline(
     device: &Device,
     layout: &wgpu::BindGroupLayout,
@@ -110,6 +118,7 @@ fn pipeline(
     })
 }
 
+#[cfg(feature = "test-meter")]
 fn shader(device: &Device) -> wgpu::ShaderModule {
     device
         .device
@@ -149,31 +158,16 @@ impl Kit {
                 },
             ],
         });
-        let history = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("live history"),
-            entries: &[
-                texture(wgpu::TextureViewDimension::D2Array),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
         let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("live"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+        #[cfg(feature = "test-meter")]
         let module = shader(device);
         Kit {
-            resolve: pipeline(device, &history, &module, "resolve", LINEAR, None),
+            history: deep_scene3d_render::history::Kit::new(device),
             #[cfg(feature = "test-meter")]
             composite: pipeline(
                 device,
@@ -191,7 +185,6 @@ impl Kit {
                 }),
             ),
             source,
-            history,
             sampler,
             upscale: None,
             #[cfg(feature = "test-meter")]
@@ -355,6 +348,21 @@ impl Timer {
         }
     }
 
+    /// [`Timer::resolve`] in a submission of its own, once the frame's work is done (#239):
+    /// Metal orders no read of a counter sample against the pass that writes it, so a resolve in
+    /// the frame's own encoder could copy the last pass's end before its fragment stage wrote it,
+    /// and read the frame before's.
+    pub fn resolve_after(&self, device: &Device) {
+        if !self.timed() || self.n == 0 {
+            return;
+        }
+        outside(|| {
+            let mut encoder = device.device.create_command_encoder(&Default::default());
+            self.resolve(&mut encoder);
+            device.queue.submit([encoder.finish()]);
+        });
+    }
+
     /// After the frame's work is done: each pass's ticks, and whether they resolved (#1899).
     pub fn read(&mut self, device: &Device) -> bool {
         let Some((_, _, read, _)) = &self.query else {
@@ -425,91 +433,6 @@ pub fn scaled(size: [u32; 2], scale: f64) -> [u32; 2] {
     ]
 }
 
-fn texture(
-    device: &Device,
-    label: &'static str,
-    size: [u32; 2],
-    layers: u32,
-    format: wgpu::TextureFormat,
-    usage: wgpu::TextureUsages,
-) -> wgpu::Texture {
-    device.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some(label),
-        size: wgpu::Extent3d {
-            width: size[0],
-            height: size[1],
-            depth_or_array_layers: layers,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage,
-        view_formats: &[],
-    })
-}
-
-/// Frame history: the window's frames at the internal size, one array layer each.
-struct History {
-    size: [u32; 2],
-    window: u32,
-    texture: wgpu::Texture,
-    uniform: wgpu::Buffer,
-    bind: wgpu::BindGroup,
-    frames: u64,
-    bytes: Option<u64>,
-}
-
-impl History {
-    fn new(device: &Device, kit: &Kit, internal: [u32; 2], window: u32) -> History {
-        let ((texture, uniform), bytes) = memory::across(device, || {
-            (
-                texture(
-                    device,
-                    "live history",
-                    internal,
-                    window,
-                    LINEAR,
-                    wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                ),
-                device.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("live history count"),
-                    size: 16,
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                }),
-            )
-        });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default()
-        });
-        let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("live history"),
-            layout: &kit.history,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: uniform.as_entire_binding(),
-                },
-            ],
-        });
-        History {
-            size: internal,
-            window,
-            texture,
-            uniform,
-            bind,
-            frames: 0,
-            bytes,
-        }
-    }
-}
-
 /// What a frame draws a view with beyond its document: its rung, the view's turn, its
 /// effects' resolution, and whether this is a canonical render (no history, ever).
 #[derive(Clone, Copy, Debug)]
@@ -547,12 +470,13 @@ pub struct View {
     pub surface: Surface,
     /// The internal scale and the upscale its last frame drew through.
     pub drew: (f64, &'static str),
-    history: Option<History>,
+    /// Frame history (#173), when its look keeps it.
+    pub history: Option<Live>,
     /// What the view allocated beyond `low` and `history`, as the device reports it.
     base_bytes: Option<u64>,
-    /// How the last frame drew (its rung and internal scale) and how many frames it has drawn
-    /// since its scene last changed: a still scene settles once its history is full (#421).
-    still: Option<(Rung, f64, u32)>,
+    /// How the last frame drawn on its own drew, its rung and internal scale: a still scene drawn
+    /// so records nothing more (#421; frame history drops at rest, #173).
+    still: Option<(Rung, f64)>,
     /// The document's composed pass and compute operators (#429), each at the resolution its
     /// writer's meter gives it, and what each drew last frame.
     pub ops: DocOps,
@@ -659,13 +583,20 @@ impl View {
     }
 
     /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
-    /// they draw with is compiled before its first frame; none of them is a frame's.
-    pub fn warm(&mut self, device: &Device, look: &Look3, scenes: &[deep_canvas_scene3d::scene::Scene]) {
+    /// they draw with is compiled before its first frame; none of them is a frame's, so the
+    /// first frame after it encodes each batch (#1903).
+    pub fn warm(
+        &mut self,
+        device: &Device,
+        look: &Look3,
+        scenes: &[deep_canvas_scene3d::scene::Scene],
+    ) {
         self.renderer.log.warming = true;
         for scene in scenes {
             self.renderer.prepare(device, scene, look);
         }
         self.renderer.log.warming = false;
+        self.renderer.forget_encodings();
         self.prepared = false;
     }
 
@@ -696,6 +627,10 @@ impl View {
         self.frames = frames;
         self.prepared = false;
         self.still = None;
+        // A revision is a jump: its window renders again (#173).
+        if let Some(h) = self.history.as_mut() {
+            h.jump = true;
+        }
     }
 
     /// The core targets its frames build (#431): those its operators read, or both under the
@@ -714,6 +649,7 @@ impl View {
             .target_rows()
             .into_iter()
             .map(|(name, texture, bytes)| (name, bytes, memory::texture(device, texture)))
+            .chain(self.history.as_ref().and_then(Live::row))
             .collect()
     }
 
@@ -722,7 +658,7 @@ impl View {
     pub fn own_bytes(&self) -> Option<u64> {
         let low = Some(self.renderer.low_bytes());
         let core: u64 = self.renderer.core.held().iter().map(|(_, _, b)| b).sum();
-        let history = self.history.as_ref().map_or(Some(0), |h| h.bytes);
+        let history = Some(self.history.as_ref().map_or(0, Live::bytes));
         #[cfg(feature = "test-meter")]
         let test = self.test.bytes();
         #[cfg(not(feature = "test-meter"))]
@@ -796,26 +732,42 @@ impl View {
         } else {
             drawing.rung.scale(self.scale)
         };
+        // Frame history (#173): a moving view shows its window's resolve; at rest, or while the
+        // playhead is dragged, its frame draws on its own below.
+        match self.history_plan(t, drawing, scale, labels)? {
+            Some(Plan::Same) => return Ok(false),
+            Some(Plan::Window { render, resolve }) => {
+                return self.draw_window(
+                    device, kit, look, drawing, labels, encoder, timer, session, scale, &render,
+                    &resolve,
+                );
+            }
+            Some(Plan::Plain) | None => {}
+        }
+        self.renderer.history = false;
+        self.renderer.jitter = [0.0; 2];
         let evaluated = match &mut self.frames {
             Content::Scene(frames) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
                 frames.at(t, self.size, &drawing.offsets, labels)?;
                 let still = match self.still {
-                    Some((rung, s, n)) if drawing.settles && self.prepared && !frames.changed() => {
-                        (rung == drawing.rung && s == scale).then_some(n)
+                    Some((rung, s)) if drawing.settles && self.prepared && !frames.changed() => {
+                        rung == drawing.rung && s == scale
                     }
-                    _ => None,
+                    _ => false,
                 };
                 #[cfg(feature = "test-meter")]
-                let still = still.filter(|_| self.test.bound.is_empty());
-                if still.is_some_and(|n| n >= self.window) {
+                let still = still && self.test.bound.is_empty();
+                if still {
                     return Ok(false);
                 }
-                self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
+                self.still = Some((drawing.rung, scale));
                 true
             }
             // #467: a 2D frame that draws what the view last drew records nothing.
             Content::Flat(flat) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
-                let still = flat.still(t).map_err(|(code, path)| Refused { code, path })?;
+                let still = flat
+                    .still(t)
+                    .map_err(|(code, path)| Refused { code, path })?;
                 if still && self.shown.is_some() {
                     return Ok(false);
                 }
@@ -894,6 +846,68 @@ impl View {
         if !evaluated {
             frames.at(t, self.size, &drawing.offsets, labels)?;
         }
+        if !self.record_frame(
+            device, kit, look, t, drawing, internal, encoder, timer, session,
+        ) {
+            return Ok(true);
+        }
+        let i = timer.start(OUTPUT_PASS, session);
+        match self.renderer.low_view(device) {
+            Some(low) => {
+                self.renderer.record_output(encoder, &low, timer.writes(i));
+                timer.end(i);
+                for step in self
+                    .renderer
+                    .surface_steps(device, &slot_view)
+                    .into_iter()
+                    .flatten()
+                {
+                    let i = timer.start(step.name(), session);
+                    step.record(encoder, timer.writes(i));
+                    timer.end(i);
+                }
+            }
+            None => {
+                self.renderer
+                    .record_output(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
+        }
+        for (name, draw) in [
+            (OUTLINE_PASS, self.renderer.outline_draw(false)),
+            (LABEL_PASS, self.renderer.label_draw()),
+        ] {
+            if let Some(draw) = draw {
+                let i = timer.start(name, session);
+                draw.record(encoder, &slot_view, timer.writes(i));
+                timer.end(i);
+            }
+        }
+        self.after(encoder, slot);
+        Ok(true)
+    }
+
+    /// Records the frame `frames` last evaluated, at `t`, up to its output pass: the renderer
+    /// prepared, what feeds an instances output, the geometry and the operators. `false` when
+    /// the renderer has no targets to draw into.
+    #[allow(clippy::too_many_arguments)]
+    fn record_frame(
+        &mut self,
+        device: &Device,
+        kit: &Kit,
+        look: &Look3,
+        t: i64,
+        drawing: &Drawing,
+        internal: [u32; 2],
+        encoder: &mut wgpu::CommandEncoder,
+        timer: &mut Timer,
+        session: usize,
+    ) -> bool {
+        #[cfg(not(feature = "test-meter"))]
+        let _ = kit;
+        let Content::Scene(frames) = &self.frames else {
+            return false;
+        };
         let scene = frames.scene();
         let clip = scene.camera.clip(Depth::Reversed);
         // The instances outputs the frame's instancers draw from (#484).
@@ -903,10 +917,10 @@ impl View {
             None => self.renderer.prepare(device, scene, look),
         }
         self.prepared = true;
-        let Some((linear_texture, linear)) = self.renderer.linear() else {
-            return Ok(true);
+        let Some((_, linear)) = self.renderer.linear() else {
+            return false;
         };
-        let (linear_texture, linear) = (linear_texture.clone(), linear.clone());
+        let linear = linear.clone();
         // Operators are bound before the frame draws, so what feeds an instances output can
         // record first; the rest record where the effects chain runs.
         let planned = (!self.ops.ops.is_empty()).then(|| {
@@ -986,124 +1000,16 @@ impl View {
             }
             self.op_rows = rows;
         }
-        if self.window > 0 && !drawing.canonical {
-            self.resolve_history(
-                device,
-                kit,
-                internal,
-                encoder,
-                &linear_texture,
-                &linear,
-                timer,
-                session,
-            );
-        }
-        let i = timer.start(OUTPUT_PASS, session);
-        match self.renderer.low_view(device) {
-            Some(low) => {
-                self.renderer.record_output(encoder, &low, timer.writes(i));
-                timer.end(i);
-                for step in self
-                    .renderer
-                    .surface_steps(device, &slot_view)
-                    .into_iter()
-                    .flatten()
-                {
-                    let i = timer.start(step.name(), session);
-                    step.record(encoder, timer.writes(i));
-                    timer.end(i);
-                }
-            }
-            None => {
-                self.renderer
-                    .record_output(encoder, &slot_view, timer.writes(i));
-                timer.end(i);
-            }
-        }
-        for (name, draw) in [
-            (OUTLINE_PASS, self.renderer.outline_draw(false)),
-            (LABEL_PASS, self.renderer.label_draw()),
-        ] {
-            if let Some(draw) = draw {
-                let i = timer.start(name, session);
-                draw.record(encoder, &slot_view, timer.writes(i));
-                timer.end(i);
-            }
-        }
-        self.after(encoder, slot);
-        Ok(true)
+        true
     }
 
     fn after(&self, encoder: &mut wgpu::CommandEncoder, slot: usize) {
         outside(|| self.slots[slot].after_render(encoder));
     }
-
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_history(
-        &mut self,
-        device: &Device,
-        kit: &Kit,
-        internal: [u32; 2],
-        encoder: &mut wgpu::CommandEncoder,
-        linear_texture: &wgpu::Texture,
-        linear: &wgpu::TextureView,
-        timer: &mut Timer,
-        session: usize,
-    ) {
-        if self
-            .history
-            .as_ref()
-            .is_none_or(|h| h.size != internal || h.window != self.window)
-        {
-            self.history = Some(History::new(device, kit, internal, self.window));
-        }
-        let h = self.history.as_mut().expect("made above");
-        let layer = (h.frames % u64::from(h.window)) as u32;
-        h.frames += 1;
-        let filled = h.frames.min(u64::from(h.window)) as u32;
-        outside(|| {
-            device
-                .queue
-                .write_buffer(&h.uniform, 0, bytemuck::bytes_of(&[filled, 0, 0, 0]));
-            encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: linear_texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::TexelCopyTextureInfo {
-                    texture: &h.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: layer,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::Extent3d {
-                    width: internal[0],
-                    height: internal[1],
-                    depth_or_array_layers: 1,
-                },
-            );
-        });
-        let i = timer.start(HISTORY, session);
-        full_pass(
-            encoder,
-            HISTORY,
-            linear,
-            &kit.resolve,
-            &h.bind,
-            false,
-            timer.writes(i),
-        );
-        timer.end(i);
-    }
 }
 
 /// One full-screen pass of `pipeline` reading `bind` into `target`, cleared first unless `load`.
+#[cfg(feature = "test-meter")]
 pub fn full_pass(
     encoder: &mut wgpu::CommandEncoder,
     label: &'static str,

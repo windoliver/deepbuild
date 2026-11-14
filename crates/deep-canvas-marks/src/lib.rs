@@ -12,17 +12,22 @@
 //! own check ([`check`]).
 
 pub mod animator;
+pub mod arrays;
+pub mod atlas;
+pub mod axes3d;
 pub mod check;
 pub mod code;
+pub mod copy;
 pub mod data;
 pub mod dirty;
 pub mod drawn;
 pub mod ends;
-pub mod finish;
 pub mod fields;
-pub mod fx;
+pub mod finish;
+pub mod follow;
 pub mod function;
 pub mod functions;
+pub mod fx;
 pub mod implicit;
 pub mod key;
 pub mod layout;
@@ -33,9 +38,12 @@ pub mod outline_sources;
 pub mod paint;
 pub mod path;
 pub mod pathops;
+mod place;
+pub mod plural;
 pub mod print;
 pub mod relations;
 pub mod runs;
 pub mod scene;
 pub mod story;
 pub mod terrain;
+pub mod turn;

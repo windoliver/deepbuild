@@ -6,15 +6,16 @@ import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, relative } from 'node:path';
-import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
-import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import type { ChecksProvider, CommandRun } from './checks-port.js';
+import { isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import type { CheckResult } from '@deepbuild/conformance';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
-import type { Up } from '@deepbuild/env-local';
+import type { Up } from './environment-port.js';
+import type { TimingReport } from '@deepbuild/verdicts';
 import { isRoot, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
 import type { RunKey } from './gate-runner.js';
@@ -52,7 +53,6 @@ export const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 /** How long a run stopped at its deadline gets to end on SIGTERM before SIGKILL. */
 const RUN_KILL_GRACE_MS = 10_000;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sql = (text: string): string => text.replace(/'/g, "''");
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
 const isUnder = (path: string, dir: string) => {
@@ -61,6 +61,7 @@ const isUnder = (path: string, dir: string) => {
 };
 
 interface RunsOptions {
+  command: ChecksProvider['command'];
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
   point(): void;
@@ -86,8 +87,8 @@ interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
-  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`. */
-  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult>;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`; a document check's issues as its stdout (#1723); a stated speed's timing report (#1863). */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult & { stdout?: string; speed?: TimingReport }>;
   hosts: () => Hosts;
 }
 
@@ -178,8 +179,8 @@ export class Runs {
     }
     const aside = keepAside(this.o.journalFile, bytes, this.o.now());
     // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
-    // other writer's start or finish counts.
-    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
+    // other writer's start or finish counts. A root plan's run (#1945) is never the hub's to run.
+    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND json_extract(s.data, '$.ask') IS NULL AND NOT EXISTS
       (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
     // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
     const now = this.o.now();
@@ -323,7 +324,7 @@ export class Runs {
       // is check.kind@1's, with no exit, output, attempts or stand-ins, as a replacing package's is.
       if (run.spec) {
         ended = this.o.kind(run, run.cwd, deadline, controller.signal)
-          .then((result) => ({ code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
+          .then(({ stdout = '', ...result }) => ({ code: null, record: { run: run.run, ...result, exit: null, output: { ...empty, stdout }, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
           .catch((error: Error) => ({ code: null, failed: error.message }));
       } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
@@ -342,7 +343,7 @@ export class Runs {
           const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
           let record: CommandRun;
           try {
-            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
+            record = await this.o.command({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
           } catch (error) {
             await this.o.stacks.finish(run.run);
             throw error;

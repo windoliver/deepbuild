@@ -10,40 +10,17 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSyn
 import { homedir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 import { cwdOf } from '@deepbuild/archive';
-import type { Asks } from '@deepbuild/asks';
-import type { EvidenceStore } from '@deepbuild/evidence';
 import { scrubText } from '@deepbuild/evidence';
 import { claimId, openReading } from '@deepbuild/reading';
-import { openRecordReader, parseClaimLine, ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
-import type { Agent, Runner } from '@deepbuild/runner';
+import { openRecordReader, parseClaimLine, ulid, type Message } from '@deepbuild/record';
+import type { Agent } from '@deepbuild/runner';
 import { openWiki, type Candidate, type Wiki } from '@deepbuild/wiki';
 import { rulesAppendix } from './rules.js';
 import { writeJson } from './claude-settings.js';
 import { captureRejected } from './memory.js';
-import { repoOf, type Root } from './paths.js';
-
-interface WikiBuildOptions {
-  record: RecordStore;
-  root: Root;
-  store: EvidenceStore;
-  runner: Runner;
-  asks: Asks;
-  now: () => number;
-  /** One archive pass: what the agents wrote is copied into the record before it is read. */
-  archive: () => Promise<void>;
-  /** The core's connection and yours (the CLI's): the core writes claims and positions, you keep your edits. */
-  core: Connection;
-  cli: Connection;
-  plant?: string | undefined;
-  /** The secret values the hub holds: a memory file holding one never reaches a page. */
-  held?: readonly string[] | undefined;
-}
-export interface WikiBuilt {
-  /** The pages whose bytes changed, relative to the wiki, `index.md` and `log.md` never among them. */
-  changed: string[];
-  /** Reading jobs started, and whether one is waiting on the plan reserve (the build then ends; the job goes on). */
-  reading: { jobs: number; waiting: boolean };
-}
+import { repoOf } from './paths.js';
+import type { WikiBuildOptions, WikiBuilt } from './knowledge-port.js';
+export type { WikiBuilt } from './knowledge-port.js';
 
 /** The pages that always exist: about you, the setup, and your rules. */
 const STANDING = ['you', 'setup', 'rules'];

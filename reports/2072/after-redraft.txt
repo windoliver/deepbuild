@@ -1,0 +1,12 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ✓ tests/acceptance/2072/redraft/retry.test.ts > AC1 #2072 After a send is held and answered yes, the same request ID with other input is refused and runs nothing; the first input then runs once > AC1 r1 + input A held and answered yes: r1 + input B is refused with nothing run or entered; r1 + input A runs once 1200ms
+ ✓ tests/acceptance/2072/redraft/retry.test.ts > AC2 #2072 After the same yes, the same request ID naming another change or send action is refused the same way > AC2 a send held, a change called under r1: the other action is refused, nothing runs or is entered; the held action then runs once 1007ms
+ ✓ tests/acceptance/2072/redraft/retry.test.ts > AC2 #2072 After the same yes, the same request ID naming another change or send action is refused the same way > AC2 a change held, a send called under r1: the other action is refused, nothing runs or is entered; the held action then runs once 1034ms
+ ✓ tests/acceptance/2072/redraft/retry.test.ts > AC3 #2072 An input longer than the question shows is marked as cut, with its length > AC3 the ask for a 2,000-character input states that length 999ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  16:39:51
+   Duration  7.54s (tests 98%, transform 1%, import 1%)

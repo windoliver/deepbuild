@@ -62,7 +62,10 @@ pub fn only_loaded(c: &deep_canvas_effects::check::Checked, name: &str) -> bool 
     use deep_canvas_effects::graph::{Arg, Step};
     fn reads(steps: &BTreeMap<String, Step>, name: &str) -> bool {
         steps.values().all(|s| {
-            let names = s.args.values().any(|a| matches!(a, Arg::Ref(r, _) if r == name))
+            let names = s
+                .args
+                .values()
+                .any(|a| matches!(a, Arg::Ref(r, _) if r == name))
                 || s.fields.get("tex").and_then(|v| v.as_str()) == Some(name);
             (!names || s.op == "load@1") && s.body.as_ref().is_none_or(|b| reads(&b.steps, name))
         })
@@ -107,7 +110,11 @@ fn uniform() -> wgpu::BindingType {
 }
 
 impl Runner {
-    pub fn new(device: &wgpu::Device, compiled: Compiled, format: wgpu::TextureFormat) -> Runner {
+    pub fn new(
+        device: &deep_gpu::counted::Wgpu,
+        compiled: Compiled,
+        format: wgpu::TextureFormat,
+    ) -> Runner {
         let c = &compiled.checked;
         let stage = match compiled.kind() {
             Kind::Compute => wgpu::ShaderStages::COMPUTE,
@@ -138,7 +145,9 @@ impl Runner {
                 Ty::Tex3(_) => wgpu::TextureSampleType::Float { filterable: false },
                 // An input the operator only loads, never samples, binds unfiltered, so a
                 // full-precision intermediate can feed it (#432).
-                _ => wgpu::TextureSampleType::Float { filterable: !only_loaded(c, name) },
+                _ => wgpu::TextureSampleType::Float {
+                    filterable: !only_loaded(c, name),
+                },
             };
             wgpu::BindingType::Texture {
                 sample_type,
@@ -157,15 +166,19 @@ impl Runner {
         };
         let buffers = (c.storage_inputs.iter().map(|_| storage(true)))
             .chain(c.op.storage.iter().map(|_| storage(false)))
-            .chain(c.op.textures.values().map(|t| wgpu::BindingType::StorageTexture {
-                access: wgpu::StorageTextureAccess::WriteOnly,
-                format: texture_format(&t.format),
-                view_dimension: if t.dim3 {
-                    wgpu::TextureViewDimension::D3
-                } else {
-                    wgpu::TextureViewDimension::D2
-                },
-            }));
+            .chain(
+                c.op.textures
+                    .values()
+                    .map(|t| wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: texture_format(&t.format),
+                        view_dimension: if t.dim3 {
+                            wgpu::TextureViewDimension::D3
+                        } else {
+                            wgpu::TextureViewDimension::D2
+                        },
+                    }),
+            );
         entries.extend(
             textures
                 .chain(buffers)
@@ -245,7 +258,7 @@ impl Runner {
     /// for each texture input and a buffer for each storage input and output, in binding order.
     pub fn bind(
         &self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         frame: &Frame,
         size: [u32; 2],
         values: &BTreeMap<String, Val>,
@@ -259,7 +272,7 @@ impl Runner {
     #[allow(clippy::too_many_arguments)]
     pub fn bind_with(
         &self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         frame: &Frame,
         size: [u32; 2],
         values: &BTreeMap<String, Val>,
@@ -267,7 +280,6 @@ impl Runner {
         storage: &[&wgpu::Buffer],
         outs: &[&wgpu::TextureView],
     ) -> (wgpu::BindGroup, wgpu::BindGroup, [wgpu::Buffer; 2]) {
-        use wgpu::util::DeviceExt as _;
         let fb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("operator frame"),
             contents: &frame.bytes(size),
@@ -410,7 +422,6 @@ impl Runner {
 /// Runs a checked compute operator on the GPU over `inputs` (one buffer of words each, in its
 /// storage inputs' order) and reads back its first storage output.
 pub fn dispatch(device: &deep_gpu::device::Device, c: &Compiled, inputs: &[Vec<u32>]) -> Vec<u32> {
-    use wgpu::util::DeviceExt as _;
     let d = &device.device;
     let runner = Runner::new(d, c.clone(), LINEAR);
     let ins: Vec<wgpu::Buffer> = inputs

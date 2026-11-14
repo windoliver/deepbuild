@@ -24,7 +24,7 @@
 //! whose content key changed; each step reports the entries it built and the rebuild key.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -34,7 +34,9 @@ use deep_canvas_marks::dirty::{Class, Dirty};
 use deep_canvas_marks::key::{sha256_hex, ContentKey, KeyBuilder};
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::{self, Mesh};
-use deep_canvas_marks::scene::{self, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark};
+use deep_canvas_marks::scene::{
+    self, AtlasCell, Drawn, Fill, ImageFit, ImageSampling, Mark, Record, Rgb, StatusMark,
+};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
 use deep_marks_gpui::Strip;
@@ -254,12 +256,14 @@ impl Read {
     }
 }
 
-/// An image's decoding by (sha256, crop bits, opacity bits), and the decoded picture with its size in
-/// pixels.
-type ImageKey = (String, [u64; 4], u64);
-type Decoded = (Arc<RenderImage>, [u32; 2]);
+/// An image's sprite by its level's sha256 and the mark's opacity bits (#1486).
+type ImageKey = ([u8; 32], u64);
 
-/// A nearest or cubic image's copy resampled on the CPU, by its decoding, its sampling and its
+/// A linear image's copy placed as a canonical render places it, by its sprite and its fitted
+/// rect and cut, in u, as bits (#1486).
+type PlacedKey = (ImageKey, [u64; 4], [u64; 4]);
+
+/// A nearest or cubic image's copy resampled on the CPU, by its sprite, its sampling and its
 /// drawn size in device pixels (GPUI's sprite sampler is linear and can't change per draw).
 type ResampleKey = (ImageKey, ImageSampling, [u32; 2]);
 
@@ -297,10 +301,32 @@ struct Session {
     compiled: Option<(Program, State)>,
     /// The dirty classes the frames since the last report stamped.
     stamped: BTreeSet<(String, Class)>,
-    /// The content-addressed store images are read from, and each decoded image with its size
-    /// in pixels, by (sha256, crop, opacity).
+    /// The content-addressed store images are read from, and the image service's view of it.
     store: Option<PathBuf>,
-    images: HashMap<ImageKey, Decoded>,
+    image_store: Option<Arc<deep_images::Store>>,
+    /// #1486: each sprite made from a level at an opacity, with the last frame that drew it; and
+    /// each copy of one placed off whole pixels, by its rect and cut, with the whole-pixel rect it
+    /// is drawn 1:1 in.
+    images: HashMap<ImageKey, (Arc<RenderImage>, u64)>,
+    placed: HashMap<PlacedKey, (Arc<RenderImage>, [f64; 4], u64)>,
+    /// #1486: whether frames run on the real clock, so they draw what the image service holds
+    /// and never wait; each image item's level, kept while its drawn size drifts within the band;
+    /// the requests this frame drew and their levels' bytes; and the presented frames so far.
+    live: bool,
+    levels: HashMap<String, u8>,
+    drawn_keys: HashSet<deep_images::Key>,
+    drawn_bytes: u64,
+    frame_no: u64,
+    /// #1486: the image items a frame leaves out while they're out of view (by program index, ID
+    /// and box), with this frame's verdicts, and whether the last frame drew any short of its level.
+    cull: Vec<(usize, String, [f64; 4])>,
+    culled: HashMap<String, usize>,
+    out: Vec<bool>,
+    settling: bool,
+    /// #1486: each image item in view this frame, the level it asked for and the level it drew,
+    /// and what the image service's frame start left.
+    frame_levels: BTreeMap<String, (u8, Option<u8>)>,
+    started: deep_images::Started,
     /// The resampled copies the frame on screen draws, and how many the session has made.
     resampled: HashMap<ResampleKey, Arc<RenderImage>>,
     resamples: u64,
@@ -317,50 +343,120 @@ struct Session {
     run_start: Option<Instant>,
 }
 
-fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
-    let crop_bits = crop.map_or([u64::MAX; 4], |c| c.map(f64::to_bits));
-    (asset.to_string(), crop_bits, opacity.to_bits())
+/// What a frame draws for an image mark: its level as GPUI's sprite, the level's size and sha256,
+/// and the rect its fit draws it in.
+struct Pictured {
+    image: Arc<RenderImage>,
+    size: [u32; 2],
+    sha256: [u8; 32],
+    to: [f64; 4],
 }
 
-/// Reads, checks and decodes an image once per session: its bytes by hash from the store, the
-/// crop in image pixels, and the mark's opacity carried in its alpha, since GPUI's sprite takes
-/// straight alpha. The decodings and copies the session holds count against `asset::CAP`, so an
-/// image past what is left is refused by its header before it is decoded.
+/// The store the image service reads the session's images from.
+fn image_store(session: &mut Session) -> Arc<deep_images::Store> {
+    session
+        .image_store
+        .get_or_insert_with(|| crate::asset::store_of(session.store.as_deref()))
+        .clone()
+}
+
+/// What a frame draws for an image mark (#1486): the level the image service gives for its drawn
+/// size at `zoom`, as GPUI's BGRA sprite with the mark's opacity in its alpha, since GPUI's sprite
+/// takes straight alpha. A live frame draws what the service holds, the level or the nearest one
+/// held, or nothing yet (`None`), and an item keeps its level while its drawn size drifts within
+/// the band; a frame on a simulated clock waits for the level. The levels a frame draws hold at
+/// most `asset::CAP`: one past it is refused, naming the image's asset.
+#[allow(clippy::too_many_arguments)]
 fn image_of(
     session: &mut Session,
     asset: &str,
-    crop: Option<[f64; 4]>,
+    (crop, tile): (Option<[f64; 4]>, Option<&AtlasCell>),
     opacity: f64,
     item: &str,
-) -> Result<Decoded, Value> {
-    let key = image_key(asset, crop, opacity);
-    if let Some(found) = session.images.get(&key) {
-        return Ok(found.clone());
+    (bounds, fit): ([f64; 4], ImageFit),
+    zoom: f64,
+) -> Result<Option<Pictured>, Value> {
+    let store = image_store(session);
+    let mut ask = crate::asset::ask(&store, asset, (crop, tile), (bounds, fit), zoom, item)?;
+    let shown = ask.key.shown();
+    if session.live {
+        let drawn = [ask.to[2] * zoom, ask.to[3] * zoom];
+        match session.levels.get_mut(item) {
+            Some(k) if deep_images::keeps(*k, shown, drawn) => ask.key.level = *k,
+            Some(k) => *k = ask.key.level,
+            None => {
+                session.levels.insert(item.to_string(), ask.key.level);
+            }
+        }
     }
-    let path = format!("items/{item}/params/asset");
-    let remaining = crate::asset::CAP.saturating_sub(held(session));
-    let rgba = crate::asset::decoded(
-        session.store.as_deref(),
-        asset,
-        crop,
-        item,
-        remaining,
-        session.plant,
-    )?;
-    let (w, h) = rgba.dimensions();
-    let mut bgra = rgba.into_raw();
+    let [lw, lh] = deep_images::level_size(shown, ask.key.level);
+    if session.drawn_keys.insert(ask.key) {
+        let bytes = u64::from(lw) * u64::from(lh) * 4;
+        if session.plant != crate::asset::Plant::CapCountsCopiesOnly
+            && held(session) + bytes > crate::asset::CAP
+        {
+            return Err(refused(
+                "over_budget",
+                &format!("items/{item}/params/asset"),
+            ));
+        }
+        session.drawn_bytes += bytes;
+    }
+    let images = crate::asset::images();
+    let no = |r| crate::asset::refusal(r, asset, item, tile.is_some());
+    let level = if session.live {
+        // A live frame asks only for what the window shows, and reports what it drew.
+        let ([x, y, w, h], _) = session.region.unwrap_or(([0.0; 4], false));
+        if !meets(bounds, [0.0, 0.0, w, h]) {
+            return Ok(None);
+        }
+        let at = [bounds[0] + x, bounds[1] + y, bounds[2], bounds[3]];
+        let asked = ask.key.level;
+        let (level, drawn) = match images.show(&store, ask.key, deep_images::Queue::Visible, at) {
+            deep_images::Shown::Exact(l) => (Some(l), Some(asked)),
+            deep_images::Shown::Nearest(l, k) => (Some(l), Some(k)),
+            deep_images::Shown::Nothing => match images.failed(&ask.key) {
+                Some(r) => return Err(no(r)),
+                None => (None, None),
+            },
+        };
+        session
+            .frame_levels
+            .insert(item.to_string(), (asked, drawn));
+        match level {
+            Some(level) => level,
+            None => return Ok(None),
+        }
+    } else {
+        images.wait(&store, ask.key).map_err(no)?
+    };
+    let key = (level.sha256, opacity.to_bits());
+    let frame = session.frame_no;
+    if let Some((image, seen)) = session.images.get_mut(&key) {
+        *seen = frame;
+        return Ok(Some(Pictured {
+            image: image.clone(),
+            size: level.size,
+            sha256: level.sha256,
+            to: ask.to,
+        }));
+    }
+    let [w, h] = level.size;
+    let mut bgra = level.rgba.clone();
     for px in bgra.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
         px[3] = (f64::from(px[3]) * opacity).round() as u8;
     }
-    let frame = image::RgbaImage::from_raw(w, h, bgra)
-        .ok_or_else(|| refused("asset_undecodable", &path))?;
-    let found = (
-        Arc::new(RenderImage::new([image::Frame::new(frame)])),
-        [w, h],
-    );
-    session.images.insert(key, found.clone());
-    Ok(found)
+    let frame_image = image::RgbaImage::from_raw(w, h, bgra)
+        .ok_or_else(|| refused("asset_undecodable", &format!("items/{item}/params/asset")))?;
+    let image = Arc::new(RenderImage::new([image::Frame::new(frame_image)]));
+    session.images.insert(key, (image.clone(), frame));
+    Ok(Some(Pictured {
+        image,
+        size: level.size,
+        sha256: level.sha256,
+        to: ask.to,
+    }))
 }
 
 /// Where a nearest or cubic image lands, as its copy's key and the rect it is drawn 1:1 in: the
@@ -381,13 +477,109 @@ fn resample_at(
     )
 }
 
-/// The images the process has read from a store and decoded, and those Vello GPU's renderer has
-/// uploaded, so far (#1485).
+/// The part of `a` inside `b`.
+fn intersect(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    let (x0, y0) = (a[0].max(b[0]), a[1].max(b[1]));
+    let (x1, y1) = (
+        (a[0] + a[2]).min(b[0] + b[2]),
+        (a[1] + a[3]).min(b[1] + b[3]),
+    );
+    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
+}
+
+/// Whether GPUI's sprite draws a `size` px level fitted to `to` and cut at `bounds` (u) as a
+/// canonical render does at `zoom`: every edge on a whole device pixel, and the cut on whole texels
+/// of the level, so neither snapping nor its sub-tile rounding moves a sample.
+fn sprite_exact(to: [f64; 4], bounds: [f64; 4], size: [u32; 2], zoom: f64) -> bool {
+    let whole = |v: f64| (v - v.round()).abs() < 1e-3;
+    let c = intersect(bounds, to);
+    let edges = [
+        to[0],
+        to[1],
+        to[0] + to[2],
+        to[1] + to[3],
+        c[0],
+        c[1],
+        c[0] + c[2],
+        c[1] + c[3],
+    ];
+    let texels = [
+        (c[0] - to[0]) / to[2] * f64::from(size[0]),
+        (c[1] - to[1]) / to[3] * f64::from(size[1]),
+        c[2] / to[2] * f64::from(size[0]),
+        c[3] / to[3] * f64::from(size[1]),
+    ];
+    edges.iter().all(|e| whole(e * zoom)) && texels.into_iter().all(whole)
+}
+
+/// A linear picture's copy placed as a canonical render places it, on the whole device pixels
+/// around its cut, and that rect in u: made once per rect and cut.
+fn placed_copy(
+    session: &mut Session,
+    p: &Pictured,
+    opacity: f64,
+    bounds: [f64; 4],
+    zoom: f64,
+) -> Result<(Arc<RenderImage>, [f64; 4]), Value> {
+    let key = (
+        (p.sha256, opacity.to_bits()),
+        p.to.map(f64::to_bits),
+        bounds.map(f64::to_bits),
+    );
+    let frame = session.frame_no;
+    if let Some((image, hull, seen)) = session.placed.get_mut(&key) {
+        *seen = frame;
+        return Ok((image.clone(), *hull));
+    }
+    let c = intersect(bounds, p.to).map(|v| v * zoom);
+    let (x0, y0) = (c[0].floor(), c[1].floor());
+    let (x1, y1) = (
+        (c[0] + c[2]).ceil().max(x0 + 1.0),
+        (c[1] + c[3]).ceil().max(y0 + 1.0),
+    );
+    let to = p.to.map(|v| v * zoom);
+    let narrow = |v: f64| u16::try_from(v as i64).ok();
+    let (Some(ow), Some(oh), Ok(sw), Ok(sh)) = (
+        narrow(x1 - x0),
+        narrow(y1 - y0),
+        u16::try_from(p.size[0]),
+        u16::try_from(p.size[1]),
+    ) else {
+        return Err(refused("asset_undecodable", ""));
+    };
+    // The sprite's straight BGRA, its opacity in alpha, back to RGBA.
+    let mut rgba = p.image.as_bytes(0).unwrap_or_default().to_vec();
+    rgba.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px.swap(0, 2));
+    let shift = |r: [f64; 4]| [r[0] - x0, r[1] - y0, r[2], r[3]];
+    let mut out = deep_marks_vello::placed(
+        rgba,
+        [sw, sh],
+        ImageSampling::Linear,
+        (shift(to), shift(c)),
+        [ow, oh],
+    );
+    out.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px.swap(0, 2));
+    let frame_image = image::RgbaImage::from_raw(u32::from(ow), u32::from(oh), out)
+        .ok_or_else(|| refused("asset_undecodable", ""))?;
+    let image = Arc::new(RenderImage::new([image::Frame::new(frame_image)]));
+    let hull = [x0 / zoom, y0 / zoom, (x1 - x0) / zoom, (y1 - y0) / zoom];
+    session.placed.insert(key, (image.clone(), hull, frame));
+    Ok((image, hull))
+}
+
+/// The images the image service has read from a store and decoded, and those Vello GPU's
+/// renderer has uploaded, so far (#1485).
 fn image_counts(vello: &Option<(Arc<deep_gpu::device::Gpu>, crate::gpu::Vello2d)>) -> [u64; 3] {
-    use std::sync::atomic::Ordering::Relaxed;
+    let stats = crate::asset::images().stats();
     [
-        crate::asset::READS.load(Relaxed),
-        crate::asset::DECODES.load(Relaxed),
+        stats.source_reads,
+        stats.decoded,
         vello.as_ref().map_or(0, |(_, v)| v.uploads()),
     ]
 }
@@ -397,30 +589,31 @@ fn bytes([w, h]: [u32; 2]) -> u64 {
     u64::from(w) * u64::from(h) * 4
 }
 
-/// What the session holds decoded, its images and their resampled copies; #1485 AC2's wrong
-/// program counts only the copies.
+/// What the frame draws held: its levels and its resampled copies; #1485 AC2's wrong program
+/// counts only the copies.
 fn held(session: &Session) -> u64 {
-    let images = match session.plant {
+    let levels = match session.plant {
         crate::asset::Plant::CapCountsCopiesOnly => 0,
-        _ => session.images.values().map(|(_, s)| bytes(*s)).sum::<u64>(),
+        _ => session.drawn_bytes,
     };
-    images + session.resampled.keys().map(|k| bytes(k.2)).sum::<u64>()
+    levels + session.resampled.keys().map(|k| bytes(k.2)).sum::<u64>()
 }
 
 /// An image's copy resampled to its drawn size, made once and then reused. The copies and the
-/// decodings hold at most `asset::CAP`: a copy past it is refused, naming the image's asset.
+/// levels a frame draws hold at most `asset::CAP`: a copy past it is refused, naming the image's
+/// asset.
 fn resampled(
     session: &mut Session,
     key: &ResampleKey,
     source: &RenderImage,
     size: [u32; 2],
-    item: &str,
+    (item, asset): (&str, &str),
 ) -> Result<Arc<RenderImage>, Value> {
     if let Some(found) = session.resampled.get(key) {
         return Ok(found.clone());
     }
     // Named as a missing asset is: the field and the asset's hash.
-    let path = format!("items/{item}/params/asset: {}", key.0 .0);
+    let path = format!("items/{item}/params/asset: {asset}");
     let to = key.2;
     if held(session) + bytes(to) > crate::asset::CAP {
         return Err(refused("over_budget", &path));
@@ -444,7 +637,7 @@ fn resampled(
         .ok_or_else(|| refused("asset_undecodable", &path))?;
     let copy = Arc::new(RenderImage::new([image::Frame::new(frame)]));
     session.resamples += 1;
-    session.resampled.insert(key.clone(), copy.clone());
+    session.resampled.insert(*key, copy.clone());
     Ok(copy)
 }
 
@@ -452,8 +645,99 @@ fn resampled(
 fn compile(session: &mut Session, doc: &Map<String, Value>) -> Result<(), Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
     let state = program.state();
+    // #1486: the image items a frame may leave out while out of view: still pictures with a box,
+    // neither a parent nor a child, no channel field writing them, and no video.
+    session.cull.clear();
+    session.culled.clear();
+    if let Some(Value::Object(items)) = doc.get("items") {
+        let parents: HashSet<&str> = (items.values())
+            .filter_map(|i| i.get("parent")?.as_str())
+            .collect();
+        let written: HashSet<usize> = program.fields.iter().filter_map(|f| f.item).collect();
+        for (i, id) in program.items.iter().enumerate() {
+            let Some(item) = items.get(id) else { continue };
+            let params = item.get("params");
+            let still = item["kind"] == "image@1"
+                && item.get("parent").is_none()
+                && !parents.contains(id.as_str())
+                && !written.contains(&i)
+                && params.and_then(|p| p.get("frames")).is_none();
+            let b: Option<Vec<f64>> = params
+                .and_then(|p| p.get("box")?.as_array())
+                .map(|b| b.iter().filter_map(Value::as_f64).collect());
+            if let (true, Some(&[x, y, w, h])) = (still, b.as_deref()) {
+                session.culled.insert(id.clone(), session.cull.len());
+                session.cull.push((i, id.clone(), [x, y, w, h]));
+            }
+        }
+    }
     session.compiled = Some((program, state));
     Ok(())
+}
+
+/// The rect `[0, 0, w, h]` a document's `size` gives.
+fn doc_rect(doc: &Map<String, Value>) -> [f64; 4] {
+    let s = doc.get("size").and_then(Value::as_array);
+    let n = |k: usize| s.and_then(|s| s.get(k)?.as_f64()).unwrap_or(0.0);
+    [0.0, 0.0, n(0), n(1)]
+}
+
+fn meets(a: [f64; 4], b: [f64; 4]) -> bool {
+    a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+}
+
+/// #1486: which of the image items a frame may leave out lie out of `view` where their slots put
+/// them, unturned and unscaled (into `out`), and those of them within a view's height above or
+/// below it, with their rects.
+fn cull(
+    entries: &[(usize, String, [f64; 4])],
+    out: &mut Vec<bool>,
+    slots: &[f64],
+    view: [f64; 4],
+) -> Vec<(usize, [f64; 4])> {
+    use deep_canvas_motion::program::TRANSFORM;
+    out.clear();
+    let mut near = Vec::new();
+    let margin = [view[0], view[1] - view[3], view[2], view[3] * 3.0];
+    for (j, (i, _, b)) in entries.iter().enumerate() {
+        let Some(s) = slots.get(i * TRANSFORM..(i + 1) * TRANSFORM) else {
+            out.push(false);
+            continue;
+        };
+        let still = s[3..6].iter().all(|v| *v == 0.0) && s[6..9].iter().all(|v| *v == 1.0);
+        let r = [b[0] + s[0], b[1] + s[1], b[2], b[3]];
+        let gone = still && !meets(r, view);
+        out.push(gone);
+        if gone && meets(r, margin) {
+            near.push((j, r));
+        }
+    }
+    near
+}
+
+/// #1486: a picture a live frame will soon draw, asked of the image service ahead of need.
+fn prefetch(session: &mut Session, doc: &Map<String, Value>, j: usize, at: [f64; 4], zoom: f64) {
+    let id = session.cull[j].1.clone();
+    let Some(params) = doc.get("items").and_then(|i| i.get(&id)?.get("params")) else {
+        return;
+    };
+    let Some(asset) = params.get("asset").and_then(Value::as_str) else {
+        return;
+    };
+    let fit = match params.get("fit").and_then(Value::as_str) {
+        Some("cover") => ImageFit::Cover,
+        Some("fill") => ImageFit::Fill,
+        Some("none") => ImageFit::None,
+        _ => ImageFit::Contain,
+    };
+    let crop = params.get("crop").and_then(Value::as_array).and_then(|c| {
+        let c: Vec<f64> = c.iter().filter_map(Value::as_f64).collect();
+        <[f64; 4]>::try_from(c).ok()
+    });
+    let store = image_store(session);
+    if let Ok(ask) = crate::asset::ask(&store, asset, (crop, None), (at, fit), zoom, &id) {
+        crate::asset::images().show(&store, ask.key, deep_images::Queue::Prefetch, at);
+    }
 }
 
 /// The layer an item is in, by its ID or the ID of the set a generated mark (`<id>#<key>`) is from.
@@ -846,6 +1130,7 @@ impl Renderer {
                 region,
                 (store, pans),
             ),
+            Request::Live(run) => self.live(*run),
             Request::Render {
                 out,
                 doc,
@@ -1210,6 +1495,7 @@ impl Renderer {
                     sampling,
                     crop,
                     opacity,
+                    tile,
                     ..
                 } => {
                     // #499: a video item draws its player's frame through the live shader.
@@ -1221,19 +1507,36 @@ impl Renderer {
                         });
                         continue;
                     }
-                    let (image, size) = image_of(session, asset, *crop, *opacity, item)?;
-                    let to = fit.fitted(*bounds, size);
-                    let (image, image_bounds) = if *sampling == ImageSampling::Linear {
-                        (image, to)
+                    // #1486: a live frame with nothing of the picture yet draws nothing there.
+                    let placed = (*bounds, *fit);
+                    let crop = (*crop, tile.as_ref());
+                    let Some(p) = image_of(session, asset, crop, *opacity, item, placed, zoom)?
+                    else {
+                        continue;
+                    };
+                    let mut clip = *bounds;
+                    let (image, image_bounds) = if *sampling == ImageSampling::Linear
+                        && sprite_exact(p.to, *bounds, p.size, zoom)
+                    {
+                        (p.image, p.to)
+                    } else if *sampling == ImageSampling::Linear {
+                        // GPUI's sprite lands on whole device pixels: a picture placed off them
+                        // draws 1:1 from a copy placed and cut as the canonical render does it.
+                        let (copy, hull) = placed_copy(session, &p, *opacity, *bounds, zoom)?;
+                        clip = hull;
+                        (copy, hull)
                     } else {
                         // The sprite sampler is linear, so the copy is drawn 1:1 on whole pixels.
-                        let (key, at) =
-                            resample_at(image_key(asset, *crop, *opacity), *sampling, to, zoom);
-                        (resampled(session, &key, &image, size, item)?, at)
+                        let key = (p.sha256, opacity.to_bits());
+                        let (key, at) = resample_at(key, *sampling, p.to, zoom);
+                        (
+                            resampled(session, &key, &p.image, p.size, (item, asset))?,
+                            at,
+                        )
                     };
                     push(Draw::Picture {
                         image,
-                        bounds: Some(rect(*bounds)),
+                        bounds: Some(rect(clip)),
                         image_bounds: Some(rect(image_bounds)),
                     });
                 }
@@ -1270,15 +1573,31 @@ impl Renderer {
         gpui_oklab: bool,
         by_clock: bool,
     ) -> Result<(), Value> {
+        // #1486: a frame starts: the image service evicts past its bounds, and the levels this
+        // frame draws count afresh.
+        session.frame_no += 1;
+        session.drawn_keys.clear();
+        session.drawn_bytes = 0;
+        session.frame_levels.clear();
+        session.started = crate::asset::images().frame_start();
+        let view_rect = session.region.map_or_else(|| doc_rect(doc), |(r, _)| r);
         // The revision's program evaluates into its state with no allocation; only the items the
-        // draw list reads are written out.
-        let (items, valid_until) = {
+        // draw list reads are written out, and (#1486) none of the image items out of view.
+        let (items, valid_until, near) = {
             let (program, state) = session
                 .compiled
                 .as_mut()
                 .ok_or_else(|| refused("bad_doc", ""))?;
             program.evaluate(t, eval::Validity::Full, state);
-            let mut items = eval::items(doc, program, state);
+            let near = cull(&session.cull, &mut session.out, &state.slots, view_rect);
+            let (out, culled) = (&session.out, &session.culled);
+            let mut items = if session.cull.is_empty() {
+                eval::items(doc, program, state)
+            } else {
+                eval::items_where(doc, program, state, |id| {
+                    culled.get(id).is_none_or(|&j| !out[j])
+                })
+            };
             let valid_until = match session.region {
                 Some((rect, false)) => {
                     let meets = |id: &str| {
@@ -1311,8 +1630,14 @@ impl Renderer {
                     }
                 }
             }
-            (items, valid_until)
+            (items, valid_until, near)
         };
+        // #1486: a live frame asks ahead for the pictures within a view's height of it.
+        if session.live {
+            for (j, at) in near {
+                prefetch(session, doc, j, at, view.zoom);
+            }
+        }
         // #499: each video item in view shows its source frame at t.
         session.video_until = Self::videos(session, doc, Some(&items), t, view.zoom)?;
         let palette = palette_of(look, view.theme);
@@ -1393,44 +1718,38 @@ impl Renderer {
             return Err(refused("no_window", ""));
         }
         let bucket = path::bucket(view.zoom);
-        // A decoding and a resampled copy live while the frame on screen draws them, so a new
-        // revision, a zoom or a resize frees what it left before the cap counts them. An image on
-        // a layer Vello GPU draws is Vello GPU's to decode, not GPUI's.
-        let gpui_marks = || {
-            (frame.layers.iter().zip(&pictures))
-                .filter(|(_, picture)| picture.is_none())
-                .flat_map(|(l, _)| l.marks.iter())
-        };
-        let images: BTreeSet<ImageKey> = gpui_marks()
-            .filter_map(|d| match &d.mark {
-                Mark::Image {
+        // A resampled copy lives while the frame on screen draws it, so a new revision, a zoom or a
+        // resize frees what it left before the cap counts it. An image on a layer Vello GPU draws
+        // is Vello GPU's to draw, not GPUI's.
+        let mut copies = Vec::new();
+        for (layer, picture) in frame.layers.iter().zip(&pictures) {
+            if picture.is_some() {
+                continue;
+            }
+            for drawn in &layer.marks {
+                if let Mark::Image {
+                    item,
                     asset,
+                    bounds,
+                    fit,
+                    sampling,
                     crop,
                     opacity,
+                    tile,
                     ..
-                } => Some(image_key(asset, *crop, *opacity)),
-                _ => None,
-            })
-            .collect();
-        session.images.retain(|k, _| images.contains(k));
-        let mut copies = Vec::new();
-        for drawn in gpui_marks() {
-            if let Mark::Image {
-                item,
-                asset,
-                bounds,
-                fit,
-                sampling,
-                crop,
-                opacity,
-                ..
-            } = &drawn.mark
-            {
-                if *sampling != ImageSampling::Linear && !session.players.contains_key(item) {
-                    let (_, size) = image_of(session, asset, *crop, *opacity, item)?;
-                    let to = fit.fitted(*bounds, size);
-                    let key = image_key(asset, *crop, *opacity);
-                    copies.push(resample_at(key, *sampling, to, view.zoom).0);
+                } = &drawn.mark
+                {
+                    if *sampling == ImageSampling::Linear || session.players.contains_key(item) {
+                        continue;
+                    }
+                    let placed = (*bounds, *fit);
+                    let crop = (*crop, tile.as_ref());
+                    if let Some(p) =
+                        image_of(session, asset, crop, *opacity, item, placed, view.zoom)?
+                    {
+                        let key = (p.sha256, opacity.to_bits());
+                        copies.push(resample_at(key, *sampling, p.to, view.zoom).0);
+                    }
                 }
             }
         }
@@ -1447,8 +1766,10 @@ impl Renderer {
             k.key(&layer.key);
             prefixes.push(k.finish());
         }
-        // A prefix stays the same while its key holds and none of its layers' items is dirty.
-        let mut dirty_below = false;
+        // A prefix stays the same while its key holds and none of its layers' items is dirty; and
+        // (#1486) not while the last live frame drew a picture short of its level, so no layer
+        // picture keeps a picture that hadn't arrived.
+        let mut dirty_below = session.live && session.settling;
         let stable: Vec<(ContentKey, u32)> = prefixes
             .iter()
             .enumerate()
@@ -1601,14 +1922,22 @@ impl Renderer {
                     Mark::Image {
                         item,
                         asset,
+                        bounds,
+                        fit,
                         crop,
                         opacity,
+                        tile,
                         ..
                     } if !session.players.contains_key(item) && picture.is_none() => {
-                        let (image, _) = image_of(session, asset, *crop, *opacity, item)?;
-                        let pixels = image.as_bytes(0).unwrap_or_default();
-                        read.images
-                            .push((item.clone(), Entry::of(drawn.mark.key(bucket), pixels)));
+                        // #1486: what a frame reads of a picture is its level, named by its hash.
+                        let placed = (*bounds, *fit);
+                        let crop = (*crop, tile.as_ref());
+                        if let Some(p) =
+                            image_of(session, asset, crop, *opacity, item, placed, view.zoom)?
+                        {
+                            read.images
+                                .push((item.clone(), Entry::of(drawn.mark.key(bucket), &p.sha256)));
+                        }
                     }
                     _ => {}
                 }
@@ -1653,6 +1982,43 @@ impl Renderer {
         let (handle, draws) = (main.handle, main.draws.clone());
         *draws.borrow_mut() = list;
         self.cx.present_frame(handle);
+        // #1486: a sprite neither this frame nor the one before drew gives back its atlas slot in
+        // both windows, after the frame that last drew it rendered; the image service's queue
+        // drops what this pass looked over and didn't ask for again.
+        let frame_no = session.frame_no;
+        let mut gone = Vec::new();
+        session.images.retain(|_, (image, seen)| {
+            let keep = *seen + 1 >= frame_no;
+            if !keep {
+                gone.push(image.clone());
+            }
+            keep
+        });
+        session.placed.retain(|_, (image, _, seen)| {
+            let keep = *seen + 1 >= frame_no;
+            if !keep {
+                gone.push(image.clone());
+            }
+            keep
+        });
+        if !gone.is_empty() {
+            let windows = [session.main.as_ref(), session.cache.as_ref()];
+            for handle in windows.into_iter().flatten().map(|w| w.handle) {
+                let _ = self.cx.update_window(handle, |_, window, _| {
+                    for image in &gone {
+                        let _ = window.drop_image(image.clone());
+                    }
+                });
+            }
+        }
+        let images = crate::asset::images();
+        images.pass_ended([
+            -f64::MAX / 4.0,
+            -f64::MAX / 4.0,
+            f64::MAX / 2.0,
+            f64::MAX / 2.0,
+        ]);
+        session.settling = images.settling();
         Ok(())
     }
 
@@ -1784,7 +2150,20 @@ impl Renderer {
             dirty: Dirty::default(),
             stamped: BTreeSet::new(),
             store: None,
+            image_store: None,
             images: HashMap::new(),
+            placed: HashMap::new(),
+            live: false,
+            levels: HashMap::new(),
+            drawn_keys: HashSet::new(),
+            drawn_bytes: 0,
+            frame_no: 0,
+            cull: Vec::new(),
+            culled: HashMap::new(),
+            out: Vec::new(),
+            settling: false,
+            frame_levels: BTreeMap::new(),
+            started: deep_images::Started::default(),
             resampled: HashMap::new(),
             resamples: 0,
             plant: crate::asset::Plant::None,
@@ -1820,6 +2199,9 @@ impl Renderer {
         let mut session = Self::new_session();
         session.region = region;
         session.store = store;
+        session.live = true;
+        let none = crate::asset::Plant::None;
+        crate::asset::images().configure(deep_images::BUDGET, deep_images::ENTRIES, none);
         // The window is the region's size.
         let mut sized = doc.clone();
         if let Some(([.., w, h], _)) = region {
@@ -1869,7 +2251,10 @@ impl Renderer {
                 let pan_next = pans
                     .get(pan)
                     .map(|p| start + Duration::from_nanos((p.0.max(0.0) * 1e6) as u64));
-                let wake = [doc_next, video_next, pan_next]
+                // #1486: while a picture on screen is short of its level, the next vsync draws
+                // what has arrived.
+                let settle_next = session.settling.then(|| now + vsync);
+                let wake = [doc_next, video_next, pan_next, settle_next]
                     .into_iter()
                     .flatten()
                     .min()
@@ -1892,7 +2277,7 @@ impl Renderer {
                     session.region = Some((rect, false));
                     session.hash_next = true;
                     self.present(&mut session, doc, look, view, &record, t, false, true)?;
-                } else if doc_next.is_some_and(|n| n <= Instant::now()) {
+                } else if doc_next.is_some_and(|n| n <= Instant::now()) || session.settling {
                     self.present(&mut session, doc, look, view, &record, t, false, true)?;
                 } else if session.video_until.is_some_and(|v| v <= t) {
                     self.video_tick(&mut session, doc, t)?;
@@ -1968,6 +2353,161 @@ impl Renderer {
         result.unwrap_or_else(|refusal| refusal)
     }
 
+    /// #1486: a document's live view on the real clock at 60 Hz, every frame a full redraw that
+    /// asks the image service for each image in view: opened until its first screen settles, moved
+    /// a frame per move, settled until nothing is short or pending, and redrawn; each frame's
+    /// times, UI-thread CPU, levels, the service's stats at its start and the service's
+    /// allocations, then every job the service's workers started.
+    fn live(&mut self, run: crate::Live) -> Value {
+        let images = crate::asset::images();
+        let class = deep_canvas::budget::of(&Value::Object(run.doc.clone()))
+            .map_or(deep_images::BUDGET, |(_, l)| {
+                l.gpu_bytes.min(deep_images::BUDGET)
+            });
+        images.configure(run.budget.unwrap_or(class), deep_images::ENTRIES, run.plant);
+        let [_, _, w, h] = run.rect;
+        let mut session = Self::new_session();
+        session.region = Some((run.rect, false));
+        session.store = run.store.clone();
+        session.live = true;
+        // The window is the view's size.
+        let mut sized = run.doc.clone();
+        sized.insert("size".into(), json!([w, h]));
+        let doc = &sized;
+        let result = (|| -> Result<Value, Value> {
+            compile(&mut session, doc)?;
+            // The window opens before frame 0.
+            if !self.surfaces(&mut session, [w, h], run.view.zoom) {
+                return Err(refused("no_window", ""));
+            }
+            let base = images.frame() + 1;
+            let start = Instant::now();
+            let ms = |at: Instant| at.duration_since(start).as_secs_f64() * 1000.0;
+            let period = Duration::from_nanos(1_000_000_000 / 60);
+            let record = Record::default();
+            let mut frames: Vec<Value> = Vec::new();
+            // Each frame's start: the UI thread's CPU, ms, and the service's allocations.
+            let mut marks: Vec<(f64, u64)> = Vec::new();
+            let mut next = start;
+            let mut draw = |me: &mut Self,
+                            session: &mut Session,
+                            (phase, index): (usize, u32),
+                            (rect, t): ([f64; 4], i64)|
+             -> Result<(bool, u64), Value> {
+                // Frames start on the 60 Hz grid: a frame still running at a vsync starts the
+                // next one at the following vsync.
+                let now = Instant::now();
+                if next > now {
+                    std::thread::sleep(next - now);
+                }
+                let at = Instant::now();
+                marks.push((thread_cpu_ms(), service_allocations()));
+                session.region = Some((rect, false));
+                let mut record = record.clone();
+                record.pinned = t;
+                let k = frames.len();
+                me.present(session, doc, &run.look, run.view, &record, t, false, k > 0)?;
+                let done = Instant::now();
+                let n = (done.duration_since(start).as_nanos() / period.as_nanos()) + 1;
+                next = start + period * n as u32;
+                for shot in &run.shots[phase] {
+                    match shot {
+                        crate::Shot::Every(dir) => {
+                            let _ = std::fs::create_dir_all(dir);
+                            me.capture(
+                                session,
+                                &dir.join(format!("{k}.png")).display().to_string(),
+                            )?
+                        }
+                        crate::Shot::One(Some(i), out) if *i == index => {
+                            me.capture(session, out)?
+                        }
+                        _ => {}
+                    }
+                }
+                let levels: Map<String, Value> = (session.frame_levels.iter())
+                    .map(|(id, (asked, drawn))| {
+                        (id.clone(), json!({"asked": asked, "drawn": drawn}))
+                    })
+                    .collect();
+                let settling = (session.frame_levels.values()).any(|(a, d)| *d != Some(*a));
+                let started = session.started;
+                let s = started.stats;
+                frames.push(json!({
+                    "frame": k, "phase": crate::PHASES[phase], "at_ms": ms(at), "done_ms": ms(done),
+                    "rect": rect, "levels": levels, "settling": settling,
+                    "stats": stats_json(&s), "drawn_bytes": started.drawn_bytes,
+                }));
+                Ok((settling, s.pending))
+            };
+            // The last frame of a phase is written once the phase knows it was its last.
+            let last = |me: &mut Self, session: &Session, phase: usize| -> Result<(), Value> {
+                for shot in &run.shots[phase] {
+                    if let crate::Shot::One(None, out) = shot {
+                        me.capture(session, out)?;
+                    }
+                }
+                Ok(())
+            };
+            let rect0 = run.rect;
+            let mut i = 0;
+            loop {
+                let (settling, _) = draw(self, &mut session, (0, i), (rect0, 0))?;
+                i += 1;
+                if !settling || ms(Instant::now()) >= run.settle_ms {
+                    break;
+                }
+            }
+            last(self, &session, 0)?;
+            let mut view = (rect0, 0);
+            for (i, (at, t)) in run.moves.iter().enumerate() {
+                view = ([at[0], at[1], w, h], *t);
+                draw(self, &mut session, (1, i as u32), view)?;
+            }
+            if !run.moves.is_empty() {
+                last(self, &session, 1)?;
+            }
+            let settle_start = Instant::now();
+            let mut i = 0;
+            loop {
+                let (settling, pending) = draw(self, &mut session, (2, i), view)?;
+                i += 1;
+                if (!settling && pending == 0)
+                    || settle_start.elapsed().as_secs_f64() * 1000.0 >= run.settle_ms
+                {
+                    break;
+                }
+            }
+            last(self, &session, 2)?;
+            for i in 0..run.redraws {
+                draw(self, &mut session, (3, i), view)?;
+            }
+            if run.redraws > 0 {
+                last(self, &session, 3)?;
+            }
+            marks.push((thread_cpu_ms(), service_allocations()));
+            images.drain();
+            for (k, f) in frames.iter_mut().enumerate() {
+                f["ui_ms"] = json!(marks[k + 1].0 - marks[k].0);
+                f["allocations"] = json!(marks[k + 1].1 - marks[k].1);
+            }
+            let count = frames.len() as u64;
+            let jobs: Vec<Value> = (images.jobs().into_iter())
+                .filter(|j| j.frame >= base)
+                .map(|j| {
+                    let asset: String = j.key.hash.iter().map(|b| format!("{b:02x}")).collect();
+                    json!({"asset": asset, "level": j.key.level, "kind": j.op,
+                           "frame": (j.frame - base).min(count.saturating_sub(1))})
+                })
+                .collect();
+            Ok(
+                json!({"ok": true, "frames": frames, "jobs": jobs, "stats": stats_json(&images.stats())}),
+            )
+        })();
+        self.close(session);
+        result.unwrap_or_else(|refusal| refusal)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn frames(
         &mut self,
@@ -1982,6 +2522,8 @@ impl Renderer {
         let mut session = Self::new_session();
         session.store = store;
         session.plant = image_plant;
+        // The image service runs the request's wrong program too (#1485).
+        crate::asset::images().configure(deep_images::BUDGET, deep_images::ENTRIES, image_plant);
         let period = 705_600_000 / clock.hz;
         // Each frame is pinned to the host time live, or to the mapped record time in a replay.
         let pinned_at_0 = clock.replay.unwrap_or(clock.start);
@@ -2050,6 +2592,8 @@ impl Renderer {
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
+        let none = crate::asset::Plant::None;
+        crate::asset::images().configure(deep_images::BUDGET, deep_images::ENTRIES, none);
         let mut doc = Map::new();
         let mut view = View {
             zoom: 1.0,
@@ -2127,6 +2671,8 @@ impl Renderer {
         let mut session = Self::new_session();
         session.store = store;
         session.plant = image_plant;
+        // The image service runs the request's wrong program too (#1485).
+        crate::asset::images().configure(deep_images::BUDGET, deep_images::ENTRIES, image_plant);
         record.pinned = t;
         // #1479: the frame report counts the glyphs the atlas rasterized and those drawn from its
         // largest raster for want of an outline, prepaint included.
@@ -2166,6 +2712,28 @@ impl Renderer {
         self.close(session);
         answer
     }
+}
+
+/// The UI thread's CPU time, ms (its thread clock).
+fn thread_cpu_ms() -> f64 {
+    // SAFETY: a zeroed timespec for clock_gettime to fill.
+    let mut t: libc::timespec = unsafe { std::mem::zeroed() };
+    unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
+    t.tv_sec as f64 * 1e3 + t.tv_nsec as f64 / 1e6
+}
+
+/// The allocations the image service has made so far (#1486 AC3).
+fn service_allocations() -> u64 {
+    crate::SERVICE_ALLOCATIONS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The image service's stats as `live` reports them.
+fn stats_json(s: &deep_images::Stats) -> Value {
+    json!({
+        "bytes": s.bytes, "budget": s.budget, "entries": s.entries, "pending": s.pending,
+        "decoded": s.decoded, "failed": s.failed, "cancelled": s.cancelled, "evicted": s.evicted,
+        "decode_ms": s.decode_ms,
+    })
 }
 
 /// #499: whether a video item's box, at its place, meets `rect`: exactly for an item that isn't

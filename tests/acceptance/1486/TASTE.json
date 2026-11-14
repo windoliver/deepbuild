@@ -1,0 +1,13 @@
+{
+  "issue": 1486,
+  "criterion": "#1486.9e82ff7a",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in session on 2026-11-10 (\"check for me\")",
+  "when": "2026-11-10T21:11:28Z",
+  "screenshots": {
+    "grid-mid-scroll.png": "81bf9999b70ba6caeaad8d385a2667b143d20e920f12dabb8ee68f14e3f2bd9c",
+    "grid-settled.png": "10bf260cdd89b06728f2388c339c2d81db1affcf3e3f18693a3389cb12d07f76",
+    "grid-scroll.apng": "4a4e6d69cd7604d6fb9ed6fb92dd5b70df8d8638821e3660735e190552859504"
+  },
+  "note": "Settled and mid-scroll: every tile in view shows its own picture, cut to cover its square; digits crisp and gradients smooth at full resolution; the one-pixel stripe bands average to an even grey with no moire, as a linear-light box level should; tile edges and gutters clean. Recording: 0 tiles shown empty across its 60 frames (4,500 in-view tile appearances), read at each tile's sample patch by the suite's chroma rule; the same count reads every gutter patch as empty."
+}

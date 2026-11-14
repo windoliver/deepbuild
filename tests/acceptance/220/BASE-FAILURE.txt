@@ -1,0 +1,53 @@
+Base commit: a9f78a6b (design(#220): the typeset job's outputs, issues and source in deep_job's terms, warm and cold, and
+a drawn match_morph); no implementation of #220 exists there.
+Command, each file alone: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/220 <file> --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10  Machine: macOS (Apple silicon), load average above 400 on 18 cores  Node: v24.22.2  vitest 5.0.5.
+Result: 5 files failed, 12 tests failed, 0 passed.
+
+Each file at the base:
+
+  parts.test.ts (AC1 #220.a1078979): 4 failed. Each fails at its first assertion:
+    "the typeset job's first-party plug-in of its own is at packages/jobs/typeset (README: The surface under test, 1):
+     it has no deepbuild.json: expected false to be true"
+  morph.test.ts (AC2 #220.ec8a4363): 2 failed, the same assertion.
+  issues.test.ts (AC3 #220.472f9775): 3 failed, the same assertion.
+  budgets.test.ts (AC4 #220.e4f3b85e): 2 failed, the same assertion.
+  taste.test.ts (AC5 #220.56b932fa): 1 failed, INCONCLUSIVE:
+    "INCONCLUSIVE: the check run's pictures are not in docs/evidence/220/: five-parts.png, match-morph.png,
+     match-morph.apng; this is not a pass"
+
+With the plug-in folder missing, beforeAll builds nothing (README: Run them), so these runs took about a second each.
+
+Behind the missing folder, from throwaway probes at the base (not kept in the suite): a stand-in plug-in
+deepbuild/typeset in a scratch folder (index.ts registering the kind typeset, its two output checks and the tool
+typst-mitex@0.0.1, whose tool/main.mjs answers each request line with an SVG of one square a part group), installed in the
+plug-in's place with ACCEPTANCE_220_PLUGIN, after `npm run build --workspaces` and `cargo build --locked -p deep-hook`:
+
+  - Declaring no inputs, as the design's kind does: the hub started (deep hub run, ready), deep mcp answered
+    initialize, and `deep install` was refused by the extension host's kindOf, so openWorld fails at its install
+    assertion:
+      "REFUSED: the job kind typeset declares no params schema and inputs, so deepbuild/typeset@1.0.0 isn't installed"
+    So past the missing folder every hub test would still fail at the base: its job API refuses a kind with no inputs.
+  - The same stand-in declaring one input x: it installed, its tool qualifying (a readline loop answering the hub's
+    one request, written with no trailing newline: the one-request case of README: The surface under test, 5);
+    deep_job listed typeset with typst-mitex@0.0.1 and openWorld found it; a run with inputs [] was refused,
+    {"status":"refused","reason":"typeset takes the inputs x; give x"}, and mustTypeset failed naming that reply.
+  - toolFiles (importing the plug-in's index.ts from outside the suite's root), runToolOnce and partsOf on the
+    stand-in's answer read five part groups with their ids and sources. linuxMissing answered "Docker has no
+    linux/amd64 image node:24.22.0-bookworm-slim, and this suite pulls no image; run once: docker pull --platform
+    linux/amd64 node:24.22.0-bookworm-slim": on this Mac the triple test is INCONCLUSIVE until that image is pulled.
+    The container run itself (runToolOnLinux) was not exercised: no Node image is here, and none was pulled.
+  - budgets.test.ts itself with the no-input stand-in in the plug-in's place: its size test failed at openWorld's
+    install (the kindOf refusal above); its timing test ran the stand-in's tool in one untimed and five timed processes,
+    each answering both requests (warm ms 0.18, 66.53, 2.13, 0.33, 0.29; cold ms 302.8, 482.1, 370.1, 460.2, 195.6),
+    and judgeLimit answered INCONCLUSIVE for both (thermal state "fair", load 413 above the 18 cores), so the test
+    failed "INCONCLUSIVE: the perf lane can't judge the times here now: …; this is not a pass".
+  - The SVG reader, on a hand-written pair (nested transforms, relative commands, implicit repeats, S and T
+    reflections, compact arc flags, rect beside its path, circle beside its ellipse): the union of five groups equalled
+    the one group, the union moved by 0.01 did not, and bounds came from curve extrema.
+
+Not run at the base: `cargo build --bin deep-show --no-default-features --features full` (the Mac's load average was
+above 400 on 18 cores). From reading: no crate at the base raises formula.alt_mismatch, so issues.test.ts's alt test
+would fail at "deep show of a vector naming the job's SVG with alt a^2+b^2=c^3 fails formula.alt_mismatch"; the match
+morph (#494's film.morphs) is at the base, so morph.test.ts's morph test can fail there only through the SVGs the job
+writes (ids, part groups, extra id'd elements).

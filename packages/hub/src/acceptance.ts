@@ -11,13 +11,14 @@ import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, w
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
-import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
+import type { ChecksProvider, CommandCheck, CommandRun } from './checks-port.js';
 import { baseProof, gitEnv, type Checkouts } from '@deepbuild/gate';
 import { SLOW_SLOT } from '@deepbuild/leases';
 import { readSince, ulid, type Connection, type RecordStore } from '@deepbuild/record';
 import type { JobInput, JobRecord, Runner } from '@deepbuild/runner';
 import type { Host, Supervisor } from '@deepbuild/supervisor';
 import { criteriaOf, ISSUE_LINK, type Reading } from './github-source.js';
+import { shellQuote as quoted } from './shell.js';
 
 const MODEL = 'opus';
 const JOB_MS = 30 * 60_000;
@@ -44,6 +45,7 @@ interface Entry {
   queued: boolean; slot: boolean;
 }
 interface AcceptanceOptions {
+  command: ChecksProvider['command'];
   record: RecordStore;
   runner(): Runner;
   supervisor(): Supervisor;
@@ -60,7 +62,6 @@ interface AcceptanceOptions {
 }
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
 function git(cwd: string, args: string[], o: { input?: Uint8Array | string; env?: NodeJS.ProcessEnv; raw?: true } = {}): Promise<string> {
   return new Promise((done, failed) => {
     const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 << 20, env: { ...gitEnv(), ...IDENTITY, ...o.env } }, (error, stdout, stderr) => {
@@ -302,8 +303,8 @@ export class Acceptance {
         mkdirSync(dirname(join(c.dir, path)), { recursive: true });
         writeFileSync(join(c.dir, path), bytes);
       }
-      const spec = { kind: 'command', runner: `${e.command} ${quoted(file)}`, inputs: [file], depth: 'unit', oracle: 'code' } as Parameters<typeof runCommandCheck>[0]['spec'];
-      return await runCommandCheck({ host: leased, run, spec, checkout: c.dir, deadline: RUN_MS });
+      const spec = { kind: 'command', runner: `${e.command} ${quoted(file)}`, inputs: [file], depth: 'unit', oracle: 'code' } as CommandCheck['spec'];
+      return await this.o.command({ host: leased, run, spec, checkout: c.dir, deadline: RUN_MS });
     } finally {
       await host.cleanup(run).catch(() => undefined);
       await this.o.checkouts().ended(c, run).catch(() => undefined);

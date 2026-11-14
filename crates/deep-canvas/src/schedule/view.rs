@@ -192,6 +192,11 @@ impl<'a> View<'a> {
         self.sealed.migrated(item)
     }
 
+    /// An item of a preview kind its module removed, as the kind its migration gives.
+    pub fn unremoved(&self, item: &Value) -> Option<Value> {
+        self.sealed.unremoved(item)
+    }
+
     /// Whether a sealed canvas module registered this kind: the build's kinds again.
     pub fn is_module_kind(&self, kind: &str) -> bool {
         crate::kinds::parse_kind(kind)
@@ -501,6 +506,12 @@ impl<'a> View<'a> {
     /// outlines through without naming the module that fills a form.
     pub fn outlines(&self) -> &'a [crate::registry::SealedOutline] {
         &self.sealed.outlines
+    }
+
+    /// The build's module fills (#226): the deforms and kinds scene3d runs and draws for the
+    /// modules that fill them, without naming those modules.
+    pub fn fills(&self) -> &'a [crate::contributed::Sealed] {
+        &self.sealed.fills
     }
 
     /// `table:<name>`: a table's value.

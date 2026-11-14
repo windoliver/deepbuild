@@ -1,0 +1,5 @@
+# node scripts/size-ratchet.mjs at 1c3d78db2, before moving the parsers' unit tests out (lines for this PR's two files):
+FAIL size: crates/deep-canvas/src/document/packs.rs: 4291 lines, over its ceiling of 3829
+  Fix: Split or shrink the file to 3829 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/expr.rs: 2993 lines, over its ceiling of 2710
+  Fix: Split or shrink the file to 2710 lines or fewer: a ceiling never rises.

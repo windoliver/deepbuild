@@ -112,6 +112,10 @@ fn lower(v: &mut View<'_>) -> Result<(), OpError> {
     let item = v.item()?;
     let mut out = crate::canon::canonical_value(item, &crate::canon::NoShape)
         .map_err(|e| OpError::new("out_of_range", format!("{}/{}", v.path(), e.path)))?;
+    // An item of a preview kind its module removed draws as its migrated form (#1802).
+    if let Some(moved) = v.unremoved(&out) {
+        out = moved;
+    }
     let kind = out
         .get("kind")
         .and_then(Value::as_str)
@@ -209,13 +213,15 @@ impl Canonical for Datum {
 
 impl Datum {
     /// As JSON, for a reader that hands its item on as the document writes it; a typed value
-    /// has no JSON form and reads as null.
+    /// has no JSON form and reads as null, but a JSON one (#538: a column a module rewrote) reads
+    /// as itself.
     fn to_json(&self) -> Value {
         match self {
             Datum::Num(x) => json!(x),
             Datum::Nums(xs) => json!(xs),
             Datum::Bool(b) => json!(b),
             Datum::Text(t) => json!(t),
+            Datum::Typed(crate::schedule::Val::Json(v)) => v.as_ref().clone(),
             Datum::Typed(_) => Value::Null,
         }
     }

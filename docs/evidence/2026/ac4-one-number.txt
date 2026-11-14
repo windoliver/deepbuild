@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2026
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  18:31:12
+   Duration  8.61s (tests 98%, transform 1%, import 1%)
+

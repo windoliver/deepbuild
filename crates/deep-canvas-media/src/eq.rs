@@ -40,19 +40,47 @@ pub struct Band {
 }
 
 /// One band's coefficients, normalized by a0: b0, b1, b2, a1, a2.
-fn coefficients(b: &Band, rate: f64) -> [f64; 5] {
+pub(crate) fn coefficients(b: &Band, rate: f64) -> [f64; 5] {
     let w0 = 2.0 * ops::PI * b.freq.clamp(1.0, rate / 2.0 - 1.0) / rate;
     let (sin, cos) = (ops::sin(w0), ops::cos(w0));
     let alpha = sin / (2.0 * b.q.max(1e-3));
     let a = ops::pow(10.0, b.gain / 40.0);
     let sq = 2.0 * ops::sqrt(a) * alpha;
     let [b0, b1, b2, a0, a1, a2] = match b.kind {
-        Type::Lowpass => [(1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
-        Type::Highpass => [(1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
+        Type::Lowpass => [
+            (1.0 - cos) / 2.0,
+            1.0 - cos,
+            (1.0 - cos) / 2.0,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        ],
+        Type::Highpass => [
+            (1.0 + cos) / 2.0,
+            -(1.0 + cos),
+            (1.0 + cos) / 2.0,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        ],
         Type::Bandpass => [alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
         Type::Notch => [1.0, -2.0 * cos, 1.0, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
-        Type::Allpass => [1.0 - alpha, -2.0 * cos, 1.0 + alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha],
-        Type::Peaking => [1.0 + alpha * a, -2.0 * cos, 1.0 - alpha * a, 1.0 + alpha / a, -2.0 * cos, 1.0 - alpha / a],
+        Type::Allpass => [
+            1.0 - alpha,
+            -2.0 * cos,
+            1.0 + alpha,
+            1.0 + alpha,
+            -2.0 * cos,
+            1.0 - alpha,
+        ],
+        Type::Peaking => [
+            1.0 + alpha * a,
+            -2.0 * cos,
+            1.0 - alpha * a,
+            1.0 + alpha / a,
+            -2.0 * cos,
+            1.0 - alpha / a,
+        ],
         Type::Lowshelf => [
             a * ((a + 1.0) - (a - 1.0) * cos + sq),
             2.0 * a * ((a - 1.0) - (a + 1.0) * cos),
@@ -85,7 +113,10 @@ impl Eq {
     pub fn new(bands: &[Band], rate: i64) -> Eq {
         let coefficients: Vec<_> = bands.iter().map(|b| coefficients(b, rate as f64)).collect();
         let state = vec![[0.0; 2]; 2 * coefficients.len()];
-        Eq { coefficients, state }
+        Eq {
+            coefficients,
+            state,
+        }
     }
 
     pub fn process(&mut self, block: &mut [f32]) {

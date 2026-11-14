@@ -221,7 +221,7 @@ impl Glyphs for Gpu<'_> {
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
-        size: f32,
+        (size, skew): (f32, f32),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
     ) {
@@ -229,6 +229,7 @@ impl Glyphs for Gpu<'_> {
         let _ = run
             .font_size(size)
             .hint(false)
+            .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
             .fill_glyphs(std::iter::once(glyph));
     }
@@ -237,7 +238,7 @@ impl Glyphs for Gpu<'_> {
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
-        size: f32,
+        (size, skew): (f32, f32),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -247,6 +248,7 @@ impl Glyphs for Gpu<'_> {
         let _ = run
             .font_size(size)
             .hint(false)
+            .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
             .stroke_glyphs(std::iter::once(glyph));
     }

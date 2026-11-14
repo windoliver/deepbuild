@@ -231,6 +231,11 @@ fn body_steps(e: &Value, out: &mut Vec<String>) {
 }
 
 fn function_resolves(v: &Value) -> Result<(), String> {
+    // A body given as WGSL source (Pack graphs and step functions: `source: {wgsl}`), as the
+    // light loop's defaults name the core's own shading (#485).
+    if v["body"]["source"]["wgsl"].is_string() {
+        return Ok(());
+    }
     let mut used = Vec::new();
     body_steps(v.get("body").unwrap_or(&Value::Null), &mut used);
     if used.is_empty() {
@@ -245,6 +250,9 @@ fn function_resolves(v: &Value) -> Result<(), String> {
 fn function_exact(v: &Value) -> Result<(), String> {
     if v.get("exact") != Some(&Value::Bool(true)) {
         return Ok(());
+    }
+    if v["body"]["source"]["wgsl"].is_string() {
+        return Err("declared exact, its body is WGSL source, whose steps no check reads".into());
     }
     let mut used = Vec::new();
     body_steps(v.get("body").unwrap_or(&Value::Null), &mut used);
@@ -1032,7 +1040,11 @@ fn outline_source() -> RegistryDef {
 
 /// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
 fn verdicts<'a>(v: &'a Value, at: &str, judged: &str) -> Result<Vec<(&'a str, &'a Value)>, String> {
-    let list = v.get(judged).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let list = v
+        .get(judged)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     strings(v, at)
         .into_iter()
         .map(|sha| {
@@ -1246,6 +1258,16 @@ pub fn registries() -> Vec<RegistryDef> {
     registries_with(true)
 }
 
+/// `gpu.output@1`'s declaration and the core's own entries of it, today's outputs, for the planted
+/// layout that declares it in the effects module (#485).
+pub fn gpu_output_registry() -> (RegistryDef, Vec<EntryDef>) {
+    let entries = entries(false)
+        .into_iter()
+        .filter(|e| e.registry == "gpu.output@1")
+        .collect();
+    (gpu_output(), entries)
+}
+
 /// `ease@1`'s declaration, for the planted layout that declares it in the motion module.
 pub fn ease_registry() -> RegistryDef {
     ease()
@@ -1313,6 +1335,15 @@ pub fn entries(steps_elsewhere: bool) -> Vec<EntryDef> {
             "check.kind.doc@1",
             kind,
             json!({"codes": codes, "reads": ["document"]}),
+        ));
+    }
+    // #409: each craft@1 check a brief can name, stating its own description, threshold and fix.
+    for c in crate::craft::checks() {
+        out.push(entry(
+            "check.kind.doc@1",
+            &c.name,
+            json!({"codes": [], "reads": ["document"], "pack": crate::craft::PACK,
+                   "description": c.description, "threshold": c.threshold, "fix": c.fix}),
         ));
     }
     out

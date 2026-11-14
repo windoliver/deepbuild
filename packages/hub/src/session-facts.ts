@@ -6,9 +6,9 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { run } from './children.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
 
 const sha = (parts: (string | Buffer)[]): string => {
@@ -133,4 +133,16 @@ export async function commitsBetween(cwd: string, from: string, to: string): Pro
   const r = await run('git', ['-C', cwd, 'rev-list', '--reverse', '--max-count=100', `${from}..${to}`], { env, timeout: 10_000 });
   const list = r.error ? [] : r.stdout.split('\n').filter((l) => /^[0-9a-f]{40}$/.test(l));
   return list.length ? list : [to];
+}
+/**
+ * Of `shas`, those no remote-tracking branch of `cwd`'s repo holds (#2019), in one walk from them that stops at every
+ * remote ref; a commit the repo no longer has counts as none. Undefined when git can't read the repo.
+ */
+export async function unpushedOf(cwd: string, shas: readonly string[]): Promise<string[] | undefined> {
+  if (!shas.length) return [];
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  const r = await run('git', ['-C', cwd, 'rev-list', '--ignore-missing', '--max-count=1000', ...shas, '--not', '--remotes'], { env, timeout: 10_000 });
+  if (r.error) return undefined;
+  const out = new Set(r.stdout.split('\n'));
+  return shas.filter((s) => out.has(s));
 }

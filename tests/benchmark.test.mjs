@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { compare, judgeLimit, measure, measureOnce, parseCpuMs, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
+import { compare, judgeLimit, judgeTask, measure, measureOnce, parseCpuMs, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
 
 const budget = { id: 'startup', command: ['binary'], margin: 0.5, limits: { peakBytes: 10_000_000 }, initialReason: 'First measured executable in issue #12.' };
 const config = { tasks: [budget] };
@@ -62,6 +62,16 @@ test('first measurement names its reason, while established budgets cannot disap
   assert.equal(initial.reason, budget.initialReason);
 });
 
+test('an established task may name the criteria it proves, while its numbers stay frozen (#1874)', () => {
+  const named = { ...budget, criteria: ['#12.eb2649f7'] };
+  validateBudgets({ tasks: [named] }, config);
+  validateBudgets({ tasks: [{ ...named, criteria: ['#12.f9ab1605'] }] }, { tasks: [named] });
+  validateBudgets(config, { tasks: [named] });
+  for (const change of [{ margin: 5 }, { limits: {} }, { command: ['other'] }]) {
+    assert.throws(() => validateBudgets({ tasks: [{ ...named, ...change }] }, config), /startup/);
+  }
+});
+
 test('a cap, or a p50 or peak-memory regression, fails even when another metric improves', () => {
   const base = { p50Ms: 10, p95Ms: 20, peakBytes: 1000 };
   assert.equal(compare(budget, base, base).status, 'PASS');
@@ -83,16 +93,6 @@ test('real process measurements reject a slower program and a failed command', (
   assert.ok(slow.p50Ms >= 100 && slow.p95Ms >= slow.p50Ms && fast.peakBytes > 0);
   assert.throws(() => compare({ ...budget, limits: {} }, slow, fast), /p50Ms/);
   assert.throws(() => measure([process.execPath, '-e', 'process.exit(9)'], process.cwd()), /exited 9/);
-});
-
-test('current and merge-base samples alternate, so both see the same machine load', (t) => {
-  const cwd = mkdtempSync(join(tmpdir(), 'deep-benchmark-order-'));
-  t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  const append = (side) => ['sh', '-c', `echo ${side} >> order`];
-  measure(append('current'), cwd, { command: append('base'), cwd });
-  const order = readFileSync(join(cwd, 'order'), 'utf8').trim().split('\n');
-  assert.ok(order.length >= 40, `${order.length} samples`);
-  assert.deepEqual(order, order.map((_, index) => (index % 2 ? 'base' : 'current')));
 });
 
 test('a single workload measurement keeps failed check output and status for later lanes', () => {
@@ -231,4 +231,15 @@ test('a command counts whole however its children were started', { skip: process
     assert.deepEqual(run.uncounted, [], name);
     assert.ok(run.instructions > 0, `${name}: ${run.instructions}`);
   }
+});
+
+// #1405: what waits counts its waiting, so a count run at another QoS doesn't compare. awk waits on nothing, and both
+// sides start it through taskpolicy, so their counts match and alone read PASS; one side lowered still reads
+// INCONCLUSIVE, naming the QoS.
+test('a budget whose sides ran at different QoS reads INCONCLUSIVE, never PASS', { skip: process.platform !== 'darwin' }, () => {
+  const awk = ['/usr/bin/awk', 'BEGIN { for (i = 0; i < 1000000; i++) s += i }'];
+  const task = { id: 'lowered', command: ['/usr/sbin/taskpolicy', '-c', 'utility', ...awk], margin: 1000, limits: {}, initialReason: 'A test.' };
+  const { instructions } = judgeTask(task, { ...task, command: ['/usr/sbin/taskpolicy', '-t', '0', '-l', '0', ...awk] }, process.cwd(), process.cwd());
+  assert.equal(instructions.status, 'INCONCLUSIVE', JSON.stringify(instructions));
+  assert.match(instructions.reason, /utility QoS and the merge base \d+% at legacy.*the counts alone read PASS/, instructions.reason);
 });

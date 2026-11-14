@@ -1,0 +1,13 @@
+{
+  "issue": 162,
+  "criterion": "#162.43d9564a",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls; the owner can overrule it on the PR",
+  "when": "2026-11-13T19:17:21Z",
+  "screenshots": {
+    "title-from-lottie.png": "b2251b321b6f94cd3887012190f1b2144db6579ad209d425d35f1f342ea1b662",
+    "title-own-render.png": "0ec83c3b5791cb2bb2db1cfb135f3a410a2b349867fe4ffa620f1328521f2003",
+    "title-motion.apng": "53ce3386e9851773565863a500ba759df758986bb35084a55f9ac29f2e2cb140"
+  },
+  "note": "Checked by pixel first: frame 24 played from the Lottie file and the document's own render differ by 0.97 luma RMS over the whole frame (44 of 230,400 pixels past 32 levels, all on the curve's edges), the tiles within 1.1 levels, and the mask cuts both at x = 160. Since the owner asked to validate and close gaps, the 2D render now draws an item's turn about z, so the tiles turn in both pictures (they turned only in the Lottie file in the first call's pictures). The motion plays the trim drawing the curve, the mask halving at 0.9375 s and the tiles turning; docs/evidence/162/validation/ holds every sampled frame side by side with their difference, before and after the fix."
+}

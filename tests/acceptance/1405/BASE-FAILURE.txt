@@ -1,0 +1,78 @@
+Acceptance tests for #1405 on the base de304b9ff (no implementation), run on 2026-11-10 between 15:35 and
+15:52 PST on a Mac17,10 (M5 Max, 18 cores) on AC power, macOS build 26B8119, at 1-minute load averages of
+245 to 438 (other sessions' work; these tests made none). Each file ran once through node --test in a fresh
+checkout made with `git archive de304b9ff | tar -x`, never this worktree. proof.test.mjs needs four built
+packages, so that checkout first ran `npm ci --ignore-scripts` and `npm run build` for @deepbuild/contracts,
+evidence, record and verdicts. Trimmed to each test's outcome and its first failing assertion; no local path
+appears below. Files that changed after a run were run again, and the last run of each final file is shown.
+
+  node --test tests/acceptance/1405/judge.test.mjs tests/acceptance/1405/order.test.mjs   (15:35, load ~410)
+
+✖ 19 pairs at +15% and 1 at -5% read FAIL
+  AssertionError: one outlier pair widens no margin: {"status":"PASS","change":0.1499999999999999,"spread":0.19999999999999996,"margin":0.19999999999999996}
+✔ 20 pairs within ±0.5% read PASS                                  (guard: holds on the base)
+✔ 19 pairs at +0.1% and 1 at +30% don't read FAIL                  (guard: holds on the base)
+✖ 20 pairs at +2% read INCONCLUSIVE
+  AssertionError: a change at the 2% line can't be told either way: {"status":"PASS","change":0.019999999999996132,"spread":1.9999921718749647e-9,"margin":0.02}
+✖ the same pairs and seed give the same result and p values twice
+  AssertionError: the seed is in the result: {"status":"PASS",...}  actual: undefined, expected: 1405
+✖ over 20 rounds each side runs first 10 times
+  AssertionError: which side ran first, round by round: current current ... current (20 times)
+  actual: { current: 20, base: 0 }, expected: { current: 10, base: 10 }
+
+  node --test tests/acceptance/1405/spin.test.mjs   (15:51, load 245 -> 274)
+
+✔ a planted two-thread spin bench, A/A over 20 pairs at load above the cores, never reads FAIL   (guard)
+  A/A pairs spread 124.7%; read {"status":"PASS","change":0.0245,"spread":1.2470,"margin":1.2470}
+✖ the same bench at +10% reads INCONCLUSIVE
+  planted 14315431 spins of 7.03 instructions on a typical 1006639508: 10.9% of this run's merge-base median; pairs spread 137.4%
+  AssertionError: a +10% change the schedule's noise hides: {"status":"PASS","change":0.1083,"spread":1.3743,"margin":1.3743}
+
+  node --test tests/acceptance/1405/qos.test.mjs   (15:42, load 316 -> 261)
+
+﹣ a pair run with one side at lower QoS reads INCONCLUSIVE or FAIL, never PASS   # SKIP
+  INCONCLUSIVE: the lower-QoS side retired fewer instructions (median 1964956008) than the default side
+  (3858225080), so this run isn't the case the criterion states. The base read it PASS (change -52%).
+  An earlier version of this file, without the direction check, ran at 15:36 at load 435: the utility
+  side read 76% under the default side, spread 36%, and the base read PASS, so it failed on its status
+  assertion. README: Readings, 5.
+
+  node --test tests/acceptance/1405/proof.test.mjs   (15:37, load 414 -> 280)
+
+✔ an A/A run of the real budget verdict-1000-runs doesn't read FAIL   (guard)
+  A/A pairs spread 3.9%; read {"status":"PASS","change":-0.0021,"spread":0.0392,"margin":0.0392}
+  (This run's file checked three of the four builds; the fourth, evidence, was built. The check was
+  widened to all four afterwards, with no other change.)
+
+Summary for the final files: 10 tests; 5 fail on their named assertion (+15%/-5%, +2%, seed, order,
++10%), 4 guards pass (±0.5%, +0.1%/+30%, spin A/A, real-budget A/A), and the qos test was skipped as
+INCONCLUSIVE because the lower-QoS side counted fewer; its earlier form failed on its status assertion.
+
+Redraft folders on the same base (15:42, load 315 -> 269), each file once:
+
+  node --test tests/acceptance/724-redraft-1405/*.test.mjs tests/acceptance/1404-redraft-1405/*.test.mjs
+
+✖ 724-redraft judge: a 20% rise in instructions retired fails the comparison, with every pair attached
+  AssertionError: the seed is in the result
+✖ 724-redraft judge: an unchanged task passes, with the seed and both p values reported
+  AssertionError: the seed is in the result
+✖ 724-redraft judge: a 1.5% rise passes: the line is never under 2%
+  AssertionError: the seed is in the result
+✖ 724-redraft judge: a 3% rise with a 0.4% spread fails: the line is 2%, no higher
+  AssertionError: the seed is in the result
+✖ 724-redraft loaded: (all three tests)
+  AssertionError: no result line for plus-20: exit null
+  Failed elsewhere, not on an assertion about the verdict: perf was killed at #724's helper timeout
+  (600 s) before printing any task line. #724's lane copies scripts/throttle.mjs, so perf waits for the
+  machine's timed grant (up to 60 min) while other sessions hold it, as tests/acceptance/1404/README.md
+  notes. The original 724/loaded.test.mjs shares this helper and would stall the same way here.
+✔ 1404-redraft judge: a child with 3 times the merge base's work reads FAIL behind the same wrapper, and
+  an unchanged one reads PASS   (ten rounds read the same under the old margin)
+✔ 1404-redraft no-counter: judgeInstructions reads a missing count INCONCLUSIVE, never PASS, and complete
+  pairs by their counts   (its criterion says "as it does today")
+✖ 1404-redraft no-count: a budget that started a child still running when it ended reads INCONCLUSIVE ...
+  AssertionError: perf read left-running as no verdict line, its comparison null
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../repo/scripts/throttle.mjs' imported from .../repo/scripts/bays.mjs
+  Failed elsewhere: #1404's perfLane leaves scripts/throttle.mjs out of its copy, and at this base
+  scripts/bays.mjs imports it, so perf can't start. The original 1404/no-count.test.mjs uses the same
+  helper and fails the same way at this base.

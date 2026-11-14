@@ -24,7 +24,11 @@ pub(crate) fn program_of(sched: &Scheduler<'_>, session: &DocSession) -> Option<
 
 /// The plan of a 2D film with timeline shots, and the index of its document camera.
 pub(crate) fn plan_of<'a>(program: &'a Program, doc: &Value) -> Option<(&'a Plan, usize)> {
-    let plan = program.shots.as_deref().filter(|p| !p.shots.is_empty())?;
+    // #504: a stage's shots write the camera too.
+    let plan = program
+        .shots
+        .as_deref()
+        .filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some))?;
     let cam = plan.camera(doc.get("camera")?.as_str()?)?;
     plan.cameras[cam].flat.then_some((plan, cam))
 }
@@ -51,7 +55,12 @@ pub(crate) struct Sides {
 }
 
 fn at<'a>(reduced: bool, keyed: &'a dyn Fn(usize) -> Option<Pose>) -> At<'a> {
-    At { reduced, planted: Planted::None, indexed: None, keyed }
+    At {
+        reduced,
+        planted: Planted::None,
+        indexed: None,
+        keyed,
+    }
 }
 
 /// The sides of the frame at t.
@@ -72,14 +81,24 @@ pub(crate) fn sides(program: &Program, doc: &Value, t: i64, reduced: bool) -> Op
         let mix = match (&tr.kind, reduced) {
             (Kind::Cut | Kind::Whip { .. }, _) => continue,
             (Kind::Dip, _) => Mix::Dip(p),
-            (Kind::Wipe { angle, feather }, false) => Mix::Wipe { angle: *angle, feather: *feather, p },
+            (Kind::Wipe { angle, feather }, false) => Mix::Wipe {
+                angle: *angle,
+                feather: *feather,
+                p,
+            },
             (Kind::Push { angle }, false) => Mix::Push { angle: *angle, p },
             _ => Mix::Fade(p),
         };
         return Some(Sides {
             sides: vec![
-                Side { pose: plan.side(tr.from, t, &at), look: look(Some(tr.from)) },
-                Side { pose: plan.side(tr.to, t, &at), look: look(Some(tr.to)) },
+                Side {
+                    pose: plan.side(tr.from, t, &at),
+                    look: look(Some(tr.from)),
+                },
+                Side {
+                    pose: plan.side(tr.to, t, &at),
+                    look: look(Some(tr.to)),
+                },
             ],
             mix: Some(mix),
             status: usize::from(t >= tr.cut),
@@ -89,11 +108,24 @@ pub(crate) fn sides(program: &Program, doc: &Value, t: i64, reduced: bool) -> Op
     let l = look(shown.shot);
     Some(match shown.dissolve {
         Some((mix, from, to)) => Sides {
-            sides: vec![Side { pose: from, look: l.clone() }, Side { pose: to, look: l }],
+            sides: vec![
+                Side {
+                    pose: from,
+                    look: l.clone(),
+                },
+                Side { pose: to, look: l },
+            ],
             mix: Some(Mix::Fade(mix)),
             status: usize::from(mix >= 0.5),
         },
-        None => Sides { sides: vec![Side { pose: shown.pose, look: l }], mix: None, status: 0 },
+        None => Sides {
+            sides: vec![Side {
+                pose: shown.pose,
+                look: l,
+            }],
+            mix: None,
+            status: 0,
+        },
     })
 }
 
@@ -126,12 +158,19 @@ pub(crate) fn finish(rgba: &mut [u8], map: ToneMap) {
 /// Two finished sides blended by `mix` (Transition), per 8-bit channel; `ink` is a dip's color.
 pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3]) -> Vec<u8> {
     let (w, h) = (usize::from(size[0]), usize::from(size[1]));
-    let lerp = |x: u8, y: u8, p: f64| (f64::from(x) + (f64::from(y) - f64::from(x)) * p).round() as u8;
+    let lerp =
+        |x: u8, y: u8, p: f64| (f64::from(x) + (f64::from(y) - f64::from(x)) * p).round() as u8;
     let mut out = vec![0u8; a.len()];
     // The share of the incoming side at a pixel, for the kinds that cover it by place.
     let along = |angle: f64| {
         let (c, s) = (angle.to_radians().cos(), angle.to_radians().sin());
-        let ends = [(0.0, 0.0), (w as f64, 0.0), (0.0, h as f64), (w as f64, h as f64)].map(|(x, y)| x * c + y * s);
+        let ends = [
+            (0.0, 0.0),
+            (w as f64, 0.0),
+            (0.0, h as f64),
+            (w as f64, h as f64),
+        ]
+        .map(|(x, y)| x * c + y * s);
         let lo = ends.iter().copied().fold(f64::INFINITY, f64::min);
         let hi = ends.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         (c, s, lo, hi - lo)
@@ -148,9 +187,17 @@ pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3])
                     }
                 }
                 Mix::Dip(p) => {
-                    let (from, to, q) = if p < 0.5 { (pa, None, p * 2.0) } else { (pb, Some(()), p * 2.0 - 1.0) };
+                    let (from, to, q) = if p < 0.5 {
+                        (pa, None, p * 2.0)
+                    } else {
+                        (pb, Some(()), p * 2.0 - 1.0)
+                    };
                     for c in 0..3 {
-                        o[c] = if to.is_none() { lerp(from[c], ink[c], q) } else { lerp(ink[c], from[c], q) };
+                        o[c] = if to.is_none() {
+                            lerp(from[c], ink[c], q)
+                        } else {
+                            lerp(ink[c], from[c], q)
+                        };
                     }
                     o[3] = 255;
                 }
@@ -167,7 +214,13 @@ pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3])
                         0.0
                     };
                     for k in 0..4 {
-                        o[k] = if share == 1.0 { pb[k] } else if share == 0.0 { pa[k] } else { lerp(pa[k], pb[k], share) };
+                        o[k] = if share == 1.0 {
+                            pb[k]
+                        } else if share == 0.0 {
+                            pa[k]
+                        } else {
+                            lerp(pa[k], pb[k], share)
+                        };
                     }
                 }
                 Mix::Push { angle, p } => {
@@ -184,7 +237,9 @@ pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3])
                     let (xi, yi) = (x as i64, y as i64);
                     let len_x = (len * c).round() as i64;
                     let len_y = (len * s).round() as i64;
-                    let v = from(xi - dx, yi - dy, a).or_else(|| from(xi - dx + len_x, yi - dy + len_y, b)).unwrap_or([0, 0, 0, 255]);
+                    let v = from(xi - dx, yi - dy, a)
+                        .or_else(|| from(xi - dx + len_x, yi - dy + len_y, b))
+                        .unwrap_or([0, 0, 0, 255]);
                     o.copy_from_slice(&v);
                 }
             }
@@ -214,7 +269,13 @@ pub(crate) fn over(under: &mut [u8], over: &[u8]) {
 
 /// The film block an `eval` with `film` reports: each camera's pose, a reduced-motion cut's
 /// dissolve, each parallax group's offset and each text's glyphs.
-pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyphs: Map<String, Value>) -> Value {
+pub(crate) fn block(
+    program: &Program,
+    doc: &Value,
+    t: i64,
+    reduced: bool,
+    glyphs: Map<String, Value>,
+) -> Value {
     let (paths, morphs) = morphs(program, doc, t);
     let Some(plan) = program.shots.as_deref() else {
         return json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs, "paths": paths, "morphs": morphs});
@@ -223,7 +284,10 @@ pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyph
     program.evaluate(t, Validity::Full, &mut state);
     let keyed = |c: usize| plan.keyed_pose(c, program, &state);
     let at = at(reduced, &keyed);
-    let doc_cam = doc.get("camera").and_then(Value::as_str).and_then(|c| plan.camera(c));
+    let doc_cam = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .and_then(|c| plan.camera(c));
     let mut cameras = Map::new();
     let mut dissolve = Value::Null;
     for (c, camera) in plan.cameras.iter().enumerate() {
@@ -231,7 +295,12 @@ pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyph
             continue;
         }
         let shown = plan.shown(c, t, &at);
-        let name = shown.shot.map(|s| plan.shots[s].id.as_str());
+        // #504: a stage's shot names itself as a timeline shot does.
+        let staged = shown
+            .stage
+            .and_then(|s| plan.stage[s].as_ref())
+            .map(|s| s.id.as_str());
+        let name = shown.shot.map(|s| plan.shots[s].id.as_str()).or(staged);
         cameras.insert(camera.id.clone(), shown.pose.to_json(name));
         if Some(c) == doc_cam {
             if let Some((mix, from, to)) = shown.dissolve {
@@ -242,7 +311,12 @@ pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyph
     let parallax: Map<String, Value> = plan
         .groups
         .iter()
-        .filter_map(|g| Some((g.id.clone(), json!(plan.parallax(program, &g.id, t, reduced)?))))
+        .filter_map(|g| {
+            Some((
+                g.id.clone(),
+                json!(plan.parallax(program, &g.id, t, reduced)?),
+            ))
+        })
         .collect();
     json!({"cameras": cameras, "dissolve": dissolve, "parallax": parallax, "glyphs": glyphs, "paths": paths, "morphs": morphs})
 }
@@ -251,26 +325,54 @@ pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyph
 /// space; and each match morph between two items, the pieces it draws at t.
 fn morphs(program: &Program, doc: &Value, t: i64) -> (Map<String, Value>, Map<String, Value>) {
     let (mut paths, mut morphs) = (Map::new(), Map::new());
-    let drawn = program.motion.channels.iter().any(|c| c.path.is_some() && c.target.field == ["path"]);
-    let Some(map) = doc.as_object().filter(|_| drawn || !program.betweens.is_empty()) else {
+    let drawn = program
+        .motion
+        .channels
+        .iter()
+        .any(|c| c.path.is_some() && c.target.field == ["path"]);
+    let Some(map) = doc
+        .as_object()
+        .filter(|_| drawn || !program.betweens.is_empty())
+    else {
         return (paths, morphs);
     };
     let mut state = program.state();
     program.evaluate(t, Validity::Full, &mut state);
     let items = deep_canvas_motion::eval::items(map, program, &state);
-    for c in program.motion.channels.iter().filter(|c| c.path.is_some() && c.target.field == ["path"]) {
-        if let Some(shape) = items.get(&c.target.owner).and_then(|i| morph::of_item(i, None)) {
+    for c in program
+        .motion
+        .channels
+        .iter()
+        .filter(|c| c.path.is_some() && c.target.field == ["path"])
+    {
+        if let Some(shape) = items
+            .get(&c.target.owner)
+            .and_then(|i| morph::of_item(i, None))
+        {
             paths.insert(c.target.owner.clone(), morph::value_of(&shape));
         }
     }
     for b in &program.betweens {
-        let side = |id: &str| items.get(id).map_or_else(Vec::new, |item| parts_of(id, item));
-        let pieces = morph::pieces(&side(&b.from), &side(&b.to), &b.pairs, b.unpaired, b.progress(t));
+        let side = |id: &str| {
+            items
+                .get(id)
+                .map_or_else(Vec::new, |item| parts_of(id, item))
+        };
+        let pieces = morph::pieces(
+            &side(&b.from),
+            &side(&b.to),
+            &b.pairs,
+            b.unpaired,
+            b.progress(t),
+        );
         let pieces: Vec<Value> = pieces
             .iter()
             .map(|p| json!({"from": p.from, "to": p.to, "center": p.centre, "opacity": p.opacity, "path": morph::value_of(&p.shape)}))
             .collect();
-        morphs.insert(b.id.clone(), json!({"progress": b.progress(t), "pieces": pieces}));
+        morphs.insert(
+            b.id.clone(),
+            json!({"progress": b.progress(t), "pieces": pieces}),
+        );
     }
     (paths, morphs)
 }
@@ -281,8 +383,15 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
     match item.get("kind").and_then(Value::as_str) {
         Some("vector@1") => morph::vector_parts(id, item),
         Some("graph@1") => {
-            let n = |k: usize| item.pointer(&format!("/at/pos/{k}")).and_then(Value::as_f64).unwrap_or(0.0);
-            let Some(Ok((_, drawn))) = item.get("params").map(|p| deep_canvas_graph::view::place(p, [n(0), n(1)])) else {
+            let n = |k: usize| {
+                item.pointer(&format!("/at/pos/{k}"))
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+            };
+            let Some(Ok((_, drawn))) = item
+                .get("params")
+                .map(|p| deep_canvas_graph::view::place(p, [n(0), n(1)]))
+            else {
                 return Vec::new();
             };
             drawn
@@ -291,12 +400,21 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
                 .map(|(key, [x, y, w, h])| morph::Part {
                     name: format!("{id}#{key}"),
                     key: key.clone(),
-                    shape: vec![morph::Sub { points: vec![[*x, *y], [x + w, *y], [x + w, y + h], [*x, y + h]], closed: true }],
+                    shape: vec![morph::Sub {
+                        points: vec![[*x, *y], [x + w, *y], [x + w, y + h], [*x, y + h]],
+                        closed: true,
+                    }],
                 })
                 .collect()
         }
         _ => morph::of_item(item, None)
-            .map(|shape| vec![morph::Part { name: id.to_string(), key: id.to_string(), shape: morph::placed(item, &shape) }])
+            .map(|shape| {
+                vec![morph::Part {
+                    name: id.to_string(),
+                    key: id.to_string(),
+                    shape: morph::placed(item, &shape),
+                }]
+            })
             .unwrap_or_default(),
     }
 }
@@ -305,7 +423,19 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
 /// writes its camera's pose), for the 3D frame; `None` when no timeline shot writes it.
 pub(crate) fn posed(doc: &Value, t: i64) -> Option<Value> {
     let shots = doc.get("shots")?.as_object()?;
-    if !shots.values().any(|s| s.get("start").is_some()) {
+    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
+    // an entry on the played form's track chooses from its entry.
+    let staged = doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .is_some_and(|c| {
+            c.values().any(|c| {
+                c.get("stages")
+                    .and_then(Value::as_object)
+                    .is_some_and(|s| s.values().any(|s| s.get("shot").is_some()))
+            })
+        });
+    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
         return None;
     }
     let program = Program::compile(doc.as_object()?).ok()?;
@@ -317,7 +447,9 @@ pub(crate) fn posed(doc: &Value, t: i64) -> Option<Value> {
     let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
     let pose = plan.shown(cam, t, &at(false, &keyed)).pose;
     let mut out = doc.clone();
-    let params = out.pointer_mut(&format!("/items/{id}/params"))?.as_object_mut()?;
+    let params = out
+        .pointer_mut(&format!("/items/{id}/params"))?
+        .as_object_mut()?;
     for k in ["orbit", "view_width", "kick"] {
         params.remove(k);
     }

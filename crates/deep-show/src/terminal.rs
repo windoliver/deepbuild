@@ -270,6 +270,47 @@ pub fn grid_json(t: &Terminal, revision: u64) -> Value {
     })
 }
 
+/// #1967: each document cell grid as its session shows it, by item: its size, each row's text
+/// right-trimmed, its cursor and every cell row-major, each as a live terminal's `cell` answers.
+pub(crate) fn grid_blocks(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &deep_canvas::schedule::Session,
+) -> Map<String, Value> {
+    use deep_canvas_cells::module::Grid;
+    let mut out = Map::new();
+    for (id, v) in session.values(sched, "cells.grid") {
+        let (Some(id), Some(g)) = (id, v.as_typed::<Grid>()) else {
+            continue;
+        };
+        let text: Vec<&str> = g
+            .rows
+            .iter()
+            .map(|r| r.text.trim_end_matches(' '))
+            .collect();
+        let cells: Vec<Value> = g
+            .cells
+            .iter()
+            .map(|c| {
+                let attrs: Vec<&str> = ATTRS
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| c.attrs & (1 << i) != 0)
+                    .map(|(_, n)| *n)
+                    .collect();
+                json!({"g": c.g, "fg": hex(c.fg), "bg": hex(c.bg), "attrs": attrs,
+                       "link": (c.link != 0).then(|| c.link.to_string())})
+            })
+            .collect();
+        let k = &g.cursor;
+        out.insert(
+            id.to_string(),
+            json!({"cols": g.cols, "rows": g.rows.len(), "text": text, "cells": cells,
+                   "cursor": {"x": k.x, "y": k.y, "shape": k.shape, "visible": k.visible, "blink": k.blink}}),
+        );
+    }
+    out
+}
+
 /// One cell as drawn in `colors`: its colors after the status rule when `status` is `Some`.
 pub fn cell_json(cell: &Cell, colors: &Colors, status: Option<(&[[u8; 3]], f64)>) -> Value {
     let mut fg = colors.resolve(cell.fg, colors.fg);
@@ -727,4 +768,16 @@ mod tests {
             (json!("#2c2c2c"), json!("#000000"))
         );
     }
+}
+
+/// #538: a cell grid row's tracking, so each glyph advances one cell whatever the mono face's own
+/// advance at `size`; none where they already match.
+pub(crate) fn cell_spacing(text: &str, cell: f64, size: f64) -> Vec<deep_text::Span> {
+    let advance = deep_text::shape::advance_em(deep_text::Role::Mono.family()).map_or(cell, |em| f64::from(em) * size);
+    let tracking = (cell - advance) as f32;
+    if tracking.abs() < 1e-3 {
+        return Vec::new();
+    }
+    let to = text.chars().count();
+    vec![deep_text::Span { from: 0, to, family: None, weight: None, italic: None, size: None, tracking: Some(tracking), shift: None, underline: false, strike: false }]
 }

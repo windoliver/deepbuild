@@ -8,11 +8,21 @@ use std::collections::BTreeMap;
 
 use deep_canvas_marks::fx::{self, Part, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 const ENTRIES: [&str; 13] = [
-    "cov", "shift", "blur", "dilate", "lin", "outside_moved", "mul", "glow", "distance", "height",
-    "lit", "satin", "paint",
+    "cov",
+    "shift",
+    "blur",
+    "dilate",
+    "lin",
+    "outside_moved",
+    "mul",
+    "glow",
+    "distance",
+    "height",
+    "lit",
+    "satin",
+    "paint",
 ];
 
 /// The pipelines, made once per device.
@@ -45,12 +55,13 @@ struct Plan<'a> {
 impl<'a> Plan<'a> {
     fn buffer(&mut self) -> usize {
         let bytes = u64::from(self.size[0]) * u64::from(self.size[1]) * 4;
-        self.buffers.push(self.device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("paint fx"),
-            size: bytes.max(4),
-            usage: wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        }));
+        self.buffers
+            .push(self.device.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("paint fx"),
+                size: bytes.max(4),
+                usage: wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            }));
         self.buffers.len() - 1
     }
 
@@ -80,12 +91,30 @@ impl<'a> Plan<'a> {
             label: Some("paint fx"),
             layout: &self.fx.layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: input(ins[0]).as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: input(ins[1]).as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: input(ins[2]).as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 4, resource: self.buffers[out].as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 5, resource: self.rgba.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: input(ins[0]).as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: input(ins[1]).as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: input(ins[2]).as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.buffers[out].as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.rgba.as_entire_binding(),
+                },
                 wgpu::BindGroupEntry {
                     binding: 6,
                     resource: wgpu::BindingResource::TextureView(self.coverage),
@@ -110,19 +139,48 @@ impl<'a> Plan<'a> {
         if radius <= 0.0 {
             return a;
         }
-        let x = self.one("blur", a, Step { f: [radius, 0.0, 0.0, 0.0], k: [1, 0, 0, 0], ..Step::default() });
-        self.one("blur", x, Step { f: [radius, 0.0, 0.0, 0.0], ..Step::default() })
+        let x = self.one(
+            "blur",
+            a,
+            Step {
+                f: [radius, 0.0, 0.0, 0.0],
+                k: [1, 0, 0, 0],
+                ..Step::default()
+            },
+        );
+        self.one(
+            "blur",
+            x,
+            Step {
+                f: [radius, 0.0, 0.0, 0.0],
+                ..Step::default()
+            },
+        )
     }
 
     fn dilate(&mut self, a: usize, r: f32) -> usize {
         if r <= 0.0 {
             return a;
         }
-        self.one("dilate", a, Step { f: [r, 0.0, 0.0, 0.0], ..Step::default() })
+        self.one(
+            "dilate",
+            a,
+            Step {
+                f: [r, 0.0, 0.0, 0.0],
+                ..Step::default()
+            },
+        )
     }
 
     fn shift(&mut self, a: usize, d: [f32; 2]) -> usize {
-        self.one("shift", a, Step { f: [d[0], d[1], 0.0, 0.0], ..Step::default() })
+        self.one(
+            "shift",
+            a,
+            Step {
+                f: [d[0], d[1], 0.0, 0.0],
+                ..Step::default()
+            },
+        )
     }
 }
 
@@ -238,22 +296,66 @@ impl PaintFx {
             Part::Drop(d) => {
                 let m = p.shift(a, [d.offset[0] as f32 * scale, d.offset[1] as f32 * scale]);
                 let b = p.blur(m, d.blur as f32 * scale);
-                p.one("lin", b, Step { f: [d.opacity as f32, 0.0, 0.0, 0.0], ..Step::default() })
+                p.one(
+                    "lin",
+                    b,
+                    Step {
+                        f: [d.opacity as f32, 0.0, 0.0, 0.0],
+                        ..Step::default()
+                    },
+                )
+            }
+            Part::Halo(h) => {
+                let grown = p.dilate(a, h.width as f32 * scale);
+                let m = p.shift(
+                    grown,
+                    [h.offset[0] as f32 * scale, h.offset[1] as f32 * scale],
+                );
+                let b = p.blur(m, h.blur as f32 * scale);
+                p.one(
+                    "lin",
+                    b,
+                    Step {
+                        f: [h.opacity as f32, 0.0, 0.0, 0.0],
+                        ..Step::default()
+                    },
+                )
             }
             Part::Inner(s) => {
                 let l = fx::toward(s.light);
                 let off = s.offset as f32 * scale;
-                let m = p.one("outside_moved", a, Step { f: [l[0] * off, l[1] * off, 0.0, 0.0], ..Step::default() });
+                let m = p.one(
+                    "outside_moved",
+                    a,
+                    Step {
+                        f: [l[0] * off, l[1] * off, 0.0, 0.0],
+                        ..Step::default()
+                    },
+                );
                 let radius = s.blur as f32 * scale;
                 let grown = p.dilate(m, radius * s.choke as f32);
                 let soft = p.blur(grown, radius * (1.0 - s.choke as f32));
-                p.run("mul", [Some(soft), Some(a), None], Step { f: [s.opacity as f32, 0.0, 0.0, 0.0], ..Step::default() })
+                p.run(
+                    "mul",
+                    [Some(soft), Some(a), None],
+                    Step {
+                        f: [s.opacity as f32, 0.0, 0.0, 0.0],
+                        ..Step::default()
+                    },
+                )
             }
             Part::Glow(g) => {
                 let size = g.size as f32 * scale;
                 let spread = g.spread as f32;
                 let source = if g.inner {
-                    p.one("lin", a, Step { f: [-1.0, 1.0, 0.0, 0.0], ..Step::default() })
+                    p.one(
+                        "lin",
+                        a,
+                        Step {
+                            f: [-1.0, 1.0, 0.0, 0.0],
+                            ..Step::default()
+                        },
+                    )
                 } else {
                     a
                 };
@@ -264,7 +366,15 @@ impl PaintFx {
                     (true, false) => 1,
                     (true, true) => 2,
                 };
-                p.run("glow", [Some(soft), Some(a), None], Step { f: [g.opacity as f32, 0.0, 0.0, 0.0], k: [kind, 0, 0, 0], ..Step::default() })
+                p.run(
+                    "glow",
+                    [Some(soft), Some(a), None],
+                    Step {
+                        f: [g.opacity as f32, 0.0, 0.0, 0.0],
+                        k: [kind, 0, 0, 0],
+                        ..Step::default()
+                    },
+                )
             }
             Part::Satin(s) => {
                 let l = fx::toward(s.angle);
@@ -273,7 +383,15 @@ impl PaintFx {
                 let one = p.blur(one, s.size as f32 * scale);
                 let two = p.shift(a, [-l[0] * off, -l[1] * off]);
                 let two = p.blur(two, s.size as f32 * scale);
-                p.run("satin", [Some(one), Some(two), Some(a)], Step { f: [s.opacity as f32, 0.0, 0.0, 0.0], k: [u32::from(s.invert), 0, 0, 0], ..Step::default() })
+                p.run(
+                    "satin",
+                    [Some(one), Some(two), Some(a)],
+                    Step {
+                        f: [s.opacity as f32, 0.0, 0.0, 0.0],
+                        k: [u32::from(s.invert), 0, 0, 0],
+                        ..Step::default()
+                    },
+                )
             }
             Part::Bevel(b, high) => {
                 let size = (b.size as f32 * scale).max(0.5);
@@ -283,23 +401,53 @@ impl PaintFx {
                     Shape::Emboss => 2,
                     Shape::Pillow => 3,
                 };
-                let d = p.one("distance", a, Step { f: [size, 0.0, 0.0, 0.0], ..Step::default() });
-                let hgt = p.one("height", d, Step { f: [size, 0.0, 0.0, 0.0], k: [shape, u32::from(b.chisel), 0, 0], ..Step::default() });
+                let d = p.one(
+                    "distance",
+                    a,
+                    Step {
+                        f: [size, 0.0, 0.0, 0.0],
+                        ..Step::default()
+                    },
+                );
+                let hgt = p.one(
+                    "height",
+                    d,
+                    Step {
+                        f: [size, 0.0, 0.0, 0.0],
+                        k: [shape, u32::from(b.chisel), 0, 0],
+                        ..Step::default()
+                    },
+                );
                 let hgt = p.blur(hgt, b.soften as f32 * scale);
                 let angle = if opposite { b.angle + 180.0 } else { b.angle };
                 let l = fx::toward(angle);
                 let alt = deep_canvas::ops::rad(b.altitude);
-                let (lc, lz) = (deep_canvas::ops::cos(alt) as f32, deep_canvas::ops::sin(alt) as f32);
+                let (lc, lz) = (
+                    deep_canvas::ops::cos(alt) as f32,
+                    deep_canvas::ops::sin(alt) as f32,
+                );
                 let k = 2.0 * b.depth as f32 * size;
                 let opacity = if *high { b.highlight.1 } else { b.shadow.1 } as f32;
-                p.run("lit", [Some(hgt), Some(a), None], Step {
-                    f: [l[0] * lc, l[1] * lc, lz, k],
-                    g: [opacity, 0.0, 0.0, 0.0],
-                    k: [shape, 0, u32::from(*high), 0],
-                })
+                p.run(
+                    "lit",
+                    [Some(hgt), Some(a), None],
+                    Step {
+                        f: [l[0] * lc, l[1] * lc, lz, k],
+                        g: [opacity, 0.0, 0.0, 0.0],
+                        k: [shape, 0, u32::from(*high), 0],
+                    },
+                )
             }
         };
-        p.one("paint", alpha, Step { f: [color[0], color[1], color[2], 0.0], k: [0, 0, 0, stride], ..Step::default() });
+        p.one(
+            "paint",
+            alpha,
+            Step {
+                f: [color[0], color[1], color[2], 0.0],
+                k: [0, 0, 0, stride],
+                ..Step::default()
+            },
+        );
         let mut encoder = p.encoder;
         encoder.copy_buffer_to_texture(
             wgpu::TexelCopyBufferInfo {
@@ -311,7 +459,11 @@ impl PaintFx {
                 },
             },
             into.as_image_copy_at(x0, y0),
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
         );
         device.queue.submit([encoder.finish()]);
     }

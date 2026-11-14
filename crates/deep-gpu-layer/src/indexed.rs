@@ -13,7 +13,6 @@ use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::print::Indexed;
 use deep_canvas_marks::scene::{Drawn, Fill, Mark, Rgb, Scope};
 use serde_json::{Map, Value};
-use wgpu::util::DeviceExt;
 
 /// The operator's name, as the reply names it.
 pub const OPERATOR: &str = "look.indexed@1";
@@ -486,7 +485,7 @@ fn uniform(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayou
 }
 
 impl Indexer {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &deep_gpu::counted::Wgpu) -> Self {
         let cs = wgpu::ShaderStages::COMPUTE;
         let index_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(OPERATOR),
@@ -546,7 +545,11 @@ impl Indexer {
         }
     }
 
-    fn up(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat) -> wgpu::RenderPipeline {
+    fn up(
+        &mut self,
+        device: &deep_gpu::counted::Wgpu,
+        format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
         if let Some((f, p)) = &self.up {
             if *f == format {
                 return p.clone();
@@ -581,7 +584,7 @@ impl Indexer {
     /// reading back goes to `tap`.
     pub fn record(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         f: &IndexFrame,
         target: &wgpu::TextureView,
@@ -705,7 +708,7 @@ impl Indexer {
 
 /// The index target read back as u16 little-endian, rows top-down.
 pub(crate) fn read_indices(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     buffer: &wgpu::Buffer,
     size: [u32; 2],
 ) -> Result<Vec<u8>, String> {

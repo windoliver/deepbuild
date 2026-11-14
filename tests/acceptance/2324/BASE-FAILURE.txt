@@ -1,0 +1,167 @@
+# #2324 acceptance suite at the base, e63447beafd51cc8bdd757865e0a7f2a7935b508 (this worktree, clean, with
+# tests/acceptance/2324 added and fixtures/base-*.json recorded on it by record.spec.ts), one run:
+#   NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run tests/acceptance/2324 --no-file-parallelism --testTimeout=600000
+# with cargo of rust-toolchain.toml's channel (1.99.1) first on PATH, Docker 29 (linux/amd64 rust:1.99.1-slim-bookworm
+# present, its runners built warm under target/acceptance-2324-linux) and headless Chrome on this Mac.
+#
+# Result: 7 tests, 4 fail and 3 pass. Nothing is BLOCKED. The reporter lists only the files with a failure; the
+# passing three are those it doesn't name (7 tests, 4 named failures).
+#
+# Fail, each for the expected reason:
+#   AC1 the lock: Cargo.lock holds wasmtime 49.0.2, inside all 17 advisories (each named with its first fix).
+#   AC3 #531's fixtures: every step hash, full-state hash and trap equals the old engine's on macOS arm64 and on
+#       Linux x86_64 (those assertions come first and pass), then it fails at the title's clause: every fixture's
+#       bake key is the merge base's, since the engine hasn't moved.
+#   AC4 the planted engine build: deep-show has no feature plant-engine-differs (an unknown plant).
+#   AC5 the pins: Cargo.lock still holds 49.0.2 (the table, pins and rows name it, as they should against it), and
+#       sandbox.alt pins =49.0.1, inside all 17; each fixture's fuel per step equals the base's recording and
+#       repo-rules prints no failing line about the engine (it exits 1 on 25 lines of main's own).
+# Pass, as expected on the old engine itself (they prove something on the work):
+#   AC1's planted lock at 49.0.4 (it judges a fixture text: it names exactly the three Oct 29 advisories, and the
+#       check reads 49.0.2 inside all 17).
+#   AC2 the kit: deep-sandbox and the app on macOS arm64, Linux x86_64 and headless Chrome give #238's recorded
+#       cases and fuel counts (so the three hosts agree with the recording made on this Mac).
+#   AC4 the digest and the save: the kit is the recording, the runtime digest is the base's, and the golden recorded
+#       on the base replays to the same step and full-state hashes.
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/shimmying-wandering-koala/agent-aa67a9f83a2fd5700
+
+stdout | tests/acceptance/2324/ac5-pins.test.ts > #2324.ceee5c0f the metering table and sandbox@1's pins name the new engine, its fuel per step is the old one's, and repo-rules passes > #2324.ceee5c0f the metering table, sandbox@1's pins and the three repo-rules rows name the engine Cargo.lock holds, each #531 fixture is charged the fuel per step it was on the old engine, and repo-rules passes
+scripts/repo-rules.mjs exited 1; its other lines that don't pass: 25
+
+ ❯ tests/acceptance/2324/ac5-pins.test.ts (1 test | 1 failed) 23085ms
+   ❯ #2324.ceee5c0f the metering table and sandbox@1's pins name the new engine, its fuel per step is the old one's, and repo-rules passes (1)
+     × #2324.ceee5c0f the metering table, sandbox@1's pins and the three repo-rules rows name the engine Cargo.lock holds, each #531 fixture is charged the fuel per step it was on the old engine, and repo-rules passes 9441ms
+ ❯ tests/acceptance/2324/ac4-seal.test.ts (2 tests | 1 failed) 3501ms
+   ❯ #2324.adfd1cb3 the runtime digest stays the merge base's while the kit gives #238's hashes, and a save from the old engine plays on (2)
+     × #2324.adfd1cb3 a planted engine build whose kit differs from #238's on pass.subset moves the runtime digest and fails this check, naming the fixture 73ms
+stdout | tests/acceptance/2324/ac1-lock.test.ts > #2324.e835c82a Cargo.lock holds the engine once, at a release past every advisory published against 49.0.2 > #2324.e835c82a Cargo.lock holds wasmtime once, at an exact release outside each of the 17 advisories and at or past each one's first fixed version
+GHSA-3r89-v5mq-j5xf 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-54p9-vhhq-8f7q 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-5hhx-4wrr-3j9g 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-63h4-6cx9-pjfj 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-7v24-42x9-pxf7 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-93g3-36p8-x2gc 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-hmwq-g22x-qjw5 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-m6w2-jwq2-cv2c 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-p79w-pv2r-29qp 2026-10-14 low      first fixed 49.0.3  lock 49.0.2
+GHSA-q554-3cjc-rx7p 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-vcg5-q8m5-8379 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-wjc8-633q-pwxr 2026-10-14 medium   first fixed 49.0.3  lock 49.0.2
+GHSA-9pvw-hwfg-92h5 2026-10-19 medium   first fixed 49.0.4  lock 49.0.2
+GHSA-mghf-wjfp-p5xm 2026-10-19 critical first fixed 49.0.4  lock 49.0.2
+GHSA-3982-jqvv-277m 2026-10-29 low      first fixed 49.0.5  lock 49.0.2
+GHSA-6fr9-xmw9-5352 2026-10-29 medium   first fixed 49.0.5  lock 49.0.2
+GHSA-qw58-7h65-crq2 2026-10-29 low      first fixed 49.0.5  lock 49.0.2
+
+ ❯ tests/acceptance/2324/ac1-lock.test.ts (2 tests | 1 failed) 349ms
+   ❯ #2324.e835c82a Cargo.lock holds the engine once, at a release past every advisory published against 49.0.2 (2)
+     × #2324.e835c82a Cargo.lock holds wasmtime once, at an exact release outside each of the 17 advisories and at or past each one's first fixed version 8ms
+ ❯ tests/acceptance/2324/ac3-fixtures.test.ts (1 test | 1 failed) 62935ms
+   ❯ #2324.c7dad014 every fixture of #531 reaches the full-state hashes it reached on the old engine (1)
+     × #2324.c7dad014 each of #531's fixtures reaches the old engine's step hashes, full-state hashes and traps on macOS arm64 and on Linux x86_64, under a bake key that isn't the old engine's 61047ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2324/ac1-lock.test.ts > #2324.e835c82a Cargo.lock holds the engine once, at a release past every advisory published against 49.0.2 > #2324.e835c82a Cargo.lock holds wasmtime once, at an exact release outside each of the 17 advisories and at or past each one's first fixed version
+AssertionError: Cargo.lock's engine is past every advisory published against 49.0.2:
+  wasmtime 49.0.2 is still inside GHSA-3r89-v5mq-j5xf (2026-10-14, medium: "Host panic when component `call_async` is cancelled under some conditions"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-54p9-vhhq-8f7q (2026-10-14, medium: "Overlapping string transcode in a fused adapter can panic"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-5hhx-4wrr-3j9g (2026-10-14, medium: "Yielding in a component start function can lead to a host panic"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-63h4-6cx9-pjfj (2026-10-14, medium: "Panic viewing component model stream or future as the wrong type"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-7v24-42x9-pxf7 (2026-10-14, medium: "Panic on erroneous call-to-host from guest realloc call"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-93g3-36p8-x2gc (2026-10-14, medium: "Out-of-bounds zero-length stream writes can panic "), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-hmwq-g22x-qjw5 (2026-10-14, medium: "Panic when pending calls are run after a trap"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-m6w2-jwq2-cv2c (2026-10-14, medium: "Panic when invoking an async-lifted function via `call`"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-p79w-pv2r-29qp (2026-10-14, low: "Exception tags can cause host data structures to be unaligned"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-q554-3cjc-rx7p (2026-10-14, medium: "Component-model handle tables are capped only per instance and charged to no limit"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-vcg5-q8m5-8379 (2026-10-14, medium: "Wasmtime may not properly enforce async-entrypoint requirement "), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-wjc8-633q-pwxr (2026-10-14, medium: "Stack overflow dropping a long chain of recursive types"), first fixed in 49.0.3
+  wasmtime 49.0.2 is still inside GHSA-9pvw-hwfg-92h5 (2026-10-19, medium: "Panic lowering a host-created component model stream into a guest that expects a different payload type"), first fixed in 49.0.4
+  wasmtime 49.0.2 is still inside GHSA-mghf-wjfp-p5xm (2026-10-19, critical: "Cranelift backend on aarch64 can jump to incorrect target on large Wasm `br_table` instruction"), first fixed in 49.0.4
+  wasmtime 49.0.2 is still inside GHSA-3982-jqvv-277m (2026-10-29, low: "Typed functions with `i31` or `nullref` arguments may panic due to insufficient type-check"), first fixed in 49.0.5
+  wasmtime 49.0.2 is still inside GHSA-6fr9-xmw9-5352 (2026-10-29, medium: "Unchecked memory usage in transferring borrowed resources between components"), first fixed in 49.0.5
+  wasmtime 49.0.2 is still inside GHSA-qw58-7h65-crq2 (2026-10-29, low: "Cross-engine type confusion with host-created struct-types-with-supertypes"), first fixed in 49.0.5: expected [ …(17) ] to deeply equal []
+
+  (the expected/received diff, which repeats the message above, is left out)
+ ❯ none tests/acceptance/2324/helpers.ts:31:73
+     29| /** No failures; the message lists them. */
+     30| export function none(failures: readonly string[], what: string): void {
+     31|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     32| }
+     33|
+ ❯ tests/acceptance/2324/ac1-lock.test.ts:20:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2324/ac3-fixtures.test.ts > #2324.c7dad014 every fixture of #531 reaches the full-state hashes it reached on the old engine > #2324.c7dad014 each of #531's fixtures reaches the old engine's step hashes, full-state hashes and traps on macOS arm64 and on Linux x86_64, under a bake key that isn't the old engine's
+AssertionError: a bake made on the old engine is never reused: no fixture's bake key is the one the merge base gave it (issue title): expected [ 'spin', 'tally', 'recurse', …(11) ] to deeply equal []
+
+  (the expected/received diff, which repeats the message above, is left out)
+ ❯ tests/acceptance/2324/ac3-fixtures.test.ts:23:141
+     21|
+     22|     const reused = Object.entries(BASE_BAKE().items).filter(([id, r]) …
+     23|     expect(reused, 'a bake made on the old engine is never reused: no …
+       |                                                                                                                                             ^
+     24|   }, TIMEOUT);
+     25| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2324/ac4-seal.test.ts > #2324.adfd1cb3 the runtime digest stays the merge base's while the kit gives #238's hashes, and a save from the old engine plays on > #2324.adfd1cb3 a planted engine build whose kit differs from #238's on pass.subset moves the runtime digest and fails this check, naming the fixture
+AssertionError: deep-show builds with --features full,plant-engine-differs: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+  (the expected/received diff, which repeats the message above, is left out)
+ ❯ Module.deepShow tests/acceptance/238/helpers.ts:462:80
+    460|     deepShows.set(name, made);
+    461|   }
+    462|   expect(made.error, `deep-show builds with --features ${features.join…
+       |                                                                                ^
+    463|   return made.bin;
+    464| }
+ ❯ deepShow tests/acceptance/2324/helpers.ts:253:59
+ ❯ tests/acceptance/2324/ac4-seal.test.ts:37:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2324/ac5-pins.test.ts > #2324.ceee5c0f the metering table and sandbox@1's pins name the new engine, its fuel per step is the old one's, and repo-rules passes > #2324.ceee5c0f the metering table, sandbox@1's pins and the three repo-rules rows name the engine Cargo.lock holds, each #531 fixture is charged the fuel per step it was on the old engine, and repo-rules passes
+AssertionError: the metering table, the pins and the rows name wasmtime 49.0.2, fuel per step is unchanged, and repo-rules passes for the engine:
+  Cargo.lock still holds wasmtime 49.0.2, so the table, the pins and the rows below are read against the old engine
+  sandbox.alt pins =49.0.1, still inside GHSA-3r89-v5mq-j5xf (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-54p9-vhhq-8f7q (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-5hhx-4wrr-3j9g (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-63h4-6cx9-pjfj (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-7v24-42x9-pxf7 (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-93g3-36p8-x2gc (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-hmwq-g22x-qjw5 (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-m6w2-jwq2-cv2c (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-p79w-pv2r-29qp (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-q554-3cjc-rx7p (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-vcg5-q8m5-8379 (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-wjc8-633q-pwxr (first fixed in 49.0.3)
+  sandbox.alt pins =49.0.1, still inside GHSA-9pvw-hwfg-92h5 (first fixed in 49.0.4)
+  sandbox.alt pins =49.0.1, still inside GHSA-mghf-wjfp-p5xm (first fixed in 49.0.4)
+  sandbox.alt pins =49.0.1, still inside GHSA-3982-jqvv-277m (first fixed in 49.0.5)
+  sandbox.alt pins =49.0.1, still inside GHSA-6fr9-xmw9-5352 (first fixed in 49.0.5)
+  sandbox.alt pins =49.0.1, still inside GHSA-qw58-7h65-crq2 (first fixed in 49.0.5): expected [ …(18) ] to deeply equal []
+
+  (the expected/received diff, which repeats the message above, is left out)
+ ❯ none tests/acceptance/2324/helpers.ts:31:73
+     29| /** No failures; the message lists them. */
+     30| export function none(failures: readonly string[], what: string): void {
+     31|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     32| }
+     33|
+ ❯ tests/acceptance/2324/ac5-pins.test.ts:67:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  4 failed | 3 passed (7)
+   Start at  17:01:17
+   Duration  145.46s (tests 100%)
+

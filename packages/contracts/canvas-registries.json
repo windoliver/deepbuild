@@ -372,6 +372,8 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#200",
+    "preview_since": "R2",
+    "decide_by": "R5",
     "entry": {
       "type": "object",
       "properties": {
@@ -383,6 +385,14 @@
           "type": "string",
           "minLength": 1
         },
+        "pack": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recipe": {
+          "type": "string",
+          "minLength": 1
+        },
         "minor": {
           "type": "integer",
           "minimum": 0
@@ -390,8 +400,20 @@
       },
       "required": [
         "name",
-        "module",
         "minor"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "module"
+          ]
+        },
+        {
+          "required": [
+            "pack",
+            "recipe"
+          ]
+        }
       ],
       "additionalProperties": false
     }

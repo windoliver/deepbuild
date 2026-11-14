@@ -10,10 +10,15 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::light::{Maps, Texels, Wrap};
+use deep_canvas_scene3d::terrain::Normals;
 
 /// The maps in the order the shader numbers them: base color, metallic-roughness, normal,
 /// occlusion, emission.
 pub const SLOTS: usize = 5;
+
+/// A terrain tile's plate's full-detail normals (#2017), bound after any input a material
+/// operator adds.
+pub const TERRAIN_NORMALS: u32 = 40;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -72,10 +77,20 @@ pub fn layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
             count: None,
         });
     }
+    entries.push(wgpu::BindGroupLayoutEntry {
+        binding: TERRAIN_NORMALS,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    });
     entries
 }
 
-pub fn layout(d: &wgpu::Device) -> wgpu::BindGroupLayout {
+pub fn layout(d: &deep_gpu::counted::Wgpu) -> wgpu::BindGroupLayout {
     d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene3d maps"),
         entries: &layout_entries(),
@@ -100,7 +115,7 @@ pub struct Store {
     next: u32,
 }
 
-fn sampler(d: &wgpu::Device, wrap: [Wrap; 2], taps: u8) -> wgpu::Sampler {
+fn sampler(d: &deep_gpu::counted::Wgpu, wrap: [Wrap; 2], taps: u8) -> wgpu::Sampler {
     let mode = |w: Wrap| match w {
         Wrap::Repeat => wgpu::AddressMode::Repeat,
         Wrap::Clamp => wgpu::AddressMode::ClampToEdge,
@@ -120,7 +135,7 @@ fn sampler(d: &wgpu::Device, wrap: [Wrap; 2], taps: u8) -> wgpu::Sampler {
 }
 
 impl Store {
-    pub fn new(d: &wgpu::Device, queue: &wgpu::Queue) -> Store {
+    pub fn new(d: &deep_gpu::counted::Wgpu, queue: &deep_gpu::counted::Queue) -> Store {
         let layout = layout(d);
         let white = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("scene3d map stand-in"),
@@ -163,10 +178,17 @@ impl Store {
         store
     }
 
-    /// The maps' index in draw keys (0 when none of their texels is here, so the solid draws
-    /// without them), made the first time a frame draws them; `taps` is the look's (or the
-    /// planted one's) default.
-    pub fn group(&mut self, d: &wgpu::Device, queue: &wgpu::Queue, maps: &Maps, taps: u8) -> u32 {
+    /// The maps' index in draw keys (0 when none of their texels is here and no terrain's
+    /// normals, so the solid draws without them), made the first time a frame draws them;
+    /// `taps` is the look's (or the planted one's) default.
+    pub fn group(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
+        maps: &Maps,
+        taps: u8,
+        terrain: Option<&Normals>,
+    ) -> u32 {
         let present: String = maps
             .slots()
             .iter()
@@ -175,12 +197,14 @@ impl Store {
                 _ => '0',
             })
             .collect();
-        if !present.contains('1') {
+        if !present.contains('1') && terrain.is_none() {
             return 0;
         }
-        let key = format!("{}|{present}|{taps}", maps.key);
+        let normals = terrain.map_or(String::new(), |n| format!("|{:016x}", n.key));
+        let key = format!("{}|{present}|{taps}{normals}", maps.key);
         if !self.groups.contains_key(&key) {
-            let g = self.bind(d, queue, maps, taps);
+            let layout = self.layout.clone();
+            let g = self.bind_with(d, queue, maps, taps, terrain, &layout, Vec::new());
             let n = self.next;
             self.next += 1;
             self.groups.insert(key.clone(), (n, g));
@@ -196,7 +220,12 @@ impl Store {
             .map_or(&self.none, |(_, g)| g)
     }
 
-    fn texture(&mut self, d: &wgpu::Device, queue: &wgpu::Queue, sha: &str) -> Option<String> {
+    fn texture(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
+        sha: &str,
+    ) -> Option<String> {
         let t = self.texels.get(sha)?.clone();
         // Kept by the source's hash and its format.
         let key = format!("{sha}:{}", t.format);
@@ -263,8 +292,8 @@ impl Store {
     /// input).
     pub fn view_of(
         &mut self,
-        d: &wgpu::Device,
-        queue: &wgpu::Queue,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
         sha: &str,
     ) -> wgpu::TextureView {
         match self.texture(d, queue, sha) {
@@ -273,29 +302,67 @@ impl Store {
         }
     }
 
+    /// A terrain's full-detail normals as an Rg32Float texture of a texel per sample (#2017),
+    /// uploaded once by its key.
+    fn normals(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
+        n: &Normals,
+    ) -> String {
+        let key = format!("terrain:{:016x}", n.key);
+        if !self.textures.contains_key(&key) {
+            let texture = d.create_texture(&wgpu::TextureDescriptor {
+                label: Some("scene3d terrain normals"),
+                size: wgpu::Extent3d {
+                    width: n.cols,
+                    height: n.rows,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rg32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let bytes: &[u8] = bytemuck::cast_slice(&n.xz);
+            crate::write_texture(queue, &texture, 0, bytes, 8 * n.cols, [n.cols, n.rows]);
+            self.uploads += 1;
+            self.bytes += bytes.len() as u64;
+            let view = texture.create_view(&Default::default());
+            self.textures.insert(key.clone(), (texture, view));
+        }
+        key
+    }
+
     fn bind(
         &mut self,
-        d: &wgpu::Device,
-        queue: &wgpu::Queue,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
         maps: &Maps,
         taps: u8,
     ) -> wgpu::BindGroup {
         let layout = self.layout.clone();
-        self.bind_with(d, queue, maps, taps, &layout, Vec::new())
+        self.bind_with(d, queue, maps, taps, None, &layout, Vec::new())
     }
 
-    /// `maps`' bind group in `layout`, with `extra` bound after the maps' own: a material
-    /// operator's inputs (#429).
+    /// `maps`' bind group in `layout`, with a terrain tile's plate's normals (#2017) and `extra`
+    /// bound after the maps' own: a material operator's inputs (#429).
+    #[allow(clippy::too_many_arguments)]
     pub fn bind_with(
         &mut self,
-        d: &wgpu::Device,
-        queue: &wgpu::Queue,
+        d: &deep_gpu::counted::Wgpu,
+        queue: &deep_gpu::counted::Queue,
         maps: &Maps,
         taps: u8,
+        terrain: Option<&Normals>,
         layout: &wgpu::BindGroupLayout,
         extra: Vec<wgpu::BindGroupEntry<'_>>,
     ) -> wgpu::BindGroup {
+        let normals = terrain.map(|n| self.normals(d, queue, n));
         let mut u = MapsUniform::zeroed();
+        u.has[3] = u32::from(normals.is_some());
         let slots = maps.slots().map(|(_, s)| s);
         let mut keys: [Option<String>; SLOTS] = Default::default();
         let mut wraps = [([Wrap::Repeat; 2], 1u8); SLOTS];
@@ -331,14 +398,11 @@ impl Store {
             maps.alpha_cutoff as f32,
             0.0,
         ];
-        let buffer = wgpu::util::DeviceExt::create_buffer_init(
-            d,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d maps"),
-                contents: bytemuck::bytes_of(&u),
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        );
+        let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d maps"),
+            contents: bytemuck::bytes_of(&u),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
         for w in wraps {
             self.samplers
                 .entry(w)
@@ -364,6 +428,14 @@ impl Store {
                 resource: wgpu::BindingResource::Sampler(&self.samplers[w]),
             });
         }
+        entries.push(wgpu::BindGroupEntry {
+            binding: TERRAIN_NORMALS,
+            resource: wgpu::BindingResource::TextureView(
+                normals
+                    .as_ref()
+                    .map_or(&self.white, |k| &self.textures[k].1),
+            ),
+        });
         entries.extend(extra);
         d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scene3d maps"),

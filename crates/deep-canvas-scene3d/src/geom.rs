@@ -57,6 +57,11 @@ pub struct Mesh {
     /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line
     /// draws them, each edge by its two ends.
     pub cage: Option<Vec<[V3; 2]>>,
+    /// Its GPU sway (#2016): the params and weights the vertex move reads at each frame.
+    pub sway: Option<crate::stack::Sway>,
+    /// A terrain tile's plate's full-detail normals, which its pixels read at every level
+    /// (#2017; uv1 is the place on the plate's grid), or none.
+    pub terrain: Option<std::sync::Arc<crate::terrain::Normals>>,
 }
 
 /// What a mesh-edge line draws.
@@ -66,7 +71,10 @@ pub enum EdgeKind {
     Quads,
     Cage,
     /// The edges sharper than `angle` degrees, and with `border` those of one face (#1640).
-    Crease { angle: f64, border: bool },
+    Crease {
+        angle: f64,
+        border: bool,
+    },
 }
 
 impl EdgeKind {
@@ -128,6 +136,7 @@ impl Canonical for Mesh {
         let faces: Vec<(&String, &Vec<f64>)> = self.face_attributes.iter().collect();
         faces.encode(out);
         self.cage.encode(out);
+        self.sway.encode(out);
     }
 }
 
@@ -416,6 +425,13 @@ impl Mesh {
         b
     }
 
+    /// Its bounds with room for its sway (#2016): a swaying vertex moves up to `amount` m.
+    pub fn reach(&self) -> [V3; 2] {
+        let [lo, hi] = self.bounds();
+        let a = self.sway.as_ref().map_or(0.0, |s| s.amount.abs());
+        [lo.map(|x| x - a), hi.map(|x| x + a)]
+    }
+
     /// The mesh's edges as a mesh-edge line draws them (Marks in 3D: mesh edges), each by its
     /// two ends: on positions welded to 1e-6 m, so an edge split for its normals draws once;
     /// `all` draws every triangle edge, `quads` leaves out an edge both of whose triangles are one
@@ -458,7 +474,8 @@ impl Mesh {
             .iter()
             .map(|p| {
                 let next = ids.len() as u32;
-                *ids.entry(p.map(|x| (x / 1e-6).round() as i64)).or_insert(next)
+                *ids.entry(p.map(|x| (x / 1e-6).round() as i64))
+                    .or_insert(next)
             })
             .collect()
     }
@@ -542,7 +559,10 @@ impl Mesh {
         let key = h.finish().0;
         let made = MADE.get_or_init(Default::default);
         let cached = planted != Some("edges_derive_every_frame");
-        if let Some(set) = cached.then(|| made.lock().ok()?.get(&key).cloned()).flatten() {
+        if let Some(set) = cached
+            .then(|| made.lock().ok()?.get(&key).cloned())
+            .flatten()
+        {
             return (set, false);
         }
         let set = Arc::new(self.creases(angle, border, below));
@@ -592,17 +612,13 @@ impl Mesh {
 }
 
 impl Mesh {
-    /// Each vertex's welded point (positions equal to 1e-6 m are one), numbered from 0.
+    /// Each vertex's welded point (positions equal to 1e-6 m are one), numbered from 0 in order
+    /// of first appearance.
     pub fn welded(&self) -> Vec<u32> {
-        let mut ids: BTreeMap<[i64; 3], u32> = BTreeMap::new();
-        self.positions
-            .iter()
-            .map(|p| {
-                let key = p.map(|x| (x / 1e-6).round() as i64);
-                let next = ids.len() as u32;
-                *ids.entry(key).or_insert(next)
-            })
-            .collect()
+        let key = |i: usize| self.positions[i].map(|x| (x / 1e-6).round() as i64);
+        first_seen(self.positions.len(), key, |k| {
+            spread(spread(spread(k[0] as u64) ^ k[1] as u64) ^ k[2] as u64)
+        })
     }
 
     /// The closed parts recomputed from the triangles: each connected piece (on welded points)
@@ -653,6 +669,49 @@ impl Mesh {
     }
 }
 
+/// Each of `n` keys' number among the distinct keys, in order of first appearance, found through
+/// an open-addressed table of first places (`hash` spreads a key over 64 bits; the numbers never
+/// depend on it). A key equal to the one before takes its number.
+pub(crate) fn first_seen<K: PartialEq>(
+    n: usize,
+    key: impl Fn(usize) -> K,
+    hash: impl Fn(&K) -> u64,
+) -> Vec<u32> {
+    let mask = (2 * n).next_power_of_two().max(2) - 1;
+    let mut table = vec![u32::MAX; mask + 1];
+    let mut ids: Vec<u32> = Vec::with_capacity(n);
+    let (mut count, mut last) = (0, None);
+    for i in 0..n {
+        let k = key(i);
+        if last.as_ref() == Some(&k) {
+            ids.push(ids[i - 1]);
+            continue;
+        }
+        let mut h = hash(&k) as usize & mask;
+        let id = loop {
+            match table[h] {
+                u32::MAX => {
+                    table[h] = i as u32;
+                    count += 1;
+                    break count - 1;
+                }
+                j if key(j as usize) == k => break ids[j as usize],
+                _ => h = (h + 1) & mask,
+            }
+        };
+        ids.push(id);
+        last = Some(k);
+    }
+    ids
+}
+
+/// `x`'s bits mixed so each depends on all of them (SplitMix64's finalizer).
+pub(crate) fn spread(x: u64) -> u64 {
+    let x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    let x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
 /// A polygon's normal by Newell's method.
 pub fn newell(points: &[V3]) -> V3 {
     let mut n = [0.0; 3];
@@ -699,6 +758,17 @@ fn between(p: V2, a: V2, c: V2) -> bool {
 
 fn inside(p: V2, a: V2, b: V2, c: V2) -> bool {
     cross2(a, b, p) > 1e-12 && cross2(b, c, p) > 1e-12 && cross2(c, a, p) > 1e-12
+}
+
+/// Whether the direction from corner `b` to `m` lies inside the polygon's angle at `b`, which
+/// turns counter-clockwise from its edge to the next corner `c` to its edge to the previous `a`.
+fn opens_to(a: V2, b: V2, c: V2, m: V2) -> bool {
+    let x = |p: V2, q: V2| (p[0] - b[0]) * (q[1] - b[1]) - (p[1] - b[1]) * (q[0] - b[0]);
+    if x(c, a) > 0.0 {
+        x(c, m) > 0.0 && x(m, a) > 0.0
+    } else {
+        x(c, m) > 0.0 || x(m, a) > 0.0
+    }
 }
 
 /// Ear clipping of `outer` with `holes` bridged in, each triangle counter-clockwise, its
@@ -780,6 +850,15 @@ pub fn triangulate(outer: &[V2], holes: &[Vec<V2>]) -> Vec<[u32; 3]> {
                     pick = k;
                 }
             }
+        }
+        // A corner an earlier bridge doubled is in the ring twice: the bridge leaves from the copy
+        // whose angle opens toward m, or the ring crosses itself and the clipping stops short.
+        let (at, n) = (points[ring[pick] as usize], ring.len());
+        let corner = |k: usize| points[ring[k] as usize];
+        if let Some(k) = (0..n).find(|&k| {
+            corner(k) == at && opens_to(corner((k + n - 1) % n), at, corner((k + 1) % n), m)
+        }) {
+            pick = k;
         }
         let mut merged = ring[..=pick].to_vec();
         merged.extend(hring[mi..].iter().chain(&hring[..mi]));

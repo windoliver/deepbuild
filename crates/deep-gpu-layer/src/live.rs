@@ -80,6 +80,8 @@ pub struct Plants {
     pub(crate) builds_unread_targets: bool,
     /// #1173's: scene3d's sample count (session3::msaa_planted) and the claimed one.
     planted: Option<Planted>,
+    /// #173's: frames a planted window keeps past its own.
+    history_past: u32,
 }
 
 impl Plants {
@@ -112,6 +114,7 @@ impl Plants {
             settles_with_fallback: p == Some(Planted::SettlesWithFallback),
             builds_unread_targets: p == Some(Planted::BuildsUnreadTargets),
             planted: p,
+            history_past: u32::from(p == Some(Planted::KeepsFramePastWindow)),
         }
     }
 }
@@ -286,27 +289,6 @@ fn open_of(v: &Value, windows: &[String]) -> Option<Open> {
     })
 }
 
-/// The look's `history` window: 0 for none.
-fn history_of(look: &Value) -> Result<u32, String> {
-    match look.get("history") {
-        None | Some(Value::Null) => Ok(0),
-        Some(h) => match h["mode"].as_str().unwrap_or("antialias") {
-            "none" => Ok(0),
-            "antialias" | "upscale" => {
-                let w = h["window"].as_u64().unwrap_or(8);
-                if (2..=16).contains(&w) {
-                    Ok(w as u32)
-                } else {
-                    Err("look: history.window is 2 to 16".into())
-                }
-            }
-            other => Err(format!(
-                "look: history.mode {other} is none, antialias or upscale"
-            )),
-        },
-    }
-}
-
 fn parse(call: &Value, out: &str) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let test_build = cfg!(feature = "test-meter");
@@ -321,7 +303,11 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         .filter(|f| *f >= 1)
         .ok_or_else(|| bad("fps"))?;
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
-    let history = history_of(&call["look"]).map_err(|e| bad(&e))?;
+    let history = if look.history.on() {
+        look.history.window
+    } else {
+        0
+    };
     let windows = match call.get("windows") {
         None => vec!["main".to_string()],
         Some(ws) => {
@@ -586,7 +572,7 @@ struct Rev {
     #[cfg(feature = "test-meter")]
     placed: Vec<crate::testgpu::Placed>,
     #[cfg(feature = "test-meter")]
-    loops: Option<u32>,
+    burns: crate::testgpu::Burns,
 }
 
 struct Pending {
@@ -599,8 +585,8 @@ struct Pending {
 /// What a revision's warm-up compiles at check (#432): the scenes it can reach over its span and
 /// its controls, each state's document, and the operators that run apart.
 #[derive(Default)]
-struct Warm {
-    scenes: Vec<deep_canvas_scene3d::scene::Scene>,
+pub(crate) struct Warm {
+    pub(crate) scenes: Vec<deep_canvas_scene3d::scene::Scene>,
     docs: Vec<Value>,
     apart: BTreeSet<String>,
 }
@@ -677,14 +663,21 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 /// A revision that passed admission.
 pub(crate) struct Admitted {
     pub(crate) doc: Value,
-    frames: Content,
-    class: Option<Class>,
+    pub(crate) frames: Content,
+    pub(crate) class: Option<Class>,
     pub(crate) limits: Limits,
-    fit: Estimate,
-    size: [u32; 2],
+    pub(crate) fit: Estimate,
+    pub(crate) size: [u32; 2],
     /// The climb rungs that don't fit its memory cap (#425).
     skips: Vec<Rung>,
-    warm: Warm,
+    pub(crate) warm: Warm,
+}
+
+impl Admitted {
+    /// The revision's frames, for a view that already shows the document.
+    pub(crate) fn into_frames(self) -> Content {
+        self.frames
+    }
 }
 
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
@@ -725,7 +718,9 @@ fn warm_up(
         if crate::flat::is_flat(&doc) {
             continue;
         }
-        let Ok(mut frames) = Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels)) else {
+        let Ok(mut frames) =
+            Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels))
+        else {
             continue;
         };
         for (j, t) in crate::warm::times(&doc).into_iter().enumerate() {
@@ -773,6 +768,7 @@ pub(crate) fn admit(
     size: Option<[u32; 2]>,
     look: &Look3,
     history: u32,
+    path: Path,
     labels: &mut Labels,
     warm: Option<(&Value, &Plants)>,
     planted: Option<Planted>,
@@ -826,15 +822,32 @@ pub(crate) fn admit(
     }
     let frames = content_with(&doc, program, look, labels)?;
     let moving = camera_moves(&doc);
-    let base_scale = if moving { limits.scale_moving } else { 1.0 };
+    // Frame history's upscale renders at the look's scale (#173).
+    let base_scale = match look.history.mode {
+        _ if !moving => 1.0,
+        deep_canvas_scene3d::history::Mode::Upscale => look.history.scale,
+        _ => limits.scale_moving,
+    };
     let effects = doc["items"]
         .as_object()
         .is_some_and(|items| items.values().any(|i| i["kind"] == "test.burn@1"));
+    // What the renderer will hold for the scene it opens with (#2189); a 2D document's targets
+    // are counted at 16 bytes a pixel, as before.
+    let held = match &frames {
+        Content::Scene(f) => deep_scene3d_render::held::of(f.scene()),
+        Content::Flat(_) => deep_scene3d_render::held::Held {
+            per_px: 16.0,
+            fixed: 0,
+        },
+    };
     let shape = Shape {
         size,
         slots: SLOTS,
         hdr: false,
         effects,
+        read_back: path == Path::Copy,
+        per_px: held.per_px,
+        fixed: held.fixed,
     };
     let fit = meter::fit(&shape, base_scale, history, limits.gpu_bytes).map_err(|floor| {
         vec![json!({
@@ -1319,6 +1332,7 @@ impl Live {
             size,
             &self.args.look,
             self.args.history,
+            self.path,
             &mut self.labels,
             (!input).then_some((&raw, &self.plants)),
             self.plants.planted,
@@ -1339,7 +1353,7 @@ impl Live {
                 warm,
             }) => {
                 #[cfg(feature = "test-meter")]
-                let (placed, loops) = match crate::testgpu::items(&doc) {
+                let (placed, burns) = match crate::testgpu::items(&doc) {
                     Ok(x) => x,
                     Err(path) => {
                         ses.revisions.push((
@@ -1377,7 +1391,7 @@ impl Live {
                     #[cfg(feature = "test-meter")]
                     placed,
                     #[cfg(feature = "test-meter")]
-                    loops,
+                    burns,
                 });
                 self.next_rev += 1;
             }
@@ -1499,13 +1513,18 @@ impl Live {
                 v.window = rev.fit.history;
             }
         }
+        // Frame history on the grid of the frames the view shows, one a call frame (#173).
+        if let Some(v) = ses.view.as_mut() {
+            let past = self.plants.history_past;
+            let _ = v.hold_history(&self.args.look, rev.fit.history, self.args.fps as u32, past);
+        }
         #[cfg(feature = "test-meter")]
         if let Some(v) = ses.view.as_mut() {
             v.test.set(
                 &self.device,
                 &self.kit,
                 &rev.placed,
-                rev.loops,
+                &rev.burns,
                 &self.results,
             );
         }
@@ -2151,7 +2170,6 @@ impl Live {
                     operator_pipelines,
                 });
             }
-            timer.resolve(&mut encoder);
             let cpu_ms = began.elapsed().as_secs_f64() * 1e3;
             deep_gpu::alloc::outside(|| self.device.queue.submit([encoder.finish()]));
             for &s in &drew {
@@ -2203,6 +2221,7 @@ impl Live {
                     self.raised(of, Some(s), vec![("validation".to_string(), e.to_string())]);
                 }
             }
+            timer.resolve_after(&self.device);
             timer.read(&self.device);
             let views_end = self.views.len();
             for ses in &mut self.sessions {
@@ -2267,7 +2286,8 @@ impl Live {
                         .and_then(|ses| ses.view.as_ref())
                         .and_then(|v| v.ops.pass_of(m.name))
                     {
-                        self.pass_ops.insert(self.passes.len(), (key, members.to_vec()));
+                        self.pass_ops
+                            .insert(self.passes.len(), (key, members.to_vec()));
                     }
                     self.passes.push(PassRow {
                         name: m.name,
@@ -2818,7 +2838,7 @@ impl Live {
                         "limits": {"gpu_ms": l.gpu_ms, "cpu_ms": l.cpu_ms, "gpu_bytes": l.gpu_bytes},
                         "estimate": {
                             "gpu_bytes": fit.bytes(), "internal_scale": fit.scale, "history_frames": fit.history,
-                            "parts": {"slots": fit.slots, "hdr_slots": fit.hdr_slots, "targets": fit.targets, "upscale": fit.upscale, "frame_history": fit.frame_history, "effects": fit.effects},
+                            "parts": {"slots": fit.slots, "hdr_slots": fit.hdr_slots, "read_back": fit.read_back, "targets": fit.targets, "upscale": fit.upscale, "frame_history": fit.frame_history, "effects": fit.effects, "scene": fit.scene},
                         },
                         "measured": s.ring.oldest_first().collect::<Vec<_>>(),
                     })
@@ -2892,7 +2912,7 @@ fn render_canonical(
     let mut results: Cache<crate::testgpu::Made> = Cache::new(cache::Planted::default());
     #[cfg(feature = "test-meter")]
     {
-        let (placed, loops) = crate::testgpu::items(&doc).unwrap_or_default();
+        let (placed, burns) = crate::testgpu::items(&doc).unwrap_or_default();
         let reader = Reader {
             revision: 0,
             writer: "canonical".into(),
@@ -2904,7 +2924,7 @@ fn render_canonical(
                 return refused("asset_unreadable", e);
             }
         }
-        view.test.set(device, kit, &placed, loops, &results);
+        view.test.set(device, kit, &placed, &burns, &results);
     }
     let (options, planted) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, planted, fail);
@@ -3047,6 +3067,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
                 Some(size),
                 &look,
                 0,
+                Path::Copy,
                 &mut labels,
                 None,
                 None,
@@ -3079,4 +3100,50 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
         }
         c
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2189: #1903's every-pass scene, which the device held at 659 MB full screen at the
+    /// showpiece's floors on the copy path, is refused at check, naming bytes within 10% of that.
+    #[test]
+    fn the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held() {
+        let evidence: Value =
+            serde_json::from_str(include_str!("../../../docs/evidence/1903/envelope.json"))
+                .expect("the #1903 evidence");
+        let held = evidence["reply"]["fixtures"][0]["gpu_memory"]["peak_bytes"]
+            .as_u64()
+            .expect("the device's peak");
+        let look: Value = serde_json::from_str(include_str!(
+            "../../../tests/acceptance/1903/fixtures/look.json"
+        ))
+        .expect("the #1903 look");
+        let look = Look3::read(&look).expect("a look");
+        let issues = admit(
+            evidence["scene"].clone(),
+            "agent:alpha",
+            "01jb3790000000000000000000",
+            Some([3456, 2234]),
+            &look,
+            0,
+            Path::Copy,
+            &mut Labels::new(),
+            None,
+            None,
+        )
+        .map(|a| a.fit)
+        .expect_err("the scene is refused at check");
+        let over = issues
+            .iter()
+            .find(|i| i["code"] == "over_budget")
+            .expect("an over_budget issue");
+        assert_eq!(over["actual"]["size"], json!([3456, 2234]));
+        let named = over["actual"]["gpu_bytes"].as_u64().expect("its bytes");
+        assert!(
+            named.abs_diff(held) * 10 <= held,
+            "the check names {named} bytes, the device held {held}"
+        );
+    }
 }

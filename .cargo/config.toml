@@ -27,9 +27,21 @@ accesskit_macos = { path = "vendor/accesskit_macos" }
 # from crates.io, whose shown window ran the request-frame callback every vsync; a tick that neither
 # drew nor was asked again stops the link, and `schedule_frame` and the frame waker start it.
 gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
+# Issue #503: our own Vorbis decoder decodes within -90 dBFS of FFmpeg's decode on macOS.
+# vendor/symphonia-codec-vorbis is symphonia-codec-vorbis 0.6.1 from crates.io whose inverse coupling
+# takes a magnitude of +0.0 down the positive branch, as FFmpeg's arm64 decode does, marked
+# "DeepBuild patch".
+symphonia-codec-vorbis = { path = "vendor/symphonia-codec-vorbis" }
 
 # Issue #358: the panel host's JIT switch (technical design: Decided, "Where agent-built panels run").
 # vendor/quickjs-jit-runtime is that crate at the commit gpui-shell pins with `deny_native_code` added,
 # marked "DeepBuild patch". It replaces this one crate; gpui-kit and gpui-shell stay upstream, unforked.
 [patch."https://github.com/longbridge/quickjs-jit"]
 quickjs-jit-runtime = { path = "vendor/quickjs-jit-runtime" }
+
+# Issue #449: an x86_64 build, the other machine a check runs under Rosetta 2, links CoreMedia for
+# Rust's x86_64 deployment target (macOS 10.12) through the Swift overlay
+# @rpath/libswiftCoreMedia.dylib, which macOS keeps in /usr/lib/swift; this rpath finds it there.
+# Only x86_64 builds read it, so an arm64 build is unchanged.
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]

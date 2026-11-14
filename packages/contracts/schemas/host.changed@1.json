@@ -1,0 +1,183 @@
+{
+  "title": "host.changed@1",
+  "description": "A change on a host (#1945): what it did, what it touched, its undo (null when it has none) and a fingerprint of what it wrote, made as you or by a root plan you approved and ran. Only the core appends it.",
+  "x-since": "R3",
+  "x-stability": "preview",
+  "x-tracking": "#1945",
+  "x-preview_since": "R3",
+  "x-decide_by": "R6",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "host.changed"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The host, as your SSH config names it."
+        },
+        "change": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "What was done, such as the command that made the change."
+        },
+        "changes": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "description": "What it touched."
+        },
+        "undo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "How to undo it; null when it can't be undone."
+        },
+        "grant": {
+          "type": "string",
+          "enum": [
+            "you",
+            "root"
+          ],
+          "description": "The grant it was made under, which its undo runs with: your user's, or a root plan's.",
+          "x-closure": {
+            "closed": "each value is a grant a change on a host is made under: changes as you, or root as one plan you approved",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "fingerprint": {
+          "type": "array",
+          "maxItems": 1024,
+          "description": "What it wrote, read once it was made: each target with the SHA-256 of its bytes, null when the target isn't a file.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "A file it wrote, by its absolute path on the host."
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$",
+                "maxLength": 8192,
+                "description": "Its SHA-256, in lower-case hex."
+              }
+            },
+            "required": [
+              "target",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "ask": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The root plan's ask that made it; null for a change as you."
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The root plan's run that made it; null for a change as you."
+        }
+      },
+      "required": [
+        "host",
+        "change",
+        "changes",
+        "undo",
+        "grant",
+        "fingerprint",
+        "ask",
+        "run"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

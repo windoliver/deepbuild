@@ -28,11 +28,22 @@ pub fn modules() -> Vec<Module> {
     let mut out: Vec<Module> = Vec::new();
     #[cfg(feature = "test-mark")]
     out.push(deep_canvas_test_modules::registries::mark());
+    // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
+    #[cfg(feature = "test-weight")]
+    out.push(deep_canvas_test_modules::weight::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
+    // Issue #522's test canvas module: an item that fires a world's launch input.
+    #[cfg(any(feature = "test-launch-module", feature = "test-launch-module-first"))]
+    out.push(deep_canvas_test_modules::launch::module());
     // Issue #412's test canvas modules.
     #[cfg(feature = "test-preview")]
     out.push(deep_canvas_test_modules::kinds::preview());
+    // Issue #1802's: the same module once it removed its preview kind, with a migration and without.
+    #[cfg(feature = "test-preview-removed")]
+    out.push(deep_canvas_test_modules::kinds::preview_removed());
+    #[cfg(feature = "test-preview-removed-bare")]
+    out.push(deep_canvas_test_modules::kinds::preview_removed_bare());
     #[cfg(feature = "test-cue")]
     out.push(deep_canvas_test_modules::kinds::cue());
     #[cfg(feature = "test-cue-span")]
@@ -105,21 +116,26 @@ pub fn effects_with_base_steps() -> Module {
     m
 }
 
-/// #501: the writer of a test module's `export.target@1` entry: the frames' BGRA8 rows, one
-/// after another, in one file at `temp`; `None` for a target no test module writes.
-pub(crate) fn write_export(
-    target: &str,
-    entry: &serde_json::Value,
-    parts: &[crate::export::Rendered],
-    temp: &std::path::Path,
-) -> Option<serde_json::Value> {
+/// The effects module of the planted layout `test-gpu-output-in-effects` (#485): it declares
+/// `gpu.output@1` with today's outputs, which the core then leaves to it.
+#[cfg_attr(not(feature = "test-gpu-output-in-effects"), allow(dead_code))]
+pub fn effects_declaring_outputs() -> Module {
+    let mut m = deep_canvas_effects::module::module();
+    m.register = |r| {
+        (deep_canvas_effects::module::module().register)(r);
+        let (def, entries) = deep_canvas::registry::core_lists::gpu_output_registry();
+        r.registry(def);
+        r.entries.extend(entries);
+    };
+    m
+}
+
+/// #501: the writer of a test module's `export.target@1` entry, whose delivery is the frames'
+/// BGRA8 rows, one after another, in one file (#157: the export appends each as it is drawn);
+/// `None` for a target no test module writes.
+pub(crate) fn write_export(target: &str, entry: &serde_json::Value) -> Option<serde_json::Value> {
     if !entry["writer"].as_str()?.starts_with("test.") {
         return None;
     }
-    let mut bytes = Vec::new();
-    for f in parts.iter().flat_map(|p| &p.files) {
-        bytes.extend(std::fs::read(f).ok()?);
-    }
-    std::fs::write(temp, bytes).ok()?;
     Some(serde_json::json!({"name": target, "writer": entry["writer"]}))
 }

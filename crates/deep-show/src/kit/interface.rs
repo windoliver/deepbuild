@@ -106,7 +106,7 @@ pub fn behavior(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let iface = sealed.interface_of(module)?;
     let measured = iface.implementation.equivalence == Equivalence::Measured;
     let Some(part) = iface.behavior.as_ref().filter(|b| !b.fixtures.is_empty()) else {
-        if !measured {
+        if !measured || iface.implementation.name == iface.reference {
             return None;
         }
         // Without a behavior part an interface admits only its reference and bit ones.
@@ -148,13 +148,12 @@ pub fn behavior(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
                 })
                 .collect()
         });
-        let mut case = Case::new(format!("behavior:{}", f.name), Verdict::Pass)
-            .with("fixture", json!(f.name));
+        let mut case =
+            Case::new(format!("behavior:{}", f.name), Verdict::Pass).with("fixture", json!(f.name));
         let mut listed = Vec::new();
         for (a, got) in f.answers.iter().zip(got) {
             let answer = format!("{} {}", a.item, a.array);
-            let within =
-                got.is_some_and(|g| (g - a.value).abs() <= a.tolerance * a.value.abs());
+            let within = got.is_some_and(|g| (g - a.value).abs() <= a.tolerance * a.value.abs());
             listed.push(json!({"answer": answer, "expected": a.value, "got": got, "tolerance": a.tolerance}));
             if !within {
                 case.fail(

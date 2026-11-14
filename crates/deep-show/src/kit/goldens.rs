@@ -33,11 +33,21 @@ pub enum Render {
     Unfit(String),
 }
 
-/// The machine's GPU lease: one kit at a time draws on the GPU. Held until dropped.
+/// The machine's GPU lease: one kit or export at a time draws on the GPU. Held until dropped.
 pub struct GpuLease(Option<PathBuf>);
 
 impl GpuLease {
     pub fn take() -> GpuLease {
+        Self::acquire(Some(600))
+    }
+
+    /// #157: the lease for an export, however long its holder keeps it, so a second export waits
+    /// for it instead of sharing the GPU.
+    pub fn wait() -> GpuLease {
+        Self::acquire(None)
+    }
+
+    fn acquire(tries: Option<usize>) -> GpuLease {
         let dir = std::env::var_os("HOME")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
@@ -45,7 +55,7 @@ impl GpuLease {
             .join("deepbuild-gpu");
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("lease");
-        for _ in 0..600 {
+        for _ in 0..tries.unwrap_or(usize::MAX) {
             match std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -71,7 +81,11 @@ impl GpuLease {
                         let _ = std::fs::remove_file(&file);
                         continue;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    std::thread::sleep(std::time::Duration::from_millis(if tries.is_some() {
+                        500
+                    } else {
+                        50
+                    }));
                 }
             }
         }
@@ -401,7 +415,7 @@ impl<'a> Hub<'a> {
     }
 
     /// Who a decision or a record comes from: the writer, and whether it is you.
-    fn decider(&self, via: Option<&Via>) -> (Value, bool) {
+    pub(crate) fn decider(&self, via: Option<&Via>) -> (Value, bool) {
         let Some(via) = via else {
             return (json!({"kind": "you", "id": "you"}), true);
         };

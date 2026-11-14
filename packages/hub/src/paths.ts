@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir, userInfo } from 'node:os';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -103,6 +103,12 @@ export function lastingNode(node: string = process.execPath): string {
   if (!at) return node;
   const opt = join(at[1]!, 'opt', at[2]!, 'bin', 'node');
   try { return realpathSync(opt) === realpathSync(node) ? opt : node; } catch { return node; }
+}
+/** Whether a path is under a temp folder, as written or by its real path: a place a reboot or a cleanup empties. */
+export function underTemp(path: string): boolean {
+  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
+  const temps = [tmpdir(), process.env.TMPDIR ?? '', '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'].filter(Boolean).flatMap((t) => [t, real(t)]).map((t) => (t.endsWith(sep) ? t : t + sep));
+  return temps.some((t) => path.startsWith(t) || real(path).startsWith(t));
 }
 
 export interface Root {

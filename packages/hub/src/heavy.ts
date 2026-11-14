@@ -10,6 +10,7 @@
 // (heavyDenial, which deep-hook words the same when the hub is late). A call that ran while the hub was away reads
 // "ran unleased" in its session's row.
 import { execFileSync, spawn } from 'node:child_process';
+import { shellQuote } from './shell.js';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
 import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
@@ -36,8 +37,8 @@ export type Pressure = 'normal' | 'warn' | 'critical';
  */
 /** macOS's own reading, kept a second: every waiting `deep lease` asks four times a second, and each read is a process the core waits on. */
 let macRead: { at: number; level: Pressure } | undefined;
-export function memoryPressure(env: NodeJS.ProcessEnv = process.env): Pressure {
-  const file = env.DEEP_TEST_MEMORY_PRESSURE_FILE;
+function memoryPressure(): Pressure {
+  const file = process.env.DEEP_TEST_MEMORY_PRESSURE_FILE;
   if (file) {
     try {
       const word = readFileSync(file, 'utf8').trim();
@@ -419,7 +420,7 @@ function unleased(argv: string[], why: string): Promise<number> {
  * when none does, so a build typed by hand joins the pool; a fixed count is the runner's own, as `none` is.
  */
 function jobsFor(argv: string[]): { jobs: Jobs; flag?: string } {
-  const line = argv.map((w) => (/^[\w./=:,+@%^-]+$/.test(w) ? w : `'${w.replace(/'/g, "'\\''")}'`)).join(' ');
+  const line = argv.map((w) => (/^[\w./=:,+@%^-]+$/.test(w) ? w : shellQuote(w))).join(' ');
   type Found = { jobs?: string; jobs_flag?: string | null } | null;
   const read = (): Found => {
     try { return JSON.parse(execFileSync(deepHook(), ['heavy'], { input: line, encoding: 'utf8', timeout: 5000 })) as Found; } catch { return null; } // no deep-hook here: the default

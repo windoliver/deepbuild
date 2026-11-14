@@ -1,0 +1,53 @@
+# fixtures/devices.m and helpers.ts, checked outside the suite. macOS 27.2 (26B8119), Apple clang version 21.0.0 (clang-2100.4.1.1), SDK 27.2, base bcd02c238
+
+## The base's fixture, built as helpers.ts builds it (cc's default target here is this macOS)
+$ cc -O1 -o devices -fobjc-arc fixtures/devices.m -framework Foundation -framework AVFoundation -framework AudioToolbox -framework CoreGraphics
+fixtures/devices.m:79:22: error: 'CGDisplayCreateImage' is unavailable: obsoleted in macOS 15.0 - Please use ScreenCaptureKit instead.
+   79 |   CGImageRef image = CGDisplayCreateImage(CGMainDisplayID());
+      |                      ^
+<SDK>/System/Library/Frameworks/CoreGraphics.framework/Headers/CGDirectDisplay.h:383:33: note: 'CGDisplayCreateImage' has been explicitly marked unavailable here
+  383 | CG_EXTERN CGImageRef __nullable CGDisplayCreateImage(CGDirectDisplayID displayID)
+      |                                 ^
+1 error generated.
+exit 1
+
+## The changed fixture, built as the changed helpers.ts builds it, and for a macOS 14 and a macOS 15 target
+$ cc -O1  -o devices -fobjc-arc fixtures/devices.m -framework Foundation -framework AVFoundation -framework AudioToolbox -framework CoreGraphics -framework ScreenCaptureKit
+exit 0
+$ cc -O1 -mmacosx-version-min=14.0 -o devices -fobjc-arc fixtures/devices.m -framework Foundation -framework AVFoundation -framework AudioToolbox -framework CoreGraphics -framework ScreenCaptureKit
+exit 0
+$ cc -O1 -mmacosx-version-min=15.0 -o devices -fobjc-arc fixtures/devices.m -framework Foundation -framework AVFoundation -framework AudioToolbox -framework CoreGraphics -framework ScreenCaptureKit
+exit 0
+
+## What a macOS 14 target compiles is what the base compiles: the preprocessed source (cc -E -P -fobjc-arc), by SHA-256
+target 14.0: base 6fab98281008085c  changed 6fab98281008085c
+target 14.6: base 6fab98281008085c  changed 6fab98281008085c
+target 15.0: base 6fab98281008085c  changed 09e0d746c72666bf
+
+## The changed fixture run by hand outside any sandbox, on this Mac (this process holds no camera, microphone or screen recording permission)
+exit 0
+{"device":"camera","sandbox":"allow","authorized":false,"open":"not tried: authorization status 0"}
+{"device":"microphone","sandbox":"allow","authorized":false,"open":"not tried: authorization status 0"}
+{"device":"audio-output","sandbox":"allow","authorized":true,"open":"ok"}
+{"device":"screen-capture","sandbox":"allow","authorized":false,"open":"not tried: screen capture not allowed"}
+
+## helpers.ts: which fixtures bins() builds, and what a devices build that fails does to a caller that never reads `devices`
+A scratch test outside the repo, deleted after. It calls bins() and binsIn() and looks for the built files: probe and tree at once, devices only once
+`.devices` is read. With a cc first on PATH that refuses devices.m, bins() and binsIn() must still return, and reading `.devices` must throw BLOCKED naming the compile.
+
+### The changed helpers.ts, the real cc
+ ✓ lazy.test.ts > bins() with the real cc 2695ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+### The changed helpers.ts, a cc that refuses devices.m
+ ✓ lazy.test.ts > bins() with a cc that refuses devices.m 810ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+### The base's helpers.ts (bcd02c238), the same cc: every caller of bins() stops here, whether it runs devices or not
+ × lazy.test.ts > bins() with a cc that refuses devices.m 794ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Error: BLOCKED: cc couldn't build fixtures/devices: planted: this cc cannot build devices.m
+ Test Files  1 failed (1)
+      Tests  1 failed (1)

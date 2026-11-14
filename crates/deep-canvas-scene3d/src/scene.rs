@@ -121,6 +121,117 @@ pub struct Solid {
     pub batch: u32,
     /// Its row in its instancer, with a batch: where a compact step's kept rows name it (#484).
     pub row: u32,
+    /// Where its mesh's GPU sway is in time (#2016), with one.
+    pub sway: Option<Swaying>,
+}
+
+/// A swaying mesh's shape for the solid `id` (#2016): each swaying solid draws its own copy,
+/// which the GPU moves by its place, the same shape at every t.
+fn swaying_shape(mesh: u64, id: &str) -> u64 {
+    let mut h = deep_canvas::schedule::Hasher::new("scene3d.sway");
+    h.text(&format!("{mesh}#{id}"));
+    let key = h.finish().0;
+    u64::from_le_bytes([
+        key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+    ])
+}
+
+/// #2017: a swaying solid's rest mesh and its shape, where its sway's weights are each vertex's
+/// height (0 at its lowest point, 1 at its highest), so the sway is a shear of its place; none
+/// for weights read from an attribute or a part.
+fn rest_of(s: &Solid, h: u64) -> Option<(Arc<crate::geom::Mesh>, u64)> {
+    let mesh = s.mesh.as_ref()?;
+    let sway = mesh.sway.as_ref()?;
+    let [lo, hi] = mesh.bounds();
+    let span = hi[1] - lo[1];
+    let height = |p: &Vec3| (p[1] - lo[1]) / span;
+    let linear = span > 0.0
+        && sway.weights.len() == mesh.positions.len()
+        && (mesh.positions.iter().zip(&sway.weights)).all(|(p, w)| (height(p) - w).abs() <= 1e-9);
+    linear.then(|| {
+        let rest = crate::geom::Mesh {
+            sway: None,
+            ..(**mesh).clone()
+        };
+        (Arc::new(rest), swaying_shape(h, "#rest"))
+    })
+}
+
+/// #2017: the shear that folds a height-weighted sway (#2016) into a solid placed by `model` at
+/// its time: each point moves along the wind by amount × its height share × the lean at the
+/// place, as the GPU sway moves each vertex, which for weights by height is p + s (p.y − lo) ÷
+/// span, s the lean's move in the mesh's own space. It applies before `model`.
+fn shear_of(
+    model: &Affine3,
+    sway: &crate::stack::Sway,
+    rest: &crate::geom::Mesh,
+    at: Swaying,
+) -> Affine3 {
+    let [lo, hi] = rest.bounds();
+    let span = hi[1] - lo[1];
+    let (dx, dz) = (cos(rad(sway.direction)), sin(rad(sway.direction)));
+    let lean = sway_lean(sway, [model[0][3], model[2][3]], [dx, dz], at);
+    let world = [dx * sway.amount * lean, 0.0, dz * sway.amount * lean];
+    let inv = crate::cut::inverse(model);
+    let s = [0, 1, 2].map(|r| (0..3).map(|c| inv[r][c] * world[c]).sum::<f64>());
+    // The shear's matrix: identity plus s times the height share's gradient (0, 1 ÷ span, 0),
+    // its move s × (−lo ÷ span).
+    let shear: Affine3 = [0, 1, 2].map(|r| {
+        let mut row = [0.0; 4];
+        row[r] = 1.0;
+        row[1] += s[r] / span;
+        row[3] = -s[r] * lo[1] / span;
+        row
+    });
+    shear
+}
+
+/// The sway's lean at world place `place` (x, z) and its time (sway.wgsl's `lean`, in f64): a
+/// slow sway at hz phased by the modifier, and gusts of B-spline noise over the place less the
+/// wind's travel, seeded by the document.
+fn sway_lean(sway: &crate::stack::Sway, place: [f64; 2], d: [f64; 2], at: Swaying) -> f64 {
+    let (lo, hi) = (at.seed as u32, (at.seed >> 32) as u32);
+    let lattice = |x: i32, z: i32| -> f64 {
+        let mut h = (x as u32).wrapping_mul(0x8da6_b343) ^ (z as u32).wrapping_mul(0xd816_3841);
+        h ^= lo.wrapping_mul(0xcb1a_b31f) ^ hi.wrapping_mul(0x9e37_79b9);
+        h = (h ^ (h >> 16)).wrapping_mul(0x7feb_352d);
+        h = (h ^ (h >> 15)).wrapping_mul(0x846c_a68b);
+        h ^= h >> 16;
+        f64::from(h >> 8) / 8_388_607.5 - 1.0
+    };
+    let spline = |f: f64| {
+        let g = 1.0 - f;
+        [
+            g * g * g,
+            3.0 * f * f * f - 6.0 * f * f + 4.0,
+            -3.0 * f * f * f + 3.0 * f * f + 3.0 * f + 1.0,
+            f * f * f,
+        ]
+        .map(|w| w / 6.0)
+    };
+    let t = at.t;
+    let q = [0, 1].map(|k| (place[k] - d[k] * sway.speed * t) / sway.scale);
+    let c = q.map(f64::floor);
+    let (wx, wz) = (spline(q[0] - c[0]), spline(q[1] - c[1]));
+    let (ix, iz) = (c[0] as i32 - 1, c[1] as i32 - 1);
+    let gust: f64 = (0..4)
+        .map(|a| {
+            wz[a]
+                * (0..4)
+                    .map(|b| wx[b] * lattice(ix + b as i32, iz + a as i32))
+                    .sum::<f64>()
+        })
+        .sum();
+    let slow = sin(std::f64::consts::TAU * (sway.hz * t).fract() + sway.phase);
+    ((1.0 - sway.strength) * slow + sway.strength * gust).clamp(-1.0, 1.0)
+}
+
+/// A swaying solid's time and noise (#2016): the document's seconds and its seed, which with its
+/// mesh's [`crate::stack::Sway`] and its place give each vertex's move on the GPU.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Swaying {
+    pub t: f64,
+    pub seed: u64,
 }
 
 /// An item's adjust as a 3D item takes it in shading (Object: adjust; Item and kind: adjust):
@@ -191,6 +302,8 @@ pub struct Segment {
     pub b: Vec3,
     pub wa: f64,
     pub wb: f64,
+    /// #537: it draws nothing and isn't hit, a point it meets being out of range.
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -211,6 +324,10 @@ pub struct Line {
     pub dash: [f64; 2],
     /// The dash is in m: as `world`, but for #1640's planted `edges_dash_other_space`.
     pub dash_world: bool,
+    /// How its free ends end (#537; Marks in 3D: lines `cap`).
+    pub cap: crate::points::Cap,
+    /// What its trail draws at t (#450), or `None` for a line of its own points.
+    pub trail: Option<Arc<crate::trail::Drawn>>,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -243,6 +360,7 @@ impl EdgesOf {
                 b: apply(&self.model, b),
                 wa: self.width,
                 wb: self.width,
+                hidden: false,
             })
             .collect()
     }
@@ -264,6 +382,8 @@ pub struct Point {
     pub world: bool,
     pub shape: PointShape,
     pub color: [u8; 3],
+    /// Its set from a depth video (#503), whose points the GPU writes: the point is its item.
+    pub cloud: Option<Arc<crate::cloud::Cloud>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -302,8 +422,13 @@ pub struct Layer3 {
     pub lines: Vec<Line>,
     pub points: Vec<Point>,
     pub labels: Vec<Label>,
+    /// The opacity of each line and label a module's kind draws below full, by its ID (#226): a
+    /// tick entering or leaving its axis's domain.
+    pub fades: BTreeMap<String, f64>,
     /// Its soft cloud sprites (#422; Puff `puff@1`).
     pub puffs: Vec<Puff>,
+    /// #537: each batch of an instancer fed by logic, laid out by slot, with its slot count.
+    pub fed: std::collections::BTreeMap<u32, u32>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -707,6 +832,8 @@ pub struct Scene {
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
+    /// Each terrain plate's overlays at t (#537), which tint its cover's base color.
+    pub tints: Vec<crate::tints::Tint>,
 }
 
 impl Scene {
@@ -731,6 +858,16 @@ impl Scene {
                 .iter()
                 .flat_map(|l| &l.solids)
                 .any(|s| s.material.is_some())
+    }
+
+    /// #428's planted `drops_dispersion`, reachable only through `deep-gpu --planted`: every
+    /// material draws dispersion 0, as if its import had dropped KHR_materials_dispersion
+    /// ([`crate::gltf::drop_dispersion`]).
+    pub fn plant_drops_dispersion(&mut self) {
+        let solids = self.layers.iter_mut().flat_map(|l| &mut l.solids);
+        for m in solids.filter_map(|s| s.material.as_mut()) {
+            m.lobes.dispersion = 0.0;
+        }
     }
 
     /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
@@ -815,7 +952,7 @@ pub(crate) fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
 /// `x ↦ R·S·x + T` as rows of a 3×4 matrix.
 pub type Affine3 = [[f64; 4]; 3];
 
-pub(crate) fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
+pub fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
     let mut out = [[0.0; 4]; 3];
     for (r, row) in out.iter_mut().enumerate() {
         for (c, cell) in row.iter_mut().enumerate() {
@@ -829,7 +966,22 @@ pub(crate) fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
     out
 }
 
-fn apply(m: &Affine3, p: Vec3) -> Vec3 {
+/// Whether `m` turns and scales alike on every axis, with no mirror: what a terrain tile's
+/// normals turn by in its pixels (#2017).
+fn uniform(m: &Affine3) -> bool {
+    let col = |c: usize| [m[0][c], m[1][c], m[2][c]];
+    let (x, y, z) = (col(0), col(1), col(2));
+    let k = dot(x, x);
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * k.max(1e-300);
+    near(dot(y, y), k)
+        && near(dot(z, z), k)
+        && near(dot(x, y), 0.0)
+        && near(dot(y, z), 0.0)
+        && near(dot(x, z), 0.0)
+        && dot(crate::geom::cross(x, y), z) > 0.0
+}
+
+pub(crate) fn apply(m: &Affine3, p: Vec3) -> Vec3 {
     [
         m[0][0] * p[0] + m[0][1] * p[1] + m[0][2] * p[2] + m[0][3],
         m[1][0] * p[0] + m[1][1] * p[1] + m[1][2] * p[2] + m[1][3],
@@ -843,16 +995,6 @@ fn turn(m: &Affine3, d: Vec3) -> Vec3 {
         m[1][0] * d[0] + m[1][1] * d[1] + m[1][2] * d[2],
         m[2][0] * d[0] + m[2][1] * d[1] + m[2][2] * d[2],
     ]
-}
-
-/// An item's own `at`: subtract the pivot, scale, then rotate about X, Y and Z in turn, then move
-/// to `pos` (Units and axes).
-fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
-    let at = item.get("at");
-    let pos = vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]);
-    let rot = vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]);
-    let sc = size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]);
-    pivoted(local_of(pos, rot, sc, extra_scale), item)
 }
 
 /// An item's vector `at.pivot`, if it has one (a box-point pivot is the core's to resolve).
@@ -870,7 +1012,8 @@ fn pivoted(mut m: Affine3, item: &Value) -> Affine3 {
     m
 }
 
-/// [`local`] from the numbers themselves.
+/// An item's own `at` from the numbers themselves: scale, then rotate about X, Y and Z in turn,
+/// then move to `pos` (Units and axes).
 pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Affine3 {
     let (cx, sx) = (cos(rad(rot[0])), sin(rad(rot[0])));
     let (cy, sy) = (cos(rad(rot[1])), sin(rad(rot[1])));
@@ -900,6 +1043,12 @@ pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Aff
 /// items carry their own transforms (`Program::evaluate_local`): motion's child-of parenting
 /// turns a child only about z, and composed here again it would add the parent twice.
 fn world(items: &Items<'_>, id: &str) -> Affine3 {
+    world_moved(items, id, None)
+}
+
+/// [`world`], with the item's own position `pos` in place of its own where one is given (#226: a
+/// point a module's deform placed).
+pub(crate) fn world_moved(items: &Items<'_>, id: &str, pos: Option<Vec3>) -> Affine3 {
     let Some((item, mut m)) = items.placed(id) else {
         return [
             [1.0, 0.0, 0.0, 0.0],
@@ -907,6 +1056,9 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
             [0.0, 0.0, 1.0, 0.0],
         ];
     };
+    if let (Some(p), Some((own, _, _))) = (pos, items.at_of(id)) {
+        (0..3).for_each(|r| m[r][3] += p[r] - own[r]);
+    }
     // The parents passed, after `id` itself.
     let mut seen: Vec<&str> = Vec::new();
     let mut at = item.get("parent").and_then(Value::as_str);
@@ -915,6 +1067,11 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
             break;
         }
         let Some((parent, local)) = items.placed(p) else {
+            // #504: a chain that ends on an assembly rides its composed transform (Assembly: its
+            // transform composes before its members').
+            if let Some(a) = items.assemblies.get(p) {
+                m = matmul(a, &m);
+            }
             break;
         };
         m = matmul(&local, &m);
@@ -927,20 +1084,30 @@ fn world(items: &Items<'_>, id: &str) -> Affine3 {
 /// The document's items at a time, as [`eval::items`] gives them, without copying the document:
 /// an item a field names is its copy in `written`, and every other item is the document's own,
 /// its `at` the three numbers of each group in its slots.
-struct Items<'a> {
+pub(crate) struct Items<'a> {
     doc: &'a Map<String, Value>,
     written: &'a Map<String, Value>,
     /// Each item as evaluated, and for an object nothing writes, its index in the program: its
     /// transform is its `TRANSFORM` slots from there.
     entries: HashMap<&'a str, (&'a Value, Option<usize>)>,
     slots: &'a [f64],
+    /// #2013: each item a `rest_on` rested on true shapes, with its own position and rotation
+    /// as solved.
+    rested: BTreeMap<String, (Vec3, Vec3)>,
+    /// #504: each assembly's world transform at this state, by ID.
+    assemblies: HashMap<String, Affine3>,
 }
 
 impl<'a> Items<'a> {
     /// `doc`'s items, with `written` from [`eval::written`] of its program at `state`. The
     /// program's items are the document's in its order, so item `i`'s transform is its
     /// `TRANSFORM` slots from `i * TRANSFORM`.
-    fn new(doc: &'a Map<String, Value>, written: &'a Map<String, Value>, state: &'a State) -> Self {
+    fn new(
+        doc: &'a Map<String, Value>,
+        written: &'a Map<String, Value>,
+        state: &'a State,
+        program: &Program,
+    ) -> Self {
         let mut entries = HashMap::with_capacity(doc.len());
         let mut copies = written.iter().peekable();
         for (i, (id, item)) in doc.iter().enumerate() {
@@ -950,15 +1117,23 @@ impl<'a> Items<'a> {
             };
             entries.insert(id.as_str(), entry);
         }
+        let assemblies = program
+            .assemblies
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.id.clone(), program.assembly_world(&state.slots, i)))
+            .collect();
         Items {
             doc,
             written,
             entries,
             slots: &state.slots,
+            rested: BTreeMap::new(),
+            assemblies,
         }
     }
 
-    fn get(&self, id: &str) -> Option<&'a Value> {
+    pub(crate) fn get(&self, id: &str) -> Option<&'a Value> {
         self.entries.get(id).map(|e| e.0)
     }
 
@@ -977,12 +1152,20 @@ impl<'a> Items<'a> {
             })
     }
 
-    /// The item `id` and its [`local`] transform: an object nothing writes reads its `at` from
+    /// The item `id` and its [`local_of`] transform, less its pivot: an object nothing writes reads its `at` from
     /// its slots as the evaluated item holds them, a number that isn't finite leaving its group's
     /// default.
     fn placed(&self, id: &str) -> Option<(&'a Value, Affine3)> {
+        let &(item, _) = self.entries.get(id)?;
+        let (pos, rot, sc) = self.at_of(id)?;
+        Some((item, pivoted(local_of(pos, rot, sc, [1.0; 3]), item)))
+    }
+
+    /// The item's own position, rotation and scale as evaluated: from its slots, or from its
+    /// `at` for one a field names; where a `rest_on` rested it, as that solved them.
+    pub(crate) fn at_of(&self, id: &str) -> Option<(Vec3, Vec3, Vec3)> {
         let &(item, index) = self.entries.get(id)?;
-        let m = match index {
+        let (pos, rot, sc) = match index {
             Some(i) => {
                 let slots = &self.slots[i * TRANSFORM..(i + 1) * TRANSFORM];
                 let group = |k: usize, default: Vec3| {
@@ -993,20 +1176,323 @@ impl<'a> Items<'a> {
                         default
                     }
                 };
-                pivoted(
-                    local_of(
-                        group(0, [0.0; 3]),
-                        group(1, [0.0; 3]),
-                        group(2, [1.0; 3]),
-                        [1.0; 3],
-                    ),
-                    item,
+                (group(0, [0.0; 3]), group(1, [0.0; 3]), group(2, [1.0; 3]))
+            }
+            None => {
+                let at = item.get("at");
+                (
+                    vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]),
+                    vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]),
+                    size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]),
                 )
             }
-            None => local(item, [1.0; 3]),
         };
-        Some((item, m))
+        let (pos, rot) = self.rested.get(id).copied().unwrap_or((pos, rot));
+        Some((pos, rot, sc))
     }
+}
+
+/// Which of a document's `rest_on`s on true shapes a solve takes (#2013; Constraint: rest_on):
+/// all of them, those with both sides still, or those with a side motion moves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rests {
+    All,
+    Still,
+    Moving,
+}
+
+/// Each solved rest's owner with its own position and, where it aligned, its rotation.
+pub type Rested = BTreeMap<String, (Vec3, Option<Vec3>)>;
+
+/// Whether motion writes `id`'s transform or a parent's: a channel, a placement, a driver, a
+/// limit or a constraint the program runs.
+fn moves(items: &Items<'_>, program: &Program, id: &str) -> bool {
+    let mut at = Some(id);
+    let mut seen = 0;
+    while let Some(i) = at.filter(|_| seen < 64) {
+        let written = program
+            .items
+            .iter()
+            .position(|x| x == i)
+            .is_some_and(|k| program.writes(k * TRANSFORM..(k + 1) * TRANSFORM));
+        let held = program.motion.constraints.iter().any(|c| {
+            c.owner == i
+                && !matches!(
+                    c.kind,
+                    deep_canvas_motion::doc::Kind::RestOn { on: Some(_), .. }
+                )
+        });
+        if written || held {
+            return true;
+        }
+        at = items
+            .get(i)
+            .and_then(|v| v.get("parent"))
+            .and_then(Value::as_str);
+        seen += 1;
+    }
+    false
+}
+
+/// The X, Y, Z angles in degrees of the rotation `r` (its rows), as `local_of` composes them:
+/// Rz · Ry · Rx.
+fn euler_of(r: &[Vec3; 3]) -> Vec3 {
+    use deep_canvas::ops::{asin, atan2, deg};
+    if r[2][0].abs() > 1.0 - 1e-12 {
+        // Straight up or down: X and Z turn about one axis, so Z takes none.
+        return [
+            deg(atan2(-r[1][2], r[1][1])),
+            deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+            0.0,
+        ];
+    }
+    [
+        deg(atan2(r[2][1], r[2][2])),
+        deg(asin((-r[2][0]).clamp(-1.0, 1.0))),
+        deg(atan2(r[1][0], r[0][0])),
+    ]
+}
+
+/// The rotation of `m` (its rows): its columns at unit length.
+fn rotation_of(m: &Affine3) -> [Vec3; 3] {
+    let mut out = [[0.0; 3]; 3];
+    for j in 0..3 {
+        let l = sqrt(m[0][j] * m[0][j] + m[1][j] * m[1][j] + m[2][j] * m[2][j]);
+        for (i, row) in out.iter_mut().enumerate() {
+            row[j] = if l > 0.0 {
+                m[i][j] / l
+            } else {
+                f64::from(u8::from(i == j))
+            };
+        }
+    }
+    out
+}
+
+/// #2013: every `rest_on` of `which` that names `on`, solved from where the items stand and
+/// written into `items`, a rest whose `on` another rest's owner is among after that one. What
+/// can't be solved is in `problems`: an `on` that names nothing (`ref_unresolved`), an owner
+/// with no true shape (`out_of_range`), rests in a loop (`cycle`) and no support within
+/// `max_drop` (`no_support`); its owner stays where it was.
+fn rest(
+    map: &Map<String, Value>,
+    program: &Program,
+    items: &mut Items<'_>,
+    seconds: f64,
+    which: Rests,
+    problems: &mut Vec<Refused>,
+) -> Rested {
+    use deep_canvas_motion::doc::Kind;
+    let mut out = Rested::new();
+    let mut left: Vec<(&str, &str, &deep_canvas_motion::doc::RestOn, f64, f64)> = program
+        .motion
+        .constraints
+        .iter()
+        .filter_map(|c| match &c.kind {
+            Kind::RestOn {
+                on: Some(r),
+                offset,
+                max_drop,
+                ..
+            } => Some((c.id.as_str(), c.owner.as_str(), r, *offset, *max_drop)),
+            _ => None,
+        })
+        .collect();
+    if left.is_empty() {
+        return out;
+    }
+    left.sort_by(|a, b| a.0.cmp(b.0));
+    let doc = Value::Object(map.clone());
+    let members = |items: &Items<'_>, on: &str| -> Option<Vec<String>> {
+        if items.contains_key(on) {
+            return Some(vec![on.to_string()]);
+        }
+        let list = map
+            .get("collections")?
+            .get(on)?
+            .get("members")?
+            .as_array()?;
+        let mut ids: Vec<String> = list
+            .iter()
+            .filter_map(|m| m.as_str().map(str::to_string))
+            .collect();
+        ids.sort();
+        ids.dedup();
+        Some(ids)
+    };
+    let mut moving: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    while !left.is_empty() {
+        // The first rest, by ID, whose `on` holds no owner still to be rested.
+        let ready = left.iter().position(|(_, owner, r, _, _)| {
+            members(items, &r.on).is_none_or(|m| {
+                !m.iter()
+                    .any(|x| x != owner && left.iter().any(|l| l.1 == x))
+            })
+        });
+        let Some(k) = ready else {
+            for (id, ..) in &left {
+                problems.push(Refused {
+                    code: "cycle",
+                    path: format!("constraints/{id}/on"),
+                });
+            }
+            break;
+        };
+        let (id, owner, r, offset, max_drop) = left.remove(k);
+        // `on: ID | collection | ground`: an item or a collection by that name before the ground
+        // plane, so a plate whose ID is `ground` is rested on as itself (#2014).
+        let on_ids = match members(items, &r.on) {
+            Some(m) => Some(m),
+            None if r.on == "ground" => None,
+            None => {
+                problems.push(Refused {
+                    code: "ref_unresolved",
+                    path: format!("constraints/{id}/on"),
+                });
+                continue;
+            }
+        };
+        let moved = moves(items, program, owner)
+            || on_ids
+                .iter()
+                .flatten()
+                .any(|x| moves(items, program, x) || moving.contains(x));
+        if moved {
+            moving.insert(owner.to_string());
+        }
+        if matches!(
+            (which, moved),
+            (Rests::Still, true) | (Rests::Moving, false)
+        ) {
+            continue;
+        }
+        let shapes_of = |x: &str| -> Vec<deep_canvas::geometry_audit::Shape> {
+            let Some(item) = items.get(x) else {
+                return Vec::new();
+            };
+            crate::shapes::of(&doc, x, item, &world(items, x), seconds)
+                .ok()
+                .flatten()
+                .map_or_else(Vec::new, |(s, _)| s)
+        };
+        let own = shapes_of(owner);
+        let Some((pos, rot, _)) = items.at_of(owner).filter(|_| !own.is_empty()) else {
+            problems.push(Refused {
+                code: "out_of_range",
+                path: format!("constraints/{id}/owner"),
+            });
+            continue;
+        };
+        let on: Option<Vec<_>> = on_ids.map(|ids| {
+            ids.iter()
+                .filter(|x| x.as_str() != owner)
+                .flat_map(|x| shapes_of(x))
+                .collect()
+        });
+        let parent = items
+            .get(owner)
+            .and_then(|i| i.get("parent"))
+            .and_then(Value::as_str)
+            .map(|p| {
+                items
+                    .assemblies
+                    .get(p)
+                    .copied()
+                    .unwrap_or_else(|| world(items, p))
+            });
+        let origin = match &parent {
+            Some(p) => apply(p, pos),
+            None => pos,
+        };
+        let solved = crate::rest::solve(&crate::rest::Rest {
+            own: &own,
+            origin,
+            on: on.as_deref(),
+            axis: r.axis,
+            align: r.align,
+            bounds: r.bounds,
+            offset,
+            max_drop,
+        });
+        let Some(solved) = solved else {
+            problems.push(Refused {
+                code: "no_support",
+                path: format!("constraints/{id}"),
+            });
+            continue;
+        };
+        // The move and the turn in the owner's parent's space.
+        let (by, turn) = match &parent {
+            Some(p) => {
+                let inv = crate::cut::inverse(p);
+                let pr = rotation_of(p);
+                let t = solved.turn.map(|m| {
+                    let mut out = [[0.0; 3]; 3];
+                    for i in 0..3 {
+                        for j in 0..3 {
+                            out[i][j] = (0..3)
+                                .map(|a| (0..3).map(|b| pr[a][i] * m[a][b] * pr[b][j]).sum::<f64>())
+                                .sum();
+                        }
+                    }
+                    out
+                });
+                (turn(&inv, solved.by), t)
+            }
+            None => (solved.by, solved.turn),
+        };
+        let new_pos = [pos[0] + by[0], pos[1] + by[1], pos[2] + by[2]];
+        let new_rot = turn.map(|m| {
+            let own = rotation_of(&local_of([0.0; 3], rot, [1.0; 3], [1.0; 3]));
+            let mut r = [[0.0; 3]; 3];
+            for i in 0..3 {
+                for j in 0..3 {
+                    r[i][j] = (0..3).map(|a| m[i][a] * own[a][j]).sum();
+                }
+            }
+            euler_of(&r)
+        });
+        items
+            .rested
+            .insert(owner.to_string(), (new_pos, new_rot.unwrap_or(rot)));
+        out.insert(owner.to_string(), (new_pos, new_rot));
+    }
+    out
+}
+
+/// #2013: the document's `rest_on`s on true shapes solved at `t` (flicks), each owner with its
+/// own position and rotation, and what couldn't be solved.
+pub fn rested_at(doc: &Value, t: i64, which: Rests) -> Result<(Rested, Vec<Refused>), Refused> {
+    let Some(map) = doc.as_object() else {
+        return refused("out_of_range", "");
+    };
+    let program = Program::compile(map).map_err(|r| Refused {
+        code: r.code,
+        path: r.path,
+    })?;
+    Ok(rested_with(map, &program, t, which))
+}
+
+/// [`rested_at`] of a document whose motion program is compiled already.
+pub fn rested_with(
+    map: &Map<String, Value>,
+    program: &Program,
+    t: i64,
+    which: Rests,
+) -> (Rested, Vec<Refused>) {
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, program, &state);
+    let mut items = Items::new(doc_items, &written, &state, program);
+    let mut problems = Vec::new();
+    let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    let out = rest(map, program, &mut items, seconds, which, &mut problems);
+    (out, problems)
 }
 
 impl Index<&str> for Items<'_> {
@@ -1017,19 +1503,21 @@ impl Index<&str> for Items<'_> {
     }
 }
 
-fn origin(m: &Affine3) -> Vec3 {
+pub(crate) fn origin(m: &Affine3) -> Vec3 {
     [m[0][3], m[1][3], m[2][3]]
 }
 
-fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+pub(crate) fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     // #149: a noise fill's first stop, or a line's own role, or the ink a named fill leaves out.
-    let drawn = params.pointer("/paint/fill/noise/stops/0/role").or_else(|| {
-        params
-            .pointer("/paint/fill/role")
-            .is_none()
-            .then(|| params.pointer("/paint/stroke/role"))
-            .flatten()
-    });
+    let drawn = params
+        .pointer("/paint/fill/noise/stops/0/role")
+        .or_else(|| {
+            params
+                .pointer("/paint/fill/role")
+                .is_none()
+                .then(|| params.pointer("/paint/stroke/role"))
+                .flatten()
+        });
     if let Some(c) = drawn.and_then(Value::as_str).and_then(|r| look.role(r)) {
         return Ok(c);
     }
@@ -1044,8 +1532,9 @@ fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
     }
 }
 
-/// A solid's `paint.stroke {role, width}`: an outline around a box; a cylinder's or a sphere's
-/// isn't drawn yet, so it's refused rather than left out.
+/// A solid's `paint.stroke {role, width}`: an outline around a box or a built mesh (a recipe's
+/// parts among them, #173); a cylinder's or a sphere's isn't drawn yet, so it's refused rather
+/// than left out.
 fn stroke(
     look: &Look3,
     params: &Value,
@@ -1055,7 +1544,7 @@ fn stroke(
     let Some(st) = params.get("paint").and_then(|p| p.get("stroke")) else {
         return Ok(None);
     };
-    if shape != Shape::Box {
+    if !matches!(shape, Shape::Box | Shape::Built(_)) {
         return refused("stroke_shape", format!("{path}/paint/stroke"));
     }
     let Some(color) = st
@@ -1098,30 +1587,80 @@ fn point_of(items: &Items<'_>, v: &Value, path: &str) -> Result<Vec3, Refused> {
     Ok(origin(&world(items, id)))
 }
 
-/// The segments a mode draws over `n` points, as index pairs (Marks in 3D: lines).
-pub fn segments(mode: &str, n: usize) -> Option<Vec<(usize, usize)>> {
-    if n < 2 {
-        return Some(Vec::new());
-    }
-    match mode {
-        "strip" => Some((0..n - 1).map(|k| (k, k + 1)).collect()),
-        "segments" => Some((0..n / 2).map(|k| (2 * k, 2 * k + 1)).collect()),
-        "loop" => Some((0..n).map(|k| (k, (k + 1) % n)).collect()),
-        _ => None,
-    }
+/// A `mark.text@1`'s label at the world `m` (#226: a module's marks draw theirs through it too).
+pub(crate) fn label(
+    id: &str,
+    params: &Value,
+    path: &str,
+    m: &Affine3,
+    look: &Look3,
+    labels: &mut Labels,
+) -> Result<Label, Refused> {
+    let text = params.get("text").and_then(Value::as_str).unwrap_or("");
+    let font = params.get("font").and_then(Value::as_str).unwrap_or("body");
+    let Some(role) = Role::parse(font) else {
+        return refused("out_of_range", format!("{path}/font"));
+    };
+    let facing = match params.get("facing").and_then(Value::as_str) {
+        None | Some("camera") => Facing::Camera,
+        Some("upright") => Facing::Upright,
+        Some("fixed") => Facing::Fixed,
+        Some(_) => return refused("out_of_range", format!("{path}/facing")),
+    };
+    let world_space = params.get("size_space").and_then(Value::as_str) == Some("world");
+    let size = num(params.get("size")).unwrap_or(if world_space { 0.25 } else { 13.0 });
+    // A screen-size label's run is a 2D text's of that text, font and size.
+    let run_size = if world_space {
+        WORLD_EM_PX
+    } else {
+        size as f32
+    };
+    let (run_box, glyphs) = labels.run(text, role, run_size);
+    let shaped_at = glyphs.first().map_or(run_size, |g| g.size);
+    let to_em = size / f64::from(shaped_at);
+    Ok(Label {
+        id: id.to_string(),
+        text: text.to_string(),
+        role,
+        glyphs,
+        bounds: run_box,
+        pos: origin(m),
+        em: size,
+        quad: [run_box[0] * to_em, run_box[1] * to_em],
+        world: world_space,
+        facing,
+        axes: [
+            normalize(turn(m, [1.0, 0.0, 0.0])),
+            normalize(turn(m, [0.0, 1.0, 0.0])),
+        ],
+        color: paint(look, params, path)?,
+    })
 }
 
-fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Line, Refused> {
+pub(crate) fn line(
+    items: &Items<'_>,
+    id: &str,
+    params: &Value,
+    look: &Look3,
+    (map, t): (&Map<String, Value>, i64),
+) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
-    let points = params
-        .get("points")
-        .and_then(Value::as_array)
-        .map_or(Ok(Vec::new()), |list| {
-            list.iter()
-                .enumerate()
-                .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
-                .collect::<Result<Vec<_>, _>>()
-        })?;
+    // #537: points that read a logic array, each with whether it hides.
+    let (points, hidden) = match crate::points::of(map, id, params, t)? {
+        Some(read) => read,
+        None => (
+            params
+                .get("points")
+                .and_then(Value::as_array)
+                .map_or(Ok(Vec::new()), |list| {
+                    list.iter()
+                        .enumerate()
+                        .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
+                        .collect::<Result<Vec<_>, _>>()
+                })?,
+            Vec::new(),
+        ),
+    };
     // #149: a named line's width and its profile along the line.
     let named = params.pointer("/paint/stroke/line").and_then(Value::as_str);
     let drawn_line = match (named, look.drawn.as_ref()) {
@@ -1162,10 +1701,12 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         .get("mode")
         .and_then(Value::as_str)
         .unwrap_or("strip");
-    let Some(pairs) = segments(mode, n) else {
+    let Some(pairs) = crate::points::segments(mode, n) else {
         return refused("out_of_range", format!("{path}/mode"));
     };
     let model = world(items, id);
+    // A point that can't narrow hides each segment that meets it, which keeps its record.
+    let hides = |i: usize| n == written && hidden.get(i) == Some(&true);
     let segments = pairs
         .into_iter()
         .map(|(a, b)| Segment {
@@ -1173,6 +1714,7 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
             b: apply(&model, points[b]),
             wa: widths[a],
             wb: widths[b],
+            hidden: hides(a) || hides(b),
         })
         .collect();
     Ok(Line {
@@ -1185,6 +1727,8 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         joined: drawn_line.is_some(),
         dash: [0.0; 2],
         dash_world: false,
+        cap: crate::points::cap(params, &path)?,
+        trail: None,
     })
 }
 
@@ -1233,6 +1777,10 @@ fn strokes(
     for (k, m) in list.iter().enumerate() {
         let path = |f: &str| format!("items/{id}/modifiers/{k}/{f}");
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("");
+        // #226: a module's deform moved the line's points before it was drawn.
+        if crate::contributed::named(kind) {
+            continue;
+        }
         if !crate::stack::STROKE.contains(&kind) {
             return refused("out_of_range", path("kind"));
         }
@@ -1366,6 +1914,7 @@ fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
                 b: lerp(seg.a, seg.b, fb),
                 wa: seg.wa + (seg.wb - seg.wa) * fa,
                 wb: seg.wa + (seg.wb - seg.wa) * fb,
+                hidden: seg.hidden,
             });
         }
         at += len;
@@ -1374,7 +1923,7 @@ fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
 }
 
 /// A builder's or building kind's mesh after its stack, or why it can't be built.
-fn mesh_of(
+pub(crate) fn mesh_of(
     doc: &Value,
     id: &str,
     item: &Value,
@@ -1386,14 +1935,22 @@ fn mesh_of(
         crate::building::build(doc, id, item)
     } else {
         let run = crate::stack::Run {
-            outlines: outlines.to_vec(),
+            outlines: outlines.outlines.to_vec(),
+            fills: outlines.module.to_vec(),
+            planted: outlines.planted.map(str::to_string),
             ..Default::default()
         };
         crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
     };
-    built.map_err(|path| Refused {
-        code: "out_of_range",
-        path: format!("items/{id}/{path}"),
+    built.map_err(|path| match path.split_once(crate::builders::CODED) {
+        Some((code, at)) => Refused {
+            code: crate::build::code_of(code),
+            path: at.to_string(),
+        },
+        None => Refused {
+            code: "out_of_range",
+            path: format!("items/{id}/{path}"),
+        },
     })
 }
 
@@ -1430,8 +1987,13 @@ fn edge_line(
     // Its dash and gap in its size space; one length dashes as long as it gaps.
     let dash = match params.get("dash") {
         None | Some(Value::Null) => [0.0; 2],
-        Some(v) => match v.as_array().map(|a| a.iter().map(|x| num(Some(x))).collect()) {
-            Some(Some::<Vec<f64>>(d)) if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) => {
+        Some(v) => match v
+            .as_array()
+            .map(|a| a.iter().map(|x| num(Some(x))).collect())
+        {
+            Some(Some::<Vec<f64>>(d))
+                if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) =>
+            {
                 [d[0], d[d.len() - 1]]
             }
             _ => return refused("out_of_range", format!("{path}/dash")),
@@ -1488,17 +2050,26 @@ fn edge_line(
         joined: false,
         dash,
         dash_world: world,
+        cap: Default::default(),
+        trail: None,
     })
 }
 
 /// A drawing look's key: its `dir` around the page, and its `elevation` toward the viewer.
 fn drawn_light(look: &Look3) -> Option<Sun> {
     let l = look.drawn.as_ref()?.light.as_ref()?;
-    let (dir, up) = (deep_canvas::ops::rad(l.dir), deep_canvas::ops::rad(l.elevation));
+    let (dir, up) = (
+        deep_canvas::ops::rad(l.dir),
+        deep_canvas::ops::rad(l.elevation),
+    );
     let (c, s) = (deep_canvas::ops::cos(up), deep_canvas::ops::sin(up));
     Some(Sun {
         id: "look.light".into(),
-        toward: [c * deep_canvas::ops::cos(dir), c * deep_canvas::ops::sin(dir), s],
+        toward: [
+            c * deep_canvas::ops::cos(dir),
+            c * deep_canvas::ops::sin(dir),
+            s,
+        ],
         illuminance: std::f64::consts::PI,
         shadow: l.cast.is_some(),
         cascades: Cascades::default(),
@@ -1774,12 +2345,12 @@ pub type Assets<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
 
 /// The build's outline sources an `extrude` reads its text, path or vector outline through
 /// (#443): the core's `outline.source@1`, as the sealed set holds it.
-pub type Outlines<'a> = &'a [deep_canvas::registry::SealedOutline];
+pub type Outlines<'a> = crate::contributed::Fills<'a>;
 
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`; a `mesh.asset@1` draws only where
 /// [`evaluate_with`] has a store to read it from.
 pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, None, &[])
+    evaluate_any(doc, t, look, labels, None, Outlines::default())
 }
 
 /// [`evaluate`] with the asset store `assets` that `mesh.asset@1` items read their glTF from.
@@ -1790,10 +2361,11 @@ pub fn evaluate_with(
     labels: &mut Labels,
     assets: Assets<'_>,
 ) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, Some(assets), &[])
+    evaluate_any(doc, t, look, labels, Some(assets), Outlines::default())
 }
 
-/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443).
+/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443), and whose module
+/// deforms and kinds run and draw through its module fills (#226).
 pub fn evaluate_sourced(
     doc: &Value,
     t: i64,
@@ -1805,7 +2377,9 @@ pub fn evaluate_sourced(
     evaluate_any(doc, t, look, labels, Some(assets), outlines)
 }
 
-fn evaluate_any(
+/// [`evaluate_sourced`] with or without an asset store (#226: the scheduler's lights read a
+/// module's deforms and kinds too).
+pub fn evaluate_any(
     doc: &Value,
     t: i64,
     look: &Look3,
@@ -1827,6 +2401,298 @@ fn evaluate_any(
     evaluate_compiled(map, &program, t, look, labels, assets, outlines)
 }
 
+/// The items a scatter's field names: an item's ID (a part's `<item>#<part>` as its item), or a
+/// collection's members in ID order; `None` for a name that is neither.
+fn named_items(map: &Map<String, Value>, items: &Items<'_>, name: &str) -> Option<Vec<String>> {
+    let id = name.split('#').next().unwrap_or(name);
+    if items.contains_key(id) {
+        return Some(vec![id.to_string()]);
+    }
+    let list = map
+        .get("collections")?
+        .get(name)?
+        .get("members")?
+        .as_array()?;
+    let mut ids: Vec<String> = list
+        .iter()
+        .filter_map(|m| m.as_str().map(str::to_string))
+        .collect();
+    ids.sort();
+    ids.dedup();
+    Some(ids)
+}
+
+/// The faces of `on` (`<item>` or `<item>#<part>`) in the world: a builder's mesh, or a box's
+/// six sides, whose parts are `top`, `bottom` and `side`.
+fn faces_of(
+    doc: &Value,
+    items: &Items<'_>,
+    on: &str,
+    seconds: f64,
+    outlines: Outlines<'_>,
+) -> Option<Vec<crate::distribute::Tri>> {
+    let (id, part) = match on.split_once('#') {
+        Some((id, part)) => (id, Some(part)),
+        None => (on, None),
+    };
+    let item = items.get(id)?;
+    let m = world(items, id);
+    let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+    let mut out = Vec::new();
+    if kind == "mark.box@1" {
+        let h = size3(item.pointer("/params/size"), [1.0; 3])?.map(|x| x / 2.0);
+        for axis in 0..3 {
+            for sign in [-1.0, 1.0] {
+                let name = match (axis, sign > 0.0) {
+                    (1, true) => "top",
+                    (1, false) => "bottom",
+                    _ => "side",
+                };
+                if part.is_some_and(|p| p != name) {
+                    continue;
+                }
+                let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+                let corner = |x: f64, y: f64| {
+                    let mut p = [0.0; 3];
+                    p[axis] = sign * h[axis];
+                    p[a] = x * h[a];
+                    p[b] = y * h[b] * sign;
+                    apply(&m, p)
+                };
+                let q = [
+                    corner(-1.0, -1.0),
+                    corner(1.0, -1.0),
+                    corner(1.0, 1.0),
+                    corner(-1.0, 1.0),
+                ];
+                out.extend(
+                    [[q[0], q[1], q[2]], [q[0], q[2], q[3]]]
+                        .into_iter()
+                        .filter_map(crate::distribute::Tri::new),
+                );
+            }
+        }
+        return Some(out);
+    }
+    if !crate::builders::KINDS.contains(&kind) {
+        return None;
+    }
+    let mesh = mesh_of(doc, id, item, seconds, outlines).ok()?;
+    let all: Vec<u32>;
+    let tris: &[u32] = match part {
+        Some(name) => mesh
+            .parts
+            .get(name)
+            .or_else(|| mesh.closed.get(name).map(|c| &c.0))?,
+        None => {
+            all = (0..mesh.triangles() as u32).collect();
+            &all
+        }
+    };
+    for &t in tris {
+        let k = 3 * t as usize;
+        let p = [0, 1, 2].map(|j| apply(&m, mesh.positions[mesh.indices[k + j] as usize]));
+        out.extend(crate::distribute::Tri::new(p));
+    }
+    Some(out)
+}
+
+/// #2013: the elements of instancer `id` from its `from: {distribute}` (`from`), laid out over
+/// what the scatter names as the items stand: its prototypes and each element in ID order.
+#[allow(clippy::too_many_arguments)]
+fn scattered(
+    map: &Map<String, Value>,
+    doc: &Value,
+    items: &Items<'_>,
+    id: &str,
+    params: &Value,
+    from: &Value,
+    seconds: f64,
+    outlines: Outlines<'_>,
+    planted: Option<&str>,
+) -> Result<(Vec<String>, Arc<Vec<crate::distribute::Row>>), Refused> {
+    let path = format!("items/{id}/params");
+    let of = crate::cut::prototypes(params, &path)?;
+    let at = format!("{path}/from/distribute");
+    let Some(d) = from.get("distribute").filter(|d| d.is_object()) else {
+        return refused("out_of_range", format!("{path}/from"));
+    };
+    // Rows come from the scatter or from written columns, never both.
+    if let Some(column) = ["ids", "pos", "rot", "yaw", "proto", "hidden"]
+        .into_iter()
+        .find(|c| params.get(c).is_some_and(|v| !v.is_null()))
+    {
+        return refused("out_of_range", format!("{path}/{column}"));
+    }
+    let shapes_of =
+        |name: &str, field: String| -> Result<Vec<deep_canvas::geometry_audit::Shape>, Refused> {
+            let ids = named_items(map, items, name).ok_or(Refused {
+                code: "ref_unresolved",
+                path: field,
+            })?;
+            Ok(ids
+                .iter()
+                .filter_map(|x| {
+                    crate::shapes::of(doc, x, items.get(x)?, &world(items, x), seconds)
+                        .ok()
+                        .flatten()
+                })
+                .flat_map(|(s, _)| s)
+                .collect())
+        };
+    let on = d.get("on").and_then(Value::as_str).ok_or(Refused {
+        code: "ref_unresolved",
+        path: format!("{at}/on"),
+    })?;
+    if !items.contains_key(on.split('#').next().unwrap_or(on)) {
+        return refused("ref_unresolved", format!("{at}/on"));
+    }
+    let Some(faces) = faces_of(doc, items, on, seconds, outlines) else {
+        return refused("out_of_range", format!("{at}/on"));
+    };
+    let mut avoid = Vec::new();
+    match d.get("avoid") {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(list)) => {
+            for (k, name) in list.iter().enumerate() {
+                let name = name.as_str().ok_or(Refused {
+                    code: "out_of_range",
+                    path: format!("{at}/avoid/{k}"),
+                })?;
+                avoid.extend(shapes_of(name, format!("{at}/avoid/{k}"))?);
+            }
+        }
+        Some(_) => return refused("out_of_range", format!("{at}/avoid")),
+    }
+    let project = match d.get("project") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(p) => {
+            let to = p.get("to").and_then(Value::as_str).ok_or(Refused {
+                code: "ref_unresolved",
+                path: format!("{at}/project/to"),
+            })?;
+            shapes_of(to, format!("{at}/project/to"))?
+        }
+    };
+    let identity = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+    ];
+    let protos = of
+        .iter()
+        .map(|p| {
+            let shapes = items.get(p).and_then(|i| {
+                crate::shapes::of(doc, p, i, &identity, seconds)
+                    .ok()
+                    .flatten()
+            });
+            let mut b = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+            for s in shapes.iter().flat_map(|(s, _)| s) {
+                let [lo, hi] = s.aabb();
+                for k in 0..3 {
+                    b[0][k] = b[0][k].min(lo[k]);
+                    b[1][k] = b[1][k].max(hi[k]);
+                }
+            }
+            if b[0][0] <= b[1][0] {
+                b
+            } else {
+                [[0.0; 3]; 2]
+            }
+        })
+        .collect();
+    let scene = crate::distribute::Scene {
+        on: faces,
+        avoid,
+        project,
+        protos,
+        world: world(items, id),
+        id,
+        planted,
+    };
+    Ok((of, Arc::new(crate::distribute::rows(d, &at, &scene)?)))
+}
+
+/// #2013: the elements instancer `id` places at `t` (flicks): its `from: {distribute}`'s, or its
+/// written rows, each as its columns hold it (`{id, proto, pos, yaw | rot, scale}`), in ID
+/// order; `None` for an item that is no instancer.
+pub fn elements_at(
+    doc: &Value,
+    t: i64,
+    id: &str,
+    planted: Option<&str>,
+) -> Result<Option<Vec<crate::distribute::Row>>, Refused> {
+    let Some(map) = doc.as_object() else {
+        return refused("out_of_range", "");
+    };
+    let program = Program::compile(map).map_err(|r| Refused {
+        code: r.code,
+        path: r.path,
+    })?;
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, &program, &state);
+    let mut items = Items::new(doc_items, &written, &state, &program);
+    let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    rest(
+        map,
+        &program,
+        &mut items,
+        seconds,
+        Rests::All,
+        &mut Vec::new(),
+    );
+    let Some(item) = items
+        .get(id)
+        .filter(|i| i.get("kind").and_then(Value::as_str) == Some("instance@1"))
+    else {
+        return Ok(None);
+    };
+    let empty = Value::Object(Map::new());
+    let params = item.get("params").unwrap_or(&empty);
+    let mut rows = match params.get("from").filter(|f| !f.is_null()) {
+        Some(from) => scattered(
+            map,
+            doc,
+            &items,
+            id,
+            params,
+            from,
+            seconds,
+            Outlines::default(),
+            planted,
+        )?
+        .1
+        .to_vec(),
+        None => crate::cut::elements(params, &format!("items/{id}/params"))?
+            .1
+            .into_iter()
+            .map(|e| {
+                let r = rotation_of(&e.at);
+                let scale = sqrt(
+                    e.at[0][0] * e.at[0][0] + e.at[1][0] * e.at[1][0] + e.at[2][0] * e.at[2][0],
+                );
+                crate::distribute::Row {
+                    id: e.id as u32,
+                    proto: e.proto,
+                    pos: origin(&e.at),
+                    yaw: deep_canvas::ops::deg(deep_canvas::ops::atan2(r[0][2], r[0][0])),
+                    turn: Some(r),
+                    scale,
+                }
+            })
+            .collect(),
+    };
+    rows.sort_by_key(|r| r.id);
+    Ok(Some(rows))
+}
+
 /// Each item of `doc` at `t` as evaluated, in item order, with its world transform without its
 /// size: what the spatial index (#421) bounds and queries.
 pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, Refused> {
@@ -1845,7 +2711,16 @@ pub fn placed_at(doc: &Value, t: i64) -> Result<Vec<(String, Value, Affine3)>, R
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, &program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, &program);
+    let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    rest(
+        map,
+        &program,
+        &mut items,
+        seconds,
+        Rests::All,
+        &mut Vec::new(),
+    );
     Ok(items
         .iter()
         .map(|(id, item)| (id.clone(), item.clone(), world(&items, id)))
@@ -1976,6 +2851,7 @@ fn lod_of(
         lod_px: crate::lod::lod_px(doc),
         proxy,
         proxy_mesh,
+        tile: None,
     })))
 }
 
@@ -2113,6 +2989,7 @@ fn asset_scene(
                 adjust: None,
                 batch: 0,
                 row: 0,
+                sway: None,
             });
         }
     }
@@ -2187,7 +3064,18 @@ pub(crate) fn evaluate_compiled(
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let items = Items::new(doc_items, &written, &state);
+    let mut items = Items::new(doc_items, &written, &state, program);
+    // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
+    // that finds no support.
+    rest(
+        map,
+        program,
+        &mut items,
+        seconds,
+        Rests::All,
+        &mut Vec::new(),
+    );
+    let items = items;
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -2244,6 +3132,15 @@ pub(crate) fn evaluate_compiled(
     let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
+    // #226: what a module's deforms and kinds read.
+    let lookup = |k: &str| items.get(k);
+    let ask = crate::contributed::Ask {
+        fills: outlines.module,
+        item: &lookup,
+        channels: map.get("channels"),
+        planted: outlines.planted,
+        memo: outlines.memo,
+    };
     // #424: the prototypes instancers name, whose solids are kept in their own space whether or
     // not they draw themselves; the instancers, placed once every layer is read; the cutaway.
     let mut protos_wanted: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
@@ -2291,8 +3188,18 @@ pub(crate) fn evaluate_compiled(
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
             let params = item.get("params").unwrap_or(&empty);
+            let mapped = crate::contributed::params(&ask, (id, kind), item, params)?;
+            let params = mapped.as_ref();
             if let (true, Some(p)) = (look.drawn.is_some(), params.get("paint")) {
                 painted.insert(id.clone(), p.clone());
+            }
+            // #1653: a 3D item's lights shade it, and Modifier: bevel bevels it; never a 2D
+            // paint's bevel or shade.
+            if let Some(field) = ["bevel", "shade"]
+                .into_iter()
+                .find(|f| is_3d(kind) && params.pointer(&format!("/paint/{f}")).is_some())
+            {
+                return refused("paint_2d_only", format!("{path}/paint/{field}"));
             }
             match kind {
                 "mark.box@1" | "mark.cylinder@1" | "mark.sphere@1" => {
@@ -2331,7 +3238,9 @@ pub(crate) fn evaluate_compiled(
                             (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
                                 [m.base[0], m.base[1], m.base[2]].map(encode8)
                             }
-                            (None, _) => paint(look, params, &path)?,
+                            // #540: the box, cylinder and sphere marks wrap their builders (Marks
+                            // in 3D), so an unpainted one draws as an unpainted built mesh does.
+                            (None, _) => paint_or_muted(look, params, &path)?,
                         },
                         stroke: inked(
                             stroke(look, params, shape, &path)?,
@@ -2358,6 +3267,7 @@ pub(crate) fn evaluate_compiled(
                         adjust: None,
                         batch: 0,
                         row: 0,
+                        sway: None,
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
@@ -2458,6 +3368,7 @@ pub(crate) fn evaluate_compiled(
                             adjust: None,
                             batch: 0,
                             row: 0,
+                            sway: None,
                         });
                     }
                 }
@@ -2475,7 +3386,15 @@ pub(crate) fn evaluate_compiled(
                         ("mesh.sequence@1", Some(read)) => {
                             (crate::fixtures::sequence(params, t, &path, read)?, None)
                         }
-                        _ => (mesh_of(doc, id, item, seconds, outlines)?, None),
+                        _ => {
+                            let mesh = crate::contributed::built(
+                                &ask,
+                                (doc, id, item),
+                                seconds,
+                                outlines,
+                            )?;
+                            (mesh, None)
+                        }
                     };
                     if mesh.triangles() == 0 {
                         continue;
@@ -2496,12 +3415,20 @@ pub(crate) fn evaluate_compiled(
                         Some(name) => h.text(name),
                         None => h.bytes(&deep_canvas::schedule::Canonical::canonical_bytes(&mesh)),
                     };
+                    // A swaying mesh moves per instance on the GPU (#2016).
+                    let sway = mesh.sway.as_ref().map(|_| Swaying {
+                        t: seconds,
+                        seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
+                    });
                     let key = h.finish().0;
                     let material = light::material(item, |m| items.get(m), look, id)?;
                     let maps = light::maps(item, |m| items.get(m))?;
-                    let hash = u64::from_le_bytes([
+                    let mut hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
+                    if sway.is_some() {
+                        hash = swaying_shape(hash, id);
+                    }
                     let surface = surface(&items, look, id, item)?;
                     if surface.alpha <= 0.0 {
                         continue;
@@ -2519,7 +3446,12 @@ pub(crate) fn evaluate_compiled(
                             }
                             (None, _) => paint_or_muted(look, params, &path)?,
                         },
-                        stroke: inked(None, &material, Shape::Built(hash), &path)?,
+                        stroke: inked(
+                            stroke(look, params, Shape::Built(hash), &path)?,
+                            &material,
+                            Shape::Built(hash),
+                            &path,
+                        )?,
                         lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
                         mesh: Some(Arc::new(mesh)),
                         mask: None,
@@ -2539,7 +3471,35 @@ pub(crate) fn evaluate_compiled(
                         adjust: None,
                         batch: 0,
                         row: 0,
+                        sway,
                     });
+                    // #2017: a plate with levels draws as its tiles, each at the level its error
+                    // projected at the view chooses.
+                    if k == "plate@1" && uniform(&model) {
+                        let plate = layer.solids.last().expect("just pushed");
+                        let built = plate.mesh.as_ref().expect("a built mesh");
+                        if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
+                            let plate = layer.solids.pop().expect("just pushed");
+                            let lod_px = crate::lod::lod_px(map);
+                            for t in tiles.iter() {
+                                let mut s = plate.clone();
+                                s.mesh = Some(t.levels[0].mesh.clone());
+                                s.shape = Shape::Built(t.levels[0].hash);
+                                s.lod = Some(Arc::new(crate::lod::Lod {
+                                    bands: Vec::new(),
+                                    margin: 0.0,
+                                    bounds: t.bounds,
+                                    levels: t.levels.clone(),
+                                    extent: 1.0,
+                                    lod_px,
+                                    proxy: None,
+                                    proxy_mesh: None,
+                                    tile: Some(t.at),
+                                }));
+                                layer.solids.push(s);
+                            }
+                        }
+                    }
                 }
                 // A curve draws nothing; what follows it (particles along it, #420) reads it
                 // sampled, in world metres.
@@ -2555,77 +3515,71 @@ pub(crate) fn evaluate_compiled(
                     }
                 }
                 "mark.line@1" => {
-                    let mut l = line(&items, id, params, look)?;
+                    let mut l = match crate::trail::read(params, &path)? {
+                        // #450: a trail reads its source at earlier times, through `trail::path_at`.
+                        Some(tr) => {
+                            let at = |times: &[i64]| {
+                                crate::trail::path_at(
+                                    map,
+                                    program,
+                                    &items,
+                                    &tr.of,
+                                    times,
+                                    &format!("{path}/trail/of"),
+                                )
+                            };
+                            let mut drawn = crate::trail::drawn(
+                                &tr,
+                                (map, program, t),
+                                (id, &path),
+                                &at,
+                                &mut labels.trails,
+                            )?;
+                            crate::trail::ride(
+                                &tr,
+                                &mut drawn,
+                                |p, at| world_at(map, program, p, at),
+                                map,
+                                t,
+                            );
+                            let world =
+                                params.get("size_space").and_then(Value::as_str) == Some("world");
+                            let cap = crate::points::cap(params, &path)?;
+                            crate::trail::line(
+                                id,
+                                &tr,
+                                drawn,
+                                paint(look, params, &path)?,
+                                world,
+                                cap,
+                            )
+                        }
+                        None => line(&items, id, params, look, (map, t))?,
+                    };
                     let under = strokes(map, id, item, &mut l, look, seconds)?;
-                    bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
+                    bounds.extend(crate::points::ends(&l));
                     layer.lines.extend(under);
                     layer.lines.push(l);
                 }
                 "mark.point@1" => {
-                    let pos = origin(&world(&items, id));
-                    bounds.push(pos);
-                    let shape = match params.get("shape").and_then(Value::as_str) {
-                        None | Some("dot") => PointShape::Dot,
-                        Some("square") => PointShape::Square,
-                        Some("diamond") => PointShape::Diamond,
-                        Some(_) => return refused("out_of_range", format!("{path}/shape")),
-                    };
-                    layer.points.push(Point {
-                        id: id.clone(),
-                        pos,
-                        size: num(params.get("size")).unwrap_or(4.0),
-                        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
-                        shape,
-                        color: paint(look, params, &path)?,
-                    });
+                    let at = crate::contributed::place(&ask, &items, id, item)?;
+                    let point =
+                        crate::cloud::point(id, params, &path, world_moved(&items, id, at), look)?;
+                    // A set from a depth video bounds its frustum, never its points (#503).
+                    match &point.cloud {
+                        Some(c) => bounds.extend(c.corners()),
+                        None => bounds.push(point.pos),
+                    }
+                    layer.points.push(point);
                 }
                 "mark.text@1" => {
-                    let text = params.get("text").and_then(Value::as_str).unwrap_or("");
-                    let font = params.get("font").and_then(Value::as_str).unwrap_or("body");
-                    let Some(role) = Role::parse(font) else {
-                        return refused("out_of_range", format!("{path}/font"));
-                    };
-                    let facing = match params.get("facing").and_then(Value::as_str) {
-                        None | Some("camera") => Facing::Camera,
-                        Some("upright") => Facing::Upright,
-                        Some("fixed") => Facing::Fixed,
-                        Some(_) => return refused("out_of_range", format!("{path}/facing")),
-                    };
-                    let world_space =
-                        params.get("size_space").and_then(Value::as_str) == Some("world");
-                    let size =
-                        num(params.get("size")).unwrap_or(if world_space { 0.25 } else { 13.0 });
-                    // A screen-size label's run is a 2D text's of that text, font and size.
-                    let run_size = if world_space {
-                        WORLD_EM_PX
-                    } else {
-                        size as f32
-                    };
-                    let (run_box, glyphs) = labels.run(text, role, run_size);
-                    let shaped_at = glyphs.first().map_or(run_size, |g| g.size);
-                    let to_em = size / f64::from(shaped_at);
-                    let m = world(&items, id);
-                    let pos = origin(&m);
-                    bounds.push(pos);
-                    layer.labels.push(Label {
-                        id: id.clone(),
-                        text: text.to_string(),
-                        role,
-                        glyphs,
-                        bounds: run_box,
-                        pos,
-                        em: size,
-                        quad: [run_box[0] * to_em, run_box[1] * to_em],
-                        world: world_space,
-                        facing,
-                        axes: [
-                            normalize(turn(&m, [1.0, 0.0, 0.0])),
-                            normalize(turn(&m, [0.0, 1.0, 0.0])),
-                        ],
-                        color: paint(look, params, &path)?,
-                    });
+                    let l = label(id, params, &path, &world(&items, id), look, labels)?;
+                    bounds.push(l.pos);
+                    layer.labels.push(l);
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                // #1183: an overlay whose `show` is false at t draws nothing.
+                "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
@@ -2719,6 +3673,15 @@ pub(crate) fn evaluate_compiled(
                     let pos = origin(&world(&items, id));
                     probe_items.push(crate::probe::read(id, params, pos, &path)?);
                 }
+                k if crate::contributed::draws(k) => crate::contributed::drawn(
+                    &ask,
+                    (&items, id, item),
+                    (look, labels, (map, t)),
+                    crate::contributed::Out {
+                        layer: &mut layer,
+                        bounds: &mut bounds,
+                    },
+                )?,
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2762,12 +3725,36 @@ pub(crate) fn evaluate_compiled(
         let path = format!("items/{id}/params");
         let empty = Value::Object(Map::new());
         let params = items[id.as_str()].get("params").unwrap_or(&empty);
-        let (of, elements) = crate::cut::elements(params, &path)?;
+        let (of, elements) = match params.get("from").filter(|f| !f.is_null()) {
+            // #2013: its rows from a scatter.
+            Some(from) => {
+                let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
+                let (of, rows) =
+                    scattered(map, doc, &items, id, params, from, seconds, outlines, None)?;
+                let elements = rows
+                    .iter()
+                    .enumerate()
+                    .map(|(k, r)| crate::cut::Element {
+                        id: u64::from(r.id),
+                        row: k as u32,
+                        proto: r.proto,
+                        at: r.at(),
+                    })
+                    .collect();
+                (of, elements)
+            }
+            None => crate::cut::elements(params, &path)?,
+        };
         let at = world(&items, id);
         let from: Vec<Affine3> = of
             .iter()
             .map(|p| crate::cut::inverse(&world(&items, p)))
             .collect();
+        if crate::slots::fed(params) {
+            let sink = (&mut batches, &mut layers[*l], &mut bounds);
+            crate::slots::place(map, id, params, t, (&at, &of, &from, assets), &protos, sink)?;
+            continue;
+        }
         // Above the line, or drawn from an instances output, the GPU culls each (prototype,
         // material) batch (#484); inside a batch elements upload by stable ID, so survivors in
         // index order are in stable-ID order.
@@ -2776,6 +3763,10 @@ pub(crate) fn evaluate_compiled(
         if gpu {
             elements.sort_by_key(|e| e.id);
         }
+        // #2017: a prototype whose sway weighs each vertex by its height, batched on the GPU,
+        // sways as a shear of each element's place, so every element keeps the one rest mesh.
+        type Sheared = HashMap<(usize, usize), Option<(Arc<crate::geom::Mesh>, u64)>>;
+        let mut sheared: Sheared = HashMap::new();
         for e in elements {
             let Some(solids) = protos.get(&of[e.proto]) else {
                 return refused("ref_unresolved", format!("{path}/of"));
@@ -2783,6 +3774,35 @@ pub(crate) fn evaluate_compiled(
             let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
             for (k, s) in solids.iter().enumerate() {
                 let mut s = s.clone();
+                let own = if solids.len() == 1 {
+                    format!("{id}#{}", e.id)
+                } else {
+                    format!("{id}#{}#{k}", e.id)
+                };
+                let shear = match (gpu, s.sway, s.shape) {
+                    (true, Some(_), Shape::Built(h)) => sheared
+                        .entry((e.proto, k))
+                        .or_insert_with(|| rest_of(&s, h))
+                        .clone(),
+                    _ => None,
+                };
+                if let (Some((rest, h)), Some(at)) = (shear, s.sway) {
+                    let sway = s
+                        .mesh
+                        .as_ref()
+                        .and_then(|m| m.sway.as_ref())
+                        .expect("swaying");
+                    let shear = shear_of(&matmul(&place, &s.model), sway, &rest, at);
+                    s.model = matmul(&s.model, &shear);
+                    s.mesh = Some(rest);
+                    s.shape = Shape::Built(h);
+                    s.sway = None;
+                }
+                // A swaying element moves by its own place on the GPU (#2016): it draws its own
+                // copy.
+                if let (Some(_), Shape::Built(h)) = (s.sway, s.shape) {
+                    s.shape = Shape::Built(swaying_shape(h, &own));
+                }
                 if gpu {
                     s.row = e.row;
                     let key = (id.as_str(), s.shape, s.material);
@@ -2792,11 +3812,7 @@ pub(crate) fn evaluate_compiled(
                         batches.len() - 1
                     }) as u32;
                 }
-                s.id = if solids.len() == 1 {
-                    format!("{id}#{}", e.id)
-                } else {
-                    format!("{id}#{}#{k}", e.id)
-                };
+                s.id = own;
                 s.model = matmul(&place, &s.model);
                 s.op = None;
                 bounds.extend(s.points());
@@ -2850,10 +3866,27 @@ pub(crate) fn evaluate_compiled(
         &cam_path,
     )?;
 
-    // A readout sits in the view's top-left corner, its text the template's (#419).
+    // A readout sits in the view's top-left corner, its text the template's (#419), filled from
+    // the values that move the parts at t; a figure's card stacks its lines below (#504).
+    let shown = (!readout_items.is_empty() || map.contains_key("card"))
+        .then(|| eval::shown_doc(map, program, &state));
+    let card: Vec<(String, Value)> = shown
+        .as_ref()
+        .map(|s| {
+            deep_canvas::template::card_lines(s)
+                .into_iter()
+                .map(|(f, t)| (format!("card/{f}"), serde_json::json!({"template": t})))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut readouts = Vec::new();
-    for (id, params) in &readout_items {
-        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+    let mut top = 12.0;
+    for (id, params) in readout_items.iter().chain(card.iter()) {
+        let template = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let filled = shown
+            .as_ref()
+            .and_then(|s| deep_canvas::template::expand_in(s, id, template).ok());
+        let text = filled.as_deref().unwrap_or(template);
         let size = num(params.get("size")).unwrap_or(13.0);
         let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
         let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
@@ -2872,7 +3905,7 @@ pub(crate) fn evaluate_compiled(
             role: Role::Body,
             glyphs,
             bounds: run_box,
-            pos: camera.unproject(12.0 + quad[0] / 2.0, 12.0 + quad[1] / 2.0, depth),
+            pos: camera.unproject(12.0 + quad[0] / 2.0, top + quad[1] / 2.0, depth),
             em: size,
             quad,
             world: false,
@@ -2883,6 +3916,7 @@ pub(crate) fn evaluate_compiled(
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
         });
+        top += quad[1] + 4.0;
     }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
@@ -2960,6 +3994,7 @@ pub(crate) fn evaluate_compiled(
         read_reflection: false,
         read_foam: false,
         probes,
+        tints: crate::tints::tints(map, look, t)?,
     };
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
@@ -2970,7 +4005,9 @@ pub(crate) fn evaluate_compiled(
             let step = frame_interval(map);
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
-            wake.path = wake_path(map, program, &items, &w.material, &wake.item, &times)?;
+            let path = format!("items/{}/params/water/wake/item", w.material);
+            let at = crate::trail::path_at(map, program, &items, &wake.item, &times, &path)?;
+            wake.path = at.iter().map(|p| [p[0], p[2]]).collect();
         }
         // #268: the shore's field, baked once per key.
         if let Some(shore) = &mut w.shore {
@@ -2993,57 +4030,6 @@ pub(crate) fn evaluate_compiled(
     Ok(scene)
 }
 
-/// #166: where a wake's item stood in the water's plane (x, z) at each of `times`, read through
-/// the chain a trail reads: its channels and parents, or a physics bake's output kept through the
-/// world's span, never an earlier frame ([`crate::water::logic_moved`] refuses an item a logic
-/// array moves before this).
-fn wake_path(
-    map: &Map<String, Value>,
-    program: &Program,
-    items: &Items<'_>,
-    material: &str,
-    item: &str,
-    times: &[i64],
-) -> Result<Vec<[f64; 2]>, Refused> {
-    let unresolved = || {
-        refused(
-            "ref_unresolved",
-            format!("items/{material}/params/water/wake/item"),
-        )
-    };
-    // A body of a baked world: `<world>#<body>`.
-    if let Some((owner, body)) = item.split_once('#') {
-        let Some(world) = items
-            .get(owner)
-            .filter(|w| w.get("kind").and_then(Value::as_str) == Some("fixture.world@1"))
-        else {
-            return unresolved();
-        };
-        let params = world.get("params").cloned().unwrap_or(Value::Null);
-        let bake = crate::fixtures::bake(&params, &format!("items/{owner}/params"))?;
-        let Some(k) = bake.bodies.iter().position(|b| b.id == body) else {
-            return unresolved();
-        };
-        return Ok(times
-            .iter()
-            .map(|&at| {
-                let p = bake.at(at)[k];
-                [p[0], p[2]]
-            })
-            .collect());
-    }
-    if items.get(item).is_none() {
-        return unresolved();
-    }
-    Ok(times
-        .iter()
-        .map(|&at| {
-            let o = origin_at(map, program, item, at);
-            [o[0], o[2]]
-        })
-        .collect())
-}
-
 /// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
 fn frame_interval(map: &Map<String, Value>) -> i64 {
     let (p, q) = map
@@ -3056,7 +4042,12 @@ fn frame_interval(map: &Map<String, Value>) -> i64 {
 
 /// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a
 /// wake reads at an earlier time, never an earlier frame.
-fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Vec3 {
+pub(crate) fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Vec3 {
+    origin(&world_at(map, program, id, t))
+}
+
+/// Item `id`'s world transform at `t`, evaluated afresh (#450: a local trail's parent then).
+pub(crate) fn world_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Affine3 {
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
     let empty = Map::new();
@@ -3065,8 +4056,17 @@ fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> V
         .and_then(Value::as_object)
         .unwrap_or(&empty);
     let written = eval::written(map, program, &state);
-    let items = Items::new(doc_items, &written, &state);
-    origin(&world(&items, id))
+    let mut items = Items::new(doc_items, &written, &state, program);
+    let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    rest(
+        map,
+        program,
+        &mut items,
+        seconds,
+        Rests::All,
+        &mut Vec::new(),
+    );
+    world(&items, id)
 }
 
 /// The document's light probes, each captured or baked from what it sees (#427). Figures and
@@ -3339,7 +4339,7 @@ impl Scene {
             }
             for l in &layer.lines {
                 let mut pts = Vec::new();
-                for seg in &l.segments {
+                for seg in l.segments.iter().filter(|s| !s.hidden) {
                     for (p, w) in [(seg.a, seg.wa), (seg.b, seg.wb)] {
                         if let Some(q) = cam.project(p) {
                             let r = if l.world { w * cam.px_per_m(q[2]) } else { w }.max(1.0) / 2.0;
@@ -3389,13 +4389,20 @@ impl Scene {
 }
 
 /// Whether `doc` holds any of scene3d's marks: a document a 2D renderer can't draw alone.
+/// A scene3d kind, or one a module draws through its fills (#226).
+fn is_3d_or_contributed(kind: &str) -> bool {
+    is_3d(kind) || crate::contributed::draws(kind)
+}
+
 pub fn has_3d(doc: &Value) -> bool {
     doc.get("items")
         .and_then(Value::as_object)
         .is_some_and(|items| {
-            items
-                .values()
-                .any(|i| i.get("kind").and_then(Value::as_str).is_some_and(is_3d))
+            items.values().any(|i| {
+                i.get("kind")
+                    .and_then(Value::as_str)
+                    .is_some_and(is_3d_or_contributed)
+            })
         })
 }
 
@@ -3478,7 +4485,144 @@ mod stroke_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #2013's garden: the vase rests on the table's top, the scatter keeps its distance and its
+    /// margin and stays off the table, no two elements' bounds pass into each other, and the
+    /// same garden with its items listed the other way round scatters the same.
+    #[test]
+    fn the_scattered_garden_rests_its_vase_and_prunes_its_shrubs() {
+        let doc = crate::module::garden();
+        let placed = placed_at(&doc, 0).unwrap();
+        let vase = placed.iter().find(|(id, _, _)| id == "vase").unwrap();
+        assert!(
+            (vase.2[1][3] - 0.75).abs() < 1e-8 && vase.2[0][3] == 0.2,
+            "{:?}",
+            vase.2
+        );
+        let rows = elements_at(&doc, 0, "shrubs", None).unwrap().unwrap();
+        assert!(rows.len() > 40, "{}", rows.len());
+        // An element's bounds on the ground: its prototype's square, turned by its yaw.
+        let half = |r: &crate::distribute::Row| {
+            let (c, s) = (cos(rad(r.yaw)).abs(), sin(rad(r.yaw)).abs());
+            (if r.proto == 0 { 0.45 } else { 0.1 }) * (c + s)
+        };
+        assert!(rows.iter().any(|r| r.proto == 0) && rows.iter().any(|r| r.proto == 1));
+        for (i, a) in rows.iter().enumerate() {
+            assert!(
+                a.pos[0].abs() <= 4.5 && a.pos[2].abs() <= 4.5 && a.pos[1] == 0.0,
+                "{:?}",
+                a.pos
+            );
+            assert!(
+                a.pos[0].abs() > 0.6 || a.pos[2].abs() > 0.4,
+                "in the table: {:?}",
+                a.pos
+            );
+            for b in &rows[i + 1..] {
+                let d = [(a.pos[0] - b.pos[0]).abs(), (a.pos[2] - b.pos[2]).abs()];
+                assert!(d[0] * d[0] + d[1] * d[1] >= 0.25);
+                let clear = half(a) + half(b) - 1e-9;
+                assert!(
+                    d[0] >= clear || d[1] >= clear,
+                    "{} and {} pass into each other",
+                    a.id,
+                    b.id
+                );
+            }
+        }
+        let mut reversed = doc.clone();
+        let items: Vec<(String, Value)> = doc["items"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .rev()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        reversed["items"] = Value::Object(items.into_iter().collect());
+        assert_eq!(
+            elements_at(&reversed, 0, "shrubs", None).unwrap().unwrap(),
+            rows
+        );
+        // A rest with nothing under it reports no support and leaves its owner where it was.
+        let mut lost = doc.clone();
+        lost["items"]["vase"]["at"]["pos"] = serde_json::json!([4.0, 2.0, 4.0]);
+        let (rested, problems) = rested_at(&lost, 0, Rests::All).unwrap();
+        assert!(rested.is_empty());
+        assert_eq!(
+            problems,
+            vec![Refused {
+                code: "no_support",
+                path: "constraints/rest".into()
+            }]
+        );
+        // On a collection it rests on the first surface of any member; on the ground, on y 0.
+        lost["collections"] = serde_json::json!({"floor": {"members": ["ground", "table"]}});
+        lost["constraints"]["rest"]["on"] = serde_json::json!("floor");
+        assert_eq!(
+            rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0,
+            [4.0, 0.0, 4.0]
+        );
+        lost["constraints"]["rest"]["on"] = serde_json::json!("ground");
+        lost["constraints"]["rest"]["offset"] = serde_json::json!(0.25);
+        assert_eq!(
+            rested_at(&lost, 0, Rests::All).unwrap().0["vase"].0,
+            [4.0, 0.25, 4.0]
+        );
+        // In an assembly turned a quarter about +Z (#504), down is the owner's own −x: a box
+        // written at the world's (0.2, 2, 0.1) rests on the table's top, 0.1 m under its centre.
+        let mut turned = doc.clone();
+        turned["assemblies"] = serde_json::json!({"tray": {"at": {"rot": [0, 0, 90]}}});
+        turned["items"]["vase"] = serde_json::json!({"id": "vase", "kind": "mark.box@1", "name": "Vase", "order": "a3",
+            "parent": "tray", "params": {"size": [0.2, 0.3, 0.2]}, "at": {"pos": [2.0, -0.2, 0.1]}});
+        let at = rested_at(&turned, 0, Rests::All).unwrap().0["vase"].0;
+        assert!(
+            (at[0] - 0.85).abs() < 1e-6 && (at[1] + 0.2).abs() < 1e-6 && (at[2] - 0.1).abs() < 1e-6,
+            "{at:?}"
+        );
+        // A channel on the owner's position is refused as a second writer, naming both.
+        lost["channels"] = serde_json::json!({"lift": {"target": "items/vase/at/pos/1", "type": "f32",
+            "keys": {"k0": {"t": "0s", "value": 2, "interp": "linear"}, "k1": {"t": "1s", "value": 3, "interp": "linear"}}}});
+        let refusal = rested_at(&lost, 0, Rests::All).unwrap_err();
+        assert_eq!(
+            (refusal.code, refusal.path.as_str()),
+            ("second_writer", "channels/lift and constraints/rest")
+        );
+    }
     use serde_json::json;
+
+    /// #1653: a 2D paint's bevel or shade on a 3D item is refused, naming the field; the
+    /// builders' own `bevel` and `shade` params are not paint and draw.
+    #[test]
+    fn a_bevel_or_a_shade_on_a_3d_item_is_refused() {
+        let look = Look3::read(&json!({"roles": {"block": "#808080", "ground": "#ffffff"}}))
+            .expect("the look reads");
+        let doc = |paint: Value| {
+            json!({
+                "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
+                "camera": "cam", "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+                "items": {
+                    "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+                        "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
+                    "b": {"id": "b", "kind": "mark.box@1", "layer": "main", "name": "B", "order": "a1",
+                        "params": {"size": [1, 1, 1], "paint": paint}},
+                }
+            })
+        };
+        let fill = json!({"role": "block"});
+        for field in ["bevel", "shade"] {
+            let mut paint = json!({"fill": fill});
+            paint[field] = json!({"size": 4});
+            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new()).expect_err("refused");
+            assert_eq!(
+                (refused.code, refused.path.as_str()),
+                (
+                    "paint_2d_only",
+                    format!("items/b/params/paint/{field}").as_str()
+                )
+            );
+        }
+        assert!(evaluate(&doc(json!({"fill": fill})), 0, &look, &mut Labels::new()).is_ok());
+    }
 
     #[test]
     fn a_child_box_rides_its_parent_once() {

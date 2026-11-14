@@ -18,13 +18,19 @@ import { alive, HELPER, scan, sha256, startNow, table, tokenOf, type Proc } from
 import { bubblewrapWith } from './bubblewrap.js';
 import type { Egress } from './egress.js';
 import { markerOf, quote, real, seatbeltWith } from './seatbelt.js';
-import type { Cleanup, Exit, Grant, HostFacts, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
+import type { Cleanup, Exit, Grant, HostFacts, LimitStop, ResourceKind, ResourceStep, RunStatus, SandboxBackend, Started, StartSpec, Supervisor, SupervisorOptions } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 const DAY = 86_400_000;
 const SCAN_MS = 100;
 const GRACE_MS = 2000;
 const WARM_MS = 60_000;
+/** The system log's sandbox reports that carry a run's tag, by their sender: `log` tests every message the machine writes. */
+const REPORTS = 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"';
+/** The same reports by the subsystem they carry too, which the log filters by before it sends the stream a message. */
+const REPORTS_BY_SUBSYSTEM = `subsystem == "com.apple.sandbox.reporting" AND ${REPORTS}`;
+/** The planted world of the fallback's test: a macOS whose reports carry another subsystem than the filter names. */
+const REPORTS_ELSEWHERE = `subsystem == "com.apple.sandbox.elsewhere" AND ${REPORTS}`;
 /** How long a run's output may stay open after its process exits: a background process holding it is a leftover, reaped by cleanup. */
 const DRAIN_MS = 1000;
 /** How often a key out of its pool has its cleanup check run again. */
@@ -32,6 +38,11 @@ const RECHECK_MS = 60_000;
 /** The ask.sources@1 row the supervisor raises its unblock asks from. */
 const UNBLOCK_SOURCE = 'supervisor.cleanup';
 const RUN = /^run:[0-9A-Za-z]+$/;
+const MIB = 1024 * 1024;
+/** The event a stop at a limit records (#1409). */
+const LIMIT_KIND = 'run.stopped_at_limit';
+/** How long a run's end waits for the watcher to write the ends before it: it never holds an exit longer. */
+const SYNC_MS = 1000;
 /** Whether a lease event is one of the supervisor's runs' (the core's, or a writer a run named as its holder), not a session's or a package's own. */
 const ours = (holder: unknown): boolean => holder === 'core' || (typeof holder === 'string' && holder.startsWith('mcp:'));
 /** The kinds `open` and a tick read: both read them as this type, so a kind either names that the list leaves out fails to compile. */
@@ -67,6 +78,14 @@ interface Run {
   kept?: boolean;
   /** Its egress filter, while it holds a credential by stand-in; closed by its cleanup. */
   egress?: Egress;
+  /** What it may take (StartSpec.limits). */
+  limits?: StartSpec['limits'];
+  /** The limit it was stopped at, once it was: what its exit carries. */
+  limited?: LimitStop;
+  /** Its stop at a limit while it is recorded and its processes are killed. */
+  stopping?: Promise<void>;
+  /** Its first process, as the watcher names its ends: a run with a file limit on macOS. */
+  watched?: number;
   child?: ChildProcess;
   exit?: Promise<Exit>;
   state: RunStatus['state'];
@@ -99,6 +118,8 @@ class LocalSupervisor implements Supervisor {
   private scanning: Promise<void> = Promise.resolve();
   private pumping: Promise<void> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
+  /** When the timed scan's beat began: the supervisor's opening. */
+  private beatFrom = 0;
   /** The timer's scan while it is queued or runs. */
   private timed: Promise<void> | undefined;
   private log: ChildProcess | undefined;
@@ -116,6 +137,16 @@ class LocalSupervisor implements Supervisor {
   private readonly lingering = new Set<Run>();
   private closed = false;
   private readonly sandbox: SandboxBackend;
+  /**
+   * The helper's `watch` (macOS), started with the first run that has a file limit: it follows each such run's
+   * processes, its forks included, and writes each one's end, so a child killed at the limit is seen.
+   */
+  private watcher: ChildProcess | undefined;
+  /** Each watched run by the first process the watcher names its ends with. */
+  private readonly watchedRuns = new Map<number, Run>();
+  /** Each "sync" sent to the watcher whose echo hasn't come. */
+  private readonly syncs = new Map<number, () => void>();
+  private synced = 0;
 
   constructor(private readonly options: SupervisorOptions) {
     // The supervisor's own package, whose helper it runs outside any sandbox, is guarded like the caller's paths.
@@ -289,23 +320,51 @@ class LocalSupervisor implements Supervisor {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
-    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials();
+    if (process.platform === 'darwin' && this.options.plant !== 'sandbox-left-to-caller') this.watchDenials(this.options.plant === 'reports-other-subsystem' ? REPORTS_ELSEWHERE : REPORTS_BY_SUBSYSTEM);
+    this.beatFrom = Date.now();
+    this.scanSoon();
+  }
+
+  /** The runs a scan reads: each in the supervisor's sandbox that is live, or that its cleanup left running. */
+  private scanned(): Run[] {
+    return [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
+  }
+  /**
+   * The timed scan, running while a run has a sandbox to scan: with none, the timer stops, so a hub with no run
+   * wakes for nothing; a run's start and a cleanup that leaves a process running start it again, on the beat it
+   * has kept since the supervisor opened, so a run's first scan comes as soon as it did while the timer never stopped.
+   */
+  private scanSoon(): void {
+    if (this.timer || this.closed) return;
     // One timed scan at a time: on a loaded machine a scan outlasts the interval, and queued ones would pile up
     // without end in front of a cleanup's own scan.
-    this.timer = setInterval(() => {
+    const beat = (): void => {
+      if (!this.scanned().length) {
+        clearInterval(this.timer);
+        this.timer = undefined;
+        return;
+      }
       this.timed ??= this.scanOnce().catch(() => undefined).finally(() => { this.timed = undefined; });
-    }, SCAN_MS);
+    };
+    this.timer = setTimeout(() => {
+      this.timer = setInterval(beat, SCAN_MS);
+      this.timer.unref();
+      beat();
+    }, SCAN_MS - ((Date.now() - this.beatFrom) % SCAN_MS));
     this.timer.unref();
   }
 
   /**
-   * The system log's sandbox reports that carry a run's tag: each a sandbox.denied for that run. The stream
-   * announces its filter before it is attached, and after a while idle macOS drops the first reports of a program
-   * that isn't Apple's, so it counts as ready only once it has seen a denial of its own: the helper, refused a
-   * write in a canary's sandbox, until its report comes through.
+   * The system log's sandbox reports that carry a run's tag: each a sandbox.denied for that run. The filter names
+   * the reports' subsystem, so the log sends the stream those alone: filtered by sender only, `log` reads every
+   * message the machine writes for the hub's whole life. The stream announces its filter before it is attached,
+   * and after a while idle macOS drops the first reports of a program that isn't Apple's, so it counts as ready
+   * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
+   * comes through. A macOS whose reports carry another subsystem shows the canary's through that filter never:
+   * the stream then starts again on the sender alone.
    */
-  private watchDenials(): void {
-    const log = spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', 'sender == "Sandbox" AND eventMessage CONTAINS "dev.deepbuild.run:"'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  private watchDenials(filter: string): void {
+    const log = spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', filter], { stdio: ['ignore', 'pipe', 'ignore'] });
     this.log = log;
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
@@ -329,7 +388,11 @@ class LocalSupervisor implements Supervisor {
       }
     });
     this.warming = this.warm(10_000).then((live) => {
-      if (!live) process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      if (live || this.closed) return undefined;
+      if (filter === REPORTS) return void process.stderr.write('deep supervisor: the system log never showed a sandbox report, so denials go unrecorded\n');
+      if (log.pid) try { process.kill(log.pid, 'SIGTERM'); } catch { /* gone */ }
+      this.watchDenials(REPORTS);
+      return this.warming;
     });
   }
 
@@ -397,6 +460,12 @@ class LocalSupervisor implements Supervisor {
   start(spec: StartSpec): Promise<Started> {
     if (!RUN.test(spec.run)) return Promise.reject(Error(`a run is named run:<id>, not ${spec.run}`));
     if (this.runs.has(spec.run) || this.waiters.some((w) => w.spec.run === spec.run)) return Promise.reject(Error(`${spec.run} has already started`));
+    for (const name of spec.limits ? ['memory_mb', 'file_mb'] as const : []) {
+      const value: unknown = spec.limits![name];
+      if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 0xffff_ffff) return Promise.reject(Error(`a run's ${name} is a whole number of MiB, not ${String(value)}`));
+    }
+    // The scan finds a run's processes by its sandbox: one in a sandbox of its own can't be measured, so it can't be held to memory.
+    if (spec.limits && spec.own_sandbox) return Promise.reject(Error(`${spec.run} runs in its own sandbox, where the supervisor's scan can't find its processes to hold them to memory_mb`));
     return new Promise((resolve) => {
       this.waiters.push({ spec, on: [], resolve });
       // A failed pass leaves the waiter for the next one.
@@ -570,8 +639,9 @@ class LocalSupervisor implements Supervisor {
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
-    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}) };
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases, ...(spec.holder ? { holder: spec.holder } : {}), ...(egress ? { egress } : {}), ...(spec.limits ? { limits: spec.limits } : {}) };
     this.runs.set(spec.run, r);
+    this.scanSoon();
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
     // How each credential reached it, by name: the value itself, or a stand-in for its hosts.
@@ -591,13 +661,17 @@ class LocalSupervisor implements Supervisor {
     const service = spec.keep === true && process.platform === 'linux' && process.env.INVOCATION_ID !== undefined ? this.options.kept : undefined;
     const name = spec.run.replace(':', '-');
     const scope = service !== undefined && this.options.plant !== 'kept-in-service-cgroup' ? ['/usr/bin/systemd-run', '--user', '--scope', '--quiet', '--collect', `--unit=deep-${name}`] : [];
-    const argv = [...scope, ...launch.argv];
+    // The file limit is the kernel's, set by the helper as it execs the sandbox, so every process inside inherits it.
+    const fsize = spec.limits ? [HELPER, 'limit', String(spec.limits.file_mb * MIB)] : [];
+    const argv = [...scope, ...fsize, ...launch.argv];
     if (service !== undefined) mkdirSync(service, { recursive: true, mode: 0o700 });
     const outputs = service === undefined ? undefined : ['stdout', 'stderr'].map((stream) => join(service, `${name}.${stream}`)) as [string, string];
     const files = outputs?.map((file) => openSync(file, 'a', 0o600));
     const child = spawn(argv[0]!, argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', files?.[0] ?? 'pipe', files?.[1] ?? 'pipe', ...(denials ? ['pipe' as const] : [])] });
     files?.forEach((fd) => closeSync(fd));
     r.child = child;
+    // Watched from its first process on: the watcher follows its forks as they come.
+    if (child.pid !== undefined && spec.limits && process.platform === 'darwin') this.watch(r, child.pid);
     // A process that exits before reading all of its input is no error of the supervisor's.
     child.stdin?.on('error', () => undefined);
     const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
@@ -614,7 +688,7 @@ class LocalSupervisor implements Supervisor {
     r.exit = new Promise((resolve) => { settle = resolve; });
     const ended = (code: number | null, signal: NodeJS.Signals | null) => {
       const digests = outputs ? Promise.all(outputs.map(sha256File)) : Promise.resolve([hashes.stdout.digest(), hashes.stderr.digest()]);
-      void digests.then(([stdout, stderr]) => settle({ run: spec.run, code, signal, evidence: { stdout: stdout!, stderr: stderr! } }));
+      void Promise.all([digests, this.limitsSettled(r, signal)]).then(([[stdout, stderr]]) => settle({ run: spec.run, code, signal, evidence: { stdout: stdout!, stderr: stderr! }, ...(r.limited ? { limit: r.limited } : {}) }));
     };
     child.on('error', () => ended(null, null));
     if (denials) {
@@ -651,9 +725,17 @@ class LocalSupervisor implements Supervisor {
   private scanOnce(): Promise<void> {
     if (this.options.plant === 'records-only-started' || this.closed) return this.scanning;
     const next = this.scanning.then(async () => {
-      const live = [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
+      const live = this.scanned();
       if (!live.length) return;
-      const found = await scan(live.map((r) => markerOf(r.run)));
+      const bytes = new Map<number, number>();
+      const found = await scan(live.map((r) => markerOf(r.run)), bytes);
+      // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
+      for (const r of live) {
+        const cap = r.limits?.memory_mb;
+        if (cap === undefined || r.limited || r.state === 'cleaned') continue;
+        const reading = (found.get(markerOf(r.run)) ?? []).reduce((sum, pid) => sum + (bytes.get(pid) ?? 0), 0);
+        if (reading > cap * MIB) this.stopAtLimit(r, 'memory_mb', reading / MIB);
+      }
       const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
       if (!held.length) return;
       // By ID and start time: an ID the run used before may name a new process of its own.
@@ -695,6 +777,74 @@ class LocalSupervisor implements Supervisor {
       if (ok) proven.push(p);
     }
     return proven;
+  }
+
+  /**
+   * Stops a run at one of its limits, once: its own event names the limit, its value and the reading, and every
+   * process it owns is killed. Its exit carries the stop, so a check reads it as stopped, never as the product's failure.
+   */
+  private stopAtLimit(r: Run, limit: LimitStop['limit'], reading?: number): void {
+    if (r.limited) return;
+    r.limited = { limit, max: r.limits![limit], ...(reading === undefined ? {} : { reading }) };
+    r.stopping = Promise.all([
+      this.append(LIMIT_KIND, { run: r.run, ...r.limited }, r.run),
+      this.signal(r.run, 'SIGKILL'),
+    ]).then(() => undefined, () => undefined);
+  }
+
+  /**
+   * Once each stop at a limit that came before the run's end is recorded: the ends the watcher saw before it, and the
+   * program's own end by SIGXFSZ, which is the file limit's.
+   */
+  private async limitsSettled(r: Run, signal: NodeJS.Signals | null): Promise<void> {
+    if (!r.limits) return;
+    if (r.watched !== undefined) await this.sync();
+    if (signal === 'SIGXFSZ') this.stopAtLimit(r, 'file_mb');
+    await r.stopping;
+  }
+
+  /** Has the watcher follow a run's processes from its first, `pid`. */
+  private watch(r: Run, pid: number): void {
+    if (!this.watcher) {
+      const watcher = spawn(HELPER, ['watch'], { stdio: ['pipe', 'pipe', 'ignore'] });
+      this.watcher = watcher;
+      watcher.unref();
+      for (const pipe of [watcher.stdin, watcher.stdout] as unknown as { unref?: () => void }[]) pipe.unref?.();
+      watcher.stdin!.on('error', () => undefined);
+      let buffer = '';
+      watcher.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
+        buffer += chunk;
+        let i: number;
+        while ((i = buffer.indexOf('\n')) >= 0) {
+          const [what, a, , status] = buffer.slice(0, i).split(' ');
+          buffer = buffer.slice(i + 1);
+          if (what === 'sync') { this.syncs.get(Number(a))?.(); this.syncs.delete(Number(a)); continue; }
+          // A process killed by SIGXFSZ wrote past the file limit: its status's low bits are the signal.
+          const watched = this.watchedRuns.get(Number(a));
+          if (what === 'exit' && watched && (Number(status) & 0x7f) === constants.signals.SIGXFSZ) this.stopAtLimit(watched, 'file_mb');
+        }
+      });
+      // Gone, it answers no sync: none waits on it.
+      watcher.on('close', () => {
+        if (this.watcher === watcher) this.watcher = undefined;
+        for (const done of this.syncs.values()) done();
+        this.syncs.clear();
+      });
+    }
+    r.watched = pid;
+    this.watchedRuns.set(pid, r);
+    this.watcher.stdin!.write(`${pid}\n`);
+  }
+  /** Once the watcher has written every end that came before this call, or SYNC_MS pass. */
+  private sync(): Promise<void> {
+    const watcher = this.watcher;
+    if (!watcher) return Promise.resolve();
+    const n = ++this.synced;
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(() => { this.syncs.delete(n); resolve(); }, SYNC_MS);
+      this.syncs.set(n, () => { clearTimeout(timer); resolve(); });
+      watcher.stdin!.write(`sync ${n}\n`);
+    });
   }
 
   async signal(run: string, signal: NodeJS.Signals): Promise<void> {
@@ -791,7 +941,10 @@ class LocalSupervisor implements Supervisor {
     }
     await this.scanOnce().catch(() => undefined);
     const left = (await this.leftovers(r, this.rescan)).map((pid) => `pid:${pid}`);
-    if (left.length) this.lingering.add(r);
+    if (left.length) {
+      this.lingering.add(r);
+      this.scanSoon();
+    }
     // The leases end only once every process recorded for the run is gone; a key its check finds bound is left,
     // and so is every key while a process is, each one held for the unblock ask.
     if (left.length) {
@@ -828,6 +981,7 @@ class LocalSupervisor implements Supervisor {
     const outcome = left.length ? 'unfinished' : 'clean';
     await r.egress?.close();
     delete r.egress;
+    if (r.watched !== undefined && this.watchedRuns.get(r.watched) === r) this.watchedRuns.delete(r.watched);
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
     r.cleaned = { run, outcome, left, stopped: [...stopped] };
@@ -966,6 +1120,8 @@ class LocalSupervisor implements Supervisor {
     await Promise.allSettled([this.scanning, this.pumping, this.ticking, ...this.cleaning]);
     await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
     if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
+    // The watcher ends at the end of its input.
+    this.watcher?.stdin?.end();
   }
 }
 

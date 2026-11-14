@@ -67,6 +67,10 @@ pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refus
     if let Some(v) = c.get("const") {
         return Ok(Column::Const(v.clone()));
     }
+    // #538: a copy column no frame has looked up yet shows nothing; a frame rewrites it.
+    if crate::copy::is_copy_column(&Value::Object(c.clone())) {
+        return Ok(Column::Texts(vec![String::new(); n]));
+    }
     // A table column reaches the module inlined by whoever holds the evidence store, and a
     // column-view source by the build's column view; one still unread names what's missing.
     if c.contains_key("from") {
@@ -336,7 +340,11 @@ pub fn log_rows(id: &str, items: &Map<String, Value>) -> Result<Vec<String>, Ref
 }
 
 impl Scale {
-    fn read(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Scale, Refused> {
+    pub(crate) fn read(
+        id: &str,
+        item: &Value,
+        items: &Map<String, Value>,
+    ) -> Result<Scale, Refused> {
         let path = format!("items/{id}/params");
         let p = item.get("params").and_then(Value::as_object);
         let get = |k: &str| p.and_then(|p| p.get(k));
@@ -396,6 +404,9 @@ impl Scale {
                 .is_some_and(|r| r.first().is_some_and(Value::is_string));
         let (range, roles) = if kind == ScaleKind::Quantize || ramp {
             ([0.0, 0.0], strings("range")?)
+        } else if matches!(get("range").and_then(Value::as_str), Some("x" | "y" | "z")) {
+            // #226: a range naming a view axis spans that axis, which its reader places: the unit.
+            ([0.0, 1.0], Vec::new())
         } else {
             (pair("range")?, Vec::new())
         };
@@ -683,6 +694,17 @@ pub fn scale_of(id: &str, item: &Value) -> Result<Scale, Refused> {
     Scale::read(id, item, &Map::new())
 }
 
+/// [`scale_named`], following the keys of a channel on its domain (#226).
+fn keyed_named(
+    items: &Map<String, Value>,
+    channels: Option<&Value>,
+    id: &str,
+    path: &str,
+) -> Result<Scale, Refused> {
+    let scale = scale_named(items, id, path)?;
+    Ok(crate::follow::keyed(scale, id, &items[id], items, channels))
+}
+
 fn scale_named(items: &Map<String, Value>, id: &str, path: &str) -> Result<Scale, Refused> {
     match items.get(id) {
         Some(item) if item.get("kind").and_then(Value::as_str) == Some("scale@1") => {
@@ -833,12 +855,14 @@ pub fn head_place(
 }
 
 /// What `geometry` answers of a mark set at t: each row by key, after the transforms, with its
-/// columns, opacity, place in document u and, through a colormap, its color unrounded.
+/// columns, opacity, place in document u (an atlas row's, its cell's centre) and, through a
+/// colormap, its color unrounded. `planted`: #1653's square layout of an isometric grid.
 pub fn rows_report(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
+    planted: crate::scene::Planted,
 ) -> Result<Value, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
@@ -846,6 +870,15 @@ pub fn rows_report(
     let props = encoded(p, &rows, items, &path)?;
     let pos = crate::scene::item_pos(item);
     let bar = p.get("mark").and_then(Value::as_str) == Some("bar");
+    // #1653: an atlas row's place is its cell's centre.
+    let centres: std::collections::BTreeMap<String, [f64; 2]> = if crate::atlas::is_atlas(p) {
+        crate::atlas::tiles(id, p, &rows, planted)?
+            .into_iter()
+            .map(|t| (t.key, t.centre))
+            .collect()
+    } else {
+        Default::default()
+    };
     let mut out = Map::new();
     for (i, key) in rows.keys.iter().enumerate() {
         let columns: Map<String, Value> = rows
@@ -863,6 +896,10 @@ pub fn rows_report(
             if let Some(v) = at(k).or(base) {
                 place.insert(k.to_string(), json!(v + pos[axis]));
             }
+        }
+        if let Some(c) = centres.get(key) {
+            place.insert("x".into(), json!(c[0] + pos[0]));
+            place.insert("y".into(), json!(c[1] + pos[1]));
         }
         let mut row = json!({"columns": columns, "opacity": rows.opacity_of(i), "place": place});
         // #505: a role column's index into the set's roles.
@@ -896,13 +933,17 @@ pub fn domain_report(id: &str, item: &Value, items: &Map<String, Value>) -> Resu
 
 /// What `geometry` answers of an axis at t: every tick its scale holds at any period, with its
 /// opacity.
-pub fn ticks_report(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Value, Refused> {
+pub fn ticks_report(
+    id: &str,
+    item: &Value,
+    (items, channels): (&Map<String, Value>, Option<&Value>),
+) -> Result<Value, Refused> {
     let path = format!("items/{id}/params/scale");
     let scale = item.pointer("/params/scale").and_then(Value::as_str);
     let Some(scale) = scale else {
         return refuse("bad_axis", path);
     };
-    let ticks = scale_named(items, scale, &path)?.faded_ticks();
+    let ticks = keyed_named(items, channels, scale, &path)?.faded_ticks();
     Ok(ticks
         .into_iter()
         .map(|(value, _, opacity)| json!({"value": value, "opacity": opacity}))
@@ -979,10 +1020,10 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     // nothing measured.
     let mut hidden = std::collections::BTreeSet::new();
     // The rows the column view hid: a value its reader can't narrow to (Array and table: column
-    // view) doesn't draw for as long as it lasts.
-    for c in columns.values() {
+    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535).
+    for c in columns.values().chain(p.get("alive")) {
         if let Some(Value::Array(rows)) = c.get("hide") {
-            hidden.extend(rows.iter().filter_map(Value::as_u64).map(|r| r as usize));
+            hidden.extend(rows.iter().filter_map(Value::as_f64).map(|r| r as usize));
         }
     }
     for ((key, column), value) in bound {
@@ -1015,11 +1056,7 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
         ),
     };
     let keys: Vec<String> = (0..n)
-        .map(|i| {
-            key_column
-                .and_then(|(_, k)| k.text(i))
-                .unwrap_or_else(|| i.to_string())
-        })
+        .map(|i| crate::atlas::key(key_column.and_then(|(_, k)| k.text(i)), p, i))
         .collect();
     let transforms = story::listed(p, &path)?;
     // A key is unique and stable (Mark set: `key`), so a row can be picked and patched by it;
@@ -1113,7 +1150,11 @@ pub fn mark_set(
             }
             let mut at = vec![0.0; n];
             for (r, i) in rank.into_iter().enumerate() {
-                at[i] = if n > 1 { r as f64 / (n - 1) as f64 } else { 0.0 };
+                at[i] = if n > 1 {
+                    r as f64 / (n - 1) as f64
+                } else {
+                    0.0
+                };
             }
             Some((stops, at))
         }
@@ -1272,6 +1313,8 @@ pub fn mark_set(
                     crop: None,
                     opacity: 1.0,
                     adjust: crate::paint::Adjust::default(),
+                    tile: None,
+                    turn: 0.0,
                 });
             }
             "text" => out.push(Mark::Text {
@@ -1289,6 +1332,7 @@ pub fn mark_set(
                     mask: false,
                     align: Align::Start,
                     bound: false,
+                    spans: Vec::new(),
                 },
                 origin: at,
                 role: None,
@@ -1855,7 +1899,7 @@ fn cross_zero(id: &str, items: &Map<String, Value>, path: &str) -> Result<(bool,
 pub fn axis(
     id: &str,
     item: &Value,
-    items: &Map<String, Value>,
+    (items, channels): (&Map<String, Value>, Option<&Value>),
     palette: &Palette,
     pos: [f64; 2],
     frame: [f64; 2],
@@ -1865,7 +1909,7 @@ pub fn axis(
     let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
         return refuse("bad_axis", format!("{path}/scale"));
     };
-    let scale = scale_named(items, scale_id, &format!("{path}/scale"))?;
+    let scale = keyed_named(items, channels, scale_id, &format!("{path}/scale"))?;
     let side = p.get("side").and_then(Value::as_str).unwrap_or("bottom");
     let through_zero = match side {
         "zero" => Some(cross_zero(scale_id, items, &format!("{path}/side"))?),
@@ -1903,7 +1947,11 @@ pub fn axis(
     // Grid lines first, under the line, the ticks and the labels: each from the line to the
     // frame's edge on the side away from the labels.
     if p.get("grid").and_then(Value::as_bool) == Some(true) {
-        let at = if horizontal { cross + pos[1] } else { cross + pos[0] };
+        let at = if horizontal {
+            cross + pos[1]
+        } else {
+            cross + pos[0]
+        };
         let far = if out_dir > 0.0 {
             0.0
         } else if horizontal {
@@ -2005,6 +2053,7 @@ pub fn axis(
                 mask: false,
                 align,
                 bound: false,
+                spans: Vec::new(),
             },
             origin,
             role: None,
@@ -2048,6 +2097,7 @@ pub fn axis(
                 mask: false,
                 align,
                 bound: false,
+                spans: Vec::new(),
             },
             origin,
             role: None,
@@ -2181,6 +2231,7 @@ pub fn legend(
                 mask: false,
                 align: Align::Start,
                 bound: false,
+                spans: Vec::new(),
             },
             origin: [x, mid - line / 2.0],
             role: None,
@@ -2242,7 +2293,7 @@ mod tests {
             let drawn = super::axis(
                 "a",
                 &axis,
-                all.as_object().unwrap(),
+                (all.as_object().unwrap(), None),
                 &palette,
                 [0.0, 0.0],
                 [640.0, 480.0],
@@ -2335,7 +2386,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "x", "side": "bottom", "at": 50}}),
-            items,
+            (items, None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
@@ -2354,7 +2405,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "x"}}),
-            items.as_object().unwrap(),
+            (items.as_object().unwrap(), None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
@@ -2382,7 +2433,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "y", "side": "left", "at": 48, "title": "Sales"}}),
-            items.as_object().unwrap(),
+            (items.as_object().unwrap(), None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],

@@ -1,0 +1,51 @@
+Acceptance tests for #2070 on the base 1c4d1f0e2 (main: the hub of #16 and #26, whose hello as `mcp` binds by the
+parent it names or by a paseo bind token, and the paseo plugin of #55, whose lines map a token before anything is
+checked), run on 2026-11-12 on an Apple silicon Mac, Node v24.22.2, after `npm ci`, `npm run build --workspaces` and
+`cargo build --locked -q -p deep-hook`:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2070 --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2070/tsconfig.json   -> no errors
+
+The base is the wrong program of AC1, AC2 and AC3 (the issue's Proof): each fails at its binding assertion, the message
+naming the session (both sessions for AC3). The twins of AC4 pass. Trimmed to each test's first failure.
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+
+FAIL binding.test.ts  #2070.e45923ea AC1 a bind token only an unchecked line named binds no connection: its hello binds to none, its deep_claim is refused as unbound, and the line is recorded unverified
+  AssertionError: a hello as mcp with the token only process 56754's unchecked line 01M78MSA4800000000M9BQCB25 named,
+  for session cff849e7-d78a-4430-a198-e5e0879fe3b7 binds to none; it bound as mcp:cff849e7-d78a-4430-a198-e5e0879fe3b7,
+  and its deep_claim was filed under cff849e7-d78a-4430-a198-e5e0879fe3b7
+  Expected: "mcp"
+  Received: "mcp:cff849e7-d78a-4430-a198-e5e0879fe3b7"
+  (Expected: paseoOwner maps the outsider's token to the session from its line's payload before the line is checked;
+  the line itself is recorded unverified, as the test's last assertion wants.)
+
+FAIL binding.test.ts  #2070.b951fb7f AC2 a process outside every agent's process tree that names a live session's agent process as its parent binds to none
+  AssertionError: process 56994, outside every agent's process tree, whose hello names session
+  ac69d046-c58e-4491-9659-7057e51717ed's agent process 56854 as its parent binds to none; it bound as
+  mcp:ac69d046-c58e-4491-9659-7057e51717ed, and its deep_claim was filed under ac69d046-c58e-4491-9659-7057e51717ed
+  Expected: "mcp"
+  Received: "mcp:ac69d046-c58e-4491-9659-7057e51717ed"
+  (Expected: mcpHello takes the parent from the hello and checks only that it runs with that start time and has one
+  live session.)
+
+FAIL binding.test.ts  #2070.f489755d AC3 a token bound to one session and named again by a line for another session stays with the first
+  AssertionError: session 28434cb5-fa5e-4334-bd2e-095b7759e510's token, named again by line 01M78MSD0K00000000QWY0MHPV
+  for session 13e44c33-48c3-4355-9d1b-36b0765d1d59, stays with 28434cb5-fa5e-4334-bd2e-095b7759e510: the deep_claim
+  through the server holding it was filed under 13e44c33-48c3-4355-9d1b-36b0765d1d59
+  - "28434cb5-fa5e-4334-bd2e-095b7759e510"
+  + "13e44c33-48c3-4355-9d1b-36b0765d1d59"
+  (Expected: paseoOwner overwrites the token's session with each line's.)
+
+PASS binding.test.ts  #2070.21673a03 AC4 the twins: a deep mcp the session's own agent started, and one paseo's plugin started with its token, bind to their sessions and their deep_ask works
+  (Expected: both twins bind on the base, by parent and by token; each deep_ask is filed under its own session and
+  returns your answer from deep inbox answer.)
+
+Earlier runs of this file on the base, before the run above, and why they don't count:
+- The first read BLOCKED in every test: the hub didn't start, as no deep-hook was built in this checkout
+  ("no deep-hook is built under <repo>/target"). Built it, as the Run section now says.
+- The second showed two faults of this suite's AC4, not of the base: a taste question with a recommendation goes on
+  at once, provisionally, so its deep_ask never waited; and a paseo session has no worktree the hub knows, so its
+  deep_ask was refused for want of an ask deadline. AC4 now asks with no recommendation and writes your ask settings
+  (README, Readings). AC1 to AC3 failed then as above.

@@ -190,7 +190,7 @@ impl Config {
     fn level(&self) -> Option<Level> {
         match self.simd {
             Simd::Scalar => Some(settings().level),
-            Simd::Neon => Level::new().as_neon().map(Level::Neon),
+            Simd::Neon => crate::neon::level(),
             Simd::Detected => Some(Level::new()),
         }
     }
@@ -210,11 +210,12 @@ impl Config {
 /// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
 /// GPU's scene with its own.
 pub(crate) trait Glyphs: Canvas {
+    /// A glyph at `size`, slanted `skew` degrees (#1964: a faux italic).
     fn glyph(
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        size: f32,
+        size_skew: (f32, f32),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
     );
@@ -224,7 +225,7 @@ pub(crate) trait Glyphs: Canvas {
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        size: f32,
+        size_skew: (f32, f32),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -242,7 +243,7 @@ impl Glyphs for RenderContext {
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        size: f32,
+        (size, skew): (f32, f32),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
     ) {
@@ -250,6 +251,7 @@ impl Glyphs for RenderContext {
         let _ = run
             .font_size(size)
             .hint(false)
+            .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
             .fill_glyphs(std::iter::once(glyph));
     }
@@ -258,7 +260,7 @@ impl Glyphs for RenderContext {
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        size: f32,
+        (size, skew): (f32, f32),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -268,6 +270,7 @@ impl Glyphs for RenderContext {
         let _ = run
             .font_size(size)
             .hint(false)
+            .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
             .stroke_glyphs(std::iter::once(glyph));
     }
@@ -347,6 +350,7 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
     for pair in cuts.windows(2) {
         let piece = deep_text_gpui::shape(&deep_text_gpui::Label {
             text: text[byte(pair[0])..byte(pair[1])].to_string(),
+            spans: Vec::new(),
             ..label.clone()
         });
         for g in &piece.glyphs {
@@ -432,8 +436,9 @@ impl<C: Glyphs> Painter<'_, C> {
                 x: g.x + origin[0] as f32,
                 y: g.y + origin[1] as f32,
             };
+            let size = (g.size, g.skew);
             self.ctx
-                .glyph(&mut self.resources, &g.font, g.size, &g.coords, glyph);
+                .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
             let mut row = glyph_row(g, role, lang);
             // #496: the glyph's advance, outline and place, upright and unclipped here.
             let e = origin[0] + f64::from(g.x);
@@ -444,7 +449,25 @@ impl<C: Glyphs> Painter<'_, C> {
             row["clip"] = Value::Null;
             out.push(row);
         }
+        self.decorations(shaped, origin, (role, color), runs);
         out
+    }
+
+    /// #1964: a run's underlines and strikes over its glyphs, each in its span's paint.
+    fn decorations(
+        &mut self,
+        shaped: &deep_text::Shaped,
+        origin: [f64; 2],
+        (role, color): (Option<&str>, Rgb),
+        runs: &[scene::TextRun],
+    ) {
+        for d in &shaped.decorations {
+            let (_, color) = scene::run_paint(runs, d.grapheme, role, color);
+            self.ctx.set_paint(solid(color));
+            let [x, y, w, h] = d.rect.map(f64::from);
+            self.ctx
+                .fill_rect(&rect([origin[0] + x, origin[1] + y, w, h]));
+        }
     }
 
     /// #496: a text's glyphs as its animators, curve and roll place them, each drawn through its
@@ -494,15 +517,16 @@ impl<C: Glyphs> Painter<'_, C> {
                 x: 0.0,
                 y: 0.0,
             };
+            let size = (g.size, g.skew);
             self.ctx
-                .glyph(&mut self.resources, &g.font, g.size, &g.coords, glyph);
+                .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
             if let Some((name, width)) = &p.paint.stroke {
                 if let (Some(rgb), true) = (role_rgb(name), *width > 0.0) {
                     self.ctx.set_paint(solid(adjust.rgb(rgb)));
                     self.ctx.glyph_stroke(
                         &mut self.resources,
                         &g.font,
-                        g.size,
+                        (g.size, g.skew),
                         &g.coords,
                         glyph,
                         *width,
@@ -645,6 +669,7 @@ impl<C: Glyphs> Painter<'_, C> {
                         (role.as_deref(), *color),
                         (runs, spec.lang.as_deref()),
                     );
+                    self.decorations(&shaped, *origin, (role.as_deref(), *color), runs);
                     let mut text =
                         json!({"shown": shaped.shown, "glyphs": glyphs, "coverage": laid.coverage});
                     if !laid.reveal.is_empty() {
@@ -698,15 +723,21 @@ impl<C: Glyphs> Painter<'_, C> {
                 crop,
                 opacity,
                 adjust,
+                tile,
+                turn,
             } => {
                 let looks = (*opacity, adjust);
-                let (pixmap, [w, h]) = match self.kept {
-                    Some(kept) => kept
-                        .borrow_mut()
-                        .pixmap(self.store, hash, *crop, looks, item)?,
-                    None => asset::Kept::default().pixmap(self.store, hash, *crop, looks, item)?,
-                };
-                let to = fit.fitted(*bounds, [w, h]);
+                let placed = (*bounds, *fit, self.zoom);
+                let mut fresh = asset::Kept::default();
+                let mut kept = self.kept.map(|k| k.borrow_mut());
+                let kept = kept.as_deref_mut().unwrap_or(&mut fresh);
+                let cut = (*crop, tile.as_ref());
+                let (pixmap, [w, h], to) =
+                    kept.pixmap(self.store, hash, cut, looks, placed, item)?;
+                // #535: a turned image draws turned about its box's centre.
+                let unturned = self.ctx.transform();
+                let t = deep_canvas_marks::turn::turn_of(*bounds, *turn);
+                self.ctx.set_transform(unturned * Affine::new(t));
                 self.ctx.set_paint(
                     Image {
                         image: ImageSource::Pixmap(pixmap),
@@ -724,6 +755,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     self.ctx.fill_rect(&shown);
                 }
                 self.ctx.reset_paint_transform();
+                self.ctx.set_transform(unturned);
             }
         }
         Ok(())
@@ -966,6 +998,9 @@ thread_local! {
 pub fn answer(req: Request) -> Value {
     KEPT.with(|kept| {
         kept.borrow_mut().plant = req.image_plant;
+        let images = asset::images();
+        images.configure(deep_images::BUDGET, deep_images::ENTRIES, req.image_plant);
+        images.frame_start();
         let answer = draw(&req, kept);
         kept.borrow_mut().frame_ended();
         match answer {
@@ -1096,6 +1131,8 @@ fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
             "name": "vello_cpu", "version": VELLO_CPU,
             "pipeline": if req.config.u8 { "u8" } else { "f32" }, "simd": level_name(level),
         },
+        // #1486: the level each picture drew at, the levels live frames draw.
+        "levels": kept.borrow().levels,
     });
     if let Some(dir) = &req.blend_inputs {
         let write = |name: String, pixmap: &Pixmap| -> Result<String, Value> {
@@ -1298,9 +1335,16 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
             l.get(3)?.as_f64()?,
         ])
     };
-    let marks: Vec<&Drawn> = frame.layers.iter().flat_map(|l| l.marks.iter().map(|m| &**m)).collect();
+    let marks: Vec<&Drawn> = frame
+        .layers
+        .iter()
+        .flat_map(|l| l.marks.iter().map(|m| &**m))
+        .collect();
     for drawn in &marks {
-        let Mark::Text { item, spec, origin, .. } = &drawn.mark else {
+        let Mark::Text {
+            item, spec, origin, ..
+        } = &drawn.mark
+        else {
             continue;
         };
         if item.contains('#') {
@@ -1315,7 +1359,9 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
             }
             // The copy's glyphs in the text's own frame: moved by where the copy sits from it.
             let at = marks.iter().find_map(|d| match &d.mark {
-                Mark::Text { item: i, origin: o, .. } if *i == format!("{item}#drop") => Some(*o),
+                Mark::Text {
+                    item: i, origin: o, ..
+                } if *i == format!("{item}#drop") => Some(*o),
                 _ => None,
             });
             if let (Some(o), Some(list)) = (at, copy["glyphs"].as_array_mut()) {
@@ -1337,12 +1383,18 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
                 continue;
             }
             for s in &d.scopes {
-                if let Scope::Opacity { item: part_id, effect: Some(e), .. } = s {
+                if let Scope::Opacity {
+                    item: part_id,
+                    effect: Some(e),
+                    ..
+                } = s
+                {
                     if let (Some(part), true) = (&e.paint, seen.insert(part_id.clone())) {
                         let [l, t, r, b] = part.reach();
                         let own = texts[item]["bounds"].clone();
                         if let Some(o) = four(&own) {
-                            bounds = union(bounds, [o[0] - l, o[1] - t, o[2] + l + r, o[3] + t + b]);
+                            bounds =
+                                union(bounds, [o[0] - l, o[1] - t, o[2] + l + r, o[3] + t + b]);
                         }
                     }
                 }
@@ -1476,7 +1528,7 @@ pub fn geometry(
     item: &str,
     t: i64,
     vectors: &crate::Vectors,
-    router: deep_canvas_graph::view::Router,
+    (router, planted): (deep_canvas_graph::view::Router, scene::Planted),
     (look, timing): (Option<&Look>, bool),
     (ctx, color_at): (&crate::formulas::Ctx, Option<&[f64]>),
 ) -> Value {
@@ -1594,7 +1646,7 @@ pub fn geometry(
             match found["kind"].as_str() {
                 Some("marks@1") => {
                     answer["rows"] =
-                        data::rows_report(item, found, &items, &palette).map_err(story)?;
+                        data::rows_report(item, found, &items, &palette, planted).map_err(story)?;
                     if timing {
                         answer["timing"] = json!({"mix_ms": mix_ms(item, found).map_err(story)?});
                     }
@@ -1603,7 +1655,8 @@ pub fn geometry(
                     answer["domain"] = data::domain_report(item, found, &items).map_err(story)?
                 }
                 Some("axis@1") => {
-                    answer["ticks"] = data::ticks_report(item, found, &items).map_err(story)?
+                    answer["ticks"] = data::ticks_report(item, found, (&items, doc.get("channels")))
+                        .map_err(story)?
                 }
                 _ => {}
             }

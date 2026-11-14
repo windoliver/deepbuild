@@ -9,12 +9,12 @@ use std::io::{self, BufRead, Write};
 
 use deep_canvas::canon::revision_hash;
 use deep_canvas::document::DocShape;
+use deep_canvas::expr::Scope;
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas_motion::clock::{meets, run, Mode, Rect, View};
 use deep_canvas_motion::curve::Ease;
-use deep_canvas::expr::Scope;
 use deep_canvas_motion::doc::{feel_of, Feel, Refused};
-use deep_canvas_motion::eval::{frame_with, position, Validity};
+use deep_canvas_motion::eval::{frame_with, position, shown_doc, Validity};
 use deep_canvas_motion::follow::Source;
 use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
@@ -84,6 +84,11 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "pan_ignores_angle" => Planted::PanIgnoresAngle,
             "match_framer_ignores_match" => Planted::MatchFramerIgnoresMatch,
             "kick_fresh_per_frame" => Planted::KickFreshPerFrame,
+            "stage_glide_moves_target_only" => Planted::StageGlideMovesTargetOnly,
+            "take_apart_all_at_once" => Planted::TakeApartAllAtOnce,
+            "framer_ignores_apart" => Planted::FramerIgnoresApart,
+            "readout_reads_document" => Planted::ReadoutReadsDocument,
+            "assembly_value_from_previous_frame" => Planted::AssemblyValueFromPreviousFrame,
             _ => return None,
         },
         Some(_) => return None,
@@ -156,7 +161,9 @@ fn look_feel(look: Option<&Value>, frame_rate: (u32, u32)) -> Result<Feel, Value
         Some(Value::String(id)) => deep_canvas_marks::look::shipped(id).ok_or_else(|| {
             refusal(Refused {
                 code: "ref_unresolved",
-                path: "look".into(), detail: None })
+                path: "look".into(),
+                detail: None,
+            })
         })?,
         Some(def @ Value::Object(_)) => def.clone(),
         Some(_) => return Err(bad_input()),
@@ -196,11 +203,25 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         Some("track_forks_at_late_entry") => TrackPlant::ForksAtLateEntry,
         _ => TrackPlant::None,
     };
-    let planted = if linear || plant != TrackPlant::None { Some(Planted::None) } else { planted_of(input.get("planted")) };
-    let (Some(planted), Some(track), Some(listed), Some(arrives)) =
-        (planted, track_of(input.get("track")), track_of(input.get("input")), arrivals_of(input.get("input")))
-    else {
+    let planted = if linear || plant != TrackPlant::None {
+        Some(Planted::None)
+    } else {
+        planted_of(input.get("planted"))
+    };
+    let (Some(planted), Some(track), Some(listed), Some(arrives)) = (
+        planted,
+        track_of(input.get("track")),
+        track_of(input.get("input")),
+        arrivals_of(input.get("input")),
+    ) else {
         return bad_input();
+    };
+    // #504: without an `input`, the `track` is the program's input track too, so its sliders'
+    // entries move the drivers that read them.
+    let (listed, arrives) = if input.contains_key("input") {
+        (listed, arrives)
+    } else {
+        (track.clone(), vec![i64::MIN; track.len()])
     };
     // #497: the entries that arrive later than the first frame wait; the rest are on the track.
     let first = times.first().copied().unwrap_or(i64::MIN);
@@ -239,13 +260,23 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     };
     // The document compiled over the track as it stands, again whenever an entry arrives.
     let build = |entries: &[Entry]| -> Result<Program, Value> {
-        let options = Options { input: entries.to_vec(), ..options.clone() };
+        let options = Options {
+            input: entries.to_vec(),
+            ..options.clone()
+        };
         let program = Program::compile_with(doc, options).map_err(refusal)?;
         let mut feel = look_feel(input.get("look"), program.motion.frame_rate)?;
         if linear {
             feel.ease = Ease::Linear;
         }
-        program.with_inputs(feel, &track).ok_or_else(bad_input)
+        // #504: without a #417 `track`, the program's own track (`input`, or the document's
+        // inline one) moves its toggles and stages under the look's feel.
+        let moves = if input.contains_key("track") {
+            track.clone()
+        } else {
+            program.options.input.clone()
+        };
+        program.with_inputs(feel, &moves).ok_or_else(bad_input)
     };
     let mut program = match build(&entries) {
         Ok(p) => p,
@@ -315,7 +346,9 @@ fn eval_line(input: &Map<String, Value>) -> Value {
                 // #494: a path channel's value as path@1's columns.
                 let path = motion.channels.get(c).and_then(|ch| ch.path.as_ref());
                 let value = match (path, s.value.as_slice()) {
-                    (Some(p), run) => deep_canvas_motion::morph::value_of(&deep_canvas_motion::morph::unflat(run, &p.structure)),
+                    (Some(p), run) => deep_canvas_motion::morph::value_of(
+                        &deep_canvas_motion::morph::unflat(run, &p.structure),
+                    ),
                     (None, [one]) => json!(one),
                     (None, many) => json!(many),
                 };
@@ -339,7 +372,11 @@ fn eval_line(input: &Map<String, Value>) -> Value {
                 (id.clone(), out)
             })
             .collect();
-        let ids = motion.limits.iter().map(|l| &l.id).chain(motion.constraints.iter().map(|c| &c.id));
+        let ids = motion
+            .limits
+            .iter()
+            .map(|l| &l.id)
+            .chain(motion.constraints.iter().map(|c| &c.id));
         let constraints: Map<String, Value> = ids
             .zip(&state.reports)
             .map(|(id, (ops, scale))| {
@@ -362,10 +399,13 @@ fn eval_line(input: &Map<String, Value>) -> Value {
                     .placement_rates(i, f.doc_t)
                     .into_iter()
                     .map(|(channel, rate)| {
-                        (channel, match rate.as_slice() {
-                            [one] => json!(one),
-                            many => json!(many),
-                        })
+                        (
+                            channel,
+                            match rate.as_slice() {
+                                [one] => json!(one),
+                                many => json!(many),
+                            },
+                        )
                     })
                     .collect();
                 (
@@ -409,10 +449,19 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         if !remaps.is_empty() {
             frame["remaps"] = Value::Object(remaps);
         }
-        let aimless: Vec<&str> = motion.constraints.iter().zip(&state.degenerate).filter(|(_, d)| **d).map(|(c, _)| c.id.as_str()).collect();
+        let aimless: Vec<&str> = motion
+            .constraints
+            .iter()
+            .zip(&state.degenerate)
+            .filter(|(_, d)| **d)
+            .map(|(c, _)| c.id.as_str())
+            .collect();
         for id in aimless {
             let notice = json!({"code": "look_at_degenerate", "constraint": id, "t": f.t});
-            frame["notices"].as_array_mut().map(|n| n.push(notice.clone())).unwrap_or_else(|| frame["notices"] = json!([notice.clone()]));
+            frame["notices"]
+                .as_array_mut()
+                .map(|n| n.push(notice.clone()))
+                .unwrap_or_else(|| frame["notices"] = json!([notice.clone()]));
             degenerate.push(notice);
         }
         if !film.project.is_empty() {
@@ -421,6 +470,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         // #491: each laid-out item's box at this time, where the document lays any out.
         if let Some(boxes) = program.boxes(f.doc_t).filter(|b| !b.is_empty()) {
             frame["boxes"] = json!(boxes);
+        }
+        let readouts = readouts_json(doc, &program, &state);
+        if !readouts.is_empty() {
+            frame["readouts"] = Value::Object(readouts);
         }
         frames.push(frame);
         previous = Some(t);
@@ -442,14 +495,24 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
     let mut answer = json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash});
-    // #493: each shot's one framed pose and the kept items' union it fit.
-    if let Some(plan) = program.shots.as_ref().filter(|p| !p.shots.is_empty()) {
+    // #493: each shot's one framed pose and the kept items' union it fit; #504 a stage's shots too.
+    if let Some(plan) = program
+        .shots
+        .as_ref()
+        .filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some))
+    {
         answer["shots"] = plan
             .shots
             .iter()
+            .chain(plan.stage.iter().flatten())
             .map(|s| {
-                let union = s.union.map_or(Value::Null, |u| json!({"lo": u[0], "hi": u[1]}));
-                (s.id.clone(), json!({"framed": s.framed.to_json(Some(&s.id)), "union": union}))
+                let union = s
+                    .union
+                    .map_or(Value::Null, |u| json!({"lo": u[0], "hi": u[1]}));
+                (
+                    s.id.clone(),
+                    json!({"framed": s.framed.to_json(Some(&s.id)), "union": union}),
+                )
             })
             .collect::<Map<String, Value>>()
             .into();
@@ -466,7 +529,9 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         };
         let (channels, drivers) = program.bounds();
         let group = |list: Vec<(String, Option<(f64, f64)>)>| {
-            list.into_iter().map(|(id, b)| (id, bound(b))).collect::<Map<String, Value>>()
+            list.into_iter()
+                .map(|(id, b)| (id, bound(b)))
+                .collect::<Map<String, Value>>()
         };
         answer["bounds"] = json!({"channels": group(channels), "drivers": group(drivers)});
     }
@@ -486,44 +551,73 @@ struct Film {
 fn film_of(input: &Map<String, Value>, program: &Program) -> Option<Film> {
     let project = match input.get("project") {
         None => Vec::new(),
-        Some(Value::Array(ids)) => ids.iter().map(|v| v.as_str().map(str::to_string)).collect::<Option<_>>()?,
+        Some(Value::Array(ids)) => ids
+            .iter()
+            .map(|v| v.as_str().map(str::to_string))
+            .collect::<Option<_>>()?,
         Some(_) => return None,
     };
     let look = input.get("look").filter(|l| l.is_object());
     let blur = look.and_then(|l| l.get("motion_blur")).map(|b| {
         (
-            b.get("shutter_angle").and_then(Value::as_f64).unwrap_or(180.0),
+            b.get("shutter_angle")
+                .and_then(Value::as_f64)
+                .unwrap_or(180.0),
             b.get("samples").and_then(Value::as_u64).unwrap_or(8) as u32,
         )
     });
-    let indexed = look.and_then(|l| l.pointer("/basis/indexed/size/0")).and_then(Value::as_f64);
-    Some(Film { project, blur, indexed, reduced: program.options.reduced_motion, planted: program.options.planted })
+    let indexed = look
+        .and_then(|l| l.pointer("/basis/indexed/size/0"))
+        .and_then(Value::as_f64);
+    Some(Film {
+        project,
+        blur,
+        indexed,
+        reduced: program.options.reduced_motion,
+        planted: program.options.planted,
+    })
 }
 
 /// Each camera's pose at t, as the frame reports it (#493: the pose it is drawn through, its
 /// kick applied), and the sub-samples motion blur averages inside a declared move. A camera no
-/// timeline shot writes keeps a stage's target (#417).
-fn cameras_json(program: &Program, state: &State, stage: &[(String, [f64; 3])], t: i64, film: &Film) -> Map<String, Value> {
+/// timeline shot writes shows its stage shot's pose (#504), gliding from the pose shown; one
+/// whose params aren't a pose reports its stage's target alone (#417).
+fn cameras_json(
+    program: &Program,
+    state: &State,
+    stage: &[(String, [f64; 3])],
+    t: i64,
+    film: &Film,
+) -> Map<String, Value> {
     let Some(plan) = program.shots.as_ref() else {
-        return stage.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect();
+        return stage
+            .iter()
+            .map(|(id, target)| (id.clone(), json!({"target": target})))
+            .collect();
     };
     let keyed = |c: usize| plan.keyed_pose(c, program, state);
-    let at = At { reduced: film.reduced, planted: film.planted, indexed: film.indexed, keyed: &keyed };
+    let at = At {
+        reduced: film.reduced,
+        planted: film.planted,
+        indexed: film.indexed,
+        keyed: &keyed,
+    };
     stage
         .iter()
         .map(|(id, target)| {
-            let Some(c) = plan.camera(id).filter(|&c| plan.cameras[c].own.is_some() || plan.shot_at(c, t).is_some()) else {
+            let Some(c) = plan
+                .camera(id)
+                .filter(|&c| plan.cameras[c].own.is_some() || plan.shot_at(c, t).is_some())
+            else {
                 return (id.clone(), json!({"target": target}));
             };
             let shown = plan.shown(c, t, &at);
-            let mut pose = shown.pose;
-            if shown.shot.is_none() {
-                let d = [target[0] - pose.target[0], target[1] - pose.target[1], target[2] - pose.target[2]];
-                pose.target = *target;
-                pose.position = [pose.position[0] + d[0], pose.position[1] + d[1], pose.position[2] + d[2]];
-            }
-            let name = shown.shot.map(|s| plan.shots[s].id.as_str());
-            let mut out = pose.to_json(name);
+            let staged = shown
+                .stage
+                .and_then(|s| plan.stage[s].as_ref())
+                .map(|s| s.id.as_str());
+            let name = shown.shot.map(|s| plan.shots[s].id.as_str()).or(staged);
+            let mut out = shown.pose.to_json(name);
             if let Some((angle, samples)) = film.blur {
                 let subs = plan.blur(c, t, &at, angle, samples);
                 if !subs.is_empty() {
@@ -542,15 +636,67 @@ fn cameras_json(program: &Program, state: &State, stage: &[(String, [f64; 3])], 
         .collect()
 }
 
+/// #504: each readout's text as the frame shows it: every `text@1` with a `template`, by its ID,
+/// and the card's `readout` under `card`, each filled from the values the frame evaluates
+/// (`eval::shown_doc`). A template a slot of which reads nothing shows nothing.
+fn readouts_json(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    let shown = shown_doc(doc, program, state);
+    let texts = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(id, item)| {
+            let text = item.get("kind").and_then(Value::as_str) == Some("text@1");
+            Some((
+                id.clone(),
+                item.pointer("/params/template")?
+                    .as_str()
+                    .filter(|_| text)?,
+            ))
+        });
+    let card = doc
+        .get("card")
+        .and_then(|c| c.get("readout"))
+        .and_then(Value::as_str)
+        .map(|t| ("card".to_string(), t));
+    texts
+        .chain(card)
+        .filter_map(|(id, template)| {
+            Some((
+                id,
+                json!(deep_canvas::template::expand(&shown, template).ok()?),
+            ))
+        })
+        .collect()
+}
+
 /// #493: each item the line projects, through the document camera's pose at t: the projection
 /// of its bounds' centre and the box of their corners, in px of the document's size.
-fn projected_json(doc: &Map<String, Value>, program: &Program, state: &State, t: i64, film: &Film) -> Value {
-    let Some(plan) = program.shots.as_ref() else { return json!({}) };
-    let Some(c) = doc.get("camera").and_then(Value::as_str).and_then(|id| plan.camera(id)) else {
+fn projected_json(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    t: i64,
+    film: &Film,
+) -> Value {
+    let Some(plan) = program.shots.as_ref() else {
+        return json!({});
+    };
+    let Some(c) = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .and_then(|id| plan.camera(id))
+    else {
         return json!({});
     };
     let keyed = |c: usize| plan.keyed_pose(c, program, state);
-    let at = At { reduced: film.reduced, planted: film.planted, indexed: film.indexed, keyed: &keyed };
+    let at = At {
+        reduced: film.reduced,
+        planted: film.planted,
+        indexed: film.indexed,
+        keyed: &keyed,
+    };
     let projector = plan.shown(c, t, &at).pose.projector(plan.size);
     film.project
         .iter()

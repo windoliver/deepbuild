@@ -177,7 +177,11 @@ impl Hub<'_> {
 
     /// The export frames at `times` (ascending) from a fresh scheduler and session, each hashed
     /// with BLAKE3 on the GPU as the export hashes its frames.
-    fn frame_hashes(&mut self, doc: &Value, times: &[i64]) -> Result<Vec<String>, Value> {
+    pub(crate) fn frame_hashes(
+        &mut self,
+        doc: &Value,
+        times: &[i64],
+    ) -> Result<Vec<String>, Value> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
         session.load(&mut sched, doc);
@@ -205,9 +209,11 @@ impl Hub<'_> {
                     [u32::from(size[0]), u32::from(size[1])],
                 )
             });
-            out.extend(f.push(&px));
+            out.extend(f.push(&px).map_err(|_| json!({"code": "device_lost"}))?);
         }
-        out.extend(frames.as_mut().and_then(deep_gpu::blake3::Frames::finish));
+        if let Some(f) = frames.as_mut() {
+            out.extend(f.finish().map_err(|_| json!({"code": "device_lost"}))?);
+        }
         Ok(out.iter().map(hex).collect())
     }
 
@@ -271,7 +277,9 @@ mod tests {
     fn the_keymap_names_each_viewer_key_a_film_control_holds() {
         // Sealed without `seal()`, whose runs another test counts.
         let full = crate::BuildSet::Full;
-        let sealed = crate::assemble(full, crate::modules(full)).seal().expect("the shipped set seals");
+        let sealed = crate::assemble(full, crate::modules(full))
+            .seal()
+            .expect("the shipped set seals");
         let startup = crate::tests::startup_of(sealed);
         let doc = "01JB501V00000000000000000A";
         let film = json!({

@@ -1,7 +1,7 @@
 //! Issue #1462: a replica's own copy of the hub (design: Replica). Every call the app makes of its hub lands here in
 //! place of a socket, in order, so `see` can say what the app sent; nothing reaches your hub. It records `ask.later`
-//! as the core does, so the list folds it, and refuses what the hub refuses with no view installed. It never confirms
-//! you: only `test-confirm`'s file stands in for the OS.
+//! as the core does, so the list folds it, an answer and a row read as the core does (#1461), and refuses what the hub
+//! refuses with no view installed. It never confirms you: only `test-confirm`'s file stands in for the OS.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -104,7 +104,75 @@ impl HubCopy {
                 );
                 Ok(json!({"session": session, "paused": true}))
             }
+            // A rename is the name you gave the session, and its row is set with it, as the core records them (#2018).
+            "session.rename" => {
+                let session = params["session"].as_str().unwrap_or_default().to_owned();
+                let name = params["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if name.is_empty() {
+                    return Err(HubError::Refused(
+                        json!({"code": "type", "path": "/params/name", "message": "Give the session a name."}),
+                    ));
+                }
+                let letters: String = session
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .collect();
+                self.record(
+                    &session,
+                    json!({"kind": "session.named", "subject": format!("session:{letters}"), "data": {"name": name, "by": "you"}}),
+                );
+                let id = format!("session:{session}");
+                let row = deep_app::record::with_view(|view| {
+                    let table = view.table();
+                    Some((table.row_of(&id)?.clone(), table.order_of(&id)?))
+                })
+                .flatten();
+                if let Some((mut row, order)) = row {
+                    row["title"] = json!(name);
+                    row["listed"] = json!(true);
+                    row["order"] = json!(order);
+                    self.record(&session, json!({"kind": "row.set", "data": row}));
+                }
+                Ok(json!({"session": session, "name": name}))
+            }
             "box.say" => Ok(json!({"unread": "A replica drafts nothing."})),
+            // An answer closes its ask and its row leaves the list, as the core records them (#1461).
+            "ask.answer" => {
+                let ask = params["ask"].as_str().unwrap_or_default().to_owned();
+                let Some((session, _)) = lock(&self.asks).get(&ask).cloned() else {
+                    return refused("/params/ask", format!("{ask} is no ask"));
+                };
+                self.record(
+                    &session,
+                    json!({"kind": "ask.answered", "subject": ask, "data": {"answer": params["option"], "words": params["words"], "via": "card"}}),
+                );
+                self.record(
+                    &session,
+                    json!({"kind": "row.set", "data": {"id": ask, "listed": false}}),
+                );
+                Ok(json!({"answered": true}))
+            }
+            // A row read: the row as the record holds it, no longer unread (#1461).
+            "row.read" => {
+                let id = params["id"].as_str().unwrap_or_default().to_owned();
+                let row = deep_app::record::with_view(|view| {
+                    let table = view.table();
+                    Some((table.row_of(&id)?.clone(), table.order_of(&id)?))
+                })
+                .flatten();
+                if let Some((mut row, order)) = row {
+                    row["unread"] = json!(false);
+                    row["listed"] = json!(true);
+                    row["order"] = json!(order);
+                    let session = row["session"].as_str().unwrap_or_default().to_owned();
+                    self.record(&session, json!({"kind": "row.set", "data": row}));
+                }
+                Ok(json!({"id": id}))
+            }
             _ => Ok(json!({})),
         }
     }

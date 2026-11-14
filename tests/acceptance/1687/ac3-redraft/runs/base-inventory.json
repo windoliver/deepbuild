@@ -1,0 +1,94 @@
+{
+  "base": "c52f1c66d22886c336189d41237265e82843c34a",
+  "scope": "production JS/TS in packages and adapters; literal repository edges only",
+  "modules": 359,
+  "resolvedEdges": 1242,
+  "externalEdges": 697,
+  "unresolved": [],
+  "runtimeCyclicEdges": [
+    "packages/hub/src/list.ts -> packages/hub/src/rows.ts",
+    "packages/hub/src/rows.ts -> packages/hub/src/list.ts"
+  ],
+  "typeInclusiveCyclicEdges": [
+    "packages/config-eval/src/archive.ts -> packages/config-eval/src/index.ts",
+    "packages/config-eval/src/archive.ts -> packages/config-eval/src/recording.ts",
+    "packages/config-eval/src/index.ts -> packages/config-eval/src/archive.ts",
+    "packages/config-eval/src/index.ts -> packages/config-eval/src/launcher.ts",
+    "packages/config-eval/src/launcher.ts -> packages/config-eval/src/index.ts",
+    "packages/config-eval/src/launcher.ts -> packages/config-eval/src/recording.ts",
+    "packages/config-eval/src/recording.ts -> packages/config-eval/src/index.ts",
+    "packages/extension-host/src/series.ts -> packages/extension-host/src/sources.ts",
+    "packages/extension-host/src/sources.ts -> packages/extension-host/src/series.ts",
+    "packages/hub/src/canvas-doctor.ts -> packages/hub/src/doctor.ts",
+    "packages/hub/src/doctor.ts -> packages/hub/src/canvas-doctor.ts",
+    "packages/hub/src/holds.ts -> packages/hub/src/questions.ts",
+    "packages/hub/src/list.ts -> packages/hub/src/rows.ts",
+    "packages/hub/src/questions.ts -> packages/hub/src/holds.ts",
+    "packages/hub/src/rows.ts -> packages/hub/src/list.ts",
+    "packages/record/src/index.ts -> packages/record/src/trust.ts",
+    "packages/record/src/trust.ts -> packages/record/src/index.ts"
+  ],
+  "boundary": {
+    "violations": [
+      "packages/hub/src/acceptance.ts -> packages/checks-command/src/index.ts",
+      "packages/hub/src/ask-tasks.ts -> packages/workspaces/src/index.ts",
+      "packages/hub/src/core.ts -> packages/archive/src/index.ts",
+      "packages/hub/src/core.ts -> packages/env-local/src/index.ts",
+      "packages/hub/src/core.ts -> packages/github/src/index.ts",
+      "packages/hub/src/core.ts -> packages/resolver-decisions/src/index.ts",
+      "packages/hub/src/core.ts -> packages/wiki/src/index.ts",
+      "packages/hub/src/kinds.ts -> packages/checks-command/src/index.ts",
+      "packages/hub/src/kinds.ts -> packages/checks-numbers/src/index.ts",
+      "packages/hub/src/kinds.ts -> packages/checks-review/src/index.ts",
+      "packages/hub/src/kinds.ts -> packages/checks-work/src/index.ts",
+      "packages/hub/src/memory.ts -> packages/archive/src/index.ts",
+      "packages/hub/src/runs.ts -> packages/checks-command/src/index.ts",
+      "packages/hub/src/runs.ts -> packages/env-local/src/index.ts",
+      "packages/hub/src/stacks.ts -> packages/env-local/src/index.ts",
+      "packages/hub/src/starts.ts -> packages/github/src/index.ts",
+      "packages/hub/src/wiki-build.ts -> packages/archive/src/index.ts",
+      "packages/hub/src/wiki-build.ts -> packages/wiki/src/index.ts",
+      "packages/hub/src/workspaces.ts -> packages/workspaces/src/index.ts",
+      "packages/reading/src/index.ts -> packages/wiki/src/index.ts"
+    ],
+    "unclassified": []
+  },
+  "computedImportSites": [
+    {
+      "from": "packages/conformance/src/bin.ts",
+      "line": 46
+    },
+    {
+      "from": "packages/extension-host/runtime/deep.mjs",
+      "line": 87
+    },
+    {
+      "from": "packages/extension-host/runtime/runner.mjs",
+      "line": 33
+    },
+    {
+      "from": "packages/extension-host/src/host.ts",
+      "line": 2503
+    },
+    {
+      "from": "packages/extension-host/src/host.ts",
+      "line": 2505
+    },
+    {
+      "from": "packages/hub/src/core.ts",
+      "line": 1139
+    },
+    {
+      "from": "packages/hub/src/mcp.ts",
+      "line": 116
+    },
+    {
+      "from": "packages/hub/src/search.ts",
+      "line": 128
+    },
+    {
+      "from": "packages/pi/src/index.ts",
+      "line": 398
+    }
+  ]
+}

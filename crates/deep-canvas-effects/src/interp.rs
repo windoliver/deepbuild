@@ -1192,7 +1192,14 @@ impl<'a> Prog<'a> {
                 let (b, s) = (as_l(g("base"), Sc::F32, 3).v, as_l(g("over"), Sc::F32, 3).v);
                 let mode = p.s.fields.get("mode").and_then(Value::as_str);
                 let mode = mode.and_then(deep_canvas::blend::step_mode).unwrap_or(0);
-                V::N(Sc::F32, L::of(&deep_canvas::blend::mix(mode, [b[0], b[1], b[2]], [s[0], s[1], s[2]])))
+                V::N(
+                    Sc::F32,
+                    L::of(&deep_canvas::blend::mix(
+                        mode,
+                        [b[0], b[1], b[2]],
+                        [s[0], s[1], s[2]],
+                    )),
+                )
             }
             "luminance" => {
                 let c = as_l(g("rgb"), Sc::F32, 3).v;
@@ -1343,7 +1350,8 @@ pub fn inputs(
             }
             // The step a stepped operator computes, which its runtime sets each step (#252).
             From::Step => Val::N(Sc::U32, vec![0.0]),
-            From::Time | From::Phase(_) | From::Seed => continue,
+            // A light response's port comes from the light loop, never the uniform (#485).
+            From::Time | From::Phase(_) | From::Seed | From::Port => continue,
         };
         out.insert(name.clone(), v);
     }

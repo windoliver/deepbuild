@@ -1,0 +1,67 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A bookcase",
+  "description": "Your board of one bookcase, saved while it named the first shelf pack, after you broke out one of its boards, as the hub stored it.",
+  "size": [
+    640,
+    360
+  ],
+  "packs": [
+    "acme/shelf@1.0.0"
+  ],
+  "layers": {
+    "you-main": {
+      "writer": "you:you",
+      "title": "You",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "b": {
+      "id": "b",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase",
+      "order": "a0",
+      "layer": "you-main",
+      "params": {},
+      "at": {
+        "pos": [
+          40,
+          40,
+          0
+        ]
+      },
+      "broken_out": [
+        "b.board.2"
+      ]
+    },
+    "b.board.2": {
+      "id": "b.board.2",
+      "kind": "rect@1",
+      "layer": "you-main",
+      "name": "b.board.2",
+      "order": "a0",
+      "params": {
+        "box": [
+          0,
+          0,
+          120,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          40,
+          158,
+          0
+        ]
+      }
+    }
+  }
+}

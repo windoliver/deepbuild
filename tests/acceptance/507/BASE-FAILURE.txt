@@ -1,0 +1,73 @@
+At base 53c0e72a3 (origin/main, "Merge pull request #2356"), on 2026-11-12, the suite was not run: the machine is shared
+and loaded, so deep-show was not built, and the surfaces the tests enter plainly don't exist there. What each test would
+meet first was read from the base's code, not observed. The type-check passes.
+
+What the base has, from its code:
+- crates/deep-canvas-motion/src/doc.rs `markers_of`: a stage marker with `waits_for` is refused `bad_marker_kind` at
+  `markers/<id>/waits_for` (its comment: one that waits "holds even there, which motion doesn't land yet, so that one is
+  refused"); motion's `compile` operator raises it at check, so `deep show` of the quiz film is refused. Markers keep
+  insertion order (serde_json's preserve_order), so the first waiting marker met is `fork`. `then`, `goto`, `notes` and
+  `hold` are not read; a stage marker inside a narration line is not refused.
+- crates/deep-show/src/input.rs `input`: a key in a panel showing a film goes first to its film viewer (#501,
+  film_viewer.rs `viewer_key`), whose reply is `{serial, viewer}` with no `appended`; → seeks 5 s, Space plays or pauses.
+  A key the viewer doesn't take (`b`) reaches the scope, whose reply has `appended: []`. There is no present mode: a
+  full-screen pop-out (#400) only places the window.
+- main.rs: `present`, `presenter` and `menu_bar` are no calls, and a `media_mix` with no `doc` object doesn't parse, so a
+  scenario holding any of them answers {"ok": false, "code": "bad_input"}; so does an unknown scenario `planted` name.
+  export.rs `parse` takes `range` "whole", [in, out], {still}, ranges or frames only, so `range: "stages"` doesn't parse
+  either (bad_input). `determinism` ignores `track`; its sides have no `position` or `texts`; `eval` has neither.
+- The keymap check (film_viewer.rs `viewer_conflicts`) names only viewer keys a control holds, as `{chord, context,
+  control, doc}`; nothing names present mode. `presented` frames have no `over`; the `card` reply has no `deadline_at`.
+
+Per test:
+
+- ac1-branching.test.ts
+  - "picking B and answering two of three right …": the scenario runs; it fails at `presented(replies[0], 'the quiz
+    film')`: "the quiz film is presented", the reply refused `bad_marker_kind` at `markers/fork/waits_for`.
+  - "the export of that track renders …": fails at the same `presented(replies[0], 'the quiz film')`.
+  - "a then to a marker at 5 s, a waiting control of class view and a stage inside a narration line …": fails at
+    `none(…, 'the three faults')`: the then twin and the view twin are refused at `markers/fork/waits_for`, naming
+    neither `then` nor `viewer_pick`, and the narrated film with `inside` at 11.5 s is presented, not refused (or, if the
+    base refuses it for another reason, refused without naming `inside`).
+
+- ac2-back.test.ts
+  - "← while the question at 37 s holds …": fails in `enterPresent` at "the quiz film in present mode: the piece is
+    presented": the quiz film is refused `bad_marker_kind`.
+
+- ac3-held-stage.test.ts (the four tests share one session, run by the first; each fails with its error)
+  - The held film is presented and pops out full screen; the session fails at `presentEntry(r1[0], 'advance', '→ on
+    the first stage')`: "→ on the first stage: appended is an array, got undefined", since the film viewer takes → as a
+    5 s seek. (If the base refuses the held film, it fails earlier, at "the held film in present mode: the piece is
+    presented".) The later steps, with `media_mix {session}`, would answer bad_input.
+
+- ac4-asks.test.ts
+  - "with present mode on B, the ask's card opens on A …": the plug-in installs and the piece pops out onto B; the
+    third step fails at "the ask while presenting on B: deep-show run takes the scenario": `present` is no call, so
+    {"ok": false, "code": "bad_input"}.
+  - "with one display, the ask only adds one …": fails at "the ask while presenting on the one display: deep-show run
+    takes the scenario": `menu_bar` is no call (bad_input).
+
+- ac5-loop-and-keys.test.ts
+  - "held 7 s, the loop shows the span's frames …": the loop film is presented and pops out; it fails at
+    `presentEntry(adv, 'advance', '→ on stage s1')`: "appended is an array, got undefined" (the viewer's reply).
+  - "B blanks the presented display …": fails at "the keys: deep-show run takes the scenario": `present` is no call
+    (bad_input).
+
+- ac6-presenter-and-handout.test.ts
+  - "while stage 3 holds the presenter view on A …": fails at "stage 3 held with the presenter view open: deep-show run
+    takes the scenario": `presenter` is no call (bad_input).
+  - "the handout of the 9-stage piece is 9 pages …": poppler is found on this Mac (26.11.0); it fails at "the stills and
+    the two handouts: deep-show run takes the scenario": the handout's `range: "stages"` doesn't parse (bad_input).
+    Without poppler it is BLOCKED before that.
+  - "a planted writer that skips stage 4 …": fails at "the planted writer: deep-show run takes the scenario (planted
+    pdf_writer_skips_stage_4)": an unknown planted name answers bad_input.
+
+- ac7-keymap.test.ts
+  - "the keymap check names Space, ←, → and 0-9 …": every call parses, so the scenario runs; the keymap in present mode
+    names none of the thirteen, and it fails at `presentEntry(r[2], 'advance', '→ on stage 1')`: "appended is an array,
+    got undefined", since the viewer took → as a 5 s seek.
+
+- taste.test.ts (run, since it builds nothing: `node node_modules/vitest/vitest.mjs run --root tests/acceptance/507
+  taste.test.ts`, 1 failed)
+  - INCONCLUSIVE: the check run's pictures are not in docs/evidence/507/ (stage-full-screen.png, presenter-view.png,
+    handout-page.png, held-loop.apng).
