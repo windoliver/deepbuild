@@ -215,20 +215,21 @@ fn cover(t: [V2; 3], win: [usize; 4], out: &mut Vec<usize>) {
     }
 }
 
-/// Each pixel of the raster window `win`, how many charts cover its centre, and whether each
-/// chart shares a pixel with another. With `boxes`, the planted reading, each chart's bounding
-/// box stands for its triangles.
+/// Each pixel of the raster window `win`, how many charts cover its centre; whether each chart
+/// shares a pixel with another; and whether each covers none. With `boxes`, the planted
+/// reading, each chart's bounding box stands for its triangles.
 fn coverage(
     px: &[[V2; 3]],
     members: &[Vec<usize>],
     win: [usize; 4],
     boxes: bool,
-) -> (Vec<u8>, Vec<bool>) {
+) -> (Vec<u8>, Vec<bool>, Vec<bool>) {
     let (w, h) = (win[1].saturating_sub(win[0]), win[3].saturating_sub(win[2]));
     let mut count = vec![0u8; w * h];
     // The last chart, plus one, that counted each pixel: a chart counts a pixel once.
     let mut stamp = vec![0u32; w * h];
     let mut over = vec![false; members.len()];
+    let mut bare = vec![false; members.len()];
     let mut cells = Vec::new();
     for (c, fs) in members.iter().enumerate() {
         cells.clear();
@@ -247,6 +248,7 @@ fn coverage(
                 cover(px[i], win, &mut cells);
             }
         }
+        bare[c] = cells.is_empty();
         let mark = c as u32 + 1;
         for &p in &cells {
             if stamp[p] == mark {
@@ -262,7 +264,53 @@ fn coverage(
             count[p] = count[p].saturating_add(1);
         }
     }
-    (count, over)
+    (count, over, bare)
+}
+
+/// The pairs `(c, d)` where chart `c` covers no pixel centre and its first corner lies in a
+/// triangle of chart `d`: two charts at gap 0 that neither the raster nor their edges show.
+/// Triangles are found through a grid of 16 px cells.
+fn inside_other(
+    px: &[[V2; 3]],
+    chart: &[usize],
+    members: &[Vec<usize>],
+    bare: &[bool],
+    side: f64,
+) -> Vec<(usize, usize)> {
+    const CELL: f64 = 16.0;
+    let g = (side / CELL).ceil().max(1.0) as usize;
+    let at = |v: f64| ((v / CELL).floor().max(0.0) as usize).min(g - 1);
+    let mut grid: Vec<Vec<usize>> = vec![Vec::new(); g * g];
+    for (i, t) in px.iter().enumerate() {
+        let (lo, hi) = (
+            |k: usize| t.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min),
+            |k: usize| t.iter().map(|p| p[k]).fold(f64::NEG_INFINITY, f64::max),
+        );
+        for y in at(lo(1))..=at(hi(1)) {
+            for x in at(lo(0))..=at(hi(0)) {
+                grid[y * g + x].push(i);
+            }
+        }
+    }
+    let mut pairs = Vec::new();
+    for c in (0..members.len()).filter(|c| bare[*c]) {
+        let q = px[members[c][0]][0];
+        let mut hits: Vec<usize> = grid[at(q[1]) * g + at(q[0])]
+            .iter()
+            .filter(|&&i| chart[i] != c)
+            .filter(|&&i| {
+                // Inside or on an edge, either winding; a triangle with no area holds nothing.
+                let t = px[i];
+                let s = [0, 1, 2].map(|k| cross(sub(t[(k + 1) % 3], t[k]), sub(q, t[k])));
+                area2(&t) != 0.0 && (s.iter().all(|&e| e >= 0.0) || s.iter().all(|&e| e <= 0.0))
+            })
+            .map(|&i| chart[i])
+            .collect();
+        hits.sort_unstable();
+        hits.dedup();
+        pairs.extend(hits.into_iter().map(|d| (c, d)));
+    }
+    pairs
 }
 
 /// How many of a raster column's pixels lie within `r2` (squared) of a covered pixel's centre,
@@ -409,11 +457,11 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
     for (i, &c) in chart.iter().enumerate() {
         members[c].push(i);
     }
-    let (count, over) = coverage(&px, &members, win, false);
+    let (count, over, bare) = coverage(&px, &members, win, false);
     let multi = count.iter().filter(|&&k| k > 1).count();
     // The planted reading takes `uv_overlap`, and only it, from the charts' bounding boxes.
     let planted = o.boxes.then(|| coverage(&px, &members, win, true));
-    let (oc, oo) = planted.as_ref().map_or((&count, &over), |(c, v)| (c, v));
+    let (oc, oo) = planted.as_ref().map_or((&count, &over), |(c, v, _)| (c, v));
     let covered = oc.iter().filter(|&&k| k > 0).count();
     let shared = oc.iter().filter(|&&k| k > 1).count();
     r.overlap = if covered > 0 {
@@ -492,6 +540,14 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
         best = Some(0.0);
         for c in (0..n).filter(|c| over[*c]) {
             close[c] = limit.is_some();
+        }
+    }
+    // A chart too small to cover a pixel centre may lie inside another, its edges clear of it.
+    if bare.iter().any(|b| *b) {
+        for (c, d) in inside_other(&px, &chart, &members, &bare, side) {
+            best = Some(0.0);
+            close[c] = limit.is_some();
+            close[d] = limit.is_some();
         }
     }
     if multi == 0 || limit.is_some() {
@@ -657,5 +713,35 @@ mod tests {
         assert_eq!(planted.fill, shipped.fill);
         assert_eq!(planted.min_gap_px, shipped.min_gap_px);
         assert_eq!(planted.close, shipped.close);
+    }
+
+    #[test]
+    fn a_chart_too_small_for_a_pixel_inside_another_is_at_gap_0() {
+        let s = 1024.0;
+        let faces = [
+            // Chart 0: the square [0.1, 0.9]².
+            face(0, [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9]], [0, 1, 2]),
+            face(1, [[0.1, 0.1], [0.9, 0.9], [0.1, 0.9]], [0, 2, 3]),
+            // Chart 1: a triangle 0.2 px wide inside it, between pixel centres.
+            face(
+                2,
+                [
+                    [500.1 / s, 500.1 / s],
+                    [500.3 / s, 500.1 / s],
+                    [500.1 / s, 500.3 / s],
+                ],
+                [4, 5, 6],
+            ),
+        ];
+        let r = read(
+            &faces,
+            &Opts {
+                min_gap_px: Some(4.0),
+                ..opts()
+            },
+        );
+        assert_eq!(r.overlap, 0.0);
+        assert_eq!(r.min_gap_px, Some(0.0));
+        assert_eq!(r.close, [0, 1]);
     }
 }
