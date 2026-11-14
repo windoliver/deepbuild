@@ -1,0 +1,81 @@
+# #1887 acceptance tests: the one run on the base
+
+Base 72fe11a11 ("Merge pull request #2523 ..."; no implementation), 2026-11-14 23:25:16-23:25:53 UTC, Node 24.22.0,
+Linux, load average about 50. Run once from the checkout. This machine's lsof (4.95.0) writes a tracefs warning and
+exits 1, which gives the check an unrelated `deep.registerEnvironment ... lsof failed` finding, so the run had a
+folder first on PATH whose `lsof` runs `/usr/bin/lsof -w "$@"` (README, Run them); with it the base's check passes,
+as on the reference Mac. The output below is the run's, whole; only the checkout's path is replaced, by <checkout>.
+
+$ git status --porcelain     # before the run, and the same after it
+?? tests/acceptance/1887/
+$ PATH=<folder with the lsof wrapper>:$PATH node --test --test-reporter=spec tests/acceptance/1887/slots-parity.test.mjs
+
+AC1 (#1887.a39d9bc9) FAILS, for the issue's reason: on the merge base's published API, which has no
+deep.schedule.read entry while the runtime's table serves the method, the check exits 0 with its PASS line.
+
+AC2 (#1887.69370a95) FAILS, for the issue's reason, in both halves. With deep.schedule.planted1887 and the control
+deep.registerPlanted1887 planted in the copy's runtime table, the check names the register method only. With
+deep.planted1887.published planted in the published API, the check exits 0 with its PASS line.
+
+AC3 (#1887.4a851c74) PASSES: it already holds at the base, whose check prints 16 slots. It is there to fail a
+change that moves the count.
+
+✖ #1887.a39d9bc9 `node scripts/slots-check.mjs` fails on the merge base's published API, naming `deep.schedule.read`, and passes once the entry exists (9534.406378ms)
+✖ #1887.69370a95 A planted runtime method with no published entry, and a planted published entry the runtime doesn't serve, each fail the check by name (16072.761303ms)
+✔ #1887.4a851c74 The slot count the check prints is unchanged (10650.386069ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36337.435934
+
+✖ failing tests:
+
+test at tests/acceptance/1887/slots-parity.test.mjs:116:1
+✖ #1887.a39d9bc9 `node scripts/slots-check.mjs` fails on the merge base's published API, naming `deep.schedule.read`, and passes once the entry exists (9534.406378ms)
+  AssertionError [ERR_ASSERTION]: node scripts/slots-check.mjs --api <packages/contracts/extension-api.json at 72fe11a11e9b40da5d138688cac52df193af4933>: no `FAIL slots:` line names deep.schedule.read:
+  exit 0
+  --- stdout
+  PASS slots: 16 slots from the published API, each with one row, a frozen interface, a kit and a planted fill it refuses
+  --- stderr
+  
+      at failsNaming (file://<checkout>/tests/acceptance/1887/slots-parity.test.mjs:47:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1887/slots-parity.test.mjs:124:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1887/slots-parity.test.mjs:133:1
+✖ #1887.69370a95 A planted runtime method with no published entry, and a planted published entry the runtime doesn't serve, each fail the check by name (16072.761303ms)
+  AssertionError [ERR_ASSERTION]: node scripts/slots-check.mjs with deep.schedule.planted1887 planted in the runtime's table: no `FAIL slots:` line names deep.schedule.planted1887:
+  exit 1
+  --- stdout
+  FAIL slots: deep.registerPlanted1887, -: deep.registerPlanted1887 is in the host's API and has no entry in the published extension API
+  --- stderr
+  
+  
+  node scripts/slots-check.mjs --api <the published API with deep.planted1887.published planted>: no `FAIL slots:` line names deep.planted1887.published:
+  exit 0
+  --- stdout
+  PASS slots: 16 slots from the published API, each with one row, a frozen interface, a kit and a planted fill it refuses
+  --- stderr
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1887/slots-parity.test.mjs:162:29)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
