@@ -20,7 +20,24 @@ use crate::scene3d::Targets;
 pub struct Probes {
     pub camera: Option<String>,
     pub at: Vec<[u32; 2]>,
+    /// #1725: a contact sheet of named views, each drawn through a camera framing the scene.
+    pub views: Vec<&'static str>,
 }
+
+/// The named views a contact sheet takes, each an orbit's azimuth and elevation in degrees about
+/// the scene's bounds: front looks along -Z, right along -X, top straight down.
+const VIEWS: [(&str, [f64; 2]); 6] = [
+    ("front", [0.0, 0.0]),
+    ("back", [180.0, 0.0]),
+    ("left", [-90.0, 0.0]),
+    ("right", [90.0, 0.0]),
+    ("top", [0.0, 90.0]),
+    ("three_quarter", [45.0, 30.0]),
+];
+
+/// A view's field of view, degrees, and how far past the bounds' sphere its frame reaches.
+const VIEW_FOV: f64 = 40.0;
+const VIEW_PAD: f64 = 1.1;
 
 /// The most probes one render-back answers (Render-back: `probes ≤ 64`).
 const MOST: usize = 64;
@@ -39,7 +56,19 @@ pub fn parse(c: &Map<String, Value>) -> Option<Probes> {
             .collect::<Option<Vec<_>>>()
     })?
     .unwrap_or_default();
-    Some(Probes { camera, at })
+    let views = crate::optional(c.get("sheet"), |s| {
+        let list = s.get("views")?.as_array().filter(|l| !l.is_empty())?;
+        list.iter()
+            .map(|n| {
+                VIEWS
+                    .iter()
+                    .find(|(name, _)| Some(*name) == n.as_str())
+                    .map(|(name, _)| *name)
+            })
+            .collect::<Option<Vec<_>>>()
+    })?
+    .unwrap_or_default();
+    Some(Probes { camera, at, views })
 }
 
 /// Whether a revision draws in 3D: it holds a 3D writer layer, or requires scene3d, as one of
@@ -61,6 +90,14 @@ impl Hub<'_> {
         size: Option<[u16; 2]>,
         probes: &Probes,
     ) -> Value {
+        if !probes.views.is_empty() {
+            // A sheet of views draws through its own cameras: a camera or probes beside it ask
+            // about one frame it doesn't draw.
+            if probes.camera.is_some() || !probes.at.is_empty() {
+                return json!({"code": "out_of_range", "path": "sheet"});
+            }
+            return self.view_sheet(rev, shown, t, size, &probes.views);
+        }
         let mut doc = shown.clone();
         if let Some(cam) = &probes.camera {
             let kind = doc
@@ -143,6 +180,97 @@ impl Hub<'_> {
             })
             .collect();
         reply
+    }
+}
+
+impl Hub<'_> {
+    /// #1725: a contact sheet of named views of a 3D revision `shown` at `t`, from one call: each
+    /// view drawn through a camera of its own that orbits the centre of the scene's world bounds
+    /// at the view's azimuth and elevation and frames their sphere, with its own snapshot by hash
+    /// and its own visible table. Display only, like all of render-back.
+    fn view_sheet(
+        &mut self,
+        rev: u64,
+        shown: &Value,
+        t: i64,
+        size: Option<[u16; 2]>,
+        views: &[&'static str],
+    ) -> Value {
+        const CAMERA: &str = "view.sheet.camera";
+        let size = size.unwrap_or_else(|| {
+            crate::snapshot::px([0, 1].map(|i| shown["size"][i].as_f64().unwrap_or(1.0)))
+        });
+        let evidence = self.scenario.evidence.clone();
+        let read = move |sha: &str| crate::evidence::read(&evidence, sha);
+        let palette = self.look.light.clone();
+        let Some(gpu) = self.gpu3() else {
+            return refused("unsupported_platform");
+        };
+        // The scene's world bounds, from what it draws through its own camera.
+        let (scene, _) = match gpu.evaluate(shown, t, &palette, size, &read) {
+            Ok(s) => s,
+            Err(u) => return json!({"code": u.code, "path": u.path}),
+        };
+        let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for p in scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .flat_map(|s| s.points())
+        {
+            for k in 0..3 {
+                lo[k] = lo[k].min(p[k]);
+                hi[k] = hi[k].max(p[k]);
+            }
+        }
+        if !lo[0].is_finite() {
+            (lo, hi) = ([-0.5; 3], [0.5; 3]);
+        }
+        let centre: [f64; 3] = std::array::from_fn(|k| (lo[k] + hi[k]) / 2.0);
+        use deep_canvas::ops::{atan, rad, sin, sqrt, tan};
+        let radius = sqrt(
+            (0..3)
+                .map(|k| (hi[k] - lo[k]) / 2.0)
+                .map(|h| h * h)
+                .sum::<f64>(),
+        )
+        .max(0.01);
+        // The field of view spans the wider side; the sphere fits the narrower one's.
+        let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+        let half = atan(w.min(h) / w.max(h) * tan(rad(VIEW_FOV) / 2.0));
+        let distance = radius * VIEW_PAD / sin(half);
+        let mut snapshots = Vec::new();
+        for view in views {
+            let [azimuth, elevation] = VIEWS
+                .iter()
+                .find(|(n, _)| n == view)
+                .map_or([0.0; 2], |v| v.1);
+            let mut doc = shown.clone();
+            doc["camera"] = json!(CAMERA);
+            doc["items"][CAMERA] = json!({"id": CAMERA, "kind": "camera@1", "name": "View", "order": "zz",
+                "params": {"target": centre, "fov": VIEW_FOV,
+                           "orbit": {"azimuth": azimuth, "elevation": elevation, "distance": distance}}});
+            let Some(gpu) = self.gpu3() else {
+                return refused("unsupported_platform");
+            };
+            let (scene, look) = match gpu.evaluate(&doc, t, &palette, size, &read) {
+                Ok(s) => s,
+                Err(u) => return json!({"code": u.code, "path": u.path, "view": view}),
+            };
+            let Some((rgba, _)) = gpu.draw_scene(&scene, &look, false) else {
+                return refused("unsupported_platform");
+            };
+            let png = crate::snapshot::png(rgba, size);
+            let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
+                return refused("not_written");
+            };
+            snapshots.push(
+                json!({"view": view, "sha256": sha, "w": size[0], "h": size[1],
+                                  "visible": crate::snapshot::visible(scene.boxes(), 1.0, size)}),
+            );
+        }
+        json!({"rev": rev, "t": t, "outcome": "presented", "snapshots": snapshots,
+               "backends": crate::seams::backends(true)})
     }
 }
 

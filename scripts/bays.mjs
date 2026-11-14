@@ -234,32 +234,71 @@ function say(line) {
   }
 }
 
-/**
- * Stops what a dead holder's command left running in the pair: its process group, which this script started. A
- * group's number isn't given to a new process while any member lives, so members under it are that command's,
- * unless its leader lives with another start, a later process given the number. Returns whether any were stopped.
- */
-function stopLeftover(file) {
-  let group;
-  try {
-    group = JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return false;
-  }
+// Only ENOENT means absent; unreadable records and failed/incomplete process scans block reuse.
+function buildRecord(file) {
+  try { return JSON.parse(readFileSync(file, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return undefined; throw error; }
+}
+const validProcess = (entry) => Number.isSafeInteger(entry?.pid) && entry.pid > 1 && typeof entry.start === 'string' && entry.start.trim();
+const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+function processTable(deadline) {
+  if (Date.now() >= deadline) throw Error('bay process cleanup timed out');
+  const scan = spawnSync('ps', ['-A', '-o', 'pid=,pgid=,stat=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, timeout: Math.max(1, Math.min(1000, deadline - Date.now())), env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
+  if (scan.status !== 0 || !scan.stdout?.trim()) throw Error('bay process scan failed');
+  return scan.stdout.trim().split('\n').map((line) => {
+    const row = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/);
+    if (!row) throw Error('bay process scan is malformed');
+    return { pid: Number(row[1]), group: Number(row[2]), zombie: row[3].startsWith('Z'), start: row[4] };
+  });
+}
+function signal(pid, name) {
+  try { process.kill(pid, name); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+}
+/** A group number cannot be reused while any member lives; a reused leader is never ours to stop. */
+function stopGroup(group, deadline) {
+  if (!validProcess(group)) throw Error('invalid bay process group record');
   const members = () => {
-    const listing = spawnSync('ps', ['-A', '-o', 'pid=,pgid=,lstart='], { encoding: 'utf8', maxBuffer: 1 << 26, env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout;
-    const rows = listing.split('\n').map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/)).filter(Boolean);
-    const leader = rows.find(([, pid]) => Number(pid) === group.pid);
-    if (leader && leader[3] !== group.start) return 0;
-    return rows.filter(([, , pgid]) => Number(pgid) === group.pid).length;
+    const rows = processTable(deadline), leader = rows.find(({ pid }) => pid === group.pid);
+    if (leader && leader.start !== group.start) throw Error('bay process group identity changed');
+    return rows.some((row) => row.group === group.pid && !row.zombie);
   };
   if (!members()) return false;
-  try {
-    process.kill(-group.pid, 'SIGKILL');
-  } catch {}
-  const deadline = Date.now() + 10_000;
-  while (members() && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  signal(-group.pid, 'SIGKILL');
+  while (members()) {
+    if (Date.now() >= deadline) throw Error('bay process group cleanup timed out');
+    pause();
+  }
   return true;
+}
+function stopLeftover(file) {
+  const group = buildRecord(file);
+  return group === undefined ? false : stopGroup(group, Date.now() + 10_000);
+}
+
+/** Detached binary supervisors publish before compilation and remove their record only after group cleanup. */
+function stopBuilds(bay) {
+  const folder = join(bay, 'target/.deep-proof-builds');
+  let names;
+  try { names = readdirSync(folder); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  for (const name of names.filter((entry) => entry.endsWith('.json'))) {
+    const file = join(folder, name), deadline = Date.now() + 10_000;
+    let notified = false;
+    for (;;) {
+      const record = buildRecord(file);
+      if (record === undefined) break;
+      if (![record.owner, record.supervisor, record.group].every(validProcess)) throw Error(`invalid bay build record: ${file}`);
+      const rows = processTable(deadline);
+      const alive = (entry) => rows.some((row) => row.pid === entry.pid && row.start === entry.start && !row.zombie);
+      if (alive(record.owner)) throw Error(`bay build owner is still alive: ${file}`);
+      if (!alive(record.supervisor)) {
+        stopGroup(record.group, deadline);
+        rmSync(file, { force: true });
+        break;
+      }
+      if (!notified) { signal(record.supervisor.pid, 'SIGTERM'); notified = true; }
+      if (Date.now() >= deadline) throw Error(`bay build cleanup timed out: ${file}`);
+      pause();
+    }
+  }
 }
 
 
@@ -331,6 +370,8 @@ class Pair {
     // packages for a copy's links.
     if (!isBay(join(this.folder, 'change'))) throw Error(`${join(bays(), String(grant.index))} links out of ${bays()}, to ${this.folder}; make it a folder there`);
     this.groupFile = join(this.folder, 'command.json');
+    // A live build owner blocks even the old command's cleanup; detached builds are a separate barrier.
+    for (const role of ['base', 'change']) stopBuilds(join(this.folder, role));
     // A dead holder's command may still run in the pair; it is stopped before a bay changes under it.
     this.stopped = stopLeftover(this.groupFile);
     rmSync(this.groupFile, { force: true });
@@ -354,6 +395,7 @@ class Pair {
    */
   use(role, use, overlay = new Map()) {
     const bay = join(this.folder, role);
+    stopBuilds(bay); // Before a seal reset, target deletion, source replacement or a subsequent use.
     let state = this.roles[role];
     let seal = state?.seal, cold = false;
     if (!state) {
