@@ -1,0 +1,16 @@
+The #224 Oracle lane at base commit c56fe5407 ("Merge pull request #2462 …"; no implementation of #224).
+
+Not run at the base: both tests first build deep-show, the expensive part, on a shared machine under heavy load (load
+average about 300), and the surface plainly doesn't exist there. Type-check: npx tsc -p
+tests/acceptance/224-oracle/tsconfig.json exits 0 with no output.
+
+What they meet there, read from the base's own source: `surface@1` isn't a kind the base registers
+(crates/deep-canvas-scene3d/src/builders.rs KINDS, scene.rs is_3d), so `deep_show` presents each document with the
+notice `unknown_kind` on `plot` ("the item is skipped", crates/deep-canvas/src/document/check.rs), and each test fails
+at `admitted`'s named assertion:
+
+  surface-colorscale.test.ts
+    Oracle #224.7f436e55 the saddle over [−3, 3]² and the sine surface, each on axes, take each stop's color at the stop
+      AssertionError: the saddle: no item skipped as an unknown kind
+    Oracle #224.7f436e55 the planted mismatch, the saddle's scale reversed, fails the same check, naming the stop at z = −4
+      AssertionError: the reversed saddle: no item skipped as an unknown kind
