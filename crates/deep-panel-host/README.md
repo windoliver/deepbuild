@@ -17,7 +17,7 @@ The host hashes each tree it renders, whoever asked for the render (a command, o
 
 ## What it may import
 
-deep-app (the panel runtime, module and tree parser), gpui-kit's headless context, gpui-shell's script view, quickjs-jit-runtime and serde_json. Nothing imports it: the app starts it as a process of its own.
+deep-app (the panel runtime, module and tree parser), gpui-kit's headless context, gpui-shell's script view, quickjs-jit-runtime and serde_json. Nothing imports it: the app's `panel-check`, `panel-bench` and `panel-keys` commands (the `panel-check` feature, off in the shipping app) start it as a process of its own. The shipping app starts none yet: every installed view mounts in the app's process (#358).
 
 ## Deviations
 

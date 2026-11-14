@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 pub mod kinds;
 pub mod launch;
 mod time;
-pub use time::{cache, held, tick};
+pub use time::{cache, held, latch, tick};
 pub mod probe;
 pub mod registries;
 pub mod sandbox;

@@ -272,7 +272,8 @@ pub fn reply(
 }
 
 /// The document as it draws: each recipe instance replaced by the derived items its expansion
-/// made, which draw in its place; everything else as the writer sent it.
+/// made, which draw in its place, and each cue list by what it expanded to; everything else as
+/// the writer sent it.
 pub fn drawn(doc: &Value, expansions: &[Expansion]) -> Value {
     let mut out = doc.clone();
     if let Some(Value::Object(items)) = out.get_mut("items") {
@@ -283,6 +284,8 @@ pub fn drawn(doc: &Value, expansions: &[Expansion]) -> Value {
             }
         }
     }
+    // #222: a cue list's channels and markers join the document's, so the frames play them.
+    deep_canvas::document::expands::merge(&mut out, expansions);
     out
 }
 
@@ -392,6 +395,32 @@ pub fn timings(
     );
     out.insert("resolve_ms".into(), json!(resolve_ms));
     out.insert("migrate_ms".into(), json!(migrate_ms));
+    // #222: each cue list's expansion at check, the expander's own time.
+    let entries = deep_canvas::document::expands::Entries::new(sealed, &resolved);
+    let verbs = |n: &str| {
+        entries
+            .get(deep_canvas_motion::cues::REGISTRY, n)
+            .map(|(v, _)| v.clone())
+    };
+    let lists: Map<String, Value> = items
+        .iter()
+        .filter(|(_, item)| item.get("kind").and_then(Value::as_str) == Some("cues@1"))
+        .map(|(id, item)| {
+            let started = std::time::Instant::now();
+            let _ = deep_canvas_motion::cues::lower(
+                doc,
+                &items,
+                id,
+                item,
+                &verbs,
+                packs.planted.expander,
+            );
+            (id.clone(), json!(started.elapsed().as_secs_f64() * 1000.0))
+        })
+        .collect();
+    if !lists.is_empty() {
+        out.insert("expand_ms".into(), Value::Object(lists));
+    }
     out
 }
 

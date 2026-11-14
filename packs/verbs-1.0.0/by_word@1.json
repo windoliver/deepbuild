@@ -1,0 +1,22 @@
+{
+  "id": "verbs.by_word",
+  "version": "1.0",
+  "title": "By word",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's text reveals a word at a time, its reveal stepping once per word over its window.",
+  "inputs": {},
+  "steps": {
+    "words": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        },
+        "ease": {
+          "quantize": "words"
+        }
+      }
+    }
+  }
+}

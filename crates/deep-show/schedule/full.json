@@ -2,11 +2,11 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "a9313100d5ed948e43047dabddec4d52ce02f4a3a0c12e19cb488d808955d67b",
+  "set_digest": "91e23f1104550299365b0468d5a1ebfd7d90e27c004cd62ddb962678f90735f9",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
-      "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
+      "digest": "6c932b2a8efa56170d153ff1eebd957b04800110bf99d2da4385d651a2cc2bd5",
       "reference": "building",
       "kit": [
         "fixtures",
@@ -35,7 +35,7 @@
       }
     },
     "cells@1": {
-      "digest": "ad13803629031e0f3fbebd55a00f95da95e81f9f7e78fe2765449bcbc8c89431",
+      "digest": "2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049",
       "reference": "cells",
       "kit": [
         "fixtures",
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
+      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -93,7 +93,7 @@
       }
     },
     "effects@1": {
-      "digest": "d45a9a5ad3664b3c5a5849ae6bf54992cadea2d518fac39a4a5cc16c936dce78",
+      "digest": "728754098ff7e4fa72004323be2f19eb772021f76c26ca3a01930aa343f6e2af",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -151,7 +151,7 @@
       }
     },
     "graph@1": {
-      "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
+      "digest": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
       "reference": "graph",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+      "digest": "de541b43baa18be5ccd7dbf9f1cc77234acd412c2a80a4e6a48c40ae922c9ef8",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -238,7 +238,7 @@
       }
     },
     "look@1": {
-      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "digest": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
       "reference": "look",
       "kit": [
         "fixtures",
@@ -325,7 +325,7 @@
       }
     },
     "media@1": {
-      "digest": "ceeb27a5bf5262e2a2c5a8930f66217926d25695e3d70de2faf6acdc416ac9f4",
+      "digest": "16ba0318533d04e814906d17e911f9c632fb8b1089227252dad47ec6b392c1a2",
       "reference": "media",
       "kit": [
         "fixtures",
@@ -354,7 +354,7 @@
       }
     },
     "motion@1": {
-      "digest": "40fc4246f449f233e370e13e5a10150dc1ddbaa2cdeff07312a759f63ffe7add",
+      "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -376,6 +376,35 @@
       "module": "motion",
       "implementation": {
         "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "net@1": {
+      "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+      "reference": "net",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "net",
+      "implementation": {
+        "name": "net",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -565,7 +594,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "61c7c1cfa53706ec4050b74561317e375f04c2d38e69668bab48bdfbad633b55",
+      "digest": "9edd239b48ca54a24b54998ca5f2208381bdc9cac8792e7e473ffc5dd17d94d4",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -652,7 +681,7 @@
       }
     },
     "vector@1": {
-      "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
+      "digest": "0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62",
       "reference": "vector",
       "kit": [
         "fixtures",

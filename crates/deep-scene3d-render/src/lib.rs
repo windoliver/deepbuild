@@ -4579,13 +4579,10 @@ impl Renderer {
         }
         self.update_culls(device);
         self.ensure_casters(device, scene);
-        self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
-            (Some(m), Some(t)) => {
-                self.motion
-                    .prepare(device, scene, m, &self.meshes, &t.linear_view, t.size)
-            }
-            _ => None,
-        };
+        self.motion_frame = self.targets.as_ref().and_then(|t| {
+            self.motion
+                .prepare(device, scene, &self.meshes, &t.linear_view, t.size)
+        });
         self.prepare_core(device, scene);
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
@@ -4776,18 +4773,10 @@ impl Renderer {
             return;
         };
         self.core.ensure(&device.device, size);
-        self.velocity_frame = self.core.velocity.is_some().then(|| {
-            let still;
-            let motion = match &scene.velocity {
-                Some(m) => m.as_ref(),
-                None => {
-                    still = still_motion(scene);
-                    &still
-                }
-            };
-            self.motion
-                .target_frame(device, scene, motion, &self.meshes, size)
-        });
+        let wanted = self.core.velocity.is_some();
+        self.velocity_frame = self
+            .motion
+            .target_frame(device, scene, wanted, &self.meshes, size);
         let draws: Vec<targets::EmissionDraw> = self
             .order
             .iter()
@@ -9349,7 +9338,7 @@ mod tests {
     }
 
     /// A scene document of `items` in one layer, each stamped with its ID, name, order and layer.
-    fn stamped(
+    pub(crate) fn stamped(
         items: &[(&str, serde_json::Value)],
         channels: serde_json::Value,
     ) -> serde_json::Value {
@@ -9369,7 +9358,7 @@ mod tests {
         })
     }
 
-    fn orbiting_camera() -> (serde_json::Value, serde_json::Value) {
+    pub(crate) fn orbiting_camera() -> (serde_json::Value, serde_json::Value) {
         (
             json!({"kind": "camera@1", "params": {"projection": "perspective", "target": [0, 0.8, 0], "orbit": {"azimuth": 30, "elevation": 20, "distance": 14}, "fov": 45, "near": 0.1, "far": 500}}),
             json!({"orbit": {"target": "items/cam/params/orbit/azimuth", "type": "f32", "keys": {"k0": {"t": "0s", "value": 30, "interp": "linear"}, "k1": {"t": "60s", "value": 390, "interp": "linear"}}}}),
@@ -9384,10 +9373,12 @@ mod tests {
     }
 
     /// Frames 1 to 5 of `doc`, each prepared whole and its jobs recorded into a slot as the GPU
-    /// layer's view does: what the device made and wrote in each.
-    fn played(
+    /// layer's view does: what the device made and wrote in each. `host` leaves each frame's
+    /// scene and the renderer as a host would before the renderer takes the frame.
+    pub(crate) fn played(
         doc: &serde_json::Value,
         mut post: Option<&mut dyn Post>,
+        host: impl Fn(&mut Renderer, &mut Scene),
     ) -> Vec<deep_gpu::counted::Reading> {
         let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
         let device = gpu.device();
@@ -9414,8 +9405,10 @@ mod tests {
                     &mut labels,
                 )
                 .unwrap();
+            let mut scene = frames.scene().clone();
+            host(&mut renderer, &mut scene);
             let made = counted(&device, || {
-                renderer.prepare(&device, frames.scene(), &look);
+                renderer.prepare(&device, &scene, &look);
                 let mut encoder = device.device.create_command_encoder(&Default::default());
                 let post = post.as_deref_mut().map(|p| p as &mut dyn Post);
                 for (_, job) in renderer.jobs(&device, &slot, post, None) {
@@ -9479,7 +9472,7 @@ mod tests {
             ],
             channels,
         );
-        for (n, made) in played(&doc, None).iter().enumerate() {
+        for (n, made) in played(&doc, None, |_, _| {}).iter().enumerate() {
             assert_eq!(
                 (made.buffers, made.bind_groups),
                 (0, 0),
@@ -9531,7 +9524,7 @@ mod tests {
             ("its own target", Hands(Some(own))),
             ("the geometry's", Hands(None)),
         ] {
-            for (n, made) in played(&doc, Some(&mut post)).iter().enumerate() {
+            for (n, made) in played(&doc, Some(&mut post), |_, _| {}).iter().enumerate() {
                 assert_eq!(
                     made.bind_groups,
                     0,

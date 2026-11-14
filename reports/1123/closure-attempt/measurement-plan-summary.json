@@ -1,0 +1,14 @@
+{
+  "source": "63e11e81a",
+  "beforeAlone": 397,
+  "afterAlone": 395,
+  "removed": [
+    "tests/acceptance/374/",
+    "tests/acceptance/375/"
+  ],
+  "timedEqual": true,
+  "beforeAloneDigest": "e30fbb9be5ac994fe4132e8e9e27ac872393f910a0e5cd7fa8f74bc1680a2918",
+  "afterAloneDigest": "9a61b46759ac65d123a1c59ebd8e272f8651d521b401efa602886c8be80cf362",
+  "timedDigest": "b1ebe85fe85e8ccfc99305d2a02336daddebdc2dd5a2e011fe06d72acbf60a73",
+  "execution": "none: 60-minute admission request ended INCONCLUSIVE"
+}

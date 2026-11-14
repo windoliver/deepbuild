@@ -64,7 +64,49 @@ impl Steps {
     }
 }
 
+/// One row of the core's carried-state list as a session holds it now (Carried state; #169):
+/// the canvas module that declared it, the row's kind and key, and the hash of what it carries.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CarriedState {
+    pub module: String,
+    pub kind: String,
+    pub key: String,
+    pub hash: String,
+}
+
 impl Session {
+    /// Every row of carried state the sealed modules declare, as this session holds it after
+    /// its last frame, read through the core and never by module (#169): a `checkpoint` row
+    /// hashes its module's stepping arrays as the last step left them, a `tail` row the tail
+    /// under its key, and a `bake` row, which no session holds, nothing. Only values are hashed,
+    /// never the time stepped to or the checkpoints taken, so two sessions that carry the same
+    /// state hash equal whatever clock brought them there. Sorted by module, kind and key.
+    pub fn carried(&self, s: &Scheduler<'_>) -> Vec<CarriedState> {
+        let sealed: &Sealed = s.sealed;
+        let mut out = Vec::new();
+        for m in &sealed.modules {
+            for c in &m.shapes.carried {
+                let values: Vec<Val> = match c.kind.as_str() {
+                    "checkpoint" => (sealed.ops.iter())
+                        .filter(|o| o.module == m.name && o.op.step.is_some())
+                        .flat_map(|o| &o.op.writes)
+                        .map(|w| self.steps.values.get(w).cloned().unwrap_or(Val::None))
+                        .collect(),
+                    "tail" => vec![self.tails.get(&c.key).cloned().unwrap_or(Val::None)],
+                    _ => Vec::new(),
+                };
+                out.push(CarriedState {
+                    module: m.name.clone(),
+                    kind: c.kind.clone(),
+                    key: c.key.clone(),
+                    hash: super::result_digest(self.hash, &values, None),
+                });
+            }
+        }
+        out.sort();
+        out
+    }
+
     /// Runs every step up to the frame's time once, then gives each stepping node its result.
     pub(super) fn visit_steps(
         &mut self,

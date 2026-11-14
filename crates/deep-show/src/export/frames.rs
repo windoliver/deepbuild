@@ -139,8 +139,8 @@ impl Hub<'_> {
                     open: None,
                     done: Vec::new(),
                     encoder: Value::Null,
-                    ask: json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "quality": job.quality, "grain": grain,
-                        "keyframe_interval": job.keyframe_interval}),
+                    ask: transfer(json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "quality": job.quality, "grain": grain,
+                        "keyframe_interval": job.keyframe_interval}), job),
                     ext: if job.codec == "prores_4444" {
                         "mov"
                     } else {
@@ -508,4 +508,12 @@ fn now_ms() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis())
+}
+
+/// #169: an encode request with the job's transfer, sRGB for the page's clips.
+pub(super) fn transfer(mut ask: Value, job: &Job) -> Value {
+    if job.srgb {
+        ask["transfer"] = json!("srgb");
+    }
+    ask
 }

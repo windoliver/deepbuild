@@ -1,0 +1,19 @@
+{
+  "id": "verbs.in_turn_twin",
+  "version": "1.0",
+  "title": "In turn, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of in_turn: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "in": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/opacity": 0
+        }
+      }
+    }
+  }
+}

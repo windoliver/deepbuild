@@ -80,6 +80,8 @@ fn fuel_of(item: &Item) -> i64 {
         controls: Default::default(),
         tour: None,
         items: vec![item.clone()],
+        machine: Vec::new(),
+        document: String::new(),
     });
     World::new(
         p,
@@ -129,6 +131,8 @@ fn frame_ns(base: &Item, n: usize, frames: i64) -> f64 {
         controls: Default::default(),
         tour: None,
         items,
+        machine: Vec::new(),
+        document: String::new(),
     });
     let mut rec = Record::default();
     let mut w = World::new(
@@ -195,7 +199,8 @@ pub fn ceiling(class: Class, step: i64, host: &str) -> i64 {
 /// k, a linear write drawing one step late. Every write is linear or hold, the only two
 /// `interpolate` takes; a turn clock's steps run only when asked, so they stay on the frame.
 pub fn pipelined(item: &Item) -> bool {
-    item.step >= 2 * FRAME && !item.turn
+    // A preview reads the state the render worker draws, so an item with one steps there (#548).
+    item.step >= 2 * FRAME && !item.turn && item.preview.is_none()
 }
 
 /// What an item's steps are held to on `host`: its class's ceiling, twice the 60 Hz one when it
