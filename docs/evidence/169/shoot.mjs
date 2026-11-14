@@ -7,7 +7,9 @@
 //   page-lagoon.png     at the shell stage, finish lagoon
 //   page-orchid.png     the same, finish orchid
 //   page-graphite.png   the same, finish graphite
-//   page-stepping.webm  stepping through the four stages and the toggle, 10 frames a second, encoded by ffmpeg
+//   page-stepping.webm  stepping through the four stages and the toggle: Chrome's screencast at the view's own size,
+//                       each frame as the page painted it at its own time, sampled at 30 frames a second and
+//                       encoded by ffmpeg
 // and prints each SHA-256. Run from the repository root after
 // `cargo build --locked --bin deep-show --no-default-features --features full`:
 //   node --experimental-transform-types docs/evidence/169/shoot.mjs
@@ -41,14 +43,11 @@ try {
   const send = (method, params) => page.cdp.send(method, params, page.session);
   await send('Emulation.setDeviceMetricsOverride', { width: 760, height: 560, deviceScaleFactor: 2, mobile: false });
   const picture = async () => Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64');
-  /** Presses `key` and waits until the page has landed (no edge playing), keeping pictures meanwhile into `frames`. */
-  const step = async (key, frames) => {
+  /** Presses `key` and waits until the page has landed (no edge playing). */
+  const step = async (key) => {
     await page.press(key);
     await sleep(80);
-    for (let k = 0; k < 200 && (await page.now()).edge; k++) {
-      if (frames) frames.push(await picture());
-      else await sleep(50);
-    }
+    for (let k = 0; k < 200 && (await page.now()).edge; k++) await sleep(50);
   };
   const shot = async (name) => { const b = await picture(); writeFileSync(join(HERE, name), b); console.log(`${name}  ${sha(b)}  (state ${(await page.now()).state})`); };
   await sleep(500);
@@ -65,21 +64,44 @@ try {
   await step('l');
   await step('p');
 
-  // The recording: the four stages in turn, apart and together again, a frame each 100 ms or so.
+  // The recording: the four stages in turn, apart and together again, a second's hold after each.
+  // The screencast sends each frame the page paints with its time; nothing is sent while it holds.
+  // At the view's own size (a 2x view drops about one painted frame in six on a busy Mac), as JPEG.
+  await send('Emulation.setDeviceMetricsOverride', { width: 760, height: 560, deviceScaleFactor: 1, mobile: false });
+  await sleep(500);
   const frames = [];
+  page.cdp.on(page.session, 'Page.screencastFrame', (p) => {
+    frames.push({ data: Buffer.from(p.data, 'base64'), t: p.metadata.timestamp });
+    send('Page.screencastFrameAck', { sessionId: p.sessionId }).catch(() => undefined);
+  });
+  await send('Page.startScreencast', { format: 'jpeg', quality: 92, everyNthFrame: 1 });
+  await sleep(1000);
   for (const key of ['s', 'c', 'a', 'e', 'p', 'e']) {
-    await step(key, frames);
-    for (let k = 0; k < 6; k++) { frames.push(await picture()); await sleep(60); }
+    await step(key);
+    await sleep(1000);
   }
+  await send('Page.stopScreencast');
+  // Frames can arrive out of order; each shows from its own time.
+  frames.sort((a, b) => a.t - b.t);
+  const end = frames.length ? frames[frames.length - 1].t + 1 : 0;
   const outside = page.outside();
   if (outside.length) throw Error(`the page requested ${outside.join(', ')}`);
   const dir = join(work, 'frames');
   mkdirSync(dir);
-  frames.forEach((b, k) => writeFileSync(join(dir, `${String(k).padStart(4, '0')}.png`), b));
+  // Each frame shows until the next one's time, sampled here at 30 frames a second half a frame in, so a frame's
+  // jitter never moves it across a sample. (ffmpeg's concat of single images keeps them on a 1/25 s clock, which
+  // drops one frame in six at 30.)
+  const RATE = 30;
+  let shown = 0;
+  for (let k = 0; k < Math.ceil((end - frames[0].t) * RATE); k++) {
+    const at = frames[0].t + (k + 0.5) / RATE;
+    while (shown + 1 < frames.length && frames[shown + 1].t <= at) shown++;
+    writeFileSync(join(dir, `${String(k).padStart(5, '0')}.jpg`), frames[shown].data);
+  }
   const webm = join(HERE, 'page-stepping.webm');
-  const ff = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '10', '-i', join(dir, '%04d.png'), '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '32', '-pix_fmt', 'yuv420p', '-an', '-fflags', '+bitexact', webm], { encoding: 'utf8' });
+  const ff = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(RATE), '-i', join(dir, '%05d.jpg'), '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '32', '-pix_fmt', 'yuv420p', '-an', '-fflags', '+bitexact', webm], { encoding: 'utf8' });
   if (ff.status !== 0) throw Error(`ffmpeg: ${ff.stderr}`);
-  console.log(`page-stepping.webm  ${sha(readFileSync(webm))}  (${frames.length} frames)`);
+  console.log(`page-stepping.webm  ${sha(readFileSync(webm))}  (${frames.length} frames painted over ${(end - frames[0].t).toFixed(1)} s)`);
 } finally {
   await h.close();
   rmSync(work, { recursive: true, force: true });
