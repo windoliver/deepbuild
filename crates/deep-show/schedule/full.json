@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "03ca3d2bd5a589746a263cd28b5b706972b569804a26ddc295e4e8a2952f36e8",
+  "set_digest": "4180444be9b5a7da5eda18b165247f1168107d0cb0f78cce8fae99d4a36cddec",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -376,6 +376,35 @@
       "module": "motion",
       "implementation": {
         "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "net@1": {
+      "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+      "reference": "net",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "net",
+      "implementation": {
+        "name": "net",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
