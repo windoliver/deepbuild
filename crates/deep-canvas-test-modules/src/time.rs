@@ -152,3 +152,88 @@ pub fn cache() -> Module {
         register: register_cache,
     }
 }
+
+/// The control `watch` names: its value at `time` on the document's input track, its last entry
+/// at or before then, else its default.
+fn control_at(doc: &serde_json::Value, watch: &str, time: i64) -> serde_json::Value {
+    let entry = (doc["track"].as_array().into_iter().flatten())
+        .rfind(|e| e["control"] == watch && e["t"].as_i64().is_some_and(|t| t <= time));
+    entry.map_or_else(
+        || doc["controls"][watch]["default"].clone(),
+        |e| e["value"].clone(),
+    )
+}
+
+fn register_latch(r: &mut Registrar) {
+    let watch = deep_canvas::kinds::Param {
+        name: "watch",
+        ty: deep_canvas::kinds::ParamType::Str,
+        unit: "",
+        default: serde_json::json!(""),
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(
+        kind("test", "latch", vec![box_param(), watch]),
+        &[],
+        "rect@1",
+    );
+    r.array("test.latch.seen", "i64", "document", "time", "simulate");
+    r.contribution(
+        "test.latch.offset",
+        "transform",
+        "item",
+        "transform",
+        "items",
+        "core.transform",
+    );
+    r.carried("checkpoint", "test.latch.state", 64);
+    r.operator("step", "simulate", &["refs"], &["test.latch.seen"])
+        .steps(FRAME)
+        .applies(|doc, _, _| has_kind(doc, "test.latch@1"))
+        .run(|v| {
+            let mut seen = as_i64(v.carried("test.latch.seen")).unwrap_or(0);
+            if seen == 0 {
+                let doc = v.document()?;
+                let time = v.t()?;
+                let items = doc["items"].as_object().into_iter().flatten();
+                for (_, item) in items.filter(|(_, i)| of_kind(i, "test.latch@1")) {
+                    let watch = item["params"]["watch"].as_str().unwrap_or_default();
+                    let default = &doc["controls"][watch]["default"];
+                    if control_at(doc, watch, time) != *default {
+                        seen = 1;
+                    }
+                }
+            }
+            v.note_step(seen, 0);
+            v.write("test.latch.seen", Val::typed(seen))
+        });
+    r.operator(
+        "offset",
+        "items",
+        &["self", "test.latch.seen"],
+        &["test.latch.offset"],
+    )
+    .applies(|_, _, item| of_kind(item, "test.latch@1"))
+    .run(|v| {
+        let seen = as_i64(v.array("test.latch.seen")?).unwrap_or(0);
+        v.write(
+            "test.latch.offset",
+            moved_by([120.0 * seen as f64, 0.0, 0.0]),
+        )
+    });
+}
+
+/// `test.latch` 1.0.0 (the #169 acceptance README): steps at 60 Hz, holding in its checkpointed
+/// carried state whether the control its item watches has ever left its default, never set
+/// back, and moves its items 120 u right once it has: two plays that draw alike can carry
+/// different state.
+pub fn latch() -> Module {
+    Module {
+        manifest: manifest("test.latch", &[]),
+        register: register_latch,
+    }
+}

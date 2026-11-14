@@ -11,6 +11,7 @@
 //! and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
 
 pub mod bake;
+pub mod bindings;
 pub mod budget;
 pub mod checks;
 pub mod judder;
@@ -75,6 +76,12 @@ pub struct Planted {
     pub ring_drops_oldest: bool,
     pub keyframes_held_in_ring: bool,
     pub store_fails_at_step_120: bool,
+    /// #548: a preview that runs on the item's own instance rather than a throwaway copy.
+    pub preview_writes_item_memory: bool,
+    /// #548: a preview that runs only when a control it reads changes, not after a step or seek.
+    pub preview_runs_on_hover_only: bool,
+    /// #548: a region map that lays the reads out by name rather than in declaration order.
+    pub map_reads_by_name: bool,
 }
 
 impl Planted {
@@ -115,6 +122,8 @@ impl Planted {
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
             "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
             "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
+            "preview_writes_item_memory" => p.preview_writes_item_memory = true,
+            "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
             _ => return None,
         }
         Some(self)
@@ -289,6 +298,24 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
     }
     entries.sort_by_key(|e| (e.t, e.player, e.seq));
     Some(entries)
+}
+
+/// A golden's checkpoint hashes from each item's checkpoints: each one's step and deep hash, and
+/// never the time taking it took (`ns`), which differs from run to run.
+fn checkpoint_hashes(checkpoints: &Value) -> Value {
+    let hashes = |list: &Value| -> Option<Value> {
+        let list = list.as_array()?.iter();
+        Some(
+            list.map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
+                .collect(),
+        )
+    };
+    let items = checkpoints.as_object().into_iter().flatten();
+    Value::Object(
+        items
+            .filter_map(|(id, list)| Some((id.clone(), hashes(list)?)))
+            .collect(),
+    )
 }
 
 /// The runtime digest a golden carries: the seal's, of the set this crate's runner holds, the
@@ -524,6 +551,7 @@ impl Logic {
             Some("golden_verify") => self.golden_verify(line).unwrap_or_else(|e| e),
             Some("view") => self.view(line).unwrap_or_else(|e| e),
             Some("frame") => self.frame(line).unwrap_or_else(|e| e),
+            Some("baked") => self.view_bake(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
             Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
@@ -742,7 +770,7 @@ impl Logic {
         let golden = json!({
             "bake_key": keys, "runtime_digest": runtime_digest(),
             "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu()},
-            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": occurrences_hash,
+            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": checkpoint_hashes(&Value::Object(rec.checkpoints.clone())), "occurrences_hash": occurrences_hash,
             "record_on": host, "verify_on": [other, "web"],
         });
         Ok((golden, rec, piece))
@@ -795,7 +823,7 @@ impl Logic {
             json!({"first_step": k, "item": id, "field": field})
         });
         let same = mine["bake_key"] == golden["bake_key"]
-            && mine["checkpoint_hashes"] == golden["checkpoint_hashes"]
+            && mine["checkpoint_hashes"] == checkpoint_hashes(&golden["checkpoint_hashes"])
             && first_step.is_none();
         let machines = if golden["machine"]["arch"] == mine["machine"]["arch"] {
             "same"
@@ -1061,8 +1089,20 @@ impl Logic {
                     .ok_or_else(|| bad("set"))?,
             )),
         };
+        // #548: point controls' hovers from this frame on, `[cx, cy]` or null: viewer state.
+        let mut hover = Vec::new();
+        for (control, cell) in line.get("hover").and_then(Value::as_object).into_iter().flatten() {
+            let cell = match cell {
+                Value::Null => None,
+                c => match c.as_array().map(Vec::as_slice) {
+                    Some([x, y]) => Some([x.as_f64().ok_or_else(|| bad("hover"))?, y.as_f64().ok_or_else(|| bad("hover"))?]),
+                    _ => return Err(bad("hover")),
+                },
+            };
+            hover.push((control.clone(), cell));
+        }
         let mut ui_ns = budget::cpu_ns() - ui;
-        let mut out = v.frame(live::Latched { t: v.t, set }).ok_or_else(
+        let mut out = v.frame(live::Latched { t: v.t, set, hover, baked: false }).ok_or_else(
             || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
         )?;
         let ui = budget::cpu_ns();
@@ -1076,6 +1116,16 @@ impl Logic {
         ui_ns += budget::cpu_ns() - ui;
         out["ui_ns"] = json!(ui_ns);
         Ok(out)
+    }
+
+    /// A view session's bake of the steps it has run (#548): its input track, step records,
+    /// checkpoints and the bake's bytes, as a `bake` of the same piece and track gives them.
+    fn view_bake(&mut self, line: &Value) -> Result<Value, Value> {
+        let session = line.get("session").and_then(Value::as_str).ok_or_else(|| bad("session"))?;
+        let v = self.views.get_mut(session).ok_or_else(|| bad("session"))?;
+        let latched = live::Latched { t: v.t, set: None, hover: Vec::new(), baked: true };
+        v.frame(latched)
+            .ok_or_else(|| json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}))
     }
 
     fn open(&mut self, line: &Value) -> Result<Value, Value> {
@@ -1324,5 +1374,44 @@ mod tests {
         let golden = Logic::default().handle(&line)["golden"].clone();
         let none = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
         assert_eq!(golden["runtime_digest"], json!(none));
+    }
+
+    /// A golden holds no time (#532, #534's checkpoint `ns`): the same piece gives the same golden
+    /// twice and verifies against it, as does a golden recorded with each checkpoint's `ns`, while
+    /// one whose checkpoint's deep hash differs fails.
+    #[test]
+    fn a_golden_holds_no_time_and_verifies_by_step_and_deep_hash() {
+        let program = wat::parse_str(
+            r#"(module (memory (export "memory") 1 1)
+  (global (export "reads_at") i32 (i32.const 0)) (global (export "writes_at") i32 (i32.const 1024))
+  (func (export "init") (param i64))
+  (func (export "step") (param $k i64) (i32.store (i32.const 1024) (i32.wrap_i64 (local.get $k)))))"#,
+        )
+        .expect("a program");
+        let sha = rewrite::hash(&program);
+        let params = json!({"program": sha, "writes": {"a": {"type": "i32", "count": 1}}});
+        let piece = json!({"seed": 0, "assets": {&sha: B64.encode(&program)}, "items": {"e": {"kind": "logic@1", "params": params}}});
+        let call = |call: &str, golden: Option<&Value>| {
+            let line = json!({"call": call, "piece": piece, "steps": 121, "golden": golden});
+            Logic::default().handle(&line)
+        };
+        let golden = call("golden", None)["golden"].clone();
+        let steps: Vec<&Value> = golden["checkpoint_hashes"]["e"]
+            .as_array()
+            .expect("checkpoints")
+            .iter()
+            .map(|c| &c["step"])
+            .collect();
+        assert_eq!(steps, [0, 60, 120]);
+        let again = call("golden", None)["golden"].clone();
+        assert_eq!(again["checkpoint_hashes"], golden["checkpoint_hashes"]);
+        assert_eq!(again, golden);
+        assert_eq!(call("golden_verify", Some(&golden))["verdict"], "PASS");
+        let mut timed = golden.clone();
+        timed["checkpoint_hashes"]["e"][1]["ns"] = json!(4576);
+        assert_eq!(call("golden_verify", Some(&timed))["verdict"], "PASS");
+        let mut other = golden.clone();
+        other["checkpoint_hashes"]["e"][1]["deep_hash"] = json!("0000000000000000");
+        assert_eq!(call("golden_verify", Some(&other))["verdict"], "FAIL");
     }
 }

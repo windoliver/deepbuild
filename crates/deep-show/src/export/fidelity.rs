@@ -117,8 +117,9 @@ fn next_frame(worker: &mut Helper, buf: &mut Vec<u8>) -> Result<i64, String> {
 }
 
 /// A codec's written tags against what it must carry: BT.709 limited range for H.264 and HEVC
-/// (nclx 1-1-1, range tv), ProRes 4444's limited-range colour (nclc 1-1-1).
-fn tags_issues(codec: &str, v: &Value) -> Vec<Value> {
+/// (nclx 1-1-1, range tv), ProRes 4444's limited-range colour (nclc 1-1-1); a page's clip
+/// (#169) carries its pixels' sRGB transfer (nclx 1-13-1).
+fn tags_issues(codec: &str, v: &Value, srgb: bool) -> Vec<Value> {
     let colr = &v["colr"];
     let tagged = [&colr["primaries"], &colr["transfer"], &colr["matrix"]].map(|x| x.as_i64());
     let mut out = Vec::new();
@@ -127,11 +128,12 @@ fn tags_issues(codec: &str, v: &Value) -> Vec<Value> {
     } else {
         "nclx"
     };
-    if colr["type"] != want_type || tagged != [Some(1), Some(1), Some(1)] {
+    let transfer = if srgb { 13 } else { 1 };
+    if colr["type"] != want_type || tagged != [Some(1), Some(transfer), Some(1)] {
         out.push(issue(
             "export.color",
             None,
-            format!("{codec}'s colour tags read {colr}: not {want_type} 1-1-1 (BT.709)"),
+            format!("{codec}'s colour tags read {colr}: not {want_type} 1-{transfer}-1"),
         ));
     }
     if codec != "prores_4444" && colr["full_range"] != json!(false) {
@@ -172,8 +174,8 @@ impl Hub<'_> {
         let path = scratch.join(if alpha { "probe.mov" } else { "probe.mp4" });
         // The delivery's codec, colour properties and source format, at the encoder's highest
         // quality, so what the probe reads is the colour path and not the bitrate.
-        let ask = json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "size": size, "quality": "master",
-            "keyframe_interval": job.keyframe_interval});
+        let ask = super::frames::transfer(json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "size": size, "quality": "master",
+            "keyframe_interval": job.keyframe_interval}), job);
         let mut part = Part::open(self.encode_tool()?, ask, path.clone(), 0, 1, !alpha)?;
         part.push(self.encode_tool()?, 0, &bgra, px, true)?;
         part.finish(self.encode_tool()?)?;
@@ -205,7 +207,7 @@ impl Hub<'_> {
                 json!({"nclx": [&colr["primaries"], &colr["transfer"], &colr["matrix"]], "range": if colr["full_range"] == json!(false) { "tv" } else { "pc" }})
             }
         };
-        let mut issues = tags_issues(&job.codec, &head["video"]);
+        let mut issues = tags_issues(&job.codec, &head["video"], job.srgb);
         if buf.len() != bgra.len() || max > 2.0 {
             issues.push(issue(
                 "export.color",
@@ -341,7 +343,7 @@ impl Hub<'_> {
             }
             // export.color: the written tags and the range the decoder gives the first frame.
             if i == 0 {
-                issues.extend(tags_issues(&d.job.codec, &head["video"]));
+                issues.extend(tags_issues(&d.job.codec, &head["video"], d.job.srgb));
             }
         }
         let mut fidelity = self.read_frames(d, &mut readers, n, v, &mut issues)?;

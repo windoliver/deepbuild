@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use deep_canvas_marks::modules::{self as modules, Run, StatusDrawing};
+use deep_canvas_marks::noise_fill::{self, NoiseFill};
 use deep_canvas_marks::path;
 use deep_canvas_marks::scene::{self, Fill, Mark, Palette, Record, Rgb, Slot, StatusMark};
 use deep_canvas_motion::eval;
@@ -57,6 +58,9 @@ pub struct Drawn {
     /// #493: a 2D film's camera, from the document's units to its own pixels, where a shot
     /// moves it; the legend stays where it is.
     pub view: Option<Affine>,
+    /// #1938: each item's noise fill as evaluated at t, which its rect draws in place of the
+    /// fill's first stop.
+    noise: BTreeMap<String, Arc<NoiseFill>>,
 }
 
 impl Drawn {
@@ -115,6 +119,7 @@ impl Drawn {
             runs: self.runs.clone(),
             animated: self.animated.clone(),
             view,
+            noise: self.noise.clone(),
         }
     }
 
@@ -170,6 +175,7 @@ impl Drawn {
             runs: self.runs.clone(),
             animated: self.animated.clone(),
             view: self.view,
+            noise: self.noise.clone(),
         }
     }
 
@@ -597,6 +603,14 @@ impl Renderer {
                 }
             }
         }
+        // #1938: each item's noise fill at t, its seed as its channels give it.
+        let noise = items
+            .iter()
+            .filter_map(|(id, item)| {
+                let fill = noise_fill::of(&item["params"], palette, &format!("items/{id}/params"))?;
+                Some((id.clone(), Arc::new(fill)))
+            })
+            .collect();
         Ok(Drawn {
             frame,
             boxes: Vec::new(),
@@ -606,6 +620,7 @@ impl Renderer {
             runs: BTreeMap::new(),
             animated: BTreeMap::new(),
             view: None,
+            noise,
         })
     }
 
@@ -631,6 +646,7 @@ impl Renderer {
                 runs: BTreeMap::new(),
                 animated: BTreeMap::new(),
                 view: None,
+                noise: BTreeMap::new(),
             });
         };
         let (images, pictures) = decode_all(&drawing.frame, evidence, &self.videos)?;
@@ -644,6 +660,7 @@ impl Renderer {
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
             view: None,
+            noise: BTreeMap::new(),
         })
     }
 
@@ -832,6 +849,38 @@ impl Renderer {
                 fill,
                 ..
             } => {
+                // #1938: a noise fill draws its ramp, as its value at each px.
+                let noise = drawn.noise.get(item_of(mark));
+                if let (Some(n), Fill::Solid(_)) = (noise, fill) {
+                    let (sx, sy) = scales(at);
+                    let [x, y, w, h] = *bounds;
+                    let size = [w * sx, h * sy].map(|v| v.ceil().clamp(1.0, 4096.0) as u16);
+                    let mut rgba = Vec::with_capacity(usize::from(size[0]) * usize::from(size[1]) * 4);
+                    for j in 0..size[1] {
+                        for i in 0..size[0] {
+                            let p = [
+                                x + (f64::from(i) + 0.5) * w / f64::from(size[0]),
+                                y + (f64::from(j) + 0.5) * h / f64::from(size[1]),
+                            ];
+                            let [r, g, b] = n.color(p);
+                            rgba.extend([r, g, b, 255]);
+                        }
+                    }
+                    ctx.set_paint(Image {
+                        image: ImageSource::Pixmap(pixmap_of(rgba, size[0], size[1])),
+                        sampler: sampler(scene::ImageSampling::Nearest),
+                    });
+                    ctx.set_paint_transform(
+                        Affine::translate((x, y))
+                            * Affine::scale_non_uniform(
+                                w / f64::from(size[0]),
+                                h / f64::from(size[1]),
+                            ),
+                    );
+                    ctx.fill_path(&rect_path(*bounds, *radius));
+                    ctx.reset_paint_transform();
+                    return;
+                }
                 match fill {
                     Fill::Solid(c) => ctx.set_paint(color(*c)),
                     Fill::Linear {
@@ -936,6 +985,8 @@ impl Renderer {
                     tabular: spec.bound,
                     mask: false,
                     spans: &spec.spans,
+                    gap: spec.gap as f32,
+                    indent: spec.indent as f32,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
@@ -1064,10 +1115,13 @@ impl Renderer {
         units: Option<&[[f64; 2]]>,
     ) {
         let paint = |g: &deep_text::Glyph| scene::run_paint(runs, g.grapheme, None, c).1;
+        // #1966: a dimmed code line's glyphs at its run's opacity.
+        let alpha_of = |g: &deep_text::Glyph| scene::run_opacity(runs, g.grapheme);
         if let Some(units) = units {
             for (g, unit) in shaped.glyphs.iter().zip(units) {
                 let [lift, opacity] = *unit;
                 let c = paint(g);
+                let opacity = opacity * alpha_of(g);
                 let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
                 ctx.set_paint(AlphaColor::from_rgba8(c[0], c[1], c[2], alpha));
                 ctx.set_transform(at * Affine::translate((origin[0], origin[1] + lift)));
@@ -1098,9 +1152,10 @@ impl Renderer {
                         && g.size == first.size
                         && g.skew == first.skew
                         && paint(g) == paint(first)
+                        && alpha_of(g) == alpha_of(first)
                 })
                 .count();
-            ctx.set_paint(color(paint(first)));
+            ctx.set_paint(color(paint(first)).with_alpha(alpha_of(first) as f32));
             let glyphs = shaped.glyphs[start..start + run]
                 .iter()
                 .map(|g| vello_cpu::Glyph {
@@ -1118,7 +1173,8 @@ impl Renderer {
         }
         // #1964: underlines and strikes over the glyphs, in their span's color.
         for d in &shaped.decorations {
-            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1));
+            let alpha = scene::run_opacity(runs, d.grapheme) as f32;
+            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1).with_alpha(alpha));
             let [x, y, w, h] = d.rect.map(f64::from);
             ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
         }

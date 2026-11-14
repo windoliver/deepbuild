@@ -1,0 +1,32 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ × packages/hub/test/stall-receipt.test.ts > a committed round without its sent-back receipt is recovered once, before the next stop 231ms
+   → round 2 was committed before the crash, so its receipt cannot be lost: expected [] to have a length of 1 but got +0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/stall-receipt.test.ts > a committed round without its sent-back receipt is recovered once, before the next stop
+AssertionError: round 2 was committed before the crash, so its receipt cannot be lost: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/hub/test/stall-receipt.test.ts:31:91
+     29|     await judging.recoverGateAnswers();
+     30|     const sent = await record.read({ after: 0, kinds: ['claim.sent_bac…
+     31|     expect(sent, 'round 2 was committed before the crash, so its recei…
+       |                                                                                           ^
+     32|     expect(sent[0]!.data).toMatchObject({ claim, verdict, round: 2 });
+     33|     await judging.recoverGateAnswers();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  11:49:40
+   Duration  3.92s (transform 71%, tests 19%, import 9%)

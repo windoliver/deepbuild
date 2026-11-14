@@ -1,0 +1,159 @@
+Base run of the #1974 acceptance tests at c56fe5407 (origin/main), November 14, 2026, on the shared Mac (Mac17,10,
+not a reference Mac; 1-minute load about 220 to 300 on 18 cores during the build and the run).
+
+Built first, in the checkout's own target/ (the machine's load was far above the core count, so the build ran at
+nice 10 rather than waiting on the throttle):
+  cargo build --locked --bin deep-show            (default features: full)
+  npm ci --ignore-scripts                         (vitest and typescript only)
+(cargo from the rustup toolchain 1.99.1, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; each file's own build was then
+a no-op.)
+
+Command:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1974 --no-file-parallelism --testTimeout=600000
+
+Result: 2 files, 5 tests, 5 failed, each at an assertion (none at load). The full build's dump lists 582 fields, all
+on entries of kind@1; 249 have a default, 215 of those typed json, the first of them camera@1.projection. op: field
+answers every one of the 249 with its line (the AC1 tests read them before they fail).
+
+Summary, per criterion:
+- AC1, defaults.test.ts: FAILS on the issue's reason: there is no defaults run. `deep-show kinds --defaults` answers
+  {"ok":false,"code":"bad_input","what":"deep-show kinds --dump <dir> | --diff <a> <b>"} and exits 2, so there is no
+  report, no verdict and no field built left out.
+  The planted-reader test passes its first assertion (op: field prints puff@1.radius's default as 1) and then FAILS:
+  `deep-show kinds --defaults --planted defaults_reader_falls_back_to_2` answers {"ok":false,"code":"bad_input"},
+  since the base has no such plant and no run.
+  The dump-only test FAILS the same way: `--planted defaults_compared_with_dump_only` is an unknown name.
+- AC2, count.test.ts: FAILS on the issue's reason. The full build's dump lists no test.defaults@1 (0 fields, so none
+  defaulting to a number, a choice, a list of 3 numbers or an object; a soft assertion, so the run is still tried),
+  and `deep-show kinds --defaults` answers bad_input, so there is no count.
+  The planted test FAILS: `--planted defaults_skip_json` is an unknown name, answered {"ok":false,"code":"bad_input"}.
+
+The output below is the run's, with the absolute checkout path written <repo>.
+
+================ The run ================
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1974
+
+ ❯ defaults.test.ts (3 tests | 3 failed) 126249ms
+   ❯ AC1 each default the listing prints is built against the field left out (3)
+     × AC1 for every field with a default in the full build's dump, the kind's example with the field left out and set to the default op: field prints gives the same check result, built output hash and evaluated values 113043ms
+     × AC1 a planted reader that falls back to 2 where the line says 1 fails, naming the kind and the field 423ms
+     × AC1 a planted run that compares the line with the dump only passes that reader and fails this test 224ms
+ ❯ count.test.ts (2 tests | 2 failed) 19757ms
+   ❯ AC2 the run counts the fields it compared, and a skipped one makes it INVALID (2)
+     × AC2 test.defaults@1, whose four fields default to a number, a choice, a list of 3 numbers and an object, has all four compared, and the run's count equals the dump's count of fields with a default 7699ms
+     × AC2 a planted run that skips fields typed json reports a lower count and is INVALID, naming the first field it skipped 310ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  count.test.ts > AC2 the run counts the fields it compared, and a skipped one makes it INVALID > AC2 test.defaults@1, whose four fields default to a number, a choice, a list of 3 numbers and an object, has all four compared, and the run's count equals the dump's count of fields with a default
+AssertionError: the full build's dump lists test.defaults@1 with four fields defaulting to a number, a choice, a list of 3 numbers and an object: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "test.defaults@1: the full build's dump lists 0 fields for it, not four: []",
++   "test.defaults@1: 0 of its fields default to a number (typed number), not one: []",
++   "test.defaults@1: 0 of its fields default to a choice (typed json, one of the forms its line prints), not one: []",
++   "test.defaults@1: 0 of its fields default to a list of 3 numbers (typed json), not one: []",
++   "test.defaults@1: 0 of its fields default to an object (typed json), not one: []",
++ ]
+
+ ❯ count.test.ts:34:177
+     32|     const fixture = all.filter((f) => f.kind === FIXTURE);
+     33|     const lines = linesFor(bin, fixture);
+     34|     expect.soft(fixtureFailures(fixture, lines), `the full build's dum…
+       |                                                                                                                                                                                 ^
+     35|     const report = defaultsRun(bin);
+     36|     expect.soft(comparisonFailures(fixture.filter(hasDefault), lines, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  count.test.ts > AC2 the run counts the fields it compared, and a skipped one makes it INVALID > AC2 test.defaults@1, whose four fields default to a number, a choice, a list of 3 numbers and an object, has all four compared, and the run's count equals the dump's count of fields with a default
+AssertionError: deep-show kinds --defaults answers one report holding its verdict word (exit 2, no signal); stdout: {"ok":false,"code":"bad_input","what":"deep-show kinds --dump <dir> | --diff <a> <b>"}
+; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ defaultsRun helpers.ts:186:253
+
+ ❯ count.test.ts:35:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  count.test.ts > AC2 the run counts the fields it compared, and a skipped one makes it INVALID > AC2 a planted run that skips fields typed json reports a lower count and is INVALID, naming the first field it skipped
+AssertionError: deep-show kinds --defaults --planted defaults_skip_json answers one report holding its verdict word (exit 2, no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ defaultsRun helpers.ts:186:253
+
+ ❯ count.test.ts:45:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  defaults.test.ts > AC1 each default the listing prints is built against the field left out > AC1 for every field with a default in the full build's dump, the kind's example with the field left out and set to the default op: field prints gives the same check result, built output hash and evaluated values
+AssertionError: deep-show kinds --defaults answers one report holding its verdict word (exit 2, no signal); stdout: {"ok":false,"code":"bad_input","what":"deep-show kinds --dump <dir> | --diff <a> <b>"}
+; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ defaultsRun helpers.ts:186:253
+
+ ❯ defaults.test.ts:41:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  defaults.test.ts > AC1 each default the listing prints is built against the field left out > AC1 a planted reader that falls back to 2 where the line says 1 fails, naming the kind and the field
+AssertionError: deep-show kinds --defaults --planted defaults_reader_falls_back_to_2 answers one report holding its verdict word (exit 2, no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ defaultsRun helpers.ts:186:253
+
+ ❯ defaults.test.ts:49:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  defaults.test.ts > AC1 each default the listing prints is built against the field left out > AC1 a planted run that compares the line with the dump only passes that reader and fails this test
+AssertionError: deep-show kinds --defaults --planted defaults_compared_with_dump_only answers one report holding its verdict word (exit 2, no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ defaultsRun helpers.ts:186:253
+
+ ❯ defaults.test.ts:60:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+   Start at  02:06:21
+   Duration  148.96s (tests 100%)

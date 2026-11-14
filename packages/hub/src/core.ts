@@ -177,7 +177,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks, intakeOf: () => this.providers.workspaces.intake }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -922,6 +922,7 @@ export class Core {
       this.transcriptReader.endTurn(session);
       this.transcripts.judge(session);
     }
+    await this.judging.recoverGateAnswers();
     await this.judging.judgedAcrossRestart();
     await this.runs.recover();
     await this.control.retain();
@@ -979,7 +980,7 @@ export class Core {
     await this.delivery.restore();
     await this.acceptance.open();
     // The work runs (#1332), once the starts are reconciled with what still runs: a pass every 2 s from the record and the forge.
-    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r) })).open();
+    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r), due: () => this.control.briefsDue() })).open();
     // The session map and what its notices delivered, and the loop rule's count, read back (#352).
     await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
@@ -1763,12 +1764,9 @@ export class Core {
     const foreign = FOREIGN.has(meta.agent);
     for (const draft of drafts) {
       const data = draft.data;
-      // The pull request a `gh pr create` call opened, read once off its own PostToolUse (#83).
-      if (draft.kind === 'tool.after' && meta.pr) {
-        await this.judging.openedPr(meta.session, live.agent, meta.pr);
-        live.claimedInTurn = true;
-        live.prOpened = meta.pr;
-      }
+      // A joined call's PR is found on the forge, never in the shell's output (#2064).
+      // The lone-command hook retains its #83 reading; joined calls use the branch lookup.
+      if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
@@ -2161,7 +2159,8 @@ export class Core {
     }
     // A pull request says Closes only when every requirement of the issue's task passed (#322; design: At the claim).
     if (call.pr && call.command && meta.session && !FOREIGN.has(meta.agent)) {
-      const deny = await this.judging.closesGate(meta.session, call.command).catch(() => undefined);
+      const deny = await this.judging.closesGate(meta.session, call.command, meta.cwd)
+        .catch((error: unknown) => `DeepBuild denied this: the Closes rule failed: ${error instanceof Error ? error.message : String(error)}`);
       if (deny) return { deny, rule: "the gate's Closes rule (#322)" };
       if (!call.classes.length && !call.named && !call.mcp && !call.decided?.length && call.stage === undefined && !call.screen && !call.resend) return {};
     }
@@ -2174,7 +2173,8 @@ export class Core {
     // hooks before this one go first, so a resume's start has said which sends its cut-off turn made (#1033).
     if (call.resend) {
       await this.queue(async () => undefined);
-      const deny = await this.delivery.resent(meta).catch(() => undefined);
+      const deny = await this.delivery.resent(meta)
+        .catch((error: unknown) => `DeepBuild denied this: the repeated-send rule failed: ${error instanceof Error ? error.message : String(error)}`);
       if (deny) return { deny, rule: "the gate's repeated-send rule (#85)" };
       if (!call.classes.length && !call.named && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
     }

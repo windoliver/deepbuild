@@ -141,7 +141,7 @@ impl BuildSet {
 
 /// The module kinds the design names without a family, with the module each is: the cell grid
 /// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
-/// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
+/// `hull`, #440; Builder `surface`, #224) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
     // #540: a lockstep match, Net `net@1`.
@@ -155,6 +155,7 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("plate", "scene3d"),
     ("display", "scene3d"),
     ("hull", "scene3d"),
+    ("surface", "scene3d"),
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
@@ -634,7 +635,33 @@ pub struct Check {
     /// verdict judges it; its input then gets the assets the document's items name by hash under
     /// `assets`, each hash's bytes in base64.
     pub report: Option<ReportRun>,
+    /// A check that reads pixels (#1938): how many draws a checked time takes (the time, then
+    /// each next frame), and its run on the frames the host drew, in place of `report`. Its
+    /// result holds on the machine that drew them.
+    pub frames: Option<(u8, FramesRun)>,
 }
+
+/// One frame a host drew for a check that reads pixels (#1938), at the document's size, as
+/// render-back draws it: rows top-down.
+#[derive(Clone, Debug, Default)]
+pub struct Frame {
+    pub t: i64,
+    pub size: [u32; 2],
+    /// The linear image the output pass reads, before exposure: RGBA per px.
+    pub linear: Vec<f32>,
+    /// The exposure it was drawn at, a scale on `linear`.
+    pub exposure: f64,
+    /// The frame as shown: straight RGBA8, sRGB-encoded.
+    pub rgba: Vec<u8>,
+    /// The object-ID pass: each px's pick, 0 where no surface drew, and the item each pick is.
+    pub ids: Vec<u32>,
+    pub picks: BTreeMap<u32, String>,
+    /// The look's roles it was drawn in, sRGB.
+    pub roles: BTreeMap<String, [u8; 3]>,
+}
+
+/// A pixel check's run: the lowered document, the check input and the frames drawn for it.
+pub type FramesRun = fn(&Value, &Value, &[Frame]) -> Report;
 
 /// A registered check kind's run over a document, given the check input that named it: each
 /// raised issue with the item it names.
@@ -1074,7 +1101,17 @@ impl Registrar {
             run,
             reads: Vec::new(),
             report: None,
+            frames: None,
         });
+        self
+    }
+
+    /// The last check registered reads pixels (#1938): `draws` frames a checked time, which the
+    /// host draws and hands to `run`.
+    pub fn check_frames(&mut self, draws: u8, run: FramesRun) -> &mut Self {
+        if let Some(last) = self.checks.last_mut() {
+            last.frames = Some((draws, run));
+        }
         self
     }
 
@@ -1646,6 +1683,10 @@ impl Sealed {
     /// The determinism class of what a check reads: the least exact of its reads' writers', and
     /// `exact` for one that reads only the lowered document (#411).
     pub fn check_determinism(&self, check: &Check) -> &'static str {
+        // #1938: pixels a GPU rasterized are same machine.
+        if check.frames.is_some() {
+            return "same_machine";
+        }
         let rank = |c: &str| CLASSES.iter().position(|x| *x == c).unwrap_or(0);
         check
             .reads
@@ -2923,6 +2964,15 @@ impl Registry {
             .collect();
         for (name, r) in &shapes {
             for c in &r.checks {
+                // #1938: pixels a GPU rasterized never hold on any machine.
+                if c.frames.is_some() && c.machines == "any" {
+                    return Err(SealError::new(
+                        "not_exact",
+                        &[name],
+                        &[],
+                        format!("check `{}` of `{name}` says machines any but reads pixels, which are same machine", c.kind),
+                    ));
+                }
                 for read in &c.reads {
                     let Some(class) = class_of.get(read.as_str()) else {
                         return Err(SealError::new(
@@ -3496,6 +3546,9 @@ fn module_shapes(
             let mut v = json!({"codes": c.codes, "kind": c.kind, "machines": c.machines});
             if !c.reads.is_empty() {
                 v["reads"] = json!(c.reads);
+            }
+            if let Some((draws, _)) = c.frames {
+                v["frames"] = json!(draws);
             }
             v
         })

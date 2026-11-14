@@ -15,6 +15,20 @@ use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
 
+/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
+/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
+fn look_of(doc: &Value, palette: &Palette) -> Look3 {
+    let mut look = Look3::from_roles(palette.clone());
+    let camera = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .and_then(|id| doc.get("items")?.get(id));
+    if let Some(ev) = camera.and_then(|c| c.pointer("/params/exposure")?.as_f64()) {
+        look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
+    }
+    look
+}
+
 /// #1401: what a frame's object-ID pass and depth target hold, at their own size: each pixel's
 /// pick (u32, 0 where nothing drew), the item each pick stands for, and, for the planted depth
 /// reader alone, each pixel's view depth in m (f32).
@@ -93,7 +107,7 @@ impl Gpu3 {
             d.insert("size".into(), json!(size));
         }
         deep_canvas_physics::skin::write(&mut doc, t);
-        let look = Look3::from_roles(palette.clone());
+        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
@@ -133,6 +147,20 @@ impl Gpu3 {
             },
         };
         Some((bytes, targets))
+    }
+
+    /// #1938: the linear image the last frame's output pass read, before exposure, as f32 RGBA
+    /// per px, rows top-down.
+    pub fn pre_tone(&self) -> Option<Vec<f32>> {
+        let bytes = self.renderer.read_pre_tone(&self.device)?;
+        Some(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect(),
+        )
     }
 
     /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows
@@ -268,11 +296,27 @@ pub fn points_at(
     sealed: &deep_canvas::registry::Sealed,
     planted: Option<&str>,
 ) -> Result<std::collections::BTreeMap<String, [f64; 3]>, Unfit> {
+    Ok(scene_at(doc, t, palette, sealed, planted)?
+        .layers
+        .iter()
+        .flat_map(|l| &l.points)
+        .map(|p| (p.id.clone(), p.pos))
+        .collect())
+}
+
+/// `doc`'s scene at `t` as the frame evaluates it, with the build's fills; where it sits reads no
+/// camera, so a document that names none is evaluated under a stand-in (#226, #1974).
+pub fn scene_at(
+    doc: &Value,
+    t: i64,
+    palette: &Palette,
+    sealed: &deep_canvas::registry::Sealed,
+    planted: Option<&str>,
+) -> Result<Scene, Unfit> {
     let mut doc = doc.clone();
     if doc.get("size").is_none() {
         doc["size"] = json!([640, 360]);
     }
-    // Where a point sits reads no camera: a document that names none is evaluated under a stand-in.
     let named = doc
         .get("camera")
         .and_then(Value::as_str)
@@ -286,15 +330,8 @@ pub fn points_at(
     }
     let look = Look3::from_roles(palette.clone());
     let fills = Fills::of(sealed, planted);
-    let scene =
-        evaluate_any(&doc, t, &look, &mut Labels::new(), None, fills).map_err(|r| Unfit {
-            code: r.code,
-            path: r.path,
-        })?;
-    Ok(scene
-        .layers
-        .iter()
-        .flat_map(|l| &l.points)
-        .map(|p| (p.id.clone(), p.pos))
-        .collect())
+    evaluate_any(&doc, t, &look, &mut Labels::new(), None, fills).map_err(|r| Unfit {
+        code: r.code,
+        path: r.path,
+    })
 }

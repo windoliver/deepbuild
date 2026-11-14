@@ -15,12 +15,14 @@ pub struct Mesh {
 
 const SEGMENTS: u32 = 48;
 const RINGS: u32 = 24;
-/// Floats per vertex: position, normal, uv0, uv1 and the tangent.
-pub const FLOATS: usize = 14;
+/// Floats per vertex: position, normal with the vertex's own packed sRGB color (#224) or −1,
+/// uv0, uv1 and the tangent.
+pub const FLOATS: usize = 15;
 
 fn push(v: &mut Vec<f32>, p: [f32; 3], n: [f32; 3], uv: [f32; 2], t: [f32; 4]) {
     v.extend_from_slice(&p);
     v.extend_from_slice(&n);
+    v.push(-1.0);
     v.extend_from_slice(&uv);
     v.extend_from_slice(&uv);
     v.extend_from_slice(&t);
@@ -202,11 +204,21 @@ pub fn vertices(m: &deep_canvas_scene3d::geom::Mesh) -> Vec<f32> {
             })
             .collect();
     }
+    // #224: a surface's per-vertex color, sRGB packed as r × 65536 + g × 256 + b, exact in f32.
+    let channel = |name: &str| m.attributes.get(name).filter(|c| c.len() == count);
+    let tint = match (channel("color.r"), channel("color.g"), channel("color.b")) {
+        (Some(r), Some(g), Some(b)) => Some((r, g, b)),
+        _ => None,
+    };
+    let byte = |x: f64| (x.clamp(0.0, 1.0) * 255.0).round() as u32;
     let mut v = Vec::with_capacity(count * FLOATS);
     for (i, (p, t)) in m.positions.iter().zip(&tangents).enumerate() {
         let n = m.normals.get(i).map_or([0.0, 1.0, 0.0], |n| f(*n));
         v.extend_from_slice(&f(*p));
         v.extend_from_slice(&n);
+        v.push(tint.map_or(-1.0, |(r, g, b)| {
+            (byte(r[i]) << 16 | byte(g[i]) << 8 | byte(b[i])) as f32
+        }));
         v.extend_from_slice(&uv0(i));
         v.extend_from_slice(&uv1(i));
         v.extend_from_slice(t);
