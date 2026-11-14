@@ -3941,6 +3941,21 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
+    fn a_record_no_batching_core_wrote_shows_its_asks_at_once() {
+        // #22: a record with neither the hub's list nor any batch of the core's has nothing to wait for, so its open
+        // asks draw as they did, and the rows are as many as the count.
+        let mut view = crate::record::View::default();
+        for id in ["a1", "a2"] {
+            view.apply(serde_json::json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "core",
+                                          "data": {"kind": "taste", "question": format!("{id}?")}}));
+        }
+        let open = read(&view, Kind::NeedsYou, None).open;
+        let handles: Vec<&str> = open.iter().map(|row| row.0.as_str()).collect();
+        assert_eq!(handles, ["ask:a1", "ask:a2"]);
+        assert_eq!(open.len(), states::count(&view.table()));
+    }
+
+    #[std::prelude::v1::test]
     fn needs_you_shows_an_ask_once_the_core_shows_it_and_a_folded_one_only_through_its_exception() {
         // #22: Needs you reads the inbox projection the CLI reads, where an ask waits for its batch. Session sd asks
         // five, the core raises its exception, and a sixth folds into it; sa asks one.
