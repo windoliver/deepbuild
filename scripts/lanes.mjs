@@ -613,6 +613,8 @@ timed.push('tests/acceptance/226/ac7-budgets.test.ts');
 // one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/226-oracle-redraft/');
 byHand.push('tests/acceptance/226-oracle/');
+// #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU.
+alone.push('tests/acceptance/462/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
