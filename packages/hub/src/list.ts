@@ -103,8 +103,10 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   }
   const byRepo = [...new Set(quiet.map((r) => r.project ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (r.project ?? 'no repo') === p).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
+  // A new project from your words (#1342): its heading, your first words, over its one row until its card is ready.
+  for (const r of rows.filter((x) => x.id.startsWith('job:brief-'))) out.push(r.title, `  New project  ${r.word} · ${r.why}${age(r)}`);
   // Each running job (#1925): its count from its tool's own counter, or with none how long it has run, and why.
-  const jobs = rows.filter((r) => r.id.startsWith('job:'));
+  const jobs = rows.filter((r) => r.id.startsWith('job:') && !r.id.startsWith('job:brief-'));
   if (jobs.length) out.push('Running jobs:');
   for (const r of jobs) out.push(`  ${r.word.padEnd(9)}  ${r.title}${r.progress ? ` · ${r.progress}` : age(r)}`, `      ${r.why}`);
   if (asks.length) out.push('Needs you');

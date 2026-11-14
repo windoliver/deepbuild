@@ -464,6 +464,10 @@
           "spec": "0.0.0",
           "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
         },
+        "@deepbuild/briefs": {
+          "spec": "0.0.0",
+          "why": "Issue #1342: your words, files and links read as one brief on one card with no model, the research job's draft held to its kept findings, and the brief's page and card."
+        },
         "@deepbuild/budget": {
           "spec": "0.0.0",
           "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
