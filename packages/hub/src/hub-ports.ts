@@ -174,7 +174,7 @@ export interface SessionMemoryPort {
   lessons(): Promise<Lesson[]>;
   ruleStateOf(session: string): void;
   startRules(meta: HookMeta): Promise<Piece[] | undefined>;
-  promptRules(meta: HookMeta, prompt: string): Promise<Piece[] | undefined>;
+  promptRules(meta: HookMeta, prompt: string, from: string | undefined): Promise<Piece[] | undefined>;
   ruleHook(meta: HookMeta): Promise<void>;
   syncRules(): Promise<Obj>;
   removeRule(lesson: Lesson): Promise<Obj>;
