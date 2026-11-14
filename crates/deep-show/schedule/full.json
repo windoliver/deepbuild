@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "a9313100d5ed948e43047dabddec4d52ce02f4a3a0c12e19cb488d808955d67b",
+  "set_digest": "30b9586c8de9d7ef3be617f89a02b44eee696cf75b8c4cfba1072e7e2d4e5cf0",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
+      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -267,7 +267,7 @@
       }
     },
     "loop@1": {
-      "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+      "digest": "adeb0c97c338cfd0618dc3e56cf1a050699528591b5b48c642e9c6a9dcaad35a",
       "reference": "loop",
       "kit": [
         "fixtures",
@@ -376,6 +376,35 @@
       "module": "motion",
       "implementation": {
         "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "net@1": {
+      "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+      "reference": "net",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "net",
+      "implementation": {
+        "name": "net",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -565,7 +594,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "61c7c1cfa53706ec4050b74561317e375f04c2d38e69668bab48bdfbad633b55",
+      "digest": "43a5c86606cb7deec672a11fd98b267423eb66df81b1ad60b64624a0f948bc87",
       "reference": "scene3d",
       "kit": [
         "fixtures",

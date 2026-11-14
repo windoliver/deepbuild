@@ -1,0 +1,27 @@
+At base 23baa43b4 ("Merge pull request #2453 …"), on 2026-11-13, on an arm64 Mac with 18 cores, deep-show was not built and the suite was not run against a binary: the one-minute load was 67 to 136 and cargo isn't on this shell's PATH. Lines marked "read" come from the base's code. Lines marked "observed" are what running the files here, without cargo, showed.
+
+The commands the implementing session runs, at the base and after (from <worktree>):
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1938-redraft-contrast --no-file-parallelism
+  npx tsc -p tests/acceptance/1938-redraft-contrast/tsconfig.json
+  rm -rf tests/acceptance/1938-redraft-contrast/node_modules/.vite
+
+Observed, without cargo (node v24.22.2, vitest 5.0.5): both tests fail with "INCONCLUSIVE: cargo could not run: spawnSync cargo ENOENT; this is not a pass". oracle-contrast.test.ts reached that line only after its formula checks passed (formulaKeepsUpstreamAssertions, and each case's ratio by the formula within 0.005 of the table: 16.86, 3.24, 2.95, 1, 2.95, 4.26, 6.25).
+
+Read, with cargo on PATH. The `full` feature set exists, and every first scenario parses at the base: stored documents in `docs`, #403's `claims` with `requirements`, the `verdict` call, no `planted`. In `verdict_call` (crates/deep-show/src/verdict.rs) a requirement of kind render.contrast is no geometry audit, shape reading, film audit or flicker check, so `judge` takes it. render.contrast isn't one of the core's kinds and no module in the build registers it (crates/deep-canvas-loop registers only geometry.shading), so `judge` returns before it draws or validates anything: result BLOCKED, `blocked: [{"code": "module_missing", "kind": "render.contrast", "ids": []}]` (no `module`: `module_of_check` finds no module named `render`), `issues: []`.
+
+- contrast.test.ts, "#1938.f19b61dd text under 4.5:1 fails render.contrast with its code, naming the text, …". `decided` lets BLOCKED through. The test fails at its first product assertion, "text under 4.5:1 fails render.contrast with its code, naming the text and nothing else":
+    render.contrast on the caption in muted (3.24:1) is BLOCKED, not FAIL: {the row}
+    render.contrast on the caption in muted (3.24:1) raises nothing
+  Nothing after it runs. The twin's row is BLOCKED the same way. The planted run is never reached; if it were, `contrast_min_3` is no planted name at the base (crates/deep-show/src/main.rs's planted match ends `_ => return None`, and no module's PLANTED lists it), so the scenario would be refused as bad input.
+
+- oracle-contrast.test.ts, "#1938.f19b61dd text at or over 4.5:1 by WCAG 2's ratio passes render.contrast and text under it fails, …". All seven rows are BLOCKED the same way. The test fails at "each board passes at or over 4.5:1 and fails under it, naming the line (never the plate) with the formula's ratio", listing:
+    render.contrast on ink on the ground (16.86:1) is BLOCKED, not PASS: {the row}
+    render.contrast on muted on the ground (3.24:1) is BLOCKED, not FAIL: {the row}
+    render.contrast on muted on the ground (3.24:1) raises nothing
+  and the same two lines for each other failing board, and the first line for session_readout.
+
+Fixture validity, read, not run. Because the base returns BLOCKED before validating, a base run can't show whether the boards are clean; after the implementation, a twin's row counts every issue its validation raises. The boards hold only `text@1` (text, font body, size 20, box, paint.fill.role) and `rect@1` (box, paint.fill.role) items, with fields the base's text and marks modules define, every role one the clean look gives, no status binding (so no status-distance rule applies), no halo, no look, no requires. #403's suite asks document.validate to PASS a board of the same two kinds (its unknown-kind control), and #1653's halo test asks the marks check to pass a text@1 with a paint fill role. The core-only CLI (`deep-canvas check`, built here) registers neither kind, so it can't judge these boards.
+
+Type-check (observed): `npx tsc -p tests/acceptance/1938-redraft-contrast/tsconfig.json` exits 0 (TypeScript 5.9.3, vitest 5.0.5, @types/node 24.19.2, after `npm ci --ignore-scripts`). `spans` from scripts/proof-change.mjs reads both tests' names with `#1938.f19b61dd`. A local scan with scripts/public-text.mjs's word rule and scripts/studied-names.json over the new files and the commit message found no listed name.

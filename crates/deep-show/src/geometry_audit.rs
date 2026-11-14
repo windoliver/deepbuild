@@ -626,8 +626,13 @@ fn issue(f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>, fix: Value)
         ),
         _ => format!("an end of {} lands on nothing", f.ids[0]),
     };
+    // #1938: a fix that is patch ops is also under `fix_ops`, where every check kind's is.
+    let ops = fix.is_array().then(|| fix.clone());
     let mut v = json!({"check": GEOMETRY_AUDIT, "code": f.code, "severity": "error", "ids": f.ids,
                        "state": state, "t": t, "what": what, "fix": fix});
+    if let Some(ops) = ops {
+        v["fix_ops"] = ops;
+    }
     if f.code == OVERLAP {
         v["depth"] = json!(f.by);
     }
