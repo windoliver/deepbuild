@@ -29,7 +29,7 @@ fn register(r: &mut Registrar) {
         param("step", ParamType::F32, json!(0)),
         Param {
             min: None,
-            ..param("linear", ParamType::Json, json!([0, 0, 0]))
+            ..param("linear", ParamType::Json("vec3 (m/s)"), json!([0, 0, 0]))
         },
     ];
     r.kind(kind("test", "launch", params), &[], "");

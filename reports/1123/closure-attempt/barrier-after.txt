@@ -1,0 +1,15 @@
+✔ bay build barrier: cleanup (4196.637667ms)
+✔ bay build barrier: dead-supervisor (3406.150166ms)
+✔ bay build barrier: live-owner (2452.144583ms)
+✔ bay build barrier: wrong-group-start (2147.338417ms)
+✔ bay build barrier: bad-record (1926.250125ms)
+✔ bay build barrier: scan-failed (2113.102708ms)
+✔ bay build barrier: timeout (11990.976833ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 28764.809166

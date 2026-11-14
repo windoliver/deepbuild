@@ -17,9 +17,21 @@ pub enum ParamType {
     F32,
     /// A string.
     Str,
-    /// A structured value (a vector, an object, a choice) the kind's own reader checks when it
-    /// evaluates the item; the document check reads only its presence.
-    Json,
+    /// A structured value (a vector, an object, a choice), declared by the forms its reader
+    /// takes in the form language (`crate::form`, #1973): the listing prints them and the
+    /// document check refuses a value none of them takes. The reader checks the rest when it
+    /// evaluates the item.
+    Json(&'static str),
+}
+
+impl ParamType {
+    /// A structured param's declared forms; `None` for a number or a string.
+    pub fn form(self) -> Option<&'static str> {
+        match self {
+            ParamType::Json(form) => Some(form),
+            _ => None,
+        }
+    }
 }
 
 /// One param of a kind's schema.
@@ -237,10 +249,11 @@ fn str_param(name: &'static str, default: &str) -> Param {
     }
 }
 
-fn json_param(name: &'static str, default: Value) -> Param {
+/// A structured param, with the forms its reader takes (`crate::form`, #1973).
+fn json_param(name: &'static str, form: &'static str, default: Value) -> Param {
     Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default,
         min: None,
@@ -252,10 +265,15 @@ fn json_param(name: &'static str, default: Value) -> Param {
 }
 
 /// A field another canvas module evaluates into the kind's array (Array and table).
-fn module_param(name: &'static str, module: &'static str, default: Value) -> Param {
+fn module_param(
+    name: &'static str,
+    module: &'static str,
+    form: &'static str,
+    default: Value,
+) -> Param {
     Param {
         module,
-        ..json_param(name, default)
+        ..json_param(name, form, default)
     }
 }
 
@@ -263,20 +281,35 @@ fn module_param(name: &'static str, module: &'static str, default: Value) -> Par
 /// names no module to use it; every field is the motion module's, which resolves its times through
 /// the tempo map and checks it, so a build without motion refuses a score with `module_missing`.
 fn score() -> Entry {
+    let params = [
+        (
+            "instruments",
+            "{ID → {source: sampled {library, preset} | pluck {preset, overrides} | synth {preset} | {type, preset}, stem?: name, bass?: bool}}",
+        ),
+        (
+            "events",
+            "{ID → {at: time | flick, inst: ID, pitch: name | f32, dur: f32 | text, vel?: 0..1, pan?, gain?: dB, attack?, release?, bend?, vib?, strum?: s}}",
+        ),
+        ("loop", "{from: text, to: text} (each a bar:beat)"),
+        ("stems", "{name → sha256}"),
+    ];
     Entry {
         family: "score",
         name: "music",
         versions: vec![Version {
             major: 1,
             minor: 0,
-            params: ["instruments", "events", "loop", "stems"]
+            params: params
                 .into_iter()
-                .map(|name| module_param(name, "motion", Value::Null))
+                .map(|(name, form)| module_param(name, "motion", form, Value::Null))
                 .collect(),
         }],
         migrations: vec![],
     }
 }
+
+/// A camera's point, as `Spec::read` reads `target` and `position` (m; u in a 2D document).
+const POINT: &str = "[x: m, y: m, z: m]";
 
 /// The core's camera (Camera `camera@1`), every field at the design's default. The pose, the
 /// projection and the camera you move are evaluated here. `yield` eases back on a stage change
@@ -293,26 +326,61 @@ fn camera() -> Entry {
             major: 1,
             minor: 0,
             params: vec![
-                json_param("projection", json!("perspective")),
-                json_param("target", json!([0, 0, 0])),
-                json_param("position", Value::Null),
-                json_param("orbit", Value::Null),
+                json_param(
+                    "projection",
+                    "perspective | orthographic | isometric",
+                    json!("perspective"),
+                ),
+                json_param("target", POINT, json!([0, 0, 0])),
+                json_param("position", POINT, Value::Null),
+                json_param(
+                    "orbit",
+                    "{azimuth?: deg, elevation?: deg, distance?: m}",
+                    Value::Null,
+                ),
                 f32_param("roll", "deg", 0.0, -360.0, 360.0, 0),
-                json_param("view_width", Value::Null),
+                json_param("view_width", "m", Value::Null),
                 f32_param("fov", "deg", 40.0, 0.0, 179.0, 0),
-                json_param("shift", json!([0, 0])),
-                json_param("user", json!({})),
-                json_param("fit", Value::Null),
-                json_param("yield", Value::Null),
-                json_param("reduced_motion", json!("hold")),
-                module_param("near", "scene3d", json!("auto")),
-                module_param("far", "scene3d", json!("auto")),
-                module_param("dof", "scene3d", Value::Null),
-                module_param("exposure", "scene3d", Value::Null),
-                module_param("lens", "scene3d", Value::Null),
-                module_param("aperture", "scene3d", Value::Null),
-                module_param("shutter", "scene3d", Value::Null),
-                module_param("iso", "scene3d", Value::Null),
+                json_param("shift", "[x, y] (fractions of the view)", json!([0, 0])),
+                json_param(
+                    "user",
+                    "{turn | tilt | zoom_rate: f32, pitch | yaw: [min: deg, max: deg], zoom?: [min, max], pivot?: target | eye, pan?: {bounds | margin | edge}, zoom_at?: pointer | center}",
+                    json!({}),
+                ),
+                json_param(
+                    "fit",
+                    "{keep: [ID], pad?: f32, avoid?: overlay | none, place?: [x, y] | thirds_left | thirds_right, fill?: 0..1}",
+                    Value::Null,
+                ),
+                json_param(
+                    "yield",
+                    "{resume_after?: s, ease_back?: s, ease?: in_out_cubic}",
+                    Value::Null,
+                ),
+                json_param("reduced_motion", "hold", json!("hold")),
+                module_param("near", "scene3d", "m | auto", json!("auto")),
+                module_param("far", "scene3d", "m | auto", json!("auto")),
+                module_param(
+                    "dof",
+                    "scene3d",
+                    "{focus?: ID | m, f_stop?: f32, blades?: u8}",
+                    Value::Null,
+                ),
+                module_param("exposure", "scene3d", "EV100 | from_lens", Value::Null),
+                module_param(
+                    "lens",
+                    "scene3d",
+                    "{focal_length: mm, sensor?: [w: mm, h: mm], fit?: horizontal | vertical | wider}",
+                    Value::Null,
+                ),
+                module_param(
+                    "aperture",
+                    "scene3d",
+                    "{f_stop?: f32, blades?: u8}",
+                    Value::Null,
+                ),
+                module_param("shutter", "scene3d", "{angle?: deg}", Value::Null),
+                module_param("iso", "scene3d", "f32", Value::Null),
             ],
         }],
         migrations: vec![],
@@ -329,16 +397,24 @@ fn circle() -> Entry {
             major: 1,
             minor: 0,
             params: vec![
-                json_param("center", json!([0, 0])),
+                json_param("center", "[x: u, y: u]", json!([0, 0])),
                 f32_param("r", "u", 0.0, 0.0, 100_000.0, 0),
                 f32_param("inner_r", "u", 0.0, 0.0, 100_000.0, 0),
-                json_param("arc", Value::Null),
-                json_param("paint", Value::Null),
-                json_param("status", Value::Null),
-                json_param("ops", Value::Null),
+                json_param("arc", "{from: deg, to: deg}", Value::Null),
+                json_param(
+                    "paint",
+                    "{fill?: {role | gradient | hatch | steps | fill | opacity}, stroke?: {role | width | dash | line | opacity}, opacity?: 0..1, shade?: {kind | role}, drop?, glow?, bevel?, satin?}",
+                    Value::Null,
+                ),
+                json_param("status", "{source: text, as_of?, legend?}", Value::Null),
+                json_param(
+                    "ops",
+                    "[{trim | round_corners | offset_path | zigzag | pucker | twist | repeater}] ≤ 8 (one op each)",
+                    Value::Null,
+                ),
                 // #160: its place in the draw order (Frame and group: draw order).
-                json_param("z", json!(0)),
-                json_param("draw_order", json!("auto")),
+                json_param("z", "f32", json!(0)),
+                json_param("draw_order", "back | body | front | auto", json!("auto")),
             ],
         }],
         migrations: vec![],
@@ -348,28 +424,39 @@ fn circle() -> Entry {
 /// R2's series (Series and decimation `series@1`, #397): rows in typed columns, drawn decimated
 /// per pixel column of its `box`. Its columns and view are read by the marks it draws as.
 fn series() -> Entry {
+    // A value column, as `data::column_of` reads one.
+    const VALUES: &str = "{dtype, len: u32, data} (an f32 column)";
     let params = [
-        "source",
-        "t",
-        "v",
-        "o",
-        "h",
-        "l",
-        "c",
-        "append",
-        "chunk",
-        "capacity",
-        "gap",
-        "calendar",
-        "window",
-        "decimate",
-        "bucket",
-        "columns",
-        "marks",
-        "candle",
-        "crosshair",
-        "box",
-        "role",
+        (
+            "source",
+            "text (a reading or stream handle, or a physics output ID)",
+        ),
+        ("t", "{dtype, len: u32, data} (an i64 column, in flicks)"),
+        ("v", VALUES),
+        ("o", VALUES),
+        ("h", VALUES),
+        ("l", VALUES),
+        ("c", VALUES),
+        ("append", "{source, rule}"),
+        ("chunk", "u32 (rows)"),
+        ("capacity", "u32 (rows)"),
+        ("gap", "span | flick"),
+        ("calendar", "{tz, sessions}"),
+        ("window", "[t0, t1] | {last: count}"),
+        ("decimate", "m4 | ohlc | minmax | none"),
+        ("bucket", "text (1px, or a duration)"),
+        (
+            "columns",
+            "{name → {mean | std | min | max | sum | ema, length}}",
+        ),
+        (
+            "marks",
+            "[name] (each line, area, candle, band, bar, rule or tag)",
+        ),
+        ("candle", "{up: role, down: role}"),
+        ("crosshair", "{snap, readout}"),
+        ("box", "[x, y, w, h]"),
+        ("role", "role"),
     ];
     Entry {
         family: "",
@@ -379,7 +466,7 @@ fn series() -> Entry {
             minor: 0,
             params: params
                 .into_iter()
-                .map(|p| json_param(p, Value::Null))
+                .map(|(p, form)| json_param(p, form, Value::Null))
                 .collect(),
         }],
         migrations: vec![],
@@ -389,6 +476,9 @@ fn series() -> Entry {
 /// The two flat test kinds of the #372 acceptance README: a 2D rectangle from its top-left
 /// corner and a 3D disc about its position, each with an sRGB fill.
 fn test_shapes() -> [Entry; 2] {
+    // Three sRGB bytes, as `draw::fill_of` reads them; or a role, which the status-color rule
+    // reads (the kit's `status_color_unbound` fixture paints one).
+    const FILL: &str = "[r: u8, g: u8, b: u8] | {role}";
     let rect = Entry {
         family: "test",
         name: "rect",
@@ -398,7 +488,7 @@ fn test_shapes() -> [Entry; 2] {
             params: vec![
                 f32_param("w", "u", 100.0, 0.0, 100_000.0, 0),
                 f32_param("h", "u", 100.0, 0.0, 100_000.0, 0),
-                json_param("fill", json!([255, 255, 255])),
+                json_param("fill", FILL, json!([255, 255, 255])),
             ],
         }],
         migrations: vec![],
@@ -411,7 +501,7 @@ fn test_shapes() -> [Entry; 2] {
             minor: 0,
             params: vec![
                 f32_param("radius", "m", 0.1, 0.0, 1000.0, 0),
-                json_param("fill", json!([255, 255, 255])),
+                json_param("fill", FILL, json!([255, 255, 255])),
             ],
         }],
         migrations: vec![],

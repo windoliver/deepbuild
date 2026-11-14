@@ -16,6 +16,7 @@ import { withHub } from './hub.js';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
 const SETTLE = pathToFileURL(fileURLToPath(new URL('../dist/settle.js', import.meta.url))).href;
+const SETTLE_JSON = JSON.stringify(SETTLE);
 const dir = mkdtempSync(join(tmpdir(), 'deep-startup-memory-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -52,6 +53,63 @@ it('deep mcp loads no inspector', () => {
   expect(urls.filter((l) => UNUSED.test(l.url)).map((l) => l.url)).toEqual([]);
 }, 60_000);
 
+it("deep mcp loads what serves its client: no contracts, and Codex's settings for Codex alone", () => {
+  const served = (client: string): string[] => {
+    const home = mkdtempSync(join(dir, 'mcp-client-'));
+    const log = join(home, 'loads.log');
+    const hello = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: client } } };
+    const ran = spawnSync(process.execPath, ['--import', LOADS, CLI, 'mcp'], { cwd: home, env: { ...process.env, HOME: home, DEEP_TEST_LOADS: log }, input: `${JSON.stringify(hello)}\n`, encoding: 'utf8' });
+    expect(ran.stdout, `deep mcp answered ${client}'s initialize`).toContain('"serverInfo"');
+    return loaded(log).map((l) => l.url.replace(/^.*\/packages\//, 'packages/'));
+  };
+  // The contracts' entry brings its validator, lint and code generators, and the settings their writers: about
+  // 1.6 MB a session, which every Claude Code session held for one type guard and a timeout only Codex sets.
+  const unused = served('claude-code').filter((url) => url.startsWith('packages/contracts/') || /^packages\/hub\/dist\/(codex-settings|claude-settings|agent-files)\.js$/.test(url));
+  expect(unused).toEqual([]);
+  // Codex gives its MCP server's tool calls its own timeout, which a call's wait reads from Codex's settings.
+  expect(served('codex-mcp-client')).toContain('packages/hub/dist/codex-settings.js');
+}, 60_000);
+
+it("the asks core reads a long log at its open without growing a hub thread's heap", () => {
+  const at = (path: string): string => JSON.stringify(pathToFileURL(fileURLToPath(new URL(path, import.meta.url))).href);
+  const ledger = join(mkdtempSync(join(dir, 'long-log-')), 'ledger.db');
+  // The core's thread, under the hub's own limit on its young generation: what outlives a page of events is promoted,
+  // and the heap keeps the pages of that garbage until V8 shrinks it.
+  const worker = `import { parentPort } from 'node:worker_threads';
+const { openRecord } = await import(${at('../../record/dist/index.js')});
+const { openAsks } = await import(${at('../../asks/dist/index.js')});
+const { shedStartup } = await import(${SETTLE_JSON});
+const record = await openRecord({ path: ${JSON.stringify(ledger)}, now: Date.now });
+shedStartup();
+const before = process.memoryUsage().heapTotal;
+await openAsks({ record, now: Date.now, deliver: () => undefined });
+const grew = process.memoryUsage().heapTotal - before;
+await record.close();
+parentPort.postMessage(grew);`;
+  const script = `import { Worker } from 'node:worker_threads';
+const { openRecord } = await import(${at('../../record/dist/index.js')});
+const { ulid } = await import(${at('../../record/src/ids.js')});
+const { YOUNG } = await import(${SETTLE_JSON});
+let at = Date.now() - 86_400_000;
+const record = await openRecord({ path: ${JSON.stringify(ledger)}, now: () => at });
+for (let s = 0; s < 100; s++) {
+  const session = ulid(at);
+  const hook = { writer: 'hook', actor: 'you', scope: 'you', session, agent: 'claude-code' };
+  const appends = [record.append(hook, { v: 1, id: ulid(++at), kind: 'session.start', ts: at, data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: session } })];
+  for (let k = 0; k < 199; k++) appends.push(record.append(hook, { v: 1, id: ulid(++at), kind: k % 2 ? 'tool.after' : 'tool.before', ts: at, seq: String(BigInt(at) * 1000000n), data: { kind: 'shell', paths: [], command: 'npm test -- src/' + k + '.test.ts' } }));
+  await Promise.all(appends);
+}
+await record.close();
+const grew = await new Promise((resolve, reject) => { const core = new Worker(${JSON.stringify(worker)}, { eval: true, type: 'module', resourceLimits: YOUNG }); core.once('message', resolve); core.once('error', reject); });
+console.log(JSON.stringify({ grew }));`;
+  const ran = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  expect(ran.status, ran.stderr).toBe(0);
+  const { grew } = JSON.parse(ran.stdout) as { grew: number };
+  // Read a thousand events a page, 20,000 events grew the heap by 11 MB, and a month's record took the hub's footprint
+  // to 150 MB at a start for the 95 MB it settles at.
+  expect(grew / 2 ** 20, `the heap grew by ${(grew / 2 ** 20).toFixed(1)} MB over 20,000 events`).toBeLessThan(4);
+}, 120_000);
+
 it("the check for a newer record reads it through SQLite's 2 MB page cache", async () => {
   const root = mkdtempSync(join(dir, 'root-'));
   const ledger = join(root, 'ledger.db');
@@ -87,7 +145,11 @@ console.log(JSON.stringify({ heapUsed, heapTotal, kept: kept.length }));`;
   expect(heapTotal / heapUsed, `the heap holds ${(heapTotal / 2 ** 20).toFixed(1)} MB for the ${(heapUsed / 2 ** 20).toFixed(1)} MB it uses`).toBeLessThan(1.5);
 }, 60_000);
 
-it('an idle deep mcp holds little heap beyond what it uses', async () => {
+it('an idle deep mcp holds little heap beyond what it uses', () => idleHeap('test'), 60_000);
+// Codex's settings load once Codex names itself, after the start's collection: what loading them leaves is given back too.
+it('an idle deep mcp that serves Codex holds little heap beyond what it uses', () => idleHeap('codex-mcp-client'), 60_000);
+
+async function idleHeap(client: string): Promise<void> {
   const home = mkdtempSync(join(dir, 'mcp-idle-'));
   const out = join(home, 'heap.json');
   // A preload that writes the process's heap four seconds in, once its start has settled: whole, under its name by a rename.
@@ -97,7 +159,7 @@ it('an idle deep mcp holds little heap beyond what it uses', async () => {
   const child = spawn(process.execPath, ['--import', report, CLI, 'mcp'], { cwd: join(home, 'work'), env: { ...process.env, HOME: home, DEEP_TEST_HEAP: out }, stdio: ['pipe', 'pipe', 'inherit'] });
   try {
     const answered = new Promise<void>((resolve) => child.stdout.once('data', () => resolve()));
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'test' } } })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: client } } })}\n`);
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })}\n`);
     await answered;
     for (let i = 0; i < 200 && !existsSync(out); i++) await new Promise((r) => setTimeout(r, 100));
@@ -108,4 +170,4 @@ it('an idle deep mcp holds little heap beyond what it uses', async () => {
     child.stdin.end();
     await new Promise((resolve) => child.once('exit', resolve));
   }
-}, 60_000);
+}

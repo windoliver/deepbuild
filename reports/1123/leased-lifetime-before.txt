@@ -1,0 +1,14 @@
+✖ real deep lease cancels all binary builders after SIGTERM, with no recreated run root (21086.833208ms)
+✖ real deep lease cancels all binary builders after SIGKILL, with no recreated run root (15817.572208ms)
+ℹ tests 2
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37481.106333
+✖ failing tests:
+✖ real deep lease cancels all binary builders after SIGTERM, with no recreated run root (21086.833208ms)
+  AssertionError [ERR_ASSERTION]: lease wrapper and builder worker both ended
+✖ real deep lease cancels all binary builders after SIGKILL, with no recreated run root (15817.572208ms)
+  AssertionError [ERR_ASSERTION]: lease wrapper and builder worker both ended

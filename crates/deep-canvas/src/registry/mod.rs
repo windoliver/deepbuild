@@ -173,6 +173,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("effect", "scene3d"),
     // #1732: placement by relation in 3D is the motion module's.
     ("arrange", "motion"),
+    // #222: a cue list is the motion module's, expanded at check.
+    ("cues", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -712,6 +714,8 @@ pub struct Registrar {
     pub costs: Vec<(String, Cost)>,
     /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
     pub elements: Vec<(String, Elements)>,
+    /// Its kinds expanded at check, by kind (`family.name`; #222).
+    pub expands: Vec<(String, crate::document::expands::Expand)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -3321,7 +3325,7 @@ fn kind_shape_fault(entry: &Entry, draws_as: &str) -> Option<String> {
     if draws_as == "rect@1" {
         if let Some(v) = entry.versions.iter().find(|v| {
             v.param("box")
-                .is_none_or(|p| p.ty != crate::kinds::ParamType::Json)
+                .is_none_or(|p| !matches!(p.ty, crate::kinds::ParamType::Json(_)))
         }) {
             return Some(format!(
                 "draws as `rect@1` and has no `box` param of type Json at major {}",
@@ -3687,7 +3691,7 @@ mod tests {
                 minor: 0,
                 params: vec![Param {
                     name: "box",
-                    ..param(ParamType::Json)
+                    ..param(ParamType::Json("[x, y, w, h]"))
                 }],
             }],
             migrations: vec![],
@@ -3886,7 +3890,7 @@ mod tests {
                 default: json!(1),
                 min: Some(0.0),
                 max: Some(10.0),
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             r.kind(entry, &[], "rect@1");
         }
@@ -4056,7 +4060,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module,
                 operator,
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             entry
         }
@@ -4186,7 +4190,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module: "c",
                 operator,
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             entry
         }
@@ -4711,7 +4715,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module: "text",
                 operator: "measure",
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             r.kind(entry, &[], "rect@1");
         }

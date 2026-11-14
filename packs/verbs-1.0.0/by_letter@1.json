@@ -1,0 +1,20 @@
+{
+  "id": "verbs.by_letter",
+  "version": "1.0",
+  "title": "By letter",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's text reveals letter by letter at an even pace over its window.",
+  "inputs": {},
+  "steps": {
+    "letters": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/reveal/progress": 0
+        },
+        "ease": "linear"
+      }
+    }
+  }
+}
