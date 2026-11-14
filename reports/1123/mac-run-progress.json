@@ -1,0 +1,50 @@
+{
+  "sourceCommit": "63e11e81a883c0fdaa8d54788114ff400e08e191",
+  "afterImplementationOverlay": "968cbe68b51a44e3b354c4593c2ac8db68799c34",
+  "requiredHost": "Mac",
+  "spark": "optional",
+  "state": "INCONCLUSIVE",
+  "beforeParallel": {
+    "complete": true,
+    "runnerWallSeconds": 2974.39,
+    "testFiles": {
+      "failed": 160,
+      "passed": 633,
+      "skipped": 5
+    },
+    "tests": {
+      "failed": 396,
+      "passed": 3959,
+      "skipped": 75
+    }
+  },
+  "beforeAlone": {
+    "complete": false,
+    "plannedFiles": 1932,
+    "filesWithResultRows": 506,
+    "passRows": 1794,
+    "failRows": 311,
+    "skipRows": 62,
+    "finalEndRecord": false,
+    "durationSeconds": null,
+    "reportSha256": "687d5ab2ce4be5224441df8279895920a9ec0b0b40f0afb4915e72a1f6cdda58"
+  },
+  "after": {
+    "started": false,
+    "complete": false,
+    "durationSeconds": null
+  },
+  "blockerFailures": [
+    {
+      "file": "tests/acceptance/1477/record.test.ts",
+      "name": "#1477.e66d9bdb the record gives all arms with their fingerprint, and an unrun arm reads INCONCLUSIVE. It ends in one line: stop, or build › #1477.e66d9bdb an arm left out reads INCONCLUSIVE and so does the decision; a full run and the committed record give every arm measured with its fingerprint on a quiet reference Mac, net of the blank arm, and end in the same stop or build",
+      "error": "lists_1477 measure --out <scratch>/partial.json --arms blank,list-10k: spawnSync <scratch>/lists_1477-plain ETIMEDOUT"
+    },
+    {
+      "file": "tests/acceptance/1477/record.test.ts",
+      "name": "#1477.46aa3ab4 a variable-height list of 100,000 rows has update p99 under 4 ms and working set above data under 64 MB, net of the blank arm, or the record names what was built instead › #1477.46aa3ab4 five paired runs of the blank arm and list-100k: update p99 within 4 ms and working set above data within 64,000,000 bytes, net of the blank arm, judged by the lane, on the list the record names",
+      "error": "lists_1477 arm blank: spawnSync <scratch>/lists_1477-plain ETIMEDOUT"
+    }
+  ],
+  "termination": "Stopped only verified owned processes after approximately 6h55m; unchanged benchmark timeout failures retained. Not a complete reading; no retries or skipped tests."
+}

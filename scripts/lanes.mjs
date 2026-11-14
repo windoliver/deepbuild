@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inputs as configInputs } from './config-eval.mjs';
 import { inputs as verdictInputs } from './verdict-proofs.mjs';
+// Lane definitions are imported without the build tooling by runner configs and minimal fixture repositories.
+const require = createRequire(import.meta.url);
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // The repo's declared test paths. The unit lane's runners take their file patterns from them, and perf
@@ -22,12 +25,13 @@ export const ownLane = ['tests/acceptance/684/lean.test.ts'];
  * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
  * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/', 'tests/dither-fill.test.ts', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/268/', 'tests/acceptance/268-redraft-ac4/', 'tests/acceptance/481/', 'tests/acceptance/486/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/1417/', 'tests/acceptance/1417-redraft-ac1/', 'tests/acceptance/1417-redraft-ac3/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
+export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/', 'tests/dither-fill.test.ts', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/268/', 'tests/acceptance/268-redraft-ac4/', 'tests/acceptance/481/', 'tests/acceptance/486/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/1417/', 'tests/acceptance/1417-redraft-ac1/', 'tests/acceptance/1417-redraft-ac3/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
   'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/423/', 'tests/acceptance/424/', 'tests/acceptance/430/', 'tests/group-compositor.test.ts', 'tests/acceptance/446/', 'tests/acceptance/419/', 'tests/acceptance/428/', 'tests/acceptance/1297/', 'tests/acceptance/422/', 'tests/acceptance/426/', 'tests/acceptance/425/', 'tests/acceptance/427/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/scene3d-contact.test.ts', 'tests/scene3d-culled-casters.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/1640/', 'tests/acceptance/443/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/1162/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/1413/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/redraft-ac12/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/37/', 'packages/checks-journey/test/unrun.test.ts', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/431/', 'tests/acceptance/432/', 'tests/acceptance/483/', 'tests/acceptance/484/', 'tests/acceptance/252/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   'tests/acceptance/453/',
+  'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
   'tests/acceptance/1172/',
   'tests/acceptance/1454/',
@@ -56,6 +60,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
  */
 export const slow = [
   'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
+  'packages/hub/test/reopened-items.test.ts', 'tests/acceptance/1633/reopened.test.ts',
   'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
   'tests/acceptance/1002/cli.test.ts', 'tests/acceptance/1002/screens.test.ts',
   'tests/acceptance/1002/twins.test.ts', 'tests/acceptance/1015/claude.test.ts',
@@ -246,6 +251,8 @@ alone.push('tests/acceptance/1485-redraft-ac2/');
 byHand.push('tests/acceptance/1485/cap.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
+// #1816's live file runs the spine judge for #44 for hours and reopens #44 on GitHub if it doesn't read PASS.
+byHand.push('tests/acceptance/1816/judged-again.live.test.ts');
 
 // #1515's files each start a hub on a 500-session record, and its budgets must run with nothing beside them.
 alone.push('tests/acceptance/1515/');
@@ -282,6 +289,9 @@ alone.push('tests/acceptance/532/');
 alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #534's files build deep-logic, write 64 MiB saves and freeze and kill their writer by PID; its budgets are timed.
+alone.push('tests/acceptance/534/');
+timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 // #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
@@ -1074,90 +1084,111 @@ export function runLanes(lanes, { cwd = root } = {}) {
   // copies name theirs.
   const issues = process.env.DEEP_OPEN_ISSUES ? undefined : mkdtempSync(join(tmpdir(), 'deep-open-issues-'));
   if (issues) process.env.DEEP_OPEN_ISSUES = join(issues, 'open-issues.json');
-  let changed;
-  for (const lane of lanes) {
-    if (lane.paths && !release) {
-      changed ??= changedPaths(cwd);
-      // A lane skips only when its script reads none of the change either.
-      if (changed && !changed.some((file) => covers(lane.paths, file))) {
-        const misses = missed(lane, changed, cwd);
-        if (misses?.files.length) {
-          failures.push(`FAIL ${lane.name}: its paths miss ${misses.files.join(', ')}, which ${misses.script} reads\n  Fix: Take the lane's paths from the inputs ${misses.script} exports.`);
-          continue;
-        }
-        if (misses) {
-          console.log(`SKIP ${lane.name}: the change touches no file it reads`);
-          continue;
+  // Never forward a shell's binary directory, even to a lane that starts its own proof.
+  const environment = { ...process.env };
+  delete environment.DEEP_BIN_DIR;
+  let changed, binaries, binaryError;
+  try {
+    const selected = [];
+    for (const lane of lanes) {
+      if (lane.paths && !release) {
+        changed ??= changedPaths(cwd);
+        // A lane skips only when its script reads none of the change either.
+        if (changed && !changed.some((file) => covers(lane.paths, file))) {
+          const misses = missed(lane, changed, cwd);
+          if (misses?.files.length) {
+            failures.push(`FAIL ${lane.name}: its paths miss ${misses.files.join(', ')}, which ${misses.script} reads\n  Fix: Take the lane's paths from the inputs ${misses.script} exports.`);
+            continue;
+          }
+          if (misses) {
+            console.log(`SKIP ${lane.name}: the change touches no file it reads`);
+            continue;
+          }
         }
       }
+      selected.push(lane);
     }
-    const started = performance.now();
-    console.log(`RUN ${lane.name}`);
-    let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-    const tree = exactTree(cwd), tests = [], unproven = [], listedSkips = [];
-    for (const [command, ...args] of lane.commands) {
-      let directory, descriptor, result, results, output = '';
-      try {
-        directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
-        const log = join(directory, 'output'), report = join(directory, 'report');
-        const reported = reporting([command, ...args], report);
-        descriptor = openSync(log, 'w', 0o600);
-        // One shared descriptor preserves the child's stdout/stderr write order.
-        // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
-        // of the calling session's through scripts/lease (#1015).
-        result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...process.env, ...reported?.env }, stdio: ['ignore', descriptor, descriptor] });
-        output = readFileSync(log, 'utf8').trim();
-        results = testsOf([command, ...args], cwd, { report, output, status: result.status });
-      } catch (error) {
-        result = { status: null, error };
-      } finally {
+    for (const lane of selected) {
+      const started = performance.now();
+      console.log(`RUN ${lane.name}`);
+      let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
+      const tree = exactTree(cwd), tests = [], unproven = [], listedSkips = [];
+      for (const [command, ...args] of lane.commands) {
+        let directory, descriptor, result, results, output = '';
         try {
-          if (descriptor !== undefined) closeSync(descriptor);
-          if (directory) rmSync(directory, { recursive: true, force: true });
+          directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
+          const log = join(directory, 'output'), report = join(directory, 'report');
+          const reported = reporting([command, ...args], report);
+          if (reported && !binaries && !binaryError) {
+            binaries = mkdtempSync(join(tmpdir(), 'deep-lane-binaries-'));
+            try {
+              const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
+              watchBinaries(binaries);
+              const files = selected.flatMap((lane) => lane.commands).flatMap((command) => commandFiles(cwd, command));
+              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files));
+            } catch (error) { binaryError = error; }
+          }
+          if (reported && binaryError) throw binaryError;
+          descriptor = openSync(log, 'w', 0o600);
+          // One shared descriptor preserves the child's stdout/stderr write order.
+          // Through the machine's throttle table, by its class (docs/parallel-proof.md, section 6), and under a cpu.slot
+          // of the calling session's through scripts/lease (#1015).
+          result = spawnSync(process.execPath, [throttle, throttleClass([command, ...args]), '--wait', '30', '--', leaseScript, ...reported?.command ?? [command, ...args]], { cwd, env: { ...environment, ...reported?.env, ...reported && binaries ? { DEEP_BIN_DIR: join(binaries, 'bin') } : {} }, stdio: ['ignore', descriptor, descriptor] });
+          output = readFileSync(log, 'utf8').trim();
+          results = testsOf([command, ...args], cwd, { report, output, status: result.status });
         } catch (error) {
           result = { status: null, error };
+        } finally {
+          try {
+            if (descriptor !== undefined) closeSync(descriptor);
+            if (directory) rmSync(directory, { recursive: true, force: true });
+          } catch (error) {
+            result = { status: null, error };
+          }
         }
+        if (output) console.log(output);
+        const run = readRun(results, result.status, cwd, timed);
+        tests.push(...run.tests);
+        unproven.push(...run.unsure);
+        listedSkips.push(...run.covered);
+        let found = run.found;
+        if (result.status !== 0 && !run.explained) {
+          const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
+          // A test run's first error is its first failing test, as its runner's report names it: an output line can't
+          // stand in, since a coloured assertion misses the pattern and a line the lease prints matches the fallback (#12).
+          const failed = results?.failures?.find(({ state }) => state === 'FAIL');
+          const error = result.error?.message
+            ?? (failed && `${failed.id}${failed.message ? `: ${failed.message}` : ''}`)
+            ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
+            ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
+            ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
+          // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
+          // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
+          const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
+          found = { state: state ?? (result.error ? 'BLOCKED' : 'FAIL'), error: rest ?? error };
+        }
+        if (stands(found, failure)) failure = found;
       }
-      if (output) console.log(output);
-      const run = readRun(results, result.status, cwd, timed);
-      tests.push(...run.tests);
-      unproven.push(...run.unsure);
-      listedSkips.push(...run.covered);
-      let found = run.found;
-      if (result.status !== 0 && !run.explained) {
-        const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
-        // A test run's first error is its first failing test, as its runner's report names it: an output line can't
-        // stand in, since a coloured assertion misses the pattern and a line the lease prints matches the fallback (#12).
-        const failed = results?.failures?.find(({ state }) => state === 'FAIL');
-        const error = result.error?.message
-          ?? (failed && `${failed.id}${failed.message ? `: ${failed.message}` : ''}`)
-          ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
-          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
-          ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
-        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
-        // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
-        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
-        found = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
+      const elapsed = ((performance.now() - started) / 1000).toFixed(2);
+      for (const { id, note, reason } of listedSkips) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
+      const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
+      const lines = unproven.map(({ id, state, message }) => `  ${state} ${id}${message ? `: ${message}` : ''}\n`).join('');
+      if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
+      else console.log(`PASS ${lane.name} (${elapsed} s)`);
+      try {
+        if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests);
+      } catch (error) {
+        // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
+        if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
+        else failures.push(`BLOCKED ${lane.name}: no evidence record: ${error.message}\n  Fix: Clear what that names, then run the lane again.`);
       }
-      if (stands(found, failure)) failure = found;
     }
-    const elapsed = ((performance.now() - started) / 1000).toFixed(2);
-    for (const { id, note, reason } of listedSkips) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
-    const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
-    const lines = unproven.map(({ id, state, message }) => `  ${state} ${id}${message ? `: ${message}` : ''}\n`).join('');
-    if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
-    else console.log(`PASS ${lane.name} (${elapsed} s)`);
-    try {
-      if (tree !== null) writeRecord(lane.name, failure?.state ?? 'PASS', tree, tests);
-    } catch (error) {
-      // A lane that FAILed, or read INVALID or BLOCKED, keeps its one verdict: the missing record outranks only less.
-      if (failure && failure.state !== 'INCONCLUSIVE') console.log(`NOTE ${lane.name}: no evidence record: ${error.message}`);
-      else failures.push(`BLOCKED ${lane.name}: no evidence record: ${error.message}\n  Fix: Clear what that names, then run the lane again.`);
+  } finally {
+    if (binaries) rmSync(binaries, { recursive: true, force: true });
+    if (issues) {
+      delete process.env.DEEP_OPEN_ISSUES;
+      rmSync(issues, { recursive: true, force: true });
     }
-  }
-  if (issues) {
-    delete process.env.DEEP_OPEN_ISSUES;
-    rmSync(issues, { recursive: true, force: true });
   }
   for (const failure of failures) console.log(failure);
   return failures.length ? 1 : 0;

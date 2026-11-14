@@ -1,19 +1,23 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { accessSync, constants, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
-import { afterAll, beforeAll, beforeEach, expect } from 'vitest';
+import { afterAll, beforeAll, expect } from 'vitest';
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** The checkout root (tests/acceptance/374 is three levels down). */
+/** The checkout root (this folder is three levels down). */
 export const REPO = join(HERE, '..', '..', '..');
-/** #391's proof surface, extended by #373 (`raster`, `geometry`) and read here: `check`, `look` and `raster`. */
-export const RENDER_BIN = join(REPO, 'target', 'debug', process.platform === 'win32' ? 'deep-canvas-render.exe' : 'deep-canvas-render');
+const suppliedBinDir = process.env.DEEP_BIN_DIR;
+const binaryName = process.platform === 'win32' ? 'deep-canvas-render.exe' : 'deep-canvas-render';
+// With no supplied binary, each Vitest file builds directly into its own target, never build-to-copy.
+const privateTarget = suppliedBinDir === undefined ? mkdtempSync(join(tmpdir(), 'deep-374-target-')) : undefined;
+/** #391/#373's real check/raster surface, from this run's binary directory only. */
+export const RENDER_BIN = join(suppliedBinDir === undefined ? join(privateTarget!, 'debug') : resolve(suppliedBinDir), binaryName);
 export const RENDER_BIN_NAME = 'deep-canvas-render';
 
 // ---------------------------------------------------------------------------------------------------
@@ -66,19 +70,32 @@ export function holdsString(value: JsonValue | undefined, s: string): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// The binary: built once per file, driven by JSON lines on stdin, one JSON line out per line in.
+// The binary: consume DEEP_BIN_DIR without cargo, or build once per file into private storage.
 
-export function buildBinary(name: string): string {
-  const run = spawnSync('cargo', ['build', '--locked', '--bin', name], { cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (run.error) return `cargo could not run: ${run.error.message}`;
-  return run.status === 0 ? '' : `cargo build --bin ${name} failed:\n${run.stderr.split('\n').filter((l) => !/Blocking waiting/.test(l)).join('\n')}`;
-}
-
-/** Builds the binary once per file and fails every test of the file when it can't be built. */
+/** Missing/empty supplied directories never fall back to a build or the checkout's target. */
 export function useRenderBinary(): void {
-  let error = '';
-  beforeAll(() => { error = buildBinary(RENDER_BIN_NAME); }, 900_000);
-  beforeEach(() => { expect(error, `the binary builds: ${RENDER_BIN_NAME}`).toBe(''); });
+  afterAll(() => { if (privateTarget !== undefined) rmSync(privateTarget, { recursive: true, force: true }); });
+  beforeAll(() => {
+    if (suppliedBinDir !== undefined && suppliedBinDir.trim() === '') {
+      throw Error('BLOCKED: DEEP_BIN_DIR is empty');
+    }
+    if (privateTarget !== undefined) {
+      const env = { ...process.env };
+      delete env.CARGO_TARGET_DIR;
+      const run = spawnSync('cargo', ['build', '--locked', '--bin', RENDER_BIN_NAME, '--target-dir', privateTarget], {
+        cwd: REPO, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+      });
+      if (run.error || run.status !== 0) {
+        throw Error(`BLOCKED: cargo build ${RENDER_BIN_NAME}: ${run.error?.message ?? run.stderr}`);
+      }
+    }
+    try {
+      if (!statSync(RENDER_BIN).isFile()) throw Error('not a regular file');
+      accessSync(RENDER_BIN, constants.X_OK);
+    } catch {
+      throw Error(`BLOCKED: ${RENDER_BIN_NAME} missing or not executable in ${privateTarget === undefined ? 'DEEP_BIN_DIR' : 'the private target'}`);
+    }
+  }, 900_000);
 }
 
 /** Pipes every input line into one run (one process) of `deep-canvas-render <subcommand>`. */
