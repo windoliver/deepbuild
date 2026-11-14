@@ -985,6 +985,8 @@ class LocalSupervisor implements Supervisor {
     await this.append('run.cleaned', { run, outcome, left, stopped: [...stopped] }, run);
     r.state = 'cleaned';
     r.cleaned = { run, outcome, left, stopped: [...stopped] };
+    // A timed scan that began while the run was still being cleaned is waited out: no helper of it outlives the cleanup.
+    await this.scanning;
     // Last in the table: the window keeps the newest cleaned, however long ago each started.
     this.runs.delete(r.run);
     this.runs.set(r.run, r);
