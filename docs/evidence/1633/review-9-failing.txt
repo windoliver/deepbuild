@@ -1,0 +1,60 @@
+ RUN  v5.0.5 /tmp/dh1633v2
+ ❯ packages/hub/test/reopened-items.test.ts (10 tests | 2 failed | 8 skipped) 96179ms
+   ❯ #1633 review rounds: a reopened review note and its ask (10)
+     × a reopened note whose ask passed its deadline after the reopening gets no new ask when the session's own account resolves its thread and it is unresolved again 75051ms
+     × a reopened note names the session's own account when it resolves the thread again, whoever resolved it before the reviewer closed it 20912ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/reopened-items.test.ts > #1633 review rounds: a reopened review note and its ask > a reopened note whose ask passed its deadline after the reopening gets no new ask when the session's own account resolves its thread and it is unresolved again
+AssertionError: it had its ask, and the session resolving its thread since changes nothing you could answer, so the same question never reaches you twice: expected [ { v: 1, …(10) } ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   {
++     "actor": "you",
++     "data": {
++       "deadline": 1794373352396,
++       "default": "keep",
++       "fallback": "you",
++       "key": "3ddc14e5b18d8763fd43c3a3617bac9bdd56c25ddef1de124d0ea3cf8a552ed4",
++       "kind": "exception",
++       "options": [
++         {
++           "decision": "none",
++           "id": "accept",
++           "label": "Accept it: close it without a fix",
++         },
++         {
++           "decision": "none",
++           "id": "keep",
++           "label": "Keep it open",
++         },
++       ],
++       "owner": "you",
++       "pinned_to": {
++         "kind": "commit",
++         "ref": "d9699208cbb7d52a8794e9dfa65b033d763fd55a",
++       },
++       "provisional": false,
++       "question": "Accept this review note on the PR of task:item7 without a fix, so the PR may say Closes? Review thread PRRT_kwDOAcme1633r on https://github.com/acme/shop/pull/21 (src/auth.js:3), https://github.com/acme/shop/pull/21#discussion_r16339, first comment by maya: “Name the reason a token was rejected in the 401 body.”",
++       "recommended": "keep",
++     },
++     "evidence": [],
++     "id": "01M74FQ4BCTFV0M3R0H22GDP2H",
++     "kind": "ask.created",
++     "log_pos": 336,
++     "scope": "you",
++     "ts": 1794373292396,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+ ❯ packages/hub/test/reopened-items.test.ts:197:180
+    195|     // An ask is raised apart from the claim: give one the time it wou…
+    196|     const last = await settle(hub, () => false, 5000);
+    197|     expect(asksForT(last, defaulted), 'it had its ask, and the session…
+       |                                                                                                                                                                                    ^
+    198|   }, 900_000);
+    199|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯

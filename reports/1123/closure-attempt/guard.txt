@@ -1,0 +1,19 @@
+FAIL guard: scripts/affected.mjs: the proof lanes' own code changed (commit 76ddd340bd04)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/lanes.mjs: the proof lanes' own code changed (commit 76ddd340bd04)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/proof-binaries.mjs: the proof lanes' own code changed (commit 76ddd340bd04)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/proof-runs.mjs: the proof lanes' own code changed (commit 76ddd340bd04)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/lanes.mjs: the proof lanes' own code changed (commit 33a859a1ff43)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/lanes.mjs: the proof lanes' own code changed (commit 63e11e81a883)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/proof-bin-build.mjs: the proof lanes' own code changed (commit 63e11e81a883)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/proof-binaries.mjs: the proof lanes' own code changed (commit 63e11e81a883)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+FAIL guard: scripts/proof-bin-build.mjs: the proof lanes' own code changed (uncommitted changes)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 865.5 s
