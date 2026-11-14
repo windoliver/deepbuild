@@ -44,6 +44,17 @@
   let moved = null;
   const stillOf = (s) => (moved === 'sample' && s.samples.length ? s.samples[sampled].still : moved === 'orbit' && s.orbit.length ? s.orbit[turned].still : s.still);
   const edgesOf = (s) => s.edges.map((id) => edges.get(id));
+  // Every state's still decoded up front, so a landing never waits on one.
+  const decoded = new Map();
+  const ready = (src) => {
+    if (!decoded.has(src)) {
+      const image = new Image();
+      image.src = src;
+      decoded.set(src, image.decode().catch(() => undefined));
+    }
+    return decoded.get(src);
+  };
+  manifest.states.forEach((s) => ready(s.still));
   const edgeTo = (s, control, value) => edgesOf(s).find((e) => e.control === control && same(e.value, value)) || null;
 
   // A control: its own widget, by its role, where the page lists it; the sampled slider; any
@@ -158,10 +169,16 @@
     if (said.length) live.textContent = said.join('. ');
   }
 
-  function land(edge) {
+  // The clip's last frame stays on screen until the next state's still has decoded in its place,
+  // so a landing never shows the state it left.
+  async function land(edge) {
+    const to = states.get(edge.to);
+    await ready(stillOf(to));
+    still.src = stillOf(to);
+    await still.decode().catch(() => undefined);
     show(edge.to);
     html.removeAttribute('data-deep-edge');
-    announce(states.get(edge.from), states.get(edge.to));
+    announce(states.get(edge.from), to);
     busy = false;
   }
 

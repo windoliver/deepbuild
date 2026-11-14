@@ -158,14 +158,13 @@ pub fn escape(text: &str) -> String {
 
 /// The index page: its content policy, the title, the player's styles and script, and the
 /// manifest as escaped text in a template the player reads and never runs (so the page also
-/// opens from a file, where a request for `manifest.json` is refused). `<html>` names the first
-/// state from the first paint.
+/// opens from a file, where a request for `manifest.json` is refused). `<html>` names no state
+/// until the player shows one, so a reader that waits for `data-deep-state` finds the page built.
 pub fn index_html(doc: &Value, manifest: &Value) -> String {
     let title = escape(doc["title"].as_str().unwrap_or("DeepBuild piece"));
-    let start = escape(manifest["start"].as_str().unwrap_or_default());
     let data = escape(&manifest.to_string());
     format!(
-        "<!doctype html>\n<html lang=\"en\" data-deep-state=\"{start}\">\n<head>\n<meta charset=\"utf-8\">\n\
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
          <meta http-equiv=\"Content-Security-Policy\" content=\"{POLICY}\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
          <title>{title}</title>\n<link rel=\"stylesheet\" href=\"player/player.css\">\n</head>\n<body>\n\
