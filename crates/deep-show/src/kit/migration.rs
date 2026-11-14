@@ -387,7 +387,7 @@ fn param_set(
                 let (lo, hi) = (p.min.unwrap_or(-100.0), p.max.unwrap_or(100.0));
                 json!((rng.range(lo, hi) * 100.0).round() / 100.0)
             }
-            (ParamType::Json, _) if p.name == "box" => json!([10, 10, 40, 30]),
+            (ParamType::Json(_), _) if p.name == "box" => json!([10, 10, 40, 30]),
             _ => p.default.clone(),
         };
         if value.is_null() {

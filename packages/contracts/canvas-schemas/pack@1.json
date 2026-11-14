@@ -277,7 +277,7 @@
       "properties": {
         "op": {
           "type": "string",
-          "enum": ["mark", "item", "builder", "recipe"],
+          "enum": ["mark", "item", "builder", "recipe", "cue"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a core release that adds a map the document holds",

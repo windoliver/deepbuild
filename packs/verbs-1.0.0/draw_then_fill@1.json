@@ -1,0 +1,29 @@
+{
+  "id": "verbs.draw_then_fill",
+  "version": "1.0",
+  "title": "Draw then fill",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's outline builds over the first half of its window, then its fill comes up from dark.",
+  "inputs": {},
+  "steps": {
+    "draw": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/ops/0/trim/end": 0
+        },
+        "until": 0.5
+      }
+    },
+    "fill": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/brightness": 0
+        },
+        "at": 0.5
+      }
+    }
+  }
+}

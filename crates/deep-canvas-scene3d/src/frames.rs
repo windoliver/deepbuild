@@ -115,7 +115,11 @@ impl Frames {
         })?;
         let scene = evaluate_compiled(map, &program, 0, look, labels, None, Default::default())?;
         let state = program.state();
-        let fast = fast_path(map, &program, &scene);
+        // #462: a look's motifs move items the fast path doesn't rewrite.
+        let moving = !look.motifs.is_empty() && map.get("motif_slots").is_some();
+        let fast = (!moving)
+            .then(|| fast_path(map, &program, &scene))
+            .flatten();
         let mut bounds = Vec::with_capacity(scene.layers.iter().map(|l| l.solids.len() * 8).sum());
         for l in &scene.layers {
             for s in &l.solids {
@@ -214,6 +218,10 @@ impl Frames {
             let solid = &mut self.scene.layers[s.layer].solids[s.index];
             changed |= solid.model != model;
             solid.model = model;
+            // #462: a mask's volume moves with its solid.
+            if let Some(v) = self.scene.volumes.get_mut(&solid.id) {
+                v.1 = model;
+            }
         }
         for &(field, slot) in &cam.fields {
             let v = slots[slot];
@@ -419,6 +427,31 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     if spec.fit.is_some() {
         return None;
     }
+    let moves = |c: usize| {
+        program.writes(c * TRANSFORM..(c + 1) * TRANSFORM) || overrides.iter().any(|o| o.item == c)
+    };
+    // #462: a mask's volume moves with its solid, which this path rewrites; a hidden mask that
+    // moves, or whose parent does, is evaluated whole.
+    for id in scene.volumes.keys() {
+        if scene
+            .layers
+            .iter()
+            .any(|l| l.solids.iter().any(|s| &s.id == id))
+        {
+            continue;
+        }
+        let mut at = Some(id.as_str());
+        for _ in 0..64 {
+            let Some(i) = at else { break };
+            if index(i).is_some_and(moves) {
+                return None;
+            }
+            at = items
+                .get(i)
+                .and_then(|v| v.get("parent"))
+                .and_then(Value::as_str);
+        }
+    }
     let mut solids = Vec::new();
     let mut corner = 0;
     // A solid's chain, built here and copied out only for a solid that moves.
@@ -449,10 +482,6 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
             }
             let size =
                 crate::scene::size3(item.get("params").and_then(|p| p.get("size")), [1.0; 3])?;
-            let moves = |c: usize| {
-                program.writes(c * TRANSFORM..(c + 1) * TRANSFORM)
-                    || overrides.iter().any(|o| o.item == c)
-            };
             if !chain.iter().any(|&c| moves(c)) {
                 continue;
             }

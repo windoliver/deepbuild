@@ -19,6 +19,8 @@ use crate::Planted;
 
 pub const PAGE: u64 = 65_536;
 const MIB: u64 = 1024 * 1024;
+/// The most memory a logic item's budget may give it.
+pub const MAX_MEMORY: u64 = 64 * MIB;
 /// The most entries a control hands a step (Logic `logic@1`: Semantics); any more wait.
 pub const PER_STEP: usize = 16;
 /// A control's slot: a u32 count and 4 zero bytes, then each entry as a u32 player, 4 zero
@@ -319,6 +321,140 @@ pub struct Item {
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
+    pub saves: Option<Saves>,
+}
+
+/// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
+/// its write region, and its migrations.
+#[derive(Clone, Debug)]
+pub struct Saves {
+    pub slots: i32,
+    pub request: u32,
+    pub ends: Option<u32>,
+    pub migrate: Vec<Migration>,
+}
+
+/// A declared migration (Logic: saves across changes): the save's `{layout, content, modules}` it
+/// migrates from, its program by asset ID, rewritten at check in the role `migration`, and the
+/// remap table's bytes.
+#[derive(Clone, Debug)]
+pub struct Migration {
+    pub from: [String; 3],
+    pub by: String,
+    pub bytes: Vec<u8>,
+    pub remap: Option<Vec<u8>>,
+}
+
+/// A migration's fuel: 8 per byte of the old and the new memories together, at least 10,000,000.
+pub fn migration_fuel(bytes: u64) -> i64 {
+    (8 * bytes as i64).max(10_000_000)
+}
+
+/// The item's `saves`, checked: slots 1 to 8, `request` and `ends` its own i32 arrays, and each
+/// migration's program under the one subset with a budget scaled to memory.
+fn saves_of(
+    v: &Value,
+    layout: &Layout,
+    memory: u64,
+    asset: &dyn Fn(&str) -> Option<Vec<u8>>,
+    planted: &Planted,
+) -> Result<Saves, Value> {
+    let bad = |what: String| refusal("saves", what, json!({"field": "saves"}));
+    if let Some(k) = v
+        .as_object()
+        .into_iter()
+        .flat_map(Map::keys)
+        .find(|k| !["slots", "request", "ends", "migrate"].contains(&k.as_str()))
+    {
+        return Err(bad(format!("saves has no field {k}")));
+    }
+    let slots = v
+        .get("slots")
+        .map_or(Some(1), Value::as_i64)
+        .filter(|n| (1..=8).contains(n))
+        .ok_or_else(|| bad("saves.slots is 1 to 8".into()))?;
+    let array = |k: &str| -> Result<Option<u32>, Value> {
+        let Some(n) = v.get(k) else { return Ok(None) };
+        layout
+            .entries
+            .iter()
+            .find(|e| e.region == "writes" && n.as_str() == Some(&e.name) && e.ty == "i32")
+            .map(|e| Some(e.offset))
+            .ok_or_else(|| bad(format!("saves.{k} names one of the item's own i32 arrays")))
+    };
+    let request = array("request")?
+        .ok_or_else(|| bad("saves.request names the item's request array".into()))?;
+    let ends = array("ends")?;
+    let missing = |sha: &str| {
+        refusal(
+            "asset",
+            format!("the piece carries no migration asset {sha}"),
+            json!({"asset": sha}),
+        )
+    };
+    let mut migrate = Vec::new();
+    let list = match v.get("migrate") {
+        None => &[][..],
+        Some(Value::Array(a)) => a.as_slice(),
+        Some(_) => return Err(bad("saves.migrate is a list of migrations".into())),
+    };
+    for m in list {
+        let from = ["layout", "content", "modules"].map(|k| {
+            m.get("from")
+                .and_then(|f| f.get(k))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+        let ([Some(layout), Some(content), Some(modules)], Some(by)) =
+            (from, m.get("by").and_then(Value::as_str))
+        else {
+            return Err(bad(
+                "a migration names from: {layout, content, modules} and its program by asset ID"
+                    .into(),
+            ));
+        };
+        let given = asset(by).ok_or_else(|| missing(by))?;
+        let remap = match m.get("remap").and_then(Value::as_str) {
+            None => None,
+            Some(r) => Some(asset(r).ok_or_else(|| missing(r))?),
+        };
+        // The migration's budget: memory the new memory plus the old plus 4 MiB, stack 256 KiB.
+        // The old memory is a save's, so check admits the largest one; the run holds it to the save's.
+        let budget = Budget {
+            fuel: migration_fuel(2 * memory),
+            stack: 262_144,
+            memory: memory + MAX_MEMORY + 4 * MIB,
+        };
+        let sandbox = Sandbox {
+            planted: deep_sandbox_wasmtime::service::Planted {
+                rewrite: planted.rewrite,
+                ..Default::default()
+            },
+        };
+        let bytes = match sandbox.rewrite(&given, "migration", &budget) {
+            Ok((out, _)) => out.bytes,
+            Err(Ok(r)) => {
+                return Err(refusal(
+                    "migration",
+                    format!("the migration {by} is outside the one subset"),
+                    json!({"asset": by, "refusals": refusals_json(&r)}),
+                ))
+            }
+            Err(Err(e)) => return Err(refusal("migration", e, json!({"asset": by}))),
+        };
+        migrate.push(Migration {
+            from: [layout, content, modules],
+            by: by.into(),
+            bytes,
+            remap,
+        });
+    }
+    Ok(Saves {
+        slots: slots as i32,
+        request,
+        ends,
+        migrate,
+    })
 }
 
 impl Item {
@@ -360,6 +496,9 @@ impl Item {
     }
 }
 
+/// The fixture canvas module whose carried state is of the `same_machine` class (#534).
+pub const MACHINE: &str = "same_machine.counter@1";
+
 /// A piece: its seed, controls, tour and checked logic items in order.
 #[derive(Clone, Debug)]
 pub struct Piece {
@@ -370,6 +509,10 @@ pub struct Piece {
     pub controls: BTreeMap<String, (u32, &'static str)>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
+    /// The `same_machine.counter@1` items, by ID.
+    pub machine: Vec<String>,
+    /// The document by hash, which a save names but isn't bound to.
+    pub document: String,
 }
 
 /// An item's immutable i32 global's value, by its export name.
@@ -445,7 +588,7 @@ fn regions_digest(bytes: &[u8]) -> Result<Option<u64>, String> {
 }
 
 /// The program's one memory, in bytes.
-fn memory_bytes(bytes: &[u8]) -> u64 {
+pub fn memory_bytes(bytes: &[u8]) -> u64 {
     for payload in Parser::new(0).parse_all(bytes) {
         if let Ok(Payload::MemorySection(s)) = payload {
             if let Some(Ok(m)) = s.into_iter().next() {
@@ -487,6 +630,7 @@ struct Declared {
     ring: u64,
     assets: Vec<String>,
     links: Vec<(String, String)>,
+    saves: Option<Value>,
     emits: Vec<Emit>,
     /// The item's fields as given, for its bake key.
     given: String,
@@ -595,6 +739,7 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "checkpoint",
             "assets",
             "links",
+            "saves",
             "emits",
         ]
         .contains(&k.as_str())
@@ -738,7 +883,7 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         }
     };
     let fuel = num("fuel", 1_000_000, 10_000_000)? as i64;
-    let memory = num("memory", 4, 64)? * MIB;
+    let memory = num("memory", 4, MAX_MEMORY / MIB)? * MIB;
     let stack = num("stack", 64, 256)? as i32 * 1024;
     let every = match get(params.get("checkpoint"), "every") {
         None => 60,
@@ -784,6 +929,7 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         every,
         ring,
         assets,
+        saves: params.get("saves").cloned(),
         emits,
         given: Value::Object(params.clone()).to_string(),
     })
@@ -830,7 +976,17 @@ pub fn check_in(
         .ok_or_else(bad)?;
     // Every item's declared fields first, so a read can name a later item's array.
     let mut decls = Vec::new();
+    let mut machine = Vec::new();
     for (id, item) in items_in {
+        // The fixture module whose carried state is same-machine: a counter of the steps it's seen.
+        if item.get("kind").and_then(Value::as_str) == Some(MACHINE)
+            && item
+                .get("params")
+                .is_none_or(|p| p.as_object().is_some_and(Map::is_empty))
+        {
+            machine.push(id.clone());
+            continue;
+        }
         if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
             return Err(logic_refused(
                 id,
@@ -1143,6 +1299,18 @@ pub fn check_in(
             }
             Ok(_) => {}
         }
+        let saves = match d
+            .saves
+            .as_ref()
+            .map(|v| saves_of(v, &layout, memory, &asset, planted))
+        {
+            None => None,
+            Some(Ok(s)) => Some(s),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
@@ -1190,9 +1358,26 @@ pub fn check_in(
             linked,
             link_ns,
             fixtures: BTreeMap::new(),
+            saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
         });
+    }
+    // A save holds every item at one instant, so a piece with saves steps at one rate.
+    if items.iter().any(|i| i.saves.is_some()) && !items.windows(2).all(|w| w[0].step == w[1].step)
+    {
+        let id = items
+            .iter()
+            .find(|i| i.saves.is_some())
+            .map_or("", |i| i.id.as_str());
+        return Err(logic_refused(
+            id,
+            vec![refusal(
+                "saves",
+                "a piece with saves has every logic item at one step rate".into(),
+                json!({"field": "saves"}),
+            )],
+        ));
     }
     Ok(Piece {
         seed,
@@ -1200,21 +1385,30 @@ pub fn check_in(
         controls,
         tour: piece.get("tour").cloned(),
         items,
+        machine,
+        document: hash(piece.to_string().as_bytes()),
     })
 }
 
 /// Each active data segment's bytes in memory, `[start, end)`.
 fn data_segments(bytes: &[u8]) -> Vec<(u64, u64)> {
+    segments(bytes)
+        .into_iter()
+        .map(|(_, at, b)| (at, at + b.len() as u64))
+        .collect()
+}
+
+/// Each active data segment: its index in the data section, its address and its bytes.
+pub fn segments(bytes: &[u8]) -> Vec<(usize, u64, Vec<u8>)> {
     let mut out = Vec::new();
     for payload in Parser::new(0).parse_all(bytes) {
         if let Ok(Payload::DataSection(s)) = payload {
-            for d in s.into_iter().flatten() {
+            for (i, d) in s.into_iter().flatten().enumerate() {
                 if let wasmparser::DataKind::Active { offset_expr, .. } = d.kind {
                     if let Ok(Operator::I32Const { value }) =
                         offset_expr.get_operators_reader().read()
                     {
-                        let start = u64::from(value as u32);
-                        out.push((start, start + d.data.len() as u64));
+                        out.push((i, u64::from(value as u32), d.data.to_vec()));
                     }
                 }
             }

@@ -56,6 +56,7 @@ mod present;
 mod print;
 mod probe;
 mod query;
+mod data_hash;
 mod registries;
 mod retired;
 mod ring;
@@ -722,6 +723,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
                 paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
+                data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
             })));
         }
@@ -1256,6 +1258,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
                 || deep_canvas_motion::module::PLANTED.contains(p)
+                || deep_canvas_motion::cues::planted(p)
                 || *p == deep_canvas_motion::lengths::ONE_VALUE
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
@@ -1989,6 +1992,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
             },
             if cfg!(feature = "test-graph-tie-by-registration") {
                 deep_canvas_graph::module::tie_by_registration()
+            } else if cfg!(feature = "test-graph-layout-no-cost") {
+                // #1417: the graph@1 whose layout declares no cost.
+                deep_canvas_graph::module::layout_no_cost()
             } else {
                 deep_canvas_graph::module::module()
             },

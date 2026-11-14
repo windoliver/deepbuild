@@ -1,0 +1,28 @@
+{
+  "id": "verbs.shrink_twin",
+  "version": "1.0",
+  "title": "Shrink, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of shrink: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "shrink": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/scale": [
+            0.5,
+            0.5,
+            "now[2]"
+          ],
+          "at/pos": [
+            "cx",
+            "cy",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}
