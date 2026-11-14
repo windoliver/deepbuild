@@ -9,8 +9,6 @@
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -573,24 +571,43 @@ export function solidPng(w: number, h: number, rgb: [number, number, number]): B
 }
 
 // ---------------------------------------------------------------------------------------------------
-// A local HTTP listener: what #105's send delivers, and the canary that proves the browser's networking is off.
+// A local HTTP listener: what #105's send delivers, and the canary that proves the browser's networking is off. It
+// runs in a child process of its own, as #105's suite runs its listener, since `runShow`'s spawnSync blocks this
+// process's event loop while `deep-show run` sends: each request is logged to a file before it is answered, and the
+// child is stopped by its PID.
 
 export interface Got { method: string; path: string; sha: string; length: number }
 export class Listener {
-  private server: Server | null = null;
-  private got: Got[] = [];
+  private child: ChildProcess | null = null;
+  private dir = '';
+  private log = '';
+  /** Starts it; resolves to its port. Each request appends `<method> <path> <sha256 of body> <length>` to the log. */
   async start(): Promise<number> {
-    this.server = createServer((req, res) => {
-      const parts: Buffer[] = [];
-      req.on('data', (c: Buffer) => parts.push(c));
-      req.on('end', () => { const body = Buffer.concat(parts); this.got.push({ method: req.method ?? '', path: req.url ?? '', sha: sha256(body), length: body.length }); res.writeHead(200); res.end('ok'); });
+    this.dir = mkdtempSync(join(tmpdir(), 'deep-169-listener-'));
+    this.log = join(this.dir, 'requests.log');
+    const code = `const fs=require('fs'),c=require('crypto');const s=require('http').createServer((q,r)=>{const b=[];q.on('data',d=>b.push(d));q.on('end',()=>{const body=Buffer.concat(b);fs.appendFileSync(${JSON.stringify(this.log)},q.method+' '+q.url+' '+c.createHash('sha256').update(body).digest('hex')+' '+body.length+'\\n');r.end('ok')})});s.listen(0,'127.0.0.1',()=>console.log(s.address().port));`;
+    const child = spawn(process.execPath, ['-e', code], { stdio: ['ignore', 'pipe', 'inherit'] });
+    this.child = child;
+    return new Promise((done, fail) => {
+      child.stdout!.once('data', (d: Buffer) => done(Number(String(d).trim())));
+      child.once('error', fail);
     });
-    await new Promise<void>((done) => this.server!.listen(0, '127.0.0.1', () => done()));
-    return (this.server.address() as AddressInfo).port;
   }
-  requests(): Got[] { return [...this.got]; }
-  clear(): void { this.got = []; }
-  async stop(): Promise<void> { const s = this.server; this.server = null; if (s) await new Promise<void>((done) => s.close(() => done())); }
+  requests(): Got[] {
+    if (!this.log || !existsSync(this.log)) return [];
+    return readFileSync(this.log, 'utf8').split('\n').filter(Boolean).map((l) => {
+      const [method, path, sha, length] = l.split(' ');
+      return { method: method!, path: path!, sha: sha!, length: Number(length) };
+    });
+  }
+  clear(): void { if (this.log) rmSync(this.log, { force: true }); }
+  async stop(): Promise<void> {
+    const child = this.child;
+    this.child = null;
+    if (child?.pid && child.exitCode === null) await new Promise<void>((done) => { child.once('exit', () => done()); child.kill(); });
+    if (this.dir) rmSync(this.dir, { recursive: true, force: true });
+    this.dir = ''; this.log = '';
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------
