@@ -28,6 +28,8 @@ import { forgeOf, type Root } from './paths.js';
 import { aboutPermission, type About } from './standing.js';
 
 import { Forge } from './forge.js';
+import { prCommands } from './pr-commands.js';
+import { resolve } from 'node:path';
 
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { Answers, answerText, type Answer } from './answers.js';
@@ -755,13 +757,27 @@ export class AnswerDelivery {
     }
     if (result) {
       const agent = this.options.state().live.get(meta.session)?.agent ?? meta.agent;
-      await this.options.judging().openedPr(meta.session, agent, result).catch(() => undefined);
+      await this.options.judging().openedPr(meta.session, agent, result);
       return `DeepBuild denied this: ${found.label} is the send the turn that was cut off already made. Its result: pull request ${result}. Go on from there; don't open it again.`;
     }
     // Its outcome can't be read from here: denied with that, until a different call shows the agent went on or checked;
     // a retry right after a late reply is denied again, so a hold that ran out never lets the send through.
     found.denied = true;
     return `DeepBuild denied this: ${found.label} is the send the turn that was cut off started with no recorded end, so its outcome is unknown. Check whether it went through before sending again; only a call you've checked, or a different one, runs.`;
+  }
+
+  /** Record a completed PR call. A joined call's output is not proof of its URL (#2064). */
+  async prAfter(meta: HookMeta, command: unknown): Promise<void> {
+    const pr = typeof command === 'string' ? prCommands(command).find((p) => p.verb === 'create') : undefined;
+    const url = meta.pr ?? (pr ? await this.pullFor({ ...meta, cwd: resolve(meta.cwd, pr.folder) }).catch((error: unknown) => {
+      // This call already ran: keep its tool.after even if attribution is unavailable. Gate reads still throw.
+      process.stderr.write(`deep hub: PR lookup failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      return undefined;
+    }) : undefined);
+    if (!url) return;
+    const live = this.options.state().live.get(meta.session);
+    await this.options.judging().openedPr(meta.session, live?.agent ?? meta.agent, url);
+    if (live) { live.claimedInTurn = true; live.prOpened = url; }
   }
 
   /** The pull request the forge holds for the session's branch, or null when it holds none, or undefined when it can't be read. */
@@ -777,7 +793,7 @@ export class AnswerDelivery {
       return forge.pullFor(repo, branch);
     };
     // Well inside the gate's hold, so the reply is never late for this: past it the result is unknown.
-    return Promise.race([lookup().catch(() => undefined), new Promise<undefined>((done) => setTimeout(() => done(undefined), PULL_LOOKUP_MS).unref())]);
+    return Promise.race([lookup(), new Promise<undefined>((done) => setTimeout(() => done(undefined), PULL_LOOKUP_MS).unref())]);
   }
 
   /**

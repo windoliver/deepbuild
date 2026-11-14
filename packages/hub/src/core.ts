@@ -1763,12 +1763,9 @@ export class Core {
     const foreign = FOREIGN.has(meta.agent);
     for (const draft of drafts) {
       const data = draft.data;
-      // The pull request a `gh pr create` call opened, read once off its own PostToolUse (#83).
-      if (draft.kind === 'tool.after' && meta.pr) {
-        await this.judging.openedPr(meta.session, live.agent, meta.pr);
-        live.claimedInTurn = true;
-        live.prOpened = meta.pr;
-      }
+      // A joined call's PR is found on the forge, never in the shell's output (#2064).
+      // The lone-command hook retains its #83 reading; joined calls use the branch lookup.
+      if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
@@ -2161,7 +2158,8 @@ export class Core {
     }
     // A pull request says Closes only when every requirement of the issue's task passed (#322; design: At the claim).
     if (call.pr && call.command && meta.session && !FOREIGN.has(meta.agent)) {
-      const deny = await this.judging.closesGate(meta.session, call.command).catch(() => undefined);
+      const deny = await this.judging.closesGate(meta.session, call.command, meta.cwd)
+        .catch((error: unknown) => `DeepBuild denied this: the Closes rule failed: ${error instanceof Error ? error.message : String(error)}`);
       if (deny) return { deny, rule: "the gate's Closes rule (#322)" };
       if (!call.classes.length && !call.named && !call.mcp && !call.decided?.length && call.stage === undefined && !call.screen && !call.resend) return {};
     }
@@ -2174,7 +2172,8 @@ export class Core {
     // hooks before this one go first, so a resume's start has said which sends its cut-off turn made (#1033).
     if (call.resend) {
       await this.queue(async () => undefined);
-      const deny = await this.delivery.resent(meta).catch(() => undefined);
+      const deny = await this.delivery.resent(meta)
+        .catch((error: unknown) => `DeepBuild denied this: the repeated-send rule failed: ${error instanceof Error ? error.message : String(error)}`);
       if (deny) return { deny, rule: "the gate's repeated-send rule (#85)" };
       if (!call.classes.length && !call.named && !call.mcp && !call.decided?.length && call.stage === undefined) return {};
     }

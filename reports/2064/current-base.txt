@@ -15,9 +15,9 @@ PASS: AC4 #2064.ab3e665d with every requirement passed, gh pr create and gh pr e
 
 FAIL: the Closes rule on a task with R2 unproven › AC2 #2064.9e9dae21 a body file, --fill and an edit's body file saying Closes #7 or Fixes #7 are each denied naming R2
 each of these must be denied naming R2:
-body file: `gh pr create --title t --body-file pr.md` was allowed: 
-body file after a push: `git push -u origin b && gh pr create --title t --body-file pr.md` was allowed: 
-edit with a body file: `gh pr edit 3 --body-file pr.md` was allowed: 
+body file: `gh pr create --title t --body-file pr.md` was allowed:
+body file after a push: `git push -u origin b && gh pr create --title t --body-file pr.md` was allowed:
+edit with a body file: `gh pr edit 3 --body-file pr.md` was allowed:
 fill, one commit saying Fixes #7: `gh pr create --fill` was allowed: : expected [ …(4) ] to deeply equal []
 
 FAIL: AC7 #2064.20caa9d6 against a stand-in forge, the pull request a joined git push && gh pr create opened is recorded as the session's, with its link, though the command's output holds none
