@@ -1,0 +1,435 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2066/redraft/recorded-origin.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin scheduled: its rule line appended learn.applied for target(s) ["rule:typeda9cfcd2f96c8"]: expected [ 'rule:typeda9cfcd2f96c8' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typeda9cfcd2f96c8",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:134:129
+    132|         }
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+       |                                                                                                                                 ^
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin scheduled: the open observer session's next prompt carried its rule (targets ["rule:typeda9cfcd2f96c8"]): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:135:169
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+       |                                                                                                                                                                         ^
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+    137|         const said = refusals(readings(root, sid).slice(before), origi…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin scheduled: after two prompts with the same rule line, the session's record says once that it was not saved, naming scheduled; it said []: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:138:202
+
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin session: its rule line appended learn.applied for target(s) ["rule:typede7675309aba8"]: expected [ 'rule:typede7675309aba8' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typede7675309aba8",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:134:129
+    132|         }
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+       |                                                                                                                                 ^
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin session: the open observer session's next prompt carried its rule (targets ["rule:typede7675309aba8"]): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:135:169
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+       |                                                                                                                                                                         ^
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+    137|         const said = refusals(readings(root, sid).slice(before), origi…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin session: after two prompts with the same rule line, the session's record says once that it was not saved, naming session; it said []: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:138:202
+
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin subagent: its rule line appended learn.applied for target(s) ["rule:typed5f87cad5347e"]: expected [ 'rule:typed5f87cad5347e' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed5f87cad5347e",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:134:129
+    132|         }
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+       |                                                                                                                                 ^
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin subagent: the open observer session's next prompt carried its rule (targets ["rule:typed5f87cad5347e"]): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:135:169
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+       |                                                                                                                                                                         ^
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+    137|         const said = refusals(readings(root, sid).slice(before), origi…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin subagent: after two prompts with the same rule line, the session's record says once that it was not saved, naming subagent; it said []: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:138:202
+
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin continuation: its rule line appended learn.applied for target(s) ["rule:typed14e0a11f5abd"]: expected [ 'rule:typed14e0a11f5abd' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed14e0a11f5abd",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:134:129
+    132|         }
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+       |                                                                                                                                 ^
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin continuation: the open observer session's next prompt carried its rule (targets ["rule:typed14e0a11f5abd"]): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:135:169
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+       |                                                                                                                                                                         ^
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+    137|         const said = refusals(readings(root, sid).slice(before), origi…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin continuation: after two prompts with the same rule line, the session's record says once that it was not saved, naming continuation; it said []: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:138:202
+
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin unknown: its rule line appended learn.applied for target(s) ["rule:typed893e040a44db"]: expected [ 'rule:typed893e040a44db' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed893e040a44db",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:134:129
+    132|         }
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+       |                                                                                                                                 ^
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin unknown: the open observer session's next prompt carried its rule (targets ["rule:typed893e040a44db"]): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:135:169
+    133|         const targets = targetsOf(root, lineOf(origin));
+    134|         expect.soft(targets, `origin ${origin}: its rule line appended…
+    135|         expect.soft(heard(next.out, lineOf(origin)), `origin ${origin}…
+       |                                                                                                                                                                         ^
+    136|         await until(() => refusals(readings(root, sid).slice(before), …
+    137|         const said = refusals(readings(root, sid).slice(before), origi…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin unknown: after two prompts with the same rule line, the session's record says once that it was not saved, naming unknown; it said []: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:138:202
+
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: no recorded origin (unknown): its rule line appended learn.applied for target(s) ["rule:typed77ba2946100a"]: expected [ 'rule:typed77ba2946100a' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed77ba2946100a",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:143:176
+    141|       expect.soft(fromOf(root, none.id), 'a prompt that joins no trans…
+    142|       const loose_targets = targetsOf(root, lineOf('unplaced'));
+    143|       expect.soft(loose_targets, `no recorded origin (${String(fromOf(…
+       |                                                                                                                                                                                ^
+    144|       expect.soft(heard(next.out, lineOf('unplaced')), `no recorded or…
+    145|
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: no recorded origin: the observer's next prompt carried its rule (targets ["rule:typed77ba2946100a"]): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:144:166
+    142|       const loose_targets = targetsOf(root, lineOf('unplaced'));
+    143|       expect.soft(loose_targets, `no recorded origin (${String(fromOf(…
+    144|       expect.soft(heard(next.out, lineOf('unplaced')), `no recorded or…
+       |                                                                                                                                                                      ^
+    145|
+    146|       // Positive barrier: the person's rejection is saved and its gua…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin scheduled: rejected: `leftpad` saved a decision: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:150:100
+    148|       await until(() => fromOf(root, rejected.id) !== undefined);
+    149|       expect.soft(fromOf(root, rejected.id), 'the rejected: prompt sen…
+    150|       expect.soft(decisions(root, REJ), `origin scheduled: rejected: \…
+       |                                                                                                    ^
+    151|       expect.soft(guards(root, REJ), `origin scheduled: rejected: \`${…
+    152|     }));
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC1 AC2 AC4 a rule: or rejected: line in a prompt of any other origin saves nothing, reaches no open session, and is said once, naming the origin
+AssertionError: origin scheduled: rejected: `leftpad` wrote guard entr(ies) ["rejected-01M7DTNY3F6TR0FZPBR467G9A0"]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rejected-01M7DTNY3F6TR0FZPBR467G9A0",
++ ]
+
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:151:139
+    149|       expect.soft(fromOf(root, rejected.id), 'the rejected: prompt sen…
+    150|       expect.soft(decisions(root, REJ), `origin scheduled: rejected: \…
+    151|       expect.soft(guards(root, REJ), `origin scheduled: rejected: \`${…
+       |                                                                                                                                           ^
+    152|     }));
+    153|   }, 180_000);
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/20]⎯
+
+ FAIL  tests/acceptance/2066/redraft/recorded-origin.test.ts > #2066 rules and rejections come only from prompts a person typed > AC3 AC4 the same lines typed by you are saved once, and reach open sessions at their next prompt, a person's or an automatic one
+Error: ENOTEMPTY, Directory not empty: '/private/tmp/hub-315-8m0Iuc'
+ ❯ withHub packages/hub/test/hub.ts:98:5
+     96|   } finally {
+     97|     await stop();
+     98|     rmSync(home, { recursive: true, force: true });
+       |     ^
+     99|   }
+    100| }
+ ❯ withAgent tests/acceptance/2066/redraft/recorded-origin.test.ts:93:9
+ ❯ tests/acceptance/2066/redraft/recorded-origin.test.ts:156:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/20]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:06:15
+   Duration  77.55s (tests 100%)
+

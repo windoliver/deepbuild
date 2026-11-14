@@ -1,0 +1,449 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2066/recorded-origin.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+xxxxxxxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a scheduled prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: a scheduled prompt's rule line was saved as yours; learn.applied target(s) listed: expected [ 'rule:typed3750ff613097', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed3750ff613097",
++   "rule:typed5ac6913c8a83",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:123:142
+    121|         const next = await b.prompt('person', 'What is next?');
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+       |                                                                                                                                              ^
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a scheduled prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: the rule from the scheduled prompt reached the second open session: expected '{"hookSpecificOutput":{"hookEventName…' not to contain 'zq-scheduled'
+
+Expected: "zq-scheduled"
+Received: "{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\n- keep the zq-scheduled ledger tidy\n- keep the zq-scheduled-again ledger tidy\n- keep the zq-typed ledger tidy"}}"
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:124:108
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+       |                                                                                                            ^
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+    126|         expect.soft(next.stdout, 'the rule you typed reaches the secon…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a scheduled prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685452269000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a session prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: a session prompt's rule line was saved as yours; learn.applied target(s) listed: expected [ 'rule:typed070f5326fb71', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed070f5326fb71",
++   "rule:typed95e10a87d8bb",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:123:142
+    121|         const next = await b.prompt('person', 'What is next?');
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+       |                                                                                                                                              ^
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a session prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: the rule from the session prompt reached the second open session: expected '{"hookSpecificOutput":{"hookEventName…' not to contain 'zq-session'
+
+Expected: "zq-session"
+Received: "{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\n- keep the zq-session ledger tidy\n- keep the zq-session-again ledger tidy\n- keep the zq-typed ledger tidy"}}"
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:124:108
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+       |                                                                                                            ^
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+    126|         expect.soft(next.stdout, 'the rule you typed reaches the secon…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a session prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685455159000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a subagent prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: a subagent prompt's rule line was saved as yours; learn.applied target(s) listed: expected [ 'rule:typed6fc5ce397cfc', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed6fc5ce397cfc",
++   "rule:typed5262d1635af0",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:123:142
+    121|         const next = await b.prompt('person', 'What is next?');
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+       |                                                                                                                                              ^
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a subagent prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: the rule from the subagent prompt reached the second open session: expected '{"hookSpecificOutput":{"hookEventName…' not to contain 'zq-subagent'
+
+Expected: "zq-subagent"
+Received: "{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\n- keep the zq-subagent ledger tidy\n- keep the zq-subagent-again ledger tidy\n- keep the zq-typed ledger tidy"}}"
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:124:108
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+       |                                                                                                            ^
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+    126|         expect.soft(next.stdout, 'the rule you typed reaches the secon…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a subagent prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685457567000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a continuation prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: a continuation prompt's rule line was saved as yours; learn.applied target(s) listed: expected [ 'rule:typedd5742cde1935', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typedd5742cde1935",
++   "rule:typed2368bd90e7e7",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:123:142
+    121|         const next = await b.prompt('person', 'What is next?');
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+       |                                                                                                                                              ^
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a continuation prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: the rule from the continuation prompt reached the second open session: expected '{"hookSpecificOutput":{"hookEventName…' not to contain 'zq-continuation'
+
+Expected: "zq-continuation"
+Received: "{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\n- keep the zq-continuation ledger tidy\n- keep the zq-continuation-again ledger tidy\n- keep the zq-typed ledger tidy"}}"
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:124:108
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+       |                                                                                                            ^
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+    126|         expect.soft(next.stdout, 'the rule you typed reaches the secon…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a continuation prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685461696000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a unknown prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: a unknown prompt's rule line was saved as yours; learn.applied target(s) listed: expected [ 'rule:typed447b71a2851e', …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed447b71a2851e",
++   "rule:typed7a7b1802f52a",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:123:142
+    121|         const next = await b.prompt('person', 'What is next?');
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+       |                                                                                                                                              ^
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a unknown prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+AssertionError: the rule from the unknown prompt reached the second open session: expected '{"hookSpecificOutput":{"hookEventName…' not to contain 'zq-unknown'
+
+Expected: "zq-unknown"
+Received: "{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\n- keep the zq-unknown ledger tidy\n- keep the zq-unknown-again ledger tidy\n- keep the zq-typed ledger tidy"}}"
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:124:108
+    122|
+    123|         expect.soft(shownTargets(applied(root, token)), `a ${origin} p…
+    124|         expect.soft(next.stdout, `the rule from the ${origin} prompt r…
+       |                                                                                                            ^
+    125|         expect.soft(applied(root, 'zq-typed').length, 'the rule you ty…
+    126|         expect.soft(next.stdout, 'the rule you typed reaches the secon…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a unknown prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685465772000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a prompt with no recorded origin saves nothing; the typed twin still does
+AssertionError: a prompt with no transcript entry saved its rule; learn.applied target(s): expected [ 'rule:typed43da74fe9d21' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed43da74fe9d21",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:139:142
+    137|       await a.submit({ text: 'rule: keep the zq-noprompt ledger tidy.'…
+    138|       await typedTwin(root, a, 'zq-typed');
+    139|       expect.soft(shownTargets(applied(root, 'zq-unrecorded')), 'a pro…
+       |                                                                                                                                              ^
+    140|       expect.soft(shownTargets(applied(root, 'zq-noprompt')), 'a promp…
+    141|       expect.soft(applied(root, 'zq-typed').length, 'the rule you type…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:134:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a prompt with no recorded origin saves nothing; the typed twin still does
+AssertionError: a prompt with no prompt_id saved its rule; learn.applied target(s): expected [ 'rule:typed66cbf40c31dd' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typed66cbf40c31dd",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:140:133
+    138|       await typedTwin(root, a, 'zq-typed');
+    139|       expect.soft(shownTargets(applied(root, 'zq-unrecorded')), 'a pro…
+    140|       expect.soft(shownTargets(applied(root, 'zq-noprompt')), 'a promp…
+       |                                                                                                                                     ^
+    141|       expect.soft(applied(root, 'zq-typed').length, 'the rule you type…
+    142|     });
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:134:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > the origin is the prompt's own, not the latest entry's; rules you typed still reach an automatic prompt
+AssertionError: a scheduled prompt was judged by a later person entry; learn.applied target(s): expected [ 'rule:typedaab18d306aaa' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "rule:typedaab18d306aaa",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:160:141
+    158|       const auto = await b.prompt('scheduled', 'Scheduled check-in.');
+    159|
+    160|       expect.soft(shownTargets(applied(root, 'zq-tick')), 'a scheduled…
+       |                                                                                                                                             ^
+    161|       expect.soft(applied(root, 'zq-mine').length, 'a typed prompt was…
+    162|       expect.soft(auto.stdout, "a rule you typed earlier reaches the s…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:146:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > the origin is the prompt's own, not the latest entry's; rules you typed still reach an automatic prompt
+AssertionError: the scheduled rule reached the second session: expected '{"hookSpecificOutput":{"hookEventName…' not to contain 'zq-tick'
+
+Expected: "zq-tick"
+Received: "{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\n- keep the zq-tick ledger tidy\n- keep the zq-mine ledger tidy"}}"
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:163:85
+    161|       expect.soft(applied(root, 'zq-mine').length, 'a typed prompt was…
+    162|       expect.soft(auto.stdout, "a rule you typed earlier reaches the s…
+    163|       expect.soft(auto.stdout, 'the scheduled rule reached the second …
+       |                                                                                     ^
+    164|     });
+    165|   }, 180_000);
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:146:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a rejected: line in a scheduled prompt saves no decision and no guard entry; typed by you it saves both
+AssertionError: a scheduled prompt saved a decision as yours: expected [ 'decision.created' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "decision.created",
++ ]
+
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:176:114
+    174|       await until(() => guardWords(file).includes('word:zqredis') && d…
+    175|
+    176|       expect.soft(decisions(root, 'zqkafka').map((e) => e.kind), 'a sc…
+       |                                                                                                                  ^
+    177|       expect.soft(guardWords(file), 'a scheduled prompt wrote a guard …
+    178|       expect.soft(decisions(root, 'zqredis').length, 'the rejection yo…
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:168:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a rejected: line in a scheduled prompt saves no decision and no guard entry; typed by you it saves both
+AssertionError: a scheduled prompt wrote a guard entry: expected [ 'word:zqkafka', 'word:zqredis' ] to not include 'word:zqkafka'
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:177:83
+    175|
+    176|       expect.soft(decisions(root, 'zqkafka').map((e) => e.kind), 'a sc…
+    177|       expect.soft(guardWords(file), 'a scheduled prompt wrote a guard …
+       |                                                                                   ^
+    178|       expect.soft(decisions(root, 'zqredis').length, 'the rejection yo…
+    179|       expect.soft(guardWords(file), 'the rejection you typed writes a …
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:168:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed (8)
+   Start at  11:44:08
+   Duration  36.26s (tests 99%, transform 1%)
+

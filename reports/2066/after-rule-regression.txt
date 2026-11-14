@@ -1,0 +1,57 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/344/deliver.test.ts` runs unleased
+
+ RUN  v5.0.5 <work>
+
+·xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/344/deliver.test.ts > #344 rules reach sessions > AC5 #344.edd0e73e after a compaction or a resume, the session's next prompt carries every rule you typed in it
+AssertionError: after /compact, session A's next prompt carries "Squash merge every pull request"; it carried "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/344/deliver.test.ts:48:189
+     46|       await a.start('compact');
+     47|       const afterCompact = await a.typed('carry on');
+     48|       for (const r of [one, two]) expect(heard(afterCompact, r), `afte…
+       |                                                                                                                                                                                             ^
+     49|       await a.start('resume');
+     50|       const afterResume = await a.typed('and again');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/344/deliver.test.ts > #344 rules reach sessions > AC9 #344.d074b17a a scoped rule reaches a session as one notice at its first call inside the scope, once more after /compact or a resume, and never in a start slice or for a session that stays outside
+AssertionError: session Y (session:beb9d6fc-58f1-494b-b349-64fbbc1096b4) hears the rule once, at its third call and not at its fourth (calls 1 to 4): expected [ false, false, false, false ] to deeply equal [ false, false, true, false ]
+
+- Expected
++ Received
+
+  [
+    false,
+    false,
+-   true,
++   false,
+    false,
+  ]
+
+ ❯ tests/acceptance/344/deliver.test.ts:81:129
+     79|       const heardAt: boolean[] = [];
+     80|       for (const file of ['web/app.ts', 'web/app.ts', 'packages/dev/sr…
+     81|       expect(heardAt, `session Y (${handleOf(y)}) hears the rule once,…
+       |                                                                                                                                 ^
+     82|       await y.start('compact');
+     83|       expect(await note(y, 'packages/dev/src/a.ts'), `after /compact, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  11:50:33
+   Duration  7.48s (tests 76%, transform 22%, import 2%)
+
