@@ -1,0 +1,26 @@
+== head 52df92e86faf6eb6a4e29fdfaacb7ab39b31c9ee (ac04 budgets alone; prebuild + quiet gate)
+Mac15,12
+Apple M3
+27.2.1
+Now drawing from 'AC Power'
+start: Sat Nov 14 09:39:28 UTC 2026 |  1:39  up 18:41, 7 users, load averages: 2.69 12.92 15.67 | thermalState 0
+noop check: 0 Compiling lines
+
+
+ RUN  v5.0.5 ~/private/dbc-534/tests/acceptance/534
+
+ ✓ ac04-budgets.test.ts (5 tests) 4654ms
+   ✓ #534.e281f3dd the budgets on the reference Mac (5)
+     ✓ #534.e281f3dd rewriting a 1 MB program takes under 200 ms, once at check 2596ms
+     ✓ #534.e281f3dd a flock step takes under 0.5 ms of CPU with the metering 335ms
+     ✓ #534.e281f3dd a checkpoint of a 4 MiB memory takes under 2 ms 504ms
+     ✓ #534.e281f3dd a save of a 4 MiB memory reads back whole in under 50 ms, off the UI thread 338ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  01:39:29
+   Duration  4.77s (tests 99%, transform 1%)
+
+
+end: Sat Nov 14 09:39:34 UTC 2026 |  1:39  up 18:41, 6 users, load averages: 2.71 12.75 15.59 | thermalState 0
+vitest exit=0

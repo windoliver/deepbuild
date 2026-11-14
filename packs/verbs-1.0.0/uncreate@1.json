@@ -1,0 +1,19 @@
+{
+  "id": "verbs.uncreate",
+  "version": "1.0",
+  "title": "Uncreate",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An exit: each target's outline unbuilds from its end back to its start over its window.",
+  "inputs": {},
+  "steps": {
+    "unbuild": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/ops/0/trim/end": 0
+        }
+      }
+    }
+  }
+}

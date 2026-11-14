@@ -2277,8 +2277,8 @@
           "why": "Issue #531: a logic item's fields and the binary's JSON lines; already in the tree."
         },
         "sha2": {
-          "spec": "^0.10",
-          "why": "Issue #531: an item's bake key and its step and state hashes; already in the tree."
+          "spec": "^0.11",
+          "why": "Issue #531: an item's bake key and its step and state hashes; issue #534 takes 0.11, already in the tree (deep-gpu-layer), whose SHA-256 uses the CPU's SHA instructions, for a 4 MiB checkpoint's and save's hashes."
         },
         "wat": {
           "spec": "=1.263.0",
@@ -2355,6 +2355,18 @@
         "typst-layout": {
           "spec": "=0.15.1",
           "why": "Issue #220: the paged document Typst 0.15.1 compiles to, whose frames the SVG and the probe are read from."
+        }
+      }
+    },
+    "tests/acceptance/534/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #534's blind suite: its own assembler for the fixtures, #532's renamed, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #534's blind suite: validates each fixture module before it is written."
         }
       }
     },

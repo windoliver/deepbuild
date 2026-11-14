@@ -1,0 +1,1 @@
+PASS: owned identity, argv, descriptor attribution, tail retained after unlink, ended identity absent

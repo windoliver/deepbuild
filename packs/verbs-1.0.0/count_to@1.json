@@ -1,0 +1,27 @@
+{
+  "id": "verbs.count_to",
+  "version": "1.0",
+  "title": "Count to",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A change: each target's text counts in whole numbers from what it shows to `value` over its window.",
+  "inputs": {
+    "value": {
+      "type": "number",
+      "default": 0,
+      "about": "the number it counts to"
+    }
+  },
+  "steps": {
+    "count": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/text": {
+            "count": "value"
+          }
+        }
+      }
+    }
+  }
+}

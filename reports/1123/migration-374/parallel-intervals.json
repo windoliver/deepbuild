@@ -1,0 +1,62 @@
+{
+  "source": "Vitest JSON reporter; original-file rows only",
+  "sourceSha256": "9d8fb316a5c8be4b12367ac18e2b6c154f16d715bd18f4aea52b01501b323dda",
+  "runnerStartedMs": 1794457740633,
+  "rawReportedFiles": 3,
+  "excludedDraftRows": 0,
+  "schedulingCommit": "63e11e81a883c0fdaa8d54788114ff400e08e191",
+  "schedulingCommitTimeMs": 1794460313000,
+  "files": [
+    {
+      "file": "tests/acceptance/374/paint.test.ts",
+      "startTimeMs": 1794457741057,
+      "endTimeMs": 1794457744891.0327,
+      "status": "failed",
+      "passedTests": 6,
+      "failedTests": 1,
+      "failedNames": [
+        "AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's AC1 with span: parent over three squares in a row, the middle square's centre reads the stops' OKLab midpoint within 0.001 ΔEOK"
+      ]
+    },
+    {
+      "file": "tests/acceptance/374/steps.test.ts",
+      "startTimeMs": 1794457741054,
+      "endTimeMs": 1794457742238.2283,
+      "status": "failed",
+      "passedTests": 0,
+      "failedTests": 2,
+      "failedNames": [
+        "AC3 steps give each member of a group one solid color mixed from the stops by its rank AC3 steps {over: children, stops: [{at: 0, role: a}, {at: 1, role: b}], by: order} over 5 squares colors the third at the OKLab midpoint within 0.001 ΔEOK, and the first and last exactly a and b",
+        "AC3 steps give each member of a group one solid color mixed from the stops by its rank AC3 members take their rank from their order keys, not from their position or their ID"
+      ]
+    },
+    {
+      "file": "tests/acceptance/374/stroke.test.ts",
+      "startTimeMs": 1794457741055,
+      "endTimeMs": 1794457743246.845,
+      "status": "failed",
+      "passedTests": 1,
+      "failedTests": 1,
+      "failedNames": [
+        "AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle AC2 a circle with a 4 u stroke scaled 3× by its parent keeps a 4 ± 0.1 u stroke, and 12 ± 0.1 u with scale_stroke: true"
+      ]
+    }
+  ],
+  "pairwiseOverlap": [
+    {
+      "left": "tests/acceptance/374/paint.test.ts",
+      "right": "tests/acceptance/374/steps.test.ts",
+      "overlapMs": 1181.228271484375
+    },
+    {
+      "left": "tests/acceptance/374/paint.test.ts",
+      "right": "tests/acceptance/374/stroke.test.ts",
+      "overlapMs": 2189.844970703125
+    },
+    {
+      "left": "tests/acceptance/374/steps.test.ts",
+      "right": "tests/acceptance/374/stroke.test.ts",
+      "overlapMs": 1183.228271484375
+    }
+  ]
+}
