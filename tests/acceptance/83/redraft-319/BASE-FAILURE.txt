@@ -1,0 +1,35 @@
+The redraft run once on its base, main b1a1ff862, on Linux, November 14, 2026 (home paths redacted as <repo>):
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/83/redraft-319 --no-file-parallelism --testTimeout=600000
+
+5 tests: 1 failed, 4 passed. The one that fails is the waiting ask's, on its named expect: at the base the hub's inbox
+reads the ask queued, but deep inbox lists its row; the run stops there, before the count. The other AC2 test (an ask that
+has shown is counted, under settings with no asks.batch), AC4's two and AC6's pass.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/83/redraft-319
+
+ ❯ status.test.ts (5 tests | 1 failed) 13822ms
+   ❯ AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call (2)
+     × AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep setup drafts (batches 8 hours apart), an ask raised between batches is open but not shown in Needs you, deep inbox lists no row for it, and each status question's answer carries the Needs-you count deep inbox shows, without it 2353ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep setup drafts (batches 8 hours apart), an ask raised between batches is open but not shown in Needs you, deep inbox lists no row for it, and each status question's answer carries the Needs-you count deep inbox shows, without it
+AssertionError: Needs you shows no row for ask:01M7DV9PCV9G7PFFKX3R7602NN, which still waits for its batch (deep inbox --json lists the rows shown): expected [ 'ask:01M7DV9PCV9G7PFFKX3R7602NN' ] to not include 'ask:01M7DV9PCV9G7PFFKX3R7602NN'
+ ❯ status.test.ts:132:159
+    130|     expect(row!.status, `${asked.handle} waits for its batch (queued, …
+    131|     const rows = await needsYouRows(h);
+    132|     expect(rows.map((r) => r.id), `Needs you shows no row for ${asked.…
+       |                                                                                                                                                               ^
+    133|     const listed = await deep(h, ['inbox']);
+    134|     expect(listed.code, `deep inbox exits 0: ${shown(listed)}`).toBe(0…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  12:16:58
+   Duration  14.09s (tests 99%)
+
