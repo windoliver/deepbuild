@@ -1,0 +1,14 @@
+Base of tests/acceptance/222-oracle at f6d811c7947dea9d28bb64de8759dca02c1fa27c ("Merge pull request #2392 …"), main with
+no implementation of #222, on this worktree.
+
+Not run against a binary: the lane's surfaces plainly don't exist at the base (no `cues@1` kind, no cue list entry or
+markers in a `deep show` reply's `expansions`, no `packs/verbs-1.0.0/`). No Rust was built for this record; where each
+test fails was read from the base's code, not observed:
+
+- timing.test.ts (AC1, 4): every film names deepbuild/verbs@1.0.0, which the store can't load from the missing folder,
+  so `deep show` doesn't present it ("… is presented").
+- stagger.test.ts (AC3, 4): the same for the grid films and the wait-then-fade film; the graphical case fails with
+  `BLOCKED:` at the base and after, until its goldens exist.
+- from-values.test.ts (AC2, 1): the same: not presented.
+
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/222-oracle/tsconfig.json, exits 0.

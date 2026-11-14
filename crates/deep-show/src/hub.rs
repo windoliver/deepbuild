@@ -1005,6 +1005,8 @@ pub struct Eval {
     pub paths: Vec<String>,
     /// #504: the document's input track for this evaluation, over the hub's.
     pub track: Option<Vec<Value>>,
+    /// #222: the evaluated-data hash of the frame.
+    pub data_hash: bool,
     /// #507: each text item's drawn string beside the frame.
     pub texts: bool,
 }
@@ -1311,6 +1313,12 @@ impl<'a> Hub<'a> {
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
+            // #222: the planted cue-list expander.
+            expander: scenario
+                .module_planted
+                .as_deref()
+                .filter(|p| deep_canvas_motion::cues::planted(p))
+                .map(|p| &*Box::leak(p.to_string().into_boxed_str())),
         };
         let mut hub = Hub {
             scenario,
