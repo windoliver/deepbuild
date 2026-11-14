@@ -289,6 +289,9 @@ alone.push('tests/acceptance/532/');
 alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #534's files build deep-logic, write 64 MiB saves and freeze and kill their writer by PID; its budgets are timed.
+alone.push('tests/acceptance/534/');
+timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 // #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
