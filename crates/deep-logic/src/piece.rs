@@ -789,6 +789,16 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
 
 /// Checks every item of a piece in order: the first refusal answers.
 pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<Piece, Refused> {
+    check_bound(piece, planted, history, &[])
+}
+
+/// [`check`], with the between-step services this build binds (Logic: between-step services).
+pub fn check_bound(
+    piece: &Value,
+    planted: &Planted,
+    history: &mut History,
+    services: &[crate::services::Service],
+) -> Result<Piece, Refused> {
     let assets = piece
         .get("assets")
         .and_then(Value::as_object)
@@ -799,7 +809,7 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         planted,
         history,
         &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
-        &[],
+        services,
     )
 }
 

@@ -13,7 +13,9 @@ use std::rc::Rc;
 use deep_canvas_scene3d::scene::{placed_at, Assets, Refused, Scene};
 use deep_canvas_scene3d::{points, slots};
 use deep_logic::piece::{check_in, History};
+use deep_logic::services::Service;
 use deep_logic::world::{track_of, Record, World};
+use deep_physics_rapier::cast::{self, Caster};
 use deep_scene3d_render::Counts;
 use serde_json::{json, Map, Value};
 
@@ -71,8 +73,24 @@ pub(crate) fn bake(
         "items": items,
     });
     let read = |sha: &str| std::fs::read(assets.get(sha)?).ok();
-    let piece = check_in(&piece, &Default::default(), &mut History::new(), &read, &[])
-        .map_err(|r| json!({"code": "logic_refused", "refusal": r.0}))?;
+    // #213: physics.cast@1 answers the logic items' requests on the document's worlds.
+    let caster = std::cell::RefCell::new(Caster::new(doc, &[], false));
+    let cast = Service {
+        name: cast::NAME.into(),
+        request: cast::REQUEST as u32,
+        result: cast::RESULT as u32,
+        max_per_step: cast::MAX_PER_STEP,
+        fuel_per_request: cast::FUEL_PER_REQUEST,
+        answer: Rc::new(move |t, r| caster.borrow_mut().answer(t, r)),
+    };
+    let piece = check_in(
+        &piece,
+        &Default::default(),
+        &mut History::new(),
+        &read,
+        &[cast],
+    )
+    .map_err(|r| json!({"code": "logic_refused", "refusal": r.0}))?;
     let steps = (piece.items.iter())
         .map(|i| until.max(0) / i.step.max(1) + 1)
         .max()

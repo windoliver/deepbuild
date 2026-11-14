@@ -33,6 +33,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 }
 
 pub mod bound;
+pub mod cast;
 pub mod fp;
 mod inputs;
 mod joints;

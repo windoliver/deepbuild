@@ -356,4 +356,83 @@ mod tests {
         union(&mut p, [[0, 1]].into_iter());
         assert_eq!(p, None);
     }
+
+    /// A writer at 60 Hz and two readers at 30 Hz, one declared before it and one after, each
+    /// reading its array plainly and mirroring it: at every step each mirror equals the plain read,
+    /// whichever item steps first at a shared time, so each reader counts no mismatch.
+    #[test]
+    fn a_mirror_equals_a_plain_read_across_rates_and_orders() {
+        let writer = wat::parse_str(
+            r#"(module (memory (export "memory") 1 1)
+  (global (export "reads_at") i32 (i32.const 0)) (global (export "writes_at") i32 (i32.const 1024))
+  (func (export "init") (param i64))
+  (func (export "step") (param $k i64)
+    (i32.store (i32.add (i32.const 1024) (i32.shl (i32.wrap_i64 (i64.rem_u (local.get $k) (i64.const 64))) (i32.const 2)))
+      (i32.add (i32.wrap_i64 (local.get $k)) (i32.const 1)))))"#,
+        )
+        .expect("the writer");
+        // Its read region: the plain read of w.vals (256 B) at 0, then the mirror's list; its
+        // mirror at 8192; `bad` (the steps whose mirror differed) at 4096.
+        let reader = wat::parse_str(
+            r#"(module (memory (export "memory") 1 1)
+  (global (export "reads_at") i32 (i32.const 0)) (global (export "writes_at") i32 (i32.const 4096))
+  (global (export "m_at") i32 (i32.const 8192))
+  (func (export "init") (param i64))
+  (func (export "step") (param $k i64) (local $i i32) (local $d i32)
+    (loop $each
+      (local.set $d (i32.or (local.get $d) (i32.ne (i32.load (local.get $i)) (i32.load (i32.add (i32.const 8192) (local.get $i))))))
+      (local.set $i (i32.add (local.get $i) (i32.const 4)))
+      (br_if $each (i32.lt_u (local.get $i) (i32.const 256))))
+    (i32.store (i32.const 4096) (i32.add (i32.load (i32.const 4096)) (local.get $d)))))"#,
+        )
+        .expect("the reader");
+        let params = |sha: &str| {
+            json!({"program": sha, "step_rate": 30, "reads": ["w.vals"], "mirrors": [{"array": "w.vals", "at": "m_at"}],
+                   "writes": {"bad": {"type": "i32"}}})
+        };
+        let mut items = serde_json::Map::new();
+        items.insert(
+            "before".into(),
+            json!({"kind": "logic@1", "params": params(&hash(&reader))}),
+        );
+        items.insert("w".into(), json!({"kind": "logic@1", "params": {"program": hash(&writer), "step_rate": 60, "writes": {"vals": {"type": "i32", "count": 64}}}}));
+        items.insert(
+            "after".into(),
+            json!({"kind": "logic@1", "params": params(&hash(&reader))}),
+        );
+        let found = |sha: &str| {
+            [&writer, &reader]
+                .into_iter()
+                .find(|b| hash(b) == sha)
+                .cloned()
+        };
+        let piece = check_in(
+            &json!({"seed": 0, "items": items}),
+            &Planted::default(),
+            &mut History::new(),
+            &found,
+            &[],
+        )
+        .expect("checked");
+        let piece = std::rc::Rc::new(piece);
+        let mut rec = crate::world::Record::default();
+        let mut world = crate::world::World::new(
+            piece,
+            crate::world::track_of(&[]),
+            false,
+            Planted::default(),
+            &mut rec,
+            None,
+        )
+        .expect("instantiated");
+        world.run(240, &mut rec, &mut |_, _| {});
+        for (i, id) in [(0, "before"), (2, "after")] {
+            let bad = i32::from_le_bytes(world.write_region(i)[..4].try_into().expect("4 bytes"));
+            assert_eq!(
+                bad, 0,
+                "{id}: steps whose mirror differed from its plain read"
+            );
+        }
+        assert!(world.failed().is_empty(), "{:?}", rec.traps);
+    }
 }

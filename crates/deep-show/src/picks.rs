@@ -253,7 +253,13 @@ pub(crate) fn stepped(
 /// Each step 0 … `count` − 1 of `world`: its hash and arrays per item and, with `full` (#213's
 /// `logic` call), its fuel, its services' and mirrors' times and, where `rec` keeps them, the
 /// services regions each step read.
-fn step_rows(world: &mut World, rec: &mut Record, piece: &Piece, count: i64, full: bool) -> Vec<Value> {
+fn step_rows(
+    world: &mut World,
+    rec: &mut Record,
+    piece: &Piece,
+    count: i64,
+    full: bool,
+) -> Vec<Value> {
     let len = piece.items.first().map_or(1, |i| i.step);
     let mut steps = Vec::new();
     for k in 0..count {
@@ -751,7 +757,7 @@ impl Hub<'_> {
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
         let mut out = json!({"steps": steps, "track": held, "traps": rec.traps, "checkpoints": rec.checkpoints,
-                             "handles": crate::physics::cast::handles(&form)});
+                             "handles": deep_physics_rapier::cast::handles(&form)});
         if !l.seeks.is_empty() {
             let mut seeks = Vec::new();
             for &to in &l.seeks {

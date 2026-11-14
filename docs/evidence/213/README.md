@@ -29,5 +29,3 @@ ffmpeg) beside the checks the same run's numbers passed (`checks.json`).
 node docs/evidence/213/export.mjs target/debug/deep-show <out dir> mov   # writes both films, the documents and checks.json
 node docs/evidence/213/sheet.mjs <out dir> <out dir>/sheet.png           # after ffmpeg -i <film>.mov <film>-frames/f%04d.png
 ```
-
-The turret's label is cropped at the frame's left edge and the wall's falls outside the frame; neither carries a reading.
