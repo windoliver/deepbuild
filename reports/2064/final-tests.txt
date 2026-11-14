@@ -1,0 +1,61 @@
+#2064 final verification
+Base tested: bfe8c8a5e
+Workspace TypeScript + real deep-hook build: exit 0. Hub rebuild after each production correction: exit 0.
+Verification entry: node scripts/affected.mjs with explicit affected test paths.
+37 distinct latest passing tests; no test skipped or edited to pass. Runs below are cumulative; only affected files rerun after each correction.
+
+final-affected: 32 passed, 0 failed
+FAIL affected: 154 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 32 passed, in 73 s at load 172
+wrappers-fixed-affected: 16 passed, 0 failed
+FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 16 passed, in 69 s at load 179
+review-fix-affected: 13 passed, 1 failed
+FAIL affected: 154 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 13 passed, in 33 s at load 125
+isolated-affected: 1 passed, 0 failed
+FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 21 s at load 84
+delivery-affected: 16 passed, 0 failed
+FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 16 passed, in 67 s at load 217
+
+Latest result per test:
+PASS packages/hub/test/forge.test.ts — Forge.nextIssue › a sibling whose dependency the forge no longer shows (404) is blocked, and the next sibling is tried
+PASS packages/hub/test/forge.test.ts — Forge.nextIssue › an issue with no epic has no next issue
+PASS packages/hub/test/forge.test.ts — Forge.nextIssue › finds the lowest unblocked sibling past the first page, skipping pull requests and a sibling whose dependency is still open, reading a closed dependency by number
+PASS packages/hub/test/forge.test.ts — Forge.pull › a commit status still pending is checks running
+PASS packages/hub/test/forge.test.ts — Forge.pull › a forge that answers 401 leaves the state unknown (undefined), and the token goes only as a bearer
+PASS packages/hub/test/forge.test.ts — Forge.pull › a head whose check runs completed and that has no commit status at all is open, not checks running
+PASS packages/hub/test/forge.test.ts — Forge.pull › a merged PR is released when a release's tag, an annotated one with a slash, names the merge commit, though its target is a branch; a release older than the merge is not read
+PASS packages/hub/test/forge.test.ts — Forge.pull › a merged PR no release's tag reaches is merged
+PASS packages/hub/test/forge.test.ts — closesIssue › names the issue a PR body closes by any of GitHub's closing keywords, and none for Part of
+PASS packages/hub/test/forge.test.ts — isPrCreate › is not a second command joined to it, or another command, however the quotes or heredocs around the join mix
+PASS packages/hub/test/forge.test.ts — isPrCreate › is one gh pr create command, its quoted title and a heredoc body included, in a substitution or bare
+PASS packages/hub/test/pr-after-lookup-error.test.ts — keeps the completed joined call when lookup of the current branch throws
+PASS packages/hub/test/pr-commands.test.ts — every PR in a list is read, not the surrounding text or a body word that looks like a flag
+PASS packages/hub/test/pr-commands.test.ts — fill uses only gh-selected text: a single message, multiple subjects, explicit overrides and the selected base
+PASS packages/hub/test/pr-commands.test.ts — heredocs stay data, including when another command follows their terminator
+PASS packages/hub/test/pr-commands.test.ts — literal bodies survive shell quoting; separators in them never invent another PR
+PASS packages/hub/test/pr-commands.test.ts — reads a file afresh but refuses when an earlier command could change it
+PASS packages/hub/test/pr-commands.test.ts — unreadable input fails closed rather than treating substitutions, pipes or uncertain directories as an empty body
+PASS packages/hub/test/pr-context.test.ts — matches the qualified issue to the PR working directory after cd
+PASS packages/hub/test/pr-fill-overrides.test.ts — still judges the filled closing subject with an explicit body or body file unless the title is also replaced
+PASS packages/hub/test/pr-wrappers.test.ts — reads literal wrappers without executing them
+PASS packages/hub/test/pr-wrappers.test.ts — recognizes a PR in shell groups and conditional/loop bodies
+PASS packages/hub/test/verdict-stop.test.ts — a Codex session that opens a pull request › records the PR from the gh pr create call's PostToolUse, so its receipt can name it
+PASS packages/hub/test/verdict-stop.test.ts — a turn interrupted by a hub restart › is judged at its stop: the Stop reply carries the line, as the turn's edit stands in the record
+PASS tests/acceptance/1881/lookup.test.ts — a cut-off turn looks up its pull request by the origin's owner and name, on the real hub › AC1: with the forge holding one open PR for fix-cart-total under acme/cart, the cut-off turn records that PR's URL, and the identical gh pr create is denied with it
+PASS tests/acceptance/1881/lookup.test.ts — a cut-off turn looks up its pull request by the origin's owner and name, on the real hub › AC2 fails on a lookup that reaches the forge, naming its path, and on one that lets the identical call run
+PASS tests/acceptance/1881/lookup.test.ts — a cut-off turn looks up its pull request by the origin's owner and name, on the real hub › AC2: in a checkout with no remote, the stand-in forge receives no request
+PASS tests/acceptance/2064/gate.test.ts — the Closes rule on a task with R2 unproven › AC1 #2064.715f176e a joined command's gh pr create saying Closes #7 is denied naming R2, with its body in a heredoc, and each pull request command of a joined line is read
+PASS tests/acceptance/2064/gate.test.ts — the Closes rule on a task with R2 unproven › AC2 #2064.9e9dae21 a body file, --fill and an edit's body file saying Closes #7 or Fixes #7 are each denied naming R2
+PASS tests/acceptance/2064/gate.test.ts — the Closes rule on a task with R2 unproven › AC3 #2064.c8d25a38 in a checkout of acme/shop, Closes acme/shop#7 is denied naming R2, and another repo's issue 7 is not this task's
+PASS tests/acceptance/2064/gate.test.ts — the Closes rule on a task with R2 unproven › AC4 #2064.ab3e665d the twins run: each form saying Part of #7 with R2 listed under it
+PASS tests/acceptance/2064/gate.test.ts — the Closes rule on a task with R2 unproven › AC5 #2064.80da88e3 a body file that is missing is denied naming the file
+PASS tests/acceptance/2064/passed.test.ts — AC4 #2064.ab3e665d with every requirement passed, gh pr create and gh pr edit saying Closes #7 run, alone, joined, from a heredoc, a body file and --fill
+PASS tests/acceptance/2064/record.test.ts — AC6 #2064.2afeb0df with the record's read of the issue's task failing inside the rule, gh pr create saying Closes #7 is denied naming the error
+PASS tests/acceptance/2064/record.test.ts — AC7 #2064.20caa9d6 against a stand-in forge, the pull request a joined git push && gh pr create opened is recorded as the session's, with its link, though the command's output holds none
+PASS tests/acceptance/2064/supplement/send-error.test.ts — #2064 Scope: the repeated-send rule (#85) refuses on an error, naming it › SCOPE twin: with nothing planted, the identical gh pr create is denied with the pull request the forge holds
+PASS tests/acceptance/2064/supplement/send-error.test.ts — #2064 Scope: the repeated-send rule (#85) refuses on an error, naming it › SCOPE with a planted record read failure (no such table: sessions), the identical gh pr create is denied, naming that error
+
+The post-call test first failed at its behavior assertion. After the correction its assertion passed, but teardown failed ENOTEMPTY because a real external Claude CLI wrote .claude config during folder removal. The unchanged affected test then passed after excluding that external CLI from PATH. The teardown failure was not suppressed.
+One earlier fill test run timed out under load. A saved direct probe then failed the exact explicit-title assertion before the fix; the unchanged test passed after correction.
+The final parser/gate correction run passed 16 affected tests; earlier receipt/lookup/repeated-send proofs remained unchanged.
+No WIDE/INCONCLUSIVE line in the explicit-path runs. Full selection listed, not executed: 356 parallel Vitest, 15 Node, 655 alone Vitest, 67 timed, 30 slow, deep-app, plus by-hand exclusions.
+Overall affected: FAIL on 153 new-to-baseline lint findings and 45 listed main failures. No full preflight/release/timed/by-hand PASS is claimed.
