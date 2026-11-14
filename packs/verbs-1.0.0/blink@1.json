@@ -1,0 +1,42 @@
+{
+  "id": "verbs.blink",
+  "version": "1.0",
+  "title": "Blink",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An emphasis: each target goes dark and comes back `count` times over its window.",
+  "inputs": {
+    "count": {
+      "type": "integer",
+      "default": 1,
+      "min": 1,
+      "max": 32,
+      "about": "how many times it blinks"
+    }
+  },
+  "steps": {
+    "blink": {
+      "op": "cue",
+      "repeat": {
+        "count": "count",
+        "as": "k"
+      },
+      "params": {
+        "set": {
+          "adjust/opacity": {
+            "pulse": {
+              "amount": "0 - now",
+              "shape": {
+                "pause": {
+                  "share": 0.6
+                }
+              }
+            }
+          }
+        },
+        "at": "k / count",
+        "until": "(k + 1) / count"
+      }
+    }
+  }
+}

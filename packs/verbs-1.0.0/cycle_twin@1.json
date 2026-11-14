@@ -1,0 +1,19 @@
+{
+  "id": "verbs.cycle_twin",
+  "version": "1.0",
+  "title": "Cycle, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of cycle: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "cycle": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/pos": "here"
+        }
+      }
+    }
+  }
+}

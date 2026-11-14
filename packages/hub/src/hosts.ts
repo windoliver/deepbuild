@@ -177,8 +177,9 @@ export class Hosts {
   }
   /** Refuses a name your SSH config doesn't name, before anything reaches it. */
   named(host: unknown): string {
-    if (typeof host === 'string' && this.names().includes(host)) return host;
-    throw new Refused(refusal('not_found', '/params/host', `${String(host)} isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. Name one of: ${this.names().join(', ') || 'none'}.`, host));
+    const names = this.names();
+    if (typeof host === 'string' && names.includes(host)) return host;
+    throw new Refused(refusal('not_found', '/params/host', `${String(host)} isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. ${names.length ? `Name one of: ${names.join(', ')}.` : 'It names no host.'}`, host));
   }
 
   /** One ssh call on a connection of its own: the script on its stdin, run by `sh -s` with `args`. */

@@ -78,7 +78,10 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
                 "role": text(control.get("role")),
                 "name": text(control.get("label")),
             }));
-            for t in targets.iter().filter(|t| &t.control == id && draws.contains(&t.item)) {
+            for t in targets
+                .iter()
+                .filter(|t| &t.control == id && draws.contains(&t.item))
+            {
                 nodes.push(json!({"id": format!("{id}/{}", t.option), "role": "button", "name": t.label, "item": t.item}));
             }
         }
@@ -138,6 +141,7 @@ impl Hub<'_> {
     /// what was said, so showing it again unchanged says nothing; one that leaves the document
     /// is forgotten.
     pub fn see(&mut self, panel: &str) -> Value {
+        self.settle_focus(panel);
         let presented = self.presented(panel);
         let (Some(frames), Some(doc)) = (
             presented.get("frames").and_then(Value::as_array),
@@ -166,7 +170,9 @@ impl Hub<'_> {
                 continue;
             };
             let hidden = hidden_of(frame);
-            said.retain(|id, _| id.starts_with("card/") || revision.pointer(&format!("/items/{id}")).is_some());
+            said.retain(|id, _| {
+                id.starts_with("card/") || revision.pointer(&format!("/items/{id}")).is_some()
+            });
             // The readout as this frame shows it: its keyed values at the frame's time.
             let t = frame["t"].as_i64().unwrap_or(vsync);
             let shown = data_at(revision, program.as_ref(), t);
@@ -183,6 +189,14 @@ impl Hub<'_> {
             (Some(s), Some((shown, _))) => tree(&shown, &s.scope.hidden(&shown)),
             _ => Vec::new(),
         };
+        // #539: each landing of a pick control's roving focus, by its row's label, in time order.
+        announcements.extend(
+            self.scopes
+                .get(panel)
+                .map(|s| s.picks.said.clone())
+                .unwrap_or_default(),
+        );
+        announcements.sort_by_key(|a| a["t"].as_i64());
         json!({"tree": tree, "announcements": announcements})
     }
 }

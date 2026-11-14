@@ -1,0 +1,8 @@
+{
+  "base": "ede4b3679680a6b16a5324cf002f0ba627cc3067",
+  "fixture": "layered",
+  "item": "flow",
+  "produced": "At the base, by this job: deep-show (debug, --no-default-features --features full) `fixtures` call, the graph module's `layered` document, its graph@1 item `flow`'s params.graph and params.layout sent as one line to `deep-graph layout` (debug; the release build gave the same bytes); `memory` is the answer's memory object exactly as the line spelled it.",
+  "line": "{\"ok\":true,\"memory\":{\"build\":[1,0,0.0,80.0],\"plan\":[0,0,12.0,0.0],\"ship\":[3,0,12.0,240.0],\"test\":[2,0,12.0,160.0]},\"replaced\":[0,1,2,3]}",
+  "memory": "{\"build\":[1,0,0.0,80.0],\"plan\":[0,0,12.0,0.0],\"ship\":[3,0,12.0,240.0],\"test\":[2,0,12.0,160.0]}"
+}

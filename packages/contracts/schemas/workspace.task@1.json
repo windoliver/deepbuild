@@ -1,0 +1,231 @@
+{
+  "title": "workspace.task@1",
+  "description": "A workspace's task (#1347): a record item with the fields a work source's work.item@1 reading gives, and what it is blocked by. It is entered with `deep workspace task`, finished when a work run lands its change on the workspace's main, and filed as an issue when the workspace moves to a repo; a run takes these as it takes a forge's issues. Only the core appends it.",
+  "x-since": "R2",
+  "x-stability": "preview",
+  "x-tracking": "#1347",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "workspace.task"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z]+$",
+          "description": "The workspace's project id.",
+          "maxLength": 8192
+        },
+        "task": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The task's number in the workspace, from 1 in the order tasks were entered."
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "entered",
+            "finished",
+            "filed"
+          ],
+          "description": "Entered in the workspace; finished, its change on the workspace's main with a PASS covering it; or filed as an issue at a forge when the workspace moved to a repo.",
+          "x-closure": {
+            "closed": "a task is entered in its workspace, finishes there, and is filed once it moves to a repo",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The task's ID: the workspace's id, `#` and its number."
+        },
+        "link": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Where the task lives: in the workspace, or the issue it was filed as."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 8192,
+          "description": "The task's title."
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "A handle to the task's body, never its text inline."
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "One acceptance criterion, as you wrote it."
+          },
+          "description": "The task's acceptance criteria, in order."
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Who wrote it."
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "owner",
+                  "collaborator",
+                  "outside"
+                ],
+                "description": "Their role: the workspace is yours.",
+                "x-closure": {
+                  "closed": "an author owns the workspace, collaborates on it, or is outside it",
+                  "reopens": "a new major of this kind",
+                  "mark": "exhaustive"
+                }
+              }
+            },
+            "required": [
+              "handle",
+              "role"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Everyone who wrote the task's text, each with their role."
+        },
+        "updated": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "When the task was last written, as an ISO time."
+        },
+        "blocked_by": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "A task of the same workspace this one is blocked by."
+          },
+          "description": "The tasks it is blocked by, by number."
+        },
+        "issue": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The issue it was filed as, or null while it is in the workspace alone."
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "The workspace commit its PASS covered, now main's head, once it finished; else null."
+        },
+        "kept": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Main's head before it finished: the last version, kept a step back. Null until it finished."
+        }
+      },
+      "required": [
+        "workspace",
+        "task",
+        "step",
+        "source_id",
+        "link",
+        "title",
+        "body",
+        "criteria",
+        "authors",
+        "updated",
+        "blocked_by",
+        "issue",
+        "commit",
+        "kept"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -265,6 +265,9 @@ export function waitForApp(appConnected: () => boolean): Promise<boolean> {
   });
 }
 
+/** A diagnostic mode's fields on a deep_show call, as the canvas core takes them (#411, #427). */
+const MODE_FIELDS = ['mode', 'cursor', 'item', 'reference', 'select', 'span', 'depth'] as const;
+
 /**
  * A deep_show call's fields as the canvas core takes them (#393's): the document and a patch parsed from their JSON
  * text, and the fields left null dropped, so the core's defaults hold. With no document or patch, a render-back of
@@ -278,13 +281,14 @@ export function showCall(args: Obj): Obj {
     try { return JSON.parse(v) as unknown; } catch { throw refuse('type', `/params/arguments/${key}`, `Give ${key} as one JSON object's text.`, v.slice(0, 200)); }
   };
   const out: Obj = { doc: args.doc };
-  for (const key of ['removes', 't', 'size', 'include', 'check', 'claim'] as const) if (args[key] !== null && args[key] !== undefined) out[key] = args[key];
+  for (const key of ['removes', 't', 'size', 'include', 'check', 'claim', ...MODE_FIELDS] as const) if (args[key] !== null && args[key] !== undefined) out[key] = args[key];
   const document = parse('document');
   const patch = parse('patch');
   if (document !== null && document !== undefined) out.document = document;
   else if (patch !== null && patch !== undefined) out.patch = patch;
-  else {
-    const probe = Object.fromEntries((['camera', 'probes'] as const).filter((k) => args[k] !== null && args[k] !== undefined).map((k) => [k, args[k]]));
+  // A diagnostic mode with no document draws the current revision (#411, #427): the canvas core's deep_show call.
+  else if (typeof out.mode !== 'string') {
+    const probe = Object.fromEntries((['camera', 'probes', 'sheet'] as const).filter((k) => args[k] !== null && args[k] !== undefined).map((k) => [k, args[k]]));
     return { call: 'render_back', doc: args.doc, t: flicksOf(String(args.t ?? '0s')), rev: args.rev ?? null, ...(out.size ? { size: out.size } : {}), ...probe };
   }
   return out;

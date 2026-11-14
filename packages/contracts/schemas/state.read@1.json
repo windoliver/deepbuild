@@ -3,6 +3,9 @@
   "description": "What a workspace's state sources read (#67), at a definition's lock, at a claim or at a drift, by digest: each reading's items are in the evidence store under that digest, and what a check pinned on it is the verdict's state_digests. Only the core appends it.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#67",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

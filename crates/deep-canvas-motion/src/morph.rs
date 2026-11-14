@@ -30,7 +30,15 @@ pub const FLATTEN: f64 = 0.001;
 pub fn of_d(d: &str) -> Option<Shape> {
     let verbs = deep_canvas_marks::path::parse(d)?;
     let lines = deep_canvas_marks::path::flatten(&verbs, FLATTEN);
-    (!lines.is_empty()).then(|| lines.into_iter().map(|l| Sub { points: l.points, closed: l.closed }).collect())
+    (!lines.is_empty()).then(|| {
+        lines
+            .into_iter()
+            .map(|l| Sub {
+                points: l.points,
+                closed: l.closed,
+            })
+            .collect()
+    })
 }
 
 /// A shape as an SVG path string: `M x y L x y … Z` for each sub-path.
@@ -41,7 +49,12 @@ pub fn d_of(shape: &Shape) -> String {
             if !d.is_empty() {
                 d.push(' ');
             }
-            d.push_str(&format!("{} {} {}", if i == 0 { 'M' } else { 'L' }, p[0], p[1]));
+            d.push_str(&format!(
+                "{} {} {}",
+                if i == 0 { 'M' } else { 'L' },
+                p[0],
+                p[1]
+            ));
         }
         if s.closed {
             d.push_str(" Z");
@@ -56,7 +69,10 @@ pub fn structure(shape: &Shape) -> Structure {
 
 /// The shape as one flat run of coordinates, sub-path after sub-path.
 pub fn flat(shape: &Shape) -> Vec<f64> {
-    shape.iter().flat_map(|s| s.points.iter().flat_map(|p| [p[0], p[1]])).collect()
+    shape
+        .iter()
+        .flat_map(|s| s.points.iter().flat_map(|p| [p[0], p[1]]))
+        .collect()
 }
 
 /// A flat run back into a shape of `structure`.
@@ -65,7 +81,9 @@ pub fn unflat(values: &[f64], structure: &Structure) -> Shape {
     structure
         .iter()
         .map(|&(n, closed)| {
-            let points = (0..n).map(|k| [values[2 * (at + k)], values[2 * (at + k) + 1]]).collect();
+            let points = (0..n)
+                .map(|k| [values[2 * (at + k)], values[2 * (at + k) + 1]])
+                .collect();
             at += n;
             Sub { points, closed }
         })
@@ -121,8 +139,16 @@ fn pair(a: &Shape, b: &Shape) -> Vec<(Option<usize>, Option<usize>)> {
         }
     }
     pairs.sort_by_key(|p| p.0);
-    pairs.extend((0..a.len()).filter(|&i| !used_a[i]).map(|i| (Some(i), None)));
-    pairs.extend((0..b.len()).filter(|&j| !used_b[j]).map(|j| (None, Some(j))));
+    pairs.extend(
+        (0..a.len())
+            .filter(|&i| !used_a[i])
+            .map(|i| (Some(i), None)),
+    );
+    pairs.extend(
+        (0..b.len())
+            .filter(|&j| !used_b[j])
+            .map(|j| (None, Some(j))),
+    );
     pairs
 }
 
@@ -136,19 +162,34 @@ pub fn resample(s: &Sub, n: usize) -> Sub {
     }
     let edges = if s.closed { m } else { m - 1 };
     if edges == 0 {
-        return Sub { points: vec![s.points[0]; n], closed: s.closed };
+        return Sub {
+            points: vec![s.points[0]; n],
+            closed: s.closed,
+        };
     }
-    let lengths: Vec<f64> = (0..edges).map(|i| dist(s.points[i], s.points[(i + 1) % m])).collect();
+    let lengths: Vec<f64> = (0..edges)
+        .map(|i| dist(s.points[i], s.points[(i + 1) % m]))
+        .collect();
     let total: f64 = lengths.iter().sum();
     let extra = n - m;
     let shares: Vec<f64> = lengths
         .iter()
-        .map(|l| if total > 0.0 { extra as f64 * l / total } else { extra as f64 / edges as f64 })
+        .map(|l| {
+            if total > 0.0 {
+                extra as f64 * l / total
+            } else {
+                extra as f64 / edges as f64
+            }
+        })
         .collect();
     let mut add: Vec<usize> = shares.iter().map(|s| s.floor() as usize).collect();
     let mut left = extra - add.iter().sum::<usize>();
     let mut order: Vec<usize> = (0..edges).collect();
-    order.sort_by(|&x, &y| (shares[y] - shares[y].floor()).total_cmp(&(shares[x] - shares[x].floor())).then(x.cmp(&y)));
+    order.sort_by(|&x, &y| {
+        (shares[y] - shares[y].floor())
+            .total_cmp(&(shares[x] - shares[x].floor()))
+            .then(x.cmp(&y))
+    });
     for &e in order.iter().cycle() {
         if left == 0 {
             break;
@@ -167,7 +208,10 @@ pub fn resample(s: &Sub, n: usize) -> Sub {
             }
         }
     }
-    Sub { points, closed: s.closed }
+    Sub {
+        points,
+        closed: s.closed,
+    }
 }
 
 /// `b` turned so its start is the rotation with the least summed squared distance to `a`.
@@ -184,13 +228,22 @@ fn turned(a: &Sub, b: &Sub) -> Sub {
             })
             .sum()
     };
-    let best = (0..n).map(|k| (cost(k), k)).fold((f64::INFINITY, 0), |m, c| if c.0 < m.0 { c } else { m }).1;
-    Sub { points: (0..n).map(|i| b.points[(i + best) % n]).collect(), closed: b.closed }
+    let best = (0..n)
+        .map(|k| (cost(k), k))
+        .fold((f64::INFINITY, 0), |m, c| if c.0 < m.0 { c } else { m })
+        .1;
+    Sub {
+        points: (0..n).map(|i| b.points[(i + best) % n]).collect(),
+        closed: b.closed,
+    }
 }
 
 /// A sub-path collapsed to its centroid, `n` points long.
 fn point_at_centroid(s: &Sub, n: usize) -> Sub {
-    Sub { points: vec![area_centroid(s).1; n], closed: s.closed }
+    Sub {
+        points: vec![area_centroid(s).1; n],
+        closed: s.closed,
+    }
 }
 
 /// `a` and `b` matched: one structure, `a`'s and `b`'s points on it.
@@ -201,8 +254,14 @@ pub fn matched(a: &Shape, b: &Shape) -> (Shape, Shape) {
             (Some(i), Some(j)) => {
                 let n = a[i].points.len().max(b[j].points.len());
                 let closed = a[i].closed && b[j].closed;
-                let sa = Sub { closed, ..resample(&a[i], n) };
-                let sb = Sub { closed, ..resample(&b[j], n) };
+                let sa = Sub {
+                    closed,
+                    ..resample(&a[i], n)
+                };
+                let sb = Sub {
+                    closed,
+                    ..resample(&b[j], n)
+                };
                 mb.push(turned(&sa, &sb));
                 ma.push(sa);
             }
@@ -233,7 +292,13 @@ pub fn matched_all(shapes: &[Shape]) -> Vec<Shape> {
     }
     shapes
         .iter()
-        .map(|s| if structure(s) == structure(&reference) { s.clone() } else { matched(&reference, s).1 })
+        .map(|s| {
+            if structure(s) == structure(&reference) {
+                s.clone()
+            } else {
+                matched(&reference, s).1
+            }
+        })
         .collect()
 }
 
@@ -244,7 +309,10 @@ pub fn of_value(v: &Value) -> Option<Shape> {
         return of_d(d);
     }
     let (verbs, pts) = (v.get("verbs")?.as_array()?, v.get("pts")?.as_array()?);
-    let pts: Vec<f64> = pts.iter().map(|p| p.as_f64().filter(|p| p.is_finite())).collect::<Option<_>>()?;
+    let pts: Vec<f64> = pts
+        .iter()
+        .map(|p| p.as_f64().filter(|p| p.is_finite()))
+        .collect::<Option<_>>()?;
     let mut at = 0;
     let mut next = || -> Option<[f64; 2]> {
         let p = [*pts.get(at)?, *pts.get(at + 1)?];
@@ -255,7 +323,9 @@ pub fn of_value(v: &Value) -> Option<Shape> {
     for verb in verbs {
         let name = match verb {
             Value::String(s) => s.as_str(),
-            Value::Number(n) => ["M", "L", "Q", "C", "Z"].get(n.as_u64()? as usize).copied()?,
+            Value::Number(n) => ["M", "L", "Q", "C", "Z"]
+                .get(n.as_u64()? as usize)
+                .copied()?,
             _ => return None,
         };
         out.push(match name {
@@ -271,7 +341,15 @@ pub fn of_value(v: &Value) -> Option<Shape> {
         return None;
     }
     let lines = deep_canvas_marks::path::flatten(&out, FLATTEN);
-    (!lines.is_empty()).then(|| lines.into_iter().map(|l| Sub { points: l.points, closed: l.closed }).collect())
+    (!lines.is_empty()).then(|| {
+        lines
+            .into_iter()
+            .map(|l| Sub {
+                points: l.points,
+                closed: l.closed,
+            })
+            .collect()
+    })
 }
 
 /// A shape as path@1's columns, `{verbs, pts}`, verbs as letters.
@@ -297,30 +375,55 @@ pub fn of_item(item: &Value, part: Option<&str>) -> Option<Shape> {
     match part {
         Some(part) => of_value(params.pointer("/outline/parts")?.get(part)?),
         None if params.get("verbs").is_some() => of_value(params),
-        None => params.get("d").and_then(Value::as_str).or_else(|| params.pointer("/outline/d").and_then(Value::as_str)).and_then(of_d),
+        None => params
+            .get("d")
+            .and_then(Value::as_str)
+            .or_else(|| params.pointer("/outline/d").and_then(Value::as_str))
+            .and_then(of_d),
     }
 }
 
 /// An item's `at` in the plane: `x ↦ pos + R(rot z)·S(scale)·(x − pivot)` (Units and axes), as
 /// a 2×2 matrix and an offset.
 fn at_of(item: &Value) -> ([[f64; 2]; 2], [f64; 2]) {
-    let v = |name: &str, k: usize, or: f64| item.pointer(&format!("/at/{name}/{k}")).and_then(Value::as_f64).unwrap_or(or);
+    let v = |name: &str, k: usize, or: f64| {
+        item.pointer(&format!("/at/{name}/{k}"))
+            .and_then(Value::as_f64)
+            .unwrap_or(or)
+    };
     let turn = deep_canvas::ops::rad(v("rot", 2, 0.0));
     let (s, c) = (deep_canvas::ops::sin(turn), deep_canvas::ops::cos(turn));
     let (sx, sy) = (v("scale", 0, 1.0), v("scale", 1, 1.0));
     let m = [[c * sx, -s * sy], [s * sx, c * sy]];
     let (px, py) = (v("pivot", 0, 0.0), v("pivot", 1, 0.0));
-    (m, [v("pos", 0, 0.0) - (m[0][0] * px + m[0][1] * py), v("pos", 1, 0.0) - (m[1][0] * px + m[1][1] * py)])
+    (
+        m,
+        [
+            v("pos", 0, 0.0) - (m[0][0] * px + m[0][1] * py),
+            v("pos", 1, 0.0) - (m[1][0] * px + m[1][1] * py),
+        ],
+    )
 }
 
 fn mapped(shape: &Shape, f: impl Fn([f64; 2]) -> [f64; 2]) -> Shape {
-    shape.iter().map(|s| Sub { points: s.points.iter().map(|&p| f(p)).collect(), closed: s.closed }).collect()
+    shape
+        .iter()
+        .map(|s| Sub {
+            points: s.points.iter().map(|&p| f(p)).collect(),
+            closed: s.closed,
+        })
+        .collect()
 }
 
 /// A shape in an item's own space placed in the document by the item's `at`.
 pub fn placed(item: &Value, shape: &Shape) -> Shape {
     let (m, t) = at_of(item);
-    mapped(shape, |p| [m[0][0] * p[0] + m[0][1] * p[1] + t[0], m[1][0] * p[0] + m[1][1] * p[1] + t[1]])
+    mapped(shape, |p| {
+        [
+            m[0][0] * p[0] + m[0][1] * p[1] + t[0],
+            m[1][0] * p[0] + m[1][1] * p[1] + t[1],
+        ]
+    })
 }
 
 /// A shape in the document taken into an item's own space.
@@ -332,19 +435,31 @@ pub fn unplaced(item: &Value, shape: &Shape) -> Shape {
         if det == 0.0 {
             return [x, y];
         }
-        [(m[1][1] * x - m[0][1] * y) / det, (-m[1][0] * x + m[0][0] * y) / det]
+        [
+            (m[1][1] * x - m[0][1] * y) / det,
+            (-m[1][0] * x + m[0][0] * y) / det,
+        ]
     })
 }
 
 /// A vector import's parts as a match morph pairs them: `ID#part`, keyed by the part's id, each
 /// in document u.
 pub fn vector_parts(id: &str, item: &Value) -> Vec<Part> {
-    let Some(parts) = item.pointer("/params/outline/parts").and_then(Value::as_object) else {
+    let Some(parts) = item
+        .pointer("/params/outline/parts")
+        .and_then(Value::as_object)
+    else {
         return Vec::new();
     };
     parts
         .iter()
-        .filter_map(|(key, d)| Some(Part { name: format!("{id}#{key}"), key: key.clone(), shape: placed(item, &of_value(d)?) }))
+        .filter_map(|(key, d)| {
+            Some(Part {
+                name: format!("{id}#{key}"),
+                key: key.clone(),
+                shape: placed(item, &of_value(d)?),
+            })
+        })
         .collect()
 }
 
@@ -382,27 +497,46 @@ impl Between {
         } else if t >= self.end {
             1.0
         } else {
-            self.ease.at((t - self.start) as f64 / (self.end - self.start) as f64)
+            self.ease
+                .at((t - self.start) as f64 / (self.end - self.start) as f64)
         }
     }
 }
 
 fn refused(code: &'static str, path: String) -> Refused {
-    Refused { code, path, detail: None }
+    Refused {
+        code,
+        path,
+        detail: None,
+    }
 }
 
 /// The document's match morphs that name two items rather than two shots or placements.
 pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, Refused> {
     let items = doc.get("items").and_then(Value::as_object);
-    let is_item = |v: Option<&Value>| v.and_then(Value::as_str).is_some_and(|n| items.is_some_and(|i| i.contains_key(n)));
+    let is_item = |v: Option<&Value>| {
+        v.and_then(Value::as_str)
+            .is_some_and(|n| items.is_some_and(|i| i.contains_key(n)))
+    };
     let mut out = Vec::new();
-    for (id, tr) in doc.get("transitions").and_then(Value::as_object).into_iter().flatten() {
+    for (id, tr) in doc
+        .get("transitions")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let path = format!("transitions/{id}");
-        if tr.get("kind").and_then(Value::as_str) != Some("match_morph") || !(is_item(tr.get("from")) || is_item(tr.get("to"))) {
+        if tr.get("kind").and_then(Value::as_str) != Some("match_morph")
+            || !(is_item(tr.get("from")) || is_item(tr.get("to")))
+        {
             continue;
         }
         let name = |f: &str| -> Result<String, Refused> {
-            tr.get(f).and_then(Value::as_str).filter(|_| is_item(tr.get(f))).map(str::to_string).ok_or_else(|| refused("ref_unresolved", format!("{path}/{f}")))
+            tr.get(f)
+                .and_then(Value::as_str)
+                .filter(|_| is_item(tr.get(f)))
+                .map(str::to_string)
+                .ok_or_else(|| refused("ref_unresolved", format!("{path}/{f}")))
         };
         let (from, to) = (name("from")?, name("to")?);
         let span = crate::doc::time_of(tr.get("span"), ctx, &format!("{path}/span"))?;
@@ -423,8 +557,13 @@ pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, 
             None => {}
             Some(Value::Object(p)) => {
                 for (a, b) in p {
-                    let b = b.as_str().ok_or_else(|| refused("bad_doc", format!("{path}/match_morph/pairs/{a}")))?;
-                    pairs.push((a.trim_start_matches('#').to_string(), b.trim_start_matches('#').to_string()));
+                    let b = b.as_str().ok_or_else(|| {
+                        refused("bad_doc", format!("{path}/match_morph/pairs/{a}"))
+                    })?;
+                    pairs.push((
+                        a.trim_start_matches('#').to_string(),
+                        b.trim_start_matches('#').to_string(),
+                    ));
                 }
             }
             Some(_) => return Err(refused("bad_doc", format!("{path}/match_morph/pairs"))),
@@ -436,7 +575,16 @@ pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, 
             Some(Some("split")) => Unpaired::Split,
             Some(_) => return Err(refused("bad_doc", format!("{path}/match_morph/unpaired"))),
         };
-        out.push(Between { id: id.clone(), from, to, start, end: start + span, ease, pairs, unpaired });
+        out.push(Between {
+            id: id.clone(),
+            from,
+            to,
+            start,
+            end: start + span,
+            ease,
+            pairs,
+            unpaired,
+        });
     }
     Ok(out)
 }
@@ -463,9 +611,22 @@ pub struct Piece {
 
 /// A shape's box: `[x0, y0, x1, y1]`.
 fn bbox(shape: &Shape) -> [f64; 4] {
-    shape.iter().flat_map(|s| &s.points).fold([f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY], |b, p| {
-        [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])]
-    })
+    shape.iter().flat_map(|s| &s.points).fold(
+        [
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ],
+        |b, p| {
+            [
+                b[0].min(p[0]),
+                b[1].min(p[1]),
+                b[2].max(p[0]),
+                b[3].max(p[1]),
+            ]
+        },
+    )
 }
 
 /// A shape's box centre.
@@ -479,7 +640,16 @@ pub fn centre(shape: &Shape) -> [f64; 2] {
 fn shape_hash(shape: &Shape) -> String {
     let b = bbox(shape);
     let q = |v: f64| (v * 1e6).round() as i64;
-    shape.iter().map(|s| s.points.iter().map(|p| format!("{},{};", q(p[0] - b[0]), q(p[1] - b[1]))).collect::<String>() + if s.closed { "Z" } else { "|" }).collect()
+    shape
+        .iter()
+        .map(|s| {
+            s.points
+                .iter()
+                .map(|p| format!("{},{};", q(p[0] - b[0]), q(p[1] - b[1])))
+                .collect::<String>()
+                + if s.closed { "Z" } else { "|" }
+        })
+        .collect()
 }
 
 /// Reading order: by the box's top, then its left.
@@ -487,7 +657,9 @@ fn reading(parts: &[Part]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..parts.len()).collect();
     order.sort_by(|&i, &j| {
         let (a, b) = (bbox(&parts[i].shape), bbox(&parts[j].shape));
-        a[1].total_cmp(&b[1]).then(a[0].total_cmp(&b[0])).then(i.cmp(&j))
+        a[1].total_cmp(&b[1])
+            .then(a[0].total_cmp(&b[0]))
+            .then(i.cmp(&j))
     });
     order
 }
@@ -498,7 +670,11 @@ fn lerp2(a: [f64; 2], b: [f64; 2], p: f64) -> [f64; 2] {
 
 /// `a` morphing into `b` at progress p, their points matched.
 fn mixed(a: &Shape, b: &Shape, p: f64) -> Shape {
-    let (ma, mb) = if structure(a) == structure(b) { (a.clone(), b.clone()) } else { matched(a, b) };
+    let (ma, mb) = if structure(a) == structure(b) {
+        (a.clone(), b.clone())
+    } else {
+        matched(a, b)
+    };
     let (fa, fb) = (flat(&ma), flat(&mb));
     let v: Vec<f64> = fa.iter().zip(&fb).map(|(x, y)| x + (y - x) * p).collect();
     unflat(&v, &structure(&ma))
@@ -506,7 +682,13 @@ fn mixed(a: &Shape, b: &Shape, p: f64) -> Shape {
 
 /// The pieces of a match morph at progress p: `pairs` first, then parts whose keys are equal,
 /// then what's left by shape hash in reading order; the rest as `unpaired` says (Transition).
-pub fn pieces(a: &[Part], b: &[Part], pairs: &[(String, String)], unpaired: Unpaired, p: f64) -> Vec<Piece> {
+pub fn pieces(
+    a: &[Part],
+    b: &[Part],
+    pairs: &[(String, String)],
+    unpaired: Unpaired,
+    p: f64,
+) -> Vec<Piece> {
     let (mut used_a, mut used_b) = (vec![false; a.len()], vec![false; b.len()]);
     let mut paired: Vec<(usize, usize)> = Vec::new();
     let mut take = |i: usize, j: usize, used_a: &mut Vec<bool>, used_b: &mut Vec<bool>| {
@@ -517,7 +699,10 @@ pub fn pieces(a: &[Part], b: &[Part], pairs: &[(String, String)], unpaired: Unpa
         }
     };
     for (x, y) in pairs {
-        if let (Some(i), Some(j)) = (a.iter().position(|q| &q.key == x), b.iter().position(|q| &q.key == y)) {
+        if let (Some(i), Some(j)) = (
+            a.iter().position(|q| &q.key == x),
+            b.iter().position(|q| &q.key == y),
+        ) {
             take(i, j, &mut used_a, &mut used_b);
         }
     }
@@ -529,7 +714,10 @@ pub fn pieces(a: &[Part], b: &[Part], pairs: &[(String, String)], unpaired: Unpa
     let (ra, rb) = (reading(a), reading(b));
     for &i in &ra {
         let hash = shape_hash(&a[i].shape);
-        if let Some(&j) = rb.iter().find(|&&j| !used_b[j] && !used_a[i] && shape_hash(&b[j].shape) == hash) {
+        if let Some(&j) = rb
+            .iter()
+            .find(|&&j| !used_b[j] && !used_a[i] && shape_hash(&b[j].shape) == hash)
+        {
             take(i, j, &mut used_a, &mut used_b);
         }
     }
@@ -543,8 +731,20 @@ pub fn pieces(a: &[Part], b: &[Part], pairs: &[(String, String)], unpaired: Unpa
         shape: mixed(&a[i].shape, &b[j].shape, p),
     };
     let mut out: Vec<Piece> = paired.iter().map(|&(i, j)| morph(i, j, 1.0)).collect();
-    let going = |i: usize, opacity: f64| Piece { from: Some(a[i].name.clone()), to: None, centre: centre(&a[i].shape), opacity, shape: a[i].shape.clone() };
-    let coming = |j: usize, opacity: f64| Piece { from: None, to: Some(b[j].name.clone()), centre: centre(&b[j].shape), opacity, shape: b[j].shape.clone() };
+    let going = |i: usize, opacity: f64| Piece {
+        from: Some(a[i].name.clone()),
+        to: None,
+        centre: centre(&a[i].shape),
+        opacity,
+        shape: a[i].shape.clone(),
+    };
+    let coming = |j: usize, opacity: f64| Piece {
+        from: None,
+        to: Some(b[j].name.clone()),
+        centre: centre(&b[j].shape),
+        opacity,
+        shape: b[j].shape.clone(),
+    };
     match unpaired {
         Unpaired::Fade | Unpaired::CrossFade => {
             out.extend(left_a.iter().map(|&i| going(i, 1.0 - p)));
@@ -562,21 +762,37 @@ pub fn pieces(a: &[Part], b: &[Part], pairs: &[(String, String)], unpaired: Unpa
             // the one part (their opacities sum to its own) and end whole on their parts.
             let near = |j: usize| {
                 left_a.iter().copied().min_by(|&x, &y| {
-                    let (cx, cy, cj) = (centre(&a[x].shape), centre(&a[y].shape), centre(&b[j].shape));
-                    let d = |c: [f64; 2]| (c[0] - cj[0]) * (c[0] - cj[0]) + (c[1] - cj[1]) * (c[1] - cj[1]);
+                    let (cx, cy, cj) = (
+                        centre(&a[x].shape),
+                        centre(&a[y].shape),
+                        centre(&b[j].shape),
+                    );
+                    let d = |c: [f64; 2]| {
+                        (c[0] - cj[0]) * (c[0] - cj[0]) + (c[1] - cj[1]) * (c[1] - cj[1])
+                    };
                     d(cx).total_cmp(&d(cy))
                 })
             };
-            let sources: Vec<(usize, Option<usize>)> = left_b.iter().map(|&j| (j, near(j))).collect();
+            let sources: Vec<(usize, Option<usize>)> =
+                left_b.iter().map(|&j| (j, near(j))).collect();
             for &i in &left_a {
-                let copies: Vec<usize> = sources.iter().filter(|(_, s)| *s == Some(i)).map(|(j, _)| *j).collect();
+                let copies: Vec<usize> = sources
+                    .iter()
+                    .filter(|(_, s)| *s == Some(i))
+                    .map(|(j, _)| *j)
+                    .collect();
                 if copies.is_empty() {
                     out.push(going(i, 1.0 - p));
                 }
                 let n = copies.len() as f64;
                 out.extend(copies.iter().map(|&j| morph(i, j, (1.0 - p) / n + p)));
             }
-            out.extend(sources.iter().filter(|(_, s)| s.is_none()).map(|&(j, _)| coming(j, p)));
+            out.extend(
+                sources
+                    .iter()
+                    .filter(|(_, s)| s.is_none())
+                    .map(|&(j, _)| coming(j, p)),
+            );
         }
     }
     out
@@ -596,7 +812,10 @@ mod tests {
                 [rr * cos(a), rr * sin(a)]
             })
             .collect();
-        Sub { points, closed: true }
+        Sub {
+            points,
+            closed: true,
+        }
     }
 
     #[test]
@@ -614,10 +833,23 @@ mod tests {
     #[test]
     fn an_unpartnered_sub_path_grows_from_its_centroid() {
         let one = vec![ngon(4, 1.0, None)];
-        let two = vec![ngon(4, 1.0, None), Sub { points: ngon(4, 0.5, None).points.iter().map(|p| [p[0] + 5.0, p[1]]).collect(), closed: true }];
+        let two = vec![
+            ngon(4, 1.0, None),
+            Sub {
+                points: ngon(4, 0.5, None)
+                    .points
+                    .iter()
+                    .map(|p| [p[0] + 5.0, p[1]])
+                    .collect(),
+                closed: true,
+            },
+        ];
         let (a, b) = matched(&one, &two);
         assert_eq!(a.len(), 2);
-        assert!(a[1].points.iter().all(|p| (p[0] - 5.0).abs() < 1e-12 && p[1].abs() < 1e-12));
+        assert!(a[1]
+            .points
+            .iter()
+            .all(|p| (p[0] - 5.0).abs() < 1e-12 && p[1].abs() < 1e-12));
         assert_eq!(b[1], two[1]);
     }
 }

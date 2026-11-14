@@ -1,0 +1,52 @@
+no paths, fixed script:                               41 tests
+#2091's surviving paths, main's script (workaround):  21 tests
+#2091's surviving paths, fixed script:                21 tests, identical to the workaround's
+scripts/affected.mjs + node_modules (the setup):      20 tests
+workaround's + setup's, against no paths:             identical
+
+#2091's own selection (21):
+    tests/acceptance/303/budgets.test.ts
+    tests/acceptance/303/checkfile-redraft.test.ts
+    tests/acceptance/303/days.test.ts
+    tests/acceptance/303/first.test.ts
+    tests/acceptance/303/lock.test.ts
+    tests/acceptance/303/midturn.test.ts
+    tests/acceptance/303/origins.test.ts
+    tests/acceptance/303/outside.test.ts
+    tests/acceptance/303/rename.test.ts
+    tests/acceptance/303/stops.test.ts
+    tests/acceptance/303/survive.test.ts
+    tests/acceptance/322/approved-redraft.test.ts
+    tests/acceptance/322/coverage.test.ts
+    tests/acceptance/344/deliver.test.ts
+    tests/acceptance/344/lessons.test.ts
+    tests/acceptance/344/proposal.test.ts
+    tests/acceptance/344/reach.test.ts
+    tests/acceptance/344/rules-page.test.ts
+    tests/acceptance/344/sets.test.ts
+    tests/acceptance/344/taste.test.ts
+    tests/proof/344/shots.test.ts
+
+added by the setup (20):
+    tests/acceptance/1015/redraft/own-repo.test.ts
+    tests/acceptance/1113/waits.test.mjs
+    tests/acceptance/1114/affected.test.mjs
+    tests/acceptance/1114/failures.test.mjs
+    tests/acceptance/1114/lanes.test.mjs
+    tests/acceptance/1114/timed-list.test.mjs
+    tests/acceptance/1115/affected.test.mjs
+    tests/acceptance/1115/decisions.test.mjs
+    tests/acceptance/1115/evidence.test.mjs
+    tests/acceptance/1115/failing-states.test.mjs
+    tests/acceptance/1115/failures.test.mjs
+    tests/acceptance/1115/guard.test.mjs
+    tests/acceptance/1115/no-grant.test.mjs
+    tests/acceptance/1115/notes.test.mjs
+    tests/acceptance/1115/skips.test.mjs
+    tests/acceptance/1406/classify.test.mjs
+    tests/acceptance/2144/lint-on-main.test.mjs
+    tests/acceptance/33/bootstrap.test.ts
+    tests/affected.test.mjs
+    tests/shards.test.mjs
+
+deleted tests in any of these lists: 0

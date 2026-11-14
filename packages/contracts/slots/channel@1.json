@@ -3,6 +3,9 @@
   "description": "A way to reach you (#65): it only transports. deliver(item, ctx) hands the provider what the hub rendered and says delivered with the provider's acknowledgement, stalled, timed out or conflict; receive(ctx) returns the answers, the threads seen and any conflict the provider reports, each answer's proof passed on unchanged for the hub to check.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#65",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "type": "object",
   "properties": {
     "slot": {

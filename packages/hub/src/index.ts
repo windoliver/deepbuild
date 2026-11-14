@@ -25,6 +25,7 @@ export const secretCommand = async (args: string[]): Promise<number> => (await i
 export const followCommand = async (run: string): Promise<number> => (await import('./hosts.js')).followCommand(run);
 export const hostCommand = async (args: string[]): Promise<number> => (await import('./hosts.js')).hostCommand(args);
 export const workspaceCommand = async (args: Args): Promise<number> => (await import('./workspace-command.js')).workspaceCommand(args);
+export const wordsCommand = async (args: Args): Promise<number> => (await import('./words-command.js')).wordsCommand(args);
 export const fixCommand = async (args: Args): Promise<number> => (await import('./fix-command.js')).fixCommand(args);
 export const landCommand = async (args: Args): Promise<number> => (await import('./land-command.js')).landCommand(args);
 export const workCommand = async (args: Args): Promise<number> => (await import('./land-command.js')).workCommand(args);
@@ -43,7 +44,8 @@ export const joinCommand = async (args: Args): Promise<number> => (await import(
 export const showCommand = async (args: Args): Promise<number> => (await import('./show.js')).showCommand(args);
 export const doctorCommand = async (args: Args, also: () => Promise<Item[]>): Promise<number> => (await import('./doctor.js')).doctorCommand(args, also);
 export const doctorItems = async (env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> => (await import('./doctor.js')).doctorItems(env, options);
-export { exportCommand, kindsCommand } from './canvas.js';
+export const exportCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).exportCommand(args);
+export const kindsCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).kindsCommand(args);
 export { activePlant } from './plant.js';
-export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';
+export { contractAdapter, extendPreview, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';

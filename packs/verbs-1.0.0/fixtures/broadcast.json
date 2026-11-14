@@ -1,0 +1,557 @@
+{
+  "verb": "broadcast",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Broadcast fixture",
+    "description": "Broadcast fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "broadcast",
+              "targets": [
+                "sq"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Broadcast fixture written by hand",
+    "description": "Broadcast fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "sq": {
+        "id": "sq",
+        "kind": "rect@1",
+        "name": "Square sq",
+        "order": "csq",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list.v.echo.0": {
+        "id": "list.v.echo.0",
+        "kind": "rect@1",
+        "name": "list.v.echo.0",
+        "order": "csq0",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "stroke": {
+              "role": "accent",
+              "width": 2
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list.v.echo.1": {
+        "id": "list.v.echo.1",
+        "kind": "rect@1",
+        "name": "list.v.echo.1",
+        "order": "csq1",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "stroke": {
+              "role": "accent",
+              "width": 2
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list.v.echo.2": {
+        "id": "list.v.echo.2",
+        "kind": "rect@1",
+        "name": "list.v.echo.2",
+        "order": "csq2",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "stroke": {
+              "role": "accent",
+              "width": 2
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list.v.echo.3": {
+        "id": "list.v.echo.3",
+        "kind": "rect@1",
+        "name": "list.v.echo.3",
+        "order": "csq3",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "stroke": {
+              "role": "accent",
+              "width": 2
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list.v.echo.4": {
+        "id": "list.v.echo.4",
+        "kind": "rect@1",
+        "name": "list.v.echo.4",
+        "order": "csq4",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "stroke": {
+              "role": "accent",
+              "width": 2
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "lift": {
+        "target": "items/sq/adjust/brightness",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 1,
+            "interp": "hold"
+          }
+        },
+        "modifiers": [
+          {
+            "kind": "pulse",
+            "at": 352800000,
+            "span": 705600000,
+            "amount": 0.3,
+            "ease": {
+              "name": "sigmoid",
+              "params": 10
+            }
+          }
+        ]
+      },
+      "grow0": {
+        "target": "items/list.v.echo.0/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              3,
+              3,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "fade0": {
+        "target": "items/list.v.echo.0/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": "hold"
+          },
+          "k1": {
+            "t": 352800000,
+            "value": 0.8,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k2": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "grow1": {
+        "target": "items/list.v.echo.1/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 423360000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              3,
+              3,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "fade1": {
+        "target": "items/list.v.echo.1/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": "hold"
+          },
+          "k1": {
+            "t": 423360000,
+            "value": 0.8,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k2": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "grow2": {
+        "target": "items/list.v.echo.2/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 493920000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              3,
+              3,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "fade2": {
+        "target": "items/list.v.echo.2/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": "hold"
+          },
+          "k1": {
+            "t": 493920000,
+            "value": 0.8,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k2": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "grow3": {
+        "target": "items/list.v.echo.3/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 564480000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              3,
+              3,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "fade3": {
+        "target": "items/list.v.echo.3/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": "hold"
+          },
+          "k1": {
+            "t": 564480000,
+            "value": 0.8,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k2": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      },
+      "grow4": {
+        "target": "items/list.v.echo.4/at/scale",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 635040000,
+            "value": [
+              1,
+              1,
+              1
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              3,
+              3,
+              1
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "fade4": {
+        "target": "items/list.v.echo.4/adjust/opacity",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": "hold"
+          },
+          "k1": {
+            "t": 635040000,
+            "value": 0.8,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k2": {
+            "t": 1058400000,
+            "value": 0,
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/sq/adjust/brightness",
+    "items/list.v.echo.0/at/scale",
+    "items/list.v.echo.0/adjust/opacity",
+    "items/list.v.echo.1/at/scale",
+    "items/list.v.echo.1/adjust/opacity",
+    "items/list.v.echo.2/at/scale",
+    "items/list.v.echo.2/adjust/opacity",
+    "items/list.v.echo.3/at/scale",
+    "items/list.v.echo.3/adjust/opacity",
+    "items/list.v.echo.4/at/scale",
+    "items/list.v.echo.4/adjust/opacity"
+  ]
+}

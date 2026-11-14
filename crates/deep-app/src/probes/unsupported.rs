@@ -9,6 +9,9 @@ pub mod notification_center {
         None
     }
 
+    /// Asks nothing and never calls `answered`, as on macOS outside the bundle.
+    pub fn request(_answered: impl Fn() + 'static) {}
+
     pub fn print() {
         eprintln!("deep-app: --notification-center runs on macOS only");
         std::process::exit(1);

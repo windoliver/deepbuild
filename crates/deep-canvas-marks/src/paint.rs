@@ -474,7 +474,11 @@ pub fn steps(palette: &Palette, s: &Map<String, Value>, path: &str) -> Result<St
 
 /// A mark set's stepped fill over its rows (`steps {over: rows, by: order | key}`): its stops'
 /// colors through `palette`, each row one solid color by its rank (#1162).
-pub fn row_stops(palette: &Palette, s: &Map<String, Value>, path: &str) -> Result<Vec<(f64, Rgb)>, Refused> {
+pub fn row_stops(
+    palette: &Palette,
+    s: &Map<String, Value>,
+    path: &str,
+) -> Result<Vec<(f64, Rgb)>, Refused> {
     Ok(stops_of(palette, s.get("stops"), path)?
         .into_iter()
         .map(|(at, c, _)| (at, c))

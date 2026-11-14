@@ -143,7 +143,13 @@ impl Fills {
     }
 
     /// The fill of level 0 of `tex` (a texture output of `format`) with `v`.
-    pub fn fill(&self, d: &deep_gpu::counted::Wgpu, tex: &wgpu::Texture, format: &str, v: [f32; 4]) -> Fill {
+    pub fn fill(
+        &self,
+        d: &deep_gpu::counted::Wgpu,
+        tex: &wgpu::Texture,
+        format: &str,
+        v: [f32; 4],
+    ) -> Fill {
         let dim3 = tex.dimension() == wgpu::TextureDimension::D3;
         let pipeline = self.pipes[&(format.to_string(), dim3)].clone();
         let buf = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {

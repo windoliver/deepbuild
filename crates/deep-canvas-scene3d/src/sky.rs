@@ -46,8 +46,12 @@ pub enum Background {
     Auto,
     Sky,
     Environment,
-    /// An equirectangular video by its hash, its frame at t.
-    Video(String),
+    /// An equirectangular video by its hash, and its `frames` as an image's video frames take
+    /// them: the host draws its frame at t (#503).
+    Video {
+        asset: String,
+        frames: Value,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -293,7 +297,10 @@ pub fn parse(
             _ => return Err(bad("background")),
         },
         Some(v) => match v.pointer("/video/asset").and_then(Value::as_str) {
-            Some(sha) if is_sha(sha) => Background::Video(sha.to_string()),
+            Some(sha) if is_sha(sha) => Background::Video {
+                asset: sha.to_string(),
+                frames: v.pointer("/video/frames").cloned().unwrap_or_default(),
+            },
             _ => return Err(bad("background")),
         },
     };
@@ -334,7 +341,7 @@ pub fn parse(
     };
     // A video's frames can't be blurred or laid on a ground, and a ground needs a background
     // that shows the environment; each refused naming its field.
-    if matches!(sky.background, Background::Video(_)) && sky.background_blur > 0.0 {
+    if matches!(sky.background, Background::Video { .. }) && sky.background_blur > 0.0 {
         return Err(bad("background_blur"));
     }
     if sky.background_ground.is_some() && !sky.shows_environment() {
@@ -348,13 +355,64 @@ pub fn parse(
     if matches!(sky.background, Background::Environment) && sky.environment.is_none() {
         return Err(bad("background"));
     }
-    // A 360° video behind the scene takes its frames as `image@1`'s video frames do, which no
-    // renderer decodes yet: refused naming the field, never drawn as an empty sky.
-    if matches!(sky.background, Background::Video(_)) {
+    // A 360° video behind the scene takes its frames as `image@1`'s video frames do, which only
+    // a host with the document's assets decodes (#503): without them it's refused naming the
+    // field, never drawn as an empty sky.
+    if matches!(sky.background, Background::Video { .. }) && assets.is_none() {
         return Err(Refused {
             code: "unsupported",
             path: format!("{path}/background"),
         });
     }
     Ok(sky)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    const SHA: &str = "ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12";
+
+    fn video(extra: Value) -> Value {
+        let mut p = json!({"environment": {"from": "studio"},
+            "background": {"video": {"asset": SHA, "frames": {"start": 0}}}});
+        p.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        p
+    }
+
+    /// #503: with the document's assets a video background parses with its frames, its blur and
+    /// ground are still refused naming each field, and without assets it's refused as before.
+    #[test]
+    fn a_video_background_draws_where_assets_are_and_never_blurs() {
+        let look = Look3::from_roles(Default::default());
+        let none = |_: &str| -> Option<Vec<u8>> { None };
+        let assets: crate::scene::Assets<'_> = &none;
+        let sky = parse("sky", &video(json!({})), &look, Some(assets)).unwrap();
+        assert_eq!(
+            sky.background,
+            Background::Video {
+                asset: SHA.into(),
+                frames: json!({"start": 0})
+            }
+        );
+        let refused = |extra: Value, a| parse("sky", &video(extra), &look, a).unwrap_err();
+        let blur = refused(json!({"background_blur": 0.5}), Some(assets));
+        assert_eq!(
+            (blur.code, blur.path.as_str()),
+            ("out_of_range", "items/sky/params/background_blur")
+        );
+        let ground = refused(
+            json!({"background_ground": {"height": 1, "radius": 5}}),
+            Some(assets),
+        );
+        assert_eq!(ground.path, "items/sky/params/background_ground");
+        let bare = refused(json!({}), None);
+        assert_eq!(
+            (bare.code, bare.path.as_str()),
+            ("unsupported", "items/sky/params/background")
+        );
+    }
 }

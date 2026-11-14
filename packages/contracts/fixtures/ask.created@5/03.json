@@ -1,0 +1,44 @@
+{
+  "v": 5,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.created",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "exception",
+    "question": "Does reject_expired stay off for #42?",
+    "options": [
+      {
+        "id": "stay-off",
+        "label": "stay-off",
+        "decision": "none"
+      },
+      {
+        "id": "not-yet",
+        "label": "not-yet",
+        "decision": "none"
+      }
+    ],
+    "recommended": "stay-off",
+    "deadline": 1760099851123,
+    "fallback": "you",
+    "default": "not-yet",
+    "provisional": false,
+    "owner": "you",
+    "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba",
+    "pinned_to": {
+      "kind": "commit",
+      "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212a"
+    },
+    "action": {
+      "kind": "switch.off",
+      "repo": "/repo/.git",
+      "name": "reject_expired",
+      "deployed": "config/deployed.json",
+      "task": "task:item42",
+      "issue": 42
+    }
+  }
+}

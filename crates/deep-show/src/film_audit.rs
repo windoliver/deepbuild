@@ -141,6 +141,16 @@ impl Hub<'_> {
     /// `drawn` played through every frame of its span in one rendition, each frame read as
     /// evaluated data. None when it has no frame rate a frame can be cut from.
     fn film_played(&mut self, drawn: &Value, reduced: bool) -> Option<Played> {
+        self.film_played_at(drawn, reduced, None)
+    }
+
+    /// [`Hub::film_played`]; with `only`, just the frame at that clock time (#507).
+    fn film_played_at(
+        &mut self,
+        drawn: &Value,
+        reduced: bool,
+        only: Option<i64>,
+    ) -> Option<Played> {
         let (p, q) = drawn
             .get("transport")
             .and_then(deep_canvas::document::frame_rate_of)
@@ -148,7 +158,11 @@ impl Hub<'_> {
         let frame = deep_canvas::time::frame_length(p, q).ok()?;
         let span = time_of(drawn, drawn.pointer("/transport/span")).unwrap_or(0);
         let start = time_of(drawn, drawn.pointer("/transport/start")).unwrap_or(0);
-        let count = (span / frame).max(1) as usize;
+        // #507: the clock runs on through the path's holds to where the timeline ends.
+        let span = crate::present::path_of(drawn)
+            .clock_end(start + span)
+            .map_or(span, |end| end - start);
+        let (start, count) = only.map_or((start, (span / frame).max(1) as usize), |t| (t, 1));
         let size = [
             drawn["size"][0].as_f64().unwrap_or(1.0),
             drawn["size"][1].as_f64().unwrap_or(1.0),
@@ -251,18 +265,7 @@ impl Hub<'_> {
                             .map(|s| s.text.clone())
                     })
                     .unwrap_or_default();
-                let (mut cjk, mut other) = (0, 0);
-                let mut unrated = None;
-                for g in deep_text::unicode::grapheme_clusters(&text) {
-                    match deep_text::unicode::reading(g) {
-                        Reading::Cjk => cjk += 1,
-                        Reading::Other => other += 1,
-                        Reading::Space => {}
-                        Reading::Unrated(s) => {
-                            unrated.get_or_insert(s);
-                        }
-                    }
-                }
+                let (cjk, other, unrated) = reading_counts(&text);
                 if let Some(script) = unrated {
                     if !blocked.iter().any(|b| b["item"] == json!(item)) {
                         blocked.push(json!({"code": "film.script_unrated", "ids": [item], "item": item,
@@ -287,13 +290,67 @@ impl Hub<'_> {
         (out, blocked)
     }
 
-    /// The film audit on one document for the check input `input`, under the claim's brief.
+    /// #507: how long a hold at clock `t` must last for the text shown there, by the hold rule
+    /// under `input`, in whole frames of flicks.
+    pub(crate) fn hold_need(&mut self, drawn: &Value, input: &Value, t: i64) -> i64 {
+        let hold = Hold::from_input(input, HOLD_FLOOR);
+        let look_min = self
+            .look
+            .sizes
+            .as_ref()
+            .and_then(|s| s.text.values().map(|r| r.size).reduce(f64::min))
+            .unwrap_or(0.0);
+        let readable = Readable::from_input(input, look_min);
+        let cards = title_cards(drawn);
+        let (mut need, mut frame) = (hold.needed(0, 0, false), FLICKS);
+        for (_, reduced) in RENDITIONS {
+            let Some(played) = self.film_played_at(drawn, reduced, Some(t)) else {
+                continue;
+            };
+            frame = played.frame;
+            for (item, seen) in seen_by_item(&played, &readable) {
+                if let Some(s) = seen.first().filter(|s| s.readable && !s.text.is_empty()) {
+                    let (cjk, other, _) = reading_counts(&s.text);
+                    need = need.max(hold.needed(cjk, other, cards.contains(&item)));
+                }
+            }
+        }
+        // To the nearest flick first, so 1.5 + 51 ÷ 15 s is 4.9 s and not a frame more.
+        let flicks = (need * FLICKS as f64).round() as i64;
+        (flicks + frame - 1).div_euclid(frame.max(1)) * frame
+    }
+
+    /// The film audit on one document for the check input `input`, under the claim's brief: on
+    /// each path its waits and branches make (#507), else on the film as it plays.
     pub(crate) fn film_audit(
         &mut self,
         drawn: &Value,
         input: &Value,
         brief: Option<&Value>,
     ) -> Audited {
+        let Some(tracks) = self.audit_tracks(drawn, input) else {
+            return self.film_audit_path(drawn, input, brief);
+        };
+        let mut all = Audited::default();
+        for (k, track) in tracks.iter().enumerate() {
+            let found =
+                self.film_audit_path(&crate::present::with_track_only(drawn, track), input, brief);
+            all.issues.extend(found.issues.into_iter().map(|mut i| {
+                i["path"] = json!(k);
+                i
+            }));
+            all.blocked.extend(found.blocked);
+            for n in found.not_run {
+                if !all.not_run.contains(&n) {
+                    all.not_run.push(n);
+                }
+            }
+        }
+        all
+    }
+
+    /// The film audit on one path of a document.
+    fn film_audit_path(&mut self, drawn: &Value, input: &Value, brief: Option<&Value>) -> Audited {
         let mut a = Audited::default();
         let (holds, blocked) = self.holds(drawn, input);
         a.blocked.extend(blocked);
@@ -1103,6 +1160,41 @@ fn seen_by_item(played: &Played, limits: &Readable) -> BTreeMap<String, Vec<Seen
         }
     }
     out
+}
+
+/// #507: the string each text item draws in `drawing` with any opacity, by item, as the film
+/// audit reads it.
+pub(crate) fn drawn_texts(drawing: &deep_canvas_marks::modules::Drawing) -> Map<String, Value> {
+    let f = frame_of(
+        drawing,
+        Affine::IDENTITY,
+        1.0,
+        &BTreeMap::new(),
+        &mut crate::film_layout::Outlines::new(),
+        &mut None,
+    );
+    f.texts
+        .into_iter()
+        .filter(|t| t.opacity.iter().any(|o| *o > 0.0))
+        .map(|t| (t.item, json!(t.text)))
+        .collect()
+}
+
+/// A text's graphemes read at the CJK rate and at the other rate, and the first script with no
+/// stated rate.
+fn reading_counts(text: &str) -> (usize, usize, Option<String>) {
+    let (mut cjk, mut other, mut unrated) = (0, 0, None);
+    for g in deep_text::unicode::grapheme_clusters(text) {
+        match deep_text::unicode::reading(g) {
+            Reading::Cjk => cjk += 1,
+            Reading::Other => other += 1,
+            Reading::Space => {}
+            Reading::Unrated(s) => {
+                unrated.get_or_insert(s);
+            }
+        }
+    }
+    (cjk, other, unrated)
 }
 
 /// Each text@1 with a copy key and a line limit whose copy in some locale wraps past it, checked

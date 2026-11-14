@@ -103,9 +103,12 @@ pub fn frame_rate(v: &Value) -> Result<(String, i64), String> {
 /// Each output's position at each frame over `steps` steps at `step_rate` (Physics output): frame
 /// k at t = k × `frame` flicks while t is within the span, step s = ⌊t ÷ h⌋ and α = (t − s × h) ÷ h
 /// exact from flicks, the position the state after step s lerped toward the next by α, in f32.
-/// `positions[id][s]` is output `id`'s body's position after step s.
+/// `positions[id][s]` is output `id`'s body's position after step s; `readings[id]` (#523) is a
+/// joint output's: whether it reads joint_force, written `{force: N, torque: N·m}`, else
+/// joint_coordinate, written as one number, and its values after each step, lerped alike.
 pub fn outputs(
     positions: &BTreeMap<String, Vec<[f32; 3]>>,
+    readings: &BTreeMap<String, (bool, Vec<[f64; 2]>)>,
     frame_rate: &str,
     frame: i64,
     step_rate: f64,
@@ -140,6 +143,29 @@ pub fn outputs(
                     bytes.extend_from_slice(&x.to_bits().to_le_bytes());
                 }
                 json!(p.map(f64::from))
+            })
+            .collect();
+        series.insert(id.clone(), Value::Array(values));
+    }
+    for (id, (pair, at)) in readings {
+        bytes.extend_from_slice(id.as_bytes());
+        let values: Vec<Value> = times
+            .iter()
+            .map(|t| {
+                let (s, rem) = ((t / step) as usize, t % step);
+                let alpha = rem as f64 / step as f64;
+                let v = [0, 1].map(|i| match rem {
+                    0 => at[s][i],
+                    _ => at[s][i] + alpha * (at[s + 1][i] - at[s][i]),
+                });
+                if *pair {
+                    v.iter()
+                        .for_each(|x| bytes.extend_from_slice(&x.to_bits().to_le_bytes()));
+                    json!({"force": v[0], "torque": v[1]})
+                } else {
+                    bytes.extend_from_slice(&v[0].to_bits().to_le_bytes());
+                    json!(v[0])
+                }
             })
             .collect();
         series.insert(id.clone(), Value::Array(values));

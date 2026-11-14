@@ -130,7 +130,7 @@
       "fail_closed": true
     },
     "no-deepbuild-home-write": {
-      "match": "write:~/.deepbuild ~/.deepbuild/* !~/.deepbuild/workspaces/*",
+      "match": "write:~/.deepbuild ~/.deepbuild/* !~/.deepbuild/workspaces/* !~/.deepbuild/worktrees/*",
       "scope": "all_repos",
       "mode": "block",
       "reason": "~/.deepbuild holds DeepBuild's record, rules and settings, the ledger and rules.json included, which change only through DeepBuild or by you, never by an agent's write, whether by a file tool, the shell or a database client.",

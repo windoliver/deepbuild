@@ -1,0 +1,27 @@
+[
+  {
+    "n": 1,
+    "id": "#2197.b904fcd1",
+    "text": "**It names the checks.** Given a session in a repo whose spec names the checks unit and e2e, when the session calls `deep_status`, then the reply lists both names. Today the reply has no such field."
+  },
+  {
+    "n": 2,
+    "id": "#2197.c8fb2936",
+    "text": "**It names the session's open asks.** Given a session with one open taste ask, when it calls `deep_status`, then the reply holds that ask's handle, its state, its default and when it takes it. Today the reply has no such field."
+  },
+  {
+    "n": 3,
+    "id": "#2197.b02b3f39",
+    "text": "**It names the session's open items.** Given a session that recorded an open item, when it calls `deep_status`, then the reply holds the item's text. Today the reply has no such field."
+  },
+  {
+    "n": 4,
+    "id": "#2197.def48d2c",
+    "text": "**Nothing of another session.** Given two sessions with an ask each, when one calls `deep_status`, then the other's ask is not in the reply. A planted status that lists every session's asks fails."
+  },
+  {
+    "n": 5,
+    "id": "#2197.e42c122a",
+    "text": "**#26's budget holds.** On the reference Mac, with 30 days in the record, `deep_status` still answers under 100 ms at p95."
+  }
+]

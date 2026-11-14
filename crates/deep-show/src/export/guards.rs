@@ -20,10 +20,20 @@ pub(crate) fn odd_size(size: [u16; 2]) -> Option<Value> {
     if size.iter().all(|n| n % 2 == 0) {
         return None;
     }
-    let even = size.map(|n| if n % 2 == 0 { n } else if n == 1 { 2 } else { n - 1 });
-    Some(json!({"outcome": "refused", "code": "export_size_odd", "size": size, "nearest_even": even,
+    let even = size.map(|n| {
+        if n % 2 == 0 {
+            n
+        } else if n == 1 {
+            2
+        } else {
+            n - 1
+        }
+    });
+    Some(
+        json!({"outcome": "refused", "code": "export_size_odd", "size": size, "nearest_even": even,
         "what": format!("a 4:2:0 codec needs an even width and height: {}×{} is odd; the nearest even size is {}×{}",
-            size[0], size[1], even[0], even[1])}))
+            size[0], size[1], even[0], even[1])}),
+    )
 }
 
 /// The licences a document's assets carry, a job output's being its inputs' (`license.from`,
@@ -40,7 +50,9 @@ pub(crate) fn licenses(doc: &Value) -> (Vec<Value>, Vec<Value>, Vec<Value>) {
                 continue;
             }
             match assets.get(&a).and_then(|x| x["license"]["from"].as_array()) {
-                Some(from) => stack.extend(from.iter().filter_map(Value::as_str).map(str::to_string)),
+                Some(from) => {
+                    stack.extend(from.iter().filter_map(Value::as_str).map(str::to_string))
+                }
                 None => {
                     leaves.insert(a);
                 }
@@ -74,7 +86,8 @@ pub(crate) fn free_bytes(at: &Path) -> Option<u64> {
     let c = std::ffi::CString::new(p.as_os_str().as_bytes()).ok()?;
     // SAFETY: `c` is a NUL-terminated path and `s` a zeroed statvfs the call fills.
     let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
-    (unsafe { libc::statvfs(c.as_ptr(), &mut s) } == 0).then(|| s.f_bavail as u64 * s.f_frsize as u64)
+    (unsafe { libc::statvfs(c.as_ptr(), &mut s) } == 0)
+        .then(|| s.f_bavail as u64 * s.f_frsize as u64)
 }
 
 /// The readiness gate's disk count: whether `needed` bytes fit the volume that holds `at`, and
@@ -88,7 +101,10 @@ pub(crate) struct Disk {
 /// before the first frame when the volume it writes to can't hold that.
 pub(crate) fn disk_gate(needed: u64, at: &Path) -> Disk {
     let free = free_bytes(at).unwrap_or(0);
-    Disk { fits: needed <= free, free }
+    Disk {
+        fits: needed <= free,
+        free,
+    }
 }
 
 /// Each strip that plays past the film's end, with its start and the time lost, in flicks.
@@ -111,11 +127,22 @@ impl Hub<'_> {
     /// #157: the film's cuts, in flicks: where one placement cuts to the next, and each shot
     /// transition of kind cut.
     pub(super) fn cuts_of(&mut self, doc: &Value) -> Vec<i64> {
-        let motion = doc.as_object().and_then(|m| deep_canvas_motion::doc::read(m).ok());
-        let mut out: Vec<i64> = motion.map(|m| m.cuts.iter().map(|c| c.at).collect()).unwrap_or_default();
+        let motion = doc
+            .as_object()
+            .and_then(|m| deep_canvas_motion::doc::read(m).ok());
+        let mut out: Vec<i64> = motion
+            .map(|m| m.cuts.iter().map(|c| c.at).collect())
+            .unwrap_or_default();
         let session = self.evaluated(doc, 0);
-        if let Some(plan) = crate::film::program_of(&self.sched, &session).and_then(|p| p.shots.clone()) {
-            out.extend(plan.transitions.iter().filter(|t| matches!(t.kind, deep_canvas_motion::shots::Kind::Cut)).map(|t| t.cut));
+        if let Some(plan) =
+            crate::film::program_of(&self.sched, &session).and_then(|p| p.shots.clone())
+        {
+            out.extend(
+                plan.transitions
+                    .iter()
+                    .filter(|t| matches!(t.kind, deep_canvas_motion::shots::Kind::Cut))
+                    .map(|t| t.cut),
+            );
         }
         out.sort_unstable();
         out.dedup();
@@ -126,18 +153,46 @@ impl Hub<'_> {
     /// flat frames lasting 0.1 s outside the declared spans, and a looping film whose last frame
     /// changes to its first by more than any two neighbouring frames change.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn frame_guards(&self, doc: &Value, job: &Job, frame: i64, first: i64, reads: &[deep_gpu::frame_checks::Reading], wrap: Option<u64>, size: [u16; 2]) -> Result<Vec<Value>, Value> {
+    pub(super) fn frame_guards(
+        &self,
+        doc: &Value,
+        job: &Job,
+        frame: i64,
+        first: i64,
+        reads: &[deep_gpu::frame_checks::Reading],
+        wrap: Option<u64>,
+        size: [u16; 2],
+    ) -> Result<Vec<Value>, Value> {
         // The document's own film.blank check input declares its intended blanks: `except`, each a
         // span [from, to) of flicks or time literals.
         let mut except = Vec::new();
-        let declared = doc["checks"].as_array().into_iter().flatten().filter(|c| c["kind"] == "film.blank");
+        let declared = doc["checks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|c| c["kind"] == "film.blank");
         for span in declared.flat_map(|c| c["except"].as_array().cloned().unwrap_or_default()) {
             let (a, b) = pair_of(&span).ok_or_else(|| json!({"outcome": "refused", "code": "bad_doc", "path": "checks/film.blank/except"}))?;
-            let at = |t| self.resolve_time(&job.doc, t).map_err(|code| json!({"outcome": "refused", "code": code, "path": "checks/film.blank/except"}));
+            let at = |t| {
+                self.resolve_time(&job.doc, t).map_err(|code| json!({"outcome": "refused", "code": code, "path": "checks/film.blank/except"}))
+            };
             except.push(at(&a)?..at(&b)?);
         }
-        let rule = rules::BlankRule { coverage: 0.98, min: deep_canvas::grammar::FLICKS_PER_SECOND / 10, frame, except, flat_window: 3 };
-        let read: Vec<FrameRead> = reads.iter().map(|r| FrameRead { dark: r.dark, pixels: r.pixels, histogram: r.histogram }).collect();
+        let rule = rules::BlankRule {
+            coverage: 0.98,
+            min: deep_canvas::grammar::FLICKS_PER_SECOND / 10,
+            frame,
+            except,
+            flat_window: 3,
+        };
+        let read: Vec<FrameRead> = reads
+            .iter()
+            .map(|r| FrameRead {
+                dark: r.dark,
+                pixels: r.pixels,
+                histogram: r.histogram,
+            })
+            .collect();
         let flat = !self.guard_planted(Guard::BlankDarkOnly);
         let mut issues: Vec<Value> = rules::blank_runs(first, &read, &rule, flat)
             .iter()
@@ -153,7 +208,11 @@ impl Hub<'_> {
             })
             .collect();
         if let Some(sum) = wrap {
-            let neighbours: Vec<(i64, u64)> = reads.iter().enumerate().filter_map(|(i, r)| r.diff.map(|d| (first + i as i64 - 1, d))).collect();
+            let neighbours: Vec<(i64, u64)> = reads
+                .iter()
+                .enumerate()
+                .filter_map(|(i, r)| r.diff.map(|d| (first + i as i64 - 1, d)))
+                .collect();
             let bytes = u64::from(size[0]) * u64::from(size[1]) * 4;
             if let Err(w) = rules::wrap(sum, &neighbours, bytes) {
                 let last = first + reads.len() as i64 - 1;
@@ -169,7 +228,13 @@ impl Hub<'_> {
     /// Whether the document's look has grain, which raises the encoder's quality floor.
     pub(crate) fn has_grain(&self, doc: &Value) -> bool {
         let def = self.look_def_of(doc);
-        let finish = def.as_ref().and_then(|l| l.get("finish")).and_then(Value::as_array);
-        finish.into_iter().flatten().any(|f| f.get("grain").is_some())
+        let finish = def
+            .as_ref()
+            .and_then(|l| l.get("finish"))
+            .and_then(Value::as_array);
+        finish
+            .into_iter()
+            .flatten()
+            .any(|f| f.get("grain").is_some())
     }
 }

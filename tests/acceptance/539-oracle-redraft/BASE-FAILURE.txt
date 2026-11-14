@@ -1,0 +1,29 @@
+#539 Oracle lane redraft (criterion 5, #539.ece9dcef) at the base, c8e33f1a6 (tests only, over main 53c0e72a3), on
+2026-11-12, an arm64 Mac (Mac17,10, 18 cores, one-minute load about 150), after `npm ci && npm run build --workspaces`,
+deep-show built by the file (`cargo build --locked --bin deep-show`, toolchain from rustup) and #544's assembler into
+target/acceptance-539-wat. `scripts/lease` found no hub here and ran the command unleased, as it says it does:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run tests/acceptance/539-oracle-redraft --testTimeout=600000
+
+Test Files 1 failed (1); Tests 19 failed (19); 1501 s, the first test's 133 s holding the build. Every failure is an
+assertion; none is a crash. The base presented every fixture (each `deep_show` reply passed `presented`), and every
+world program assembled. `npx tsc --noEmit -p tests/acceptance/539-oracle-redraft` exits 0.
+
+What the base does: a pick control with `rows` and `focus` is one Tab stop of its own, `place`, never a row, and the
+arrows, Home and End move nothing. So every ported case fails at its first row focus:
+
+- basic-tab-behavior line 26: "Tab (key 2) from before focuses place, not strip#0,0" (Tab 1 focuses `before` and Tab 3
+  `after`, as expected).
+- basic-tab-behavior line 46: "Tab (key 2) from before focuses place, not strip#0,0", then "ArrowRight (key 3) from
+  place focuses place, not strip#1,0" and "ArrowRight (key 4) ... not strip#2,0".
+- simple-case lines 29, 34, 39, 44: "Tab (key 1) from no focus focuses place, not strip#0,0" (or the case's
+  focus.start, strip#1,0 and strip#0,1), then the arrow "from place focuses place, not strip#1,0" / "strip#0,1" /
+  "strip#0,0" / "strip#0,0".
+- non-focusable centre lines 34, 44: Tab focuses place, not strip#0,1 / strip#2,1; Right "focuses place, not
+  strip#2,1"; Left "focuses place, not strip#0,1".
+- home-end lines 85, 90, 95, 100, 119, 124, 143, 148, 155, 160: Tab focuses place, not the case's entry row (strip#1,0,
+  strip#0,0, strip#2,0, strip#0,2, strip#4,0), and Home or End "from place focuses place", not strip#0,0, strip#2,0,
+  strip#0,2 or strip#4,0.
+- planted focus_stops_on_hidden_rows: the scenario answers {"ok":false,"code":"bad_input"} (the base has no such
+  planted name), so runShow's "deep-show run answers the scenario ok" fails.

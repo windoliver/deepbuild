@@ -1,0 +1,23 @@
+#538 Oracle lane at the base, 53c0e72a3 (Merge pull request #2356, origin/main), on 2026-11-12, an arm64 Mac (Mac17,10,
+18 cores, one-minute load about 160), deep-show built by the file (`cargo build --locked --bin deep-show`, toolchain
+1.99.1 from rustup) and #544's assembler into target/acceptance-538-wat, with the pinned file read from a folder laid out
+as the doneright branch's `doneright/oracles/` (its plurals.xml fetched from that branch, SHA-256
+d701d8b461afd2ba5eb21f9c1d645c8a661de225596afcf0f492ee36c69d727d):
+
+  DEEP_ORACLES=<that folder> PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    NO_COLOR=1 npx vitest run tests/acceptance/538-oracle/plural-samples.test.ts --testTimeout=600000
+
+Test Files 1 failed (1); Tests 1 failed (1). `npx tsc --noEmit -p tests/acceptance/538-oracle` exits 0. Run once.
+
+plural-samples.test.ts (1 failed of 1)
+- The judge's self-checks ran first and passed: upstream's own categories pass; English's rule applied to French fails
+  naming fr and 0; French with no many fails at 1000000; English's one covering 0 fails.
+- The pinned file was read, its SHA-256 matched the pin, and its en and fr integer samples equal the ones the test
+  re-expresses.
+- Then our code: the three references (the caption reading "one", "many" and "other" as localized copy) are presented and
+  draw three pictures, and the test failed at plural-samples.test.ts:98 (`presented`, ../538/helpers.ts:308): "the copy
+  document over cat is presented": the base refuses it, `bad_doc` at items/caption/params/text ("text.shape can't
+  evaluate this").
+
+Not run here: the lane without the file (no DEEP_ORACLES and no ../deep-oracles beside the checkout), where `vendored`
+throws its line starting `BLOCKED:` with the one unblock line before any binary is asked.

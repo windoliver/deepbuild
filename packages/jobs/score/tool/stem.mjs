@@ -55,7 +55,8 @@ export function render(params, samples, progress = () => undefined) {
     if (!inst) throw Error(`the event ${e.id} names the instrument ${e.inst}, which the stem doesn't hold`);
     const src = inst.source;
     const kind = src.sampled ? 'sampled' : src.pluck ? 'pluck' : src.synth?.preset;
-    const d = DEFAULTS[kind] ?? DEFAULTS.sine;
+    // #204: a pack preset has its own envelope, and rings for its derived tail.
+    const d = src.synth?.graph ? { attack: 0, release: src.synth.tail } : DEFAULTS[kind] ?? DEFAULTS.sine;
     const draws = { take: draw(params.seed, e.id, 'take'), noise: draw(params.seed, e.id, 'noise') };
     let take = null;
     let played;

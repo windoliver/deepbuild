@@ -46,6 +46,8 @@ pub struct State {
     pub vello2d: Option<deep_marks_render::gpu::Vello2d>,
     pub groups: Option<crate::groups::Groups>,
     pub view2d: Option<View>,
+    /// #462: the look regions' composite, for `view3d`'s read-back renders.
+    pub regions: Option<crate::regions::Composite>,
 }
 
 /// The slot count every surface takes.
@@ -139,6 +141,7 @@ impl Worker {
                     vello2d: None,
                     groups: None,
                     view2d: None,
+                    regions: None,
                 };
                 for work in rx {
                     work(&mut state);

@@ -1,0 +1,140 @@
+{
+  "title": "open_item.opened@4",
+  "description": "An open item was opened, or revised under the same ID (#323): what a claim left open, quoted as data; #82 adds what a pending or INCONCLUSIVE claim still needs, and #1633 an item opened again after evidence closed it, citing that closing.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [
+    "open_items"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 4,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "open_item.opened"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection, never the payload."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "task_ref": {
+          "type": "string",
+          "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>).",
+          "maxLength": 8192
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "item": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The open item's ID: the hash of its normalized text and its scope (repo, task, requirement).",
+          "maxLength": 8192
+        },
+        "from": {
+          "type": "string",
+          "enum": [
+            "agent",
+            "section",
+            "bug",
+            "issue",
+            "limit",
+            "placeholder",
+            "task",
+            "review_thread",
+            "verdict"
+          ],
+          "description": "What it was read from: the agent's deep_open_item, a final-message section, a bug left or filed as an issue, a limit in the PR body or docs, placeholder text in a changed file, the agent's own task list, or a review thread, or the claim's own verdict: a run or your answer a pending or INCONCLUSIVE requirement still needs.",
+          "x-closure": {
+            "closed": "each value is a place the gate reads open items from, and the readers that sort and show items act on each",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "resolved_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Who resolved its review thread when that is the session's own account or token: the agent's word, so the item stays open."
+        },
+        "replaces": {
+          "type": "string",
+          "format": "ulid",
+          "description": "The open_item.closed event this opening replaces: an item raised again after evidence closed it, such as a reviewer resolving its review thread, opens again under the same ID."
+        }
+      },
+      "required": [
+        "task_ref",
+        "text",
+        "item",
+        "from"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -16,7 +16,7 @@ The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105, #117
 
 ## What it may import
 
-The app: the top of the stack. It may use the canvas crates (deep-canvas-marks, deep-canvas-cells, deep-text-gpui, deep-marks-gpui, deep-gpu, and deep-effects-render for the chrome operators, #1434) by crate name only, and talks to the hub over its socket, never by linking hub code. No core crate imports it. It sits outside `scripts/canvas-lint.mjs`'s and `scripts/text-lint.mjs`'s scope.
+The app: the top of the stack. It may use the canvas crates (deep-canvas-marks, deep-canvas-cells, deep-text-gpui, deep-marks-gpui, deep-gpu, deep-effects-render for the chrome operators, #1434, deep-canvas-effects for the chrome-fx@1 pack read as data, #1436, deep-images for chrome thumbnails, #1486, and deep-text for the bundled code face's bytes, #1458) by crate name only, and talks to the hub over its socket, never by linking hub code. No core crate imports it. It sits outside `scripts/canvas-lint.mjs`'s and `scripts/text-lint.mjs`'s scope.
 
 ## Deviations
 

@@ -619,6 +619,8 @@ impl Hub<'_> {
                     matches!(c.states.last(), Some((s, _)) if *s == "presented" || *s == "armed")
                 });
                 let shown = !showing || self.planted(Planted::ToastsIgnoreCard);
+                // #507: and never on the display present mode shows a piece on.
+                let presented = self.presenting().map(|p| p.display.clone());
                 let list: Vec<Value> = self
                     .ring
                     .toasts
@@ -626,7 +628,7 @@ impl Hub<'_> {
                     .filter(|t| t.made <= now && now < t.made + TOAST_LIFE)
                     .map(|t| {
                         json!({"plugin": t.plugin, "text": t.text, "display": t.display,
-                               "rect": t.rect, "shown": shown})
+                               "rect": t.rect, "shown": shown && presented.as_ref() != Some(&t.display)})
                     })
                     .collect();
                 json!({ "toasts": list })
@@ -714,12 +716,31 @@ impl Hub<'_> {
         }
     }
 
+    /// #507: whether a toast draws on `display` at `at`: one made there and still showing, while
+    /// no card shows and present mode doesn't show a piece there.
+    pub(crate) fn toast_on(&self, display: &str, at: i64) -> bool {
+        let card = self.card_at(at).is_some_and(
+            |c| matches!(c.states.last(), Some((s, _)) if *s == "presented" || *s == "armed"),
+        );
+        let presented = self
+            .present_span()
+            .is_some_and(|(d, since, until)| d == display && since <= at && at < until);
+        !card
+            && !presented
+            && self
+                .ring
+                .toasts
+                .iter()
+                .any(|t| t.display == display && t.made <= at && at < t.made + TOAST_LIFE)
+    }
+
     fn reported_conflicts(&self) -> Vec<Value> {
         match self.planted(Planted::ConflictsUnreported) {
             true => Vec::new(),
             false => {
                 let mut conflicts = self.ring.conflicts();
                 conflicts.extend(self.viewer_conflicts());
+                conflicts.extend(self.present_conflicts());
                 conflicts
             }
         }

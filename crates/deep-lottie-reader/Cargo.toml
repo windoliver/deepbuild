@@ -1,0 +1,13 @@
+[package]
+name = "deep-lottie-reader"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #162: the Lottie export's fidelity reader, a pinned reference Lottie renderer run as its
+# own process (`deep-show lottie-reader`), a tool apart from the writer (canvas primitives:
+# Export: Lottie). The engine builds from its vendored source with the system's C++ compiler.
+
+[dependencies]
+thorvg = { version = "=0.6.0", default-features = false, features = ["lottie", "vendored", "std", "file-io"] }

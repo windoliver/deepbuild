@@ -1,0 +1,99 @@
+Base: d13d25e077babd185912d09ef30845a44d931f86 (archive, no .git)
+Platform: darwin arm64; Node v24.22.2; cargo/rustc 1.99.1;
+TypeScript 5.9.3; Vitest 5.0.5. No implementation changes.
+Output excerpts below are actual runs, with temporary absolute paths redacted.
+
+COMMAND (binary checks, after fixture setup correction):
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" node --test --test-concurrency=1 tests/acceptance/1123/binaries.test.mjs
+EXIT: 1
+
+✖ #1123.07de86fd before runs the base binary as the wrong program and never shares it with the change (11619.902ms)
+  BAY claim records named distinct base and change bays, crates ["deep-hook"], installed true.
+FAIL before: tests/acceptance/1123/binary.test.mjs › #1123.07de86fd binary result: passed on the merge base
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+proof: wall time 8.3 s
+
+  AssertionError [ERR_ASSERTION]: base and change must execute their own compiler-built binaries
+  + actual - expected
+    [
+  -   'base-wrong',
+      'change-right',
+  +   'change-right'
+    ]
+  at binaries.test.mjs:27:10
+
+✖ #1123.cd6b3dd8 lanes.mjs uses its own run-private build, not the shell or mutable target (7079.097625ms)
+  AssertionError [ERR_ASSERTION]: parallel binary: shell/stale binary, not this run's build
+  + actual - expected
+  + 'shell-wrong'
+  - 'change-right'
+  at helpers.mjs:100:12
+
+✖ #1123.cd6b3dd8 affected.mjs uses its own run-private build, not the shell or mutable target (9034.620625ms)
+  AssertionError [ERR_ASSERTION]: node binary: shell/stale binary, not this run's build
+  + actual - expected
+  + 'shell-wrong'
+  - 'change-right'
+  at helpers.mjs:100:12
+
+FAIL affected: 374 new, 0 already failing on main, 4 inconclusive or blocked, 0 listed skips, 0 passed, in 8 s at load 160; logs in <fixture>/tmp/deep-affected-ibzD9F
+  This is the MINIMAL FIXTURE's unchanged lints, not this repository's baseline.
+  No WIDE or INCONCLUSIVE-prefixed lines were emitted by that fixture run.
+
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27900.293125
+
+COMMAND (environment checks, final fixture layout):
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" node --test --test-concurrency=1 tests/acceptance/1123/environment.test.mjs
+EXIT: 1
+
+✖ #1123.cd6b3dd8 childEnv discards a shell binary directory (482.566208ms)
+✔ #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory (347.997583ms)
+✔ wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion (412.206875ms)
+ℹ planted delete-after-merge rejected: AssertionError [ERR_ASSERTION]: per-side DEEP_BIN_DIR survives
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1369.736458
+
+  AssertionError [ERR_ASSERTION]: inherited DEEP_BIN_DIR must be discarded before merging extra
+  + actual - expected
+  + '/fixture/shell/bin'
+  - null
+  at environment.test.mjs:21:10
+
+COMMAND (required affected verification on the archive):
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" CARGO_NET_OFFLINE=true node scripts/affected.mjs tests/acceptance/1123/
+EXIT: 1; BLOCKED, archive has no git metadata; no test selected or run.
+
+Error: Command failed: git -c core.quotePath=false ls-files -z --cached --others --exclude-standard
+fatal: not a git repository (or any of the parent directories): .git
+  at git (scripts/proof-change.mjs:30:10)
+  at listFiles (scripts/proof-change.mjs:35:50)
+  at select (scripts/affected.mjs:198:48)
+  at main (scripts/affected.mjs:328:21)
+No WIDE or INCONCLUSIVE lines (selection never completed).
+
+EARLIER SETUP RUNS — INVALID as behavior proof, retained here rather than counted:
+1. PATH="/opt/homebrew/opt/rustup/bin:$PATH" TMPDIR="$PWD/.1123-tools/tmp" node --test --test-concurrency=1 tests/acceptance/1123/*.test.mjs
+   Exit 1, 2 pass / 4 fail. Environment checks reached the same assertions above.
+   Three binary checks failed setup at helpers.mjs:47:
+     error: failed to load source for dependency `rquickjs`
+     can't checkout from 'https://github.com/longbridge/gpui-kit': you are in the offline mode (--offline)
+   Cause: fixtures below this archive inherited its .cargo/config.toml. Corrected the command to use the normal OS temp directory; tests unchanged.
+2. PATH="/opt/homebrew/opt/rustup/bin:$PATH" node --test --test-concurrency=1 tests/acceptance/1123/binaries.test.mjs
+   Exit 1, 0 pass / 3 fail. Before stopped with:
+     SystemError [ERR_FS_EISDIR]: Path is a directory: rm returned EISDIR (is a directory) <fixture-home>/deepbuild-bays/1/change/node_modules
+   Lanes could not load vitest and affected could not load typescript.
+   Cause: the fixture's top-level node_modules symlink was tracked, and npm setup pruned its linked tools.
+   Blind setup correction: make node_modules an ignored real directory with a Vitest link; resolve script dependencies through a sandbox-parent link. Restore local tools. No behavior assertion changed. Then ran only affected binary checks (first block above), and the environment checks once for the final layout.

@@ -1,0 +1,57 @@
+Superseded: these are the first runs, through an earlier e2e.py (its usage below; see this file's git history). The current
+e2e.py and its recorded runs, on the PR's merge base and its head, are in shots/ (shots/README.md).
+
+#1468 e2e, 2026-11-08, Linux aarch64, debug builds of deep-motion, deep-canvas-render and deep-show.
+Each document holds a string of N parens around its expression through a real binary: a driver (deep-motion eval),
+a text animator's field (deep-canvas-render raster) and a pack's kind rule (deep-show run, install_pack).
+Run: python3 -I docs/evidence/1468/e2e.py <target/debug> shallow|deep. Long strings are shortened in the printout.
+
+### base ede4b367 (debug), shallow
+== driver: deep-motion eval (shallow, 1 parens): exit 0
+stdout: {"ok": true, "order": ["dot.driver", "dot.transform"], "markers": {}, "cuts": [], "hash": "afdf36a4a303b28d71423a17304ff5acd263cd7890191d589f40205a0ad4510c"}
+== field: deep-canvas-render raster (shallow, 1 parens): exit 0
+stdout: {"ok": true, "width": 640, "height": 360, "offscreen": 0, "backends": {"fonts": {"name": "fonts.bundled", "version": "1.0.0"}, "cpu": {"name": "aarch64", "version": "1.0.0"}, "headless": {"name": "headless.vello-cpu", "version": "0.3.0"}}, "golden": true, "renderer": {"name": "vello_cpu", "version": "0.3.0", "pipeline": "f32", "simd": "scalar"}, "shaped": 1}
+== pack rule: deep-show run install_pack (shallow, 1 parens): exit 0
+stdout: {"ok": true, "replies": [{"outcome": "installed", "pack": "test/deeprule", "version": "1.0.0", "issues": [], "layouts": [], "core": "core@0.0.0", "set_digest": "3bc540df5dc9643c858458caaeff72dfd107cddf62814dc218087c3e3c8a6546"}]}
+### base ede4b367 (debug), deep
+== driver: deep-motion eval (deep, 1,000,000 parens): exit -6, died by signal 6
+stderr: thread 'main' (740353) has overflowed its stack
+stderr: fatal runtime error: stack overflow, aborting
+== field: deep-canvas-render raster (deep, 1,000,000 parens): exit -6, died by signal 6
+stderr: thread 'main' (740790) has overflowed its stack
+stderr: fatal runtime error: stack overflow, aborting
+== pack rule: deep-show run install_pack (deep, 1,000,000 parens): exit -6, died by signal 6
+stderr: thread 'main' (741207) has overflowed its stack
+stderr: fatal runtime error: stack overflow, aborting
+
+### fix f0ab79a9 (debug), shallow
+== driver: deep-motion eval (shallow, 1 parens): exit 0
+stdout: {"ok": true, "order": ["dot.driver", "dot.transform"], "markers": {}, "cuts": [], "hash": "afdf36a4a303b28d71423a17304ff5acd263cd7890191d589f40205a0ad4510c"}
+== field: deep-canvas-render raster (shallow, 1 parens): exit 0
+stdout: {"ok": true, "width": 640, "height": 360, "offscreen": 0, "backends": {"fonts": {"name": "fonts.bundled", "version": "1.0.0"}, "cpu": {"name": "aarch64", "version": "1.0.0"}, "headless": {"name": "headless.vello-cpu", "version": "0.3.0"}}, "golden": true, "renderer": {"name": "vello_cpu", "version": "0.3.0", "pipeline": "f32", "simd": "scalar"}, "shaped": 1}
+== pack rule: deep-show run install_pack (shallow, 1 parens): exit 0
+stdout: {"ok": true, "replies": [{"outcome": "installed", "pack": "test/deeprule", "version": "1.0.0", "issues": [], "layouts": [], "core": "core@0.0.0", "set_digest": "05eb78285554ed6b6d3671aaa6a6c6787ccac5849ba3f75c58660ecc7af3fc9f"}]}
+### fix f0ab79a9 (debug), deep
+== driver: deep-motion eval (deep, 1,000,000 parens): exit 0
+stdout: {"ok": false, "code": "bad_doc", "path": "drivers/deep/expr", "call": "((((((((((((((((((((((((((((((((((((((((…(2,000,001 chars)", "why": "nests past the cap of 64 levels"}
+== field: deep-canvas-render raster (deep, 1,000,000 parens): exit 0
+stdout: {"ok": false, "code": "bad_doc", "path": "items/words/params/animators/0/selectors/0/field/expr"}
+== pack rule: deep-show run install_pack (deep, 1,000,000 parens): exit 0
+stdout: {"ok": true, "replies": [{"outcome": "refused", "pack": "test/deeprule", "version": "1.0.0", "issues": [{"check": "document.validate", "code": "out_of_range", "severity": "error", "ids": [], "path": "recipes/deeprule.probe@1/rules/0/expr", "actual": "{\"rule\":\"deeprule.holds\",\"call\":\"(((((((…(8,192 chars)", "what": "nests past the cap of 64 levels", "fix": "Give the field a value of its type inside its range."}], "layouts": [], "core": "core@0.0.0", "set_digest": "05eb78285554ed6b6d3671aaa6a6c6787ccac5849ba3f75c58660ecc7af3fc9f"}]}
+
+#1468 e2e, 2026-11-09, after origin/main was rewritten: the change cherry-picked onto main 96b462a6 (commit adfc02aa
+before the acceptance redraft), debug builds of deep-motion and deep-show. deep-canvas-render isn't run here: at 96b462a6
+the crate's gpui dependency doesn't build on Linux (gpui-pre-wgpu 0.3.9: `PrimitiveBatch::Chrome(_)` not covered, from main's
+vendored gpui-pre), so the field path is BLOCKED for the binary and proven by the acceptance test through animator::amounts.
+### rebased adfc02aa on main 96b462a6 (debug), shallow
+== driver: deep-motion eval (shallow, 1 parens): exit 0
+stdout: {"ok": true, "order": ["dot.driver", "dot.transform"], "markers": {}, "cuts": [], "hash": "afdf36a4a303b28d71423a17304ff5acd263cd7890191d589f40205a0ad4510c"}
+== field: BLOCKED, the binary doesn't build at 96b462a6 on Linux
+== pack rule: deep-show run install_pack (shallow, 1 parens): exit 0
+stdout: {"ok": true, "replies": [{"outcome": "installed", "pack": "test/deeprule", "version": "1.0.0", "issues": [], "layouts": [], "core": "core@0.0.0", "set_digest": "1975b68da46dad13f1610e8704ba80c26eaa4c9ad4eb68a5e3220e8ffb4bb6e7"}]}
+### rebased adfc02aa on main 96b462a6 (debug), deep
+== driver: deep-motion eval (deep, 1,000,000 parens): exit 0
+stdout: {"ok": false, "code": "bad_doc", "path": "drivers/deep/expr", "call": "((((((((((((((((((((((((((((((((((((((((…(2,000,001 chars)", "why": "nests past the cap of 64 levels"}
+== field: BLOCKED, the binary doesn't build at 96b462a6 on Linux
+== pack rule: deep-show run install_pack (deep, 1,000,000 parens): exit 0
+stdout: {"ok": true, "replies": [{"outcome": "refused", "pack": "test/deeprule", "version": "1.0.0", "issues": [{"check": "document.validate", "code": "out_of_range", "severity": "error", "ids": [], "path": "recipes/deeprule.probe@1/rules/0/expr", "actual": "{\"rule\":\"deeprule.holds\",\"call\":\"(((((((…(8,192 chars)", "what": "nests past the cap of 64 levels", "fix": "Give the field a value of its type inside its range."}], "layouts": [], "core": "core@0.0.0", "set_digest": "1975b68da46dad13f1610e8704ba80c26eaa4c9ad4eb68a5e3220e8ffb4bb6e7"}]}

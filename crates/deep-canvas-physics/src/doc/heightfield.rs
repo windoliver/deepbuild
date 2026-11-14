@@ -22,7 +22,9 @@ impl Reader {
                 "out_of_range",
                 join(p, "cols"),
                 &json!([s.get("cols"), s.get("rows")]),
-                format!("a heightfield's cols and rows must each be 2 to {HEIGHTFIELD_SAMPLES} samples"),
+                format!(
+                    "a heightfield's cols and rows must each be 2 to {HEIGHTFIELD_SAMPLES} samples"
+                ),
             );
             return None;
         };
@@ -36,7 +38,10 @@ impl Reader {
                 "out_of_range",
                 join(p, "heights"),
                 s.get("heights").unwrap_or(&Value::Null),
-                format!("a heightfield's heights must be cols × rows = {} numbers", cols * rows),
+                format!(
+                    "a heightfield's heights must be cols × rows = {} numbers",
+                    cols * rows
+                ),
             );
             return None;
         };
@@ -50,6 +55,11 @@ impl Reader {
             );
             return None;
         }
-        Some(Shape::Heightfield { cols, rows, heights, scale })
+        Some(Shape::Heightfield {
+            cols,
+            rows,
+            heights,
+            scale,
+        })
     }
 }

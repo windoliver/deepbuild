@@ -1,0 +1,400 @@
+#239: the suite run once at the base 53c0e72a3 ("Merge pull request #2356"), on November 12, 2026, on a Mac17,10
+(M5 Max, 64 GB), thermal state fair, one-minute load about 125 on 18 cores. The checkout path is written <checkout>.
+
+Commands (README: Run them): the whole folder once, then links.test.ts again with the verbose reporter to show its
+passes; the type-check exits 0.
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/239 --testTimeout=600000 --no-file-parallelism
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/239 --testTimeout=600000 --no-file-parallelism links.test.ts --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/239/tsconfig.json
+
+Result: 23 tests in 8 files; 21 fail, 2 pass.
+
+Why each fails, or passes, at the base:
+
+- films.test.ts (AC1, 2 tests), seek-play.test.ts (AC1, 2), exports.test.ts (AC1, 2), checks.test.ts (AC2, 8),
+  budget.test.ts (AC2, 4), off-reference.test.ts (AC3, 2): BLOCKED, the first line naming the film that isn't
+  delivered, tests/fixtures/films/strokes-and-paper/film.json or tests/fixtures/films/camera-and-transitions/film.json.
+  That is the expected base failure: the two films are the deliverable. Each test reads its film before it builds
+  anything, so no cargo build ran in this run. The four leased builds the README names (deep-show full and
+  full,test-tick, deep-gpu and deep-gpu test-meter) were queued on the machine's build throttle behind other
+  sessions' builds and withdrawn unrun; the surfaces they'd reach are described in the README's "What the base has"
+  from the base's code, not from a run.
+- shown.test.ts (AC5, 1): INCONCLUSIVE, the first line listing the nine files of docs/evidence/239/ the check run
+  writes, none of which exist; there is no TASTE.json either.
+- links.test.ts (AC4, 2): both pass. The live links already hold criterion 4, as the owner's comment of November 9
+  says: #142 and #222 to #229 are blocked by #239, #143 is held through its parts (#462 ← #239; #463 ← #462 ← #239),
+  and #99's blockers are #403 to #409, without #222. The criterion's wrong program is a link set that misses one of
+  these, which the second test plants five times, and the judge fails each, naming the issue. So this criterion
+  passes on the base by the live data, not by code; it fails the moment a link it needs is removed.
+
+Before this commit, the suite's own film logic (the group check, the twins and the sampled times) was also run once,
+by a scratch test file, on two scratch films made only for that run under tests/fixtures/films/; both were deleted
+after. It found nothing to change, and no expected value came from it.
+
+------------------------------------------------------------------------------------------------------------------------
+The whole folder
+------------------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/239
+
+ ❯ checks.test.ts (8 tests | 8 failed) 13ms
+   ❯ AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault (8)
+     × AC2 #239.a88a17ac the strokes and paper film: document.determinism (holding on machines: same), film.audit and film.layout each PASS 9ms
+     × AC2 #239.a88a17ac the strokes and paper film: document.determinism's planted twin (the film with stepping ticks, under checkpoint_nearest_in_distance) FAILs at 352,799,999 flicks, while the same document unplanted PASSes 0ms
+     × AC2 #239.a88a17ac the strokes and paper film: film.audit's planted twin, its first text given more words than any of its holds can read, FAILs with film.hold_short naming that text 0ms
+     × AC2 #239.a88a17ac the strokes and paper film: film.layout's planted twin, a line the frame cuts at both sides, FAILs with layout.cut naming it 0ms
+     × AC2 #239.a88a17ac the camera and transitions film: document.determinism (holding on machines: same), film.audit and film.layout each PASS 0ms
+     × AC2 #239.a88a17ac the camera and transitions film: document.determinism's planted twin (the film with stepping ticks, under checkpoint_nearest_in_distance) FAILs at 352,799,999 flicks, while the same document unplanted PASSes 0ms
+     × AC2 #239.a88a17ac the camera and transitions film: film.audit's planted twin, its first text given more words than any of its holds can read, FAILs with film.hold_short naming that text 0ms
+     × AC2 #239.a88a17ac the camera and transitions film: film.layout's planted twin, a line the frame cuts at both sides, FAILs with layout.cut naming it 0ms
+ ❯ exports.test.ts (2 tests | 2 failed) 82ms
+   ❯ AC1 #239.72f4af59 each film exports to H.264 with AAC whose delivery passes the export guards, sound included (2)
+     × AC1 #239.72f4af59 the strokes and paper film exports whole to H.264 with AAC, delivered past film.blank, frames.finite, export.color and export.fidelity, its sound included 80ms
+     × AC1 #239.72f4af59 the camera and transitions film exports whole to H.264 with AAC, delivered past film.blank, frames.finite, export.color and export.fidelity, its sound included 0ms
+ ❯ shown.test.ts (1 test | 1 failed) 6ms
+   ❯ AC5 #239.85750ec9 the check run's screenshots and recordings of both films, and the one taste call on them (1)
+     × AC5 #239.85750ec9 the screenshots of both films from their exported files and a recording of each are in docs/evidence/239/, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 5ms
+ ❯ budget.test.ts (4 tests | 4 failed) 121ms
+   ❯ AC2 #239.a88a17ac the frame budget passes on both films on the reference Mac, and its planted twin fails, naming its fault (4)
+     × AC2 #239.a88a17ac the strokes and paper film: the frame budget's five runs, judged on this machine's own environment fingerprint, PASS on the reference Mac 84ms
+     × AC2 #239.a88a17ac the strokes and paper film: the frame budget's planted twin, every frame read at 100 ms of GPU by the test meter under the reference Mac's fingerprint, FAILs naming the GPU limit and each run's p95 1ms
+     × AC2 #239.a88a17ac the camera and transitions film: the frame budget's five runs, judged on this machine's own environment fingerprint, PASS on the reference Mac 0ms
+     × AC2 #239.a88a17ac the camera and transitions film: the frame budget's planted twin, every frame read at 100 ms of GPU by the test meter under the reference Mac's fingerprint, FAILs naming the GPU limit and each run's p95 0ms
+ ❯ off-reference.test.ts (2 tests | 2 failed) 10ms
+   ❯ AC3 #239.7ded5bb7 off the reference Mac's environment fingerprint the frame budget reads INCONCLUSIVE, never PASS or FAIL (2)
+     × AC3 #239.7ded5bb7 the strokes and paper film: under another machine's fingerprint and the reference Mac's on battery the frame budget reads INCONCLUSIVE at 1 ms and at 100 ms a frame, which the reference Mac's PASSes and FAILs; and so does the real run on this machine when its fingerprint isn't a reference Mac's 6ms
+     × AC3 #239.7ded5bb7 the camera and transitions film: under another machine's fingerprint and the reference Mac's on battery the frame budget reads INCONCLUSIVE at 1 ms and at 100 ms a frame, which the reference Mac's PASSes and FAILs; and so does the real run on this machine when its fingerprint isn't a reference Mac's 1ms
+ ❯ seek-play.test.ts (2 tests | 2 failed) 30ms
+   ❯ AC1 #239.72f4af59 seek equals play by pixel hash at 20 sampled times on the reference Mac (2)
+     × AC1 #239.72f4af59 the strokes and paper film: at 20 seeded off-grid times, each reached from a later time, the seek's GPU pixel hash equals the play's, on the reference Mac 12ms
+     × AC1 #239.72f4af59 the camera and transitions film: at 20 seeded off-grid times, each reached from a later time, the seek's GPU pixel hash equals the play's, on the reference Mac 0ms
+ ❯ films.test.ts (2 tests | 2 failed) 108ms
+   ❯ AC1 #239.72f4af59 both films render from their documents (2)
+     × AC1 #239.72f4af59 the strokes and paper film is a document that holds its group's primitives, deep show presents it with no error, and its middle frame draws at its own size 5ms
+     × AC1 #239.72f4af59 the camera and transitions film is a document that holds its group's primitives, deep show presents it with no error, and its middle frame draws at its own size 2ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget.test.ts > AC2 #239.a88a17ac the frame budget passes on both films on the reference Mac, and its planted twin fails, naming its fault > AC2 #239.a88a17ac the strokes and paper film: the frame budget's five runs, judged on this machine's own environment fingerprint, PASS on the reference Mac
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ budget.test.ts:30:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  budget.test.ts > AC2 #239.a88a17ac the frame budget passes on both films on the reference Mac, and its planted twin fails, naming its fault > AC2 #239.a88a17ac the strokes and paper film: the frame budget's planted twin, every frame read at 100 ms of GPU by the test meter under the reference Mac's fingerprint, FAILs naming the GPU limit and each run's p95
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ budget.test.ts:52:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  budget.test.ts > AC2 #239.a88a17ac the frame budget passes on both films on the reference Mac, and its planted twin fails, naming its fault > AC2 #239.a88a17ac the camera and transitions film: the frame budget's five runs, judged on this machine's own environment fingerprint, PASS on the reference Mac
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ budget.test.ts:30:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  budget.test.ts > AC2 #239.a88a17ac the frame budget passes on both films on the reference Mac, and its planted twin fails, naming its fault > AC2 #239.a88a17ac the camera and transitions film: the frame budget's planted twin, every frame read at 100 ms of GPU by the test meter under the reference Mac's fingerprint, FAILs naming the GPU limit and each run's p95
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ budget.test.ts:52:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the strokes and paper film: document.determinism (holding on machines: same), film.audit and film.layout each PASS
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:46:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the strokes and paper film: document.determinism's planted twin (the film with stepping ticks, under checkpoint_nearest_in_distance) FAILs at 352,799,999 flicks, while the same document unplanted PASSes
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:57:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the strokes and paper film: film.audit's planted twin, its first text given more words than any of its holds can read, FAILs with film.hold_short naming that text
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the strokes and paper film: film.layout's planted twin, a line the frame cuts at both sides, FAILs with layout.cut naming it
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the camera and transitions film: document.determinism (holding on machines: same), film.audit and film.layout each PASS
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:46:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the camera and transitions film: document.determinism's planted twin (the film with stepping ticks, under checkpoint_nearest_in_distance) FAILs at 352,799,999 flicks, while the same document unplanted PASSes
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:57:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the camera and transitions film: film.audit's planted twin, its first text given more words than any of its holds can read, FAILs with film.hold_short naming that text
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  checks.test.ts > AC2 #239.a88a17ac document.determinism, film.audit and film.layout pass on both films, and each one's planted twin fails, naming its fault > AC2 #239.a88a17ac the camera and transitions film: film.layout's planted twin, a line the frame cuts at both sides, FAILs with layout.cut naming it
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ checks.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  exports.test.ts > AC1 #239.72f4af59 each film exports to H.264 with AAC whose delivery passes the export guards, sound included > AC1 #239.72f4af59 the strokes and paper film exports whole to H.264 with AAC, delivered past film.blank, frames.finite, export.color and export.fidelity, its sound included
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ exports.test.ts:78:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  exports.test.ts > AC1 #239.72f4af59 each film exports to H.264 with AAC whose delivery passes the export guards, sound included > AC1 #239.72f4af59 the camera and transitions film exports whole to H.264 with AAC, delivered past film.blank, frames.finite, export.color and export.fidelity, its sound included
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ exports.test.ts:78:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  films.test.ts > AC1 #239.72f4af59 both films render from their documents > AC1 #239.72f4af59 the strokes and paper film is a document that holds its group's primitives, deep show presents it with no error, and its middle frame draws at its own size
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ films.test.ts:24:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  films.test.ts > AC1 #239.72f4af59 both films render from their documents > AC1 #239.72f4af59 the camera and transitions film is a document that holds its group's primitives, deep show presents it with no error, and its middle frame draws at its own size
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ films.test.ts:24:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  off-reference.test.ts > AC3 #239.7ded5bb7 off the reference Mac's environment fingerprint the frame budget reads INCONCLUSIVE, never PASS or FAIL > AC3 #239.7ded5bb7 the strokes and paper film: under another machine's fingerprint and the reference Mac's on battery the frame budget reads INCONCLUSIVE at 1 ms and at 100 ms a frame, which the reference Mac's PASSes and FAILs; and so does the real run on this machine when its fingerprint isn't a reference Mac's
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ off-reference.test.ts:32:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  off-reference.test.ts > AC3 #239.7ded5bb7 off the reference Mac's environment fingerprint the frame budget reads INCONCLUSIVE, never PASS or FAIL > AC3 #239.7ded5bb7 the camera and transitions film: under another machine's fingerprint and the reference Mac's on battery the frame budget reads INCONCLUSIVE at 1 ms and at 100 ms a frame, which the reference Mac's PASSes and FAILs; and so does the real run on this machine when its fingerprint isn't a reference Mac's
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ off-reference.test.ts:32:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  seek-play.test.ts > AC1 #239.72f4af59 seek equals play by pixel hash at 20 sampled times on the reference Mac > AC1 #239.72f4af59 the strokes and paper film: at 20 seeded off-grid times, each reached from a later time, the seek's GPU pixel hash equals the play's, on the reference Mac
+AssertionError: BLOCKED: the strokes and paper film isn't delivered: tests/fixtures/films/strokes-and-paper/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ seek-play.test.ts:26:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  seek-play.test.ts > AC1 #239.72f4af59 seek equals play by pixel hash at 20 sampled times on the reference Mac > AC1 #239.72f4af59 the camera and transitions film: at 20 seeded off-grid times, each reached from a later time, the seek's GPU pixel hash equals the play's, on the reference Mac
+AssertionError: BLOCKED: the camera and transitions film isn't delivered: tests/fixtures/films/camera-and-transitions/film.json is missing (README: The two films); this is not a pass
+ ❯ blocked ../501/helpers.ts:94:17
+     92| /** A platform need is missing here: never a pass. */
+     93| export function blocked(reason: string): never {
+     94|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     95| }
+     96| export function none(failures: readonly string[], what: string): void {
+ ❯ film helpers.ts:88:26
+ ❯ seek-play.test.ts:26:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  shown.test.ts > AC5 #239.85750ec9 the check run's screenshots and recordings of both films, and the one taste call on them > AC5 #239.85750ec9 the screenshots of both films from their exported files and a recording of each are in docs/evidence/239/, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: INCONCLUSIVE: the check run's files are not in docs/evidence/239/: strokes-and-paper-drawing.png, strokes-and-paper-drawn.png, strokes-and-paper.mp4, strokes-and-paper.receipt.json, camera-and-transitions-shot.png, camera-and-transitions-transition-1.png, camera-and-transitions-transition-2.png, camera-and-transitions.mp4, camera-and-transitions.receipt.json (README: The taste call); this is not a pass
+ ❯ inconclusive ../501/helpers.ts:90:17
+     88| /** The criterion stays open, whatever the reason: never a pass (AGENT…
+     89| export function inconclusive(reason: string): never {
+     90|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     91| }
+     92| /** A platform need is missing here: never a pass. */
+ ❯ shown.test.ts:32:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+
+ Test Files  7 failed | 1 passed (8)
+      Tests  21 failed | 2 passed (23)
+   Start at  22:23:03
+   Duration  18.20s (tests 82%, import 9%, transform 9%)
+
+    Isolate  8 workers spawned · ~465ms startup each (spawn + environment, per file)
+             at least ~3.25s faster with isolate: false — reuses workers across files instead of one per file
+
+vitest exit 1
+
+------------------------------------------------------------------------------------------------------------------------
+links.test.ts, verbose
+------------------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/239
+
+stdout | links.test.ts > AC4 #239.68acd310 #142, #143 and #222 to #229 are blocked by #239 in the live links, and #99 no longer depends on #222 > AC4 #239.68acd310 in the live links #239 blocks #142 and #222 to #229, holds #143 through its parts, and #99's blockers hold no #222
+AC4 #239.68acd310: #143 held as #462 ← #239; #463 ← #462 ← #239; #99's blockers #403 (closed), #404 (closed), #405 (closed), #406 (closed), #407 (closed), #408 (closed), #409 (closed)
+
+ ✓ links.test.ts > AC4 #239.68acd310 #142, #143 and #222 to #229 are blocked by #239 in the live links, and #99 no longer depends on #222 > AC4 #239.68acd310 in the live links #239 blocks #142 and #222 to #229, holds #143 through its parts, and #99's blockers hold no #222 9905ms
+ ✓ links.test.ts > AC4 #239.68acd310 #142, #143 and #222 to #229 are blocked by #239 in the live links, and #99 no longer depends on #222 > AC4 #239.68acd310 the judge fails planted link sets, each missing one link, naming the issue it leaves free 2ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:29:00
+   Duration  10.40s (tests 98%, transform 1%, import 1%)
+
+vitest exit 0

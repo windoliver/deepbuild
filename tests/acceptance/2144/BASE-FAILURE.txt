@@ -1,0 +1,216 @@
+# #2144 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (53c0e72a3, "Merge pull request #2356 ..."; no implementation)
+
+$ scripts/lease nice -n 10 env CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node --test --test-concurrency=1 tests/acceptance/2144/lint-on-main.test.mjs tests/acceptance/2144/plants.test.mjs
+(run once, 2026-11-13 07:34:29-07:35:21 UTC, cold target/; through the lease at low priority, not the throttle, whose
+one build slot another session held; a preload outside the suite, TEE_LINT_OUT and NODE_OPTIONS=--import below,
+saved the lint's raw stdout to BASE-LINT.txt. Stack-trace lines and the assertion's duplicate `actual:` dump dropped;
+the checkout's path reads <checkout>, the scratch folder <scratch>.)
+
+AC1 (#2144.35365960) FAILS, as it must: the lint exits 1 with 72 FAIL lines (BASE-LINT.txt). Keyed and classified as the
+lint lane does (scripts/affected.mjs lintFindings, classify), 61 are new to scripts/known-failures.json and 11 are
+recorded, under 5 keys whose entries are counts naming no issue. Of the 72: the issue's 30 lines, all still there at
+moved line numbers; the 11 recorded ones; and 31 more that appeared after the audit (deep-canvas-cells recording.rs,
+deep-canvas craft.rs's static and seven std float calls, deep-canvas-motion, terrain.rs, graph.rs's static, one more
+deep-text cache.rs pointer width, twelve unlisted dependencies in the rayon, crossbeam, icu and postcard chains, and
+embedded-io resolved at two versions).
+
+AC2 (#2144.ad4aea4d) PASSES on the base, as it may: the base lint already fails all seven plants. Its wrong programs
+are the mutants below.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `nice -n 10 env TEE_LINT_OUT=<scratch>/base-lint NODE_OPTIONS=--import=<scratch>/tee-lint.mjs CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node --test --test-concurrency=1 tests/acceptance/2144/lint-on-main.test.mjs tests/acceptance/2144/plants.test.mjs` runs unleased
+✖ #2144.35365960 node scripts/canvas-lint.mjs exits 0 on main, or every line it prints is one scripts/known-failures.json records with its issue (47518.912959ms)
+✔ #2144.ad4aea4d the lint still fails a planted static item, a planted std float call and an unlisted dependency (3104.304791ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 51236.026459
+
+✖ failing tests:
+
+test at tests/acceptance/2144/lint-on-main.test.mjs:35:1
+✖ #2144.35365960 node scripts/canvas-lint.mjs exits 0 on main, or every line it prints is one scripts/known-failures.json records with its issue (47518.912959ms)
+  AssertionError [ERR_ASSERTION]: exit 1: 61 lines known-failures.json doesn't record, and 5 recorded lines whose entry names no issue (#<n>). The lint printed:
+  FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:243:20 the pointer width (usize::MAX), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:439:40 the env! macro, the building machine's environment compiled into the check
+  FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:440:33 the fs module, ambient input a check never reads
+  FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:451:25 the fs module, ambient input a check never reads
+  FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs:453:41 the fs module, ambient input a check never reads
+  FAIL canvas-lint: crates/deep-canvas-effects/src/chrome_fx.rs:23:24 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas-effects/src/fx.rs:10:24 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs:1565:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs:748:4 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs:796:21 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-canvas-graph/src/lib.rs:852:13 debug_assert!, a check that runs in one build and not the other
+  FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs:431:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs:432:9 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs:1471:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs:4128:1 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs:4130:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-marks/src/story.rs:528:1 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-marks/src/story.rs:529:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-media/src/lib.rs:71:1 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-motion/src/canonical.rs:130:47 the pointer width (usize::MAX), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-canvas-motion/src/program.rs:3309:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-sandbox/src/check.rs:123:1 a macro definition, whose expansion the scan never reads
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/geom.rs:549:9 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/gltf.rs:618:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/lod.rs:501:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:240:28 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:250:13 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:251:13 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs:257:24 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/sets.rs:138:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/shore.rs:610:1 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas-scene3d/src/terrain.rs:260:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas/src/blend.rs:124:15 use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:30:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:314:19 use of a disallowed method `f32::hypot` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:403:15 use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:412:46 use of a disallowed method `f64::acos` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:418:10 use of a disallowed method `f64::atan2` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:457:15 use of a disallowed method `f64::atan2` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:696:39 use of a disallowed method `f64::sin` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/craft.rs:696:65 use of a disallowed method `f64::cos` (clippy::disallowed_methods)
+  FAIL canvas-lint: crates/deep-canvas/src/document/check.rs:354:9 the thread module, ambient input a check never reads
+  FAIL canvas-lint: crates/deep-canvas/src/document/check.rs:379:5 the thread module, ambient input a check never reads
+  FAIL canvas-lint: crates/deep-canvas/src/document/packs.rs:3384:50 include_str! of a file the lint can't read: outside the crate, or not a literal path
+  FAIL canvas-lint: crates/deep-canvas/src/schedule/tests.rs:220:9 the thread module, ambient input a check never reads
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:105:15 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:106:21 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:109:40 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:110:45 the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:148:1 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:150:1 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:151:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-text/src/cache.rs:79:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-text/src/fonts.rs:197:24 a raw pointer (ptr::), an address that differs per process and target
+  FAIL canvas-lint: crates/deep-text/src/fonts.rs:66:5 a static item, state a check could carry between runs
+  FAIL canvas-lint: crates/deep-text/src/lib.rs:27:17 a build predicate (feature), code that computes differently per build
+  FAIL canvas-lint: crossbeam-deque depends on crossbeam-epoch 0.9.21, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: crossbeam-epoch depends on crossbeam-utils 0.8.23, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: deep-canvas-scene3d depends on meshopt 0.7.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version
+  FAIL canvas-lint: icu_normalizer depends on utf16_iter 1.1.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: icu_normalizer depends on write16 1.0.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: icu_provider depends on postcard 1.1.3, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: icu_segmenter depends on core_maths 0.1.1, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: indexmap depends on rayon 1.12.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: meshopt depends on float-cmp 0.10.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: postcard depends on cobs 0.3.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: rayon depends on either 1.19.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: rayon depends on rayon-core 1.13.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: rayon-core depends on crossbeam-deque 0.8.8, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: utf16_iter depends on utf_types 1.0.0, which lint/canvas/crates.json doesn't list
+  FAIL canvas-lint: wasmparser depends on semver 1.0.28, which lint/canvas/crates.json doesn't list
+    Fix: Route the math through the ops module on pinned libm in f64, take time from the input track, draw from the document seed through hash@1, iterate a BTreeMap or a sorted Vec, and keep state out of statics. Include or #[path] only a literal path to a .rs file inside the crate (include_bytes! and include_str! a file inside it), keep no symlinks under it, or make the code a plain module of the crate. Audit the crate's source at the resolved version, then add it to lint/canvas/crates.json with that version, its equivalence class (what of its output a check could read) and why it's needed. Pin every crate in scope to the one listed version of the dependency.
+  
+  
+  + actual - expected
+  
+    {
+  +   unrecorded: [
+  +     'FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs the pointer width (usize::MAX), 32 on wasm32 and 64 on the reference Macs',
+  +     "FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check",
+  +     'FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads',
+  +     'FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads',
+  +     'FAIL canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads',
+  +     "FAIL canvas-lint: crates/deep-canvas-effects/src/chrome_fx.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     "FAIL canvas-lint: crates/deep-canvas-effects/src/fx.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     'FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs',
+  +     'FAIL canvas-lint: crates/deep-canvas-effects/src/graph.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs',
+  +     'FAIL canvas-lint: crates/deep-canvas-graph/src/lib.rs debug_assert!, a check that runs in one build and not the other',
+  +     'FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-marks/src/check.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-media/src/lib.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-motion/src/canonical.rs the pointer width (usize::MAX), 32 on wasm32 and 64 on the reference Macs',
+  +     'FAIL canvas-lint: crates/deep-canvas-motion/src/program.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-sandbox/src/check.rs a macro definition, whose expansion the scan never reads',
+  +     'FAIL canvas-lint: crates/deep-canvas-scene3d/src/geom.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-scene3d/src/gltf.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-scene3d/src/lod.rs a static item, state a check could carry between runs',
+  +     "FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     "FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     "FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     "FAIL canvas-lint: crates/deep-canvas-scene3d/src/look.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     'FAIL canvas-lint: crates/deep-canvas-scene3d/src/sets.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-scene3d/src/shore.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas-scene3d/src/terrain.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/blend.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f32::hypot` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f64::acos` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f64::atan2` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f64::atan2` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f64::sin` (clippy::disallowed_methods)',
+  +     'FAIL canvas-lint: crates/deep-canvas/src/craft.rs use of a disallowed method `f64::cos` (clippy::disallowed_methods)',
+  +     "FAIL canvas-lint: crates/deep-canvas/src/document/packs.rs include_str! of a file the lint can't read: outside the crate, or not a literal path",
+  +     'FAIL canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs',
+  +     'FAIL canvas-lint: crates/deep-text/src/fonts.rs a raw pointer (ptr::), an address that differs per process and target',
+  +     'FAIL canvas-lint: crates/deep-text/src/fonts.rs a static item, state a check could carry between runs',
+  +     'FAIL canvas-lint: crates/deep-text/src/lib.rs a build predicate (feature), code that computes differently per build',
+  +     "FAIL canvas-lint: crossbeam-deque depends on crossbeam-epoch 0.9.21, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: crossbeam-epoch depends on crossbeam-utils 0.8.23, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: deep-canvas-scene3d depends on meshopt 0.7.0, which lint/canvas/crates.json doesn't list",
+  +     'FAIL canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version',
+  +     "FAIL canvas-lint: icu_normalizer depends on utf16_iter 1.1.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: icu_normalizer depends on write16 1.0.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: icu_provider depends on postcard 1.1.3, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: icu_segmenter depends on core_maths 0.1.1, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: indexmap depends on rayon 1.12.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: meshopt depends on float-cmp 0.10.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: postcard depends on cobs 0.3.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: rayon depends on either 1.19.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: rayon depends on rayon-core 1.13.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: rayon-core depends on crossbeam-deque 0.8.8, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: utf16_iter depends on utf_types 1.0.0, which lint/canvas/crates.json doesn't list",
+  +     "FAIL canvas-lint: wasmparser depends on semver 1.0.28, which lint/canvas/crates.json doesn't list"
+  +   ],
+  +   withoutIssue: [
+  +     'canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs',
+  +     'canvas-lint: crates/deep-canvas/src/document/check.rs the thread module, ambient input a check never reads',
+  +     'canvas-lint: crates/deep-canvas/src/schedule/tests.rs the thread module, ambient input a check never reads',
+  +     'canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs',
+  +     'canvas-lint: crates/deep-text/src/cache.rs a static item, state a check could carry between runs'
+  +   ]
+  -   unrecorded: [],
+  -   withoutIssue: []
+    }
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    expected: { unrecorded: [], withoutIssue: [] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+
+## The planted wrong programs for AC2 (mutants of the lint, run before the base run, each in a scratch copy)
+
+Each copies scripts/canvas-lint.mjs, scripts/rust-source.mjs, lint/canvas/clippy.toml and plants.test.mjs into a
+scratch tree of the same layout, changes one rule there, and runs `node --test <copy>/tests/acceptance/2144/plants.test.mjs`.
+Each fails AC2 at its assertion, naming the plants the switched-off rule no longer fails:
+
+- static: the static-item scan matches nothing (`const staticItem = /(?!)/g;`)
+  ✖ missing: 'static at the top level', 'static in a thread local', 'static in a body'
+- sqrt: `f64::sqrt` taken off clippy.toml's disallowed-methods
+  ✖ missing: 'std float call'
+- transitive: only a scope crate's direct third-party dependencies are walked (`return` after listing one)
+  ✖ missing: 'unlisted dependency of an unlisted crate', 'unlisted dependency of a listed crate'
+- names: checkList skips meshopt, float-cmp and semver by name
+  ✖ missing: 'unlisted direct dependency', 'unlisted dependency of an unlisted crate', 'unlisted dependency of a listed crate'
+
+(A first "names" mutant that skipped them inside the else-if chain crashed the lint, BLOCKED "Cannot read properties of
+undefined (reading 'version')", and was replaced by the one above; it failed AC2 too, on every plant.)

@@ -1,0 +1,64 @@
+## months as an older CLDR abbreviates them
+#   planted in packages/hub/src/list.ts:
+#     < const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+#     > const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+ ✓ packages/hub/test/clock.test.ts > every minute of the week America/Los_Angeles changes its clocks reads as the locale's formatter writes it 6157ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week Europe/London changes its clocks reads as the locale's formatter writes it 5629ms
+ ✓ packages/hub/test/clock.test.ts > every minute of the week Australia/Lord_Howe changes its clocks reads as the locale's formatter writes it 6090ms
+ × packages/hub/test/clock.test.ts > every day of two years in Asia/Kathmandu names its weekday and month as the locale's formatter does 207ms
+   → expected [ …(5) ] to deeply equal []
+ × packages/hub/test/clock.test.ts > every day of two years in Pacific/Kiritimati names its weekday and month as the locale's formatter does 359ms
+   → expected [ …(5) ] to deeply equal []
+ × packages/hub/test/clock.test.ts > every day of two years in UTC names its weekday and month as the locale's formatter does 212ms
+   → expected [ …(5) ] to deeply equal []
+ ✓ packages/hub/test/clock.test.ts > a time that is no time reads as the locale's formatter writes it 0ms
+ ✓ packages/hub/test/clock.test.ts > deep status with the hub down says since when in a clock time, and constructs no date formatter to say it 1306ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  3 failed | 5 passed (8)
+
+## the clock in UTC, not your time zone
+#   planted in packages/hub/src/list.ts:
+#     <   return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+#     >   return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+ × packages/hub/test/clock.test.ts > every minute of the week America/Los_Angeles changes its clocks reads as the locale's formatter writes it 6292ms
+   → expected [ …(5) ] to deeply equal []
+ × packages/hub/test/clock.test.ts > every minute of the week Europe/London changes its clocks reads as the locale's formatter writes it 5872ms
+   → expected [ …(5) ] to deeply equal []
+ × packages/hub/test/clock.test.ts > every minute of the week Australia/Lord_Howe changes its clocks reads as the locale's formatter writes it 7030ms
+   → expected [ …(5) ] to deeply equal []
+ × packages/hub/test/clock.test.ts > every day of two years in Asia/Kathmandu names its weekday and month as the locale's formatter does 245ms
+   → expected [ …(5) ] to deeply equal []
+ × packages/hub/test/clock.test.ts > every day of two years in Pacific/Kiritimati names its weekday and month as the locale's formatter does 264ms
+   → expected [ …(5) ] to deeply equal []
+ ✓ packages/hub/test/clock.test.ts > every day of two years in UTC names its weekday and month as the locale's formatter does 323ms
+ ✓ packages/hub/test/clock.test.ts > a time that is no time reads as the locale's formatter writes it 0ms
+ ✓ packages/hub/test/clock.test.ts > deep status with the hub down says since when in a clock time, and constructs no date formatter to say it 923ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  5 failed | 3 passed (8)
+
+## deep hub stop returns without waiting for the socket to go quiet
+#   planted in packages/hub/src/service.ts:
+#     <   while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
+#     >   void deadline;
+ ✓ packages/hub/test/hub-waits.test.ts > deep hub start returns within 20 ms of the hub's socket answering, not at the next 100 ms step 140ms
+ × packages/hub/test/hub-waits.test.ts > deep hub stop returns within 20 ms of the hub going, and never while its socket still answers 277ms
+   → the hub still answers: expected +0 to be 'pending' // Object.is equality
+ ✓ packages/hub/test/hub-waits.test.ts > a hub that never answers still fails deep hub start at 15 s, naming its socket and its log 288ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+
+## deep hub start gives up after 5 s
+#   planted in packages/hub/src/service.ts:
+#     < const WAIT_MS = 15_000;
+#     > const WAIT_MS = 5_000;
+ ✓ packages/hub/test/hub-waits.test.ts > deep hub start returns within 20 ms of the hub's socket answering, not at the next 100 ms step 181ms
+ ✓ packages/hub/test/hub-waits.test.ts > deep hub stop returns within 20 ms of the hub going, and never while its socket still answers 290ms
+ × packages/hub/test/hub-waits.test.ts > a hub that never answers still fails deep hub start at 15 s, naming its socket and its log 6592ms
+   → a second short of the limit: expected 3 to be 'pending' // Object.is equality
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+

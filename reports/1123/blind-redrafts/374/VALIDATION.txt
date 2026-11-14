@@ -1,0 +1,52 @@
+Archive: 092754bb1. This job inspected only issue/design/base, not parent work or results.
+
+Prerequisite inspection (no installs/builds performed):
+  Node v24.22.2
+  BLOCKED: no git metadata
+  BLOCKED: no node_modules
+  BLOCKED: no target
+  BLOCKED: cargo not on PATH
+  BLOCKED: tsc not on PATH
+
+Commands run:
+  node --check tests/acceptance/374-binary-redraft/prove-consumer.mjs
+  for f in tests/acceptance/374-binary-redraft/*.ts; do node --check "$f"; done
+  Both exited 0. Node syntax parsing is not TypeScript typechecking.
+
+  Byte comparison + SHA-256, helper-region comparison, mutation-anchor/expectation inspection
+  and Node stripTypeScriptTypes over the four .ts files (node --input-type=module):
+  IDENTICAL paint.test.ts sha256 97aaf1863c4bc8d120c5f209db9396f47cf5823463f7add7391b25cc18e4fa2c
+  IDENTICAL steps.test.ts sha256 4b0f2d4b954bcac24b0a964122a8079155efae3fa001ac460673a0a8128b2de5
+  IDENTICAL stroke.test.ts sha256 057c5176506b35e091a991ca85e144ee9b7771f1d986c16145b06e007144b1b6
+  IDENTICAL fixture/JSON helpers and all post-bootstrap behavior helpers; all 11 tests preserved
+  UNIQUE source mutation and mapped original assertion: paint.test.ts
+  UNIQUE source mutation and mapped original assertion: stroke.test.ts
+  UNIQUE source mutation and mapped original assertion: steps.test.ts
+  Node TypeScript syntax stripping succeeded (not typechecking or runtime proof)
+  Exit 0; Node printed its ExperimentalWarning for stripTypeScriptTypes.
+
+  diff -u tests/acceptance/374/helpers.ts tests/acceptance/374-binary-redraft/helpers.ts
+  Reviewed: imports, location selection and binary setup only. Diff exit 1 means differences.
+
+Validation-command correction disclosed:
+  First static mapping inspection asserted that the paint failure's expanded runtime message
+  appeared literally in its source. It failed:
+    AssertionError [ERR_ASSERTION]:
+      assert(readFileSync(`${dir}/${m.testFile}`, 'utf8').includes(m.assertion))
+  The original message interpolates name/x. Corrected only that ad-hoc validation command
+  to inspect its template plus the [70, 'left'] sample. No test/helper/mutant was changed to
+  address this command failure. This was NOT a behavior red or a wrong-program kill.
+
+UNRUN / BLOCKED (not PASS):
+  - Compilation of good and combined-mutant deep-canvas-render on Mac and Spark.
+  - Three intended behavior assertion failures in file-parallel Vitest.
+  - All 11 unchanged tests passing against clean prebuilt binaries with no cargo on PATH.
+  - Binary seals unchanged; empty/missing DEEP_BIN_DIR blocking behavior.
+  - Hand-run private-target fallback under file parallelism.
+  - TypeScript strict typecheck.
+  - node scripts/affected.mjs: not run (no git metadata, dependencies or Rust toolchain).
+    WIDE: no output available. INCONCLUSIVE: no output available. Do not infer either absent.
+  - Parent #1123 lane/before-lane isolation, inherited-value behavior, migration and wall reading.
+
+README.md contains the exact parent red/green/fallback recipe and requirement mappings.
+No acceptance/runtime result is claimed from these static observations.

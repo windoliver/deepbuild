@@ -1,0 +1,15 @@
+{
+  "criterion": "#224.c7725e3e",
+  "by": "you",
+  "screenshots": [
+    "2a1a393f0bf2890766a39a3c8d68d2ce7e182c4ce9b39e51684d36a192d3cd74",
+    "2d90486a0aeadf545191839bbc4ed5d6e5dfb90bfa758ba32c2658b0e0763ec5",
+    "ca378ea9c4e0eafe661b7759ae601e460d84edc6afedf49d8e10818d142c3dfc",
+    "c4529ee7ebe992263e380a656a73d28a839860899cbf7e78222c074c6010f3a4"
+  ],
+  "recordings": [
+    "bcd03358004da84c6ee9927d39f19d2b9a83b47f53326350570d2841a24db99a"
+  ],
+  "call": "looks_right",
+  "note": "Delegated in session on 2026-11-14 (the owner: \"validate for me\"); checked by pixel, then by eye. sphere.png: no hole, silhouette within 0.8 px of a circle, no faceting (largest luminance second difference 1.9). family.png: no hole, grid lines continuous (85% of line pixels in long runs). value-colored.png: roles a, b and c all present, the ramp smooth between them. checker.png: 2.2% of pixels neither role (edges), cells sharp, only the torus's own hole. family-slider.apng: 60 frames, each different from the last, helicoid first (mirror symmetry 0.71), catenoid last (0.99). Nit: at 4x zoom, lines at grazing angles show a faint stipple; solid at 1x."
+}

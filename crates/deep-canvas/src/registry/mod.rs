@@ -141,9 +141,11 @@ impl BuildSet {
 
 /// The module kinds the design names without a family, with the module each is: the cell grid
 /// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
-/// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
+/// `hull`, #440; Builder `surface`, #224) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
+    // #540: a lockstep match, Net `net@1`.
+    ("net", "net"),
     ("slab", "scene3d"),
     ("lathe", "scene3d"),
     ("extrude", "scene3d"),
@@ -153,6 +155,7 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("plate", "scene3d"),
     ("display", "scene3d"),
     ("hull", "scene3d"),
+    ("surface", "scene3d"),
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
@@ -163,12 +166,16 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("marks", "data"),
     ("axis", "data"),
     ("scale", "data"),
+    // #226: 3D axes are the data module's too, beside its scales and axes.
+    ("axes3d", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
     ("effect", "scene3d"),
     // #1732: placement by relation in 3D is the motion module's.
     ("arrange", "motion"),
+    // #222: a cue list is the motion module's, expanded at check.
+    ("cues", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -327,13 +334,31 @@ pub struct Kind {
     /// `(deprecated_since, replaced_by)` once the kind is replaced: it still loads, with a
     /// `deprecated` notice (Item and kind).
     pub deprecated: Option<(String, String)>,
-    /// A preview kind's tracking issue: its stability is `preview` until the issue lands (#412).
-    pub preview: Option<String>,
+    /// A preview kind's history: its stability is `preview` until it is promoted or removed
+    /// (#412, #1802).
+    pub preview: Option<Preview>,
     /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
     pub description: Option<String>,
     /// The param naming an asset whose probe the check reads (#499): the core has the decode
     /// worker probe it, so a module reads an asset without the media module.
     pub probes: Option<String>,
+}
+
+/// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
+/// preview in, and the release by which it is promoted, removed or extended.
+#[derive(Clone, Debug)]
+pub struct Preview {
+    pub tracking: String,
+    pub since: String,
+    pub decide_by: String,
+}
+
+/// A preview kind the module removed (#1802): `family.name@major`, with the kind an item of it
+/// opens as and that kind's params from the item's, or none for a removal with no migration.
+#[derive(Clone, Debug)]
+pub struct Removed {
+    pub kind: String,
+    pub migration: Option<(String, DrawFn)>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -505,6 +530,9 @@ pub struct Operator {
     /// What its per-item nodes key on of `self` and `refs`, when narrower than the whole item
     /// and document (#420).
     pub keyed: Option<Keyed>,
+    /// Its CPU time on one item, in ms, from what the item gives it to work on, charged on top of
+    /// its coefficients' terms: an operator whose work grows with its item's params (#1417).
+    pub cost: Option<Cost>,
 }
 
 impl Operator {
@@ -555,6 +583,12 @@ impl Operator {
     /// Keys its per-item nodes on `keyed`'s value in place of their item and document.
     pub fn keyed(&mut self, keyed: Keyed) -> &mut Self {
         self.keyed = Some(keyed);
+        self
+    }
+
+    /// Its CPU time on an item beyond its coefficients' terms (#1417).
+    pub fn cost(&mut self, cost: Cost) -> &mut Self {
+        self.cost = Some(cost);
         self
     }
 }
@@ -681,6 +715,8 @@ pub struct Registrar {
     pub costs: Vec<(String, Cost)>,
     /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
     pub elements: Vec<(String, Elements)>,
+    /// Its kinds expanded at check, by kind (`family.name`; #222).
+    pub expands: Vec<(String, crate::document::expands::Expand)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -689,8 +725,12 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// Its Rust for the deforms and kinds scene3d runs and draws for it (#226).
+    pub fills: Vec<(String, crate::contributed::Fill)>,
     /// The pack fields it reads, each with its check at the pack check (#1720).
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
+    /// The preview kinds it removed (#1802).
+    pub removed: Vec<Removed>,
 }
 
 impl Registrar {
@@ -717,11 +757,26 @@ impl Registrar {
         self
     }
 
-    /// The last kind registered is a preview, tracked by the issue `tracking` (#412).
-    pub fn preview(&mut self, tracking: &str) -> &mut Self {
+    /// The last kind registered is a preview, tracked by the issue `tracking` (#412), since the
+    /// release `since` and decided by the release `decide_by` (#1802).
+    pub fn preview(&mut self, tracking: &str, since: &str, decide_by: &str) -> &mut Self {
         if let Some(k) = self.kinds.last_mut() {
-            k.preview = Some(tracking.into());
+            k.preview = Some(Preview {
+                tracking: tracking.into(),
+                since: since.into(),
+                decide_by: decide_by.into(),
+            });
         }
+        self
+    }
+
+    /// The module removed the preview kind `kind` (`family.name@major`); an item of it opens as
+    /// the kind `migration` names, with the params its function gives (#1802).
+    pub fn removed(&mut self, kind: &str, migration: Option<(&str, DrawFn)>) -> &mut Self {
+        self.removed.push(Removed {
+            kind: kind.into(),
+            migration: migration.map(|(to, params)| (to.into(), params)),
+        });
         self
     }
 
@@ -891,6 +946,7 @@ impl Registrar {
             serial: false,
             determinism: "exact",
             keyed: None,
+            cost: None,
         });
         self.operators.last_mut().expect("just pushed")
     }
@@ -1280,6 +1336,8 @@ pub struct Sealed {
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
+    /// Each deform and kind a module fills for scene3d (#226), sorted by module then kind.
+    pub fills: Vec<crate::contributed::Sealed>,
 }
 
 /// One outline source the seal admitted: its entry, module, form and Rust (#443).
@@ -1454,6 +1512,22 @@ impl Sealed {
             }
             out["kind"] = json!(format!("{full}@{}", step.to));
         }
+        Some(out)
+    }
+
+    /// An item of a preview kind its module removed, as the kind its migration gives (#1802);
+    /// `None` for any other item, and where the removal carries no migration.
+    pub fn unremoved(&self, item: &Value) -> Option<Value> {
+        let text = item.get("kind")?.as_str()?;
+        let removed = self
+            .modules
+            .iter()
+            .flat_map(|m| &m.shapes.removed)
+            .find(|r| r.kind == text)?;
+        let (to, params) = removed.migration.as_ref()?;
+        let mut out = item.clone();
+        out["params"] = params(item.get("params").unwrap_or(&Value::Null));
+        out["kind"] = json!(to);
         Some(out)
     }
 
@@ -2893,7 +2967,9 @@ impl Registry {
                 .filter(|e| e.registry != "ease@1")
                 .collect();
         if eases {
-            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+            core_entries.extend(core_lists::ease_entries(
+                self.fault == Some(Fault::EaseRenumbered),
+            ));
         }
         if outputs_elsewhere {
             core_entries.retain(|e| e.registry != "gpu.output@1");
@@ -2932,6 +3008,7 @@ impl Registry {
             })
             .collect();
         outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
+        let fills = crate::contributed::sealed(&shapes[1..]);
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -3004,6 +3081,7 @@ impl Registry {
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
+            fills,
             costs: self
                 .costs
                 .take()
@@ -3038,7 +3116,10 @@ impl Registry {
         let digest = pinned(digest, m).map_err(bad)?;
         let covers = self.fault == Some(Fault::DigestCoversPins);
         if covers {
-            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+            listed.insert(
+                "pins".into(),
+                d1(&m.implementation.to_json()["pins"]).map_err(bad)?,
+            );
         }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
@@ -3052,7 +3133,8 @@ impl Registry {
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
             if covers {
-                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
+                let pins =
+                    d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
                 want_listed.insert("pins".into(), pins);
             }
             if want != digest {
@@ -3117,7 +3199,8 @@ pub(crate) fn id_named(name: &str) -> bool {
         !b.is_empty()
             && b.len() <= 48
             && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
-            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+            && b.iter()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
     })
 }
 
@@ -3157,7 +3240,11 @@ fn may_read(
                 owned_by.unwrap_or(owner)
             ),
         );
-        err.implementations = [reader, owned_by].into_iter().flatten().map(str::to_string).collect();
+        err.implementations = [reader, owned_by]
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect();
         err.implementations.sort();
         return Err(err);
     }
@@ -3239,7 +3326,7 @@ fn kind_shape_fault(entry: &Entry, draws_as: &str) -> Option<String> {
     if draws_as == "rect@1" {
         if let Some(v) = entry.versions.iter().find(|v| {
             v.param("box")
-                .is_none_or(|p| p.ty != crate::kinds::ParamType::Json)
+                .is_none_or(|p| !matches!(p.ty, crate::kinds::ParamType::Json(_)))
         }) {
             return Some(format!(
                 "draws as `rect@1` and has no `box` param of type Json at major {}",
@@ -3430,7 +3517,10 @@ fn module_shapes(
         ("tool_entry", &tools, &["tool", "entry"]),
     ] {
         for v in list_of {
-            let name: Vec<String> = keys.iter().map(|k| v[*k].to_string().trim_matches('"').to_string()).collect();
+            let name: Vec<String> = keys
+                .iter()
+                .map(|k| v[*k].to_string().trim_matches('"').to_string())
+                .collect();
             list(format!("{what} {}", name.join(" ")), v)?;
         }
     }
@@ -3442,6 +3532,14 @@ fn module_shapes(
         "tables": tables,
         "tool_entries": tools,
     });
+    // A removal is a shape too; a module with none keeps the digest it had.
+    if !r.removed.is_empty() {
+        whole["removed"] = r
+            .removed
+            .iter()
+            .map(|x| json!({"kind": x.kind, "to": x.migration.as_ref().map(|m| &m.0)}))
+            .collect();
+    }
     // The registries it declares and the entries it fills at the seal (#200), only when it has
     // any, so a module with none keeps the digest it had.
     if let Some(l) = lists {
@@ -3544,7 +3642,10 @@ mod tests {
             feature: name.into(),
             license: "Apache-2.0".into(),
             implements: format!("{name}@1"),
-            implementation: Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+            implementation: Implementation::reference(
+                name,
+                Semver::parse("1.0.0").expect("a version"),
+            ),
         }
     }
 
@@ -3591,7 +3692,7 @@ mod tests {
                 minor: 0,
                 params: vec![Param {
                     name: "box",
-                    ..param(ParamType::Json)
+                    ..param(ParamType::Json("[x, y, w, h]"))
                 }],
             }],
             migrations: vec![],
@@ -3790,7 +3891,7 @@ mod tests {
                 default: json!(1),
                 min: Some(0.0),
                 max: Some(10.0),
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             r.kind(entry, &[], "rect@1");
         }
@@ -3960,7 +4061,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module,
                 operator,
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             entry
         }
@@ -4090,7 +4191,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module: "c",
                 operator,
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             entry
         }
@@ -4615,7 +4716,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module: "text",
                 operator: "measure",
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             r.kind(entry, &[], "rect@1");
         }

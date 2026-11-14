@@ -26,7 +26,11 @@ pub enum Centers {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Travel {
     /// `arc {angle, axis, centers}`, the angle in radians and the axis of unit length.
-    Arc { angle: f64, axis: [f64; 3], centers: Centers },
+    Arc {
+        angle: f64,
+        axis: [f64; 3],
+        centers: Centers,
+    },
     /// `spiral {angle}`, in radians.
     Spiral { angle: f64 },
 }
@@ -45,7 +49,10 @@ impl Travel {
         };
         let field = |name: &str| body.and_then(|b| b.get(name));
         let angle = || -> Result<f64, &'static str> {
-            let a = field("angle").and_then(Value::as_f64).filter(|a| a.is_finite()).ok_or("angle")?;
+            let a = field("angle")
+                .and_then(Value::as_f64)
+                .filter(|a| a.is_finite())
+                .ok_or("angle")?;
             // A whole turn has no arc between two points.
             if a.abs() >= 360.0 {
                 return Err("angle");
@@ -79,7 +86,11 @@ impl Travel {
                     },
                     Some(_) => return Err("centers"),
                 };
-                Ok(Some(Travel::Arc { angle, axis, centers }))
+                Ok(Some(Travel::Arc {
+                    angle,
+                    axis,
+                    centers,
+                }))
             }
             _ => Err(""),
         }
@@ -105,10 +116,17 @@ impl Travel {
         for &n in subs {
             let span = start * dim..(start + n) * dim;
             let centre = match self {
-                Travel::Arc { centers: Centers::PerPoint, .. } => {
-                    Some((centroid(&a[span.clone()], dim), centroid(&b[span.clone()], dim)))
-                }
-                Travel::Arc { centers: Centers::At(c), .. } => Some(([c[0], c[1], 0.0], [c[0], c[1], 0.0])),
+                Travel::Arc {
+                    centers: Centers::PerPoint,
+                    ..
+                } => Some((
+                    centroid(&a[span.clone()], dim),
+                    centroid(&b[span.clone()], dim),
+                )),
+                Travel::Arc {
+                    centers: Centers::At(c),
+                    ..
+                } => Some(([c[0], c[1], 0.0], [c[0], c[1], 0.0])),
                 _ => None,
             };
             for p in start..start + n {
@@ -120,7 +138,14 @@ impl Travel {
     }
 
     /// One point's place at progress `w`.
-    fn point(&self, a: &[f64], b: &[f64], w: f64, centre: Option<([f64; 3], [f64; 3])>, out: &mut [f64]) {
+    fn point(
+        &self,
+        a: &[f64],
+        b: &[f64],
+        w: f64,
+        centre: Option<([f64; 3], [f64; 3])>,
+        out: &mut [f64],
+    ) {
         let axis = match self {
             Travel::Arc { axis, .. } => *axis,
             Travel::Spiral { .. } => [0.0, 0.0, 1.0],
@@ -140,7 +165,10 @@ impl Travel {
                 let (cs, sn) = (cos(theta), sin(theta));
                 let det = 2.0 * (1.0 - cs);
                 let v = [pb[0] - ra[0], pb[1] - ra[1]];
-                let c = [((1.0 - cs) * v[0] + sn * v[1]) / det, (-sn * v[0] + (1.0 - cs) * v[1]) / det];
+                let c = [
+                    ((1.0 - cs) * v[0] + sn * v[1]) / det,
+                    (-sn * v[0] + (1.0 - cs) * v[1]) / det,
+                ];
                 let r = turn([pa[0] - c[0], pa[1] - c[1]], w * theta);
                 [c[0] + r[0], c[1] + r[1]]
             }
@@ -151,8 +179,14 @@ impl Travel {
                 let (cb, _) = plane.split(&cb[..a.len()]);
                 let oa = [pa[0] - ca[0], pa[1] - ca[1]];
                 let ob = turn([pb[0] - cb[0], pb[1] - cb[1]], -theta);
-                let o = turn([oa[0] + (ob[0] - oa[0]) * w, oa[1] + (ob[1] - oa[1]) * w], w * theta);
-                [ca[0] + (cb[0] - ca[0]) * w + o[0], ca[1] + (cb[1] - ca[1]) * w + o[1]]
+                let o = turn(
+                    [oa[0] + (ob[0] - oa[0]) * w, oa[1] + (ob[1] - oa[1]) * w],
+                    w * theta,
+                );
+                [
+                    ca[0] + (cb[0] - ca[0]) * w + o[0],
+                    ca[1] + (cb[1] - ca[1]) * w + o[1],
+                ]
             }
         };
         Plane::new(axis).join(q, sa + (sb - sa) * w, out);
@@ -188,16 +222,34 @@ struct Plane {
 impl Plane {
     fn new(axis: [f64; 3]) -> Plane {
         if axis == [0.0, 0.0, 1.0] {
-            return Plane { e1: [1.0, 0.0, 0.0], e2: [0.0, 1.0, 0.0], axis, flat: true };
+            return Plane {
+                e1: [1.0, 0.0, 0.0],
+                e2: [0.0, 1.0, 0.0],
+                axis,
+                flat: true,
+            };
         }
         // Any unit vector across the axis, then the one that completes the right-handed frame.
-        let seed = if axis[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
+        let seed = if axis[0].abs() < 0.9 {
+            [1.0, 0.0, 0.0]
+        } else {
+            [0.0, 1.0, 0.0]
+        };
         let along = dot(seed, axis);
-        let e1 = [seed[0] - along * axis[0], seed[1] - along * axis[1], seed[2] - along * axis[2]];
+        let e1 = [
+            seed[0] - along * axis[0],
+            seed[1] - along * axis[1],
+            seed[2] - along * axis[2],
+        ];
         let n = sqrt(dot(e1, e1));
         let e1 = [e1[0] / n, e1[1] / n, e1[2] / n];
         let e2 = cross(axis, e1);
-        Plane { e1, e2, axis, flat: false }
+        Plane {
+            e1,
+            e2,
+            axis,
+            flat: false,
+        }
     }
 
     /// A point's coordinates in the plane and along the axis.
@@ -229,7 +281,11 @@ fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
 }
 
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 #[cfg(test)]
@@ -244,10 +300,18 @@ mod tests {
 
     #[test]
     fn arcs_turn_counterclockwise_on_a_y_down_screen() {
-        let half = Travel::Arc { angle: rad(180.0), axis: [0.0, 0.0, 1.0], centers: Centers::None };
+        let half = Travel::Arc {
+            angle: rad(180.0),
+            axis: [0.0, 0.0, 1.0],
+            centers: Centers::None,
+        };
         let p = at(&half, &[-2.0, 0.0], &[2.0, 0.0], 0.5);
         assert!((p[0]).abs() < 1e-9 && (p[1] - 2.0).abs() < 1e-9, "{p:?}");
-        let back = Travel::Arc { angle: rad(-180.0), axis: [0.0, 0.0, 1.0], centers: Centers::None };
+        let back = Travel::Arc {
+            angle: rad(-180.0),
+            axis: [0.0, 0.0, 1.0],
+            centers: Centers::None,
+        };
         let p = at(&back, &[-2.0, 0.0], &[2.0, 0.0], 0.5);
         assert!((p[0]).abs() < 1e-9 && (p[1] + 2.0).abs() < 1e-9, "{p:?}");
         let ends = at(&half, &[-2.0, 0.0], &[2.0, 0.0], 1.0);
@@ -259,12 +323,19 @@ mod tests {
         let s = Travel::Spiral { angle: rad(90.0) };
         let p = at(&s, &[0.0, 0.0], &[100.0, 0.0], 0.5);
         let e = turn([100.0, 0.0], rad(-45.0));
-        assert!((p[0] - 0.5 * e[0]).abs() < 1e-9 && (p[1] - 0.5 * e[1]).abs() < 1e-9, "{p:?} vs {e:?}");
+        assert!(
+            (p[0] - 0.5 * e[0]).abs() < 1e-9 && (p[1] - 0.5 * e[1]).abs() < 1e-9,
+            "{p:?} vs {e:?}"
+        );
     }
 
     #[test]
     fn under_a_hundredth_of_a_radian_is_straight_bit_for_bit() {
-        let s = Travel::Arc { angle: rad(0.5), axis: [0.0, 0.0, 1.0], centers: Centers::None };
+        let s = Travel::Arc {
+            angle: rad(0.5),
+            axis: [0.0, 0.0, 1.0],
+            centers: Centers::None,
+        };
         let (a, b) = ([-2.0, 0.3], [2.0, 0.7]);
         for w in [0.1, 0.37, 0.5, 0.9] {
             let p = at(&s, &a, &b, w);
@@ -274,8 +345,15 @@ mod tests {
 
     #[test]
     fn a_tilted_axis_keeps_the_arc_in_its_plane() {
-        let t = Travel::Arc { angle: rad(180.0), axis: [1.0, 0.0, 0.0], centers: Centers::None };
+        let t = Travel::Arc {
+            angle: rad(180.0),
+            axis: [1.0, 0.0, 0.0],
+            centers: Centers::None,
+        };
         let p = at(&t, &[0.0, -2.0, 0.0], &[0.0, 2.0, 0.0], 0.5);
-        assert!(p[0].abs() < 1e-9 && p[1].abs() < 1e-9 && (p[2].abs() - 2.0).abs() < 1e-9, "{p:?}");
+        assert!(
+            p[0].abs() < 1e-9 && p[1].abs() < 1e-9 && (p[2].abs() - 2.0).abs() < 1e-9,
+            "{p:?}"
+        );
     }
 }

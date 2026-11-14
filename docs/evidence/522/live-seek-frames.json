@@ -1,0 +1,352 @@
+{
+ "summary": {
+  "stamped": {
+   "step": 241,
+   "kind": "grab",
+   "target": "ball",
+   "input": "grab",
+   "data": {
+    "point": [
+     0,
+     0,
+     0
+    ],
+    "plane": "ground",
+    "pick_radius": 0,
+    "hz": 2,
+    "damping_ratio": 0.6,
+    "max_accel": 140
+   }
+  },
+  "frames": 32,
+  "seek50_frames": 29,
+  "seek50_steps": 5760,
+  "max_eval_ms": 3.335958,
+  "max_ui_ms": 0.041834,
+  "stale_until_last": true,
+  "last_at": 6000,
+  "shown_states_match_straight": true
+ },
+ "frames": [
+  {
+   "phase": "seek 2 s",
+   "frame": 1,
+   "at": 115,
+   "want": 240,
+   "stale": true,
+   "steps": 115,
+   "eval_ns": 2789250,
+   "ui_ns": 25708
+  },
+  {
+   "phase": "seek 2 s",
+   "frame": 2,
+   "at": 240,
+   "want": 240,
+   "stale": false,
+   "steps": 125,
+   "eval_ns": 2074750,
+   "ui_ns": 29541
+  },
+  {
+   "phase": "grab",
+   "frame": 3,
+   "at": 240,
+   "want": 240,
+   "stale": false,
+   "steps": 0,
+   "eval_ns": 40833,
+   "ui_ns": 18500
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 4,
+   "at": 436,
+   "want": 6000,
+   "stale": true,
+   "steps": 196,
+   "eval_ns": 3230250,
+   "ui_ns": 20417
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 5,
+   "at": 660,
+   "want": 6000,
+   "stale": true,
+   "steps": 224,
+   "eval_ns": 3288708,
+   "ui_ns": 22166
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 6,
+   "at": 892,
+   "want": 6000,
+   "stale": true,
+   "steps": 232,
+   "eval_ns": 3254834,
+   "ui_ns": 20334
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 7,
+   "at": 1094,
+   "want": 6000,
+   "stale": true,
+   "steps": 202,
+   "eval_ns": 3237750,
+   "ui_ns": 36041
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 8,
+   "at": 1292,
+   "want": 6000,
+   "stale": true,
+   "steps": 198,
+   "eval_ns": 3213750,
+   "ui_ns": 20083
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 9,
+   "at": 1510,
+   "want": 6000,
+   "stale": true,
+   "steps": 218,
+   "eval_ns": 3269916,
+   "ui_ns": 19125
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 10,
+   "at": 1712,
+   "want": 6000,
+   "stale": true,
+   "steps": 202,
+   "eval_ns": 3228833,
+   "ui_ns": 19958
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 11,
+   "at": 1937,
+   "want": 6000,
+   "stale": true,
+   "steps": 225,
+   "eval_ns": 3237667,
+   "ui_ns": 23459
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 12,
+   "at": 2142,
+   "want": 6000,
+   "stale": true,
+   "steps": 205,
+   "eval_ns": 3239959,
+   "ui_ns": 20875
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 13,
+   "at": 2347,
+   "want": 6000,
+   "stale": true,
+   "steps": 205,
+   "eval_ns": 3208334,
+   "ui_ns": 28833
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 14,
+   "at": 2572,
+   "want": 6000,
+   "stale": true,
+   "steps": 225,
+   "eval_ns": 3228500,
+   "ui_ns": 41834
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 15,
+   "at": 2765,
+   "want": 6000,
+   "stale": true,
+   "steps": 193,
+   "eval_ns": 3218208,
+   "ui_ns": 18000
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 16,
+   "at": 2950,
+   "want": 6000,
+   "stale": true,
+   "steps": 185,
+   "eval_ns": 3215042,
+   "ui_ns": 21042
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 17,
+   "at": 3131,
+   "want": 6000,
+   "stale": true,
+   "steps": 181,
+   "eval_ns": 3242500,
+   "ui_ns": 26583
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 18,
+   "at": 3280,
+   "want": 6000,
+   "stale": true,
+   "steps": 149,
+   "eval_ns": 3228666,
+   "ui_ns": 25375
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 19,
+   "at": 3480,
+   "want": 6000,
+   "stale": true,
+   "steps": 200,
+   "eval_ns": 3270125,
+   "ui_ns": 29833
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 20,
+   "at": 3716,
+   "want": 6000,
+   "stale": true,
+   "steps": 236,
+   "eval_ns": 3258833,
+   "ui_ns": 22708
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 21,
+   "at": 3946,
+   "want": 6000,
+   "stale": true,
+   "steps": 230,
+   "eval_ns": 3254958,
+   "ui_ns": 21791
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 22,
+   "at": 4188,
+   "want": 6000,
+   "stale": true,
+   "steps": 242,
+   "eval_ns": 3288084,
+   "ui_ns": 13250
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 23,
+   "at": 4407,
+   "want": 6000,
+   "stale": true,
+   "steps": 219,
+   "eval_ns": 3252542,
+   "ui_ns": 29083
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 24,
+   "at": 4571,
+   "want": 6000,
+   "stale": true,
+   "steps": 164,
+   "eval_ns": 3211208,
+   "ui_ns": 26000
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 25,
+   "at": 4754,
+   "want": 6000,
+   "stale": true,
+   "steps": 183,
+   "eval_ns": 3234792,
+   "ui_ns": 25459
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 26,
+   "at": 4980,
+   "want": 6000,
+   "stale": true,
+   "steps": 226,
+   "eval_ns": 3332458,
+   "ui_ns": 28958
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 27,
+   "at": 5140,
+   "want": 6000,
+   "stale": true,
+   "steps": 160,
+   "eval_ns": 3279750,
+   "ui_ns": 23250
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 28,
+   "at": 5301,
+   "want": 6000,
+   "stale": true,
+   "steps": 161,
+   "eval_ns": 3200625,
+   "ui_ns": 18792
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 29,
+   "at": 5520,
+   "want": 6000,
+   "stale": true,
+   "steps": 219,
+   "eval_ns": 3316083,
+   "ui_ns": 22792
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 30,
+   "at": 5760,
+   "want": 6000,
+   "stale": true,
+   "steps": 240,
+   "eval_ns": 3335958,
+   "ui_ns": 24375
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 31,
+   "at": 5921,
+   "want": 6000,
+   "stale": true,
+   "steps": 161,
+   "eval_ns": 3204834,
+   "ui_ns": 20542
+  },
+  {
+   "phase": "seek 50 s",
+   "frame": 32,
+   "at": 6000,
+   "want": 6000,
+   "stale": false,
+   "steps": 79,
+   "eval_ns": 1627417,
+   "ui_ns": 28667
+  }
+ ]
+}

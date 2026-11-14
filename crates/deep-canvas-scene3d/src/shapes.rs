@@ -58,11 +58,16 @@ fn v3(v: &Value) -> Option<V3> {
 /// moved by `m`'s translation (a plate is ground: nothing turns or scales it); none for another
 /// item.
 fn terrain(item: &Value, m: &Affine3) -> Result<Option<Shape>, String> {
-    let Some(params) = item.get("params").filter(|p| crate::terrain::of_params(p).is_some()) else {
+    let Some(params) = item
+        .get("params")
+        .filter(|p| crate::terrain::of_params(p).is_some())
+    else {
         return Ok(None);
     };
     let t = crate::terrain::build(params, false)?;
-    Ok(Some(Shape::Heights(std::sync::Arc::new(t.heights(apply(m, [0.0; 3]))))))
+    Ok(Some(Shape::Heights(std::sync::Arc::new(
+        t.heights(apply(m, [0.0; 3])),
+    ))))
 }
 
 /// A part's true shape from its builder's pieces (`true_shape`, in its own space) placed by `m`:
@@ -158,8 +163,14 @@ pub fn of(
             )
         }
         // #2014: a terrain plate's surface, with no mesh built.
-        "plate@1" if item.get("params").and_then(crate::terrain::of_params).is_some() => {
-            let surface = terrain(item, m).map_err(|p| format!("out_of_range at items/{id}/{p}"))?;
+        "plate@1"
+            if item
+                .get("params")
+                .and_then(crate::terrain::of_params)
+                .is_some() =>
+        {
+            let surface =
+                terrain(item, m).map_err(|p| format!("out_of_range at items/{id}/{p}"))?;
             (surface.into_iter().collect(), Vec::new())
         }
         k if crate::builders::KINDS.contains(&k) => {

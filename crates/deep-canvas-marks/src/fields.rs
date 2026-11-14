@@ -85,9 +85,8 @@ impl Parallax {
 
     /// The offset before any wrap: origin + camera × (1 − rate) + drift × t, in u.
     pub fn unwrapped(&self, camera: [f64; 2], t_seconds: f64) -> [f64; 2] {
-        [0, 1].map(|i| {
-            self.origin[i] + camera[i] * (1.0 - self.rate[i]) + self.drift[i] * t_seconds
-        })
+        [0, 1]
+            .map(|i| self.origin[i] + camera[i] * (1.0 - self.rate[i]) + self.drift[i] * t_seconds)
     }
 
     /// The group's offset at t: [`Parallax::unwrapped`] wrapped by repeat with a floored modulo.
@@ -237,7 +236,10 @@ fn wrapping_span(doc: &Map<String, Value>) -> Option<f64> {
         markers: Default::default(),
     };
     let flicks = match transport.get("span")? {
-        Value::String(t) => deep_canvas::grammar::Time::parse(t).ok()?.resolve(&ctx).ok()?,
+        Value::String(t) => deep_canvas::grammar::Time::parse(t)
+            .ok()?
+            .resolve(&ctx)
+            .ok()?,
         v => v.as_i64()?,
     };
     (flicks > 0).then_some(flicks as f64 / FLICKS)
@@ -357,7 +359,12 @@ fn descends(items: &Map<String, Value>, item: &Value, gid: &str) -> bool {
     for _ in 0..=items.len() {
         match at {
             Some(p) if p == gid => return true,
-            Some(p) => at = items.get(p).and_then(|i| i.get("parent")).and_then(Value::as_str),
+            Some(p) => {
+                at = items
+                    .get(p)
+                    .and_then(|i| i.get("parent"))
+                    .and_then(Value::as_str)
+            }
             None => return false,
         }
     }

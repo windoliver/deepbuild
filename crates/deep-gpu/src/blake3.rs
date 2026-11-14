@@ -72,7 +72,12 @@ impl Blake3 {
     }
 
     /// The hashes of frames of `size` pixels (at least one), with buffers made once for it.
-    pub fn frames(&self, device: &crate::counted::Wgpu, queue: &crate::counted::Queue, size: [u32; 2]) -> Frames {
+    pub fn frames(
+        &self,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
+        size: [u32; 2],
+    ) -> Frames {
         let words = size[0] * size[1];
         let chunks = words.div_ceil(CHUNK_WORDS);
         let buffer = |label: &str, bytes: u64, usage: wgpu::BufferUsages| {
@@ -177,7 +182,10 @@ impl Frames {
 
     /// The last pushed frame's digest.
     pub fn finish(&mut self) -> Result<Option<[u8; 32]>, Lost> {
-        self.pending.take().map(|frame| self.read(frame)).transpose()
+        self.pending
+            .take()
+            .map(|frame| self.read(frame))
+            .transpose()
     }
 
     /// Waits for one frame's work, never a later frame's, and takes its digest.

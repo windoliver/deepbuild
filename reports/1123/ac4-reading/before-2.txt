@@ -1,0 +1,42 @@
+15:28  up  1:38, 11 users, load averages: 101.93 127.91 116.50
+RUN unit-moved-before
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=<checkout>/scripts/proof-vitest-reporter.mjs --no-file-parallelism tests/acceptance/374/ tests/acceptance/375/` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/374/paint.test.ts (7 tests) 5133ms
+   ✓ AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's (7)
+     ✓ AC1 a square's gradient from sw to ne reads its first role at the lower left corner and its last at the upper right within one code value 2096ms
+     ✓ AC1 with span: parent over three squares in a row, the middle square's centre reads the stops' OKLab midpoint within 0.001 ΔEOK 310ms
+     ✓ AC1 stops naming a status role are refused in a steps fill, an along stroke and a stop with opacity, naming the item 773ms
+ ✓ tests/acceptance/374/stroke.test.ts (2 tests) 3774ms
+   ✓ AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle (2)
+     ✓ AC2 a circle with a 4 u stroke scaled 3× by its parent keeps a 4 ± 0.1 u stroke, and 12 ± 0.1 u with scale_stroke: true 2651ms
+     ✓ AC2 count: 12 on a circle draws 12 dashes and 12 gaps of equal length within 0.5 px 311ms
+ ✓ tests/acceptance/374/steps.test.ts (2 tests) 3280ms
+   ✓ AC3 steps give each member of a group one solid color mixed from the stops by its rank (2)
+     ✓ AC3 steps {over: children, stops: [{at: 0, role: a}, {at: 1, role: b}], by: order} over 5 squares colors the third at the OKLab midpoint within 0.001 ΔEOK, and the first and last exactly a and b 2140ms
+ ✓ tests/acceptance/375/never.test.ts (3 tests) 3366ms
+   ✓ It can never: depend on its own result; resize because a bound number changed; let flow children overlap (3)
+     ✓ never: flow children of a frame never overlap, in generated row, column and grid trees (1000 cases, seed 375) 1205ms
+     ✓ never: a frame doesn't resize because a bound number changed; the bound text is sized by its widest (1000 cases, seed 375) 802ms
+ ✓ tests/acceptance/375/column.test.ts (3 tests) 2465ms
+   ✓ AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line (3)
+     ✓ AC1 the column hugs its three text items within 0.5 u, each measured by the shaper 1126ms
+ ✓ tests/acceptance/375/scope.test.ts (1 test) 818ms
+   ✓ Scope: auto layout on the canvas by Taffy, with text leaves measured by the shaper (1)
+     ✓ Scope: the canvas module crate that builds deep-layout lays out with Taffy and measures text with the canvas's one shaper (deep-text) 736ms
+ ✓ tests/acceptance/375/grid.test.ts (3 tests) 1054ms
+   ✓ AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px (3)
+     ✓ AC1 flow by column puts the second child in row 2, column 1, and every child in its cell 454ms
+ ✓ tests/acceptance/375/row.test.ts (2 tests) 1205ms
+   ✓ AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px (2)
+     ✓ AC1 the six share one bottom line within 0.5 px, in order with gap 24, and the row is the sum of their widths + 5 × 24 u wide 585ms
+
+ Test Files  8 passed (8)
+      Tests  23 passed (23)
+   Start at  15:28:59
+   Duration  22.01s (tests 99%)
+PASS unit-moved-before (22.86 s)
+READING {"side":"before","round":2,"tree":"99cefc32138e95c06f064e05398191b593216251","aloneBlock":["tests/acceptance/374/","tests/acceptance/375/"],"parallelBlock":[],"laneStatus":0,"wallSeconds":22.86,"loadBefore":[101.92919921875,127.91357421875,116.49609375],"loadAfter":[92.00146484375,123.5009765625,115.2353515625],"at":"2026-11-13T23:29:21.471Z"}
+exit 0

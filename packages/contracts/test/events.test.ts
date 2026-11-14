@@ -295,7 +295,7 @@ describe('the design says', () => {
 
   it('every kind shares one envelope; only its kind, subject, writer, data and history differ', () => {
     // A schema's own history, as the lint's HISTORY list names it: a kind added in R2 says so.
-    const history = ['x-since', 'x-stability', 'x-tracking', 'x-deprecated_since', 'x-replaced_by'];
+    const history = ['x-since', 'x-stability', 'x-tracking', 'x-preview_since', 'x-decide_by', 'x-deprecated_since', 'x-replaced_by'];
     const envelope = (name: string) => {
       const { properties, required, ...rest } = getSchema(name) as { properties: Record<string, unknown>; required: string[] };
       const { kind: _kind, subject: _subject, writer: _writer, data: _data, v, ...shared } = properties;

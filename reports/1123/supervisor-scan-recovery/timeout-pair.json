@@ -1,0 +1,20 @@
+[
+  {
+    "side": "before",
+    "started": "2026-11-13T05:50:05.347753+00:00",
+    "durationSeconds": 4.0187859999999995,
+    "exit": 1,
+    "sourceSha256": "fd98d7040374fa15a610616c3deee215339b289cbef72b2d8ef7276fe883180d",
+    "testSha256": "b831c2097c2126d75a6f9c256e692391a983ad2f141872c4b9ee0ecf8950e0ff",
+    "scanDelaySeconds": 0.25
+  },
+  {
+    "side": "after",
+    "started": "2026-11-13T05:50:09.367221+00:00",
+    "durationSeconds": 7.1049707920000005,
+    "exit": 0,
+    "sourceSha256": "ee3ac2cc1d08356da1a13c3668bcf5febbec87965f8b19695043d80a7e5c24e0",
+    "testSha256": "b831c2097c2126d75a6f9c256e692391a983ad2f141872c4b9ee0ecf8950e0ff",
+    "scanDelaySeconds": 0.25
+  }
+]

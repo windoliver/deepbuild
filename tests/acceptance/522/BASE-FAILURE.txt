@@ -1,0 +1,141 @@
+The #522 suite run once at base commit 53c0e72a3 ("Merge pull request #2356 …"; no implementation of #522; #2009's,
+#2010's, #2012's, #1918's, #1919's, #1920's and #1921's merges are there), on macOS 27.2 arm64 (rustc 1.99.1, Node
+24.22.2, vitest 5.0.5), the checkout's path redacted to `<checkout>`. Each test ran once, in two vitest invocations over
+disjoint files, so the deep-show builds could wait for the machine's one build grant while the files that build nothing
+new ran under a test grant:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- sh scripts/lease npx vitest run --root tests/acceptance/522 \
+    --testTimeout=600000 --no-file-parallelism ac1-seek-stack.test.ts ac4-scrub-and-fork.test.ts ac5-late-poke.test.ts \
+    ac6-ring-budget.test.ts ac8-determinism.test.ts ac9-seek-across-frames.test.ts
+  PATH=… (the same) node scripts/throttle.mjs build --wait 240 -- sh scripts/lease npx vitest run --root \
+    tests/acceptance/522 --testTimeout=600000 --no-file-parallelism ac2-without-logic.test.ts ac3-module-inputs.test.ts \
+    ac7-late-joint.test.ts
+
+`scripts/lease` found no `deep` on PATH and ran each unleased, as it says. The base's deep-physics was built just before
+through the throttle's build grant (`cargo build --locked --bin deep-physics`, 4 min 3 s cold), so the runs' own builds
+of it were no-ops; the second run compiled deep-show from cold (ac7's `beforeAll`, about 24 minutes on a shared machine
+whose load average ran from 15 to 180 on 18 cores). Nothing here was judged on timing: criterion 9's tests fail before
+any frame.
+
+Run: 21 of 21 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED or
+INCONCLUSIVE:
+
+- ac1 (#522.e8dd3a56), 2 tests. The 20-box stack bakes 960 steps (step hashes, checkpoints every 60), then `seek`
+  answers `{"ok":false,"code":"bad_input"}`: no call seeks a bake. `--planted checkpoint_poses_only` answers
+  `bad_input` and exits 2.
+- ac2 (#522.07ad2783), 3 tests. Both deep-show builds that exist were made (`test-leave-out-logic`). The first test
+  fails at deep-physics's bake of the lab: its world's `inputs` are refused, `physics.unsupported`, "inputs isn't run
+  by this backend interface yet; #522 brings it". The second: in the build without logic the lab whose world input
+  takes `on: {logic: "coach"}` is refused, but by `physics_refused` (the same unsupported `inputs`), never
+  `module_missing` naming logic, the assertion it fails at. The third: cargo refuses the build, "the package
+  'deep-show' does not contain this feature: test-physics-needs-logic".
+- ac3 (#522.80128e91), 2 tests: cargo refuses both builds, "does not contain this feature: test-launch-module" (and
+  `test-launch-module-first`, checked with `cargo metadata --no-deps` before the run: neither feature exists).
+- ac4 (#522.ef486477), 2 tests: the lab's bake with its eight grabs is refused, `physics.unsupported` at `inputs`
+  (the planted test fails there too, before its `--planted fork_on_scrub` process, which the base doesn't plant).
+- ac5 (#522.cc560b9c), 3 tests: the drop's bake with its sideways poke (and, in the twins' tests, the bake with both
+  pokes) is refused, `physics.unsupported` at `inputs`.
+- ac6 (#522.ab65f8d2), 2 tests. The step-60 probe bakes (one checkpoint, step 60) and the 200-box stack bakes its
+  7,200 steps, keeping all 120 checkpoints (the base reads `checkpoint.budget` and ignores it); its reply has no
+  `ring`, the assertion it fails at. `--planted ring_drops_oldest` answers `bad_input` and exits 2.
+- ac7 (#522.5a2c866e), 2 tests. The full set builds; the kit's report lists the physics module with no part: "physics
+  ran the late_entry part; it ran" nothing (the base registers no physics stepper or fixture). Cargo refuses the
+  planted build: "does not contain this feature: test-physics-checkpoint-drops-break-steps".
+- ac8 (#522.dfeb8487), 2 tests: `determinism` answers `bad_input`; `--planted restore_without_warm_start` answers
+  `bad_input` and exits 2.
+- ac9 (#522.c32bed6d), 3 tests: `view` answers `bad_input` (for the planted test, after `--planted
+  simulate_runs_all_steps` answers it and exits 2).
+
+The type-check, `npx tsc -p tests/acceptance/522/tsconfig.json`, exits 0. `node scripts/public-text.mjs` reads the
+added files, the commit message and the open issues and finds no studied name.
+
+The runs' output, as vitest printed it (summaries, then each failure's assertion and its frame):
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/522
+ ❯ ac9-seek-across-frames.test.ts (3 tests | 3 failed) 1592ms
+ ❯ ac4-scrub-and-fork.test.ts (2 tests | 2 failed) 1056ms
+ ❯ ac5-late-poke.test.ts (3 tests | 3 failed) 1136ms
+ ❯ ac6-ring-budget.test.ts (2 tests | 2 failed) 33689ms
+ ❯ ac1-seek-stack.test.ts (2 tests | 2 failed) 4554ms
+ ❯ ac8-determinism.test.ts (2 tests | 2 failed) 1114ms
+ Test Files  6 failed (6)
+      Tests  14 failed (14)
+   Duration  43.88s (tests 99%)
+
+ FAIL  ac1-seek-stack.test.ts > … > a seek to step 330 restores the checkpoint at step 300 and plays the 600 steps after it with the straight run's step hashes
+AssertionError: the seek to step 330: the seek ran (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ ac1-seek-stack.test.ts:49:15
+ FAIL  ac1-seek-stack.test.ts > … > a planted checkpoint that keeps only poses and velocities (checkpoint_poses_only) fails that comparison, naming the first step and field that differ
+AssertionError: deep-physics --planted checkpoint_poses_only (checkpoint_poses_only) exits 0; stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac1-seek-stack.test.ts:56:28
+ FAIL  ac4-scrub-and-fork.test.ts > … > 50 scrubs back and forth read the bake, never step, … re-simulates only from the checkpoint at step 240
+AssertionError: the lab's bake answers ok: {"ok":false,"issues":[{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":[],"path":"inputs",…,"what":"inputs isn't run by this backend interface yet; #522 brings it",…}]}
+ ❯ ac4-scrub-and-fork.test.ts:66:21
+ FAIL  ac4-scrub-and-fork.test.ts > … > a planted transport that forks on a scrub alone (fork_on_scrub) changes the bake's key on the first scrub and fails
+AssertionError: the lab's bake answers ok: {"ok":false,"issues":[{… "code":"physics.unsupported", … "path":"inputs", …}]}
+ ❯ ac4-scrub-and-fork.test.ts:91:21
+ FAIL  ac5-late-poke.test.ts > … > the ball first touches the floor at step 250; the late poke at step 240, added at step 256, …
+AssertionError: the drop with the sideways poke is baked: {"ok":false,"issues":[{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":[],"path":"inputs","actual":{"poke":{"kind":"poke","targets":["ball"]}},…}]}: expected false to be true // Object.is equality
+ ❯ ac5-late-poke.test.ts:76:32
+ FAIL  ac5-late-poke.test.ts > … > a planted restore that keeps the replaced steps' occurrences (restore_keeps_replaced_occurrences) fails, naming the contact at step 250
+AssertionError: the run with both pokes from the start answers ok: {"ok":false,"issues":[{… "code":"physics.unsupported", … "path":"inputs", …}]}
+ ❯ ac5-late-poke.test.ts:92:22
+ FAIL  ac5-late-poke.test.ts > … > a planted late entry that forks at the late poke and drops the poke at step 252 (late_entry_forks) fails, naming that step
+AssertionError: the run with both pokes from the start answers ok: {"ok":false,"issues":[{… "code":"physics.unsupported", … "path":"inputs", …}]}
+ ❯ ac5-late-poke.test.ts:99:22
+ FAIL  ac6-ring-budget.test.ts > … > the ring keeps within its budget with checkpoints 480 steps apart, and 20 seeded seeks each restore one at most 480 steps back and equal playing by step hash
+AssertionError: the 200-box bake: ring (the checkpoint ring as the bake leaves it) is an object, got undefined: expected false to be true // Object.is equality
+ ❯ ac6-ring-budget.test.ts:70:15
+ FAIL  ac6-ring-budget.test.ts > … > a planted ring that drops its oldest checkpoint instead (ring_drops_oldest) keeps none before step 6060 and fails the first seek before it, naming the step
+AssertionError: deep-physics --planted ring_drops_oldest exits 0; stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac6-ring-budget.test.ts:81:15
+ FAIL  ac8-determinism.test.ts > … > physics.determinism with at_times [2 s, 5 s, 9 s] passes the lab with its eight grabs
+AssertionError: physics.determinism of the lab: the check ran (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ ac8-determinism.test.ts:25:15
+ FAIL  ac8-determinism.test.ts > … > a planted restore without warm-start impulses (restore_without_warm_start) fails on a continuation probe, naming the input and the first step that differs
+AssertionError: deep-physics --planted restore_without_warm_start exits 0; stdout: {"ok":false,"code":"bad_input"}
+ ❯ ac8-determinism.test.ts:31:21
+ FAIL  ac9-seek-across-frames.test.ts > … > the 5760 steps run across frames, each showing its last stepped state marked stale until the 50 s frame lands …
+AssertionError: view: the view opened (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ ac9-seek-across-frames.test.ts:92:15
+ FAIL  ac9-seek-across-frames.test.ts > … > a second seek, to 10 s, made after the steps pass 10 s and before the 50 s frame lands, lands within one checkpoint spacing (60) of steps
+AssertionError: view: the view opened (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ ac9-seek-across-frames.test.ts:102:15
+ FAIL  ac9-seek-across-frames.test.ts > … > a planted simulate phase that runs all 5760 steps in one frame (simulate_runs_all_steps) passes 4 ms in that frame and fails, naming the frame
+AssertionError: view: the view opened (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ ac9-seek-across-frames.test.ts:116:15
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/522
+ ❯ ac3-module-inputs.test.ts (2 tests | 2 failed) 18857ms
+ ❯ ac7-late-joint.test.ts (2 tests | 2 failed) 1443127ms
+ ❯ ac2-without-logic.test.ts (3 tests | 3 failed) 28994ms
+ Test Files  3 failed (3)
+      Tests  7 failed (7)
+   Duration  1496.46s (tests 100%)
+
+ FAIL  ac2-without-logic.test.ts > … > the build without the logic module seals with the physics module and plays the ball-and-goal lab
+AssertionError: deep-physics's bake of the lab is baked: {"ok":false,"issues":[{"check":"document.validate","code":"physics.unsupported","severity":"error","ids":[],"path":"inputs",…}]}
+ ❯ ac2-without-logic.test.ts:45:18
+ FAIL  ac2-without-logic.test.ts > … > in that build a document whose world input takes on: {logic: ID} is refused with module_missing, naming the logic module, and no other document is
+AssertionError: with module_missing, naming the logic module: [{"check":"document.validate","code":"physics_refused","severity":"error","ids":["lab"],"path":"worlds/lab","actual":[{"code":"physics.unsupported","path":"inputs","what":"inputs isn't run by this backend interface yet; #522 brings it"}],"what":"the physics module refuses this world in its scene",…}]
+ ❯ ac2-without-logic.test.ts:70:93
+ FAIL  ac2-without-logic.test.ts > … > a planted physics module that declares logic among its dependencies (test-physics-needs-logic) is refused at that build's seal, naming logic
+AssertionError: deep-show builds (cargo build --locked -p deep-show --bin deep-show --features test-leave-out-logic,test-physics-needs-logic): expected 'cargo build --locked -p deep-show --b…' to be '' // Object.is equality
++ error: the package 'deep-show' does not contain this feature: test-physics-needs-logic
+ ❯ ac2-without-logic.test.ts:77:25
+ FAIL  ac3-module-inputs.test.ts > … > the test module's launch for step 240 launches the ball at that step, kept in the bake, and a replay of the kept entries gives the same step hashes
+AssertionError: deep-show builds (cargo build --locked -p deep-show --bin deep-show --features test-launch-module): expected 'cargo build --locked -p deep-show --b…' to be '' // Object.is equality
++ error: the package 'deep-show' does not contain this feature: test-launch-module
+ ❯ ac3-module-inputs.test.ts:83:15
+ FAIL  ac3-module-inputs.test.ts > … > that launch and the control-derived poke on the same step apply in (kind, target ID) order whichever module wrote first
+AssertionError: deep-show builds (cargo build --locked -p deep-show --bin deep-show --features test-launch-module): expected 'cargo build --locked -p deep-show --b…' to be '' // Object.is equality
++ error: the package 'deep-show' does not contain this feature: test-launch-module
+ ❯ ac3-module-inputs.test.ts:100:15
+ FAIL  ac7-late-joint.test.ts > … > a joint with over_steps: 3 crossing its threshold one step before the restored step breaks at the same step as the on-time run, with the same occurrences
+AssertionError: physics ran the late_entry part; it ran : expected undefined to be defined
+ ❯ ac7-late-joint.test.ts:55:17
+ FAIL  ac7-late-joint.test.ts > … > a planted checkpoint that drops the joint's steps past breaks_at (test-physics-checkpoint-drops-break-steps) breaks it a step late and fails, naming the joint and the step
+AssertionError: deep-show builds (cargo build --locked -p deep-show --bin deep-show --features test-physics-checkpoint-drops-break-steps): expected 'cargo build --locked -p deep-show --b…' to be '' // Object.is equality
++ error: the package 'deep-show' does not contain this feature: test-physics-checkpoint-drops-break-steps
+ ❯ ac7-late-joint.test.ts:72:17
