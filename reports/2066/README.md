@@ -1,43 +1,44 @@
-# #2066 — implementation proved by blind redraft; adoption pending
+# #2066 — approved acceptance adoption; all four criteria traced
 
-**Part of #2066. Not ready to close or merge.** The production guard is implemented, builds, and passes the independent blind redraft. The original acceptance drafts remain unchanged and retain their failures. Per AGENTS.md / design Dogfooding, the differing drafts and results are presented for the owner's approval, not silently substituted.
+**Issue acceptance: proven. Overall repository verification: not PASS.** The owner approved the blind redraft and criterion tags. Both adopted tests pass, and `node scripts/proof.mjs before trace` reports that each of the issue's four criteria has a tagged test that ran, passed and failed on a wrong program. PR #2519 can say **Closes #2066** on this evidence, without claiming unrelated checks passed or authorizing a merge.
 
-Base: `bfe8c8a5e5713c03733e50376ea9680d34f86efa`. The PR uses a separate worktree; no unrelated changes from the original shared checkout are included. Production changes are confined to `core.ts`, `session-memory.ts`, and the internal memory port. An extension cannot stop the core's existing prompt-to-base writes.
+Base: `bfe8c8a5e5713c03733e50376ea9680d34f86efa`. The PR uses a separate worktree; unrelated edits from the shared checkout are excluded. Production changes are confined to `core.ts`, `session-memory.ts`, and the internal memory port. An extension cannot stop the core's existing prompt-to-base writes.
 
-## Requirement → change → evidence
+## Requirement → change → proof
 
-| Requirement | Change | Check result |
+| Requirement | Change | Evidence |
 |---|---|---|
-| AC1 scheduled rule saves nothing and does not reach a second open session | Require the prompt's recorded `person` origin before `saveTyped`; keep delivery separate | Redraft fails on base with target `rule:typeda9cfcd2f96c8` and unwanted delivery; passes after. |
-| AC2 session/subagent/continuation/unknown save nothing | Same origin guard, no text-based origin inference | Redraft explicitly verifies recorded origins, fails on base for every origin naming its target, passes after. |
-| AC3 same line typed by a person saves once and propagates at next prompt | Parsing, deduplication, scope and rule delivery unchanged | Redraft's typed twin passes after; #344 AC1 also passes. |
-| AC4 scheduled rejection saves no decision or guard; same words typed save both | Require `person` before `captureRejected` / `syncRejected` | Base shows unwanted decision and guard; redraft checks the same rejection in its person twin and passes after. |
-| Once-only refusal naming origin | One `session.reading` per session/origin, deduplicated from the record | Two identical non-person prompts leave one reading for every origin in the passing redraft. |
-| Prompt-specific origin; absent/unknown origin grants no authority | Reuse status's prompt-ID/splice lookup; share its result with base writes | Original socket draft's prompt-specific case passes after. Redraft verifies recorded origins and an unjoined prompt. The absent-event branch and an exactly interleaved race remain untested. |
-| #344 behavior otherwise unchanged | Ordinary prompts perform no origin query; existing rules still delivered at automatic prompts | Redraft automatic delivery passes. #344 AC1 and AC5 (compaction/resume) pass in final run. AC9 scoped notices fail identically on base and after. |
+| AC1 `#2066.be686212`: scheduled rule saves nothing and does not propagate | Require this prompt's recorded `person` origin before `saveTyped`; keep delivery separate | Adopted matrix fails on the merge base at its assertions and passes the fix. Earlier detailed base output names target `rule:typeda9cfcd2f96c8` and unwanted delivery. |
+| AC2 `#2066.0f5e890b`: session/subagent/continuation/unknown save nothing | Same origin guard, no text-based origin inference | Matrix asserts each recorded origin; base failures name every saved target; passes after. |
+| AC3 `#2066.6caf3df8`: same line typed by a person saves once and reaches a second open session | Parsing, deduplication, scope and delivery unchanged | Typed twin passes the fix and fails the one-comparison `person-origin-reversed` wrong program at its assertion. |
+| AC4 `#2066.99a5e19f`: scheduled rejection saves no decision/guard; person saves both | Require `person` before `captureRejected` and `syncRejected` | Both adopted tests cover scheduled/person rejection twins; base wrongly saves a decision and guard, fix passes. |
+| One origin-naming refusal per session | Record-deduplicated `session.reading` | Two identical non-person prompts leave one reading for every origin. |
+| Prompt-specific origin; missing origin cannot authorize | Reuse status's prompt-ID/splice lookup | Adopted suite checks recorded origins and an unjoined prompt. The earlier socket draft's later-entry test passed after. Exact concurrent race and absent-event fault are not separately exercised. |
+| #344 otherwise unchanged | Ordinary prompts remain query-free; automatic prompts still receive existing rules | Typed propagation, compaction/resume and automatic delivery pass. Scoped notices (#344 AC9) fail identically on base and after. |
 
-## Saved checks
+## Approved adoption
 
-Commands ran in the repository's fixed-path proof bays via `scripts/bays.mjs` / `claimPair`, with an intact seal recorded in their logs. Each run rebuilt the workspace; the base regression run also built `deep-hook --locked`. No copied stale workspace build was used for these final runs. Dependencies came from the bay's sealed installation. No model/provider request is part of the tests.
+See [adoption.md](adoption.md). The owner explicitly approved replacing the two earlier drafts and adding hashed criterion tags. The adopted redraft's assertions, expected values and flow are unchanged; only the two test names gained tags. Superseded drafts were retired by that approval, not weakened to pass. Exact earlier bytes remain in commit `47aba2b4d`, the independent redraft in `3e7f97070`, and all failure output remains here. Approval is not a cryptographic tag and does not waive any machine guard that requires one.
 
-- **Base original socket draft:** `npm run build --workspaces && node scripts/affected.mjs tests/acceptance/2066/recorded-origin.test.ts`. `base-recorded-origin.txt`: all five origins save rules and propagate them, naming actual targets; scheduled rejection saves a decision/guard. The test's broad `SELECT *` also throws a JavaScript-number `RangeError` reading the 64-bit hook sequence.
-- **Initial after:** `after-affected.txt`, `after-acceptance.txt`: core behavior assertions pass, but the draft still throws that `RangeError`, and original helper cleanup reports `ENOTEMPTY`. `after-status-regression.txt`: all four #83 status tests pass. Compaction delivery missed in this loaded run; ordinary prompts were then restored to the original query-free path.
-- **Blind redraft before:** `redraft-base.txt` / `.jsonl`: every non-person origin fails the named assertions, with its target and propagated rule. The person's control assertions hold; its test has a separate `ENOTEMPTY` cleanup error. `redraft-base-affected.txt` includes the complete runner result.
-- **Blind redraft after final correction:** `final-acceptance.txt` / `.jsonl`: **2 tests passed**, covering all four issue criteria plus repeated readings, missing transcript origin and automatic delivery. Tests are byte-identical to the blind job's output.
-- **Regression:** `base-rules.txt` and `final-rules.txt`: #344 **AC1 and AC5 pass on both**, **AC9 fails on both with the same four booleans**. No retry to green, skip, fixture change or baseline edit.
-- **Build:** all TypeScript workspace builds (including the hub typecheck) succeeded in the before/after logs. `git diff --check` passed. The core remains within its existing 2,638-line ceiling.
+The typed control is existing behavior and should pass the base. Its wrong program reverses only `from === 'person'` in a copy of `session-memory.ts`; the before lane builds and runs it separately. The copied twin preserves the source verbatim apart from that comparison. Acceptance typechecking excludes this intentionally relocated copy, which is typechecked when laid over the real module in the twin build.
 
-## Overall verification is not PASS
+## Latest checks
 
-`final-affected.txt`: **FAIL affected: 154 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 4 passed**. Its only failing test is the unchanged #344 AC9 failure also observed on the base. The remaining findings are repository lint failures also observed in the base run (dependency inventory, carried vendor patches, canvas closure/catalog entries, stale known-failure entries, etc.). The runner calls these NEW because main's baseline does not list them; this PR did not change that baseline. A formatting difference combines the canvas-closure error with its command warning in the after log. No new core-size finding remains.
+- [adopted-proof.txt](adopted-proof.txt): **PASS before** for both tests; the denial matrix fails the merge base, the typed twin fails `person-origin-reversed`. **PASS trace: each of 4 criteria has a tagged test that ran, passed and failed on a wrong program.** The run's commit still said `Part of`; changing the PR's closing keyword changes no tested code.
+- [adopted-acceptance.txt](adopted-acceptance.txt) / [.jsonl](adopted-acceptance.jsonl): **2 passed**, no skips. Run through `node scripts/affected.mjs tests/acceptance/2066/redraft/recorded-origin.test.ts` after the workspace build and acceptance-only typecheck.
+- Workspace TypeScript builds, including hub typecheck, passed in the proof and affected runs. `tsc -p tests/acceptance/2066/tsconfig.json` passed before the affected command ran. `git diff --check` passed. Core stays within its existing 2,638-line ceiling.
+- [base-rules.txt](base-rules.txt) and [final-rules.txt](final-rules.txt): #344 **AC1 and AC5 pass on both**, **AC9 fails on both with the same four booleans**. [after-status-regression.txt](after-status-regression.txt): all four #83 status tests passed.
 
-The targeted `affected.mjs` runs name acceptance/regression paths; they are **not** a full run over every source dependency. `full-selection.txt` records the full source selection: 340 parallel Vitest files, 14 node files, 645 alone Vitest files, 67 timed files, 30 slow files and deep-app. No **WIDE** line was emitted. **INCONCLUSIVE (unrun): the remainder of that selection, including all timed/slow files and deep-app, was not executed.** Full preflight, a final complete-suite run and acceptance-test typechecking remain unrun. Loads during checks exceeded 18 cores, so timings are readings, not budget proof.
+Runs used the repo's fixed-path proof bays, with intact seals and source/tree/overlay hashes recorded. Each side rebuilt its workspace; hook binaries came from that bay's own builds. Loads exceeded the core count, so timings are readings, not budget proof.
 
-## Approval / remaining gaps
+## Still not a clean repository verdict
 
-1. **Owner decision required:** approve adoption of `tests/acceptance/2066/redraft/recorded-origin.test.ts` in place of the earlier drafts. Both earlier files are still present, unedited; their failing output is here. The redraft passes the implementation, so Dogfooding requires presenting this once to the owner. No adoption or deletion has been presumed.
-2. The drafts omitted hashed criterion tags; automated `proof.mjs trace` cannot certify `Closes #2066`. Adding those tags is a check edit and belongs to the approved adoption, not a silent implementer edit.
-3. Preserve or resolve existing check failures and finish the unrun checks before calling this merge-ready. The original acceptance helper's `ENOTEMPTY` teardown is not fixed here; the first draft also has an unused helper that acceptance-only typecheck has not validated.
-4. Exact concurrent origins, an origin event that never lands, and deduplication across restart are reviewed in code but not separately exercised. All required non-person save branches share the tested `from === 'person'` condition.
+[adopted-affected.txt](adopted-affected.txt): **FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed.** No acceptance test failed. The remaining findings are repository lint failures also observed on the base (dependency inventory, carried vendor patches, canvas closure/catalog entries, stale known-failure entries, etc.). “New” means absent from main's known-failure list, not introduced by this patch; that list was not changed. Earlier `final-affected.txt` additionally includes the unchanged #344 AC9 failure.
 
-Handwritten changes exceed the usual 400-line target only because both immutable earlier drafts and the independent redraft are retained for the required review. Production diff is 26 added / 27 removed lines. Splitting the authority fix from its evidence would not resolve the pending test-adoption decision; separate commits keep test drafting, implementation, redraft and this evidence reviewable.
+The targeted affected runs are **not** every source dependency. [full-selection.txt](full-selection.txt) records the source selection before adoption: 340 parallel Vitest files, 14 node files, 645 alone Vitest files, 67 timed files, 30 slow files and deep-app. No **WIDE** line was emitted. **INCONCLUSIVE (unrun): the rest of that selection, timed/slow files and deep-app, and full preflight.** Exact simultaneous prompts, an origin event that never lands, and deduplication across restart remain unexercised edge cases, not acceptance passes asserted here. No failed check or baseline was edited to turn green.
+
+## Historical attempts retained
+
+`base-recorded-origin.txt` caught all unwanted saves but its `SELECT *` also raised a 64-bit-sequence `RangeError`. `after-acceptance.txt` records that infrastructure failure and existing `ENOTEMPTY` cleanup races. `redraft-base.txt` records the blind redraft's detailed base failures and a separate control cleanup error. `final-acceptance.txt` records the passing untagged redraft before adoption; `adopted-proof.txt` is the later full before/after/twin result. Nothing in these saved outputs was re-recorded or reclassified as a pass.
+
+Production diff is 26 added / 27 removed lines. The extra source-sized twin is a machine copy needed to prove the existing typed-rule criterion against a wrong program; saved output is evidence, not handwritten implementation.
