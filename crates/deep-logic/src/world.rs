@@ -797,23 +797,25 @@ impl World {
 
     /// The first step from item `i`'s next on that it runs (Logic: turn clock): the next step on
     /// a fixed clock; on `on_input`, step 0, then the first step at or after an entry it hasn't
-    /// read of a control it reads, or the step `due` names when that's after the step that wrote
-    /// it; None while nothing asks. It reads only the track and the item's own state, so a seek
-    /// runs the steps play does.
+    /// read of a control or reading it reads, or the step `due` names when that's after the step
+    /// that wrote it; None while nothing asks. It reads only the track and the item's own state,
+    /// so a seek runs the steps play does.
     fn asked(&self, i: usize) -> Option<i64> {
         let (item, l) = (&self.piece.items[i], &self.lives[i]);
         if !item.turn || l.last < 0 {
             return Some(l.next);
         }
         let mut k: Option<i64> = None;
-        for r in item
-            .layout
-            .entries
-            .iter()
-            .filter(|e| e.read == Read::Control)
-        {
+        for r in &item.layout.entries {
+            // A control's entries and a reading's values ask alike (Logic: turn clock). A
+            // `latest` reading keeps its last value, which asks for no step of its own.
+            let waits = match r.read {
+                Read::Control => true,
+                Read::Reading { each, .. } => each,
+                _ => continue,
+            };
             // Entries past a step's PER_STEP wait for the next step, as on a fixed clock.
-            if l.pending.get(&r.name).is_some_and(|q| !q.is_empty()) {
+            if waits && l.pending.get(&r.name).is_some_and(|q| !q.is_empty()) {
                 return Some(l.next);
             }
             let c = l.cursor.get(&r.name).copied().unwrap_or(0);
@@ -875,7 +877,7 @@ impl World {
         let k = self.lives[i].next;
         let t = k * item.step;
         // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
-        // player and seq, never by arrival (Input track); each reading's values as recorded.
+        // time, player and seq, never by arrival (Input track); each reading's values as recorded.
         let mut taken: BTreeMap<&str, Vec<Entry>> = BTreeMap::new();
         {
             let l = &mut self.lives[i];
@@ -897,7 +899,7 @@ impl World {
                     if self.planted.read_region_orders_by_arrival {
                         fresh.sort_by_key(|e| e.arrived);
                     } else {
-                        fresh.sort_by_key(|e| (e.player, e.seq, e.arrived));
+                        fresh.sort_by_key(|e| (e.t, e.player, e.seq, e.arrived));
                     }
                 }
                 if !each {
@@ -1160,12 +1162,16 @@ impl World {
                     json!({"ok": false, "code": "bad_input", "what": format!("the piece declares no source {}", e.control)}),
                 );
             }
-            // The first step not yet run of its readers, or of every item when none reads it.
+            // The first step not yet run of its readers, or of every item when none reads it:
+            // the first any of them runs after the time the furthest of them has read to.
             let next = |only: bool| {
-                steps
-                    .clone()
-                    .filter(|(i, _)| !only || i.reads.contains(&e.control))
-                    .map(|(i, l)| l.next * i.step)
+                let of = || {
+                    steps
+                        .clone()
+                        .filter(|(i, _)| !only || i.reads.contains(&e.control))
+                };
+                let read = of().map(|(i, l)| (l.next - 1) * i.step).max()?;
+                of().map(|(i, l)| l.next.max(read.div_euclid(i.step) + 1) * i.step)
                     .min()
             };
             e.t = next(true).or_else(|| next(false)).unwrap_or(0);

@@ -33,7 +33,8 @@ pub(super) struct Steps {
     checkpointed: Option<i64>,
     /// The revision the steps ran on: its document's key and the keys of the tables they read.
     inputs: Vec<Key>,
-    /// Each stepping node's error in this frame's steps, which its node reports.
+    /// Each stepping node's error from its last step, which its node reports until a step of
+    /// its own succeeds or the steps start again or seek.
     failed: BTreeMap<usize, OpError>,
 }
 
@@ -112,7 +113,6 @@ impl Session {
     fn run_steps(&mut self, s: &mut Scheduler<'_>, report: &mut Report) {
         let sealed: &Sealed = s.sealed;
         let to = self.t;
-        self.steps.failed.clear();
         // The stepping nodes in the plan's order, which is the order at one time.
         let mut steppers: Vec<(usize, i64, String)> = Vec::new();
         if let Some(l) = &self.loaded {
@@ -176,11 +176,13 @@ impl Session {
                 .filter(|_| checkpoints)
             {
                 Some(c) => {
+                    self.steps.failed.clear();
                     self.steps.values = self.steps.checkpoints[&c].clone();
                     self.steps.at = Some(c);
                     self.steps.checkpointed = Some(c);
                 }
                 None => {
+                    self.steps.failed.clear();
                     self.steps.at = None;
                     self.steps.values.clear();
                     self.steps.checkpoints.clear();
@@ -219,6 +221,7 @@ impl Session {
                     self.steps.failed.insert(*n, e);
                     continue;
                 }
+                self.steps.failed.remove(n);
                 self.tails.extend(tails);
                 let op = self.loaded.as_ref().expect("loaded").nodes[*n].op;
                 for (w, v) in sealed.ops[op].op.writes.iter().zip(out) {

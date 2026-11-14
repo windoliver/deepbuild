@@ -1659,7 +1659,7 @@ impl<'a> Hub<'a> {
                 .pointer("/params/program")
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            let Some(bytes) = (sha.len() == 64)
+            let Some(bytes) = (sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
                 .then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok())
                 .flatten()
             else {
