@@ -85,6 +85,8 @@ pub fn shape_later(spec: &Spec<'_>) -> Pending {
             tabular: spec.tabular,
             mask: spec.mask,
             spans: &[],
+            gap: spec.gap,
+            indent: spec.indent,
         },
         done: done.clone(),
     };

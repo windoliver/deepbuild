@@ -52,6 +52,9 @@ pub struct Label {
     pub bound: bool,
     /// #1964: text@1 `runs`' styled spans of the one shaped run.
     pub spans: Vec<Span>,
+    /// #1966: a list's gap after each of its items, and the indent its lines start at.
+    pub gap: f32,
+    pub indent: f32,
 }
 
 impl Label {
@@ -69,6 +72,8 @@ impl Label {
             align: Align::Start,
             bound: false,
             spans: Vec::new(),
+            gap: 0.,
+            indent: 0.,
         }
     }
 
@@ -88,6 +93,8 @@ impl Label {
             tabular: self.bound,
             mask: self.mask,
             spans: &self.spans,
+            gap: self.gap,
+            indent: self.indent,
         }
     }
 }
@@ -107,6 +114,8 @@ struct ShapeKey {
     align: u8,
     bound: bool,
     spans: Vec<Span>,
+    gap: u32,
+    indent: u32,
 }
 
 impl ShapeKey {
@@ -124,6 +133,8 @@ impl ShapeKey {
             align: label.align as u8,
             bound: label.bound,
             spans: label.spans.clone(),
+            gap: label.gap.to_bits(),
+            indent: label.indent.to_bits(),
         }
     }
 }

@@ -204,6 +204,13 @@ pub fn solid(c: Rgb) -> PaintType {
     AlphaColor::from_rgba8(c[0], c[1], c[2], 255).into()
 }
 
+/// #1966: `c` at `opacity`, as a dimmed code line's glyphs draw.
+pub fn solid_at(c: Rgb, opacity: f64) -> PaintType {
+    AlphaColor::from_rgba8(c[0], c[1], c[2], 255)
+        .with_alpha(opacity.clamp(0.0, 1.0) as f32)
+        .into()
+}
+
 /// A ramp as Vello's gradient at `opacity`, its stops already the OKLab ramp in encoded sRGB.
 fn gradient(ramp: &Ramp, opacity: f64) -> PaintType {
     let p = |q: [f64; 2]| (q[0], q[1]);

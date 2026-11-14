@@ -1767,11 +1767,16 @@ impl Runs<'_> {
 
 impl relations::Bounds for Runs<'_> {
     fn own(&mut self, id: &str, item: &Value, part: Option<&str>) -> Option<relations::Box4> {
-        if part.is_some() {
-            return None;
-        }
         let kind = item.get("kind").and_then(Value::as_str)?;
         let params = object_or_empty(item.get("params"));
+        // #1966: a text's line or token, `<id>#line:n` or `<id>#tok:k`, in its shaped run.
+        if let Some(part) = part {
+            if kind != "text@1" {
+                return None;
+            }
+            let local = crate::lines::anchor_box(params, &*self.shaped(id, item)?, part)?;
+            return Some(relations::placed(local, relations::place_of(item, None)));
+        }
         if kind == "text@1" {
             let shaped = self.shaped(id, item)?;
             let w = params

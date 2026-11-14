@@ -221,6 +221,7 @@ pub(crate) fn runs(
             to: span.end,
             role: name.clone(),
             color,
+            opacity: 1.0,
         });
     }
     if written.windows(2).all(|w| w[0].to <= w[1].from) {
