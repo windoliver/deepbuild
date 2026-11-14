@@ -173,6 +173,48 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect(c.reasons.join('\n')).not.toMatch(/read the canary/);
   }, 60_000);
 
+  it('a main\'s interpreter is granted its own install, and none when that install is your home (#2419)', async () => {
+    // What the host asks the supervisor to let each run read, as it asks it.
+    const dir = temp();
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const supervisor: Supervisor = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    closing.push(record, supervisor);
+    const reads: string[][] = [];
+    const start: Supervisor['start'] = (o) => { reads.push([...(o.grant?.read ?? [])]); return supervisor.start(o); };
+    const spying = new Proxy(supervisor, { get: (to, key) => (key === 'start' ? start : (Reflect.get(to, key) as (...a: unknown[]) => unknown).bind(to)) });
+    mkdirSync(join(dir, 'home'));
+    const h = await openExtensionHost({ record, supervisor: spying, trust: await openTrust({ record, now: Date.now }), home: join(dir, 'home'), now: Date.now, release: [] });
+    closing.push(h);
+    await h.ready();
+    // Node under the name the hub runs it by, in an install of its own and in one that is the home folder itself.
+    const node = (install: string): string => {
+      mkdirSync(join(install, 'bin'), { recursive: true });
+      copyFileSync(realpathSync(process.execPath), join(install, 'bin', 'node'));
+      chmodSync(join(install, 'bin', 'node'), 0o755);
+      return join(install, 'bin', 'node');
+    };
+    // Both lie as deep as an install must: only whose home it is tells them apart.
+    const own = join(temp(), 'opt', 'node-own'), yours = join(temp(), 'home', 'you');
+    const was = { HOME: process.env.HOME, PATH: process.env.PATH };
+    const granted = async (id: string, install: string): Promise<string[]> => {
+      const program = node(install);
+      process.env.PATH = `${join(install, 'bin')}:${was.PATH}`;
+      reads.length = 0;
+      await h.check(await h.install({ from: pkgOf(id, `#!${program}\nprocess.exit(0);\n`, { checks: [] }, 'main'), builtBy: null }));
+      return reads.flat();
+    };
+    try {
+      mkdirSync(yours, { recursive: true });
+      process.env.HOME = yours;
+      expect(await granted('test/own', own), 'an install of its own is readable').toContain(own);
+      expect(await granted('test/yours', yours), 'an install that is your home is not').not.toContain(yours);
+    } finally {
+      process.env.HOME = was.HOME;
+      process.env.PATH = was.PATH;
+    }
+  }, 60_000);
+
   it('a running project extension that calls the API after you revoke its trust is refused and stopped, with nothing appended', async () => {
     const { h, record, trust } = await world();
     const repo = temp();
