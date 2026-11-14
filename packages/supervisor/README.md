@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The hub's supervisor (#236), part of its trusted ring and the local implementation of `host@1`: it starts every process in the platform sandbox with a run token, tracks what each run owns, holds a run's leases until its processes are proven gone, and stops only what it can prove. The hub, runner, extension host, env-local and checks-command start processes through it.
+The hub's supervisor (#236), part of its trusted ring and the local implementation of `host@1`: it starts every process in the platform sandbox with a run token, tracks what each run owns, holds a run's leases until its processes are proven gone, and stops only what it can prove. The hub, runner, extension host, env-local, checks-command and checks-journey start processes through it, and config-eval takes its sandbox backends.
 
 ## Where new code goes
 

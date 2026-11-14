@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The first-party journey check kind (#37). It drives a browser journey with Playwright against a stack env-local started from the run's own checkout, checks the end state, and keeps the video, screenshots and trace as evidence that outlives the stack's teardown; an API journey drives the stack's service with real requests and reads the end state back from it. It also holds the feature list (`.deepbuild/features/`), the changed features' journeys with their neighbors, saved scripts and replays, the "no visible change" comparison with the merge base, the latency check, screens compared with masks, motion assertions and a model's reading of a screen. `journeyCheckKind(host)` fills the check.kind@1 slot for the kind `journey`.
+The first-party journey check kind (#37). It drives a browser journey with Playwright against a stack env-local started from the run's own checkout, checks the end state, and keeps the video, screenshots and trace as evidence that outlives the stack's teardown; an API journey drives the stack's service with real requests and reads the end state back from it. It also holds the feature list (`.deepbuild/features/`), the changed features' journeys with their neighbors, saved scripts and replays, the "no visible change" comparison with the merge base, the latency check, screens compared with masks, motion assertions and a model's reading of a screen. `journeyCheckKind(host)` fills the check.kind@1 slot for the kind `journey`. Nothing in the hub calls it yet: the hub's kind table (`packages/hub/src/kinds.ts`) holds no `journey` kind, so no gate run reaches this package. Its callers are its own tests, `tests/acceptance/37/` and `benchmarks/journeys.mjs`.
 
 ## Where new code goes
 

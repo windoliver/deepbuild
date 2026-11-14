@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The adapter contract (#312): one adapter per agent, driven by its facts file (adapter.facts@1), held to the published shapes at registration, and a registry that maps a hook request through the adapter its agent names. The hub, the archive, the extension host and the conformance kits read agents through it.
+The adapter contract (#312): one adapter per agent, driven by its facts file (adapter.facts@1), held to the published shapes at registration, and a registry that maps a hook request through the adapter its agent names. The hub, the asks core, the runner, the archive, the extension host, checks-review, otlp and the conformance kits read agents through it.
 
 ## Where new code goes
 
