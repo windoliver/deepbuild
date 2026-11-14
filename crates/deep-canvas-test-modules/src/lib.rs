@@ -13,6 +13,7 @@ use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
 pub mod kinds;
+pub mod launch;
 mod time;
 pub use time::{cache, held, tick};
 pub mod probe;

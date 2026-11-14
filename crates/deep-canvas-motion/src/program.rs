@@ -151,7 +151,7 @@ pub(crate) struct Compiled {
     pub(crate) other: Option<(usize, Option<usize>)>,
     /// reach2's lower bone and end, after the owner (its upper bone).
     pub(crate) chain: [usize; 2],
-    pub(crate) table: Option<crate::constraint::ArcTable>,
+    pub(crate) table: Option<crate::constraint::PathRead>,
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
@@ -385,6 +385,10 @@ pub struct Program {
     pub(crate) members: Vec<(usize, usize)>,
     /// #504: each take-apart target's share slot and its follow, in stagger then list order.
     pub(crate) staggered: Vec<Staggered>,
+    /// #450: its 2D trails' whole-window bakes, taken once and kept with it.
+    pub trails: crate::trail::Bakes,
+    /// #507: the timeline's position on the clock, through the stops' holds and jumps.
+    pub path: crate::present::Path,
 }
 
 /// #504: one take-apart target: its stagger (in [`Motion::staggers`]), its assembly's share slot
@@ -670,6 +674,8 @@ impl Program {
             assemblies,
             members,
             staggered: Vec::new(),
+            trails: Default::default(),
+            path: Default::default(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -779,6 +785,7 @@ impl Program {
         }
         program.motion.markers.sort_by(|a, b| a.id.cmp(&b.id));
         program.resolve_times(doc)?;
+        program.path = crate::present::Path::build(doc, &program.motion, &program.options.input)?;
         program.gather_mixes();
         program.rows = program.occurrence_rows(
             doc,
@@ -921,9 +928,14 @@ impl Program {
                 _ => [owner; 2],
             };
             let table = match &c.kind {
-                Kind::FollowPath { points, .. } => {
-                    Some(crate::constraint::ArcTable::new(points.clone()))
-                }
+                Kind::FollowPath {
+                    points, fraction, ..
+                } => Some(crate::constraint::PathRead::compile(
+                    points,
+                    fraction,
+                    &program.fields,
+                    &path,
+                )?),
                 _ => None,
             };
             program.constraints.push(Compiled {
@@ -1684,6 +1696,7 @@ impl Program {
     /// outside its control's options; entries on controls these moves don't read move nothing.
     pub fn with_inputs(mut self, feel: Feel, track: &[Entry]) -> Option<Program> {
         self.inputs = Inputs::new(&self.motion, feel, track)?;
+        self.path = std::mem::take(&mut self.path).fold(track);
         self.quantize = feel.quantize;
         // #504: the shots plan glides each camera between its stage shots' framed poses.
         if let Some(plan) = self.shots.as_mut() {
@@ -1960,11 +1973,7 @@ impl Program {
         mut note: impl FnMut(&Event, &[f64], &[f64]),
     ) {
         let motion = &self.motion;
-        let (doc_t, pass) = if self.options.unwrap {
-            (t, 0)
-        } else {
-            crate::eval::position(motion, t)
-        };
+        let (doc_t, pass) = self.position(t);
         state.t = t;
         state.doc_t = doc_t;
         state.pass = pass;
@@ -2193,12 +2202,14 @@ impl Program {
         let shown = self
             .quantize
             .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
-        let timeline = crate::eval::valid_until(&self.motion, t, shown, validity, counts);
+        let p = self.path.at(t);
+        let timeline = crate::eval::valid_until(&self.motion, p, shown, validity, counts);
         // Under the look's steps a change shows only on the next step.
         let timeline = match self.quantize {
-            Some(rate) => timeline.map(|n| n.max(crate::eval::next_grid(doc_t, rate) + t - doc_t)),
+            Some(rate) => timeline.map(|n| n.max(crate::eval::next_grid(doc_t, rate) + p - doc_t)),
             None => timeline,
         };
+        let timeline = self.path.until(t, timeline);
         // #504: a take-apart changes until its last target's move ends.
         let staggered = self
             .staggered
@@ -2623,33 +2634,6 @@ impl Program {
         crate::constraint::aimless(&pose(slots, c.owner * TRANSFORM), other.pos)
     }
 
-    /// The timeline position placements read at `doc_t`: the look's quantize, then a document
-    /// remap.
-    pub fn timeline(&self, doc_t: i64) -> i64 {
-        let shown = self
-            .quantize
-            .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
-        self.motion.document_time(shown)
-    }
-
-    /// The export frame `doc_t` falls in: start + k × Δ, floored, in exact flicks.
-    pub fn frame_index(&self, doc_t: i64) -> i64 {
-        let (p, q) = self.motion.frame_rate;
-        let d = i128::from(doc_t - self.motion.transport.start) * i128::from(p);
-        d.div_euclid(i128::from(deep_canvas::grammar::FLICKS_PER_SECOND) * i128::from(q)) as i64
-    }
-
-    /// What remap `r` reads as parent time at `doc_t`: its placement's local time before the
-    /// remap, or the timeline's from the transport's start.
-    pub fn remap_parent(&self, r: usize, doc_t: i64) -> i64 {
-        let motion = &self.motion;
-        let at = self.timeline(doc_t);
-        match motion.placements.iter().find(|p| p.timing.remap == Some(r)) {
-            Some(p) => p.parent_time(motion, at),
-            None => at - motion.transport.start,
-        }
-    }
-
     /// Channel `c`'s first component's rate per second at `doc_t`, a remapped item's by its
     /// remaps' derivatives.
     fn channel_rate(&self, c: usize, doc_t: i64) -> f64 {
@@ -2796,7 +2780,14 @@ impl Program {
             Kind::FollowPath { .. }
             | Kind::RestOn { .. }
             | Kind::SpringChain { .. }
-            | Kind::FollowTip { .. } => (groups(own, &[0, 1]), groups(own, &[0, 1])),
+            | Kind::FollowTip { .. } => (
+                [
+                    groups(own, &[0, 1]),
+                    c.table.iter().filter_map(|t| t.from).collect(),
+                ]
+                .concat(),
+                groups(own, &[0, 1]),
+            ),
         };
         ([other, reads].concat(), writes)
     }
@@ -3080,7 +3071,8 @@ impl Program {
                 doc::DriverInput::Array(array) => {
                     // #497: a stepping module's array has no steps after t yet, as the input
                     // track has no entries after t, so a lag or smooth that looks ahead through it
-                    // is refused; motion reads only a logic output its host baked (#1183).
+                    // is refused; motion reads a logic output its host baked (#1183) and, of the
+                    // other arrays, only a spectrum's bands (#503).
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
                     }
@@ -3093,15 +3085,21 @@ impl Program {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
                         continue;
                     }
-                    return Err(Refused {
+                    let why = "motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands";
+                    let detail = Some(Box::new(
+                        json!({"driver": driver.id, "array": array, "why": why}),
+                    ));
+                    let read = crate::occurrence::band(doc, array, self.motion.transport.start);
+                    CoreInput::Occurrence(Arc::new(read.ok_or(Refused {
                         code: "ref_unresolved",
                         path: format!("{path}/vars/{name}"),
-                        detail: Some(Box::new(
-                            json!({"driver": driver.id, "array": array, "why": "motion's drivers read only a logic item's scalar f64 output, baked into the document"}),
-                        )),
-                    });
+                        detail,
+                    })?))
                 }
                 doc::DriverInput::Time => CoreInput::Time,
+                doc::DriverInput::Hover(key) => {
+                    crate::hover::read(&self.motion.control_defaults, key)
+                }
                 doc::DriverInput::Rate(id) => {
                     let Some(c) = self.motion.channels.iter().position(|c| c.id == *id) else {
                         return Err(Refused {
@@ -3121,6 +3119,18 @@ impl Program {
                         });
                     };
                     CoreInput::Remap(r, *progress)
+                }
+                doc::DriverInput::Control(id)
+                    if let Some((entries, default, range)) = controls.and_then(|c| {
+                        crate::present::choice_read(c.get(id)?, id, &self.options.input)
+                    }) =>
+                {
+                    scope.maxes.insert(name.clone(), range.1);
+                    CoreInput::Control {
+                        entries,
+                        default,
+                        range,
+                    }
                 }
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));
@@ -3276,7 +3286,7 @@ impl Program {
                         default,
                         range,
                     } => {
-                        let at = doc_t - dt;
+                        let at = t_run - dt;
                         let i = entries.partition_point(|e| e.0 <= at);
                         i.checked_sub(1)
                             .map_or(*default, |i| entries[i].2)
@@ -3308,7 +3318,7 @@ impl Program {
                     default,
                     range,
                 } => {
-                    let i = entries.partition_point(|e| e.0 <= doc_t);
+                    let i = entries.partition_point(|e| e.0 <= t_run);
                     let v = i.checked_sub(1).map_or(*default, |i| entries[i].2);
                     v.clamp(range.0, range.1)
                 }
@@ -3390,7 +3400,7 @@ impl Program {
     /// `occurrences` (#544), after `reader`'s kinds and payload `fields` are checked against the
     /// item's `emits`: a name it doesn't declare is refused `occurrence.undeclared`, from the
     /// document alone, so before any step runs.
-    fn occurrences(
+    pub(crate) fn occurrences(
         &self,
         filter: &crate::occurrence::Filter,
         doc: &Map<String, Value>,
@@ -3746,7 +3756,14 @@ impl Program {
                 offset,
                 ..
             } => match &c.table {
-                Some(table) => cs::follow_path(&own, table, *fraction, *orient, *offset, &mut ops),
+                Some(read) => cs::follow_path(
+                    &own,
+                    &read.table,
+                    read.fraction(fraction, slots),
+                    *orient,
+                    *offset,
+                    &mut ops,
+                ),
                 None => own,
             },
             Kind::FollowTip { offset, rotate, .. } => cs::follow_tip(
@@ -3849,7 +3866,7 @@ impl Program {
     pub fn trace(&self, t: i64, slot: usize) -> Vec<Traced> {
         let mut state = self.state();
         let mut out = Vec::new();
-        let (doc_t, _) = crate::eval::position(&self.motion, t);
+        let (doc_t, _) = self.position(t);
         self.run(t, Validity::Full, &mut state, |event, before, slots| {
             let traced = match event {
                 Event::Channel(c)

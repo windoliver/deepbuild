@@ -449,9 +449,9 @@ impl Water {
     }
 }
 
-/// A wake behind an item a logic array moves is refused at check, naming the item: a driver whose
-/// target is the item or one of its parents and one of whose variables reads a `logic` item's
-/// array. A logic program's earlier steps aren't kept for a wake to read.
+/// A wake or a trail (#450) behind an item a logic array moves is refused at check, naming the
+/// item: a driver whose target is the item or one of its parents and one of whose variables reads
+/// a `logic` item's array. A logic program's earlier steps aren't kept for either to read.
 pub fn logic_moved(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> {
     let empty = serde_json::Map::new();
     let items = doc
@@ -486,9 +486,12 @@ pub fn logic_moved(doc: &serde_json::Map<String, Value>) -> Result<(), Refused> 
             })
     };
     for item in items.values() {
-        let Some(wake) = item
+        let source = item
             .pointer("/params/water/wake/item")
+            .or_else(|| item.pointer("/params/trail/of"));
+        let Some(wake) = source
             .and_then(Value::as_str)
+            .map(|s| s.split('#').next().unwrap_or(s))
         else {
             continue;
         };

@@ -4,6 +4,8 @@
   "x-since": "R3",
   "x-stability": "preview",
   "x-tracking": "#1945",
+  "x-preview_since": "R3",
+  "x-decide_by": "R6",
   "x-feeds": [
     "runs"
   ],

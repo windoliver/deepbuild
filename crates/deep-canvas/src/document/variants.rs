@@ -231,7 +231,9 @@ pub(crate) fn check(doc: &Value, issues: &mut Vec<Issue>) {
                 );
             }
         }
-        let Some(targets) = c.get("targets") else {
+        // #540: a list of targets names what an entry hits (Control: point), which the input
+        // module checks; only a map of options to items is checked here.
+        let Some(targets) = c.get("targets").filter(|t| !t.is_array()) else {
             continue;
         };
         let Some(targets) = targets.as_object() else {

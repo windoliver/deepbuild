@@ -3,6 +3,10 @@
 //! (loudness, onsets, envelope) run on deep-canvas-media's pinned math, so the same asset and
 //! analyzer re-check to an exact match: the reply's `sha256` is the readings' hash.
 
+use std::sync::Arc;
+
+use deep_canvas::document::Issue;
+use deep_canvas_media::analysis::spectrum::{self, Scale};
 use deep_canvas_media::analysis::{envelope, loudness, model, onsets};
 use deep_canvas_media::FLICKS;
 use serde_json::{json, Map, Value};
@@ -93,8 +97,16 @@ impl Hub<'_> {
         };
         let planted = self.scenario.module_planted.clone();
         let planted = |p: &str| planted.as_deref() == Some(p);
+        let pcm_sha = hex(Sha256::digest(pcm_bytes(&pcm)));
         let mut out = Map::new();
         match kind {
+            "spectrum" => match spectrum_fields(b) {
+                Err(what) => return bad(what.into()),
+                Ok(f) => match spectrum_bake(&f, &pcm, rate, channels, &pcm_sha, planted) {
+                    Ok(readings) => out.extend(readings),
+                    Err(refused) => return refused,
+                },
+            },
             "loudness" => {
                 let oversample = match b.get("tp_oversample").map_or(Some(4), Value::as_u64) {
                     Some(n @ (4 | 8)) => n as u32,
@@ -190,7 +202,6 @@ impl Hub<'_> {
             }
             k => return json!({"code": "unknown_bake_kind", "kind": k}),
         }
-        let pcm_sha = hex(Sha256::digest(pcm_bytes(&pcm)));
         sealed(out, asset, kind, &analyzer, &pcm_sha, rate, channels)
     }
 
@@ -489,4 +500,232 @@ fn sealed(
         ),
     ]);
     json!({"bake": out})
+}
+
+/// #503: a spectrum's fields (Analysis bake), each defaulted as the row says.
+struct Spectrum {
+    bands: usize,
+    scale: Scale,
+    range: [f64; 2],
+    rate: i64,
+    window: usize,
+}
+
+fn spectrum_fields(b: &Value) -> Result<Spectrum, &'static str> {
+    let bands = match b.get("bands") {
+        None => 16,
+        Some(v) => v
+            .as_u64()
+            .filter(|n| (1..=64).contains(n))
+            .ok_or("bands (1 to 64)")? as usize,
+    };
+    let scale = match b.get("scale").map(Value::as_str) {
+        None | Some(Some("log")) => Scale::Log,
+        Some(Some("mel")) => Scale::Mel,
+        _ => return Err("scale (log or mel)"),
+    };
+    let range = match b.get("range").map(|r| {
+        r.as_array()
+            .map(|a| a.iter().filter_map(Value::as_f64).collect::<Vec<_>>())
+    }) {
+        None => [40.0, 16_000.0],
+        Some(Some(r)) if r.len() == 2 && r[0] > 0.0 && r[0] < r[1] => [r[0], r[1]],
+        _ => return Err("range ([low, high] Hz, 0 < low < high)"),
+    };
+    let rate = b
+        .get("rate")
+        .map_or(Some(60), Value::as_i64)
+        .filter(|r| *r > 0 && FLICKS % r == 0);
+    let window = b
+        .get("window")
+        .map_or(Some(2048), Value::as_u64)
+        .map(|w| w as usize)
+        .filter(|w| spectrum::WINDOWS.contains(w));
+    Ok(Spectrum {
+        bands,
+        scale,
+        range,
+        rate: rate.ok_or("rate (a whole number of Hz that divides a second's flicks)")?,
+        window: window.ok_or("window (512, 1024, 2048, 4096, 8192 or 16384)")?,
+    })
+}
+
+/// A spectrum bake's readings: its key, rate, band edges and rows; or its refusal, each band that
+/// holds no bin centre at the file's sample rate named with the shortest window that fills it.
+/// The planted bakes space the bands evenly in hertz, or leave out the window's normalization.
+fn spectrum_bake(
+    f: &Spectrum,
+    pcm: &[f32],
+    rate: i64,
+    channels: usize,
+    pcm_sha: &str,
+    planted: impl Fn(&str) -> bool,
+) -> Result<Map<String, Value>, Value> {
+    let scale = if planted("spectrum_bands_even_hz") {
+        Scale::Hertz
+    } else {
+        f.scale
+    };
+    let edges = spectrum::edges(f.bands, scale, f.range);
+    let empty = spectrum::empty(&edges, f.window, rate);
+    if !empty.is_empty() {
+        let bands: Vec<Value> = empty
+            .iter()
+            .map(|(band, window)| json!({"band": band, "window": window}))
+            .collect();
+        return Err(
+            json!({"code": "spectrum_band_empty", "bands": bands, "window": f.window, "sample_rate": rate}),
+        );
+    }
+    let scale_name = if f.scale == Scale::Mel { "mel" } else { "log" };
+    let key = json!({"kind": "spectrum", "analyzer": "spectrum@1", "pcm_sha256": pcm_sha, "bands": f.bands,
+                     "scale": scale_name, "range": f.range, "rate": f.rate, "window": f.window});
+    let rows = spectrum::rows(
+        pcm,
+        channels,
+        rate,
+        f.rate,
+        f.window,
+        &edges,
+        !planted("spectrum_skips_window_norm"),
+    );
+    let mut out = Map::new();
+    out.extend([
+        (
+            "key".into(),
+            json!(hex(Sha256::digest(key.to_string().as_bytes()))),
+        ),
+        ("rate".into(), json!(f.rate)),
+        ("scale".into(), json!(scale_name)),
+        ("range".into(), json!(f.range)),
+        ("window".into(), json!(f.window)),
+        (
+            "bands".into(),
+            Value::Array(edges.windows(2).map(|e| json!([e[0], e[1]])).collect()),
+        ),
+        (
+            "rows".into(),
+            rows.iter()
+                .enumerate()
+                .map(|(r, levels)| json!({"t": r as i64 * FLICKS / f.rate, "levels": levels}))
+                .collect(),
+        ),
+    ]);
+    Ok(out)
+}
+
+/// A spectrum bake's bands as the array a mark set column reads (Mark set: logic columns): one
+/// f64 element per band, a step every 1 ÷ rate s from step 0, each step the runs of bands its
+/// row changed.
+fn array_of(bake: &Value) -> Value {
+    let rows: Vec<&Vec<Value>> = bake["rows"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r["levels"].as_array())
+        .collect();
+    let mut steps = Vec::new();
+    for (k, levels) in rows.iter().enumerate() {
+        let mut runs: Vec<[usize; 2]> = Vec::new();
+        for i in 0..levels.len() {
+            if k > 0 && rows[k - 1].get(i) == Some(&levels[i]) {
+                continue;
+            }
+            match runs.last_mut() {
+                Some(run) if run[1] == i => run[1] = i + 1,
+                _ => runs.push([i, i + 1]),
+            }
+        }
+        if !runs.is_empty() {
+            let values: Vec<Value> = runs
+                .iter()
+                .map(|[s, e]| json!([s, &levels[*s..*e]]))
+                .collect();
+            steps.push(json!({"step": k, "changed": runs, "values": values}));
+        }
+    }
+    json!({"type": "f64", "count": bake["bands"].as_array().map_or(0, Vec::len),
+           "every": FLICKS / bake["rate"].as_i64().unwrap_or(60).max(1), "linear": false, "steps": steps})
+}
+
+impl Hub<'_> {
+    /// What a declared bake is kept under: its asset and fields as written, and the plant.
+    fn baked_as(&self, b: &Value) -> String {
+        format!("{:?} {b}", self.scenario.module_planted)
+    }
+
+    /// #503: each spectrum the document declares in `bakes`, baked once per asset and fields and
+    /// kept for the forms that read its array, and the issues of those it refuses, at their path.
+    pub(crate) fn bake_declared(&mut self, doc: &Value) -> Vec<Issue> {
+        let mut issues = Vec::new();
+        let bakes = doc
+            .get("bakes")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        for (id, b) in bakes.iter().filter(|(_, b)| b["kind"] == "spectrum") {
+            let kept = self.baked_as(b);
+            if self.gate.spectra.contains_key(&kept) {
+                continue;
+            }
+            let reply = self.bake_call(b);
+            if let Some(bake) = reply.get("bake") {
+                self.gate.spectra.insert(kept, Arc::new(array_of(bake)));
+                continue;
+            }
+            let (code, field) = match reply["code"].as_str() {
+                Some("spectrum_band_empty") => ("spectrum_band_empty", "/bands"),
+                Some("unknown_asset" | "not_audio") => ("asset_missing", "/asset"),
+                _ => ("bad_bake", ""),
+            };
+            let actual: Map<String, Value> = reply
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter(|(k, _)| *k != "code")
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            issues.push(Issue::envelope(
+                code,
+                format!("bakes/{id}{field}"),
+                Value::Object(actual),
+                "the document's bake is refused",
+            ));
+        }
+        issues
+    }
+
+    /// #503: each declared spectrum's bands, from the bakes [`Hub::bake_declared`] kept, as the
+    /// form's array `spectrum.<bake ID>`, which the core's column view reads.
+    pub(crate) fn inline_spectra(&self, form: &mut Value) {
+        let found: Vec<(String, Arc<Value>)> = (form
+            .get("bakes")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten())
+        .filter_map(|(id, b)| {
+            Some((
+                format!("spectrum.{id}"),
+                self.gate.spectra.get(&self.baked_as(b))?.clone(),
+            ))
+        })
+        .collect();
+        if let (false, Some(doc)) = (found.is_empty(), form.as_object_mut()) {
+            let arrays = doc.entry("arrays").or_insert_with(|| json!({}));
+            for (name, array) in found {
+                arrays[name] = (*array).clone();
+            }
+        }
+    }
+
+    /// The drawn form's bakes and logic items, inlined at check (#503, #544), and the issues of
+    /// either and of its point sets from a video (#503).
+    pub(crate) fn inline_baked(&mut self, form: &mut Value) -> Vec<Issue> {
+        let mut issues = self.bake_declared(form);
+        issues.extend(self.point_sets_checked(form));
+        if let Err(i) = self.inline_occurrences(form, &[]) {
+            issues.push(*i);
+        }
+        issues
+    }
 }

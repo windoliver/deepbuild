@@ -55,7 +55,23 @@ pub enum Payload {
         force: f32,
         torque: f32,
     },
+    /// #523: `fault {kind}`, one of [`FAULTS`].
+    Fault {
+        kind: &'static str,
+    },
+    /// #523: `crossing {t: flick, output, level, direction: ±1}`: an output's reading passing a
+    /// level it watches, at a time interpolated between steps and floored to a flick.
+    Crossing {
+        t: i64,
+        output: String,
+        level: f64,
+        direction: i8,
+    },
 }
+
+/// A fault's kinds, each's byte its index here (Occurrence list: `fault`); #523 adds `jam`, a
+/// kinematic solve that ended its iteration cap past its tolerance (Kinematic solve).
+pub const FAULTS: [&str; 5] = ["nan", "capacity", "speed_cap", "penetration", "jam"];
 
 /// One occurrence as a backend reports it: `kind` an index of [`KINDS`], `a` and `b` stable IDs
 /// with the shape-use index on each body where a contact names one, in the engine's own order.
@@ -119,7 +135,10 @@ fn canonical(mut raw: Raw, rank: &BTreeMap<String, u32>) -> Raw {
     std::mem::swap(&mut raw.a_use, &mut raw.b_use);
     match &mut raw.payload {
         Payload::Contact { normal, .. } | Payload::Hit { normal, .. } => *normal = flip(*normal),
-        Payload::None | Payload::Break { .. } => {}
+        Payload::None
+        | Payload::Break { .. }
+        | Payload::Fault { .. }
+        | Payload::Crossing { .. } => {}
     }
     raw
 }
@@ -188,6 +207,21 @@ pub fn bytes(rows: &[Row], rank: &BTreeMap<String, u32>) -> Vec<u8> {
                 }
             }
             Payload::Break { force, torque } => f32s(&mut out, &[*force, *torque]),
+            Payload::Fault { kind } => {
+                out.push(FAULTS.iter().position(|f| f == kind).unwrap_or(0) as u8)
+            }
+            Payload::Crossing {
+                t,
+                output,
+                level,
+                direction,
+            } => {
+                out.extend_from_slice(&t.to_le_bytes());
+                out.extend_from_slice(&(output.len() as u32).to_le_bytes());
+                out.extend_from_slice(output.as_bytes());
+                out.extend_from_slice(&level.to_bits().to_le_bytes());
+                out.push(*direction as u8);
+            }
         }
     }
     out
@@ -238,8 +272,73 @@ pub fn json(row: &Row) -> Value {
             m.insert("force".into(), json!(f64::from(*force)));
             m.insert("torque".into(), json!(f64::from(*torque)));
         }
+        Payload::Fault { kind } => {
+            m.insert("fault".into(), json!({ "kind": kind }));
+        }
+        Payload::Crossing {
+            t,
+            output,
+            level,
+            direction,
+        } => {
+            m.insert("t".into(), json!(t));
+            m.insert("output".into(), json!(output));
+            m.insert("level".into(), json!(level));
+            m.insert("direction".into(), json!(direction));
+        }
     }
     Value::Object(m)
+}
+
+/// A row as [`json`] wrote it, read back exactly (each f32 was written as its own f64): how a
+/// stored bake's list is taken up again when a fork re-simulates past its checkpoint (#522).
+pub fn row(v: &Value) -> Option<Row> {
+    let f = |k: &str| v.get(k)?.as_f64().map(|x| x as f32);
+    let f3 = |k: &str| -> Option<[f32; 3]> {
+        let a = v.get(k)?.as_array()?;
+        Some([
+            a.first()?.as_f64()? as f32,
+            a.get(1)?.as_f64()? as f32,
+            a.get(2)?.as_f64()? as f32,
+        ])
+    };
+    let index = |k: &str| v.get(k).and_then(Value::as_u64).map(|x| x as u32);
+    let payload = if v.get("speed").is_some() {
+        Payload::Hit {
+            point: f3("point")?,
+            normal: f3("normal")?,
+            speed: f("speed")?,
+            impulse: f("impulse")?,
+            tags: v["tags"]
+                .as_array()?
+                .iter()
+                .map(|t| t.as_str().map(String::from))
+                .collect::<Option<_>>()?,
+        }
+    } else if v.get("point").is_some() {
+        Payload::Contact {
+            point: f3("point")?,
+            normal: f3("normal")?,
+        }
+    } else if v.get("force").is_some() {
+        Payload::Break {
+            force: f("force")?,
+            torque: f("torque")?,
+        }
+    } else {
+        Payload::None
+    };
+    Some(Row {
+        step: v.get("step")?.as_u64()? as u32,
+        raw: Raw {
+            kind: code(v.get("kind")?.as_str()?)?,
+            a: v.get("a")?.as_str()?.into(),
+            a_use: index("a_use"),
+            b: v.get("b").and_then(Value::as_str).map(String::from),
+            b_use: index("b_use"),
+            payload,
+        },
+    })
 }
 
 /// The list as its rows.
@@ -254,13 +353,15 @@ pub fn step_flicks(w: &World) -> i64 {
 }
 
 /// The list as readers read it in a scene: each row stamped with `t`, its step's time in flicks
-/// (`step` × the world's step length), as a logic item's rows are.
+/// (`step` × the world's step length), as a logic item's rows are; a crossing keeps its own.
 pub fn timed(rows: &[Value], w: &World) -> Vec<Value> {
     let h = step_flicks(w);
     let stamp = |r: &Value| {
         let mut r = r.clone();
-        let step = r["step"].as_i64().unwrap_or(0);
-        r["t"] = json!(step * h);
+        if r.get("t").is_none() {
+            let step = r["step"].as_i64().unwrap_or(0);
+            r["t"] = json!(step * h);
+        }
         r
     };
     rows.iter().map(stamp).collect()

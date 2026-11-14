@@ -520,6 +520,11 @@ impl Placement {
         self.displays.iter().find(|d| d.uuid == uuid)
     }
 
+    /// Every display's UUID, the main one first.
+    pub fn display_uuids(&self) -> Vec<String> {
+        self.displays.iter().map(|d| d.uuid.clone()).collect()
+    }
+
     pub fn main_window(&self) -> Option<&Window> {
         self.windows.iter().find(|w| w.kind == Kind::Main)
     }
@@ -877,7 +882,9 @@ impl Placement {
     /// changes (#327: content, display, activation, each reported with its time) and `answer` what
     /// answered it, if a press did: from the
     /// answer on, the card is answered and arms no more. A reported change always returns the card
-    /// to presented at its time and restarts the interval, armed or not.
+    /// to presented at its time and restarts the interval, armed or not. `present` is the display
+    /// present mode shows a piece on and the clock it ends at (#507), which the card keeps off.
+    #[allow(clippy::too_many_arguments)]
     pub fn card_with(
         &self,
         ask: &str,
@@ -886,6 +893,7 @@ impl Placement {
         rearms: &[i64],
         answer: Option<(&str, i64)>,
         now: i64,
+        present: Option<(&str, i64)>,
     ) -> Option<CardState> {
         if now < asked {
             return None;
@@ -902,6 +910,39 @@ impl Placement {
         let (placed, display) = match at_ask.rects.get(&window.id) {
             Some((r, d)) => (*r, self.display(d)?),
             None => (window.rect, self.display(&window.display)?),
+        };
+        // #507: the card never draws on the display present mode shows a piece on: it opens on
+        // another display, or, with one display, waits unpresented until present mode ends.
+        let mut asked = asked;
+        let (window, placed, display) = match present {
+            Some((shown_on, until)) if display.uuid == shown_on && asked < until => {
+                match self.displays.iter().find(|d| d.uuid != shown_on) {
+                    Some(other) => (
+                        self.windows
+                            .iter()
+                            .find(|w| w.display == other.uuid)
+                            .unwrap_or(main),
+                        other.bounds,
+                        other,
+                    ),
+                    None if until == i64::MAX => {
+                        let card = CardState {
+                            ask: ask.to_string(),
+                            display: display.uuid.clone(),
+                            window: window.id.clone(),
+                            rect: placed,
+                            states: Vec::new(),
+                            answer: None,
+                        };
+                        return Some(card);
+                    }
+                    None => {
+                        asked = until;
+                        (window, placed, display)
+                    }
+                }
+            }
+            _ => (window, placed, display),
         };
         let rect = clamp_into(
             [

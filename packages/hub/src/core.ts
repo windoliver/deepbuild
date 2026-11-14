@@ -82,6 +82,7 @@ const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
+import { Work } from './work.js';
 
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedStop } from './plant.js';
@@ -97,7 +98,7 @@ import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, login
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
 import { CHROME, EXTENSION_HOOK_MS, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting } from "./hub-shared.js";
 
 import { HubCanvas } from './hub-canvas.js';
 import { TranscriptReader } from './transcript-reader.js';
@@ -176,7 +177,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, work: () => this.work, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -244,8 +245,9 @@ export class Core {
   private runner!: Runner;
   /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
   private acceptance!: Acceptance;
-  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time. */
+  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time; and the work runs over it (#1332). */
   private landing!: Landing;
+  private work!: Work;
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
@@ -412,6 +414,7 @@ export class Core {
       connection: (extra) => this.connection('core', extra), keep: (bytes, source) => this.control.keep(bytes, source), fetch: (sha256) => this.store.read(sha256),
       trust: (folder) => this.trust.answer(this.connection('app'), folder, true), plugin: (name) => this.extensions!.stateSource(name),
       adopted: (session, id) => { this.state.projects.set(session, id); }, told: (session, cwd, text) => this.delivery.later(session, cwd, text), rerun: (claim, checks, state) => this.gate.rerun(claim, checks, state),
+      forge: options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote),
     });
     this.tasks = new AskTasks({
       spaces: this.spaces, renamedSince: this.providers.workspaces.renamedSince,
@@ -599,7 +602,7 @@ export class Core {
     const storage = this.durable.backend();
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
-    this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) });
+    this.record = receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) }));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
@@ -686,7 +689,6 @@ export class Core {
       }
       await this.delivery.continues();
     });
-
   }
 
   private async openResources(): Promise<ReturnType<EnvironmentProvider['resources']> & { leases: LeaseTable }> {
@@ -808,7 +810,6 @@ export class Core {
     this.every('supervisor', 1000, () => this.supervisor.tick());
     // Shared build products (#1017): the store's index, its guard entry and its watch; session starts wait for it.
     await this.products.open();
-
   }
 
   private async openRunner(): Promise<ProjectTrust> {
@@ -874,7 +875,7 @@ export class Core {
       adopt: async (bytes) => { await this.control.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
-      row: (job, running) => this.state.jobShown(job, running),
+      row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
@@ -893,7 +894,6 @@ export class Core {
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
       else await this.control.panelKits(pkg.id, true);
     }
-
   }
 
   private async recoverRecord(): Promise<void> {
@@ -930,7 +930,6 @@ export class Core {
     await this.staging.prune().catch(() => undefined);
     this.every('staging', HOUR, () => this.staging.prune());
     if (this.options.failJob) this.testJob(this.options.failJob);
-
   }
 
   private async startBackground(): Promise<void> {
@@ -976,13 +975,14 @@ export class Core {
     if (settingsWatch) this.timers.push(settingsWatch);
     // A sync a stop cut short is recovered from its journal before anything else is synced (#148).
     void this.agents.recoverAtStart().catch((error: unknown) => process.stderr.write(`deep hub: agent syncs not recovered: ${error instanceof Error ? error.message : String(error)}\n`));
-    // The promised checks the record still holds wait on, armed again (#120).
-    await this.delivery.restorePromises().catch(() => undefined);
+    // The promised checks the record still holds wait on, armed again (#120), and your notes no turn carried yet (#1577).
+    await this.delivery.restore();
     await this.acceptance.open();
+    // The work runs (#1332), once the starts are reconciled with what still runs: a pass every 2 s from the record and the forge.
+    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r) })).open();
     // The session map and what its notices delivered, and the loop rule's count, read back (#352).
     await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
-
   }
 
   /** The github extension (#46): what it reads of the hub, and where its status lands. */
@@ -1361,7 +1361,7 @@ export class Core {
     if (early) return early;
     const verified = meta.watchOnly || await this.delivery.tokenTaken(meta) ? false : this.delivery.checked(meta, await this.state.verify(meta));
     // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
-    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
+    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent, meta.fields?.model).catch(() => undefined);
     const unread = Boolean(meta.watchOnly && meta.session && !this.state.versioned.has(meta.session));
     if (unread) {
       this.state.versioned.add(meta.session);
@@ -2338,9 +2338,8 @@ export class Core {
         const slow = this.judging.slowVerdicts(r);
         // A continue the core recorded since the timer last read them goes with this prompt, not the one after (#85).
         await this.delivery.continues();
-        // Notes this prompt's hook recorded go as its context, once; a prompt typed mid-turn is acknowledged in its reply (#340).
-        const notes = this.delivery.carried.get(meta.session);
-        this.delivery.carried.delete(meta.session);
+        // Notes go as its context, once, those waiting too while it's set aside for its entry (#340, #1577); a prompt typed mid-turn is acknowledged in its reply.
+        const notes = this.delivery.takeCarried(meta.session, this.unplaced.get(meta.session)?.drafts);
         const ack = this.acknowledge(meta.session);
         const promised = await this.delivery.promiseCarried(meta.session, 'next_prompt', prompt);
         // What you reject while a session runs stops it now, not at the next wiki build (#111).
@@ -2578,6 +2577,7 @@ export class Core {
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
     this.siblings.stop();
+    this.work?.close();
     // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
     this.pool?.close(true);
     for (const live of this.state.live.values()) clearTimeout(live.quiet);
