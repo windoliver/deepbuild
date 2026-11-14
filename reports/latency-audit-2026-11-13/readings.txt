@@ -1,0 +1,81 @@
+# 2026-11-13T22:25:24Z, node v24.22.0, Apple M5 Max, 18 cores, load { 271.11 295.88 257.45 }
+# base 41d712bf93d0b6b393d9ca1002f5e5a3fa13dc63; work is the base with the change's five source files; both built the same way
+## floor: node -e 0 against deep --version
+{"deep":"--version","rounds":11,"floor":{"instrM":290.5,"minM":285.2,"maxM":304.3,"peakMB":12.1,"exit":"0"},"work":{"instrM":326.2,"minM":320.6,"maxM":337.2,"peakMB":13.9,"exit":"0"},"change":"12.3%","sameOutputAndExit":false}
+## A: set up, no hub running, no database
+{"deep":"--version","rounds":11,"base":{"instrM":325.5,"minM":322.4,"maxM":341.2,"peakMB":13.8,"exit":"0"},"work":{"instrM":325.8,"minM":321.8,"maxM":333.6,"peakMB":13.9,"exit":"0"},"change":"0.1%","sameOutputAndExit":true}
+{"deep":"(no arguments)","rounds":11,"base":{"instrM":549.8,"minM":545.9,"maxM":558.7,"peakMB":21.1,"exit":"3"},"work":{"instrM":421.3,"minM":418.2,"maxM":429.2,"peakMB":18.2,"exit":"3"},"change":"-23.4%","sameOutputAndExit":true}
+{"deep":"status","rounds":11,"base":{"instrM":549.9,"minM":545.4,"maxM":561.3,"peakMB":21.1,"exit":"3"},"work":{"instrM":425.6,"minM":420.5,"maxM":432.6,"peakMB":18.3,"exit":"3"},"change":"-22.6%","sameOutputAndExit":true}
+{"deep":"inbox","rounds":11,"base":{"instrM":482.5,"minM":477.9,"maxM":489.8,"peakMB":19.8,"exit":"3"},"work":{"instrM":410.9,"minM":407.6,"maxM":416.2,"peakMB":18,"exit":"3"},"change":"-14.8%","sameOutputAndExit":true}
+{"deep":"hub status","rounds":11,"base":{"instrM":492.7,"minM":481.5,"maxM":502.1,"peakMB":19.8,"exit":"3"},"work":{"instrM":407,"minM":404.7,"maxM":415.2,"peakMB":18,"exit":"3"},"change":"-17.4%","sameOutputAndExit":true}
+## B: hub down, its database holds one session
+{"deep":"(no arguments)","rounds":11,"base":{"instrM":1014.2,"minM":1005.5,"maxM":1026.6,"peakMB":34.3,"exit":"3"},"work":{"instrM":815.9,"minM":802.3,"maxM":828.5,"peakMB":28.7,"exit":"3"},"change":"-19.6%","sameOutputAndExit":true}
+{"deep":"status","rounds":11,"base":{"instrM":1029.4,"minM":1023,"maxM":1060.2,"peakMB":34.6,"exit":"3"},"work":{"instrM":829.3,"minM":818.1,"maxM":847.6,"peakMB":29,"exit":"3"},"change":"-19.4%","sameOutputAndExit":true}
+{"deep":"inbox","rounds":11,"base":{"instrM":922.5,"minM":916.5,"maxM":952.1,"peakMB":31.2,"exit":"3"},"work":{"instrM":799.1,"minM":788.1,"maxM":810.9,"peakMB":28.5,"exit":"3"},"change":"-13.4%","sameOutputAndExit":true}
+## C: hub up (the work tree's), empty record
+# hub ready, pid 90349
+{"deep":"(no arguments)","rounds":11,"base":{"instrM":553.6,"minM":549.5,"maxM":561.8,"peakMB":21,"exit":"0"},"work":{"instrM":425.3,"minM":422.7,"maxM":434.4,"peakMB":18.4,"exit":"0"},"change":"-23.2%","sameOutputAndExit":true}
+{"deep":"status","rounds":11,"base":{"instrM":554.6,"minM":547,"maxM":568.3,"peakMB":21.3,"exit":"0"},"work":{"instrM":425.4,"minM":418.3,"maxM":434.5,"peakMB":18.2,"exit":"0"},"change":"-23.3%","sameOutputAndExit":true}
+{"deep":"inbox","rounds":11,"base":{"instrM":492.8,"minM":487.2,"maxM":503.5,"peakMB":19.9,"exit":"0"},"work":{"instrM":420.3,"minM":417.9,"maxM":427.9,"peakMB":18.2,"exit":"0"},"change":"-14.7%","sameOutputAndExit":true}
+{"deep":"lease -- /usr/bin/true","rounds":11,"base":{"instrM":445,"minM":441.6,"maxM":450.4,"peakMB":18.4,"exit":"0"},"work":{"instrM":445.6,"minM":440.3,"maxM":452.1,"peakMB":18.6,"exit":"0"},"change":"0.1%","sameOutputAndExit":true}
+## C: deep hub status prints the hub's uptime and counters, so its output differs run to run; exit codes compared
+{"deep":"hub status","rounds":11,"base":{"instrM":493.1,"minM":487.9,"maxM":503.6,"peakMB":20,"exit":"0"},"work":{"instrM":411.3,"minM":405.8,"maxM":418.9,"peakMB":17.9,"exit":"0"},"change":"-16.6%","sameOutputAndExit":false}
+## C: deep mcp, stdin closed (one such process serves each agent session)
+{"deep":"mcp","rounds":11,"base":{"instrM":573.4,"minM":563.9,"maxM":578.2,"peakMB":20.83,"exit":"0"},"work":{"instrM":569.6,"minM":565.6,"maxM":584.2,"peakMB":20.89,"exit":"0"}}
+# hub stopped
+## the hub from start to its ready line, then stopped: its own process, children apart
+{"tree":"base","ready":true,"instrM":4188,"peakMB":84.4,"exit":0}
+{"tree":"work","ready":true,"instrM":4153,"peakMB":83.2,"exit":0}
+{"tree":"base","ready":true,"instrM":4117,"peakMB":83.2,"exit":0}
+{"tree":"work","ready":true,"instrM":4140,"peakMB":82.8,"exit":0}
+{"tree":"base","ready":true,"instrM":4127,"peakMB":82.6,"exit":0}
+{"tree":"work","ready":true,"instrM":4108,"peakMB":83.4,"exit":0}
+{"tree":"base","ready":true,"instrM":4141,"peakMB":82.2,"exit":0}
+{"tree":"work","ready":true,"instrM":4134,"peakMB":81.2,"exit":0}
+{"tree":"base","ready":true,"instrM":4116,"peakMB":83.5,"exit":0}
+{"tree":"work","ready":true,"instrM":4111,"peakMB":83.1,"exit":0}
+{"tree":"work","ready":true,"instrM":4328,"peakMB":82.7,"exit":0,"modules":541}
+## what one import costs a process, alone: node --input-type=module -e "await import(...)" in the work tree
+empty module:                      284.9 M (min 282.8, max 291.0, n=9)
+node:crypto:                       314.8 M (min 313.9, max 320.8, n=7)
+node:net:                          301.6 M (min 296.6, max 310.2, n=7)
+node:tls:                          376.2 M (min 372.6, max 381.6, n=7)
+node:child_process:                307.0 M (min 299.6, max 310.8, n=7)
+yaml:                              440.1 M (min 410.1, max 443.9, n=7)
+better-sqlite3:                    322.4 M (min 319.5, max 328.9, n=7)
+@deepbuild/contracts:              399.3 M (min 390.6, max 404.0, n=7)
+./packages/contracts/dist/json.js: 293.7 M (min 290.7, max 300.5, n=7)
+./packages/contracts/dist/canonical.js: 341.6 M (min 337.8, max 345.4, n=7)
+@deepbuild/evidence:               468.8 M (min 464.9, max 498.1, n=7)
+./packages/evidence/dist/scrub.js: 422.8 M (min 414.6, max 429.5, n=7)
+./packages/evidence/dist/patterns.js: 306.5 M (min 303.3, max 311.3, n=7)
+@deepbuild/record:                 615.9 M (min 610.6, max 623.1, n=7)
+@deepbuild/conformance:            543.1 M (min 534.0, max 555.9, n=7)
+@deepbuild/gate:                   828.6 M (min 802.7, max 834.0, n=7)
+@deepbuild/extension-host:         739.0 M (min 735.6, max 752.8, n=7)
+@deepbuild/checks-command:         855.4 M (min 832.1, max 869.3, n=7)
+@deepbuild/env-local:              772.9 M (min 764.2, max 786.5, n=7)
+@deepbuild/github:                 829.2 M (min 820.2, max 843.2, n=7)
+@deepbuild/supervisor:             645.8 M (min 632.1, max 659.7, n=7)
+@deepbuild/runner:                 669.1 M (min 654.1, max 685.3, n=7)
+@deepbuild/asks:                   659.1 M (min 647.4, max 668.3, n=7)
+@deepbuild/adapters:               411.8 M (min 407.8, max 415.0, n=7)
+@deepbuild/verdicts:               628.1 M (min 614.4, max 648.0, n=7)
+@deepbuild/readings:               364.5 M (min 357.1, max 370.1, n=7)
+first toLocaleTimeString('en-GB'): 420.5 M (min 417.1, max 422.9, n=9)
+getHours and getMinutes:           288.7 M (min 285.4, max 299.9, n=9)
+# done 2026-11-13T22:26:31Z, load { 212.17 273.30 251.77 }
+
+## experiment, not part of the change: deep mcp with the contracts entry off its path. exp is a throwaway copy of the work build in which
+## hub/dist/tools.js, codex-settings.js and claude-settings.js define isRecord's one line themselves instead of importing it from @deepbuild/contracts
+{"deep":"mcp","rounds":11,"work":{"instrM":570.6,"minM":561.9,"maxM":575.6,"peakMB":20.66,"exit":"0"},"exp":{"instrM":507.6,"minM":503.9,"maxM":514,"peakMB":19.05,"exit":"0"}}
+## the same two builds copied under the temp folder, set-up home with no hub: what a tree's place on disk moves (2026-11-13T23:25:37Z, load { 215.01 146.47 117.95 })
+{"deep":"(no arguments)","rounds":11,"base":{"instrM":525.1,"minM":519.6,"maxM":536.1,"peakMB":20.9,"exit":"3"},"work":{"instrM":415.9,"minM":411.4,"maxM":422.7,"peakMB":18.2,"exit":"3"},"change":"-20.8%","sameOutputAndExit":true}
+{"deep":"status","rounds":11,"base":{"instrM":527.5,"minM":524.3,"maxM":535.2,"peakMB":20.8,"exit":"3"},"work":{"instrM":419.6,"minM":413.2,"maxM":428.2,"peakMB":18.2,"exit":"3"},"change":"-20.5%","sameOutputAndExit":true}
+{"deep":"inbox","rounds":11,"base":{"instrM":461.6,"minM":455.1,"maxM":480.9,"peakMB":19.6,"exit":"3"},"work":{"instrM":405.4,"minM":402.3,"maxM":415.3,"peakMB":18.1,"exit":"3"},"change":"-12.2%","sameOutputAndExit":true}
+{"deep":"hub status","rounds":11,"base":{"instrM":467.7,"minM":461.9,"maxM":474.4,"peakMB":19.7,"exit":"3"},"work":{"instrM":403.9,"minM":400.8,"maxM":414.6,"peakMB":18,"exit":"3"},"change":"-13.6%","sameOutputAndExit":true}
+
+## wall time of deep hub start --root, then (once the hub's log holds its ready line) deep hub stop --root, on a dev hub with an empty record:
+## 12 rounds, the two trees alternated, load about 90 to 110, so a reading and no verdict. The hub's process, by the PID its ready line gives,
+## was still alive each time stop returned, on both trees: stop waits for the socket to go quiet, not for the process to end.
+{"base":{"rounds":12,"startMs":{"median":183,"best":159},"stopMs":{"median":65,"best":59},"hubAliveWhenStopReturned":12,"thenGoneAfterMs":{"median":39,"longest":54},"failed":0},"work":{"rounds":12,"startMs":{"median":163,"best":135},"stopMs":{"median":52,"best":48},"hubAliveWhenStopReturned":12,"thenGoneAfterMs":{"median":39,"longest":47},"failed":0}}
