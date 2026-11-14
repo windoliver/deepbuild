@@ -1,16 +1,16 @@
-# packages/record, tests named #1410 (two: lines 1102 and 1134 of test/record.test.ts), at dca3811e on the owner's Mac (load 17), same run as acceptance-mac.txt; as the Mac runner saved it (no colour codes, home folder as ~)
+# packages/record, tests named #1410 (two: 'a commit that waited behind an evidence sync...' and 'a verdict's commit syncs the evidence its requirements stand on...'), at 652dcaef on the owner's Mac (load 20), same run as acceptance-mac.txt; as the Mac runner saved it (no colour codes, home folder as ~)
 
-== head dca3811e7d4b230f1313bd6da40a49e92aabe975 packages/record test/record.test.ts -t 1410
-load start { 17.15 10.54 8.23 }
+== head 652dcaef6f0578d6fb3ce5dbd71385f87c083908 packages/record test/record.test.ts -t 1410
+sw_vers 27.2.1 node v24.22.0 Now drawing from 'AC Power'
+load start { 19.57 7.88 6.54 }
 
- RUN  v5.0.5 ~/private/dbc-1410c/packages/record
+ RUN  v5.0.5 ~/private/dbc-1410d/packages/record
 
- ✓ test/record.test.ts (75 tests | 73 skipped) 49ms
 
  Test Files  1 passed (1)
       Tests  2 passed | 73 skipped (75)
-   Start at  22:02:04
-   Duration  295ms (transform 61%, tests 21%, import 17%, worker 1%)
+   Start at  13:04:16
+   Duration  288ms (transform 61%, tests 22%, import 16%, worker 1%)
 
-load end { 17.15 10.54 8.23 }
+load end { 19.57 7.88 6.54 }
 vitest exit=0
