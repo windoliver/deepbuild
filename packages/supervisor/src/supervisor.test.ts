@@ -97,6 +97,45 @@ test.skipIf(process.platform !== 'darwin').each([
   }
 }, 90_000);
 
+// A cleanup that returns leaves no scan of its run behind (#350 AC4 counts this process's children after a disable).
+// The record here is slow to take the run's last event, until a timed scan of the run has started its helper process:
+// the cleanup then waits that scan out.
+test('a cleaned run has no scan of its sandbox still running', async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
+  dirs.push(dir);
+  const real = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  const children = () => process.getActiveResourcesInfo().filter((kind) => kind === 'ProcessWrap').length;
+  let quiet = 0, scans = 0;
+  const append: typeof real.append = async (stream, event) => {
+    if (event.kind === 'run.cleaned') {
+      for (let i = 0; i < 500 && children() <= quiet; i++) await new Promise((resolve) => setTimeout(resolve, 1));
+      if (children() > quiet) scans += 1;
+    }
+    return real.append(stream, event);
+  };
+  const record = new Proxy(real, { get: (target, key) => (key === 'append' ? append : Reflect.get(target, key, target)) });
+  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+  try {
+    // An earlier test's child may still be closing: the count this test measures from is one that has stopped moving.
+    for (let seen = -1; seen !== children();) { seen = children(); await new Promise((resolve) => setTimeout(resolve, 50)); }
+    quiet = children();
+    const left: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      expect((await sup.start({ run: `run:S${i}`, argv: ['/bin/sleep', '30'], cwd: dir, grant: { run_as_you: true } })).status).toBe('started');
+      expect((await sup.cleanup(`run:S${i}`)).outcome).toBe('clean');
+      // An exited child's handle closes at the end of the loop's turn: the second immediate comes after that.
+      for (let turn = 0; turn < 2; turn++) await new Promise((resolve) => setImmediate(resolve));
+      left.push(children() - quiet);
+    }
+    expect(scans, 'cleanups that were recorded while a timed scan ran: without one the test shows nothing').toBe(5);
+    expect(left, 'child processes of this one still running after each of 5 cleanups').toEqual([0, 0, 0, 0, 0]);
+  } finally {
+    await sup.close();
+    await real.close();
+  }
+}, 60_000);
+
 // The stream writes nothing while no report matches its filter, so nothing tells it that its reader is gone: left a
 // plain child, it ran on after a hub that was killed, until the machine's next matching report. It runs on the
 // helper's leash, which ends it when the process that started it is gone, however that process went.
