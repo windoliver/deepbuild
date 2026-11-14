@@ -1,0 +1,16 @@
+# narration, not captured: the fixed script was copied in before these runs; it is byte-identical to #2251 head's: yes
+$ git status --short
+ M scripts/affected.mjs
+?? node_modules
+$ node scripts/affected.mjs --list
+parallel vitest: tests/proof/344/shots.test.ts
+parallel node: tests/acceptance/1113/waits.test.mjs tests/acceptance/1114/affected.test.mjs tests/acceptance/1114/failures.test.mjs tests/acceptance/1114/timed-list.test.mjs tests/acceptance/1115/affected.test.mjs tests/acceptance/1115/decisions.test.mjs tests/acceptance/1115/evidence.test.mjs tests/acceptance/1115/failing-states.test.mjs tests/acceptance/1115/failures.test.mjs tests/acceptance/1115/guard.test.mjs tests/acceptance/1115/no-grant.test.mjs tests/acceptance/1115/notes.test.mjs tests/acceptance/1115/skips.test.mjs tests/acceptance/1406/classify.test.mjs tests/affected.test.mjs tests/shards.test.mjs
+alone vitest: tests/acceptance/1015/redraft/own-repo.test.ts tests/acceptance/303/checkfile-redraft.test.ts tests/acceptance/303/days.test.ts tests/acceptance/303/first.test.ts tests/acceptance/303/lock.test.ts tests/acceptance/303/midturn.test.ts tests/acceptance/303/origins.test.ts tests/acceptance/303/outside.test.ts tests/acceptance/303/rename.test.ts tests/acceptance/303/stops.test.ts tests/acceptance/303/survive.test.ts tests/acceptance/322/approved-redraft.test.ts tests/acceptance/322/coverage.test.ts tests/acceptance/33/bootstrap.test.ts tests/acceptance/344/deliver.test.ts tests/acceptance/344/lessons.test.ts tests/acceptance/344/proposal.test.ts tests/acceptance/344/reach.test.ts tests/acceptance/344/rules-page.test.ts tests/acceptance/344/sets.test.ts tests/acceptance/344/taste.test.ts
+alone node: tests/acceptance/2144/lint-on-main.test.mjs
+timed vitest: tests/acceptance/303/budgets.test.ts (--timed runs them)
+slow node: tests/acceptance/1114/lanes.test.mjs (--slow runs them)
+SKIP tests/acceptance/1015/own-repo.test.ts (by hand)
+NOTE node_modules reaches no test
+[exit 0]
+$ node scripts/affected.mjs --list | grep -c -e 303/checkfile.test.ts -e 322/approved.test.ts
+0
