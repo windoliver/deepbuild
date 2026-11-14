@@ -216,6 +216,27 @@ files this change doesn't touch: rustfmt over untouched sandbox files and other 
 AC1, #545 AC4 and #546 AC1, which failed the same way at 7b5d9da1f and 1a9ad440d (no video encoder here; this box's
 fuel ceiling above #546's budget).
 
+## `node scripts/affected.mjs` at 34f30ffd5 (2026-11-13, spark-c89f)
+
+34f30ffd5 is this branch merged with main e0c90a5a5, plus the assembler's lockfile commit (below). Summary line:
+`FAIL affected: 404 new, 52 already failing on main, 149 inconclusive or blocked, 0 listed skips, 735 passed, in
+1176 s at load 7`. No WIDE line. Its 44 INCONCLUSIVE lines are other issues' (#1116, #317, #1874, #1427, #140 and
+nine more) and the timed and slow lists it doesn't run; none is #190's. #190's own tests: no failure, and the same 4
+BLOCKED (ac04's first test, ac05, ac10's two), which ran on the Mac at f55dc2e5a. Its "new" failures in files this
+change touches are three lint lines, the `deps` lines for `tests/acceptance/190/wat/Cargo.toml`'s two crates and the
+`cards` line for lib.interface@1, as at c26b91146; the rustfmt line on `crates/deep-canvas-sandbox/src/lib.rs` is
+gone, the merge keeping the module list as main's `cargo fmt` sorted it. #140's wasm32 test fails in a list of
+crates that includes deep-canvas-sandbox, on `meshopt 0.7.0`'s C++ build for wasm32, a dependency this change
+doesn't add. The `fmt`, `size` and `clippy` lines on `crates/deep-logic/src/world.rs`, `point.rs` and `lib.rs` line
+1196 are main's code: `world.rs` is byte for byte main's, 1504 lines.
+
+**The lockfile commit (34f30ffd5).** After the merge of e0c90a5a5 every #190 test failed in under 100 ms with
+`BLOCKED: this suite's assembler (tests/acceptance/190/wat) didn't build`: main's `.cargo/config.toml` gained #503's
+vendored `symphonia-codec-vorbis` patch, and `cargo build --locked` refuses a standalone lockfile that doesn't list
+it as unused. The commit adds the four lines cargo itself writes, the same as main's 70c95f542 did for #544's
+assembler; no dependency changes. With it the suite gives 20 passed and the 4 BLOCKED again, in a clone whose local
+`main` is e0c90a5a5.
+
 ## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
 
 Run on spark-c89f (Linux arm64). The code is commit 9a02471b6: the PR's head before these commits, 7b5d9da1f (main e7609b7b merged in),
@@ -270,7 +291,11 @@ the same process.
 
 Since 11-09, main added `pipelined` to check and bake replies, `issues` to check replies, and `ranges`, `ring` and
 `occurrences` to bake replies. `assets_at` was
-already there.
+already there. By 34f30ffd5 (2026-11-13) main had also added a `type` to each region of the web plan and grown
+the runner source in `web-replies.jsonl`'s first line from 488 to 566 lines, and the six bake `keys` in
+`replies.jsonl` (lines 2 and 7) and `app-bakes-replies.jsonl` (lines 1 to 4) are no longer what the head produces;
+so a rebuild at that head differs from `e2e-raw` in more than timings, though in nothing a screenshot shows (round
+50 below). The images' "this head" and "code at 9a02471b6" mean 9a02471b6.
 
 **The fixes**, in `crates/deep-logic/src/fixtures.rs`, with tests in `crates/deep-logic/tests/fixture_once.rs`. Each
 test feeds request lines through `Logic::handle`: `fixture-once.jsonl`'s are the acceptance suite's own; the exports tests'
@@ -619,3 +644,11 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   Mac logs span two OS versions: ac04 and ac05 on 14.7.7, ac10 and ac07 on 27.2.1. All four are of f55dc2e5a; the
   merge of main 4950c76d5 (9882503c0) hasn't run on the Mac. At 9882503c0 the guard fails on 11 commits that await
   the owner's signed tags (`scripts/lanes.mjs`'s edit and the blind job's ten oracle redrafts).
+- **Round 50** (2026-11-13, a separate agent, at 34f30ffd5) found no P1 and no P2: SCREENSHOTS STILL MATCH HEAD. It
+  read all 11 images against `e2e-raw`, rebuilt `deep-logic` at 34f30ffd5 in a clone, regenerated the requests with
+  `gen.test.ts`, and compared the five reply files field by field: every program, rewritten and linked hash, size,
+  library hash, fixture ID, verdict, `ran` flag, deep hash, route, move count, item hash, trap and refusal is equal;
+  the differences are timings, the six bake `keys`, the web plan's `type` fields and the longer runner source, none
+  shown in an image. The new runner on the new plans, run in node's V8, gives `browser-replies-chromium-152.json`
+  byte for byte. Not done: no screenshot was retaken and Chromium itself wasn't rerun. Its four low gaps are fixed
+  here (the paragraph on what main added since 11-09).
