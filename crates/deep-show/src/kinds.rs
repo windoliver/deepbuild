@@ -53,6 +53,12 @@ pub enum Planted {
     StepCeilingsCap,
     /// #546: the logic guide's dice game rolls from the step's seed.
     DiceFromStepSeed,
+    /// #1971: the listing `op: field` prints from leaves out `test.slab@3`'s `corner`.
+    FieldWithoutCorner,
+    /// #1971: the line `op: field` answers for `test.slab@3.width` is padded to 600 bytes.
+    FieldLine600Bytes,
+    /// #1971: an object path answers its kind's lines in field-name order.
+    FieldObjectByName,
 }
 
 impl Planted {
@@ -69,6 +75,9 @@ impl Planted {
             "verified_by_exit" => Planted::VerifiedByExit,
             "step_ceilings_publish_fuel_cap" => Planted::StepCeilingsCap,
             "guide_dice_rolls_from_step_seed" => Planted::DiceFromStepSeed,
+            "field_listing_without_corner" => Planted::FieldWithoutCorner,
+            "field_line_600_bytes" => Planted::FieldLine600Bytes,
+            "field_object_by_name" => Planted::FieldObjectByName,
             _ => return None,
         })
     }
@@ -76,6 +85,28 @@ impl Planted {
 
 /// The moves stored for `pop_in` at 0.5 s: the planted listing that is text, not its expansion.
 const STORED_MOVES: &str = r#"[{"path":"at/scale","from":0.0,"to":1.0,"start":0.0,"span":0.5,"ease":{"spring":{"frequency":4.0,"damping_ratio":0.3,"decay":7.5398223686155035,"peak":{"at":0.1309993642018405,"value":1.3729475476163014}}}}]"#;
+
+/// An `op: field` miss (#1971): `unknown_field` in the shared shape (error@4), its remediation
+/// naming the close names in order, a rename with the kind version that made it.
+fn field_miss(path: &str, what: &str, close: &[Value]) -> Value {
+    let named: Vec<String> = close
+        .iter()
+        .map(|c| {
+            let n = c["name"].as_str().unwrap_or_default();
+            match (c["renamed_in"].as_str(), c["defines"].as_str()) {
+                (Some(k), _) => format!("{n} (renamed in {k})"),
+                (_, Some(f)) => format!("{n}, which defines {f}"),
+                _ => n.to_string(),
+            }
+        })
+        .collect();
+    let remediation = match named.as_slice() {
+        [] => format!("{what}."),
+        [one] => format!("{what}. Did you mean {one}?"),
+        [rest @ .., last] => format!("{what}. Did you mean {} or {last}?", rest.join(", ")),
+    };
+    refused("unknown_field", "/path", &remediation, path)
+}
 
 /// A refusal in the shared shape (error@2).
 fn refused(code: &str, path: &str, remediation: &str, actual: &str) -> Value {
@@ -370,7 +401,8 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
                 json!({"x-opaque": "params the drawing module reads; the kind registry holds no schema for them yet"})
             }
         };
-        let fields = version.map(|v| fields_of(v, planted)).unwrap_or_default();
+        let mut fields = version.map(|v| fields_of(v, planted)).unwrap_or_default();
+        fields.extend(crate::forms::of(&name));
         let description = kind
             .and_then(|k| k.description.clone())
             .unwrap_or_else(|| kind_description(&name, &module, version));
@@ -384,8 +416,10 @@ fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
             "cost": Value::Null, "stability": stability, "available": stability != "retired",
             "description": description, "fields": fields,
         });
-        if let Some(t) = preview {
-            e["tracking"] = json!(t);
+        if let Some(p) = preview {
+            e["tracking"] = json!(p.tracking);
+            e["preview_since"] = json!(p.since);
+            e["decide_by"] = json!(p.decide_by);
         }
         if let Some((since, by)) = retired {
             e["deprecated_since"] = json!(since);
@@ -491,8 +525,10 @@ fn one_shape(e: &mut Value, row: &Value, sealed: &Sealed, planted: Option<Plante
         })
     });
     if o["stability"] == "preview" {
-        if let Some(t) = row.get("tracking") {
-            o.entry("tracking").or_insert_with(|| t.clone());
+        for field in ["tracking", "preview_since", "decide_by"] {
+            if let Some(t) = row.get(field) {
+                o.entry(field).or_insert_with(|| t.clone());
+            }
         }
     }
     o.entry("available").or_insert(json!(pass && !retired));
@@ -535,12 +571,96 @@ impl Hub<'_> {
     pub fn kinds_listing(&self) -> Listing {
         let sealed = &self.startup.sealed;
         let planted = self.kinds_planted();
-        listing(
+        let mut l = listing(
             sealed,
             planted,
             self.registries_reply(),
             &self.scenario.plugin_entries,
-        )
+        );
+        // #202: each installed pack's recipe-backed kinds, as entries of kind@1.
+        if planted != Some(Planted::ListingWithoutPackEntries) {
+            let head = l.rows[0].clone();
+            for row in self.pack_kind_rows() {
+                let mut e = row.entry;
+                if let (Some(t), Some(h)) = (row.example, e["example"].as_str()) {
+                    l.examples.insert(h.to_string(), t);
+                }
+                one_shape(&mut e, &head, sealed, planted);
+                if let Some(list) = l.rows[0]["entries"].as_array_mut() {
+                    list.push(e);
+                }
+            }
+        }
+        l
+    }
+
+    /// Each admitted pack's kinds backed by recipes (Pack: kinds in any pack): its schema from its
+    /// recipe's inputs, its example by hash, its kit's result and its cost at defaults beside its
+    /// largest counts over its params' extremes.
+    fn pack_kind_rows(&self) -> Vec<KindRow> {
+        let mut out = Vec::new();
+        for pack in self.packs.all() {
+            let id = pack.id.text();
+            let origin = if self.pack_authors.contains_key(&id) {
+                "agent"
+            } else {
+                "pack"
+            };
+            for (name, kind) in &pack.kinds {
+                let Some(recipe) = pack.recipes.get(&kind.recipe) else {
+                    continue;
+                };
+                let properties: Map<String, Value> = recipe
+                    .inputs
+                    .iter()
+                    .map(|(n, i)| {
+                        let ty = match i.ty.as_str() {
+                            "number" => "number",
+                            "integer" => "integer",
+                            "bool" => "boolean",
+                            "text" | "ID" | "choice" => "string",
+                            "records" | "vec3" | "range" => "array",
+                            _ => "object",
+                        };
+                        let mut s = json!({"type": ty, "default": i.default});
+                        if let Some(lo) = i.min {
+                            s["minimum"] = json!(lo);
+                        }
+                        if let Some(hi) = i.max {
+                            s["maximum"] = json!(hi);
+                        }
+                        if !i.options.is_empty() {
+                            s["enum"] = json!(i.options);
+                        }
+                        (n.clone(), s)
+                    })
+                    .collect();
+                let schema = json!({"type": "object", "properties": properties, "required": [], "additionalProperties": false});
+                // Its first example, by the hash its pack lists it under.
+                let example = kind.examples.first().map(|(sha, _)| sha.clone());
+                let shape = json!({"schema": schema, "pack": id, "recipe": kind.recipe});
+                let since = pack.id.version.to_string();
+                let e = json!({
+                    "name": name, "registry": "kind@1", "origin": origin, "pack": id,
+                    "recipe": kind.recipe, "minor": kind.minor, "binds": "author",
+                    "schema": schema,
+                    "example": example,
+                    "examples": kind.examples.iter().map(|(sha, _)| sha.clone()).collect::<Vec<_>>(),
+                    "since": since, "digest": entry_digest("kind@1", name, &shape, &since),
+                    "children": kind.children, "capabilities": kind.capabilities,
+                    "rules": kind.rules.iter().map(|r| json!({"code": r.code, "expr": r.expr.text})).collect::<Vec<_>>(),
+                    "kit": kind.kit,
+                    "cost": {"class": kind.class.name(), "at_defaults": kind.at_defaults, "at_extremes": kind.at_extremes},
+                    "description": format!("{name}, a kind backed by the recipe {} of {id}", kind.recipe),
+                });
+                let text = example.and_then(|sha| kind.texts.get(&sha).cloned());
+                out.push(KindRow {
+                    entry: e,
+                    example: text,
+                });
+            }
+        }
+        out
     }
 
     /// `{"call": "deep_kinds", …}`.
@@ -556,10 +676,11 @@ impl Hub<'_> {
                 "read" => &["example", "guide", "offset"],
                 "gallery" => &["cursor"],
                 "sheet" | "step_ceilings" => &[],
+                "field" => &["path"],
                 _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery, sheet or step_ceilings.",
+                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings or field.",
                     op,
                 ),
             };
@@ -613,12 +734,89 @@ impl Hub<'_> {
                 ),
             },
             "gallery" => self.kinds_gallery(cursor),
+            "field" => match text("path") {
+                Some(p) => self.kinds_field(p),
+                None => refused(
+                    "required",
+                    "/path",
+                    "Give path, <kind>@<major>.<field> for one field or <kind>@<major> for all of them.",
+                    "",
+                ),
+            },
             // The logic module's step ceilings (Logic: work across steps, #546).
             "step_ceilings" => json!({"step_ceilings": deep_logic::budget::ceilings(
                 self.kinds_planted() == Some(Planted::StepCeilingsCap)
             )}),
             _ => self.kinds_sheet(),
         }
+    }
+
+    /// `op: field` (#1971): one line per field, printed from the listing's kind entry: the field's
+    /// row (name, type, unit, range, default and its grammar's forms) with the kind's canvas module
+    /// and stability. `<kind>@<major>` answers every field in the listing's order. A miss is
+    /// `unknown_field`, naming the close names the document check gives, renames first.
+    fn kinds_field(&self, path: &str) -> Value {
+        let sealed = &self.startup.sealed;
+        let planted = self.kinds_planted();
+        // The kind ends at the first dot after its major: `test.slab@3.width`.
+        let cut = path
+            .find('@')
+            .and_then(|at| path[at..].find('.').map(|d| at + d));
+        let (kind, field) = match cut {
+            Some(d) => (&path[..d], Some(&path[d + 1..])),
+            None => (path, None),
+        };
+        let rows = kind_rows(sealed, planted);
+        let Some(e) = rows.iter().map(|r| &r.entry).find(|e| e["name"] == kind) else {
+            let close =
+                deep_canvas::document::kind_names(kind, &sealed.kinds(), sealed.close_fault);
+            return field_miss(path, &format!("{kind} is no kind this build lists"), &close);
+        };
+        let mut fields: Vec<&Value> = e["fields"].as_array().into_iter().flatten().collect();
+        if planted == Some(Planted::FieldWithoutCorner) && kind == "test.slab@3" {
+            fields.retain(|f| f["name"] != "corner");
+        }
+        let line = |f: &Value| {
+            let mut l = f.clone();
+            l["path"] = json!(format!("{kind}.{}", f["name"].as_str().unwrap_or_default()));
+            l["module"] = e["module"].clone();
+            l["stability"] = e["stability"].clone();
+            if planted == Some(Planted::FieldLine600Bytes) && l["path"] == "test.slab@3.width" {
+                // `,"pad":""` is 9 bytes.
+                let pad = 600usize.saturating_sub(l.to_string().len() + 9);
+                l["pad"] = json!(" ".repeat(pad));
+            }
+            l
+        };
+        let Some(name) = field else {
+            let mut lines: Vec<Value> = fields.into_iter().map(line).collect();
+            if planted == Some(Planted::FieldObjectByName) {
+                lines.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+            }
+            return json!({"path": path, "lines": lines});
+        };
+        if let Some(f) = fields.iter().find(|f| f["name"] == name) {
+            return json!({"path": path, "lines": [line(f)]});
+        }
+        let registry = sealed.kinds();
+        let close = match deep_canvas::kinds::lookup(&registry, kind) {
+            deep_canvas::kinds::Lookup::Known { entry, .. } => {
+                let fault = sealed.close_fault;
+                let owners = deep_canvas::document::owners(name, entry, &registry, fault);
+                deep_canvas::document::field_names(name, entry, entry.current(), &owners, fault)
+            }
+            _ => Vec::new(),
+        };
+        let have: Vec<&str> = fields.iter().filter_map(|f| f["name"].as_str()).collect();
+        let what = if close.is_empty() {
+            format!(
+                "{kind} has no field {name}; its fields are {}",
+                have.join(", ")
+            )
+        } else {
+            format!("{kind} has no field {name}")
+        };
+        field_miss(path, &what, &close)
     }
 
     fn corpus(&self) -> Option<Corpus> {
@@ -697,7 +895,9 @@ impl Hub<'_> {
                     .iter()
                     .map(|(word, a)| (word.clone(), a["target"].clone()))
                     .collect();
-                json!({"pack": p.id.id, "version": p.id.version.to_string(),
+                // #1958: a retired version stays listed, as retired.
+                let state = if self.packs.is_retired(&p.id.text()) { "retired" } else { "installed" };
+                json!({"pack": p.id.id, "version": p.id.version.to_string(), "state": state,
                        "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
             })
             .collect();
@@ -1125,6 +1325,7 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
                             if let Some(o) = f.as_object_mut() {
                                 o.remove("grammar");
                                 o.remove("forms");
+                                o.remove("form");
                             }
                             f
                         })

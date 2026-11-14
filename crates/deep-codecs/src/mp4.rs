@@ -99,8 +99,10 @@ pub struct Edit {
 }
 
 /// A `colr` box's code points: ISO/IEC 23091-2 values, and the range when it says.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Colr {
+    /// #157: `nclx` or `nclc`.
+    pub kind: [u8; 4],
     pub primaries: u16,
     pub transfer: u16,
     pub matrix: u16,
@@ -114,6 +116,8 @@ pub struct Entry {
     pub width: u16,
     pub height: u16,
     pub channels: u16,
+    /// #157: a sound entry's bits per sample, which integer PCM (`sowt`, `twos`) is read by.
+    pub bits: u16,
     pub sample_rate: u32,
     /// The codec's configuration box (`avcC`, `hvcC` or `esds`) and its body.
     pub config: Option<([u8; 4], Vec<u8>)>,
@@ -179,6 +183,53 @@ pub fn parse(data: &[u8]) -> Option<Movie> {
     Some(movie)
 }
 
+/// #157: a file's top-level boxes and its movie, read without its samples: each box's header in
+/// turn, seeking over the rest, and only the first `moov` read whole.
+pub struct Head {
+    /// Each top-level box: its type, where it starts and its size, a box past the end cut at it.
+    pub boxes: Vec<([u8; 4], u64, u64)>,
+    pub movie: Option<Movie>,
+}
+
+impl Head {
+    pub fn read(r: &mut (impl std::io::Read + std::io::Seek)) -> std::io::Result<Head> {
+        use std::io::SeekFrom;
+        let len = r.seek(SeekFrom::End(0))?;
+        let mut head = Head {
+            boxes: Vec::new(),
+            movie: None,
+        };
+        let mut at = 0u64;
+        while at + 8 <= len {
+            let mut b = [0u8; 16];
+            r.seek(SeekFrom::Start(at))?;
+            r.read_exact(&mut b[..8])?;
+            let kind = [b[4], b[5], b[6], b[7]];
+            let (header, size) = match be32(&b) {
+                1 if at + 16 <= len => {
+                    r.read_exact(&mut b[8..])?;
+                    (16, be64(&b[8..]))
+                }
+                0 => (8, len - at),
+                n => (8, n as u64),
+            };
+            if size < header {
+                break;
+            }
+            let size = size.min(len - at);
+            head.boxes.push((kind, at, size));
+            if &kind == b"moov" && head.movie.is_none() {
+                let mut moov = vec![0u8; size as usize];
+                r.seek(SeekFrom::Start(at))?;
+                r.read_exact(&mut moov)?;
+                head.movie = parse(&moov);
+            }
+            at += size;
+        }
+        Ok(head)
+    }
+}
+
 fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
     let mdia = child(trak, b"mdia")?;
     let mut b = Bytes(child(mdia, b"mdhd")?, 0);
@@ -202,7 +253,9 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
         urls.extend(external(dref));
     }
     let stbl = child(minf, b"stbl")?;
-    let mut entry = child(stbl, b"stsd").and_then(stsd).unwrap_or_default();
+    let mut entry = child(stbl, b"stsd")
+        .and_then(|b| stsd(b, kind == Kind::Audio))
+        .unwrap_or_default();
     // #501: a rate over 16 bits is left out of an MP4 sample entry; the track's timescale is it.
     if kind == Kind::Audio && entry.sample_rate == 0 {
         entry.sample_rate = timescale;
@@ -259,7 +312,7 @@ fn external(dref: &[u8]) -> Vec<String> {
         .collect()
 }
 
-fn stsd(body: &[u8]) -> Option<Entry> {
+fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
     let e = atoms(body.get(8..)?).into_iter().next()?;
     let mut entry = Entry {
         fourcc: e.kind,
@@ -279,12 +332,14 @@ fn stsd(body: &[u8]) -> Option<Entry> {
             entry.tmcd = Some((drop, b.u8()?));
             return Some(entry);
         }
-        b"mp4a" | b"lpcm" | b"fpcm" | b"sowt" | b"twos" | b"alac" => {
+        // #503: every sound track's entry, whatever its codec, so the probe can name it.
+        _ if audio => {
             let mut b = Bytes(e.body, 8);
             let version = b.u16()?;
             b.take(6)?;
             entry.channels = b.u16()?;
-            b.take(6)?;
+            entry.bits = b.u16()?;
+            b.take(4)?;
             entry.sample_rate = b.u32()? >> 16;
             match version {
                 1 => e.body.get(44..)?,
@@ -301,16 +356,23 @@ fn stsd(body: &[u8]) -> Option<Entry> {
     };
     for a in atoms(rest) {
         match &a.kind {
-            b"avcC" | b"hvcC" | b"esds" => entry.config = Some((a.kind, a.body.to_vec())),
+            // #503: ALAC's cookie, Opus's dOps and FLAC's dfLa too.
+            b"avcC" | b"hvcC" | b"esds" | b"alac" | b"dOps" | b"dfLa" => {
+                entry.config = Some((a.kind, a.body.to_vec()))
+            }
             b"wave" => {
-                if let Some(esds) = child(a.body, b"esds") {
-                    entry.config = Some((*b"esds", esds.to_vec()));
+                if let Some(c) = [b"esds", b"alac"]
+                    .into_iter()
+                    .find_map(|k| child(a.body, k).map(|b| (*k, b)))
+                {
+                    entry.config = Some((c.0, c.1.to_vec()));
                 }
             }
             b"colr" if a.body.len() >= 10 => {
                 let kind = &a.body[..4];
                 if kind == b"nclx" || kind == b"nclc" {
                     entry.colr = Some(Colr {
+                        kind: [kind[0], kind[1], kind[2], kind[3]],
                         primaries: be16(&a.body[4..]),
                         transfer: be16(&a.body[6..]),
                         matrix: be16(&a.body[8..]),

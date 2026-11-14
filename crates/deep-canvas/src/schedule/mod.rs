@@ -1416,6 +1416,11 @@ impl Session {
         &self.look
     }
 
+    /// The time the session's last frame evaluated at, in flicks.
+    pub fn t(&self) -> i64 {
+        self.t
+    }
+
     pub fn outside(&self) -> &Outside {
         &self.outside
     }
@@ -1610,19 +1615,33 @@ impl Session {
                 // Whether a node's array reads bind to the same writers, by operator and item, in
                 // both revisions (#504: a writer an operator's `applies` drops or adds).
                 fn who(l: &Loaded, w: usize) -> (usize, Option<&str>) {
-                    (l.nodes[w].op, l.nodes[w].item.map(|i| l.items[i].id.as_str()))
+                    (
+                        l.nodes[w].op,
+                        l.nodes[w].item.map(|i| l.items[i].id.as_str()),
+                    )
                 }
                 fn same_writers(a: &Loaded, an: &Node, b: &Loaded, bn: &Node) -> bool {
                     an.reads.len() == bn.reads.len()
                         && an.reads.iter().zip(&bn.reads).all(|(x, y)| match (x, y) {
                             (
-                                Bound::Array { writers: wa, contributions: ca, .. },
-                                Bound::Array { writers: wb, contributions: cb, .. },
+                                Bound::Array {
+                                    writers: wa,
+                                    contributions: ca,
+                                    ..
+                                },
+                                Bound::Array {
+                                    writers: wb,
+                                    contributions: cb,
+                                    ..
+                                },
                             ) => {
                                 wa.len() == wb.len()
                                     && ca.len() == cb.len()
                                     && wa.iter().zip(wb).all(|(&p, &q)| who(a, p) == who(b, q))
-                                    && ca.iter().zip(cb).all(|((m, p), (n, q))| m == n && who(a, *p) == who(b, *q))
+                                    && ca
+                                        .iter()
+                                        .zip(cb)
+                                        .all(|((m, p), (n, q))| m == n && who(a, *p) == who(b, *q))
                             }
                             _ => true,
                         })
@@ -2770,7 +2789,10 @@ impl Session {
             let sop = &s.sealed.ops[g.op];
             let w = sop.op.writes.iter().position(|w| w == name)?;
             let node = &l.nodes[*g.nodes.first()?];
-            node.item.is_none().then(|| node.out.get(w).cloned()).flatten()
+            node.item
+                .is_none()
+                .then(|| node.out.get(w).cloned())
+                .flatten()
         })
     }
 

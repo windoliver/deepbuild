@@ -1,0 +1,15 @@
+{
+  "name": "lamp",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1957 acceptance suite: the recipe lamp.desk@1.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "lamp.desk@1": "lamp.desk@1.json"
+  }
+}

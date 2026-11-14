@@ -1,0 +1,130 @@
+{
+  "id": "shelf.bookcase",
+  "version": "3.0",
+  "title": "Bookcase",
+  "license": "MIT",
+  "author": "the #1956 acceptance suite",
+  "description": "A bookcase from the front at 100 u a metre, sides as tall as its height and one shelf per level, with a plan strip under it as deep as the bookcase.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "unit": "m",
+      "default": 1.2,
+      "min": 0.5,
+      "max": 3,
+      "about": "the outside width, in metres"
+    },
+    "shelves": {
+      "type": "integer",
+      "default": 4,
+      "min": 1,
+      "max": 8,
+      "about": "how many shelves, one per level, 0.4 m apart"
+    },
+    "depth": {
+      "type": "number",
+      "unit": "m",
+      "default": 0.3,
+      "min": 0.1,
+      "max": 1,
+      "about": "the depth, in metres"
+    },
+    "height": {
+      "type": "number",
+      "unit": "m",
+      "default": 1.6,
+      "min": 0.2,
+      "max": 4,
+      "about": "the height of the sides, in metres"
+    }
+  },
+  "steps": {
+    "sides": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": 2,
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          "height * 100"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "i * (width * 100 - 2)",
+          0,
+          0
+        ]
+      }
+    },
+    "boards": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "shelves",
+        "as": "i"
+      },
+      "params": {
+        "box": [
+          0,
+          0,
+          "width * 100",
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          "(i + 1) * 40 - 2",
+          0
+        ]
+      }
+    },
+    "plan": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          "width * 100",
+          "depth * 100"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          "height * 100 + 10",
+          0
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "sides",
+      "boards",
+      "plan"
+    ]
+  }
+}

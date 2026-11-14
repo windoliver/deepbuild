@@ -21,7 +21,11 @@ fn frame_color(input: &Value) -> bool {
 fn own_pixel_reads(g: &Value) -> Option<BTreeSet<String>> {
     let steps = g["steps"].as_object()?;
     let inputs = g["inputs"].as_object()?;
-    let op_of = |id: &Value| id.as_str().and_then(|i| steps.get(i)).and_then(|s| s["op"].as_str());
+    let op_of = |id: &Value| {
+        id.as_str()
+            .and_then(|i| steps.get(i))
+            .and_then(|s| s["op"].as_str())
+    };
     let mut out = BTreeSet::new();
     for (id, s) in steps {
         let op = s["op"].as_str()?;
@@ -31,7 +35,10 @@ fn own_pixel_reads(g: &Value) -> Option<BTreeSet<String>> {
             "sample@1" => op_of(&a["uv"]) == Some("screen_uv@1") && a["lod"].as_f64() == Some(0.0),
             _ => continue,
         };
-        let color = a["tex"].as_str().and_then(|t| inputs.get(t)).is_some_and(frame_color);
+        let color = a["tex"]
+            .as_str()
+            .and_then(|t| inputs.get(t))
+            .is_some_and(frame_color);
         if !(reads && color) {
             return None;
         }
@@ -57,7 +64,9 @@ pub fn pixel_wise(g: &Value) -> bool {
     let inputs_ok = g["inputs"].as_object().is_some_and(|ins| {
         ins.values().all(|i| {
             frame_color(i)
-                || ["param", "channel", "role"].iter().any(|k| i["from"].get(*k).is_some())
+                || ["param", "channel", "role"]
+                    .iter()
+                    .any(|k| i["from"].get(*k).is_some())
                 || i["from"] == "time"
         })
     });
@@ -137,7 +146,11 @@ pub fn fuse(members: &[(String, Value)]) -> Option<Value> {
         let reads = own_pixel_reads(g)?;
         let own_steps = g["steps"].as_object()?;
         let own_inputs = g["inputs"].as_object()?;
-        let colors: BTreeSet<&String> = own_inputs.iter().filter(|(_, i)| frame_color(i)).map(|(n, _)| n).collect();
+        let colors: BTreeSet<&String> = own_inputs
+            .iter()
+            .filter(|(_, i)| frame_color(i))
+            .map(|(n, _)| n)
+            .collect();
         let replaced: BTreeMap<String, String> = match &prev_out {
             Some(out) => reads.iter().map(|r| (r.clone(), out.clone())).collect(),
             None => BTreeMap::new(),
@@ -271,7 +284,9 @@ pub fn split_blur(g: &Value) -> Option<Vec<Part>> {
     if calls.next().is_some() {
         return None;
     }
-    let src = call["args"]["src"].as_str().filter(|s| steps.contains_key(*s))?;
+    let src = call["args"]["src"]
+        .as_str()
+        .filter(|s| steps.contains_key(*s))?;
     // The steps before: what `src` reads, transitively.
     let mut before: BTreeSet<String> = BTreeSet::new();
     let mut stack = vec![src.to_string()];
@@ -279,7 +294,11 @@ pub fn split_blur(g: &Value) -> Option<Vec<Part>> {
         if id == *blur_id || !before.insert(id.clone()) {
             continue;
         }
-        stack.extend(named(&steps[&id]["args"], steps).into_iter().map(String::from));
+        stack.extend(
+            named(&steps[&id]["args"], steps)
+                .into_iter()
+                .map(String::from),
+        );
     }
     if before.contains(blur_id) {
         return None;
@@ -289,30 +308,41 @@ pub fn split_blur(g: &Value) -> Option<Vec<Part>> {
         .filter(|k| *k != blur_id && !before.contains(*k))
         .cloned()
         .collect();
-    if after
-        .iter()
-        .any(|a| named(&steps[a]["args"], steps).iter().any(|n| before.contains(*n)))
-    {
+    if after.iter().any(|a| {
+        named(&steps[a]["args"], steps)
+            .iter()
+            .any(|n| before.contains(*n))
+    }) {
         return None;
     }
-    let base = |id: &str, steps_of: Map<String, Value>, inputs: Value, color: Value, blend: Value| {
-        let mut part = json!({
-            "id": id, "kind": "pass", "origin": g["origin"].clone(),
-            "about": format!("A part of {}.", g["id"].as_str().unwrap_or("a pass")),
-            "inputs": inputs, "steps": steps_of, "outputs": {"color": color, "blend": blend},
-            "resolution": g.get("resolution").cloned().unwrap_or(json!("full")),
-        });
-        if let Some(c) = g.get("cost") {
-            part["cost"] = c.clone();
-        }
-        part
-    };
+    let base =
+        |id: &str, steps_of: Map<String, Value>, inputs: Value, color: Value, blend: Value| {
+            let mut part = json!({
+                "id": id, "kind": "pass", "origin": g["origin"].clone(),
+                "about": format!("A part of {}.", g["id"].as_str().unwrap_or("a pass")),
+                "inputs": inputs, "steps": steps_of, "outputs": {"color": color, "blend": blend},
+                "resolution": g.get("resolution").cloned().unwrap_or(json!("full")),
+            });
+            if let Some(c) = g.get("cost") {
+                part["cost"] = c.clone();
+            }
+            part
+        };
     let id = g["id"].as_str().unwrap_or("pass");
-    let first: Map<String, Value> = before.iter().map(|k| (k.clone(), steps[k].clone())).collect();
-    let mut last: Map<String, Value> = after.iter().map(|k| (k.clone(), steps[k].clone())).collect();
+    let first: Map<String, Value> = before
+        .iter()
+        .map(|k| (k.clone(), steps[k].clone()))
+        .collect();
+    let mut last: Map<String, Value> = after
+        .iter()
+        .map(|k| (k.clone(), steps[k].clone()))
+        .collect();
     let px = format!("{blur_id}__px");
     last.insert(px.clone(), json!({"op": "pixel@1", "args": {}}));
-    last.insert(blur_id.clone(), json!({"op": "load@1", "args": {"tex": "src", "ixy": px}}));
+    last.insert(
+        blur_id.clone(),
+        json!({"op": "load@1", "args": {"tex": "src", "ixy": px}}),
+    );
     let mut values = g["inputs"].as_object().cloned().unwrap_or_default();
     values.retain(|_, i| i["type"] != "texture");
     let mut last_inputs = values.clone();
@@ -330,14 +360,34 @@ pub fn split_blur(g: &Value) -> Option<Vec<Part>> {
     Some(vec![
         Part {
             of: "steps".into(),
-            graph: base(&format!("{id}.before"), first, g["inputs"].clone(), json!(src), json!("replace")),
+            graph: base(
+                &format!("{id}.before"),
+                first,
+                g["inputs"].clone(),
+                json!(src),
+                json!("replace"),
+            ),
             steps: before.iter().cloned().collect(),
         },
-        Part { of: "blur.x@1".into(), graph: blur_stage("x"), steps: vec![blur_id.clone()] },
-        Part { of: "blur.y@1".into(), graph: blur_stage("y"), steps: vec![blur_id.clone()] },
+        Part {
+            of: "blur.x@1".into(),
+            graph: blur_stage("x"),
+            steps: vec![blur_id.clone()],
+        },
+        Part {
+            of: "blur.y@1".into(),
+            graph: blur_stage("y"),
+            steps: vec![blur_id.clone()],
+        },
         Part {
             of: "steps".into(),
-            graph: base(&format!("{id}.after"), last, Value::Object(last_inputs), g["outputs"]["color"].clone(), g["outputs"]["blend"].clone()),
+            graph: base(
+                &format!("{id}.after"),
+                last,
+                Value::Object(last_inputs),
+                g["outputs"]["color"].clone(),
+                g["outputs"]["blend"].clone(),
+            ),
             steps: after.iter().cloned().collect(),
         },
     ])
@@ -380,8 +430,16 @@ mod tests {
     /// second, would differ.
     #[test]
     fn a_fused_pair_computes_the_second_over_the_first() {
-        let a = pass("a", json!({"res": {"op": "mul@1", "args": {"a": "rgb", "b": "gain"}}}), "full");
-        let b = pass("b", json!({"sq": {"op": "mul@1", "args": {"a": "rgb", "b": "rgb"}}, "res": {"op": "add@1", "args": {"a": "sq", "b": 0.1}}}), "full");
+        let a = pass(
+            "a",
+            json!({"res": {"op": "mul@1", "args": {"a": "rgb", "b": "gain"}}}),
+            "full",
+        );
+        let b = pass(
+            "b",
+            json!({"sq": {"op": "mul@1", "args": {"a": "rgb", "b": "rgb"}}, "res": {"op": "add@1", "args": {"a": "sq", "b": 0.1}}}),
+            "full",
+        );
         let fused = fuse(&[("a".into(), a.clone()), ("b".into(), b)]).expect("they join");
         let c = read_and_check(&fused).expect("the fused graph passes the check");
         let mut img = Image::new(2, 1);
@@ -402,12 +460,20 @@ mod tests {
         for (got, px) in out.px.iter().zip(&img.px) {
             for i in 0..3 {
                 let want = (px[i] * 2.0) * (px[i] * 2.0) + 0.1;
-                assert!((got[i] - want).abs() < 1e-6, "channel {i}: {} vs {want}", got[i]);
+                assert!(
+                    (got[i] - want).abs() < 1e-6,
+                    "channel {i}: {} vs {want}",
+                    got[i]
+                );
             }
             assert!((got[3] - px[3]).abs() < 1e-9, "alpha kept");
         }
         // Another resolution, `fuse: none` or a blend that isn't replace keeps them apart.
-        let half = pass("h", json!({"res": {"op": "mul@1", "args": {"a": "rgb", "b": 2.0}}}), "half");
+        let half = pass(
+            "h",
+            json!({"res": {"op": "mul@1", "args": {"a": "rgb", "b": 2.0}}}),
+            "half",
+        );
         assert!(!joins(&a, &half));
         let mut none = a.clone();
         none["fuse"] = json!("none");
@@ -415,7 +481,10 @@ mod tests {
         let mut neighbour = a.clone();
         neighbour["steps"]["px2"] = json!({"op": "add@1", "args": {"a": "px", "b": 1}});
         neighbour["steps"]["c"]["args"]["ixy"] = json!("px2");
-        assert!(!pixel_wise(&neighbour), "a read off its own pixel isn't pixel-wise");
+        assert!(
+            !pixel_wise(&neighbour),
+            "a read off its own pixel isn't pixel-wise"
+        );
     }
 
     /// A lift, the shipped blur and a dim split into the steps before, the blur's two passes and

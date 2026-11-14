@@ -3,7 +3,9 @@
 // from the Building blocks table of docs/technical-design.md (#26): every row whose "Agents, through MCP" cell names a
 // tool gives that tool's description and the skill its block and what the block never is. Only what a tool can't teach
 // goes in the skill, when to use each block and what it never does, and never a tool's parameters, which agents read
-// from its schema. tests/acceptance/26 fails when either drifts from the table.
+// from its schema. tests/acceptance/26 fails when either drifts from the table. The skill also states each craft@1
+// check in its own words, from crates/deep-canvas/src/craft.json, the table the checks read (#409);
+// tests/acceptance/409 fails when it drifts from what the checks state.
 //   node scripts/skill.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,7 +16,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** When an agent uses each tool, and what its result does not prove. */
 const TOOLS = {
   deep_status: {
-    use: 'Read where your session stands: the hub\'s gates, and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
+    use: 'Read where your session stands: the hub\'s gates; the checks the repo\'s spec names; your open asks, each with its state, its default and its deadline; your open items; and each of your claims with its runs, its verdict and any run that contradicts what you predicted.',
     proves: 'Its result does not prove your work is done: only a verdict the checks reached says so, and a claim with no verdict is still open.',
   },
   deep_search: {
@@ -69,6 +71,10 @@ const TOOLS = {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',
   },
+  deep_root_plan: {
+    use: 'Propose a root plan for a host, with the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password.',
+    proves: 'A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did.',
+  },
 };
 
 /** Table text as an agent reads it: no backticks or bold. */
@@ -88,6 +94,8 @@ export function blocks(design = readFileSync(join(ROOT, 'docs/technical-design.m
   return rows;
 }
 const naming = (rows, tool) => rows.filter((r) => r.mcp.includes(`\`${tool}\``));
+/** craft@1's checks as the checks read them (#409): name, description, threshold and fix. */
+const CRAFT = JSON.parse(readFileSync(join(ROOT, 'crates/deep-canvas/src/craft.json'), 'utf8'));
 
 export function generate(rows = blocks()) {
   const descriptions = {};
@@ -121,7 +129,14 @@ export function generate(rows = blocks()) {
     // The canvas working order (#412; technical design, after the Building blocks table): what the tools can't teach.
     '## Working on a canvas document',
     '',
-    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory.',
+    'Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory. For a formula, run the typeset job with deep_job: it turns LaTeX or Typst into an SVG with one id per term, which a vector@1 item imports, so a step moves the terms two formulas share; never set a formula as text.',
+    '',
+    // craft@1's checks (#409), each in its own words from the table the checks themselves read.
+    '## Craft checks a film brief names',
+    '',
+    `A film's brief names the ${CRAFT.pack} checks it wants. Each runs only when the brief names it, holds the film to the brief's thresholds and never yours, and never passes a film on its own.`,
+    '',
+    ...CRAFT.checks.map((c) => `- ${c.name}. ${c.description} Threshold — ${c.threshold}. Fix — ${c.fix}`),
     '',
   ].join('\n');
   return { descriptions, skill };

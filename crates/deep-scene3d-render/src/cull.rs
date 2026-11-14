@@ -421,7 +421,12 @@ impl Run {
     }
 }
 
-fn storage(d: &deep_gpu::counted::Wgpu, label: &str, n: u32, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+fn storage(
+    d: &deep_gpu::counted::Wgpu,
+    label: &str,
+    n: u32,
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
     d.create_buffer(&wgpu::BufferDescriptor {
         label: Some(label),
         size: u64::from(n.max(1)) * 4,
@@ -515,7 +520,13 @@ impl Culled {
     }
 
     /// Makes view `k`'s list and arguments, which stay its own while this cull lasts.
-    pub fn view(&mut self, d: &deep_gpu::counted::Wgpu, kernels: &Kernels, records: &wgpu::Buffer, k: usize) {
+    pub fn view(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        records: &wgpu::Buffer,
+        k: usize,
+    ) {
         if self.views[k].is_none() {
             self.views[k] = Some(self.make_view(d, kernels, records));
         }
@@ -568,7 +579,12 @@ impl Culled {
         });
     }
 
-    fn make_view(&self, d: &deep_gpu::counted::Wgpu, kernels: &Kernels, records: &wgpu::Buffer) -> View {
+    fn make_view(
+        &self,
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        records: &wgpu::Buffer,
+    ) -> View {
         let n = self.made_for.1;
         let rows = storage(
             d,
@@ -790,7 +806,12 @@ pub struct Pyramid {
 }
 
 impl Pyramid {
-    pub fn new(d: &deep_gpu::counted::Wgpu, kernels: &Kernels, size: [u32; 2], samples: u32) -> Pyramid {
+    pub fn new(
+        d: &deep_gpu::counted::Wgpu,
+        kernels: &Kernels,
+        size: [u32; 2],
+        samples: u32,
+    ) -> Pyramid {
         let [w, h] = size.map(|v| v.max(1));
         let levels = 32 - w.max(h).leading_zeros();
         let extent = |depth| wgpu::Extent3d {

@@ -1,0 +1,36 @@
+#540 at the base, 9b77cd2cd (Merge pull request #2438), on 2026-11-13, an arm64 Mac (Mac17,10, 18 cores, one-minute
+load between 130 and 330 while this was written).
+
+No test file was run at the base: the surface every file drives doesn't exist there, so a run could only fail before
+any of its assertions, which proves nothing (design: Proven on the base; AGENTS.md, Proof). Read from the base's code:
+
+- Every fixture carries a control of `kind: "point"`. The base's `control@1` holds nine kinds
+  (crates/deep-canvas-input/src/session.rs, `KINDS`: slider, toggle, choice, stages, transport, drag_along, turn,
+  press, hover), and `control_of` refuses any other as `out_of_range` at `controls/<id>/kind`, so `deep_show` refuses
+  every fixture and each file would stop at `presented(r[0], ...)`, before its first assertion on behaviour.
+- ac6-throw.test.ts also needs the `world` call, and a world input's `data` and `from`, which the base refuses as
+  `physics.unsupported`, naming #522 (crates/deep-canvas-physics/src/doc/inputs.rs). #522 isn't on this base.
+- ac7-lockstep-box.test.ts also needs the `match` call and a `net@1` item; the base has no net module and no lockstep.
+- ac2-terrain-box.test.ts's third test needs a record from Linux aarch64; without it it is BLOCKED by design.
+- `world`, `match` and the ten planted names aren't in deep-show's call list or planted names (crates/deep-show/src/
+  main.rs), so a scenario with them answers `{"ok": false, "code": "bad_input"}` at the base.
+
+What was checked instead, on this machine:
+
+- `npx tsc --noEmit -p tests/acceptance/540` exits 0 (after `npm ci --ignore-scripts`).
+- The six logic programs (programs.ts) assembled and validated with a copy of #544's assembler built under the
+  worktree's target/, and ran in Node's WebAssembly against hand-built read regions in the 248 B layout: `belts` lays
+  belts on the cells it reads and keeps them; `pins` keeps the last press's 256 B; `select` selects exactly units 0 to
+  5 for the expected corners of criterion 2 and keeps the release; `orders` selects by keys of generation 1 and walks
+  past a unit-key tail; `army` writes its positions; `world` the grid. (A scratch check, not part of the suite.)
+- The fixtures' own geometry (each file's pure f64 assertions, run in a scratch script): criterion 2's six units lie
+  2.1 m or more inside the expected corners' quad and the four others 5.1 m outside, and a 90° turn's recomputed quad
+  holds another set; criterion 6's ray from the orbited eye enters the top box at its +Z face centre; criterion 7's
+  units 0 to 5 lie inside the square at steps 18 to 22 and units 0 to 3 alone from step 23; criterion 9's points land
+  on pixel centres (500.5, 500.5) and (504.5, 500.5); criterion 3's centre ray meets y = 0 at 17.320508 m.
+
+One more thing the base would do: `cargo build --locked --manifest-path tests/acceptance/544/wat/Cargo.toml`, run from
+this checkout, fails at this commit ("cannot update the lock file ... because --locked was passed"): the assembler's
+lockfile doesn't list the root's unused patches. So at this base the files with programs (ac1, ac2, ac4, ac7, ac11)
+would stop `BLOCKED:` at the assembler before any assertion. That is the assembler's lockfile, not this suite; a later
+main that lists the patch builds it.

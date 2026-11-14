@@ -1,0 +1,61 @@
+Base commit: b726c8be8 ("design(#154): score.music@1 as built: the plan call, per-stem render job, list inputs, loop
+points in the stem, score.pitch as an output check"), main 3c36f9180 plus that one design commit; no implementation of #154.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook; cargo build --locked --bin deep-show
+(rustup's toolchain, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), through scripts/throttle.mjs build and scripts/lease.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/154-redraft --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10  Machine: macOS 27.2 (arm64)  Node: v24.22.2  vitest 5.0.5. <repo> is the worktree.
+Result: Test Files 7 failed (7); Tests 14 failed (14); 66 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base, and each failed for the expected reason, at a named assertion, never in a helper's crash:
+
+- 11 tests, every one that needs a hub (AC1 x3, AC2 x2, AC3, AC5 x2, AC7, AC9 x2), at helpers.ts installScore:
+  "the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built (#154)): there is no
+  packages/jobs/score/deepbuild.json". Before it, in each file, the world opened: a test CA and leaf were made, the
+  take server listened on 127.0.0.1, the hub started (deep hub run, ready), deep mcp answered initialize, and
+  deep-show built. A file's later tests share its world's setup (helpers.ts `once`), so they fail at the same assertion
+  in about 1 ms.
+- AC9's perf-lane test, at budgets.test.ts: "benchmarks/budgets.json has a task whose reason names #154".
+- AC6's two tests (no hub), at helpers.ts presented: deep-show answered the scenario ok, and the base's canvas core
+  presented each film with its `score.music@1` item skipped (`unknown_kind`, a notice), so the first passing case of
+  each test fails "no item skipped as an unknown kind".
+
+Probed by hand at the base with the same deep-show (README: What the base has): `score_plan` makes the scenario
+{"ok": false, "code": "bad_input"}; a library pack with `samples` is refused `unknown_field` at `samples`, so a film
+naming it is refused `pack_missing`; a film with `tempo_map` is refused `unknown_field` at `tempo_map`.
+
+ ❯ determinism.test.ts (3 tests | 3 failed)
+     × AC1 #154.c8c95dbc two runs in two fresh hubs give the same stem hashes, and the mix stem is the same when the second score has one more note on its pad stem
+     × AC1 #154.c8c95dbc adding one note to a stem changes no other note's noise, no take before it and no take on another instrument (a keys note, then a plucked note, added to the mix stem)
+     × AC1 #154.c8c95dbc over 1,024 notes on an instrument with four takes no note repeats the previous note's take, read from the stem; a round robin without the fold repeats and fails
+ ❯ onsets.test.ts (2 tests | 2 failed)
+     × AC2 #154.8b0e5b99 each event's note_on (the plan's, the job's meta and the first sample that sounds in the stem) lands within one sample of its resolved flick, through a tempo ramp, a marker, seconds, frames and flicks
+     × AC2 #154.8b0e5b99 score.pitch fails the job for a note whose sample is 50 cents sharp, naming the event, keeps nothing, and passes the same event on the in-tune sample; the planted check that reads the event's pitch passes the sharp sample and fails
+ ❯ budgets.test.ts (3 tests | 3 failed)
+     × AC9 #154.d6804da4 the perf lane has a task whose reason names #154, and the budgets are valid against the merge base's
+     × AC9 #154.d6804da4 the canvas side only plans: planning the 60 s six-stem score writes no audio to the store, and its six stems come from deep_job
+     × AC9 #154.d6804da4 on the reference Mac a 60 s six-stem score renders in under 60 s (five runs after a warm-up, each a fresh seed), and a cached stem's run is a cache hit in under 100 ms
+ ❯ loop.test.ts (1 test | 1 failed)
+     × AC7 #154.54798db1 the looped stem's loop points sit on 5:1 and 9:1 exactly, three passes match the straight render of bars 5 to 8 played three times within −96 dBFS per sample from the second pass on, and the stem looped without the fold differs there by more than −40 dBFS
+ ❯ cache.test.ts (1 test | 1 failed)
+     × AC3 #154.6e31be7c a plucked note's pitch edited: only the guitar stem misses; then one more keys note: only the keys stem misses
+ ❯ offline.test.ts (2 tests | 2 failed)
+     × AC5 #154.87a31a62 online: the score plans BLOCKED naming its unfetched library with no request; the take's fetch holds on one authority ask with no request until your yes, then the score plans
+     × AC5 #154.87a31a62 with no network: a score on an unfetched library is BLOCKED naming it; its fetch is BLOCKED twice with exactly one unblock ask and no authority ask, nothing stored, and the score stays BLOCKED
+ ❯ limits.test.ts (2 tests | 2 failed)
+     × AC6 #154.74061b19 a sustained pad below MIDI 48 not marked bass is refused naming the event (40 and 47; as a synth pad and a sustained library preset); MIDI 48 passes, bass passes, and a pluck at 40 is no pad
+     × AC6 #154.74061b19 a held note of 61 s is refused naming the event, and one of 60 s passes
+
+The assertions, as vitest printed them (one per test; the 11 installScore failures are the same line):
+
+AssertionError: benchmarks/budgets.json has a task whose reason names #154: expected false to be true // Object.is equality
+ ❯ budgets.test.ts:76:168
+AssertionError: the first-party plug-in deepbuild/score is at packages/jobs/score (Score: As built (#154)): there is no packages/jobs/score/deepbuild.json: expected false to be true // Object.is equality
+ ❯ budgets.test.ts:82:25, cache.test.ts:53:25, determinism.test.ts:85:36 and :99:25, loop.test.ts:52:25,
+   offline.test.ts:26:9 (via :43:25), onsets.test.ts:85:25
+AssertionError: a synth pad at MIDI 48: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+ ❯ limits.test.ts:53:131
+AssertionError: a note held 60 s: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+ ❯ limits.test.ts:62:5
+
+ Test Files  7 failed (7)
+      Tests  14 failed (14)

@@ -144,7 +144,7 @@ struct Owner {
     /// the test audio backend, the mix and piece it plays and its play on the audio clock.
     media: Option<Arc<Mix>>,
     live: Option<Live>,
-    played: Option<(Arc<Mix>, Option<Value>)>,
+    played: Option<(Arc<Mix>, Option<Value>, Option<Value>)>,
     audio: Option<crate::audio::AudioPlay>,
     /// When it last opened a document or closed: a gesture before then grants nothing.
     since: i64,
@@ -175,6 +175,8 @@ const DEVICE_BUFFER: usize = 512;
 pub struct Gate {
     owners: BTreeMap<String, Owner>,
     pub sources: BTreeMap<String, Arc<deep_canvas_media::mix::Source>>,
+    /// #503: each declared spectrum's bands as the array its readers read, by asset and fields.
+    pub spectra: BTreeMap<String, Arc<serde_json::Value>>,
     /// The test audio backend as the run's device changes left it.
     pub backend: Option<crate::audio::Backend>,
 }
@@ -187,6 +189,10 @@ impl Gate {
 
     pub fn audio_play(&self, panel: &str) -> Option<&crate::audio::AudioPlay> {
         self.owners.get(panel)?.audio.as_ref()
+    }
+
+    pub fn audio_play_mut(&mut self, panel: &str) -> Option<&mut crate::audio::AudioPlay> {
+        self.owners.get_mut(panel)?.audio.as_mut()
     }
 
     /// `panel`'s live transport, having handed the gate every device buffer due by `now`.
@@ -477,12 +483,26 @@ impl Hub<'_> {
         let planted = self.scenario.planted;
         let now = self.now;
         match call {
-            GateCall::Open { panel, strips, media, piece } => {
+            GateCall::Open {
+                panel,
+                strips,
+                media,
+                piece,
+            } => {
                 if !self.scenario.panels.contains_key(panel) {
                     return refused("unknown_panel");
                 }
                 self.advance_audio();
-                let media = match media {
+                // #525: its recipes expanded, and its worlds' lists empty until a live play steps them.
+                let opened = match media
+                    .as_ref()
+                    .map(|m| crate::stepped::opened(m, &self.scenario.packs))
+                    .transpose()
+                {
+                    Ok(o) => o,
+                    Err(e) => return e,
+                };
+                let media = match &opened {
                     Some(m) => match self.mix_of(m) {
                         Ok(mix) => Some(Arc::new(mix)),
                         Err(e) => return e,
@@ -492,13 +512,13 @@ impl Hub<'_> {
                 // #499: under the test audio backend, the document's strips play as a mix.
                 let played = match (&self.scenario.audio, &media) {
                     (None, _) => None,
-                    (Some(_), Some(m)) => Some((m.clone(), piece.clone())),
+                    (Some(_), Some(m)) => Some((m.clone(), piece.clone(), opened.clone())),
                     (Some(_), None) => {
                         let doc = json!({"strips": strips.iter().enumerate().map(|(i, (track, sha, start, from, to, looped))| {
                             (format!("s{i}"), json!({"track": track, "src": {"asset": sha}, "start": start, "in": from, "out": to, "loop": looped}))
                         }).collect::<Map<String, Value>>()});
                         match self.mix_of(&doc) {
-                            Ok(m) => Some((Arc::new(m), piece.clone())),
+                            Ok(m) => Some((Arc::new(m), piece.clone(), None)),
                             Err(e) => return e,
                         }
                     }
@@ -583,6 +603,34 @@ impl Hub<'_> {
                     }),
                     None => ungated,
                 };
+                // #1163: a panel showing a film with strips plays the film's own mix live, as a
+                // media document opened there would.
+                if !self
+                    .gate
+                    .owners
+                    .get(panel)
+                    .is_some_and(|o| o.strips.is_some())
+                {
+                    let film = self
+                        .scenario
+                        .docs
+                        .iter()
+                        .filter(|(_, p)| *p == panel)
+                        .find_map(|(id, _)| {
+                            self.current(id)
+                                .map(|r| r.doc.clone())
+                                .filter(|d| d.get("strips").is_some_and(|s| s.is_object()))
+                        });
+                    if let Some(doc) = film {
+                        let mix = match self.mix_of(&doc) {
+                            Ok(mix) => Arc::new(mix),
+                            Err(e) => return e,
+                        };
+                        let o = self.gate.owners.entry(panel.clone()).or_default();
+                        o.strips = Some(Rc::new(Vec::new()));
+                        o.media = Some(mix);
+                    }
+                }
                 let Some(o) = self
                     .gate
                     .owners
@@ -609,19 +657,22 @@ impl Hub<'_> {
                 });
                 // #499: the media document plays from its time 0 on the live transport.
                 if let Some(mix) = o.media.clone() {
+                    let mut player =
+                        Player::new(mix.clone(), crate::mixdown::planted_of(planted, true));
+                    crate::mixdown::synth::bake(&mut player);
                     o.live = Some(Live {
                         rate: mix.rate,
                         start: sample_at(now),
-                        player: Player::new(mix, crate::mixdown::planted_of(planted, true)),
+                        player,
                         handed: Vec::new(),
                     });
                 }
                 o.granted_by = *serial;
                 // #499: under the test audio backend, the play opens a stream on the default
                 // output and the transport follows its clock.
-                if let Some((mix, piece)) = o.played.clone() {
+                if let Some((mix, piece, doc)) = o.played.clone() {
                     self.advance_audio();
-                    match self.start_audio(panel, mix, piece) {
+                    match self.start_audio(panel, mix, piece, doc) {
                         Ok(p) => {
                             if let Some(o) = self.gate.owners.get_mut(panel) {
                                 o.audio = Some(p);
@@ -636,21 +687,32 @@ impl Hub<'_> {
                 let audio = self.audio_gate(panel);
                 let o = self.gate.owners.get(panel);
                 let running = o.is_some_and(|o| o.voices.iter().any(|v| v.stop.is_none()));
-                let (state, notice) = match audio {
+                let (state, notice, stats) = match audio {
                     Some(a) => a,
-                    None => (if running { "running" } else { "suspended" }, Value::Null),
+                    None => (
+                        if running { "running" } else { "suspended" },
+                        Value::Null,
+                        Value::Null,
+                    ),
                 };
-                json!({"gate": {
+                let mut reply = json!({"gate": {
                     "owner": self.owner_of(panel),
                     "granted_by": o.and_then(|o| o.granted_by),
                     "state": state,
                     "notice": notice,
                     "reserved": reserved().iter().map(|r| r.0).collect::<Vec<_>>(),
-                }})
+                }});
+                // #525: under the test backend, the gate's stats (Device gate: `stats`).
+                if !stats.is_null() {
+                    reply["gate"]["stats"] = stats;
+                }
+                reply
             }
-            GateCall::Output { device: Some(device), from, to } => {
-                self.device_output(device, *from, *to)
-            }
+            GateCall::Output {
+                device: Some(device),
+                from,
+                to,
+            } => self.device_output(device, *from, *to),
             GateCall::Output { from, to, .. } => {
                 let (first, last) = (sample_at(*from), sample_at(*to));
                 let mut mix = vec![0f32; (last - first).max(0) as usize];

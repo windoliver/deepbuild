@@ -6,14 +6,15 @@
 //! then checks the whole set: dependency ranges (the readers of a missing optional dependency
 //! left out), one owner per array, every read resolved, no read of a later phase, no cycle,
 //! legal places, check machine classes and tool entries, one implementation per interface; it
-//! computes each module's digest and the module-set digest. Any failure is a [`SealError`] with
-//! its reason, naming the modules and arrays involved: there is no warning level and no accept
-//! list. A [`Sealed`] registry never changes, and nothing here runs per frame.
+//! computes each module's digest, the module-set digest and the runtime digest. Any failure is a
+//! [`SealError`] with its reason, naming the modules and arrays involved: there is no warning
+//! level and no accept list. A [`Sealed`] registry never changes, and nothing here runs per frame.
 //!
 //! Everything is ordinary data over `BTreeMap`s and sorted `Vec`s: no static, no hash-map order,
 //! nothing read from the machine, as the canvas lint requires.
 
 pub mod core_lists;
+mod implementation;
 pub mod lists;
 mod semver;
 
@@ -23,6 +24,7 @@ use crate::canon::{self, CanonError, NoShape};
 use crate::kinds::Entry;
 use serde_json::{json, Value};
 
+pub use implementation::{Equivalence, Implementation, Pin, StateClass};
 pub use semver::{Range, Semver};
 
 /// The core's version, as `core@<version>` names it in every reply; it is the `deep-canvas`
@@ -142,6 +144,8 @@ impl BuildSet {
 /// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
+    // #540: a lockstep match, Net `net@1`.
+    ("net", "net"),
     ("slab", "scene3d"),
     ("lathe", "scene3d"),
     ("extrude", "scene3d"),
@@ -161,6 +165,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("marks", "data"),
     ("axis", "data"),
     ("scale", "data"),
+    // #226: 3D axes are the data module's too, beside its scales and axes.
+    ("axes3d", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
@@ -229,65 +235,6 @@ pub struct Manifest {
     pub implements: String,
     /// The crate behind the interface (Canvas module: interface and implementation).
     pub implementation: Implementation,
-}
-
-/// How an implementation's results compare with its interface's reference.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Equivalence {
-    /// Every kit fixture gives the reference implementation's hashes.
-    Bit,
-    /// Every behavior fixture lands within the interface's tolerances.
-    Measured,
-}
-
-/// What an implementation's carried state is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StateClass {
-    /// A documented layout any implementation of the interface reads.
-    Canonical,
-    /// Its crate's own bytes, which no other implementation or version loads.
-    BackendBytes,
-}
-
-/// One library an implementation pins.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Pin {
-    pub version: String,
-    pub features: Vec<String>,
-}
-
-/// The implementation a canvas module is of its interface.
-#[derive(Clone, Debug)]
-pub struct Implementation {
-    pub name: String,
-    pub version: Semver,
-    /// crate → its version and features.
-    pub pins: BTreeMap<String, Pin>,
-    pub equivalence: Equivalence,
-    pub state: StateClass,
-}
-
-impl Implementation {
-    /// A bit, canonical implementation pinning nothing, as every shipped module but physics is.
-    pub fn reference(name: &str, version: Semver) -> Implementation {
-        Implementation {
-            name: name.into(),
-            version,
-            pins: BTreeMap::new(),
-            equivalence: Equivalence::Bit,
-            state: StateClass::Canonical,
-        }
-    }
-
-    pub fn to_json(&self) -> Value {
-        json!({
-            "name": self.name,
-            "version": self.version.to_string(),
-            "pins": self.pins.iter().map(|(k, p)| (k.clone(), json!({"version": p.version, "features": p.features}))).collect::<serde_json::Map<_, _>>(),
-            "equivalence": match self.equivalence { Equivalence::Bit => "bit", Equivalence::Measured => "measured" },
-            "state": match self.state { StateClass::Canonical => "canonical", StateClass::BackendBytes => "backend_bytes" },
-        })
-    }
 }
 
 /// A canvas interface: what documents, checks and other canvas modules see of an implementation.
@@ -384,13 +331,31 @@ pub struct Kind {
     /// `(deprecated_since, replaced_by)` once the kind is replaced: it still loads, with a
     /// `deprecated` notice (Item and kind).
     pub deprecated: Option<(String, String)>,
-    /// A preview kind's tracking issue: its stability is `preview` until the issue lands (#412).
-    pub preview: Option<String>,
+    /// A preview kind's history: its stability is `preview` until it is promoted or removed
+    /// (#412, #1802).
+    pub preview: Option<Preview>,
     /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
     pub description: Option<String>,
     /// The param naming an asset whose probe the check reads (#499): the core has the decode
     /// worker probe it, so a module reads an asset without the media module.
     pub probes: Option<String>,
+}
+
+/// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
+/// preview in, and the release by which it is promoted, removed or extended.
+#[derive(Clone, Debug)]
+pub struct Preview {
+    pub tracking: String,
+    pub since: String,
+    pub decide_by: String,
+}
+
+/// A preview kind the module removed (#1802): `family.name@major`, with the kind an item of it
+/// opens as and that kind's params from the item's, or none for a removal with no migration.
+#[derive(Clone, Debug)]
+pub struct Removed {
+    pub kind: String,
+    pub migration: Option<(String, DrawFn)>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -676,15 +641,15 @@ pub struct Report {
 
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
-/// The core's own document check kinds (canvas primitives: Check input). Each reads only the
-/// core's arrays, which canvas modules fill through `contributes_to`, and names no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 11] = [
+/// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
+pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
     "document.layout",
     "document.determinism",
     "geometry.audit",
+    "geometry.shape",
     "film.audit",
     "film.flicker",
     "film.layout",
@@ -746,8 +711,12 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// Its Rust for the deforms and kinds scene3d runs and draws for it (#226).
+    pub fills: Vec<(String, crate::contributed::Fill)>,
     /// The pack fields it reads, each with its check at the pack check (#1720).
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
+    /// The preview kinds it removed (#1802).
+    pub removed: Vec<Removed>,
 }
 
 impl Registrar {
@@ -774,11 +743,26 @@ impl Registrar {
         self
     }
 
-    /// The last kind registered is a preview, tracked by the issue `tracking` (#412).
-    pub fn preview(&mut self, tracking: &str) -> &mut Self {
+    /// The last kind registered is a preview, tracked by the issue `tracking` (#412), since the
+    /// release `since` and decided by the release `decide_by` (#1802).
+    pub fn preview(&mut self, tracking: &str, since: &str, decide_by: &str) -> &mut Self {
         if let Some(k) = self.kinds.last_mut() {
-            k.preview = Some(tracking.into());
+            k.preview = Some(Preview {
+                tracking: tracking.into(),
+                since: since.into(),
+                decide_by: decide_by.into(),
+            });
         }
+        self
+    }
+
+    /// The module removed the preview kind `kind` (`family.name@major`); an item of it opens as
+    /// the kind `migration` names, with the params its function gives (#1802).
+    pub fn removed(&mut self, kind: &str, migration: Option<(&str, DrawFn)>) -> &mut Self {
+        self.removed.push(Removed {
+            kind: kind.into(),
+            migration: migration.map(|(to, params)| (to.into(), params)),
+        });
         self
     }
 
@@ -1150,6 +1134,11 @@ pub enum Fault {
     /// outputs there too (#485): a build without effects leaves scene3d's outputs with no
     /// registry.
     GpuOutputInEffects,
+    /// Leaves the physics implementation out of the runtime digest (#1920).
+    RuntimeOmitsPhysics,
+    /// Hashes each interface's registered shapes into the runtime digest in place of its
+    /// implementation's version and pins (#1920).
+    RuntimeOnlyShapes,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1310,6 +1299,8 @@ pub struct Sealed {
     kinds: crate::kinds::Registry,
     /// A d1 digest over the sorted modules' names, versions and digests.
     pub set_digest: String,
+    /// A d1 digest over each measured or backend_bytes implementation, with its pins (#1920).
+    pub runtime_digest: String,
     /// Each canvas interface, by name, with its digest and the implementation the build chose.
     pub interfaces: Vec<SealedInterface>,
     /// The time the seal's interface checks took, in nanoseconds of the registry's clock; 0
@@ -1330,6 +1321,8 @@ pub struct Sealed {
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
+    /// Each deform and kind a module fills for scene3d (#226), sorted by module then kind.
+    pub fills: Vec<crate::contributed::Sealed>,
 }
 
 /// One outline source the seal admitted: its entry, module, form and Rust (#443).
@@ -1379,6 +1372,7 @@ impl Sealed {
             "core": core_name(),
             "build_set": self.build_set.name(),
             "set_digest": self.set_digest,
+            "runtime_digest": self.runtime_digest,
             "interfaces": self.interfaces.iter().map(|i| (i.name.clone(), i.to_json())).collect::<serde_json::Map<_, _>>(),
             "phases": phases,
             "contributions": self.contributions,
@@ -1503,6 +1497,22 @@ impl Sealed {
             }
             out["kind"] = json!(format!("{full}@{}", step.to));
         }
+        Some(out)
+    }
+
+    /// An item of a preview kind its module removed, as the kind its migration gives (#1802);
+    /// `None` for any other item, and where the removal carries no migration.
+    pub fn unremoved(&self, item: &Value) -> Option<Value> {
+        let text = item.get("kind")?.as_str()?;
+        let removed = self
+            .modules
+            .iter()
+            .flat_map(|m| &m.shapes.removed)
+            .find(|r| r.kind == text)?;
+        let (to, params) = removed.migration.as_ref()?;
+        let mut out = item.clone();
+        out["params"] = params(item.get("params").unwrap_or(&Value::Null));
+        out["kind"] = json!(to);
         Some(out)
     }
 
@@ -2942,7 +2952,9 @@ impl Registry {
                 .filter(|e| e.registry != "ease@1")
                 .collect();
         if eases {
-            core_entries.extend(core_lists::ease_entries(self.fault == Some(Fault::EaseRenumbered)));
+            core_entries.extend(core_lists::ease_entries(
+                self.fault == Some(Fault::EaseRenumbered),
+            ));
         }
         if outputs_elsewhere {
             core_entries.retain(|e| e.registry != "gpu.output@1");
@@ -2981,6 +2993,7 @@ impl Registry {
             })
             .collect();
         outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
+        let fills = crate::contributed::sealed(&shapes[1..]);
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -3015,6 +3028,8 @@ impl Registry {
             self.implementation_of(&m.name, m, &shapes, None, private, &mut interface_ns)?;
         }
         interfaces.sort_by(|a, b| a.name.cmp(&b.name));
+        let runtime_digest = implementation::runtime_digest(&interfaces, self.fault)
+            .map_err(|e| SealError::new("bad_shape", &[], &[], e.to_string()))?;
         let set_digest = d1(&Value::Array(
             modules
                 .iter()
@@ -3041,6 +3056,7 @@ impl Registry {
             left_out_kinds,
             kinds,
             set_digest,
+            runtime_digest,
             interfaces,
             interface_ns,
             registries,
@@ -3050,6 +3066,7 @@ impl Registry {
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
+            fills,
             costs: self
                 .costs
                 .take()
@@ -3084,7 +3101,10 @@ impl Registry {
         let digest = pinned(digest, m).map_err(bad)?;
         let covers = self.fault == Some(Fault::DigestCoversPins);
         if covers {
-            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+            listed.insert(
+                "pins".into(),
+                d1(&m.implementation.to_json()["pins"]).map_err(bad)?,
+            );
         }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
@@ -3098,7 +3118,8 @@ impl Registry {
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
             if covers {
-                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
+                let pins =
+                    d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
                 want_listed.insert("pins".into(), pins);
             }
             if want != digest {
@@ -3163,7 +3184,8 @@ pub(crate) fn id_named(name: &str) -> bool {
         !b.is_empty()
             && b.len() <= 48
             && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
-            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+            && b.iter()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
     })
 }
 
@@ -3203,7 +3225,11 @@ fn may_read(
                 owned_by.unwrap_or(owner)
             ),
         );
-        err.implementations = [reader, owned_by].into_iter().flatten().map(str::to_string).collect();
+        err.implementations = [reader, owned_by]
+            .into_iter()
+            .flatten()
+            .map(str::to_string)
+            .collect();
         err.implementations.sort();
         return Err(err);
     }
@@ -3476,7 +3502,10 @@ fn module_shapes(
         ("tool_entry", &tools, &["tool", "entry"]),
     ] {
         for v in list_of {
-            let name: Vec<String> = keys.iter().map(|k| v[*k].to_string().trim_matches('"').to_string()).collect();
+            let name: Vec<String> = keys
+                .iter()
+                .map(|k| v[*k].to_string().trim_matches('"').to_string())
+                .collect();
             list(format!("{what} {}", name.join(" ")), v)?;
         }
     }
@@ -3488,6 +3517,14 @@ fn module_shapes(
         "tables": tables,
         "tool_entries": tools,
     });
+    // A removal is a shape too; a module with none keeps the digest it had.
+    if !r.removed.is_empty() {
+        whole["removed"] = r
+            .removed
+            .iter()
+            .map(|x| json!({"kind": x.kind, "to": x.migration.as_ref().map(|m| &m.0)}))
+            .collect();
+    }
     // The registries it declares and the entries it fills at the seal (#200), only when it has
     // any, so a module with none keeps the digest it had.
     if let Some(l) = lists {
@@ -3590,7 +3627,10 @@ mod tests {
             feature: name.into(),
             license: "Apache-2.0".into(),
             implements: format!("{name}@1"),
-            implementation: Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+            implementation: Implementation::reference(
+                name,
+                Semver::parse("1.0.0").expect("a version"),
+            ),
         }
     }
 

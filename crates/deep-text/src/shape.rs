@@ -111,6 +111,18 @@ impl std::hash::Hash for Span {
     }
 }
 
+/// #538: the advance of `family`'s `0` in ems: a monospace face's cell at size 1, which a cell
+/// grid spaces its rows to so each glyph sits in its own cell.
+pub fn advance_em(family: &str) -> Option<f32> {
+    use skrifa::MetadataProvider;
+    let face = FACES.iter().find(|f| f.family == family)?;
+    let font = skrifa::FontRef::new(face.bytes).ok()?;
+    let em = f32::from(font.head().ok()?.units_per_em().max(1));
+    let glyph = font.charmap().map('0')?;
+    let metrics = font.glyph_metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    Some(metrics.advance_width(glyph)? / em)
+}
+
 /// The `[size, rise]` ratios of an em a face sets its subscripts or superscripts at, from its
 /// OS/2 table; `None` for a face without one.
 fn script_metrics(family: &str, shift: Shift) -> Option<[f32; 2]> {
@@ -516,15 +528,26 @@ impl Shaper {
     pub fn missing(&mut self, spec: &Spec<'_>, text: &str) -> Vec<String> {
         let run = self.run(spec, text);
         let starts = grapheme_starts(text);
+        // #1965: one pass over the run's glyphs, so a code item's 256 KiB isn't read once a
+        // grapheme.
+        let mut notdef: Vec<usize> = run
+            .glyphs
+            .iter()
+            .filter(|g| g.id == 0)
+            .map(|g| g.grapheme)
+            .collect();
+        notdef.sort_unstable();
+        notdef.dedup();
+        let mut seen = std::collections::BTreeSet::new();
         let mut out: Vec<String> = Vec::new();
-        for (i, start) in starts.iter().enumerate() {
+        for i in notdef {
+            let Some(start) = starts.get(i) else { continue };
             let end = starts.get(i + 1).copied().unwrap_or(text.len());
             let grapheme = &text[*start..end];
             let needs_glyph = grapheme
                 .chars()
                 .any(|c| !c.is_whitespace() && !is_default_ignorable(c));
-            let notdef = run.glyphs.iter().any(|g| g.grapheme == i && g.id == 0);
-            if needs_glyph && notdef && !out.iter().any(|g| g == grapheme) {
+            if needs_glyph && seen.insert(grapheme) {
                 out.push(grapheme.to_string());
             }
         }

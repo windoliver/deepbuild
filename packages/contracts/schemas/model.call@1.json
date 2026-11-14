@@ -1,0 +1,142 @@
+{
+  "title": "model.call@1",
+  "description": "A model call inside a session's turn, as the agent's own transcript records it (#2019): a retry the agent makes of a call the provider refused, with which attempt, its most and the cause its error names, or the model's next reply, which ends the retries. Read from the agent's structured records by its facts' retries entry, never from its text; one record is one event, so a record read twice is one.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "model.call"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "retry",
+            "reply"
+          ],
+          "description": "A retry of the call, or the reply that ends the retries.",
+          "x-closure": {
+            "closed": "a model call is retried or answered",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "For a retry: which attempt it is, from 1."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "For a retry: the most attempts the agent makes."
+        },
+        "cause": {
+          "type": "string",
+          "enum": [
+            "overloaded",
+            "rate_limited",
+            "server_error",
+            "connection",
+            "unknown"
+          ],
+          "description": "For a retry: the cause its error names, by the agent's facts.",
+          "x-closure": {
+            "closed": "the values come from agents that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
+            "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
+            "mark": "extensible"
+          }
+        },
+        "at": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When the agent wrote the record, ms since the Unix epoch: its own time, which orders it among the turn, whenever it was read."
+        },
+        "record": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The record's own identity in the transcript."
+        }
+      },
+      "required": [
+        "outcome",
+        "at",
+        "record"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data",
+    "subject"
+  ],
+  "additionalProperties": false
+}

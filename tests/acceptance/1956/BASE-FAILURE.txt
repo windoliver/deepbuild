@@ -1,0 +1,34 @@
+Base commit: 76e7855c0 ("Merge pull request #2255 from windoliver/claude/issue-1118-mac-after")
+Run: SKIPPED. The surfaces plainly don't exist at the base, so no run was made: the drafting worktree had no target
+folder (a cold deep-show build of r1) and the shared Mac's 1-minute load stood near 350 on 18 cores. The suite
+type-checks (node node_modules/typescript/bin/tsc -p tests/acceptance/1956/tsconfig.json, exit 0, after npm ci).
+Date: 2026-11-10  darwin-arm64
+
+Why each test fails at the base, read from the base's code:
+
+- The pack check refuses every kind with a non-empty `migrate`, or at a major past 1
+  (crates/deep-canvas/src/document/pack_kinds.rs, check_kinds: "migrations as data land with the pack versions task"),
+  with out_of_range at kinds/<kind>/migrate, actual {kind, field: "migrate"}; and `corpus` is not in PACK_KEYS
+  (crates/deep-canvas/src/document/packs.rs), so module_fields::check refuses it as unknown_field at the path `corpus`.
+  Every 2.0.0 and 3.0.0 fixture has both, so each is refused, and those two refusals are all its refusal holds; the
+  suite leaves both out of every refusal it reads. acme/shelf@1.0.0 (migrate {}, no corpus) is #202's format and
+  installs.
+- `migration_stops_at_first_fault` is not a planted name (crates/deep-show/src/main.rs, the `planted` match ends
+  `_ => return None`), so that scenario answers {"ok": false, "code": "bad_input"}.
+- No pack kind migrates at load or on a writer's patch: migrate_item and store_migrations read the sealed registry
+  (crates/deep-canvas/src/document/check.rs, apply.rs), and a pack kind is not in it.
+
+Expected failure per test:
+
+migrate.test.ts
+  × #1956.9deb4e8e …  at "acme/shelf@2.0.0 installs": refused (kinds/shelf.bookcase@2/migrate; unknown_field at corpus)
+refusals.test.ts
+  × #1956.9e619118 …  at "the planted migration acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-depth-25)": refused, but
+                      with nothing but the base's two refusals of whole fields, so no error about depth names case1
+                      and 5
+chain.test.ts
+  × #1956.e6c1b60f …  at "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0) installs": refused, as above
+faults.test.ts
+  × #1956.fd7b382f … all three params …    at "the three-fault migration …": refused with the base's two refusals
+                                           only, so no error names width, shelves or depth with its reason
+  × #1956.fd7b382f … planted check …       at "deep-show run refused the scenario": bad_input (unknown planted)

@@ -1,0 +1,68 @@
+The #1919 suite run once at base commit 35df4523f ("Merge pull request #2280 …"; no implementation of #1919; #2009's,
+#2010's, #2012's, #1918's and #411's merges are there), on macOS arm64 (rustc 1.99.1, Node 24.22.0, vitest 5.0.5), with
+`PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root
+tests/acceptance/1919 --testTimeout=600000 --no-file-parallelism ac1-through-query.test.ts ac2-probes.test.ts
+ac4-machines.test.ts` (the checkout's path redacted to `<checkout>`). The base's deep-physics was built just before
+(`cargo build --locked --bin deep-physics`, 5 min 27 s cold), so the run's own build of it was a no-op.
+
+Run: the three files that drive deep-physics. 6 of 6 tests fail, each at an assertion because the surface is absent,
+none in the harness and none BLOCKED:
+- ac1's two tests: the counting test backend doesn't build: `cargo build --locked -p deep-physics-rapier --bin
+  deep-physics --features test-count-calls` answers "error: the package 'deep-physics-rapier' does not contain this
+  feature: test-count-calls".
+- ac2's two tests: the projectile bakes (its first hit of ball and floor at step 174, the ball's x 10.2428 m there), and
+  then `query` answers `{"ok":false,"code":"bad_input"}`: no call answers physics.query.
+- ac4's first test: the golden is recorded and this Mac's replay passes (`machines: same`), then `query` answers
+  `bad_input`, before the wasm32 leg, which isn't reached. Its second test: `--planted query_machines_any` is
+  `bad_input`, exit 2.
+
+Not run at the base, by the job's brief (a deep-show build takes many minutes): ac3-shapes-mode.test.ts (2 tests),
+which builds deep-show twice. Its surface is absent at the base, so each test would fail there at an assertion:
+deep-show has no cargo features `test-leave-out-physics` or `test-physics-shapes-empty`, so cargo refuses both builds
+and each test's build assertion fails. (The base's every build answers `physics_shapes` with `module_missing`, physics
+shapes being among the modes no build draws yet, so on a build without physics the first test's judge would pass; it is
+the missing build that fails it.)
+
+The type-check, `npx tsc -p tests/acceptance/1919/tsconfig.json`, exits 0.
+
+The run's output, as vitest printed it:
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1919
+
+ ❯ ac2-probes.test.ts (2 tests | 2 failed) 2092ms
+   ❯ #1919.b83c52f8 physics.query against the projectile's bake (2)
+     × #1919.b83c52f8 the ball's x at its first hit passes against 10.19 m ± 0.1 and fails against 11 m ± 0.1 naming the step and the value; a ray down from (5, 3, 0) at step 0 hits the floor at 3.00 m 361ms
+     × #1919.b83c52f8 with the bake deleted the check is BLOCKED, never PASS 13ms
+ ❯ ac4-machines.test.ts (2 tests | 2 failed) 2474ms
+   ❯ #1919.6198ed94 physics.query reports machines: same until the bake's golden matches on its second machine, and any once it has (2)
+     × #1919.6198ed94 same while the golden hasn't matched on its second machine (this Mac's own replay aside), any once wasm32 has matched it 345ms
+     × #1919.6198ed94 a planted result that always reports any fails, naming the probe 38ms
+ ❯ ac1-through-query.test.ts (2 tests | 2 failed) 56ms
+   ❯ #1919.adaa86f8 physics.query reaches the backend only through query() (2)
+     × #1919.adaa86f8 the counting backend sees each physics.query ray, sweep and overlap arrive through query(), one call each 4ms
+     × #1919.adaa86f8 a planted physics.query that calls Rapier's query pipeline directly leaves the count short and fails, naming the call 1ms
+
+ FAIL  ac1-through-query.test.ts > … > the counting backend sees each physics.query ray, sweep and overlap arrive through query(), one call each
+AssertionError: deep-physics builds with --features test-count-calls (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-count-calls): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
++ error: the package 'deep-physics-rapier' does not contain this feature: test-count-calls
+
+ FAIL  ac1-through-query.test.ts > … > a planted physics.query that calls Rapier's query pipeline directly leaves the count short and fails, naming the call
+AssertionError: deep-physics builds with --features test-count-calls (…): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
++ error: the package 'deep-physics-rapier' does not contain this feature: test-count-calls
+
+ FAIL  ac2-probes.test.ts > … > the ball's x at its first hit passes against 10.19 m ± 0.1 and fails against 11 m ± 0.1 naming the step and the value; a ray down from (5, 3, 0) at step 0 hits the floor at 3.00 m
+AssertionError: x at the first hit, expecting 10.19 m ± 0.1: physics.query ran (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  ac2-probes.test.ts > … > with the bake deleted the check is BLOCKED, never PASS
+AssertionError: x at the first hit, its bake deleted: physics.query ran (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  ac4-machines.test.ts > … > same while the golden hasn't matched on its second machine (this Mac's own replay aside), any once wasm32 has matched it
+AssertionError: the probe, no replay: physics.query ran (ok: true): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ FAIL  ac4-machines.test.ts > … > a planted result that always reports any fails, naming the probe
+AssertionError: deep-physics --planted query_machines_any exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Duration  5.12s (tests 97%, transform 2%, import 1%)

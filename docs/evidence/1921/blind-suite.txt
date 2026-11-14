@@ -1,0 +1,34 @@
+# tests/acceptance/1921 (blind commit 1a7d1abe4, unchanged), each file run once on the change at 3dff361b1 with:
+# NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1921 --testTimeout=600000 --no-file-parallelism <file>
+# main had not moved from the base (35df4523f), so this is also the run after merging main.
+
+### ac1-scale-out-of-physics (load { 16.22 15.34 25.85 })
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  09:49:58
+   Duration  3.40s (tests 99%)
+### ac2-each-element-order (load { 15.24 15.15 25.72 })
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  09:50:02
+   Duration  810ms (tests 98%, import 1%, transform 1%)
+### ac3-one-instanced-draw (load { 15.24 15.15 25.72 })
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  09:50:03
+   Duration  30.45s (tests 100%)
+### ac4-one-by-one-twin (load { 16.32 15.43 25.46 })
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  09:50:33
+   Duration  2.85s (tests 99%)
+### ac5-seek-columns (load { 15.49 15.28 25.34 })
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  09:50:36
+   Duration  138.34s (tests 100%)
+### ac6-budget-and-uploads (load { 7.74 11.89 22.42 })
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  09:52:55
+   Duration  18.33s (tests 100%)

@@ -266,6 +266,8 @@ struct Played {
     /// The check's estimate of the view's GPU memory (#2189).
     estimate_bytes: u64,
     seek_ms: Option<f64>,
+    /// #173: the window's bytes on the device, its frames, and those the seek rendered.
+    history: Option<(Option<u64>, u32, u32)>,
     log: Vec<Value>,
     inputs: Vec<Value>,
     input_p95s: Vec<Option<f64>>,
@@ -282,13 +284,18 @@ fn checked(
     planted: Option<Planted>,
 ) -> Result<(Value, Admitted), Value> {
     let raw = read_payload(path).map_err(|issues| json!({"code": "refused", "issues": issues}))?;
+    let window = if args_look.history.on() {
+        args_look.history.window
+    } else {
+        0
+    };
     let a = admit(
         raw.clone(),
         writer,
         DOC_ID,
         size,
         args_look,
-        0,
+        window,
         Path::Copy,
         labels,
         Some((&raw, plants)),
@@ -397,10 +404,10 @@ fn draw(
         0,
     )
     .map_err(|r| refused(r.code, r.path))?;
-    timer.resolve(&mut encoder);
     let cpu = began.elapsed().as_secs_f64() * 1e3;
     device.queue.submit([encoder.finish()]);
     memory::drain(device);
+    timer.resolve_after(device);
     Ok((cpu, timer.read(device)))
 }
 
@@ -460,10 +467,14 @@ fn play(
     )?;
     let limits = a.limits;
     let estimate_bytes = a.fit.bytes();
+    let window = a.fit.history;
     let mut kit = Kit::new(device);
     let mut view = opened(device, &mut kit, &args.look, a, labels, plants, planted)?;
     let mut timer = Timer::new(device);
     let rate = display.map_or(60.0, |d| d.rate);
+    // Frame history beside every other pass (#173), its grid a frame of the play.
+    view.hold_history(&args.look, window, rate.round() as u32, 0)
+        .map_err(|e| refused("bad_input", format!("look: {e}")))?;
     let clock = display.unwrap_or(Display { rate, held: false });
     let per_run = (args.seconds * rate).round().max(1.0) as u64;
     let alone = planted == Some(Planted::TimesEachPassAlone);
@@ -487,6 +498,7 @@ fn play(
         peak_bytes: stub.map(|s| s.gpu_bytes),
         estimate_bytes,
         seek_ms: None,
+        history: None,
         log: Vec::new(),
         inputs: Vec::new(),
         input_p95s: Vec::new(),
@@ -619,13 +631,21 @@ fn play(
     }
     if stub.is_none() {
         played.peak_bytes = peak;
-        // The seek: the scene sought to the middle of its span, rebuilt, and presented.
+        // The seek: the scene sought to the middle of its span, rebuilt, and presented; with
+        // frame history, its window rendered again (#173).
         if fixture == SCENE {
             view.warm(device, &args.look, &[]);
+            if let Some(h) = view.history.as_mut() {
+                h.jump = true;
+            }
             let t = (per_run as f64 / 2.0 * FLICKS_PER_SECOND / rate).round() as i64;
             let began = Instant::now();
             draw(device, &kit, &args.look, &mut view, t, labels, &mut timer)?;
             played.seek_ms = Some(began.elapsed().as_secs_f64() * 1e3);
+            played.history = view.history.as_ref().map(|h| {
+                let bytes = h.row().and_then(|r| r.2);
+                (bytes, h.frames(), h.rendered)
+            });
         }
     }
     Ok(played)
@@ -742,7 +762,8 @@ fn fixture_row(name: &str, p: &Played, reference: bool) -> (Value, Option<Timed>
             Some(b) if b <= limit => Verdict::Pass,
             Some(_) => Verdict::Fail,
         };
-        json!({"limit_bytes": limit, "verdict": same_machine(v, reference).name(), "peak_bytes": p.peak_bytes, "estimate_bytes": p.estimate_bytes})
+        json!({"limit_bytes": limit, "verdict": same_machine(v, reference).name(), "peak_bytes": p.peak_bytes, "estimate_bytes": p.estimate_bytes,
+               "history_bytes": p.history.and_then(|h| h.0)})
     };
     let verdict = worst([
         frame_time
@@ -1194,6 +1215,10 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         );
         let mut reply = json!({"verdict": verdict, "fixtures": fixtures, "input": input,
                                "calibration": calibration, "asks": asks, "first_frame_wait": opens});
+        // #173: the seek rebuild renders the window the scene played with.
+        if let (Some(ms), Some((_, window, rendered))) = (scene.seek_ms, scene.history) {
+            reply["seek_rebuild"] = json!({"ms": ms, "window": window, "rendered": rendered});
+        }
         let mut log = scene.log;
         if let Some((a, b)) = separate {
             log.extend(a.log);

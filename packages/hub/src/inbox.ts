@@ -112,9 +112,17 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   for (const o of (reply.result.offers ?? []) as Offer[]) say(`${o.offer}  offered  ${o.session}  save \`${o.command}\` as a decision for ${o.scope}  (deep inbox save ${o.offer})`);
   // The one count, last, as deep and deep status end, in words that agree with it (#2026). Read from a database, it's
   // the count the hub last held, said under the line that says so; never "Nothing needs you" while the hub is down.
-  if (asks.length) say(asksNeedYou(asks.length));
+  // #2028's planted count adds the list's unread rows, as deep status reads them, to the asks.
+  const count = asks.length + (down === undefined && activePlant() === 'inbox-adds-unread' ? await unreadRows() : 0);
+  if (count) say(asksNeedYou(count));
   else if (down === undefined) say('Nothing needs you');
   return down === undefined ? 0 : 3;
+}
+
+/** The list's unread rows as deep status reads them, for #2028's planted count. */
+async function unreadRows(): Promise<number> {
+  const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'rows.read', {});
+  return 'error' in reply ? 0 : ((reply.result.rows ?? []) as ListRow[]).filter((r) => r.unread).length;
 }
 
 /** `deep race <issue>` (#352): a race you start on an issue, from your own terminal; exit 0 started, 2 a usage error, 3 the hub unreached, 1 refused. */

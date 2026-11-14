@@ -1,0 +1,19 @@
+At base cbd5e4f98 (main), on 2026-11-11, with deep-show built as the #409 suite's BASE-FAILURE.txt says, and the outside film gate saved outside the repository and named in DEEP_FILM_GATE (its SHA-256 the pinned 2d375cc2…9e52; uv 0.13.7 and FFmpeg 9.0.2 at /opt/homebrew/bin):
+
+    $ node node_modules/typescript/bin/tsc -p tests/acceptance/409-oracle/tsconfig.json    (exit 0)
+    $ DEEP_FILM_GATE=<path> node scripts/throttle.mjs test --wait 3 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/409-oracle --testTimeout=600000 --no-file-parallelism
+          Tests  1 failed (1)
+       Duration  79.35s
+
+    AC2 #409.c9b3929c: AssertionError: the slow film: 0 rows come from the brief's craft check motion_share, not one: []
+
+Both films were presented and exported, and the gate read both exports before the app's measure was asked for: the base fails at its missing motion_share row and measure. A scratch run of the same films at the base (not kept) printed the gate's reports on our exports:
+
+    slow   (9 s):  fast_ratio 0      cuts at [3, 6] s       cross-fades at []     -> red, as its slow-push test asks
+    lively (12 s): fast_ratio 0.2034 cuts at [4] s          cross-fades at [8] s  -> green, as its punch test asks
+
+0.2034 is 24 / 118, the README's count: 143 pairs at 12 fps less the cut and the 24 cross-fade pairs, 24 of them the two sweeps; the gate found the timeline's cut and cross-fade and no others. The exports are 640 × 360 yuv420p H.264 at 12/1 fps, 144 frames for the lively film.
+
+Without the gate (no DEEP_FILM_GATE, nothing at ~/Library/Caches/deepbuild/film-gate/film_gate.py) the test fails in about a second, before any build is used:
+
+    AssertionError: BLOCKED: the outside film gate isn't at /Users/<you>/Library/Caches/deepbuild/film-gate/film_gate.py; unblock: save the outside film gate the #409 Oracle page pins (doneright/oracles/issues/409.md on branch doneright of DeepBuildAI/deepbuild: its scripts/film_gate.py) at …, or name it in DEEP_FILM_GATE

@@ -27,7 +27,13 @@ pub fn op_issue(i: &OpIssue) -> Issue {
     let actual = i.actual.clone().unwrap_or(Value::Null);
     // #544: a read a logic item doesn't declare names its close declared names as the canvas
     // does an unknown kind's.
-    let close = actual.get("close").and_then(Value::as_array).into_iter().flatten().map(|n| json!({"name": n})).collect();
+    let close = actual
+        .get("close")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|n| json!({"name": n}))
+        .collect();
     let issue = match &i.item {
         Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
         None => Issue::envelope(i.code, i.path.clone(), actual, &what),
@@ -247,7 +253,10 @@ impl<'a> Hub<'a> {
         }
         // Planted (#504): a document with controls runs a program through the sandbox each frame.
         if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
-            && self.forms.get(&e.doc).is_some_and(|f| f.get("controls").is_some())
+            && self
+                .forms
+                .get(&e.doc)
+                .is_some_and(|f| f.get("controls").is_some())
         {
             self.sandbox.runs += 1;
         }
@@ -255,7 +264,9 @@ impl<'a> Hub<'a> {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
         // #544's planted start_on: a run starts at the session's first frame at or after it.
-        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame) && !self.first_frames.contains_key(&e.doc) {
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame)
+            && !self.first_frames.contains_key(&e.doc)
+        {
             self.first_frames.insert(e.doc.clone(), t);
             if let Some(mut d) = session.document().cloned() {
                 crate::logic::from_first_frame(&mut d, t);
@@ -312,11 +323,14 @@ impl<'a> Hub<'a> {
         // #535: a logic column's row whose value goes out of range raises column.out_of_range at
         // the frame of the step its excursion begins.
         if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
-            list.extend(
-                deep_canvas::columns::raised_at(doc, t)
-                    .iter()
-                    .map(|i| i.to_json()),
-            );
+            // #537: and scene3d's readers', an instancer's columns and a line's points; #538: and
+            // the cell grid's, keyed copy's and flip's, in the session's locale.
+            let raised = [
+                deep_canvas::columns::raised_at(doc, t),
+                deep_canvas_scene3d::arrays::raised_at(doc, t),
+                crate::logic::raised_at(doc, Some(t), view[deep_canvas::schedule::LOCALE].as_str().unwrap_or("en")),
+            ];
+            list.extend(raised.iter().flatten().map(|i| i.to_json()));
         }
         if !e.arrays.is_empty() {
             // #497: each named array as this frame read it.
@@ -325,12 +339,29 @@ impl<'a> Hub<'a> {
                 .iter()
                 .map(|name| {
                     let v = evaluated.array(&self.sched, name);
-                    let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
-                    let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
-                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                    let n = v
+                        .as_ref()
+                        .and_then(|v| v.as_typed::<i64>())
+                        .map(|n| json!(*n));
+                    let x = v
+                        .as_ref()
+                        .and_then(|v| v.as_typed::<f64>())
+                        .map(|x| json!(*x));
+                    // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
+                    let doc = evaluated.document();
+                    let bands = || {
+                        doc.and_then(|d| {
+                            deep_canvas::columns::map(d.get("arrays")?.get(name)?, t, None, false)
+                        })
+                        .map(|m| json!(m.values))
+                    };
+                    (name.clone(), n.or(x).or_else(bands).unwrap_or(Value::Null))
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
+        }
+        if !e.paths.is_empty() {
+            reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
         }
         if self.startup.test_build {
             reply["access"] = json!(report
@@ -340,14 +371,20 @@ impl<'a> Hub<'a> {
                 .collect::<Vec<_>>());
         }
         // #493: a 2D film's shots: the sides its frame draws, and the film block.
-        let reduced = e.view.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+        let reduced = e
+            .view
+            .get("reduced_motion")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let program = crate::film::program_of(&self.sched, evaluated);
         let document = evaluated.document().cloned();
         let sides = match (&program, &document) {
             (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
             _ => None,
         };
-        let drawing = if e.pixels || e.film {
+        // #507: the timeline position the frame at this clock time shows.
+        reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
+        let drawing = if e.pixels || e.film || e.texts {
             drawing_of(&self.sched, evaluated)
         } else {
             None
@@ -364,13 +401,26 @@ impl<'a> Hub<'a> {
         if e.film {
             let glyphs = drawing
                 .as_ref()
-                .and_then(|d| self.renderer.prepare_drawing(d, &self.scenario.evidence).ok())
+                .and_then(|d| {
+                    self.renderer
+                        .prepare_drawing(d, &self.scenario.evidence)
+                        .ok()
+                })
                 .map(|d| d.glyphs())
                 .unwrap_or_default();
             reply["film"] = match (&program, &document) {
                 (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
                 _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
             };
+        }
+        if e.texts {
+            reply["texts"] = Value::Object(
+                drawing
+                    .as_ref()
+                    .and_then(|d| d.drawing.as_deref())
+                    .map(crate::film_audit::drawn_texts)
+                    .unwrap_or_default(),
+            );
         }
         let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self
@@ -431,9 +481,15 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let rgba = if self.renderer.caption.is_some() {
             // #502: the caption layer draws over every item and under the status marks.
-            let mut rgba = self.renderer.raster(&drawn.part(drawn.view, true, false), size, self.ground(opaque));
+            let mut rgba = self.renderer.raster(
+                &drawn.part(drawn.view, true, false),
+                size,
+                self.ground(opaque),
+            );
             self.caption_over(&mut rgba, size);
-            let status = self.renderer.raster(&drawn.part(drawn.view, false, true), size, None);
+            let status = self
+                .renderer
+                .raster(&drawn.part(drawn.view, false, true), size, None);
             snapshot::over(&mut rgba, &status);
             rgba
         } else {
@@ -466,19 +522,20 @@ impl<'a> Hub<'a> {
         sides: &crate::film::Sides,
         doc: &Value,
     ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
-        let (rgba, status, size) = self.film_rgba(drawing, size, sides, doc, true)?;
+        let (rgba, status, size) = self.film_rgba(drawing, size, sides, doc, (true, None))?;
         Ok((self.put_png(rgba, size)?, status, size))
     }
 
     /// #501: the raster [`Hub::film_png`] stores, as [`Hub::canonical_rgba`] is to
-    /// [`Hub::canonical_png`].
+    /// [`Hub::canonical_png`]; an export's (#157) opaque sides each through their look's print
+    /// finish at `print_at` (its grain), as the canvas shows them.
     pub(crate) fn film_rgba(
         &mut self,
         drawing: &Painted,
         size: Option<[u16; 2]>,
         sides: &crate::film::Sides,
         doc: &Value,
-        opaque: bool,
+        (opaque, print_at): (bool, Option<i64>),
     ) -> Result<(Vec<u8>, Drawn, [u16; 2]), Unfit> {
         let drawn = self
             .renderer
@@ -490,7 +547,14 @@ impl<'a> Hub<'a> {
         let mut pictures = Vec::with_capacity(sides.sides.len());
         for side in &sides.sides {
             let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
-            let mut rgba = self.renderer.raster(&part, size, ground);
+            let printed = match print_at
+                .filter(|_| opaque)
+                .and_then(|t| Some((t, self.print_look(doc, side.look.as_deref())?)))
+            {
+                Some((t, def)) => self.print_part(&def, doc, &part, size, t)?,
+                None => None,
+            };
+            let mut rgba = printed.unwrap_or_else(|| self.renderer.raster(&part, size, ground));
             if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
                 crate::film::finish(&mut rgba, map);
             }
@@ -511,11 +575,7 @@ impl<'a> Hub<'a> {
     /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
     /// store (#1162's way).
     fn tone_of(&self, doc: &Value, name: &str) -> Option<deep_canvas_marks::finish::ToneMap> {
-        let sha = doc.pointer(&format!("/assets/{name}/sha256"))?.as_str()?;
-        let bytes = (sha.len() == 64)
-            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
-            .flatten()?;
-        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        let def = self.look_named(doc, name)?;
         deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
@@ -564,6 +624,7 @@ impl<'a> Hub<'a> {
         let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
         let mut out = Vec::with_capacity(f.count);
         let mut revised_now = false;
+        let mut seen = BTreeMap::new();
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -594,6 +655,7 @@ impl<'a> Hub<'a> {
                 break;
             };
             let view = session_view(session, &Map::new());
+            let before = f.timings.then(|| crate::timings::mappings(&self.sched, session));
             let _ = self.sched.take_json();
             let frame_started = Instant::now();
             let (ran, allocs) =
@@ -613,6 +675,10 @@ impl<'a> Hub<'a> {
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
+            if let (Some(before), Some(doc)) = (&before, self.sessions[&f.doc].document()) {
+                let after = crate::timings::mappings(&self.sched, &self.sessions[&f.doc]);
+                crate::timings::add(&mut frame, (doc, before, &after, t), &mut seen);
+            }
             revised_now = false;
             let mut capture = 0;
             if f.pixels {
@@ -975,10 +1041,12 @@ fn cell_grids(
                     color: *c,
                 })
                 .collect();
+            let text = row.text.trim_end().to_string();
             out.push(mark(Mark::Text {
                 item: id.clone(),
                 spec: scene::TextSpec {
-                    text: row.text.trim_end().to_string(),
+                    spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
+                    text,
                     font: "mono".into(),
                     family: Some(deep_text::Role::Mono.family()),
                     fallback: Vec::new(),
@@ -990,7 +1058,6 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
-                    spans: Vec::new(),
                 },
                 origin: [g.origin[0], y],
                 role: None,
@@ -1002,11 +1069,164 @@ fn cell_grids(
     out
 }
 
-/// Each vector writing on at t (#1162; Vector and formula `vector@1`: write_on), drawn as the
-/// write draws it: the whole outline marks2d draws for it gives way to each of its paths as the
-/// vector module's lowering writes them at the item's evaluated progress (outline first, then
-/// fill), from the SVG the evidence store's holder inlined, in the look's roles. `None` when no
-/// vector is mid-write.
+/// #220: each match morph between two vector items as a frame draws it: before its window only its
+/// from item, after it only its to item, and inside it each piece in place of both, a shape in the
+/// document's u filled in the role of the item it comes from at the piece's opacity.
+fn morphed_vectors(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+    doc: &Value,
+    frame: &deep_canvas_marks::scene::Frame,
+) -> Option<deep_canvas_marks::scene::Frame> {
+    use deep_canvas::schedule::core_ops::Fields;
+    use deep_canvas_marks::path::Verb;
+    use deep_canvas_marks::scene::{Drawn, Fill, Mark};
+    use deep_canvas_motion::morph;
+    let program = crate::film::program_of(sched, session)?;
+    if program.betweens.is_empty() {
+        return None;
+    }
+    let t = session.t();
+    let fields = |id: &str| -> Option<Value> {
+        let item = doc.pointer(&format!("/items/{id}"))?;
+        (item["kind"].as_str() == Some("vector@1")).then_some(())?;
+        session
+            .read(sched, "core.fields", Some(id))
+            .and_then(|(v, _)| v.as_typed::<Fields>())
+            .map(|f| f.to_json())
+    };
+    let rgb = |role: &str| -> Option<[u8; 3]> {
+        let c = session.look().get(role)?.as_array()?;
+        let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
+        Some([channel(0)?, channel(1)?, channel(2)?])
+    };
+    // Where marks2d placed each vector's outline: its path mark's offset, as a write-on reads it.
+    let mut offsets: BTreeMap<&str, [f64; 2]> = BTreeMap::new();
+    for m in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+        if let Mark::Path { item, offset, .. } = &m.mark {
+            offsets.entry(item.as_str()).or_insert(*offset);
+        }
+    }
+    let parts = |id: &str, item: &Value| -> Vec<morph::Part> {
+        let [dx, dy] = offsets.get(id).copied().unwrap_or([0.0, 0.0]);
+        morph::vector_parts(id, item)
+            .into_iter()
+            .map(|mut p| {
+                for s in &mut p.shape {
+                    for q in &mut s.points {
+                        *q = [q[0] + dx, q[1] + dy];
+                    }
+                }
+                p
+            })
+            .collect()
+    };
+    // Each item's marks dropped, and for the from item of an open window, the pieces drawn there.
+    let mut dropped: BTreeMap<String, Option<Vec<Arc<Drawn>>>> = BTreeMap::new();
+    let mut mix = [0u8; 8];
+    for b in &program.betweens {
+        let (Some(from), Some(to)) = (fields(&b.from), fields(&b.to)) else {
+            continue;
+        };
+        if t <= b.start {
+            dropped.insert(b.to.clone(), None);
+            continue;
+        }
+        if t >= b.end {
+            dropped.insert(b.from.clone(), None);
+            continue;
+        }
+        let p = b.progress(t);
+        let role = |item: &Value| {
+            item.pointer("/params/outline/role")
+                .and_then(Value::as_str)
+                .unwrap_or("ink")
+                .to_string()
+        };
+        let (role_a, role_z) = (role(&from), role(&to));
+        let pieces = morph::pieces(
+            &parts(&b.from, &from),
+            &parts(&b.to, &to),
+            &b.pairs,
+            b.unpaired,
+            p,
+        );
+        let marks = pieces
+            .iter()
+            .filter_map(|piece| {
+                let color = rgb(if piece.from.is_some() {
+                    &role_a
+                } else {
+                    &role_z
+                })?;
+                let mut verbs = Vec::new();
+                for s in &piece.shape {
+                    for (i, q) in s.points.iter().enumerate() {
+                        verbs.push(if i == 0 {
+                            Verb::Move(*q)
+                        } else {
+                            Verb::Line(*q)
+                        });
+                    }
+                    if s.closed {
+                        verbs.push(Verb::Close);
+                    }
+                }
+                Some(Arc::new(Drawn {
+                    mark: Mark::Shape {
+                        item: b.from.clone(),
+                        verbs,
+                        fill: Some((Fill::Solid(color), piece.opacity.clamp(0.0, 1.0))),
+                        stroke: None,
+                    },
+                    clip: None,
+                    scopes: Vec::new(),
+                }))
+            })
+            .collect();
+        dropped.insert(b.from.clone(), Some(marks));
+        dropped.insert(b.to.clone(), None);
+        for (m, x) in mix.iter_mut().zip(p.to_bits().to_le_bytes()) {
+            *m ^= x;
+        }
+    }
+    if dropped.is_empty() {
+        return None;
+    }
+    let owner = |m: &Drawn| match &m.mark {
+        Mark::Path { item, .. } | Mark::Shape { item, .. } => Some(item.clone()),
+        _ => None,
+    };
+    let mut frame = frame.clone();
+    for layer in &mut frame.layers {
+        if !layer
+            .marks
+            .iter()
+            .any(|m| owner(m).is_some_and(|i| dropped.contains_key(&i)))
+        {
+            continue;
+        }
+        let mut marks = Vec::with_capacity(layer.marks.len());
+        for m in &layer.marks {
+            match owner(m).and_then(|i| dropped.get_mut(&i)) {
+                None => marks.push(m.clone()),
+                // The pieces stand where the from item's first mark stood.
+                Some(pieces) => marks.extend(pieces.take().unwrap_or_default()),
+            }
+        }
+        layer.marks = marks.into_iter().collect();
+        for (k, x) in layer.key.0.iter_mut().zip(mix) {
+            *k ^= x;
+        }
+    }
+    Some(frame)
+}
+
+/// Each vector at t, drawn as its lowering draws it (#1162; Vector and formula `vector@1`): the whole
+/// outline marks2d draws for it gives way to each of its paths, so a glyph's counters stay open
+/// (#220), and while it writes on, to each path as the lowering writes it at the item's evaluated
+/// progress (outline first, then fill); from the SVG the evidence store's holder inlined, in the
+/// look's roles. `None` when the frame draws no vector.
 fn written_vectors(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &DocSession,
@@ -1038,18 +1258,16 @@ fn written_vectors(
             continue;
         };
         let params = &fields["params"];
-        let Some(progress) = params.pointer("/write_on/progress").and_then(Value::as_f64) else {
-            continue;
-        };
+        let progress = params
+            .pointer("/write_on/progress")
+            .and_then(Value::as_f64)
+            .unwrap_or(1.0);
         let (Some(src), Some(map)) = (
             params.pointer("/outline/svg").and_then(Value::as_str),
             params.as_object(),
         ) else {
             continue;
         };
-        if progress >= 1.0 {
-            continue;
-        }
         let classes: Vec<String> = params["parts"]
             .as_array()
             .into_iter()
@@ -1187,6 +1405,16 @@ pub(crate) fn drawing_of(
         });
     }
     if let Some(d) = &mut drawing {
+        if let Some(frame) = morphed_vectors(sched, session, doc, &d.frame) {
+            *d = Arc::new(Drawing {
+                frame,
+                runs: d.runs.clone(),
+                animated: d.animated.clone(),
+                built: d.built,
+                damage: Vec::new(),
+                basis: None,
+            });
+        }
         if let Some(frame) = written_vectors(sched, session, doc, &d.frame) {
             *d = Arc::new(Drawing {
                 frame,
@@ -1407,7 +1635,12 @@ mod story_tests {
             (2 * SECOND, "30", "2002", "140", "100", 140.0),
         ] {
             live.frame(&mut s, t, &default_view(&doc));
-            let refused: Vec<_> = live.report.issues.iter().map(|i| (i.code, &i.path)).collect();
+            let refused: Vec<_> = live
+                .report
+                .issues
+                .iter()
+                .map(|i| (i.code, &i.path))
+                .collect();
             assert!(refused.is_empty(), "at {t}: {refused:?}");
             let drawing = live
                 .value(&s, "marks2d.frame", None)

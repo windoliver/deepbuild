@@ -1,0 +1,120 @@
+Issue: #2203
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Acceptance tests: independent draft from the issue, design and pristine base.
+Built first in the checkout, by the caller: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook
+Command: NO_COLOR=1 node scripts/throttle.mjs test --wait 600 -- scripts/lease node node_modules/vitest/vitest.mjs run tests/acceptance/2203/temp-home.test.ts
+Date: 2026-11-12  macOS 27.2  Node v24.22.2  vitest 5.0.5
+Paths: <checkout> is the checkout the run was made in. /private/tmp/dh2203-* and /Users/Shared/dh2203-* are the run's
+  own folders, removed at its end. gui/<uid> is the user's launchd domain as the stand-in was handed it.
+Exit code: 1
+Result: Test Files 1 failed (1); Tests 2 failed | 2 passed (4). Duration 1.5 s.
+
+Failed, each at its first expect, as the issue says of the base ("Today the stand-in logs a bootstrap of the temp
+home's plist"):
+  #2203.3f4ab016 at temp-home.test.ts:18: deep hub start in a temp home, no launcher named, logged the bootstrap.
+  #2203.ca54c4b1 at temp-home.test.ts:39: deep inbox in an empty temp home logged the bootstrap through setup. Its
+    control had passed: the same command with the stand-in under a temp folder logged one too. The line
+    "BLOCKED: ENOENT ... control.token" in its output is deep inbox's own, said of a hub that isn't running, after
+    setup; it is not this suite's BLOCKED.
+Passed, as behavior that must not change; their wrong programs are the twins, which this job has not run:
+  #2203.e7d67ec1 (a real home loads as before) and #2203.c433bc9f (a test that names a launcher is unchanged).
+
+The first output line is scripts/lease's: the run had no hub to lease from, so it ran unleased, under the throttle's
+test grant.
+
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run tests/acceptance/2203/temp-home.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2203/temp-home.test.ts (4 tests | 2 failed) 1351ms
+   × #2203.3f4ab016 a temp home loads nothing: deep hub start there, with no launcher named and a launchctl outside every temp folder first on PATH, logs no bootstrap and exits 3 saying a temp home gets no login service 254ms
+   × #2203.ca54c4b1 the same through setup: deep inbox in that home, with no .deepbuild, logs no bootstrap 619ms
+   ✓ #2203.e7d67ec1 a real home loads as before: deep hub start in a home outside every temp folder, with the same stand-in, logs the bootstrap of that home's plist 217ms
+   ✓ #2203.c433bc9f a test that names a launcher is unchanged: deep hub start in a temp home that names one, as #1359's and #1002's suites do, hands it the home's service definition, and launchctl logs no bootstrap 211ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2203/temp-home.test.ts > #2203.3f4ab016 a temp home loads nothing: deep hub start there, with no launcher named and a launchctl outside every temp folder first on PATH, logs no bootstrap and exits 3 saying a temp home gets no login service
+AssertionError: deep hub start in a home under a temp folder reached launchctl bootstrap, where that home gets no login service
+$ HOME=/private/tmp/dh2203-M3S0dm/h PATH=/Users/Shared/dh2203-vVRikK/bin:/usr/bin:/bin deep hub start
+exit 3
+stdout: nothing
+stderr:
+  | deep hub start: launchctl:
+the launchctl stand-in logged:
+  | launchctl bootstrap gui/<uid> /private/tmp/dh2203-M3S0dm/h/Library/LaunchAgents/com.deepbuild.hub.plist
+  | launchctl print gui/<uid>/com.deepbuild.hub
+  | launchctl kickstart gui/<uid>/com.deepbuild.hub
+(end of the run): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "launchctl bootstrap gui/<uid> /private/tmp/dh2203-M3S0dm/h/Library/LaunchAgents/com.deepbuild.hub.plist",
++ ]
+
+ ❯ tests/acceptance/2203/temp-home.test.ts:18:154
+     16|   const r = deep({ home, bin }, 'hub', 'start');
+     17|   // The base's failure comes first: today the stand-in logs a bootstr…
+     18|   expect(bootstraps(bin), `deep hub start in a home under a temp folde…
+       |                                                                                                                                                          ^
+     19|   expect(r.code, `deep hub start in a home under a temp folder exits 3…
+     20|   expect(r.stderr, `deep hub start in a home under a temp folder says …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2203/temp-home.test.ts > #2203.ca54c4b1 the same through setup: deep inbox in that home, with no .deepbuild, logs no bootstrap
+AssertionError: deep inbox in a home under a temp folder, with no .deepbuild, reached launchctl bootstrap through setup
+$ HOME=/private/tmp/dh2203-NfHit6/h PATH=/Users/Shared/dh2203-8zKZP3/bin:/usr/bin:/bin deep inbox
+exit 3
+stdout: nothing
+stderr:
+  | deep hub start: launchctl:
+  | DeepBuild's hooks are in Claude Code's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.
+  | deep setup: the hub didn't start through its login service; deep doctor names what is missing.
+  | BLOCKED: ENOENT: no such file or directory, open '/private/tmp/dh2203-NfHit6/h/.deepbuild/control.token'
+the launchctl stand-in logged:
+  | launchctl bootstrap gui/<uid> /private/tmp/dh2203-NfHit6/h/Library/LaunchAgents/com.deepbuild.hub.plist
+  | launchctl print gui/<uid>/com.deepbuild.hub
+  | launchctl kickstart gui/<uid>/com.deepbuild.hub
+(end of the run): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "launchctl bootstrap gui/<uid> /private/tmp/dh2203-NfHit6/h/Library/LaunchAgents/com.deepbuild.hub.plist",
++ ]
+
+ ❯ tests/acceptance/2203/temp-home.test.ts:39:146
+     37|   const bin = standIns(realFolder());
+     38|   const r = deep({ home, bin }, 'inbox');
+     39|   expect(bootstraps(bin), `deep inbox in a home under a temp folder, w…
+       |                                                                                                                                                  ^
+     40| }, 300_000);
+     41|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  17:21:04
+   Duration  1.47s (tests 98%, transform 1%)
+
+exit 1
+
+=== The same tests read by the lanes' rule for a failure at an assertion ===
+Command: DEEP_PROOF_VITEST_REPORT=<scratch>/report.jsonl NO_COLOR=1 node scripts/throttle.mjs test --wait 600 -- scripts/lease node node_modules/vitest/vitest.mjs run --reporter=<checkout>/scripts/proof-vitest-reporter.mjs tests/acceptance/2203/temp-home.test.ts
+Exit code: 1
+Read with a throwaway copy of frames, asserted and atAssertion from scripts/proof-runs.mjs, over the report that
+scripts/proof-vitest-reporter.mjs wrote, one line a test:
+
+{"type":"fail","tag":"#2203.3f4ab016","atAssertion":true,"errorName":"AssertionError","firstFrame":"tests/acceptance/2203/temp-home.test.ts","cause":"deep hub start in a home under a temp folder reached launchctl bootstrap, where that home gets no login service"}
+{"type":"fail","tag":"#2203.ca54c4b1","atAssertion":true,"errorName":"AssertionError","firstFrame":"tests/acceptance/2203/temp-home.test.ts","cause":"deep inbox in a home under a temp folder, with no .deepbuild, reached launchctl bootstrap through setup"}
+{"type":"pass","tag":"#2203.e7d67ec1"}
+{"type":"pass","tag":"#2203.c433bc9f"}
+end

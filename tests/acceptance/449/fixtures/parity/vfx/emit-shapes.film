@@ -1,0 +1,131 @@
+{
+  "format": 1,
+  "id": "parity-emit-shapes",
+  "profile": "film",
+  "title": "Emit shapes",
+  "description": "Ten particle emitters in a row, each bursting 4,096 particles at 0 s that hold still where they are born: a disk and a ring on volume, then a sphere, a box, a cylinder and a capsule each on volume and on surface.",
+  "size": [480, 270],
+  "seed": 449,
+  "camera": "cam",
+  "requires": { "modules": { "scene3d": "^1", "effects": "^1" } },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "transport": { "span": "4s" },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a00",
+      "params": { "projection": "perspective", "position": [0, 4, 22], "target": [0, 1.2, 0], "fov": 60 }
+    },
+    "disk-volume": {
+      "id": "disk-volume", "kind": "particles@1", "layer": "main", "name": "Disk, volume", "order": "a01",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": "disk", "radius": 1, "on": "volume", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-a" }]
+      },
+      "at": { "pos": [-11.25, 1.5, 0] }
+    },
+    "ring-volume": {
+      "id": "ring-volume", "kind": "particles@1", "layer": "main", "name": "Ring, volume", "order": "a02",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "ring": { "r": 1, "inner_r": 0.5 } }, "on": "volume", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-a" }]
+      },
+      "at": { "pos": [-8.75, 1.5, 0] }
+    },
+    "sphere-volume": {
+      "id": "sphere-volume", "kind": "particles@1", "layer": "main", "name": "Sphere, volume", "order": "a03",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": "sphere", "radius": 1, "on": "volume", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-a" }]
+      },
+      "at": { "pos": [-6.25, 1.5, 0] }
+    },
+    "sphere-surface": {
+      "id": "sphere-surface", "kind": "particles@1", "layer": "main", "name": "Sphere, surface", "order": "a04",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": "sphere", "radius": 1, "on": "surface", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-b" }]
+      },
+      "at": { "pos": [-3.75, 1.5, 0] }
+    },
+    "box-volume": {
+      "id": "box-volume", "kind": "particles@1", "layer": "main", "name": "Box, volume", "order": "a05",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "box": { "size": [2, 1, 0.5] } }, "on": "volume", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-a" }]
+      },
+      "at": { "pos": [-1.25, 1.5, 0] }
+    },
+    "box-surface": {
+      "id": "box-surface", "kind": "particles@1", "layer": "main", "name": "Box, surface", "order": "a06",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "box": { "size": [2, 1, 0.5] } }, "on": "surface", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-b" }]
+      },
+      "at": { "pos": [1.25, 1.5, 0] }
+    },
+    "cylinder-volume": {
+      "id": "cylinder-volume", "kind": "particles@1", "layer": "main", "name": "Cylinder, volume", "order": "a07",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "cylinder": { "r": 0.5, "h": 2 } }, "on": "volume", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-a" }]
+      },
+      "at": { "pos": [3.75, 1.5, 0] }
+    },
+    "cylinder-surface": {
+      "id": "cylinder-surface", "kind": "particles@1", "layer": "main", "name": "Cylinder, surface", "order": "a08",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "cylinder": { "r": 0.5, "h": 2 } }, "on": "surface", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-b" }]
+      },
+      "at": { "pos": [6.25, 1.5, 0] }
+    },
+    "capsule-volume": {
+      "id": "capsule-volume", "kind": "particles@1", "layer": "main", "name": "Capsule, volume", "order": "a09",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "capsule": { "r": 0.5, "h": 1 } }, "on": "volume", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-a" }]
+      },
+      "at": { "pos": [8.75, 1.5, 0] }
+    },
+    "capsule-surface": {
+      "id": "capsule-surface", "kind": "particles@1", "layer": "main", "name": "Capsule, surface", "order": "a10",
+      "params": {
+        "count": 4096,
+        "emit": { "shape": { "capsule": { "r": 0.5, "h": 1 } }, "on": "surface", "bursts": [{ "t": "0s", "count": 4096 }] },
+        "life": [10, 10],
+        "motion": { "ballistic": { "velocity": [0, 0, 0], "gravity": [0, 0, 0], "drag": 0 } },
+        "draw": "dot", "size": 2, "opacity": 1, "color": [{ "at": 0, "role": "spark-b" }]
+      },
+      "at": { "pos": [11.25, 1.5, 0] }
+    }
+  }
+}

@@ -3,7 +3,8 @@
 //! (`test.sim.b`, measured, with backend_bytes state) lands a hair off A's answers, as another
 //! backend would. Both register as the canvas module `test.sim`, so their arrays share names: the
 //! public `test.sim.pos`, twice an item's `value`, and the private `test.sim.scratch`. Each of B's
-//! variants changes one thing: an array's type or name, a false `bit`, or an answer 2% off.
+//! variants changes one thing: an array's type or name, a false `bit`, or an answer 2% off. Issue
+//! #1920 adds A and B at version 1.0.1 and B with its pin's feature changed, for the runtime digest.
 
 use std::collections::BTreeMap;
 
@@ -135,6 +136,31 @@ pub fn b() -> Module {
         manifest: measured("test.sim.b"),
         register: |r| shapes(r, "test.sim.pos", "f32", "test.sim.scratch", near),
     }
+}
+
+/// `m` with its implementation at version 1.0.1 and nothing else changed (#1920).
+fn at_1_0_1(mut m: Module) -> Module {
+    m.manifest.implementation.version = Semver::parse("1.0.1").expect("a version");
+    m
+}
+
+/// A at version 1.0.1: still bit and canonical, with the same shapes and answers (#1920).
+pub fn a_1_0_1() -> Module {
+    at_1_0_1(a())
+}
+
+/// B at version 1.0.1 (#1920).
+pub fn b_1_0_1() -> Module {
+    at_1_0_1(b())
+}
+
+/// B with its pin's feature `f32` changed to `f64`, the crate and its version unchanged (#1920).
+pub fn b_pin_feature() -> Module {
+    let mut m = b();
+    for pin in m.manifest.implementation.pins.values_mut() {
+        pin.features = vec!["f64".into()];
+    }
+    m
 }
 
 /// B with `test.sim.pos` registered as f64.

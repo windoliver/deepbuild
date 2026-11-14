@@ -20,6 +20,9 @@ use serde_json::{json, Map, Value};
 
 use crate::graph::Kind;
 
+mod points;
+pub use points::{points, POINT_WORDS};
+
 /// A shipped operator as the library lists it: its stage graphs run in order as one pass (a
 /// multi-pass chain), or its one graph.
 #[derive(Clone, Debug)]
@@ -1111,7 +1114,14 @@ pub fn blur(axis: &str) -> Value {
     let mut g = G::new();
     let uv = g.s("screen_uv@1", json!({}));
     let texel = texel(&mut g, "src");
-    let along = g.ty(if axis == "x" { json!([1, 0]) } else { json!([0, 1]) }, "vec2<f32>");
+    let along = g.ty(
+        if axis == "x" {
+            json!([1, 0])
+        } else {
+            json!([0, 1])
+        },
+        "vec2<f32>",
+    );
     let px = g.mul(&texel, &along);
     let reach = g.mul(&px, "radius");
     let mut b = G::named("b");
@@ -1165,7 +1175,14 @@ pub fn frost(axis: &str, taps: u32) -> Value {
     let mut g = G::new();
     let pix = g.s("pixel@1", json!({}));
     let at = g.convert(&pix, "vec2<i32>");
-    let along = g.ty(if axis == "x" { json!([1, 0]) } else { json!([0, 1]) }, "vec2<i32>");
+    let along = g.ty(
+        if axis == "x" {
+            json!([1, 0])
+        } else {
+            json!([0, 1])
+        },
+        "vec2<i32>",
+    );
     let mut b = G::named("b");
     let i = b.convert("i", "f32");
     let k = b.add(&i, "first");
@@ -1286,6 +1303,14 @@ pub fn library(karis: bool) -> Vec<Shipped> {
             kind: Kind::Compute,
             noise: true,
             stages: vec![particles()],
+        },
+        // #503: a depth video's frame as a 3D point set's records.
+        Shipped {
+            name: "points.video@1",
+            effect: None,
+            kind: Kind::Compute,
+            noise: false,
+            stages: vec![points()],
         },
         Shipped {
             name: "pixel_hash@1",

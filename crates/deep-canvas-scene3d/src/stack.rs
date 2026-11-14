@@ -57,6 +57,11 @@ pub struct Run {
     pub rotate: usize,
     /// The build's outline sources an `extrude` reads (#443).
     pub outlines: Vec<deep_canvas::registry::SealedOutline>,
+    /// The deforms modules fill in the core's `modifier@1` (#226).
+    pub fills: Vec<deep_canvas::contributed::Sealed>,
+    /// A monotonic clock in milliseconds that times each step into its row (#2017): the
+    /// `geometry` call's `timings` hand one in; no check runs with one.
+    pub clock: Option<fn() -> f64>,
 }
 
 impl Run {
@@ -137,6 +142,9 @@ pub struct Row {
     pub reads_time: bool,
     pub enabled: bool,
     pub gpu: bool,
+    /// The step's time in milliseconds by the run's clock (0 for a skipped one); none without
+    /// one (#2017). `to_json` leaves it out, so a build's key never reads it.
+    pub ms: Option<f64>,
 }
 
 impl Row {
@@ -399,6 +407,7 @@ pub fn apply(
         // A line's stroke modifiers (but `build`) are no builder's.
         let (class, gpu, timed) = kind_row(&kind)
             .filter(|_| kind == "mod.build@1" || !STROKE.contains(&kind.as_str()))
+            .or_else(|| crate::contributed::row(&kind))
             .ok_or_else(|| at("kind"))?;
         let on = enabled(modifier);
         rows.push(Row {
@@ -407,10 +416,12 @@ pub fn apply(
             reads_time: timed || reads_time(doc, id, k),
             enabled: on,
             gpu,
+            ms: (run.clock.is_some() && !on).then_some(0.0),
         });
         if !on {
             continue;
         }
+        let started = run.clock.map(|now| now());
         let params = modifier.get("params").cloned().unwrap_or(json!({}));
         let part = modifier.get("on").and_then(Value::as_str).unwrap_or("all");
         // A generate step makes the mesh anew; only a deform moves part of it.
@@ -616,8 +627,14 @@ pub fn apply(
                 let a = rad(num("rate", 90.0)? * t);
                 deform(&m, &only, |p, _| rotate(p, axis, a), |n| rotate(n, axis, a))
             }
+            name if crate::contributed::named(name) => {
+                crate::contributed::mesh(&m, &only, modifier, (doc, id, k), run)?
+            }
             _ => return Err(at("kind")),
         };
+        if let (Some(now), Some(started), Some(row)) = (run.clock, started, rows.last_mut()) {
+            row.ms = Some(now() - started);
+        }
     }
     if let Some(weights) = m.attributes.remove(SWAY_WEIGHTS) {
         let k = rows.iter().position(|r| r.kind == SWAY && r.enabled);
@@ -1137,37 +1154,77 @@ fn normals(m: Mesh, p: &Value, run: &Run) -> Result<Mesh, String> {
         corner_angle: weight != "area",
         keep_sharp: truth(p, "keep_sharp", true)?,
     };
-    let poly = Poly::of(&m);
-    // The edges the mesh already shades sharp: its corner normals differ across them.
     let w = m.welded();
-    let mut seen: BTreeMap<(u32, u32), Vec<(u32, V3)>> = BTreeMap::new();
-    for t in 0..m.triangles() {
-        for j in 0..3 {
-            let (a, b) = (
-                m.indices[3 * t + j] as usize,
-                m.indices[3 * t + (j + 1) % 3] as usize,
-            );
-            for (v, n) in [(a, m.normals[a]), (b, m.normals[b])] {
-                seen.entry(crate::poly::key(w[a], w[b]))
-                    .or_default()
-                    .push((w[v], n));
-            }
-        }
-    }
-    let sharp: BTreeMap<(u32, u32), bool> = seen
-        .into_iter()
-        .map(|(e, list)| {
-            let split = list.iter().any(|(v, n)| {
-                list.iter()
-                    .any(|(u, q)| u == v && crate::geom::length(sub(*n, *q)) > 1e-6)
-            });
-            (e, split)
-        })
-        .collect();
-    let n = crate::bevel::normals(&poly, &opts, &poly.weak, &sharp, run.blocks());
-    let mut out = poly.mesh(&m, Some(&n));
+    let poly = Poly::of_welded(&m, &w);
+    // Only keep_sharp reads the edges the mesh already shades sharp.
+    let sharp = if opts.keep_sharp && !opts.by_angle {
+        shaded_sharp(&m, &w)
+    } else {
+        Vec::new()
+    };
+    let n = crate::bevel::normals_sorted(&poly, &opts, &poly.weak, &sharp, run.blocks());
+    let mut out = poly.mesh_flat(&m, &n);
     keep_annotations(&m, &mut out);
     Ok(out)
+}
+
+/// Each edge of `m`'s triangles on its welded points `w`, by its sorted ends in that order, and
+/// whether the mesh shades it sharp: two of its corners at one point have normals more than 1e-6
+/// apart.
+fn shaded_sharp(m: &Mesh, w: &[u32]) -> Vec<((u32, u32), bool)> {
+    // Triangle edge i's two vertices, and their welded points.
+    let ends = |i: u32| {
+        let i = i as usize;
+        (
+            m.indices[i] as usize,
+            m.indices[i - i % 3 + (i + 1) % 3] as usize,
+        )
+    };
+    let welded: Vec<(u32, u32)> = (0..3 * m.triangles() as u32)
+        .map(|i| {
+            let (a, b) = ends(i);
+            (w[a], w[b])
+        })
+        .collect();
+    let edge = |i: u32| {
+        let (a, b) = welded[i as usize];
+        crate::poly::key(a, b)
+    };
+    let points = w.iter().max().map_or(0, |x| *x as usize + 1);
+    let order = crate::poly::by_ends(welded.len(), points, |i| welded[i as usize]);
+    // Each edge's run of triangle edges in `order`, read once.
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < order.len() {
+        let e = edge(order[start]);
+        let mut end = start + 1;
+        while end < order.len() && edge(order[end]) == e {
+            end += 1;
+        }
+        // The run's corners (two per triangle edge): each one's welded point and normal.
+        let run = &order[start..end];
+        let corner = |j: usize| {
+            let i = run[j / 2];
+            let (a, b) = ends(i);
+            let (wa, wb) = welded[i as usize];
+            if j.is_multiple_of(2) {
+                (wa, m.normals[a])
+            } else {
+                (wb, m.normals[b])
+            }
+        };
+        let n = 2 * run.len();
+        let split = (0..n).any(|x| {
+            let (u, p) = corner(x);
+            (x + 1..n).any(|y| {
+                let (v, q) = corner(y);
+                u == v && crate::geom::length(sub(p, q)) > 1e-6
+            })
+        });
+        out.push((e, split));
+        start = end;
+    }
+    out
 }
 
 /// A per-face field, one value per triangle, read at each face's centroid (the mean of its
@@ -1207,6 +1264,12 @@ fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
             })
         })
         .collect()
+}
+
+/// A mesh's welded points, edges and faces: its polygon view's.
+pub fn welded(m: &Mesh) -> [u64; 3] {
+    let (p, e, f, _) = topology(&Poly::of(m));
+    [p, e, f]
 }
 
 /// The welded points, edges, faces and corners of a polygon view.

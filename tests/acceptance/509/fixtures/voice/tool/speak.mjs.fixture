@@ -1,0 +1,36 @@
+// The test speech tool's entry (#509 AC9 and AC13; README: The test speech tool). The hub runs it with Node, as a
+// process of its own, once per cache miss and per qualification fixture: one JSON object on stdin, {params: {say,
+// voice, rate}, inputs: {}}, and one on stdout, {outputs: {audio: <WAV, base64>, record: <JSON, base64>}}. The empty
+// line is an empty 16-bit mono WAV; the kind's fixture line is line.wav beside this file, which the test made with
+// macOS say; any other line is refused. voice.json names this tool and the fixture line.
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+
+const me = JSON.parse(readFileSync(new URL('./voice.json', import.meta.url), 'utf8'));
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+const params = request.params ?? {};
+const say = String(params.say ?? '');
+
+function emptyWav(rate) {
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0, 'ascii'); h.writeUInt32LE(36, 4); h.write('WAVE', 8, 'ascii');
+  h.write('fmt ', 12, 'ascii'); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(rate, 24); h.writeUInt32LE(rate * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+  h.write('data', 36, 'ascii'); h.writeUInt32LE(0, 40);
+  return h;
+}
+
+let wav;
+if (say === '') wav = emptyWav(24000);
+else if (say === me.line) wav = readFileSync(new URL('./line.wav', import.meta.url));
+else {
+  process.stderr.write(`${me.tool} speaks only the empty line and the kind's fixture line, not ${JSON.stringify(say)}\n`);
+  process.exit(2);
+}
+const record = {
+  kind: 'speech', engine: me.tool, voice: String(params.voice ?? 'samantha'), rate: params.rate ?? 1, say,
+  sample_rate: wav.readUInt32LE(24), samples: wav.readUInt32LE(40) / 2, audio_sha256: createHash('sha256').update(wav).digest('hex'),
+};
+process.stdout.write(`${JSON.stringify({ outputs: { audio: wav.toString('base64'), record: Buffer.from(JSON.stringify(record), 'utf8').toString('base64') } })}\n`);

@@ -1,0 +1,30 @@
+#503 Oracle lane: how each test is expected to fail at the base 014344430 ("design(#503): ..."). A note, not a run.
+
+The lane was not run at the base and deep-show was not built (the job was told not to build). What follows is read
+from the base's decode worker (crates/deep-codecs/src/{lib,wav,mp4}.rs): it reads WAV (8, 16, 24 and 32-bit integer
+and float, sample ÷ 2^(depth − 1)), PNG, playlists and MP4/QuickTime, and in MP4 decodes only float or integer PCM
+(`fpcm`, `lpcm`) and AAC through AudioToolbox; anything else is refused unreadable or answers "no decoder for <codec>".
+The lane type-checks (`tsc -p tests/acceptance/503-oracle/tsconfig.json`: clean). What was run, outside the product,
+with the local FFmpeg 9.0.2 and the lane's own helpers: each pinned sample fetched and hashed; FFmpeg's own decodes
+held to each recipe's bound by this lane's comparison (all within it); this lane's s16 conversion against FFmpeg's
+`-f s16le` (equal); FLAC round trips of the three audio-reference sources against `referenceF32` (equal); inside.m4a
+to the lossless-alac MD5, caf-pcm16.caf to the caf-demux CRC and the synthetic second in AIFF, WAV and CAF to the lavf
+CRC (all equal).
+
+Expected at the base:
+
+- lossy.test.ts (4): aac.mak: the six MP4 AAC streams decode through AudioToolbox at the base, so this test may pass or
+  fail on the recipe's one-off 2 there; it holds the AAC decode to FATE's references either way and doesn't tell #503's
+  change from the base. mp3.mak: the raw `.bit` streams are no known format, refused: fails naming each recipe.
+  opus.mak: Matroska isn't a known container, refused: fails. vorbis.mak: Ogg isn't known, refused: fails.
+- containers.test.ts (1): the reference and FFmpeg's probe agree on 312 (passes); then every sample is Matroska or Ogg,
+  refused: fails naming each recipe.
+- lossless.test.ts (2): test 1, FLAC is no known format and ALAC in MOV has no decoder: fails naming each recipe. Test
+  2: inside.m4a (ALAC) and caf-pcm16.caf (CAF) are refused, and so are lavf.aiff and lavf.caf; lavf.wav decodes at the
+  base and meets its CRC: fails naming fate-lossless-alac, fate-caf-demux, fate-lavf-aiff and fate-lavf-caf.
+- wav-engine.test.ts (1): expected to PASS at the base: #498's WAV reader already reads 8 and 16-bit PCM, mono and
+  stereo, at any rate, by the same rule. It holds the WAV decoder to the upstream cases and doesn't tell #503's change
+  from the base.
+
+Expected at the base: 8 tests, 6 failed (each on a missing decoder or container, not a test mistake), the WAV cases
+passing and the AAC recipes passing or failing on AudioToolbox's decode, as above.

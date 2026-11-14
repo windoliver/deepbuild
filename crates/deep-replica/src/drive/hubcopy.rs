@@ -104,6 +104,41 @@ impl HubCopy {
                 );
                 Ok(json!({"session": session, "paused": true}))
             }
+            // A rename is the name you gave the session, and its row is set with it, as the core records them (#2018).
+            "session.rename" => {
+                let session = params["session"].as_str().unwrap_or_default().to_owned();
+                let name = params["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if name.is_empty() {
+                    return Err(HubError::Refused(
+                        json!({"code": "type", "path": "/params/name", "message": "Give the session a name."}),
+                    ));
+                }
+                let letters: String = session
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .collect();
+                self.record(
+                    &session,
+                    json!({"kind": "session.named", "subject": format!("session:{letters}"), "data": {"name": name, "by": "you"}}),
+                );
+                let id = format!("session:{session}");
+                let row = deep_app::record::with_view(|view| {
+                    let table = view.table();
+                    Some((table.row_of(&id)?.clone(), table.order_of(&id)?))
+                })
+                .flatten();
+                if let Some((mut row, order)) = row {
+                    row["title"] = json!(name);
+                    row["listed"] = json!(true);
+                    row["order"] = json!(order);
+                    self.record(&session, json!({"kind": "row.set", "data": row}));
+                }
+                Ok(json!({"session": session, "name": name}))
+            }
             "box.say" => Ok(json!({"unread": "A replica drafts nothing."})),
             // An answer closes its ask and its row leaves the list, as the core records them (#1461).
             "ask.answer" => {

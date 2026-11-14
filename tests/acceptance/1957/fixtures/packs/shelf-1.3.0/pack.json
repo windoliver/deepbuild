@@ -1,0 +1,15 @@
+{
+  "name": "shelf",
+  "version": "1.3.0",
+  "license": "MIT",
+  "description": "A test pack of the #1957 acceptance suite: the recipe shelf.bookcase@2 at its minor 1, which adds a crown.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@2": "shelf.bookcase@2.json"
+  }
+}

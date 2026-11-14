@@ -98,7 +98,7 @@ impl Hub<'_> {
             .map(|(id, _)| id.clone())
             .collect();
         let view = deep_canvas::schedule::default_view(&doc);
-        let Ok((painted, _, _)) = self.evaluate(&doc, &view, &[t], false) else {
+        let Ok((painted, ..)) = self.evaluate(&doc, &view, &[t], false) else {
             return Vec::new();
         };
         let marks = painted

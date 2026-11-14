@@ -62,6 +62,16 @@ test('first measurement names its reason, while established budgets cannot disap
   assert.equal(initial.reason, budget.initialReason);
 });
 
+test('an established task may name the criteria it proves, while its numbers stay frozen (#1874)', () => {
+  const named = { ...budget, criteria: ['#12.eb2649f7'] };
+  validateBudgets({ tasks: [named] }, config);
+  validateBudgets({ tasks: [{ ...named, criteria: ['#12.f9ab1605'] }] }, { tasks: [named] });
+  validateBudgets(config, { tasks: [named] });
+  for (const change of [{ margin: 5 }, { limits: {} }, { command: ['other'] }]) {
+    assert.throws(() => validateBudgets({ tasks: [{ ...named, ...change }] }, config), /startup/);
+  }
+});
+
 test('a cap, or a p50 or peak-memory regression, fails even when another metric improves', () => {
   const base = { p50Ms: 10, p95Ms: 20, peakBytes: 1000 };
   assert.equal(compare(budget, base, base).status, 'PASS');

@@ -21,6 +21,7 @@ mod check;
 mod close;
 mod merge;
 mod order;
+pub mod pack_kinds;
 pub mod packs;
 mod requires;
 mod rows;
@@ -39,7 +40,7 @@ pub use check::{
     check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
     literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
-pub use close::undeclared;
+pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
@@ -97,8 +98,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "worlds",
     "brief",
     "checks",
-    // The media module's strips and the positional voices placed on items (#427; Strip and
-    // track, Emitter), read by the media module.
+    // #427: the media module's strips and the voices placed on items (Strip and track, Emitter).
     "strips",
     "emitters",
     // #499: the media module's buses and processors (Bus, Processor).
@@ -108,6 +108,11 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "spawns",
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
+    // #503: the media module's bakes (Analysis bake), each baked at check into its array.
+    "bakes",
+    "tempo_map",
+    // #935: the media module's generated sounds, each held to audio.gen before an item names it.
+    "sounds",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -278,8 +283,12 @@ impl Issue {
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
         }
-        // The column view's issue names its reader, column, row, value and step (#397).
-        if self.code == "column.out_of_range" {
+        // The column view's issue names its reader, column, row, value and step (#397); a terrain
+        // overlay's its array, cell, value and step (#537); a bake's empty bands, theirs (#503).
+        if matches!(
+            self.code,
+            "column.out_of_range" | "terrain.overlay_range" | "spectrum_band_empty"
+        ) {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {
                     out.entry(k.clone()).or_insert_with(|| v.clone());
@@ -366,6 +375,10 @@ impl Notice {
         }
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
+        }
+        // `pack_missing {pack, version, ids}` (Pack: retired and missing).
+        if self.code == "pack_missing" {
+            packs::retired::fields(&self.actual, &mut out);
         }
         Value::Object(out)
     }
@@ -1013,10 +1026,24 @@ mod tests {
             .filter(|i| i.path.starts_with("assemblies/") || i.path.starts_with("items/a/parent"))
             .map(|i| format!("{} {}", i.code, i.path))
             .collect();
-        assert!(found.contains(&"out_of_range assemblies/a5/parent".to_string()), "{found:?}");
-        assert!(found.contains(&"cycle assemblies/x/parent".to_string()), "{found:?}");
-        assert!(found.contains(&"ref_unresolved assemblies/lost/parent".to_string()), "{found:?}");
-        assert!(!found.iter().any(|f| f.contains("a4") || f.contains("items/a/parent")), "{found:?}");
+        assert!(
+            found.contains(&"out_of_range assemblies/a5/parent".to_string()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"cycle assemblies/x/parent".to_string()),
+            "{found:?}"
+        );
+        assert!(
+            found.contains(&"ref_unresolved assemblies/lost/parent".to_string()),
+            "{found:?}"
+        );
+        assert!(
+            !found
+                .iter()
+                .any(|f| f.contains("a4") || f.contains("items/a/parent")),
+            "{found:?}"
+        );
     }
 
     #[test]

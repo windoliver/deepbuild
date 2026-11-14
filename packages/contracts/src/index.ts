@@ -1,4 +1,5 @@
 export type { JsonValue, Schema, SchemaEntry } from './json.js';
+export { isObject, isRecord } from './json.js';
 export { ContractError, ERROR_CODES, type ContractIssue } from './errors.js';
 export { registry, type Registry, type Validation } from './validate.js';
 export { decode, encode, fixtures, frozenDigests, getSchema, isUntouched, listSchemas, validate } from './schemas.js';
@@ -14,4 +15,5 @@ export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';
 export { checkManifest } from './manifest.js';
 export { extensionApi, hubSlots, type ApiEntry, type HubSlot } from './slots.js';
+export { codeWords } from './words.js';
 export { LIFECYCLE_OBJECTS, lifecycleGaps, machineProblems, machines, type Machine, type MachineMove } from './lifecycle.js';

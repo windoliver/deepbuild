@@ -20,19 +20,18 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
-import { keychainStore, type SecretStore } from '@deepbuild/extension-host';
 import { CANT_UNDO } from '@deepbuild/asks';
 import { ulid } from '@deepbuild/record';
 import { keepOriginal, noteWritten, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
 import { tomlTables } from './codex-settings.js';
-import { ownHome } from './keychain.js';
+import { hubSecrets as secretStore } from './held.js';
 import { lastingNode } from './paths.js';
 import type { Plant } from './plant.js';
 import { syncPath, type Durable } from './vfs.js';
 import { refuse } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 const canonical = (v: unknown): string => JSON.stringify(v, (_, x: unknown) => (isObj(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
 /** The agents a sync knows, by their facts files' names. */
@@ -67,6 +66,15 @@ function agentFacts(): AgentFacts[] {
   }));
 }
 const factsOf = (id: string): AgentFacts | undefined => agentFacts().find((a) => a.id === id);
+/** The agents whose sessions reach DeepBuild through hooks, by their facts: those that map hook events and name the agent (#2019). */
+export function hookedAgents(): { id: string; name: string }[] {
+  return AGENT_IDS.flatMap((id) => {
+    let f: Obj;
+    try { f = readFacts<Obj>(`${id}.facts.json`); } catch { return []; }
+    const e = isObj(f.entries) ? f.entries : {};
+    return isObj(f.mapping) && typeof e.name === 'string' ? [{ id, name: e.name }] : [];
+  });
+}
 const expand = (p: string): string => (p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 /** A path as you'd read it: under your home as ~/... */
 const shownPath = (p: string): string => (p.startsWith(`${homedir()}/`) ? `~/${relative(homedir(), p)}` : p);
@@ -347,22 +355,6 @@ function readSkill(source: Obj, staged: string): SkillItem {
   return { name, repo: repo!, commit: commit!, path: path!, digest: sha(canonical(files.map((f) => [f.rel, f.sha, f.mode]))), files, license, scripts, findings };
 }
 
-// ---- The secret store: the platform's, or the file a test names.
-
-function secretStore(): SecretStore | undefined {
-  const file = process.env.DEEP_HUB_TEST_SECRETS;
-  if (file) {
-    const all = (): Obj => { try { return JSON.parse(readFileSync(file, 'utf8')) as Obj; } catch { return {}; } };
-    const save = (v: Obj) => writeFileSync(file, `${JSON.stringify(v)}\n`, { mode: 0o600 });
-    return {
-      get: (k) => Promise.resolve(typeof all()[k] === 'string' ? all()[k] as string : undefined),
-      set: (k, v) => Promise.resolve(save({ ...all(), [k]: v })),
-      delete: (k) => { const v = all(); delete v[k]; save(v); return Promise.resolve(); },
-    };
-  }
-  // A hub under a test's temp HOME never touches your Keychain.
-  return process.platform === 'darwin' && ownHome() ? keychainStore() : undefined;
-}
 const secretKey = (server: string, variable: string): string => `mcp.${server}.${variable}`;
 
 // ---- The syncs.

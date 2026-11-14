@@ -1,0 +1,45 @@
+# #173 acceptance suite at the base, 145315636 (Merge pull request #2297), read at its descendant on main b0555d120
+# (Merge pull request #2323), before any implementation.
+#
+# NOT RUN at the base: the surfaces plainly don't exist there, building deep-gpu is slow, and other sessions on this
+# Mac share its GPU. What was run instead, after `npm ci --ignore-scripts` in this worktree:
+#
+#   npx tsc -p tests/acceptance/173/tsconfig.json   -> exit 0, no errors (all 13 .ts files of the folder checked)
+#   npx vitest list --root tests/acceptance/173     -> exit 0, 16 tests collected in 12 files:
+#     budgets.test.ts 1, cap-stall.test.ts 2, determinism.test.ts 2, envelope.test.ts 1, fence-chart.test.ts 1,
+#     outline.test.ts 2, reactive.test.ts 1, rest-canonical.test.ts 1, scrub.test.ts 1, seek-play.test.ts 2,
+#     taste.test.ts 1, trail.test.ts 1 (12 criterion tests, 4 planted twins)
+#
+# Why each test fails at the base, read from the base's code (crates/deep-gpu-layer: view3d.rs, live.rs, liveview.rs,
+# envelope.rs, golden.rs, main.rs; crates/deep-canvas-scene3d: look.rs, scene.rs). The base's view3d parses none of
+# `cap`, `stalls`, `scrubs`, `determinism` or a viewer entry's `camera`, and its Look3::read ignores `history`, `scale`
+# and `reject`, so those calls are answered as plain views: no frame carries a `history` report, nothing is stalled,
+# scrubbed or turned by hand, and there is no `determinism` in the reply. `class: render_back` is refused (bad_input:
+# "class is live or export"). deep-gpu refuses each --planted name this suite adds at startup (Planted::parse has none
+# of keeps_frame_past_window, determinism_hashes_live_view, grid_at_refresh, outlines_in_history: bad_input, a non-zero
+# exit), so every planted twin fails at runGpu's exit-status assertion there.
+#
+#   seek-play.test.ts      AC1   the problems list (asserted in the file) holds "frame 75 reports no frame history" for
+#                                each leg, "frame 74 was drawn, so the stall missed nothing", and "the frame with history
+#                                on hashes as the frame with history off" (no window in the frame).
+#   trail.test.ts          AC2   the fixture's own numbers hold; then "frame 30 reports its frame history" fails.
+#   reactive.test.ts       AC3   the first lit frame is found from the own render; then "frame 30 reports its frame
+#                                history" fails (and without history the unmasked leg doesn't lag). Should the base not
+#                                key a material's emission_strength, "the own render lights the sign" fails first.
+#   fence-chart.test.ts    AC4   the fence's own numbers hold (1.0 px wires, at most 0.112 px of motion a frame by the
+#                                same pinhole computed outside the test); then "frame 8 reports its frame history" fails
+#                                for the fence with history on.
+#   scrub.test.ts          AC5   "after a seek from 10 s: frame 120 reports its frame history" fails.
+#   rest-canonical.test.ts AC6   "frame 12, while your hand orbits the view, reports its frame history" fails (the
+#                                render-back's refusal is read only after it).
+#   envelope.test.ts       AC7   off a reference Mac INCONCLUSIVE; on one, the envelope answers but its scene's
+#                                gpu_memory has no `history_bytes` ("the scene's GPU memory counts the window's").
+#   determinism.test.ts    AC8   "history off: the call reports its determinism check" fails (no `determinism`).
+#   budgets.test.ts        AC9   "budgets.json has a task canvas-frame-history" fails first.
+#   cap-stall.test.ts      AC10  the problems list holds "frames drawn 60, 61, …, not the display's 60–179 less the 2
+#                                the stall missed" and "frame 60 reports no frame history" for each display.
+#   outline.test.ts        AC11  "bare, with history: frame 0 reports its frame history" fails (checked before the
+#                                stroked castle, whose composite stroke the base may refuse, is read).
+#   taste.test.ts          AC12  the pictures are drawn (as plain views), then no TASTE.json: INCONCLUSIVE, never PASS.
+#
+# A run at the base, when one is made, is recorded beside this note by the job that runs it.

@@ -6,13 +6,12 @@
 import { statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { parse as parseYaml } from 'yaml';
 
 type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 
 /** One kind of `resources` in done.yaml: `created_by` matches a command, group 1 of `key` names what its output made. */

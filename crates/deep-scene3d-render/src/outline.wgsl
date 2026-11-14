@@ -108,6 +108,12 @@ fn outline_vs(
 // object's silhouette shows over what's behind it.
 fn hidden(p: vec2<f32>, z: f32) -> bool {
     let dims = vec2<i32>(textureDimensions(core_depth));
+    // After frame history's resolve the depth is the display's own, at its size, each pixel's the
+    // nearest surface within a px of it (#173: px.z 0): the line's own pixel decides.
+    if line_frame.px.z == 0.0 && line_frame.px.w <= 0.5 {
+        let t = clamp(vec2<i32>(floor(p * vec2<f32>(dims) / line_frame.viewport.xy)), vec2<i32>(0), dims - 1);
+        return z < textureLoad(core_depth, t, 0) * 0.995 - 1e-7;
+    }
     let q = p * line_frame.px.z - 0.5;
     let i = vec2<i32>(floor(q));
     var far = 1.0;

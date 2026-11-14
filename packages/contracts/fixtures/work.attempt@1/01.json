@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "work.attempt",
+  "subject": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "step": "started",
+    "issue": 100,
+    "attempt": 1,
+    "run": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "agent": "claude-code",
+    "model": null,
+    "worktree": "~/.deepbuild/worktrees/shop/run01K74F",
+    "branch": "deep/100-p4t6w",
+    "reason": "unblocks #102, #103; then the lowest number; claude-code's turn: the approved agents take turns",
+    "cause": "none",
+    "verdict": null
+  }
+}

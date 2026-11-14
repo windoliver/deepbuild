@@ -20,9 +20,9 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { PlanInput } from '@deepbuild/asks';
 import { freeBytes } from './disk.js';
 import { forbiddenLicense, Packs } from './packs.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
 const BUNDLED_TERMS: Record<string, string> = { 'https://creativecommons.org/publicdomain/zero/1.0/': 'CC0-1.0', 'https://creativecommons.org/licenses/by/4.0/': 'CC-BY-4.0' };
 
@@ -129,16 +129,22 @@ export class Libraries {
     return (this.d.host()?.libraries() ?? []).some((l) => l.name === library);
   }
 
+  /** Why `library` can't be turned on or given a rule, or, with `off`, turned off: read before the OS confirms you. Off also takes one a package that no longer loads left on. */
+  unchangeable(library: string, off = false): string | undefined {
+    return this.registered(library) || (off && this.saved.on.includes(library)) ? undefined : `no loaded package registers the library ${library}`;
+  }
   /** `library.on` and `library.off`: a library ships off; on puts it in search, off takes it out and refuses its fetches. */
   turn(library: string, on: boolean): { library: string; on: boolean } {
-    if (on && !this.registered(library)) throw new LibraryRefused(`no loaded package registers the library ${library}`);
+    const why = this.unchangeable(library, !on);
+    if (why) throw new LibraryRefused(why);
     this.saved.on = on ? [...new Set([...this.saved.on, library])] : this.saved.on.filter((l) => l !== library);
     this.save();
     return { library, on };
   }
   /** `library.rule`: your standing rule for a library, the licenses it may fetch under with no ask; any other is refused. */
   rule(library: string, licenses: string[]): { library: string; licenses: string[] } {
-    if (!this.registered(library)) throw new LibraryRefused(`no loaded package registers the library ${library}`);
+    const why = this.unchangeable(library);
+    if (why) throw new LibraryRefused(why);
     this.saved.rules[library] = [...new Set(licenses)];
     this.save();
     return { library, licenses: this.saved.rules[library]! };
@@ -249,7 +255,8 @@ export class Libraries {
   /** A deep_kinds fetch of a row a library gave: held on your answer, fetched, refused naming why, or BLOCKED with one unblock ask. */
   async fetch(library: string, id: string): Promise<FetchReply> {
     if (!this.saved.on.includes(library) || !this.registered(library)) {
-      return { status: 'refused', reason: `${library} is ${this.saved.on.includes(library) ? 'not loaded' : 'off'}, so nothing is fetched from it; turn it on to fetch ${id}` };
+      const on = this.saved.on.includes(library);
+      return { status: 'refused', reason: `${library} is ${on ? 'not loaded' : 'off'}, so nothing is fetched from it; turn it on to fetch ${id}${on ? '' : `: deep library on ${library}, from the person's own terminal`}` };
     }
     const key = `${library}#${id}`;
     const now = this.fetches.get(key);

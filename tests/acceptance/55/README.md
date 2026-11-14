@@ -45,7 +45,7 @@ Everything this repo owns runs for real: the hub (`deep hub run`), `deep setup` 
 | `#55.dae4bb29` AC10 | Claude watched by deep-hook: one prompt, one ask and one delivery, both deep-hook's | `permissions.test.ts` | `keys-by-agent-id` |
 | `#55.b7bb3861` AC11 | under 10 ms at p95 added per gated event, reference Mac, against the merge base | `budgets.test.ts` (three) | `slow-handlers` |
 | `#55.da36aa35` AC12 | pi with the pi package is gated once, by the package | `gate.test.ts` | `keys-by-agent-id` |
-| `#55.480a0e0c` AC13 | an answer arrives once, by deep-hook's wake or the plugin's prompt on its behalf; else "answer waiting" | `delivery.test.ts` (three) | `delivers-beside-waiter` (hub) |
+| `#55.480a0e0c` AC13 | an answer arrives once, by deep-hook's wake or the plugin's prompt on its behalf; else "answer waiting" | `../55-redraft-ac13/` (redraft; this draft's `delivery.test.ts` was retired by the owner, Nov 12, 2026: `../55-redraft-ac13/DISPUTE.md`) | `delivers-beside-waiter` (hub) |
 | `#55.9d31eef3` AC14 | a fake agent with a picker and a trust prompt while unknown gets no words, then once after idle | `gate.test.ts` | `idle-guess` |
 
 IDs are the first 8 hex digits of SHA-256 of each criterion's text, trimmed, whitespace collapsed (tests/acceptance/48/README.md). `twins.json` maps each to its twin under `twins/`.

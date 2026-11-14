@@ -163,7 +163,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
 
 // Alternates current and merge-base runs so both see the same machine load, and swaps which side runs first each
 // round, so a cache one run leaves warm favors neither: one warmup round, then 20 rounds.
-// Returns [current] or [current, base], each with its instructions retired per round, in round order,
+// Returns [current] or [current, base], each with its sample count, its instructions retired per round, in round order,
 // what started a child no count covers, and its CPU time at each QoS class over its rounds.
 export function measure(command, cwd, base) {
   const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
@@ -177,7 +177,7 @@ export function measure(command, cwd, base) {
       if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions, uncounted: result.uncounted, qos: result.qos });
     }
   }
-  return samples.map((side) => ({ ...summarize(side), instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
+  return samples.map((side) => ({ ...summarize(side), samples: side.length, instructions: side.map(({ instructions }) => instructions), uncounted: [...new Set(side.flatMap(({ uncounted }) => uncounted))], qos: sumQos(side.map(({ qos }) => qos)) }));
 }
 
 // A rise in instructions retired is judged against 2%, by 10,000 sign flips decided at p under 0.01.
@@ -333,12 +333,22 @@ export function judgeLimit({ limit, runs, fingerprint: machine, loads }) {
   return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `the five runs are neither all within ${limit} nor all over it by more than the ${(margin * 100).toFixed(1)}% margin` };
 }
 
+// A budget is frozen once main has it, but where its value is an estimate, a measurement made before the change it
+// judges may move it once, with the reason recorded (#12): only its limits change, and it gains the changeReason its
+// merge base's entry doesn't have yet. A second move, or one with no reason, is refused like any other change.
+const numbers = ({ limits, changeReason, ...rest } = {}) => rest;
+const movedOnce = (current, established) => typeof current?.changeReason === 'string' && current.changeReason.trim() !== ''
+  && !('changeReason' in established) && isDeepStrictEqual(numbers(current), numbers(established));
+const frozen = (current, established) => isDeepStrictEqual(current, established) || movedOnce(current, established);
+
 export function validateBudgets(current, base) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
-  if (base?.preflight && !isDeepStrictEqual(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
-  if (base?.harness && !isDeepStrictEqual(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
+  if (base?.preflight && !frozen(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
+  if (base?.harness && !frozen(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
+  // A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
+  const definition = ({ criteria, ...task } = {}) => task;
   for (const established of base?.tasks ?? []) {
-    if (!isDeepStrictEqual(current.tasks.find(({ id }) => id === established.id), established))
+    if (!frozen(definition(current.tasks.find(({ id }) => id === established.id)), definition(established)))
       throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
   }
   const ids = new Set();
