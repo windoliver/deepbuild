@@ -1,7 +1,8 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openAsks } from '@deepbuild/asks';
 import { openRecord } from '@deepbuild/record';
 import { afterEach, expect, test } from 'vitest';
@@ -95,3 +96,47 @@ test.skipIf(process.platform !== 'darwin').each([
     await record.close();
   }
 }, 90_000);
+
+// The stream writes nothing while no report matches its filter, so nothing tells it that its reader is gone: left a
+// plain child, it ran on after a hub that was killed, until the machine's next matching report. It runs on the
+// helper's leash, which ends it when the process that started it is gone, however that process went.
+test.skipIf(process.platform !== 'darwin')('a process killed with its supervisor open leaves no sandbox-report stream running', async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
+  dirs.push(dir);
+  const built = (name: string) => JSON.stringify(fileURLToPath(new URL(`../../${name}/dist/index.js`, import.meta.url)));
+  const script = `
+    const { openRecord } = await import(${built('record')});
+    const { openAsks } = await import(${built('asks')});
+    const { openSupervisor } = await import(${built('supervisor')});
+    const record = await openRecord({ path: process.argv[1], now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+    console.log('open');
+    setInterval(() => undefined, 1000);`;
+  const owner = spawn(process.execPath, ['--input-type=module', '-e', script, join(dir, 'ledger.db')], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const gone = new Promise((done) => owner.on('exit', done));
+  /** Every `log stream` under the owner, by PID: its child, or its child's. */
+  const streams = (): number[] => {
+    const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' }).stdout.split('\n').map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line)).filter((m) => m !== null);
+    const under = new Set([owner.pid!]);
+    for (let grew = true; grew;) { grew = false; for (const m of rows) if (under.has(Number(m[2])) && !under.has(Number(m[1]))) { under.add(Number(m[1])); grew = true; } }
+    return rows.filter((m) => under.has(Number(m[1])) && m[3]!.includes('/usr/bin/log stream')).map((m) => Number(m[1]));
+  };
+  const running = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  let left: number[] = [];
+  try {
+    await new Promise<void>((opened, failed) => {
+      owner.stdout.setEncoding('utf8').on('data', (text: string) => { if (text.includes('open')) opened(); });
+      owner.on('exit', () => failed(Error('the process ended before its supervisor opened')));
+    });
+    left = streams();
+    expect(left.length, 'the open supervisor runs a sandbox-report stream').toBeGreaterThan(0);
+    owner.kill('SIGKILL');
+    await gone;
+    for (const until = Date.now() + 5_000; left.some(running) && Date.now() < until;) await new Promise((done) => setTimeout(done, 50));
+    expect(left.filter(running), 'sandbox-report streams still running 5 s after their process was killed').toEqual([]);
+  } finally {
+    owner.kill('SIGKILL');
+    for (const pid of left.filter(running)) try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
+  }
+}, 60_000);
