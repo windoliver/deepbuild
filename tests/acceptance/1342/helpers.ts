@@ -22,6 +22,8 @@ export const NODE = process.execPath;
 export const MIN = 60_000;
 /** The forge account whose token the hub holds: the person who gives the input. */
 export const PERSON = 'maya';
+/** The account the agent is signed in to, whose plan window the runner reads. */
+const ACCOUNT = '0a0a0a0a-1111-4222-8333-555555555555';
 
 /** The criteria's IDs: `#1342.` and the first 8 hex digits of SHA-256 of each criterion's text, white space collapsed (scripts/proof-change.mjs). */
 export const AC = {
@@ -186,6 +188,11 @@ export class World {
     w.token = w.forge.person(PERSON);
     writeFileSync(join(w.agents, 'plan.json'), `${JSON.stringify({ api: w.forge.url, repo: '', node: NODE, cli: CLI, issues: {} }, null, 2)}\n`);
     w.hub = await w.startHub();
+    // Approved by the owner on 2026-11-14 (APPROVED-WORLD-FIX.md): a job on the runner waits for its account's first
+    // plan-window reading, so the world gives the account a sign-in and reports one reading with room, as 1328 and 63 do.
+    writeFileSync(join(w.home, '.claude.json'), `${JSON.stringify({ oauthAccount: { accountUuid: ACCOUNT, emailAddress: 'dh1342@example.invalid' }, mcpServers: {}, projects: {} })}\n`);
+    const now = Math.floor(Date.now() / 1000);
+    await control(w.hub, 'windows.report', { agent: 'claude-code', account: ACCOUNT, rate_limits: { five_hour: { used_percentage: 5, resets_at: now + 10_800 }, seven_day: { used_percentage: 20, resets_at: now + 400_000 } } });
     return w;
   }
 
