@@ -2,7 +2,7 @@
   "core": {
     "version": "0.0.0",
     "digest": "c06e44fef71012bca0d4484495e4e7f2edb23b5061ed6ec8739592f65469cf40",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -11,7 +11,7 @@
       "order": "PASS",
       "schedule": "PASS",
       "repair_loop": "PASS",
-      "time_order": "FAIL",
+      "time_order": "PASS",
       "catalog": "PASS",
       "registries": "PASS"
     }
