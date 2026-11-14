@@ -19,6 +19,22 @@ pub struct P {
     /// Its dirty class (Dirty classes): `geometry` rebuilds, the rest reshade.
     pub class: &'static str,
     pub sweep: (Value, Value),
+    /// The forms its reader takes in the form language (`deep_canvas::form`, #1973), where `ty`
+    /// alone doesn't say them; `None` declares `ty`.
+    pub form: Option<&'static str>,
+}
+
+impl P {
+    /// The param with the forms its reader takes, where they are more than `ty` says (#1973).
+    pub(crate) fn takes(mut self, form: &'static str) -> P {
+        self.form = Some(form);
+        self
+    }
+
+    /// The forms its reader takes, in the form language.
+    pub fn declared(&self) -> &'static str {
+        self.form.unwrap_or(self.ty)
+    }
 }
 
 /// A kind's schema, with the reads a building kind declares and the fixture its sweep runs on.
@@ -49,6 +65,7 @@ pub(crate) fn p(
         max: None,
         class,
         sweep: (from, to),
+        form: None,
     }
 }
 
@@ -61,6 +78,31 @@ fn ranged(mut p: P, min: f64, max: f64) -> P {
 pub(crate) const G: &str = "geometry";
 pub(crate) const S: &str = "shading";
 
+// #1973: forms more than one field takes, module.rs's marks and sun among them, so they agree.
+/// `paint`, as `scene::paint` and `stroke` read it, and a drawing look its named fill.
+pub(crate) const PAINT: &str =
+    "{fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}";
+/// A mark's status binding (Status binding), whose target is the mark itself.
+pub(crate) const STATUS: &str = "{source: text, as_of?, legend?}";
+/// Level of detail's `open`.
+pub(crate) const OPEN: &str = "{at_px: px, doc: doc ID}";
+/// A solid mark's size (`scene::size3`): one number for all three sides, or each.
+pub(crate) const SIZE: &str = "m | [x, y, z]";
+/// A color `light::color3` reads: its alpha, when given, is left out.
+pub(crate) const COLOR: &str = "linear RGB | [r, g, b, a]";
+/// A color `sky::color` reads: linear RGB, or an sRGB `#rrggbb` or a look role by name.
+const SKY_COLOR: &str = "linear RGB | [r, g, b, a] | role (or #rrggbb)";
+/// A line's points (`scene::point_of`), or a logic array's elements (`points::of`).
+pub(crate) const POINTS: &str =
+    "[[x, y, z] | ID] | {array: <logic>.<name>, rows: [from, to] | all}";
+/// A line of a mesh's edges (`geom::EdgeKind::read`).
+pub(crate) const EDGES: &str =
+    "{of: ID (or ID#part), kind: all | quads | cage | crease {angle: deg}, border: bool}";
+/// A line's ends, as Path `path@1` takes them; scene3d doesn't draw them yet.
+pub(crate) const ENDS: &str = "{start | end: none | arrow | open | stealth | dot | ring | square | diamond | bar, size: f32, width: f32}";
+/// A line's trail (`deep_canvas_motion::trail::read`).
+const TRAIL: &str = "{of: ID, span: s, segments: 1 to 64, width: px, taper: f32, fade: f32, space: world | local, window: span | since {on, until, keep: 1 to 8} | whole {from}, rate: Hz, max_points: u32}";
+
 fn paint() -> P {
     p(
         "paint",
@@ -71,6 +113,7 @@ fn paint() -> P {
         json!({"fill": {"role": "accent"}}),
         json!({"fill": {"role": "muted"}}),
     )
+    .takes(PAINT)
 }
 
 /// A light's color as a blackbody temperature, in place of `color` (#421).
@@ -113,6 +156,7 @@ fn shade() -> P {
         json!("smooth"),
         json!("flat"),
     )
+    .takes("smooth | flat | by_angle {angle: deg}")
 }
 
 /// Every mark in 3D's common fields (Marks in 3D: common fields).
@@ -127,24 +171,30 @@ pub(crate) fn common(mut params: Vec<P>) -> Vec<P> {
         json!("world"),
     ));
     params.push(paint());
-    params.push(p(
-        "status",
-        "status binding",
-        "",
-        Value::Null,
-        S,
-        json!({"binding": "build"}),
-        json!({"binding": "ship"}),
-    ));
-    params.push(p(
-        "open",
-        "level of detail",
-        "",
-        Value::Null,
-        S,
-        json!({"at_px": 600, "doc": "01JB420D0000000000000000090"}),
-        json!({"at_px": 400, "doc": "01JB420D0000000000000000090"}),
-    ));
+    params.push(
+        p(
+            "status",
+            "status binding",
+            "",
+            Value::Null,
+            S,
+            json!({"binding": "build"}),
+            json!({"binding": "ship"}),
+        )
+        .takes(STATUS),
+    );
+    params.push(
+        p(
+            "open",
+            "level of detail",
+            "",
+            Value::Null,
+            S,
+            json!({"at_px": 600, "doc": "01JB420D0000000000000000090"}),
+            json!({"at_px": 400, "doc": "01JB420D0000000000000000090"}),
+        )
+        .takes(OPEN),
+    );
     params
 }
 
@@ -162,29 +212,35 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
     spec.params.extend(extras(kind));
     if crate::builders::KINDS.contains(&kind) {
         // Builder: uv, on every builder.
-        spec.params.push(p(
-            "uv0",
-            "natural | box {size} | planar {axis} | cylinder {axis} | sphere",
-            "",
-            json!("natural"),
-            G,
-            json!("natural"),
-            json!("box"),
-        ));
+        spec.params.push(
+            p(
+                "uv0",
+                "natural | box {size} | planar {axis} | cylinder {axis} | sphere",
+                "",
+                json!("natural"),
+                G,
+                json!("natural"),
+                json!("box"),
+            )
+            .takes("natural | box {size: m} | planar {axis: x | y | z} | cylinder {axis: x | y | z} | sphere"),
+        );
         spec.params.push(ranged(
             p("uv_scale", "m", "m", json!(1), G, json!(1), json!(0.5)),
             0.0,
             1000.0,
         ));
-        spec.params.push(p(
-            "scatter",
-            "{count, part?}",
-            "",
-            Value::Null,
-            G,
-            json!({"count": 8}),
-            json!({"count": 16}),
-        ));
+        spec.params.push(
+            p(
+                "scatter",
+                "{count, part?}",
+                "",
+                Value::Null,
+                G,
+                json!({"count": 8}),
+                json!({"count": 16}),
+            )
+            .takes("{count: 1 to 10000, part?: named part}"),
+        );
     }
     Some(spec)
 }
@@ -206,7 +262,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!({"depth": 0.05, "width": 0.2}),
                 json!({"depth": 0.08, "width": 0.3}),
-            ),
+            )
+            .takes("{depth: m, width: m}"),
             p(
                 "along",
                 "{path, from, to}",
@@ -215,7 +272,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!({"path": [[0, 0, 0], [2, 0, 0]]}),
                 json!({"path": [[0, 0, 0], [2, 0, 1]], "from": 0.25}),
-            ),
+            )
+            .takes("{path: [vec3] | curve ID, from: 0..1, to: 0..1}"),
         ],
         "lathe@1" => vec![
             p(
@@ -226,7 +284,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!({"count": 8, "depth": 0.02, "span": 0.5}),
                 json!({"count": 6, "depth": 0.03, "span": 0.25}),
-            ),
+            )
+            .takes("{count: integer, depth: m, span: 0..1}"),
             p(
                 "bands",
                 "[{y0, y1, material}]",
@@ -235,7 +294,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!([]),
                 json!([{"y0": 0, "y1": 0.5, "material": "wood"}]),
-            ),
+            )
+            .takes("[{y0: m, y1: m, material}]"),
             p(
                 "thread",
                 "{pitch, depth}",
@@ -244,7 +304,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!({"pitch": 0.1, "depth": 0.01}),
                 json!({"pitch": 0.2, "depth": 0.02}),
-            ),
+            )
+            .takes("{pitch: m, depth: m}"),
             p(
                 "rim",
                 "polygon",
@@ -285,7 +346,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!(0),
                 json!({"wave": {"amplitude": 0.1, "wavelength": 1}}),
-            ),
+            )
+            .takes("m | {wave: {amplitude: m, wavelength: m, direction?: deg}} | {noise: {amplitude: m, scale: m, seed?: u64}}"),
             // #2014: a terrain plate's height field, size and spacing (Builder plate: terrain).
             p(
                 "terrain",
@@ -295,7 +357,8 @@ fn extras(kind: &str) -> Vec<P> {
                 G,
                 json!({"height": 0, "size": [4, 4]}),
                 json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5}),
-            ),
+            )
+            .takes("{height: m | expr | {wave} | {noise}, size: [m, m], spacing?: m, tile?: m, lod_levels?: u8 ≤ 6}"),
             // #537: a terrain plate's overlays tint its cover and rebuild nothing (Builder plate: terrain overlays).
             p(
                 "overlays",
@@ -305,7 +368,8 @@ fn extras(kind: &str) -> Vec<P> {
                 S,
                 Value::Null,
                 json!([]),
-            ),
+            )
+            .takes("[{grid: <logic>.<name>, size: [cols, rows: u16], origin?: [m, m], cell?: m, roles: [role | none] ≤ 16, opacity?: 0..1}] ≤ 2"),
         ],
         _ => Vec::new(),
     }
@@ -321,7 +385,8 @@ fn mesh_asset() -> Spec {
         module: "scene3d",
         params: vec![
             p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b)),
-            p("node", "index | name", "", json!(0), G, json!(0), json!(1)),
+            p("node", "index | name", "", json!(0), G, json!(0), json!(1))
+                .takes("index | name | {scene: index}"),
             shade(),
             paint(),
         ],
@@ -343,7 +408,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             G,
             json!([1, 1, 1]),
             json!([1, 2, 1]),
-        )]),
+        )
+        .takes(SIZE)]),
         reads: None,
         fixture: json!({"it": item(kind, json!({"size": [1, 1, 1], "paint": {"fill": {"role": "accent"}}}))}),
     };
@@ -359,7 +425,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 G,
                 json!([[0, 0, 0], [1, 1, 0]]),
                 json!([[0, 0, 0], [1, 2, 0]]),
-            ),
+            )
+            .takes(POINTS),
             p(
                 "edges",
                 "{of, kind}",
@@ -368,7 +435,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 G,
                 json!(null),
                 json!(null),
-            ),
+            )
+            .takes(EDGES),
             p(
                 "mode",
                 "strip | segments | loop",
@@ -387,7 +455,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!([4, 2]),
                 json!([6, 2]),
-            ),
+            )
+            .takes("[px] ≤ 2"),
             p(
                 "ends",
                 "{start, end}",
@@ -396,7 +465,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!({"end": "arrow"}),
                 json!({"start": "arrow"}),
-            ),
+            )
+            .takes(ENDS),
             p(
                 "cap",
                 "butt | round | square",
@@ -415,6 +485,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("miter"),
                 json!("round"),
             ),
+            // #450: the path of the item it names, in place of points; the sweep leaves it unset,
+            // since the fixture holds no source.
+            p(
+                "trail",
+                "{of, span, segments, width, taper, fade, space, window, rate, max_points}",
+                "",
+                Value::Null,
+                G,
+                Value::Null,
+                Value::Null,
+            )
+            .takes(TRAIL),
         ])),
         reads: None,
         fixture: json!({"it": item("mark.line@1", json!({"points": [[0, 0, 0], [1, 1, 0]], "width": 2, "paint": {"fill": {"role": "ink"}}}))}),
@@ -507,7 +589,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!([1, 0.95, 0.9]),
                 json!([0.9, 0.95, 1]),
-            ),
+            )
+            .takes(COLOR),
             temperature(),
             p("priority", "integer", "", json!(0), S, json!(0), json!(1)),
             flicker(),
@@ -567,7 +650,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!(800),
                 json!(1600),
             ),
-            p("range", "m", "m", json!("auto"), S, json!(10), json!(20)),
+            p("range", "m", "m", json!("auto"), S, json!(10), json!(20)).takes("m | auto"),
             p("radius", "m", "m", json!(0.05), S, json!(0.05), json!(0.2)),
             p(
                 "color",
@@ -577,7 +660,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!([1, 0.9, 0.8]),
                 json!([0.8, 0.9, 1]),
-            ),
+            )
+            .takes(COLOR),
             temperature(),
             p("priority", "integer", "", json!(0), S, json!(0), json!(1)),
             p(
@@ -681,6 +765,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         kind: "material@1",
         module: "scene3d",
         params: vec![
+            // `light::material` and `scene::surface` read it: a role, as a name or `{role}`, or
+            // linear RGB with an alpha or without.
             p(
                 "base_color",
                 "color | role",
@@ -689,7 +775,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!([0.8, 0.8, 0.8, 1]),
                 json!([0.6, 0.3, 0.2, 1]),
-            ),
+            )
+            .takes("[r, g, b, a] | [r, g, b] | role | {role: role}"),
             unit("metallic", 0.0, 0.0, 1.0),
             unit("roughness", 0.5, 0.5, 0.2),
             p(
@@ -709,7 +796,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!([1, 1, 1]),
                 json!([1, 0.8, 0.6]),
-            ),
+            )
+            .takes(COLOR),
             p(
                 "emission",
                 "color",
@@ -718,7 +806,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!([0, 0, 0]),
                 json!([1, 0.5, 0]),
-            ),
+            )
+            .takes(COLOR),
             p(
                 "emission_strength",
                 "f32",
@@ -745,23 +834,33 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             unit("coat", 0.0, 0.0, 1.0),
             unit("coat_roughness", 0.03, 0.03, 0.2),
             // The extra lobes (#428), each off at its zero.
-            p("sheen", "{weight, color | base, roughness}", "", Value::Null, S, Value::Null, json!({"weight": 1, "color": [1, 1, 1], "roughness": 0.5})),
-            p("anisotropy", "{strength, rotation}", "deg", Value::Null, S, Value::Null, json!({"strength": 0.8, "rotation": 30})),
-            p("translucency", "{kind: thin | wrap, amount, color | base, wrap}", "", Value::Null, S, Value::Null, json!({"kind": "wrap", "amount": 1, "wrap": 0.5})),
+            p("sheen", "{weight, color | base, roughness}", "", Value::Null, S, Value::Null, json!({"weight": 1, "color": [1, 1, 1], "roughness": 0.5}))
+                .takes("{weight: 0..1, color: linear RGB | [r, g, b, a] | base, roughness: 0..1}"),
+            p("anisotropy", "{strength, rotation}", "deg", Value::Null, S, Value::Null, json!({"strength": 0.8, "rotation": 30}))
+                .takes("{strength: -1..1, rotation: deg}"),
+            p("translucency", "{kind: thin | wrap, amount, color | base, wrap}", "", Value::Null, S, Value::Null, json!({"kind": "wrap", "amount": 1, "wrap": 0.5}))
+                .takes("{kind: thin | wrap, amount: 0..1, color: linear RGB | [r, g, b, a] | base, wrap: 0..1}"),
             unit("transmission", 0.0, 0.0, 1.0),
             p("ior", "f32", "", json!(1.5), S, json!(1.5), json!(1.33)),
-            p("absorption", "{thickness, attenuation: {color, distance}}", "m", Value::Null, S, Value::Null, json!({"thickness": 0.02, "attenuation": {"color": [0.5, 0.8, 1], "distance": 0.02}})),
+            p("absorption", "{thickness, attenuation: {color, distance}}", "m", Value::Null, S, Value::Null, json!({"thickness": 0.02, "attenuation": {"color": [0.5, 0.8, 1], "distance": 0.02}}))
+                .takes("{thickness: m, attenuation: {color: linear RGB | [r, g, b, a], distance: m}}"),
             p("dispersion", "f32", "", json!(0), S, json!(0), json!(1)),
-            p("iridescence", "{weight, ior, thickness: nm}", "nm", Value::Null, S, Value::Null, json!({"weight": 1, "ior": 1.3, "thickness": 400})),
+            p("iridescence", "{weight, ior, thickness: nm}", "nm", Value::Null, S, Value::Null, json!({"weight": 1, "ior": 1.3, "thickness": 400}))
+                .takes("{weight: 0..1, ior: f32, thickness: nm}"),
             unit("diffuse_roughness", 0.0, 0.0, 1.0),
             unit("retroreflection", 0.0, 0.0, 1.0),
-            p("flakes", "{weight, size, tilt, color | base}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "size": 0.001, "tilt": 15})),
-            p("subsurface", "{weight, color | base, radius: [m, m, m], thin}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "radius": [0.0036, 0.0014, 0.0007], "thin": true})),
+            p("flakes", "{weight, size, tilt, color | base}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "size": 0.001, "tilt": 15}))
+                .takes("{weight: 0..1, size: m, tilt: deg, color: linear RGB | [r, g, b, a] | base}"),
+            p("subsurface", "{weight, color | base, radius: [m, m, m], thin}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "radius": [0.0036, 0.0014, 0.0007], "thin": true}))
+                .takes("{weight: 0..1, color: linear RGB | [r, g, b, a] | base, radius: [m, m, m], thin: bool}"),
             // #465: the planar part it mirrors in; the sweep leaves it unset, since the fixture
             // holds no planar part.
-            p("mirror", "{strength, blur: px, plane: named part}", "px", Value::Null, S, Value::Null, Value::Null),
+            p("mirror", "{strength, blur: px, plane: named part}", "px", Value::Null, S, Value::Null, Value::Null)
+                .takes("{strength: 0..1, blur: px, plane: named part}"),
             // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
-            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold}, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null),
+            // `water::parse` also takes a wind's fields bare, in place of `{wind: {..}}`.
+            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold}, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
+                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam, wake: {item, span} | none, shore}"),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
@@ -772,7 +871,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("plaster"),
             ),
             p("pattern_scale", "m", "m", json!(1), S, json!(1), json!(2)),
-            p("pattern_seed", "seed", "", Value::Null, S, json!(1), json!(2)),
+            // `light::seed` hashes any value's JSON text; the form language has no "any".
+            p("pattern_seed", "seed", "", Value::Null, S, json!(1), json!(2)).takes("seed | text"),
             p(
                 "ink",
                 "{role, weight: px}",
@@ -781,7 +881,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 S,
                 json!({"role": "accent", "weight": 1}),
                 json!({"role": "muted", "weight": 2}),
-            ),
+            )
+            .takes("{role: role, weight: px}"),
             p(
                 "shadow",
                 "auto | cast | none",
@@ -880,7 +981,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!([0.2, 0.4, 0.8, 1]),
                     json!([0.1, 0.2, 0.5, 1]),
-                ),
+                )
+                .takes(SKY_COLOR),
                 p(
                     "low",
                     "color",
@@ -889,7 +991,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!([0.8, 0.8, 0.7, 1]),
                     json!([0.9, 0.6, 0.3, 1]),
-                ),
+                )
+                .takes(SKY_COLOR),
                 p(
                     "ambient_top",
                     "linear RGB",
@@ -898,7 +1001,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!([0.3, 0.3, 0.4]),
                     json!([0.2, 0.2, 0.3]),
-                ),
+                )
+                .takes(SKY_COLOR),
                 p(
                     "ambient_low",
                     "linear RGB",
@@ -907,7 +1011,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!([0.1, 0.1, 0.1]),
                     json!([0.2, 0.1, 0.1]),
-                ),
+                )
+                .takes(SKY_COLOR),
                 p(
                     "fog",
                     "color | background",
@@ -916,7 +1021,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!([0.8, 0.8, 0.8, 1]),
                     json!("background"),
-                ),
+                )
+                .takes("background | linear RGB | [r, g, b, a] | role (or #rrggbb)"),
                 p(
                     "fog_density",
                     "1/m",
@@ -943,7 +1049,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!({"top": 1, "density": 0}),
                     json!({"top": 1, "density": 0.2}),
-                ),
+                )
+                .takes("{top: m, density: 1/m}"),
                 ranged(
                     p("stars", "f32", "", json!(0), S, json!(0), json!(0.5)),
                     0.0,
@@ -957,7 +1064,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     Value::Null,
                     json!({"azimuth": 30, "elevation": 20, "radius": 1}),
-                ),
+                )
+                .takes("{azimuth: deg, elevation: deg, radius: deg}"),
                 p(
                     "sun",
                     "light ID",
@@ -984,7 +1092,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     Value::Null,
                     json!({"from": "studio"}),
-                ),
+                )
+                .takes("{from: sky | studio | sha256, intensity: f32, rotation: deg, size: px, mix: {to: sha256, by: 0..1}}"),
                 p(
                     "background",
                     "auto | sky | environment | video",
@@ -993,7 +1102,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!("auto"),
                     json!("sky"),
-                ),
+                )
+                .takes("auto | sky | environment | video {asset: sha256, frames}"),
                 ranged(
                     p(
                         "background_blur",
@@ -1015,7 +1125,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!("none"),
                     json!("none"),
-                ),
+                )
+                .takes("{height: m, radius: m} | none"),
             ],
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
@@ -1034,7 +1145,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!({"from": "lights", "ghosts": 4}),
                     json!({"from": "lights", "ghosts": 6, "halo": 0.05}),
-                ),
+                )
+                .takes("{from: lights | {emissive: EV100}, ghosts: u8 ≤ 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic: bool}, halo: ratio, starburst: {blades: u8}, intensity: f32, tint: role}"),
             ],
             reads: None,
             fixture: json!({"it": item("effect@1", json!({"kind": "flare", "flare": {"from": "lights", "ghosts": 4}}))}),
@@ -1052,7 +1164,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!([{"normal": [1, 0, 0], "offset": 0}]),
                     json!([{"normal": [1, 0, 0], "offset": 0.5}]),
-                ),
+                )
+                .takes("[{normal: [x, y, z], offset: m}] ≤ 4"),
                 p(
                     "mode",
                     "union | intersect",
@@ -1070,7 +1183,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!("all"),
                     json!("all"),
-                ),
+                )
+                .takes("collection | [collection] | all"),
                 p(
                     "cap",
                     "none | role",
@@ -1079,7 +1193,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     json!("none"),
                     json!("muted"),
-                ),
+                )
+                .takes("none | role | {role: role}"),
                 p(
                     "class",
                     "view | document",
@@ -1124,6 +1239,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     Value::Null,
                     Value::Null,
                 ),
+                // A column is written, one row per element (`cut::elements`), or reads a logic
+                // array (`slots::readers`).
                 p(
                     "proto",
                     "u16 column",
@@ -1132,7 +1249,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("[u16] | {array: <logic>.<name>, as, part, range}"),
                 p(
                     "ids",
                     "u32 column",
@@ -1141,7 +1259,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("[u32]"),
                 p(
                     "pos",
                     "vec3 column",
@@ -1150,7 +1269,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("[[x, y, z]] | {array: <logic>.<name>, as, part, range}"),
                 p(
                     "rot",
                     "quat column",
@@ -1159,7 +1279,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("[[x, y, z, w]] | {array: <logic>.<name>, as, part, range}"),
                 p(
                     "yaw",
                     "f32 column",
@@ -1168,7 +1289,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("[deg] | {array: <logic>.<name>, as, part, range}"),
                 p(
                     "scale",
                     "vec3 | f32 column",
@@ -1177,7 +1299,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("f32 | [f32 | [x, y, z]] | {array: <logic>.<name>, as, part, range}"),
                 p(
                     "attrs",
                     "{name → column}",
@@ -1186,7 +1309,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("{name → [f32 | [f32]] | {array: <logic>.<name>, as, part, range}}"),
                 p(
                     "hidden",
                     "u32 column",
@@ -1195,7 +1319,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("[u32] | {array: <logic>.<name>, as, part, range}"),
                 // #2013: its rows from a scatter, in place of written columns.
                 p(
                     "from",
@@ -1205,7 +1330,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("{distribute: {on, mode, spacing, min_distance, margin, density, prune, avoid, project, scale, yaw, tilt, max, seed}}"),
             ]),
             reads: None,
             fixture: json!({}),
@@ -1231,7 +1357,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     S,
                     Value::Null,
                     json!({"phase": 0.7}),
-                ),
+                )
+                .takes("{sun: key | none, ambient: sky | none, phase: 0..1, shade: 0..1}"),
                 p(
                     "near_fade",
                     "m | auto",
@@ -1295,7 +1422,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!([[0.4, 0, false], [0.5, 0.5, true], [0.3, 1, false]]),
                     json!([[0.4, 0, false], [0.6, 0.5, true], [0.3, 1, false]]),
-                ),
+                )
+                .takes("[[r, y, smooth: bool] | [r, y]]"),
                 p(
                     "axis",
                     "x | y | z",
@@ -1352,7 +1480,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     rect.clone(),
                     json!([[0, 0], [3, 0], [3, 1], [0, 1]]),
-                ),
+                )
+                .takes("polygon | {text: text | {copy: key}, size: m, font?: role, weight?: u16, align?: start | center | end, lang?} | {path: ID, size: m} | {vector: ID, size: m}"),
                 p(
                     "holes",
                     "[polygon]",
@@ -1366,7 +1495,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     p("depth", "m", "m", json!(0.1), G, json!(0.5), json!(0.6)),
                     0.0,
                     1000.0,
-                ),
+                )
+                .takes("m | {from: m, to: m, up: vec3}"),
                 p("twist", "deg", "deg", json!(0), G, json!(0), json!(30)),
                 p(
                     "levels",
@@ -1392,7 +1522,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!({"curve": "rail", "rings": 4}),
                     json!({"curve": "rail", "rings": 6}),
-                ),
+                )
+                .takes("{curve: ID, range: [0..1, 0..1], scale: f32 | expr (over u), rings: u16}"),
                 p(
                     "caps",
                     "none | flat",
@@ -1423,7 +1554,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!([[0, 0, 0], [0, 1, 0]]),
                     json!("rail"),
-                ),
+                )
+                .takes("[vec3] | curve ID"),
                 ranged(
                     p("radius", "m", "m", json!(0.05), G, json!(0.05), json!(0.08)),
                     0.0,
@@ -1592,7 +1724,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]),
                     json!([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]]),
-                ),
+                )
+                .takes("[vec3] ≤ 4096"),
                 p(
                     "of",
                     "ID[#part]",
@@ -1601,7 +1734,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     Value::Null,
                     Value::Null,
-                ),
+                )
+                .takes("ID | <ID>#<part>"),
                 shade(),
                 paint(),
             ],
@@ -1652,7 +1786,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!([[0, 0, 0], [1, 1, 0], [2, 0, 0]]),
                     json!([[0, 0, 0], [1, 2, 0], [2, 0, 0]]),
-                ),
+                )
+                .takes("[vec3]"),
                 p(
                     "ids",
                     "u32 column",
@@ -1661,7 +1796,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!([0, 1, 2]),
                     json!([5, 6, 7]),
-                ),
+                )
+                .takes("[u32]"),
                 p(
                     "mode",
                     "linear | bezier | catmull_rom | auto | bspline",
@@ -1679,7 +1815,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!({"in": [[0, 0, 0], [-0.2, 0, 0], [0, 0, 0]], "out": [[0.2, 0, 0], [0.2, 0, 0], [0, 0, 0]]}),
                     json!({"in": [[0, 0, 0], [-0.4, 0, 0], [0, 0, 0]], "out": [[0.4, 0, 0], [0.4, 0, 0], [0, 0, 0]]}),
-                ),
+                )
+                .takes("{in: [vec3], out: [vec3]}"),
                 ranged(
                     p("alpha", "f32", "", json!(0.5), G, json!(0.5), json!(0.25)),
                     0.0,
@@ -1702,7 +1839,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     G,
                     json!(0),
                     json!([0, 10, 0]),
-                ),
+                )
+                .takes("deg | [deg]"),
                 p(
                     "frames",
                     "rmf | up",
@@ -2176,7 +2314,7 @@ pub fn entry(spec: &Spec, family: &'static str, name: &'static str) -> Entry {
                 .iter()
                 .map(|q| Param {
                     name: q.name,
-                    ty: ParamType::Json,
+                    ty: ParamType::Json(q.declared()),
                     unit: q.unit,
                     default: q.default.clone(),
                     min: None,

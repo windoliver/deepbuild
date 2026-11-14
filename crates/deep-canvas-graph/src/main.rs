@@ -1,7 +1,8 @@
 //! `deep-graph layout`: JSON lines in, one JSON line out per input line, in order, exit 0; a line
 //! that can't be read or lacks a required field answers `{"ok":false,"code":"bad_input"}`. The
 //! surface is the #394 acceptance README's, with #399's `replaced`, `ms` (on a line that lays new
-//! nodes into the kept picture), the kept `memory` on a refusal and the planted `from_scratch`.
+//! nodes into the kept picture), the kept `memory` on a refusal and the planted `from_scratch`;
+//! #1417's `timed: true` adds `ms` to a fresh layout's answer, the time its cost is fitted to.
 
 use std::io::{self, BufRead, Write};
 use std::time::Instant;
@@ -40,15 +41,30 @@ fn layout_line(input: &Value) -> Result<Value, Refused> {
             })
         }
     };
+    let timed = match input.get("timed") {
+        None => false,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Refused {
+                code: "bad_input",
+                names: String::new(),
+            })
+        }
+    };
     let started = Instant::now();
     let graph = read_graph(graph)?;
     let layout = read_layout(layout)?;
     let fresh = |graph, layout| -> Result<Value, Refused> {
         let memory = layered(graph, layout)?;
+        let ms = started.elapsed().as_secs_f64() * 1e3;
         let mut ranks: Vec<u32> = memory.values().map(|p| p.rank).collect();
         ranks.sort_unstable();
         ranks.dedup();
-        Ok(json!({"ok": true, "memory": write_memory(&memory), "replaced": ranks}))
+        let mut answer = json!({"ok": true, "memory": write_memory(&memory), "replaced": ranks});
+        if timed {
+            answer["ms"] = json!(ms);
+        }
+        Ok(answer)
     };
     let memory = match input.get("memory") {
         None | Some(Value::Null) => return fresh(&graph, &layout),

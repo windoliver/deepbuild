@@ -14,6 +14,8 @@ mod feed;
 mod fidelity;
 mod frames;
 mod guards;
+mod lottie;
+mod pdf;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
 
@@ -35,7 +37,6 @@ use sha2::{Digest, Sha256};
 
 use crate::frames::drawing_of;
 use crate::hub::{EvalTime, Hub, Planted};
-use crate::mixdown::planted_of;
 use crate::snapshot::Unfit;
 use crate::time::{context_of, sample_rate_of};
 use frames::{Lease, Run, Sink};
@@ -57,6 +58,8 @@ pub enum Guard {
     BlankDarkOnly,
     /// film.wrap compares the last frame with the second.
     WrapAgainstSecond,
+    /// #507: the pdf handout's writer leaves stage 4's page out.
+    PdfSkipsStage4,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -112,6 +115,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "fidelity_keeps_frames" => Planted::Export(G::FidelityKeepsFrames),
         "blank_counts_dark_only" => Planted::Export(G::BlankDarkOnly),
         "wrap_compares_second_frame" => Planted::Export(G::WrapAgainstSecond),
+        "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -222,7 +226,10 @@ impl Hub<'_> {
     ) -> (Vec<String>, bool) {
         let hz = mix.rate as u32;
         let span = |k: i64| self.span_start(k, shard.frame, hz);
-        let mut player = Player::new(mix.clone(), planted_of(self.scenario.planted, false));
+        let mut player = Player::new(
+            mix.clone(),
+            crate::mixdown::export_planted(self.scenario.planted),
+        );
         player.delivery = amp(shard.gain);
         if let Some(db) = shard.ceiling {
             player.set_ceiling(db);
@@ -300,6 +307,10 @@ pub struct Job {
     pub refuse_end_cuts: bool,
     /// #157: the agent session that asks for the export, which holds its GPU lease.
     pub session: Option<String>,
+    /// #162: `lottie: {container, images}` (or `video.lottie`), the Lottie target's options.
+    pub lottie: Value,
+    /// #507: `pdf {notes}`: the handout prints each stage's notes under its still.
+    pub notes: bool,
 }
 
 impl Default for Job {
@@ -327,6 +338,8 @@ impl Default for Job {
             keyframe_interval: None,
             refuse_end_cuts: false,
             session: None,
+            lottie: Value::Null,
+            notes: false,
         }
     }
 }
@@ -367,6 +380,8 @@ pub enum Span {
     Between(EvalTime, EvalTime),
     Still(EvalTime),
     Marker(String),
+    /// #507: each stage's settled still, the pdf handout's pages.
+    Stages,
     /// A range form the issue lists that this build does not write, by its name.
     Unbuilt(&'static str),
 }
@@ -386,6 +401,7 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
     let range = match c.get("range") {
         None => Span::Whole,
         Some(Value::String(w)) if w == "whole" => Span::Whole,
+        Some(Value::String(w)) if w == "stages" => Span::Stages,
         Some(Value::Array(a)) if a.len() == 2 => Span::Between(at(&a[0])?, at(&a[1])?),
         Some(Value::Object(o)) => match (o.get("still"), o.get("ranges"), o.get("frames")) {
             (Some(Value::Object(st)), _, _) => match (st.get("t"), st.get("marker")) {
@@ -477,6 +493,16 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .and_then(Value::as_array)
             .is_some_and(|r| r.contains(&json!("end_cut"))),
         session: s(c.get("session")),
+        lottie: c
+            .get("lottie")
+            .or_else(|| video.and_then(|v| v.get("lottie")))
+            .cloned()
+            .unwrap_or(Value::Null),
+        notes: c
+            .get("pdf")
+            .and_then(|p| p.get("notes"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
@@ -560,6 +586,9 @@ impl Hub<'_> {
         if job.software {
             return Err(no_software_adapter());
         }
+        if job.codec == "pdf" {
+            return self.export_pdf(job, &doc);
+        }
         let target = job.target().to_string();
         // The target, as this build sealed it.
         let entry = self
@@ -571,6 +600,10 @@ impl Hub<'_> {
             .ok_or_else(
                 || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
             )?;
+        // #162: a Lottie can't keep the status rule: refused before anything is written.
+        if let Some(r) = lottie::refused(&doc).filter(|_| target == "lottie") {
+            return Err(r);
+        }
         // Rates, and what the check refuses before anything is drawn.
         let (p, q) = job
             .frame_rate
@@ -630,6 +663,11 @@ impl Hub<'_> {
         let resolve = |hub: &Hub, t: &EvalTime| hub.resolve_time(&job.doc, t).map_err(refuse);
         let frames = match &job.range {
             Span::Unbuilt(form) => return Err(json!({"code": "range_unbuilt", "range": form})),
+            Span::Stages => {
+                return Err(
+                    json!({"code": "range_unbuilt", "range": "stages", "why": "range: stages is the pdf handout's"}),
+                )
+            }
             Span::Whole => {
                 // An open span has no end: an export takes a finite range of its own (Transport).
                 if doc.pointer("/transport/span").and_then(Value::as_str) == Some("open") {
@@ -687,6 +725,19 @@ impl Hub<'_> {
             // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
             self.hover_into(&job.doc, &mut doc);
         }
+        // #507: a film whose markers wait or branch exports one path, each hold as long as the
+        // film audit's hold rule asks for what it shows.
+        let path = match (&job.range, doc_span(&doc)) {
+            (Span::Whole, Some(end)) => self.export_path(&doc, end)?,
+            _ => None,
+        };
+        let frames = match &path {
+            Some(p) => {
+                doc = p.doc.clone();
+                0..(p.frames + frame - 1).div_euclid(frame)
+            }
+            None => frames,
+        };
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track)
@@ -718,6 +769,10 @@ impl Hub<'_> {
             return Err(
                 json!({"outcome": "stopped", "state": "BLOCKED", "gate": "readiness", "frames_drawn": drawn, "issues": [issue]}),
             );
+        }
+        // #162: the Lottie target writes no frames: its writer reads the document as the frames show it.
+        if target == "lottie" {
+            return self.export_lottie(job, &doc, ((p, q), frame), frames, &out, &temp);
         }
         // #502: the script's lines, their captions laid out on this export's frames and held to
         // their profile, before any frame is drawn.
@@ -785,7 +840,7 @@ impl Hub<'_> {
                 self.span_start(frames.start, frame, hz),
                 self.span_start(frames.end, frame, hz),
             );
-            let planted = planted_of(self.scenario.planted, false);
+            let planted = crate::mixdown::export_planted(self.scenario.planted);
             let pass = |db: f64| {
                 let mut player = Player::new(mix.clone(), planted);
                 player.delivery = amp(db);
@@ -1129,6 +1184,10 @@ impl Hub<'_> {
         }
         if target == "video" {
             receipt["color_probe"] = probe;
+        }
+        if let Some(p) = &path {
+            receipt["ranges"] = json!(p.ranges);
+            receipt["holds"] = json!(p.holds);
         }
         if mix.is_some() {
             receipt["sample_rate"] = json!(hz);

@@ -43,7 +43,8 @@ export const joinCommand = async (args: Args): Promise<number> => (await import(
 export const showCommand = async (args: Args): Promise<number> => (await import('./show.js')).showCommand(args);
 export const doctorCommand = async (args: Args, also: () => Promise<Item[]>): Promise<number> => (await import('./doctor.js')).doctorCommand(args, also);
 export const doctorItems = async (env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> => (await import('./doctor.js')).doctorItems(env, options);
-export { exportCommand, kindsCommand } from './canvas.js';
+export const exportCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).exportCommand(args);
+export const kindsCommand = async (args: Args): Promise<number> => (await import('./canvas.js')).kindsCommand(args);
 export { activePlant } from './plant.js';
 export { contractAdapter, extendPreview, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';

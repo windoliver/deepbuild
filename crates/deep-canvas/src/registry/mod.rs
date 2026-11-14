@@ -144,6 +144,8 @@ impl BuildSet {
 /// `hull`, #440) and its material (Material `material@1`; #421). Any other bare name is the core's.
 const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cells", "cells"),
+    // #540: a lockstep match, Net `net@1`.
+    ("net", "net"),
     ("slab", "scene3d"),
     ("lathe", "scene3d"),
     ("extrude", "scene3d"),
@@ -163,6 +165,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("marks", "data"),
     ("axis", "data"),
     ("scale", "data"),
+    // #226: 3D axes are the data module's too, beside its scales and axes.
+    ("axes3d", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
@@ -523,6 +527,9 @@ pub struct Operator {
     /// What its per-item nodes key on of `self` and `refs`, when narrower than the whole item
     /// and document (#420).
     pub keyed: Option<Keyed>,
+    /// Its CPU time on one item, in ms, from what the item gives it to work on, charged on top of
+    /// its coefficients' terms: an operator whose work grows with its item's params (#1417).
+    pub cost: Option<Cost>,
 }
 
 impl Operator {
@@ -573,6 +580,12 @@ impl Operator {
     /// Keys its per-item nodes on `keyed`'s value in place of their item and document.
     pub fn keyed(&mut self, keyed: Keyed) -> &mut Self {
         self.keyed = Some(keyed);
+        self
+    }
+
+    /// Its CPU time on an item beyond its coefficients' terms (#1417).
+    pub fn cost(&mut self, cost: Cost) -> &mut Self {
+        self.cost = Some(cost);
         self
     }
 }
@@ -707,6 +720,8 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// Its Rust for the deforms and kinds scene3d runs and draws for it (#226).
+    pub fills: Vec<(String, crate::contributed::Fill)>,
     /// The pack fields it reads, each with its check at the pack check (#1720).
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
     /// The preview kinds it removed (#1802).
@@ -926,6 +941,7 @@ impl Registrar {
             serial: false,
             determinism: "exact",
             keyed: None,
+            cost: None,
         });
         self.operators.last_mut().expect("just pushed")
     }
@@ -1315,6 +1331,8 @@ pub struct Sealed {
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
+    /// Each deform and kind a module fills for scene3d (#226), sorted by module then kind.
+    pub fills: Vec<crate::contributed::Sealed>,
 }
 
 /// One outline source the seal admitted: its entry, module, form and Rust (#443).
@@ -2985,6 +3003,7 @@ impl Registry {
             })
             .collect();
         outlines.sort_by(|a, b| (&a.module, &a.entry).cmp(&(&b.module, &b.entry)));
+        let fills = crate::contributed::sealed(&shapes[1..]);
         // Digests: each module's own; the core's shapes are no module's. Each module's shapes
         // hash to its interface's digest: its reference's, registered beside it when the module
         // isn't that reference (Canvas module: interface and implementation).
@@ -3057,6 +3076,7 @@ impl Registry {
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
+            fills,
             costs: self
                 .costs
                 .take()
@@ -3301,7 +3321,7 @@ fn kind_shape_fault(entry: &Entry, draws_as: &str) -> Option<String> {
     if draws_as == "rect@1" {
         if let Some(v) = entry.versions.iter().find(|v| {
             v.param("box")
-                .is_none_or(|p| p.ty != crate::kinds::ParamType::Json)
+                .is_none_or(|p| !matches!(p.ty, crate::kinds::ParamType::Json(_)))
         }) {
             return Some(format!(
                 "draws as `rect@1` and has no `box` param of type Json at major {}",
@@ -3667,7 +3687,7 @@ mod tests {
                 minor: 0,
                 params: vec![Param {
                     name: "box",
-                    ..param(ParamType::Json)
+                    ..param(ParamType::Json("[x, y, w, h]"))
                 }],
             }],
             migrations: vec![],
@@ -3866,7 +3886,7 @@ mod tests {
                 default: json!(1),
                 min: Some(0.0),
                 max: Some(10.0),
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             r.kind(entry, &[], "rect@1");
         }
@@ -4036,7 +4056,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module,
                 operator,
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             entry
         }
@@ -4166,7 +4186,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module: "c",
                 operator,
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             entry
         }
@@ -4691,7 +4711,7 @@ mod tests {
             entry.versions[0].params.push(Param {
                 module: "text",
                 operator: "measure",
-                ..param(ParamType::Json)
+                ..param(ParamType::Json("number"))
             });
             r.kind(entry, &[], "rect@1");
         }

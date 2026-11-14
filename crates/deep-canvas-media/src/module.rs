@@ -87,6 +87,9 @@ pub fn png_reads_itself() -> Module {
 const READER: &str = "decode_worker";
 
 fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // #204: the synth presets packs fill, read from a pack's `presets`.
+    r.registry(crate::synth::registry());
+    r.pack_field("presets", crate::synth::presets_field);
     // The targets the encode job writes (Export: Targets): each held to the document by
     // export.fidelity on what a fresh decode worker reads back, hidden items left out.
     for (target, reader) in [("video", READER), ("png", png_reader)] {
@@ -162,11 +165,12 @@ fn spectrum_fixture() -> Value {
     json!({"frames": frames, "changed": changed, "seeks": [{"from": 3, "to": 2, "rows": frames[2]}]})
 }
 
-/// `media.strip@1`: Strip and track's fields as params.
+/// `media.strip@1`: Strip and track's fields as params, each with the forms a strip's readers
+/// take (#1973): the mix's (`mixdown`), the picture link's and the score's.
 fn strip_kind() -> Entry {
-    let json = |name: &'static str| Param {
+    let json = |(name, form): (&'static str, &'static str)| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
@@ -176,8 +180,37 @@ fn strip_kind() -> Entry {
         operator: "",
     };
     let fields = [
-        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch",
-        "pan", "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
+        ("track", "u16"),
+        ("src", "sha256 | {asset?: sha256, synth?, score?: item ID}"),
+        ("start", "flick | time"),
+        ("in", "flick | time"),
+        ("out", "flick | time"),
+        ("rate", "number | [p, q] | <p>/<q>"),
+        ("offset", "flick | time"),
+        ("span", "flick | time"),
+        ("loop", "bool"),
+        (
+            "gain",
+            "dB | text (-inf) | {keys: [{t: flick, value: dB | text, interp?}]}",
+        ),
+        ("pitch", "st | expr"),
+        ("pan", "-1..1"),
+        ("bus", "bus ID"),
+        (
+            "enabled",
+            "bool | {keys: [{t: flick, value: bool, interp?}]}",
+        ),
+        (
+            "fade_in",
+            "{length: flick, curve?: linear | equal_power | exp}",
+        ),
+        (
+            "fade_out",
+            "{length: flick, curve?: linear | equal_power | exp}",
+        ),
+        ("align", "{onset?: strongest | first, to: flick | time}"),
+        ("at_stage", "play | wait"),
+        ("tags", "[text]"),
     ];
     Entry {
         family: "media",
@@ -335,7 +368,9 @@ mod tests {
         let def = deep_canvas::registry::core_lists::export_target_registry();
         let mut r = Registrar::default();
         (module().register)(&mut r);
-        assert!(r.registries.is_empty());
+        // #204: media declares synth.preset@1, and never export.target@1.
+        let declared: Vec<&str> = r.registries.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(declared, [crate::synth::REGISTRY]);
         let targets: Vec<_> = r
             .entries
             .iter()
@@ -351,6 +386,6 @@ mod tests {
         let mut planted = Registrar::default();
         (declaring_export_targets().register)(&mut planted);
         let declared: Vec<&str> = planted.registries.iter().map(|d| d.name.as_str()).collect();
-        assert_eq!(declared, ["export.target@1"]);
+        assert_eq!(declared, ["export.target@1", crate::synth::REGISTRY]);
     }
 }

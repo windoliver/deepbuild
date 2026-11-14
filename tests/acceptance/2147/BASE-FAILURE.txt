@@ -1,0 +1,87 @@
+# tests/acceptance/2147 at the base 2b05d52df (PR #2151's head), before the library kit, on Linux (node 24.22.0).
+# AC1 fails on 'deep.registerSource, library declares no kit'; the environment@1 lsof line fails on Linux at main too (README, Linux note).
+# Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2147
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-245-cow-logic-spike-745f7f
+
+ ❯ tests/acceptance/2147/slots-check.test.ts (5 tests | 3 failed) 16782ms
+   ❯ AC1 #2147.328da474 `node scripts/slots-check.mjs` exits 0 on main (3)
+     × AC1 the slot check on the shipped contract exits 0 with its PASS line and no FAIL line 4145ms
+     × AC1 the library source slot names a kit the conformance package ships, with a planted wrong fill that kit refuses 1ms
+     × AC1 neither the source slots nor the channel slot has a FAIL line from the shipped slot check 4092ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2147/slots-check.test.ts > AC1 #2147.328da474 `node scripts/slots-check.mjs` exits 0 on main > AC1 the slot check on the shipped contract exits 0 with its PASS line and no FAIL line
+AssertionError: FAIL slots: deep.registerSource, library: deep.registerSource, library declares no kit; a slot needs the kit that holds its fills to the interface
+FAIL slots: deep.registerEnvironment, - (planted leaves-grandchild): deep.registerEnvironment's kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown" not with its own message "left its process running after down"
+: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL slots: deep.registerSource, library: deep.registerSource, library declares no kit; a slot needs the kit that holds its fills to the interface",
++   "FAIL slots: deep.registerEnvironment, - (planted leaves-grandchild): deep.registerEnvironment's kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED \"the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown\" not with its own message \"left its process running after down\"",
++ ]
+
+ ❯ tests/acceptance/2147/slots-check.test.ts:46:31
+     44|   it('AC1 the slot check on the shipped contract exits 0 with its PASS…
+     45|     const r = slotsCheck();
+     46|     expect(r.fails, r.stdout).toEqual([]);
+       |                               ^
+     47|     expect(r.stdout).toMatch(/^PASS slots/m);
+     48|     expect(r.status, r.stdout).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2147/slots-check.test.ts > AC1 #2147.328da474 `node scripts/slots-check.mjs` exits 0 on main > AC1 the library source slot names a kit the conformance package ships, with a planted wrong fill that kit refuses
+AssertionError: the library slot names a kit: expected null to be truthy
+
+- Expected:
+true
+
++ Received:
+null
+
+ ❯ tests/acceptance/2147/slots-check.test.ts:55:54
+     53|     expect(row, 'hub-slots.json has the deep.registerSource, library r…
+     54|     expect(row!.interface).toBe('asset.library@1');
+     55|     expect(row!.kit, 'the library slot names a kit').toBeTruthy();
+       |                                                      ^
+     56|     expect(row!.planted.length, 'the library slot plants at least one …
+     57|     const { slotKits, slotProblems } = await conformance();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2147/slots-check.test.ts > AC1 #2147.328da474 `node scripts/slots-check.mjs` exits 0 on main > AC1 neither the source slots nor the channel slot has a FAIL line from the shipped slot check
+AssertionError: FAIL slots: deep.registerSource, library: deep.registerSource, library declares no kit; a slot needs the kit that holds its fills to the interface
+FAIL slots: deep.registerEnvironment, - (planted leaves-grandchild): deep.registerEnvironment's kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown" not with its own message "left its process running after down"
+: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL slots: deep.registerSource, library: deep.registerSource, library declares no kit; a slot needs the kit that holds its fills to the interface",
++ ]
+
+ ❯ tests/acceptance/2147/slots-check.test.ts:70:86
+     68|     const r = slotsCheck();
+     69|     expect(r.fails.filter((line) => line.includes('deep.registerChanne…
+     70|     expect(r.fails.filter((line) => line.includes('deep.registerSource…
+       |                                                                                      ^
+     71|   }, 300_000);
+     72| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 2 passed (5)
+   Start at  20:25:06
+   Duration  16.91s (tests 100%)
+

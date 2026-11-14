@@ -16,7 +16,7 @@ import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
 import { startOf } from './wire.js';
-import { claimState, newestClaim } from './verdict-chat.js';
+import { claimState } from './verdict-chat.js';
 import { watched, watchWords, type Watch } from './watch.js';
 import { ROUNDS, verdictLine } from '@deepbuild/verdicts';
 
@@ -467,13 +467,23 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
     if (billingMode({ id: '', kind: 'session.start', v: 3, ts: 0, session: e.session_id, data }) === 'api_key') keyed.add(e.session_id);
     else keyed.delete(e.session_id);
   }
+  const once = <T>(read: (worktree: string) => T) => {
+    const known = new Map<string, T>();
+    return (worktree: string): T => {
+      if (!known.has(worktree)) known.set(worktree, read(worktree));
+      return known.get(worktree)!;
+    };
+  };
+  const repo = once(repoOf);
+  const shadow = once((worktree) => shadowedBy(topLevel(worktree))[0]);
   const rows = sessions.map((s): StatusRow => {
-    return { id: s.id, repo: repoOf(s.worktree) ?? s.project_id ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: keyed.has(s.id) ? `${s.why}, billing an API key` : s.why, ...(s.note ? { note: s.note } : {}) };
+    return { id: s.id, repo: (s.worktree ? repo(s.worktree) : undefined) ?? s.project_id ?? 'no repo', agent: s.agent ?? 'agent', state: s.state, why: keyed.has(s.id) ? `${s.why}, billing an API key` : s.why, ...(s.note ? { note: s.note } : {}) };
   });
   // The newest claim's line, from the record's claims, verdicts and runs, as the chat shows it (#83, #669).
+  // A database older than the claims tables has none to show.
+  const claimed = new Map(((await query('SELECT session_id, id FROM claims WHERE session_id IS NOT NULL ORDER BY created, id').catch(() => [])) as { session_id: string; id: string }[]).map((c) => [c.session_id, c.id]));
   for (const row of rows) {
-    // A database older than the claims tables has none to show.
-    const claim = await newestClaim(query, row.id).catch(() => undefined);
+    const claim = claimed.get(row.id);
     const state = claim === undefined ? undefined : await claimState(query, claim, new Map()).catch(() => undefined);
     if (state) row.verdict = verdictLine(state.state);
   }
@@ -487,8 +497,8 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   for (const row of rows) {
     const worktree = worktrees.get(row.id);
     if ((row.agent !== 'claude-code' && row.agent !== 'claude') || !worktree) continue;
-    const shadow = shadowedBy(topLevel(worktree))[0];
-    if (shadow) row.readings = [`${UNREAD_WINDOW} ${shadow.file} sets ${shadow.key}, which runs instead of DeepBuild's status line forwarder, so this session's plan windows aren't read`];
+    const own = shadow(worktree);
+    if (own) row.readings = [`${UNREAD_WINDOW} ${own.file} sets ${own.key}, which runs instead of DeepBuild's status line forwarder, so this session's plan windows aren't read`];
   }
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);

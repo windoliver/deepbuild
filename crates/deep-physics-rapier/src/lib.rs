@@ -7,13 +7,14 @@ use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Hit, Input, Query, ShapeRef, State, Targets,
+    Backend, BodyState, Canonical, Checkpoint, Held, Hit, Input, JointState, Query, ShapeRef,
+    State, Targets,
 };
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::doc::{
     BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Material, Mode, Motor,
-    Pose as DocPose, Refusal, Region, Rot, Rule, Shape, World,
+    Pose as DocPose, Read, Refusal, Region, Rot, Rule, Shape, World,
 };
 use deep_canvas_physics::occurrence::Raw;
 use rapier3d::control::KinematicCharacterController;
@@ -32,10 +33,17 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 }
 
 pub mod bound;
+pub mod channels;
 pub mod fp;
+mod inputs;
+mod joints;
+mod kinematic;
 mod occurrences;
+pub mod planted;
 pub mod runner;
 pub mod scene;
+mod soft;
+pub mod source;
 
 /// #1919 criterion 1's test backend (`test-count-calls`): each backend-interface call this process
 /// made, by method, `query`'s by kind (`query.ray`), which `backend_calls` answers.
@@ -91,6 +99,24 @@ fn by_ulps(x: f32, ulps: i64) -> f32 {
     (0..ulps.unsigned_abs()).fold(x, |v, _| if ulps > 0 { v.next_up() } else { v.next_down() })
 }
 
+/// #523's planted wrong programs (its Proof: the flywheel, disc and hanging-body fixtures with
+/// their planted twins), each one criterion's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Twin {
+    #[default]
+    None,
+    /// A hinge's `joint_coordinate` is its angle wrapped at ±180°, with no turn count.
+    CoordinateWraps,
+    /// A restored checkpoint keeps no turn count.
+    CheckpointDropsTurns,
+    /// The backend caps as before but writes no `fault {kind: speed_cap}`.
+    SpeedCapSilent,
+    /// A joint's force is its impulse over the whole step, not the substep it came from.
+    ForcePerStep,
+    /// A kinematic solve that ends its iteration cap past its tolerance reports success.
+    SolveCapSuccess,
+}
+
 /// A Rapier world behind the backend interface.
 #[derive(Default)]
 pub struct Rapier {
@@ -105,11 +131,20 @@ pub struct Rapier {
     step: u64,
     /// The planted twin (#2009 Proof): restore skips the version comparison.
     pub restore_any_version: bool,
-    /// #1918: the joints that break at a threshold, those whose motor target a channel sets, and
-    /// those a kinematic solve drives.
+    /// #1918: the joints that break at a threshold and those whose motor target a channel sets.
     breakable: Vec<(String, ImpulseJointHandle, Breaks)>,
+    /// #523: every joint, by ID, with its kind.
+    joints: Vec<(String, ImpulseJointHandle, JointKind)>,
+    /// #523: a kinematic world's solve, and the joints its last step jammed on.
+    kin: Option<kinematic::Kinematic>,
+    jams: Vec<String>,
+    /// #523: each output watching levels on a joint's reading: (output, joint, read, levels).
+    watched: Vec<(String, String, Read, Vec<f64>)>,
+    /// The world's step length, flicks, which a crossing's time counts in.
+    step_flicks: i64,
+    /// #523's planted twin, if any.
+    pub twin: Twin,
     motors: Vec<(String, ImpulseJointHandle, JointKind, Motor)>,
-    solved: BTreeMap<String, Joint>,
     /// Each tagged shape use's material tag, by (body, shape-use index).
     tags: BTreeMap<(String, u32), String>,
     hit_threshold: f32,
@@ -120,6 +155,15 @@ pub struct Rapier {
     reverse_pairs: bool,
     /// The world's shapes, which a query's probe shape names as a compound's children (#1919).
     shapes: BTreeMap<String, Shape>,
+    /// #522: each held grab, by body; and the planted restore's: the next step applies no
+    /// warm-start impulse.
+    grabs: BTreeMap<String, inputs::Grab>,
+    cold: bool,
+    /// #524: its soft bodies' particles by name, the most particles its capacity holds, and the
+    /// steps between its checkpoints.
+    soft: soft::Softs,
+    particle_capacity: u64,
+    checkpoint_every: u64,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -468,6 +512,8 @@ impl Rapier {
                     }
                 }
             }
+            // #523: couplings Rapier lacks, which only the kinematic solve runs (kinematic.rs).
+            JointKind::Gear | JointKind::Pulley => return,
             JointKind::Rope => {
                 let max = j.limits.map_or(length, |[_, hi]| hi as f32);
                 RopeJointBuilder::new(max)
@@ -479,6 +525,7 @@ impl Rapier {
         data.set_contacts_enabled(j.collide_connected);
         data.set_enabled(j.active);
         let h = self.world.insert_impulse_joint(h1, h2, data);
+        self.joints.push((id.into(), h, j.kind));
         if let Some(b) = &j.breaks_at {
             self.breakable.push((id.into(), h, b.clone()));
         }
@@ -491,9 +538,21 @@ impl Rapier {
         self.bodies.iter().find(|(b, _)| b == id).map(|(_, h)| *h)
     }
 
+    /// #523: body `id`'s mass as its shapes give it, density × volume, kg.
+    pub fn shapes_mass(&self, id: &str) -> Option<f64> {
+        let rb = &self.world.bodies[self.handle_of(id)?];
+        let m: f32 = rb
+            .colliders()
+            .iter()
+            .map(|c| self.world.colliders[*c].mass())
+            .sum();
+        Some(f64::from(m))
+    }
+
     /// Sets what a step reads of its scene (#1918): each kinematic body's next position, keeping
-    /// its rotation; each channel motor's target, touching the joint only when it changes; and
-    /// each solved joint's coordinate, placing its second body from its first, in the solve's order.
+    /// its rotation; each channel motor's target, touching the joint only when it changes; and in
+    /// kinematic mode the solve's placements, each driven joint at its channel's coordinate (#523:
+    /// kinematic.rs).
     fn aim(&mut self, t: &Targets) {
         for (id, pos) in &t.poses {
             if let Some(h) = self.handle_of(id) {
@@ -534,41 +593,7 @@ impl Rapier {
                 j.data.set_motor_position(axis, x, k, c);
             }
         }
-        let mut placed: BTreeMap<String, Pose> = BTreeMap::new();
-        for (id, q) in &t.coords {
-            let Some(j) = self.solved.get(id) else {
-                continue;
-            };
-            let (Some(b), Some(hb)) = (
-                &j.b.body,
-                j.b.body.as_deref().and_then(|b| self.handle_of(b)),
-            ) else {
-                continue;
-            };
-            let from = |a: &str| {
-                placed
-                    .get(a)
-                    .copied()
-                    .or_else(|| Some(*self.world.bodies[self.handle_of(a)?].position()))
-            };
-            let a =
-                j.a.body
-                    .as_deref()
-                    .map_or(Some(Pose::IDENTITY), from)
-                    .unwrap_or(Pose::IDENTITY);
-            let axis = v3(j.a.axis).normalize();
-            let (rot, along) = match j.kind {
-                JointKind::Hinge => (
-                    a.rotation * Rotation::from_axis_angle(axis, *q as f32 * PI / 180.0),
-                    Vector::ZERO,
-                ),
-                _ => (a.rotation, axis * *q as f32),
-            };
-            let pos = a.transform_point(v3(j.a.point) + along) - rot * v3(j.b.point);
-            let p = Pose::from_parts(pos, rot);
-            placed.insert(b.clone(), p);
-            self.world.bodies[hb].set_next_kinematic_position(p);
-        }
+        self.jams = self.solve_step(t).into_iter().collect();
     }
 
     /// Each force's push on each body it applies to, from the state at t(k), held over the step.
@@ -732,13 +757,16 @@ impl Backend for Rapier {
         self.bodies.clear();
         self.uses.clear();
         self.breakable.clear();
+        self.joints.clear();
         self.motors.clear();
-        self.solved = w
-            .solve
+        self.jams.clear();
+        self.watched = w
+            .outputs
             .iter()
-            .flat_map(|s| &s.drivers)
-            .filter_map(|(j, _)| Some((j.clone(), w.joints.get(j)?.clone())))
+            .filter(|(_, o)| !o.crossings.is_empty())
+            .map(|(id, o)| (id.clone(), o.from.clone(), o.read, o.crossings.clone()))
             .collect();
+        self.step_flicks = deep_canvas_physics::occurrence::step_flicks(w);
         self.last.clear();
         self.shapes = w.shapes.clone();
         self.hit_threshold = w.solver.hit_threshold as f32;
@@ -837,6 +865,10 @@ impl Backend for Rapier {
         for (id, j) in &w.joints {
             self.joint(&handles, id, j, &mut out);
         }
+        self.kinematic(w);
+        self.soft.build(w, &mut self.world, &handles);
+        self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
+        self.checkpoint_every = w.checkpoint_every;
         self.forces = w.forces.values().cloned().collect();
         if out.is_empty() {
             Ok(())
@@ -847,41 +879,44 @@ impl Backend for Rapier {
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
-        // #525: a launch sets its body's velocities at the start of its step; the reader
-        // refuses every other kind (#522).
-        for i in inputs {
-            let body = self
-                .bodies
-                .iter()
-                .find(|(b, _)| *b == i.target)
-                .map(|(_, h)| *h);
-            let (Some(h), "launch") = (body, i.kind.as_str()) else {
-                let what = format!(
-                    "the input {} on {} isn't run by this backend interface yet; #522 brings it",
-                    i.kind, i.target
-                );
-                return Err(Box::new(refusal(
-                    "physics.unsupported",
-                    "inputs/kind".into(),
-                    json!(i.kind),
-                    what,
-                )));
-            };
-            let v = |k: &str| -> [f64; 3] {
-                serde_json::from_value(i.data[k].clone()).unwrap_or([0.0; 3])
-            };
-            let rb = &mut self.world.bodies[h];
-            rb.set_linvel(v3(v("linear")), true);
-            rb.set_angvel(v3(v("angular")) * (PI / 180.0), true);
-        }
+        self.apply(inputs)?;
         let before = self.before();
+        let start = self.start();
+        let watched = self.readings();
         self.aim(targets);
         self.push();
-        self.world.step();
+        self.pull();
+        let (particles, quarantined) = (
+            self.soft.particles(&self.world),
+            self.soft.quarantined(&self.world),
+        );
+        let warm = self.world.integration_parameters.warmstart_coefficient;
+        if std::mem::take(&mut self.cold) {
+            self.world.integration_parameters.warmstart_coefficient = 0.0;
+        }
+        let torn = self.soft.step(&mut self.world);
+        self.world.integration_parameters.warmstart_coefficient = warm;
         self.step += 1;
         self.last = self.gather(&before);
+        let turned = self.turned(&start);
+        self.last.extend(turned);
         let broken = self.breaks();
         self.last.extend(broken);
+        let crossed = self.crossings(&watched);
+        self.last.extend(crossed);
+        let jams: Vec<Raw> = self.jams.iter().map(|j| joints::fault(j, "jam")).collect();
+        self.last.extend(jams);
+        self.last.extend(torn);
+        let faults = self.soft_faults(particles, &quarantined);
+        self.last.extend(faults);
+        // #524: a world with soft bodies continues from its own checkpoint at every checkpoint's
+        // step, since the engine's checkpoint leaves out caches its soft contacts keep; so a run
+        // and a seek from any checkpoint pass through the same states.
+        if self.soft.has_any() && self.step.is_multiple_of(self.checkpoint_every.max(1)) {
+            let (last, cp) = (std::mem::take(&mut self.last), self.checkpoint());
+            self.restore(&cp)?;
+            self.last = last;
+        }
         Ok(())
     }
 
@@ -925,6 +960,7 @@ impl Backend for Rapier {
         State {
             step: self.step,
             bodies,
+            soft: self.soft.read(&self.world),
         }
     }
 
@@ -937,12 +973,26 @@ impl Backend for Rapier {
                 let (p, q, v, w) = (rb.translation(), rb.rotation(), rb.linvel(), rb.angvel());
                 Canonical {
                     id: id.clone(),
-                    values: [
+                    values: vec![
                         p.x, p.y, p.z, q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z,
                     ],
                 }
             })
+            .chain(self.soft.canonical(&self.world))
             .collect()
+    }
+
+    fn held(&self) -> Held {
+        let (rigid_bodies, joints) = self.rigid_held();
+        Held {
+            rigid_bodies,
+            joints,
+            soft: self.soft.held(&self.world),
+        }
+    }
+
+    fn joints(&self) -> Vec<JointState> {
+        self.joint_states()
     }
 
     fn checkpoint(&self) -> Checkpoint {
@@ -952,7 +1002,12 @@ impl Backend for Rapier {
             version: RAPIER3D.version.into(),
             features: RAPIER3D.features.iter().map(|f| f.to_string()).collect(),
             step: self.step,
-            state: bincode::serialize(&self.world).expect("a Rapier world serializes"),
+            state: [
+                bincode::serialize(&self.world).expect("a Rapier world serializes"),
+                self.soft.bytes(),
+                self.grab_bytes(),
+            ]
+            .concat(),
         }
     }
 
@@ -971,7 +1026,8 @@ impl Backend for Rapier {
                 ),
             )));
         }
-        let world: PhysicsWorld = bincode::deserialize(&cp.state).map_err(|e| {
+        let mut rest = &cp.state[..];
+        let world: PhysicsWorld = bincode::deserialize_from(&mut rest).map_err(|e| {
             Box::new(refusal(
                 CHECKPOINT_REFUSED,
                 "checkpoint/state".into(),
@@ -983,8 +1039,13 @@ impl Backend for Rapier {
             ))
         })?;
         self.world = world;
+        let rest = self.soft.restore(rest);
+        self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();
+        if self.twin == Twin::CheckpointDropsTurns {
+            self.drop_turns();
+        }
         Ok(())
     }
 

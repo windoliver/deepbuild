@@ -174,6 +174,12 @@ fn register_compiling(
     for (name, value) in crate::kit::entries(planted, cycle_through) {
         r.entry("constraint@1", name, value, "R6");
     }
+    // #450: a trail on a 3D line or a 2D path reads its source's chain at earlier times: each
+    // frame's evaluations count in the budget estimate, and its fields are checked here.
+    for kind in ["mark.line", "path"] {
+        r.cost(kind, crate::trail::cost)
+            .rule(kind, crate::trail::rule);
+    }
     r.array("motion.program", "program", "document", "geometry", "plan");
     r.contribution(
         "motion.at",
@@ -213,6 +219,8 @@ fn register_compiling(
     .run(channels);
     register_arrange(r);
     register_score(r);
+    // #538: a flip by array in the frame the hub draws.
+    crate::held::register(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",
@@ -241,6 +249,24 @@ fn register_compiling(
         "bad_marker_kind",
         "A marker of a kind motion doesn't land.",
         "Use the marker kind cue, shot, section or record.",
+        false,
+    );
+    r.code(
+        "marker_order",
+        "A then or goto that names a marker at or before its own, or a loop that replays from one at or after its stage: paths only go forward (#507).",
+        "Name a later marker; to go back, press back in present mode.",
+        false,
+    );
+    r.code(
+        "waits_for_class",
+        "A marker that waits for a control of class view or viewer, whose entries never reach the input track (#507).",
+        "Wait for a control of class document.",
+        false,
+    );
+    r.code(
+        "too_many_paths",
+        "A film whose waits and branches make more than 64 paths, more than the film audit runs on (#507).",
+        "Join branches, or let some options play on, so the film makes 64 paths or fewer.",
         false,
     );
     r.code(
@@ -319,7 +345,8 @@ fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
     })
 }
 
-/// An item a document channel or driver targets, a limit constraint holds or a placement binds.
+/// An item a document channel or driver targets, a constraint moves (but a rest solved at check)
+/// or a placement binds.
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     // #493: a parallax group moves with the camera's pose and its drift.
     if item.get("kind").and_then(Value::as_str) == Some("group@1")
@@ -347,15 +374,14 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
         || !keyed_data(doc, item).is_empty()
         || counter_data(doc, item).is_some()
         || reads_moving(doc, item);
+    // #162: every constraint's owner, not only a limit's, so an item a follow_path or a child_of
+    // alone moves draws where the program puts it.
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .any(|(_, c)| {
-            c.get("kind").and_then(Value::as_str) == Some("limit")
-                && c.get("owner").and_then(Value::as_str) == Some(id)
-        });
+        .any(|(_, c)| c.get("owner").and_then(Value::as_str) == Some(id) && !rests_at_check(c));
     let bound = doc
         .get("placements")
         .and_then(Value::as_object)
@@ -687,9 +713,9 @@ fn slide() -> Value {
 fn register_arrange(r: &mut Registrar) {
     use crate::arrange;
     use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-    let json_param = |name: &'static str| Param {
+    let json_param = |name: &'static str, form: &'static str| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: json!([]),
         min: None,
@@ -706,9 +732,12 @@ fn register_arrange(r: &mut Registrar) {
                 major: 1,
                 minor: 0,
                 params: vec![
-                    json_param("items"),
-                    json_param("relations"),
-                    json_param("broken_out"),
+                    json_param("items", "[item ID]"),
+                    json_param(
+                        "relations",
+                        "[{a: ID, rel: on | inside | next_to | against | facing | near | apart, b: ID, d?: m}]",
+                    ),
+                    json_param("broken_out", "[item ID]"),
                 ],
             }],
             migrations: Vec::new(),

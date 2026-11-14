@@ -104,8 +104,9 @@ fn param(name: &'static str, ty: ParamType, default: Value) -> Param {
     }
 }
 
-fn json_param(name: &'static str) -> Param {
-    param(name, ParamType::Json, Value::Null)
+/// A structured param with the forms its reader takes (#1973), as spec.rs declares the same field.
+fn json_param(name: &'static str, form: &'static str) -> Param {
+    param(name, ParamType::Json(form), Value::Null)
 }
 
 fn str_param(name: &'static str, default: &str) -> Param {
@@ -129,9 +130,9 @@ fn kind(name: &'static str, params: Vec<Param>) -> Entry {
 /// it loads by reference once it is large enough on screen (Level of detail; #383).
 fn common(mut params: Vec<Param>) -> Vec<Param> {
     params.push(str_param("size_space", "screen"));
-    params.push(json_param("paint"));
-    params.push(json_param("status"));
-    params.push(json_param("open"));
+    params.push(json_param("paint", crate::spec::PAINT));
+    params.push(json_param("status", crate::spec::STATUS));
+    params.push(json_param("open", crate::spec::OPEN));
     params
 }
 
@@ -187,7 +188,14 @@ fn lit(v: &mut View<'_>, tie: Tie) -> Result<(), OpError> {
         .collect();
     let doc = v.document()?;
     let look = crate::look::Look3::from_roles(roles);
-    let scene = crate::scene::evaluate(doc, t, &look, &mut crate::scene::Labels::new())
+    let fills = crate::contributed::Fills {
+        outlines: v.outlines(),
+        module: v.fills(),
+        planted: v.planted(),
+        memo: None,
+    };
+    let labels = &mut crate::scene::Labels::new();
+    let scene = crate::scene::evaluate_any(doc, t, &look, labels, None, fills)
         .map_err(|r| OpError::new(r.code, r.path))?;
     let policy = light::policy_by(&scene.lights, &scene.camera, tie);
     v.write(
@@ -215,23 +223,27 @@ fn lit_by_order(v: &mut View<'_>) -> Result<(), OpError> {
 /// module, by registration order in #421's planted implementation of scene3d@1.
 pub fn register_with(r: &mut Registrar, tie: Tie) {
     for solid in ["box", "cylinder", "sphere"] {
-        r.kind(kind(solid, common(vec![json_param("size")])), &[], "");
+        r.kind(
+            kind(solid, common(vec![json_param("size", crate::spec::SIZE)])),
+            &[],
+            "",
+        );
     }
     r.kind(
         kind(
             "line",
             common(vec![
-                json_param("points"),
+                json_param("points", crate::spec::POINTS),
                 str_param("mode", "strip"),
-                json_param("width"),
-                json_param("dash"),
-                json_param("ends"),
-                json_param("cap"),
-                json_param("join"),
+                json_param("width", "px | [px]"),
+                json_param("dash", "[px] ≤ 2"),
+                json_param("ends", crate::spec::ENDS),
+                json_param("cap", "butt | round | square"),
+                json_param("join", "miter | round | bevel"),
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
-                json_param("edges"),
+                json_param("edges", crate::spec::EDGES),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
-                json_param("fog"),
+                json_param("fog", "bool"),
             ]),
         ),
         &[],
@@ -241,10 +253,13 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         kind(
             "point",
             common(vec![
-                json_param("size"),
+                json_param("size", "px"),
                 str_param("shape", "dot"),
                 // A set from a depth video's frame at t (Marks in 3D: from video; #503).
-                json_param("from"),
+                json_param(
+                    "from",
+                    "video {asset, frames, depth: luma | r, near, far, fov: [deg, deg], step}",
+                ),
             ]),
         ),
         &[],
@@ -256,7 +271,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             common(vec![
                 str_param("text", ""),
                 str_param("font", "body"),
-                json_param("size"),
+                json_param("size", "px | m"),
                 str_param("facing", "camera"),
             ]),
         ),
@@ -275,34 +290,34 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 major: 1,
                 minor: 2,
                 params: vec![
-                    param("illuminance", ParamType::Json, json!(10_000)),
-                    param("shadow", ParamType::Json, json!(false)),
-                    param("angle", ParamType::Json, json!(0.53)),
-                    json_param("color"),
-                    param("priority", ParamType::Json, json!(0)),
+                    param("illuminance", ParamType::Json("lux"), json!(10_000)),
+                    param("shadow", ParamType::Json("bool"), json!(false)),
+                    param("angle", ParamType::Json("deg"), json!(0.53)),
+                    json_param("color", crate::spec::COLOR),
+                    param("priority", ParamType::Json("integer"), json!(0)),
                     Param {
                         minor: 1,
-                        ..json_param("temperature")
+                        ..json_param("temperature", "K")
                     },
                     Param {
                         minor: 1,
-                        ..json_param("flicker")
+                        ..json_param("flicker", "f32 | channel")
                     },
                     Param {
                         minor: 2,
-                        ..param("cascades", ParamType::Json, json!(3))
+                        ..param("cascades", ParamType::Json("1 to 4"), json!(3))
                     },
                     Param {
                         minor: 2,
-                        ..param("split", ParamType::Json, json!(0.5))
+                        ..param("split", ParamType::Json("f32"), json!(0.5))
                     },
                     Param {
                         minor: 2,
-                        ..param("shadow_far", ParamType::Json, json!("auto"))
+                        ..param("shadow_far", ParamType::Json("m | auto"), json!("auto"))
                     },
                     Param {
                         minor: 2,
-                        ..param("fade", ParamType::Json, json!(true))
+                        ..param("fade", ParamType::Json("bool"), json!(true))
                     },
                 ],
             }],
@@ -359,19 +374,26 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             versions: vec![Version {
                 major: 1,
                 minor: 0,
+                // The forms `fixtures::bake` reads, and its paint as the solids'.
                 params: [
-                    "step_hz",
-                    "span",
-                    "gravity",
-                    "floor",
-                    "restitution",
-                    "bodies",
-                    "buoyancy",
-                    "inputs",
-                    "paint",
+                    ("step_hz", "Hz"),
+                    ("span", "s | time"),
+                    ("gravity", "number (m/s²)"),
+                    ("floor", "m"),
+                    ("restitution", "f32"),
+                    (
+                        "bodies",
+                        "{ID → {radius: m, pos: [x, y, z], vel: [x, y, z], density: f32}}",
+                    ),
+                    ("buoyancy", "{level: m, density: f32}"),
+                    (
+                        "inputs",
+                        "[{step: u32, kind: poke, target: ID, data: {push: [x, y, z]}}]",
+                    ),
+                    ("paint", crate::spec::PAINT),
                 ]
                 .into_iter()
-                .map(json_param)
+                .map(|(name, form)| json_param(name, form))
                 .collect(),
             }],
             migrations: Vec::new(),

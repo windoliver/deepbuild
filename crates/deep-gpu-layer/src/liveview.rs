@@ -348,6 +348,21 @@ impl Timer {
         }
     }
 
+    /// [`Timer::resolve`] in a submission of its own, once the frame's work is done (#239):
+    /// Metal orders no read of a counter sample against the pass that writes it, so a resolve in
+    /// the frame's own encoder could copy the last pass's end before its fragment stage wrote it,
+    /// and read the frame before's.
+    pub fn resolve_after(&self, device: &Device) {
+        if !self.timed() || self.n == 0 {
+            return;
+        }
+        outside(|| {
+            let mut encoder = device.device.create_command_encoder(&Default::default());
+            self.resolve(&mut encoder);
+            device.queue.submit([encoder.finish()]);
+        });
+    }
+
     /// After the frame's work is done: each pass's ticks, and whether they resolved (#1899).
     pub fn read(&mut self, device: &Device) -> bool {
         let Some((_, _, read, _)) = &self.query else {
@@ -473,8 +488,66 @@ pub struct View {
     pub op_rows: Vec<Row>,
     /// #429's planted render-back, which draws live-only operators as the live view does.
     pub canonical_draws_live_only: bool,
+    /// #462: the looks its document's shots and regions name, while any does.
+    regions: Option<Box<Regions>>,
     #[cfg(feature = "test-meter")]
     pub test: crate::testgpu::Items,
+}
+
+/// #462's look regions in a live or canonical view (canvas primitives: Look `look@1`: regions
+/// and edges): each look a shot or region names, with its own evaluation, renderer and render
+/// target; a frame where another look than the document's draws renders each look it mixes
+/// whole, then one composite pass mixes them into the slot.
+struct Regions {
+    timeline: crate::regions::Timeline,
+    looks: BTreeMap<String, Looked>,
+    /// The document's own look's render, while it mixes with another.
+    own: Option<(wgpu::Texture, wgpu::TextureView)>,
+    composite: crate::regions::Composite,
+    /// #462's planted wrong composite: each side of an edge clipped by its own copy of it.
+    independent: bool,
+}
+
+struct Looked {
+    look: Look3,
+    frames: Content,
+    renderer: Renderer,
+    prepared: bool,
+    target: Option<(wgpu::Texture, wgpu::TextureView)>,
+}
+
+/// A render target of the view's size for one look's render, kept while its size holds.
+fn target_of(
+    device: &Device,
+    kept: &mut Option<(wgpu::Texture, wgpu::TextureView)>,
+    size: [u32; 2],
+) -> wgpu::TextureView {
+    match kept {
+        Some((t, v)) if t.width() == size[0] && t.height() == size[1] => v.clone(),
+        _ => {
+            let t = crate::regions::scratch(&device.device, size, "look.regions render");
+            let v = t.create_view(&Default::default());
+            *kept = Some((t, v.clone()));
+            v
+        }
+    }
+}
+
+/// A regions refusal as the scene's: the issue's code where the view knows it.
+fn refusal(v: &Value) -> Refused {
+    let issue = v.pointer("/issues/0").unwrap_or(v);
+    Refused {
+        code: match v["code"].as_str() {
+            Some("too_many_looks") => "too_many_looks",
+            Some("look_unknown") => "look_unknown",
+            _ => "mask_unresolved",
+        },
+        path: issue["path"]
+            .as_str()
+            .or_else(|| v["reason"].as_str())
+            .unwrap_or_default()
+            .to_string(),
+    }
 }
 
 /// The live meter's timer as the operators' [`Times`], each pass charged to `session`.
@@ -562,9 +635,60 @@ impl View {
             op_resolution: BTreeMap::new(),
             op_rows: Vec::new(),
             canonical_draws_live_only: false,
+            regions: None,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
+    }
+
+    /// #462: the looks `doc`'s shots and regions name, from `named`, beside its own `look`;
+    /// none when no shot names a look or a region. A look no entry of `named` holds, a mask that
+    /// names no box, cylinder or sphere, and a frame outside every transition window where three
+    /// looks would draw are refused here, at check.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_regions(
+        &mut self,
+        device: &Device,
+        doc: &Value,
+        look: &Look3,
+        named: &BTreeMap<String, crate::regions::Named>,
+        labels: &mut Labels,
+        planted: Planted3,
+        independent: bool,
+    ) -> Result<(), Value> {
+        self.regions = None;
+        let Some(timeline) = crate::regions::Timeline::of(doc, |n| named.get(n).map(|x| &x.json))?
+        else {
+            return Ok(());
+        };
+        let refused = |r: Refused| crate::refused(r.code, r.path);
+        timeline.check(|t| {
+            let scene =
+                deep_canvas_scene3d::scene::evaluate(doc, t, look, labels).map_err(refused)?;
+            Ok((crate::regions::Seen::Camera(scene.camera), scene.volumes))
+        })?;
+        let mut looks = BTreeMap::new();
+        for (name, n) in named.iter().filter(|(name, _)| timeline.names(name)) {
+            let frames = Frames::new(doc, &n.look, labels).map_err(refused)?;
+            looks.insert(
+                name.clone(),
+                Looked {
+                    look: n.look.clone(),
+                    frames: Content::Scene(Box::new(frames)),
+                    renderer: Renderer::new(device, planted),
+                    prepared: false,
+                    target: None,
+                },
+            );
+        }
+        self.regions = Some(Box::new(Regions {
+            timeline,
+            looks,
+            own: None,
+            composite: crate::regions::Composite::default(),
+            independent,
+        }));
+        Ok(())
     }
 
     /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
@@ -719,7 +843,12 @@ impl View {
         };
         // Frame history (#173): a moving view shows its window's resolve; at rest, or while the
         // playhead is dragged, its frame draws on its own below.
-        match self.history_plan(t, drawing, scale, labels)? {
+        // #462: a view whose looks mix draws each frame on its own.
+        let plan = match self.regions {
+            Some(_) => None,
+            None => self.history_plan(t, drawing, scale, labels)?,
+        };
+        match plan {
             Some(Plan::Same) => return Ok(false),
             Some(Plan::Window { render, resolve }) => {
                 return self.draw_window(
@@ -742,6 +871,8 @@ impl View {
                 };
                 #[cfg(feature = "test-meter")]
                 let still = still && self.test.bound.is_empty();
+                // #462: a still scene still changes look where a shot or region starts.
+                let still = still && self.regions.is_none();
                 if still {
                     return Ok(false);
                 }
@@ -831,10 +962,153 @@ impl View {
         if !evaluated {
             frames.at(t, self.size, &drawing.offsets, labels)?;
         }
+        // #462: a frame where another look draws renders each look it mixes, then mixes them.
+        if let Some(mix) = self.mix_at(t)? {
+            self.draw_mix(
+                device, kit, look, t, drawing, labels, internal, encoder, timer, session, &mix,
+                &slot_view,
+            )?;
+            self.after(encoder, slot);
+            return Ok(true);
+        }
+        if !self.record_into(
+            device, kit, look, t, drawing, internal, encoder, timer, session, &slot_view,
+        ) {
+            return Ok(true);
+        }
+        self.after(encoder, slot);
+        Ok(true)
+    }
+
+    /// The frame at `t`'s mix, which the document's frames just evaluated, when a look other
+    /// than the document's draws in it.
+    fn mix_at(&self, t: i64) -> Result<Option<crate::regions::Mix>, Refused> {
+        let (Some(r), Content::Scene(frames)) = (&self.regions, &self.frames) else {
+            return Ok(None);
+        };
+        let sides = r.timeline.sides(t);
+        let scene = frames.scene();
+        let seen = crate::regions::Seen::Camera(scene.camera.clone());
+        let mix = crate::regions::mix(&r.timeline, &sides, &seen, &scene.volumes, t, r.independent)
+            .map_err(|v| refusal(&v))?;
+        Ok((mix.keys != [None]).then_some(mix))
+    }
+
+    /// Records each look `mix` mixes, rendered whole into its own target, then the composite
+    /// into `slot_view`, which reads the first one's depth.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_mix(
+        &mut self,
+        device: &Device,
+        kit: &Kit,
+        look: &Look3,
+        t: i64,
+        drawing: &Drawing,
+        labels: &mut Labels,
+        internal: [u32; 2],
+        encoder: &mut wgpu::CommandEncoder,
+        timer: &mut Timer,
+        session: usize,
+        mix: &crate::regions::Mix,
+        slot_view: &wgpu::TextureView,
+    ) -> Result<(), Refused> {
+        let mut regions = self.regions.take().expect("a mix: the view has regions");
+        let mut views = Vec::with_capacity(mix.keys.len());
+        let mut depth: Option<(wgpu::TextureView, [u32; 2])> = None;
+        let mut drawn = Ok(());
+        for key in &mix.keys {
+            let view = match key {
+                None => {
+                    let v = target_of(device, &mut regions.own, self.size);
+                    self.record_into(
+                        device, kit, look, t, drawing, internal, encoder, timer, session, &v,
+                    );
+                    if depth.is_none() {
+                        depth = self.renderer.depth_target().map(|(d, s)| (d.clone(), s));
+                    }
+                    v
+                }
+                Some(name) => {
+                    let l = regions
+                        .looks
+                        .get_mut(name)
+                        .expect("a mixed look: the timeline names it");
+                    let v = target_of(device, &mut l.target, self.size);
+                    std::mem::swap(&mut self.frames, &mut l.frames);
+                    std::mem::swap(&mut self.renderer, &mut l.renderer);
+                    std::mem::swap(&mut self.prepared, &mut l.prepared);
+                    // It draws as the view's own renderer was just set up to.
+                    let own = &l.renderer;
+                    self.renderer.history = false;
+                    self.renderer.jitter = [0.0; 2];
+                    self.renderer.upscale = own.upscale.clone();
+                    self.renderer.shadow_scale = own.shadow_scale;
+                    self.renderer.surface = own.surface;
+                    self.renderer.core.want = own.core.want;
+                    let evaluated = match &mut self.frames {
+                        Content::Scene(f) => {
+                            f.at(t, self.size, &drawing.offsets, labels).map(|_| ())
+                        }
+                        Content::Flat(_) => Ok(()),
+                    };
+                    if evaluated.is_ok() {
+                        self.record_into(
+                            device, kit, &l.look, t, drawing, internal, encoder, timer, session, &v,
+                        );
+                        if depth.is_none() {
+                            depth = self.renderer.depth_target().map(|(d, s)| (d.clone(), s));
+                        }
+                    }
+                    std::mem::swap(&mut self.frames, &mut l.frames);
+                    std::mem::swap(&mut self.renderer, &mut l.renderer);
+                    std::mem::swap(&mut self.prepared, &mut l.prepared);
+                    drawn = drawn.and(evaluated);
+                    v
+                }
+            };
+            views.push(view);
+        }
+        let refs: Vec<&wgpu::TextureView> = views.iter().collect();
+        let i = timer.start(crate::regions::PASS, session);
+        regions.composite.record(
+            &device.device,
+            encoder,
+            mix,
+            &refs,
+            depth
+                .as_ref()
+                .map_or(crate::regions::Depth::None, |(d, s)| {
+                    crate::regions::Depth::Target(d, *s)
+                }),
+            slot_view,
+            timer.writes(i),
+        );
+        timer.end(i);
+        self.regions = Some(regions);
+        drawn
+    }
+
+    /// Records the frame its frames last evaluated into `target`: the frame up to its output
+    /// pass, the output (through the upscale below scale 1), then outlines and labels at full
+    /// size. `false` when the renderer has no targets to draw into.
+    #[allow(clippy::too_many_arguments)]
+    fn record_into(
+        &mut self,
+        device: &Device,
+        kit: &Kit,
+        look: &Look3,
+        t: i64,
+        drawing: &Drawing,
+        internal: [u32; 2],
+        encoder: &mut wgpu::CommandEncoder,
+        timer: &mut Timer,
+        session: usize,
+        target: &wgpu::TextureView,
+    ) -> bool {
         if !self.record_frame(
             device, kit, look, t, drawing, internal, encoder, timer, session,
         ) {
-            return Ok(true);
+            return false;
         }
         let i = timer.start(OUTPUT_PASS, session);
         match self.renderer.low_view(device) {
@@ -843,7 +1117,7 @@ impl View {
                 timer.end(i);
                 for step in self
                     .renderer
-                    .surface_steps(device, &slot_view)
+                    .surface_steps(device, target)
                     .into_iter()
                     .flatten()
                 {
@@ -854,7 +1128,7 @@ impl View {
             }
             None => {
                 self.renderer
-                    .record_output(encoder, &slot_view, timer.writes(i));
+                    .record_output(encoder, target, timer.writes(i));
                 timer.end(i);
             }
         }
@@ -864,12 +1138,11 @@ impl View {
         ] {
             if let Some(draw) = draw {
                 let i = timer.start(name, session);
-                draw.record(encoder, &slot_view, timer.writes(i));
+                draw.record(encoder, target, timer.writes(i));
                 timer.end(i);
             }
         }
-        self.after(encoder, slot);
-        Ok(true)
+        true
     }
 
     /// Records the frame `frames` last evaluated, at `t`, up to its output pass: the renderer

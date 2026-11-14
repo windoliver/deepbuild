@@ -47,6 +47,21 @@ pub(crate) fn scene3d_reads_vector() -> deep_canvas::registry::Module {
     m
 }
 
+/// #538's planted data module: the shipped module with one more operator, whose read set names a
+/// logic item's array (`logic.cells`) itself instead of reading it through the core's column view;
+/// the seal refuses the read, naming the data module and the array.
+#[cfg(feature = "test-data-reads-logic-array")]
+pub(crate) fn data_reads_logic_array() -> deep_canvas::registry::Module {
+    let mut m = deep_canvas_marks::modules::data();
+    m.register = |r| {
+        (deep_canvas_marks::modules::data().register)(r);
+        r.array("data.direct", "values", "item", "geometry", "items");
+        r.operator("direct", "items", &["logic.cells"], &["data.direct"])
+            .run(|_| Ok(()));
+    };
+    m
+}
+
 /// A test module's manifest: version 1.0.0, any core, under its feature.
 pub(crate) fn test_manifest(name: &str, feature: &str) -> Manifest {
     Manifest {
@@ -79,7 +94,7 @@ pub(crate) fn boxed_kind(r: &mut Registrar, name: &'static str) {
                 minor: 0,
                 params: vec![Param {
                     name: "box",
-                    ty: ParamType::Json,
+                    ty: ParamType::Json("[x, y, w, h]"),
                     unit: "",
                     default: Value::Null,
                     min: None,

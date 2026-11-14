@@ -22,6 +22,7 @@ mod film;
 mod film_audit;
 mod film_layout;
 mod film_viewer;
+mod forms;
 mod frames;
 mod function;
 mod gate;
@@ -42,6 +43,7 @@ mod media;
 mod mixdown;
 mod modes;
 mod narration;
+mod net;
 mod packs;
 mod physics;
 mod picks;
@@ -49,6 +51,8 @@ mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod played;
+mod points;
+mod present;
 mod print;
 mod probe;
 mod query;
@@ -76,13 +80,15 @@ mod test_sim;
 #[cfg(feature = "test-threads")]
 mod test_threads;
 mod time;
+mod timings;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
     feature = "test-accent",
     feature = "test-threads",
     feature = "test-scene3d-tie-by-order",
-    feature = "test-scene3d-reads-vector"
+    feature = "test-scene3d-reads-vector",
+    feature = "test-data-reads-logic-array"
 ))]
 mod twins;
 mod verdict;
@@ -414,6 +420,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(g) = gate::parse_call(name, c) {
         return Some(Call::Gate(Box::new(g)));
     }
+    if let Some(p) = present::parse_call(name, c) {
+        return Some(Call::Present(p));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -470,6 +479,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 event: input::event(c.get("event")?)?,
                 t: optional(c.get("event")?.get("t"), Value::as_i64)?,
+                gesture: points::gesture(c.get("event")?),
             })
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
@@ -604,6 +614,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
         "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
+        "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
+        "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
+        "match" => return points::parse_match(c).map(|(doc, steps)| Call::Match { doc, steps }),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -709,6 +722,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
                 paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
+                texts: flag("texts")?,
             })));
         }
         "frames" => {
@@ -728,6 +742,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 paced: flag("paced")?,
                 revise,
                 pixels: flag("pixels")?,
+                timings: flag("timings")?,
             })));
         }
         "settle" => {
@@ -1197,6 +1212,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                     .map(|o| o.get("label")?.as_str().map(str::to_string))
                     .collect::<Option<_>>()?,
                 slot,
+                deadline: c.get("deadline").and_then(Value::as_i64),
             })
         }
     };
@@ -1244,7 +1260,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_export::lottie::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
+                // #540's in the input module's point control and scene3d's pointer math.
+                || deep_canvas_input::point::PLANTED.contains(p)
+                || deep_canvas_scene3d::pointer::PLANTED.contains(p)
+                // #538's in the cells, text and motion modules.
+                || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
+                || deep_canvas_marks::copy::PLANTED.contains(p)
+                || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1921,6 +1945,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-check-kind",
     feature = "test-glyph-label",
     feature = "test-leave-out-logic",
+    feature = "test-data-reads-logic-array",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
@@ -1954,10 +1979,19 @@ fn modules(set: BuildSet) -> Vec<Module> {
             if cfg!(feature = "test-data-m4-drops-last") {
                 deep_canvas_marks::modules::data_m4_drops_last()
             } else {
-                deep_canvas_marks::modules::data()
+                // #538: `test-data-reads-logic-array` seals the planted data module that reads a
+                // logic array itself.
+                #[cfg(feature = "test-data-reads-logic-array")]
+                let data = twins::data_reads_logic_array();
+                #[cfg(not(feature = "test-data-reads-logic-array"))]
+                let data = deep_canvas_marks::modules::data();
+                data
             },
             if cfg!(feature = "test-graph-tie-by-registration") {
                 deep_canvas_graph::module::tie_by_registration()
+            } else if cfg!(feature = "test-graph-layout-no-cost") {
+                // #1417: the graph@1 whose layout declares no cost.
+                deep_canvas_graph::module::layout_no_cost()
             } else {
                 deep_canvas_graph::module::module()
             },
@@ -2009,8 +2043,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_media::module::module()
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
-        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
         out.extend(physics::module());
+        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
+        out.push(net::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -3109,6 +3145,8 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #162: this binary's copy as the Lottie export's reference reader.
+        "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}
     }
     let stdout = io::stdout();

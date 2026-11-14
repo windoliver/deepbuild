@@ -16,10 +16,11 @@ The line's slice of the motion module (issue #391): channels and keys (linear, h
 
 ## What it may import
 
-A canvas module crate. It reaches the core only through the `deep-canvas` crate and uses third-party crates listed in `lint/canvas/crates.json`. Its math is f64 through deep-canvas's ops module on pinned libm, as `scripts/canvas-lint.mjs` requires. No GPU crate, no app.
+A canvas module crate. It reaches the core only through the `deep-canvas` crate, and the marks module's path reader through `deep-canvas-marks`, which reads and flattens a path key's SVG `d` (#494), and uses third-party crates listed in `lint/canvas/crates.json`. Its math is f64 through deep-canvas's ops module on pinned libm, as `scripts/canvas-lint.mjs` requires. No GPU crate, no app.
 
 ## Deviations
 
 - A `start_on`, a mark set's rows and a driver read a logic item's occurrences (#544) from the rows its host baked into the document's `occurrences`, keyed `<logic ID>.occurrences`, not through the core's column view, which serves only mark-set columns.
 - A world's occurrence list (#1918), keyed `<world ID>.occurrences`, is read the same way, from the rows its host wrote into `occurrences` once the core's column view resolved the form (`deep_canvas::columns::lists`); a document no host baked reads it empty.
 - A placement places a clip, not a recipe; a time remap reaches a recipe instance through its target.
+- A `follow_path`'s `fraction` may be `{data: <name>}` (#162), the share of the path's length a keyed data value holds at t, so a Lottie position keyed with spatial tangents moves along its curve by arc length; the constraint runs after that value's channel, and a name nothing keys is refused `ref_unresolved` at `fraction/data`. The design's Constraint fields name a number only.

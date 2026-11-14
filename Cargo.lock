@@ -705,7 +705,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd84020bf440612079c6ddb372d4c293a91e7f1cbc055f2cbacc1fc943b88667"
 dependencies = [
  "basisu_wasm_libcxx",
- "bindgen",
+ "bindgen 0.72.1",
  "bitflags 2.13.2",
  "cc",
  "spin 0.12.3",
@@ -748,6 +748,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.71.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+dependencies = [
+ "bitflags 2.13.2",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.3",
+ "shlex 1.3.0",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -2262,6 +2282,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-export"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-text",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-graph"
 version = "0.0.0"
 dependencies = [
@@ -2536,6 +2567,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-lottie"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-text",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-lottie-reader"
+version = "0.0.0"
+dependencies = [
+ "thorvg",
+]
+
+[[package]]
 name = "deep-marks-gpui"
 version = "0.0.0"
 dependencies = [
@@ -2615,6 +2664,7 @@ dependencies = [
  "bincode",
  "deep-canvas-motion",
  "deep-canvas-physics",
+ "deep-canvas-scene3d",
  "rapier3d",
  "serde_json",
  "simba",
@@ -2680,6 +2730,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
+ "deep-canvas-export",
  "deep-canvas-graph",
  "deep-canvas-input",
  "deep-canvas-loop",
@@ -2699,6 +2750,7 @@ dependencies = [
  "deep-gpu",
  "deep-images",
  "deep-logic",
+ "deep-lottie-reader",
  "deep-marks-vello",
  "deep-physics-rapier",
  "deep-relay",
@@ -2719,6 +2771,14 @@ dependencies = [
  "sha2 0.10.9",
  "vello_cpu 0.3.0",
  "wgpu 30.0.1",
+]
+
+[[package]]
+name = "deep-synth-job"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-media",
+ "serde_json",
 ]
 
 [[package]]
@@ -11019,6 +11079,27 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "thorvg"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d9b8161002409c059a3c18fdd29f979c37d2d541bb9b090adb3b9da3ead0f43"
+dependencies = [
+ "libm",
+ "thorvg-sys",
+]
+
+[[package]]
+name = "thorvg-sys"
+version = "0.4.0+thorvg-1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3f2a32e7360873852631ae72bd805fbe6b4c961a6b7b9c607785b20404a8b54"
+dependencies = [
+ "bindgen 0.71.1",
+ "cc",
+ "pkg-config",
 ]
 
 [[package]]

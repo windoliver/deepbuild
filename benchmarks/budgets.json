@@ -1425,6 +1425,16 @@
       "initialReason": "Issue #154 first measurement: the merge base has no score renderer. Six 60 s stems of one score (two sampled, two plucked, two synth) render at once, each in its own score-render@1.0.0 process given its params on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 60 s limit on the reference Mac and the cached stems that start no process stay in tests/acceptance/154/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "synth-voices",
+      "command": [
+        "node",
+        "benchmarks/synth.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #204 first measurement (#204.0458a4e3): the merge base has no synth. One `deep-show run` installs a pack whose one preset has 8 nodes (two saws, pink noise, a mix, a lowpass, an envelope, a gain and an echo) and renders one strip of it with 32 voices for 10 s of a media document through media_mix in one segment, Node's spawn and the binary's start included; the perf lane's other tasks, which hold no synth, are the documents that must gain no work per block. The issue's 10% of one core, the 50 ms restore and no work per block without a synth stay in tests/acceptance/204/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "export-fidelity",
       "command": [
         "node",
@@ -1439,6 +1449,20 @@
       ]
     },
     {
+      "id": "lottie-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "lottie-export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #162 first measurement (#162.30ea626f): the merge base has no Lottie target. One `deep-show run` exports a 200-item title with 2,000 Bézier keys (ten on each rect's x over 4 s, 30 fps) to Lottie, its fidelity check reading 20 sampled frames back through the pinned reference renderer; it prints the receipt's timing.wall (under 1 s), which tests/acceptance/162/budgets.test.ts judges on a reference Mac with the 1 MB import's time and memory. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#162.30ea626f"
+      ]
+    },
+    {
       "id": "narration-transcript",
       "command": [
         "node",
@@ -1449,6 +1473,86 @@
       "initialReason": "Issue #509 first measurement (#509.39975b5a): the merge base has no transcriber. A 60 s narrated film, twelve kokoro@0.9.4 lines over a quiet bed in a 48 kHz mix, has each line's own audio and its mix window (t − 0.15 s to t + its length + 0.25 s) transcribed by whisper-cpp@1.9.5 on the speech plug-in's model host, already running on 127.0.0.1:8720, as narration.transcript's tool takes them, a call per four cores at once; the lines are spoken once and kept by hash in the temp folder, so p50 is the 24 transcriptions with Node's start. The issue's 60 s limit on the reference Mac's CPU and the power bakes' 800 B/s per channel stay with the issue's budget tests. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#509.39975b5a"
+      ]
+    },
+    {
+      "id": "canvas-game-state",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "game-state"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "compare_ms": 0.2,
+        "remap_row_us": 20,
+        "remap_layer_ms": 1,
+        "upload_slots_ms": 0.5,
+        "overlay_upload_ms": 0.1,
+        "fit_check_ms": 2000,
+        "idle_steps": 0
+      },
+      "initialReason": "Issue #538 first measurement: the merge base reports none of live game state's costs and has no such task. Release deep-show's frames with timings read each logic step's comparison of the 1 MiB a program writes (compares) and each remap of a 9,216-row atlas layer, one row a step and every row on its first frame and five seeks back (remaps[].ms); deep_show with timing reads the fit check over a 5,000-key copy table in en, fr and de (timing.copy_fit_ms); release deep-gpu's view3d with timings reads each frame's upload of 1,000 changed slots of a 100,000-slot instancer and of a 256 x 256 terrain overlay (upload_ms); and a still document with no logic columns counts the operators its frames after the first run past a bare document's (the scheduler's ran). Each reading is the median of its frames, five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#538.ed6f8052"
+      ]
+    },
+    {
+      "id": "canvas-axes3d",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "axes3d"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "axes_over_marks": 1.05,
+        "still_maps": 0
+      },
+      "initialReason": "Issue #226 first measurement (#226.6a40f5c8): the merge base has no 3D axes. A release deep-gpu draws criterion 7's axes (three linear scales on [-4, 4] over 8 m, the xy grid plane, labels facing the camera) and the same lines, ticks, labels and plane written as mark.line@1 and mark.text@1, each orbiting at 1920 x 1080 for 300 frames with GPU timings, in alternating order, five runs after a warm-up one; and the axes with a point carrying mod.axes@1 under a still camera for four frames, counting the items its frames 1 to 3 map. canvas.mjs judge holds the axes' p95 GPU frame to 1.05 x the marks' (axes_over_marks) and the still frames' maps to 0 (still_maps, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#226.6a40f5c8"
+      ]
+    },
+    {
+      "id": "physics-module",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "module"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "bridge_step_ms": 2,
+        "stress_step_ms": 2,
+        "bake_10s_ms": 1000,
+        "world_mb": 50,
+        "startup_ms": 5
+      },
+      "initialReason": "Issue #524 first measurement: the merge base has no soft bodies, no rope bridge lab and no such task. Release deep-physics times the rope bridge lab's 600 steps and a 200-body stack's, each step on its own clock, and bakes the bridge 1,200 steps (10 s) in one process, its wall time and peak resident memory read by /usr/bin/time -l; release deep-show's registry reads the seal's interface checks, in whose pass the runtime digest is hashed. One warm-up and five runs each, each a fresh process. physics.mjs judge holds each target on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#524.584c6e80"
+      ]
+    },
+    {
+      "id": "physics-soft-labs",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "soft-labs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "bridge_step_ms": 2,
+        "banner_step_ms": 2
+      },
+      "initialReason": "Issue #524 first measurement: the merge base steps no soft body and has no lab documents or such task. Release deep-physics times each of the rope bridge and banner labs' 600 steps, the steps their goldens record, on its own clock, the 95th percentile a run, one warm-up and five runs each in a fresh process. physics.mjs judge holds each target on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#524.d7f0282a"
       ]
     }
   ]

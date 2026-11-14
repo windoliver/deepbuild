@@ -32,3 +32,15 @@ it.each([[['inbox']], [['lease', '--', 'true']]])('deep %s loads none of the YAM
   expect(urls.some((u) => u.endsWith('/packages/cli/dist/main.js')), 'the CLI ran').toBe(true);
   expect(urls.filter((u) => heavy.test(u))).toEqual([]);
 });
+
+it.each([['deep', []], ['deep status', ['status']]])('%s, in a folder that joined no project\'s hub, loads neither TLS nor the contracts', (_, args) => {
+  const urls = loaded(args);
+  expect(urls.some((u) => u.endsWith('/packages/hub/dist/list.js')), 'the list ran').toBe(true);
+  expect(urls.filter((u) => u === 'node:tls' || heavy.test(u))).toEqual([]);
+});
+
+it('deep hub status, which only asks the hub on its socket, loads none of the hub\'s own server', () => {
+  const urls = loaded(['hub', 'status']);
+  expect(urls.some((u) => u.endsWith('/packages/hub/dist/service.js')), 'the command ran').toBe(true);
+  expect(urls.filter((u) => heavy.test(u) || u.endsWith('/packages/hub/dist/server.js'))).toEqual([]);
+});
