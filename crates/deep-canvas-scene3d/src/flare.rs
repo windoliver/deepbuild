@@ -55,8 +55,11 @@ fn bad(code: &'static str, path: String) -> Refused {
 /// Reads an `effect@1`'s params; `None` for another effect kind than flare.
 pub fn parse(id: &str, params: &Value, look: &Look3) -> Result<Flare, Refused> {
     let path = |k: &str| format!("items/{id}/params/{k}");
-    if params.get("kind").and_then(Value::as_str) != Some("flare") {
-        return Err(bad("out_of_range", path("kind")));
+    // #1974: a `kind` left out is its listed default, `flare`, the one kind scene3d draws.
+    match params.get("kind") {
+        None => {}
+        Some(k) if k.as_str() == Some("flare") => {}
+        Some(_) => return Err(bad("out_of_range", path("kind"))),
     }
     let f = params
         .get("flare")

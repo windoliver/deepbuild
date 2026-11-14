@@ -568,7 +568,40 @@ fn build() -> Registry {
         ],
     };
     Registry {
-        entries: vec![slab, camera(), circle(), series(), rect, dot, score()],
+        entries: vec![
+            slab,
+            camera(),
+            circle(),
+            series(),
+            rect,
+            dot,
+            score(),
+            test_defaults(),
+        ],
+    }
+}
+
+/// #1974's fixture kind: one field defaulting to each shape a default takes (a number, a choice, a
+/// list of 3 numbers and an object), so the defaults run compares each shape.
+fn test_defaults() -> Entry {
+    Entry {
+        family: "test",
+        name: "defaults",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: vec![
+                f32_param("count", "u", 1.0, 0.0, 100.0, 0),
+                json_param("pace", "slow | fast", json!("slow")),
+                json_param("reach", "[x: u, y: u, z: u]", json!([1, 2, 3])),
+                json_param(
+                    "tint",
+                    "{r: 0..1, g: 0..1, b: 0..1}",
+                    json!({"r": 1, "g": 0.5, "b": 0}),
+                ),
+            ],
+        }],
+        migrations: vec![],
     }
 }
 

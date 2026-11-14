@@ -951,8 +951,13 @@ pub fn is_solid(item: &Value) -> bool {
     !is_arrangement(item) && dims_of(item).is_some()
 }
 
-/// A solid: an item with a three-number `params.size`, its bounds centred on its position.
+/// A solid: an item with a three-number `params.size`, its bounds centred on its position. A
+/// light's `size` is what it lights (a probe's box), never a body, written or at its default.
 fn dims_of(item: &Value) -> Option<V3> {
+    let kind = item.get("kind").and_then(Value::as_str).unwrap_or_default();
+    if kind.starts_with("light.") {
+        return None;
+    }
     let a = item.pointer("/params/size")?.as_array()?;
     if a.len() != 3 {
         return None;

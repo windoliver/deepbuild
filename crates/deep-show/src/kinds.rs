@@ -61,6 +61,13 @@ pub enum Planted {
     FieldObjectByName,
     /// #1973: the line `op: field` answers for `slab@1.size` prints its type, `json`, and no form.
     FieldSizeJsonAlone,
+    /// #1974: `puff@1`'s reader takes 2 for a radius left out, where its line says 1.
+    DefaultsReaderFallsBackTo2,
+    /// #1974: that reader, and a defaults run that builds nothing: it compares each default the
+    /// line prints with the dump's.
+    DefaultsComparedWithDumpOnly,
+    /// #1974: the defaults run skips every field typed json.
+    DefaultsSkipJson,
 }
 
 impl Planted {
@@ -81,6 +88,9 @@ impl Planted {
             "field_line_600_bytes" => Planted::FieldLine600Bytes,
             "field_object_by_name" => Planted::FieldObjectByName,
             "field_size_json_alone" => Planted::FieldSizeJsonAlone,
+            "defaults_reader_falls_back_to_2" => Planted::DefaultsReaderFallsBackTo2,
+            "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
+            "defaults_skip_json" => Planted::DefaultsSkipJson,
             _ => return None,
         })
     }
@@ -493,9 +503,9 @@ fn example_doc(kind: &str, drawn: Drawn, module: Option<&str>, preview: bool) ->
 }
 
 /// One kind as an entry of `kind@1`, with its example's text.
-struct KindRow {
-    entry: Value,
-    example: Option<String>,
+pub(crate) struct KindRow {
+    pub(crate) entry: Value,
+    pub(crate) example: Option<String>,
 }
 
 /// One-line descriptions of the kinds the core and its first-party modules register.
@@ -527,7 +537,7 @@ fn kind_description(name: &str, module: &str, version: Option<&Version>) -> Stri
 
 /// Every kind the build draws: the kind registry's, then the marks module's and scene3d's drawn
 /// with no registry entry, each with its schema, fields, example, stability and kit result.
-fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
+pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRow> {
     let registry = sealed.kinds();
     let since = "R2";
     let mut out: Vec<KindRow> = Vec::new();
@@ -1655,8 +1665,8 @@ fn changed(out: &mut Vec<Value>, entry: &str, field: &str, was: &Value, now: &Va
     }
 }
 
-/// `deep-show kinds --dump <dir> | --diff <a> <b> [--planted <name>]`: one JSON line, exit 0, or
-/// a refusal and exit 2.
+/// `deep-show kinds --dump <dir> | --diff <a> <b> | --defaults [--planted <name>]`: one JSON line,
+/// exit 0, or a refusal and exit 2. `--defaults` is #1974's run, its verdict in its report.
 pub fn command(
     args: &[String],
     seal: impl Fn(Option<Planted>) -> Result<Sealed, String>,
@@ -1704,6 +1714,13 @@ pub fn command(
                 0,
             )
         }
+        [flag] if flag.as_str() == "--defaults" => match seal(planted) {
+            Ok(sealed) => (crate::defaults::run(&sealed, planted), 0),
+            Err(what) => (
+                json!({"ok": false, "code": "seal_refused", "what": what}),
+                2,
+            ),
+        },
         [flag, a, b] if flag.as_str() == "--diff" => match (read(a), read(b)) {
             (Some(a), Some(b)) => (json!({"ok": true, "changes": diff(&a, &b, planted)}), 0),
             _ => (
@@ -1712,7 +1729,7 @@ pub fn command(
             ),
         },
         _ => (
-            json!({"ok": false, "code": "bad_input", "what": "deep-show kinds --dump <dir> | --diff <a> <b>"}),
+            json!({"ok": false, "code": "bad_input", "what": "deep-show kinds --dump <dir> | --diff <a> <b> | --defaults"}),
             2,
         ),
     }

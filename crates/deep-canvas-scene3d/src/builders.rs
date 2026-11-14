@@ -2242,8 +2242,13 @@ fn true_shape(kind: &str, p: &Value, lo: V3, hi: V3) -> Result<Vec<Value>, Fault
         "extrude@1" if p.get("bevel").is_none() && p.get("along").is_none() => {
             json!({"prism": {"outline": p.get("outline"), "holes": p.get("holes").cloned().unwrap_or(json!([])), "depth": p.get("depth")}})
         }
-        "tube@1" | "coil@1" => {
-            json!({"capsules": {"path": p.get("path"), "radius": p.get("radius").or_else(|| p.get("wire"))}})
+        "tube@1" => {
+            json!({"capsules": {"path": p.get("path"), "radius": p.get("radius")}})
+        }
+        // #1974: a coil's capsules are as thick as its wire, at the default its builder reads,
+        // never its helix's radius.
+        "coil@1" => {
+            json!({"capsules": {"path": p.get("path"), "radius": positive(p, "wire", 0.01)?}})
         }
         _ => bounds,
     }])

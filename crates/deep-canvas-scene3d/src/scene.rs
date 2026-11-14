@@ -3624,7 +3624,9 @@ pub(crate) fn evaluate_compiled(
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
-                    layer.puffs.push(puff(id, params, origin(&m), &path)?);
+                    layer
+                        .puffs
+                        .push(puff(id, params, origin(&m), &path, outlines.planted)?);
                     puffs += 1;
                 }
                 "light.sun@1" if sun.is_none() => {
@@ -4209,8 +4211,16 @@ fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
     Some([num(a.first())?, num(a.get(1))?])
 }
 
-/// A `puff@1` at `pos` (#422).
-fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused> {
+/// A `puff@1` at `pos` (#422). #1974's planted `defaults_reader_falls_back_to_2`, reachable only
+/// through `deep-show kinds --defaults --planted`, takes 2 m for a radius left out where the
+/// kind's line says 1.
+fn puff(
+    id: &str,
+    params: &Value,
+    pos: Vec3,
+    path: &str,
+    planted: Option<&str>,
+) -> Result<Puff, Refused> {
     let field = |k: &str, default: f64, ok: fn(f64) -> bool| -> Result<f64, Refused> {
         match params.get(k) {
             None => Ok(default),
@@ -4220,7 +4230,12 @@ fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused
             }),
         }
     };
-    let radius = field("radius", 1.0, |r| r > 0.0)?;
+    let left_out = if planted == Some("defaults_reader_falls_back_to_2") {
+        2.0
+    } else {
+        1.0
+    };
+    let radius = field("radius", left_out, |r| r > 0.0)?;
     let light = params.get("light");
     let on = |k: &str, yes: &str| -> Result<bool, Refused> {
         match light.and_then(|l| l.get(k)) {
