@@ -1512,6 +1512,19 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
     )
     .applies(is_placed)
     .run(place_op);
+    // #223: a group's warp whose vars read time takes the frame's seconds into its fields, so the
+    // frame carries its paths through the formula at t; no other item reads t here.
+    r.contribution(
+        "marks2d.warp",
+        "fields",
+        "item",
+        "geometry",
+        "items",
+        "core.fields",
+    );
+    r.operator("warp", "items", &["self", "t"], &["marks2d.warp"])
+        .applies(|_, _, item| crate::warp::reads_time(item))
+        .run(warp_time);
     r.code(
         relations::CYCLE,
         "Items placed by relation that read each other back, through relations or parents.",
@@ -2004,6 +2017,27 @@ fn check_font(drawn: &scene::Drawn) -> Result<(), OpError> {
     Ok(())
 }
 
+/// #223: each of a group's warp vars that reads `time` as the frame's seconds.
+fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
+    let item = v.item()?;
+    let seconds = v.t()? as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+    let edits = item
+        .pointer("/params/warp/vars")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, v)| v.as_str() == Some("time"))
+        .map(|(name, _)| deep_canvas::schedule::core_ops::Edit {
+            add: false,
+            path: ["params", "warp", "vars", name]
+                .map(str::to_string)
+                .to_vec(),
+            value: Datum::Num(seconds),
+        })
+        .collect();
+    v.write("marks2d.warp", Val::typed(Edits(edits)))
+}
+
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
@@ -2098,6 +2132,11 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             bound.insert(id.clone(), shown);
         }
     }
+    // #223's twin: a flow that finds its stream table by a vector field's kind.
+    let planted = match v.planted() {
+        Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
+        _ => scene::Planted::None,
+    };
     let (frame, basis) = match scene::frame_prebuilt(
         doc,
         &items,
@@ -2106,6 +2145,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         &bound,
         &record,
         &placed,
+        planted,
     )
     .map_err(refused)?
     {
@@ -2121,9 +2161,16 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
                 .iter()
                 .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
                 .collect();
-            let frame =
-                scene::frame_with(doc, &all, (&look.palette, &look.ty), 1.0, &bound, &record)
-                    .map_err(refused)?;
+            let frame = scene::frame_with(
+                doc,
+                &all,
+                (&look.palette, &look.ty),
+                1.0,
+                &bound,
+                &record,
+                planted,
+            )
+            .map_err(refused)?;
             (frame, None)
         }
     };

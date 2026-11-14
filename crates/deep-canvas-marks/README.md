@@ -19,3 +19,6 @@ A canvas module crate. It reaches the core through the `deep-canvas` crate, shap
 ## Deviations
 
 - `src/main.rs`: built as the `deep-layout` binary, not `deep-canvas-marks`, because `deep-layout solve` is auto layout's proof surface (#375).
+- `src/warp.rs` (#223): the split rule measures a piece's stray at a third and two thirds against the point's own image, and asks the map's interval form only when that lands within 10% of the tolerance; at a point the interval form is the point's value widened by rounding, so the two agree everywhere else, and asking it at every sample cost about ten point evaluations each. A flow has no interval form, so its image stands for itself.
+- `src/warp.rs` (#223): a carried path is kept in a process-wide map by its content key (at most 512), so a still warp maps nothing per frame; the design's flow bake "by the group's content key" is this same map, keyed by each item's pre-warp outline, the warp's inputs and the stream table's bytes.
+- `src/warp.rs` (#223): an item under nested warping groups takes the nearest group's warp only; status marks, a union outline's rings and `vector.glyphs` boxes draw unwarped; `max_points` is checked on the frame the check draws (the document as written), so a warp that grows only later is refused at that frame, not at check.

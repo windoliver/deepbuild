@@ -129,7 +129,26 @@ impl Seg {
     pub fn tangent(&self, t: f64) -> P {
         let d = self.derivative(t);
         if norm(d) > 0.0 {
-            d
+            return d;
+        }
+        // #223: where a handle collapses onto its end the derivative vanishes, and the curve
+        // runs along its next derivative there: the second, toward the inside of [0, 1], else
+        // the third; a curve with neither runs along its chord.
+        let (second, third) = match *self {
+            Seg::Line(..) => ([0.0, 0.0], [0.0, 0.0]),
+            Seg::Quad(a, b, c) => (vadd(vsub(c, vmul(b, 2.0)), a), [0.0, 0.0]),
+            Seg::Cubic(a, b, c, d) => (
+                vadd(
+                    vmul(vadd(vsub(c, vmul(b, 2.0)), a), 1.0 - t),
+                    vmul(vadd(vsub(d, vmul(c, 2.0)), b), t),
+                ),
+                vsub(vadd(vsub(d, vmul(c, 3.0)), vmul(b, 3.0)), a),
+            ),
+        };
+        if norm(second) > 0.0 {
+            vmul(second, if t < 0.5 { 1.0 } else { -1.0 })
+        } else if norm(third) > 0.0 {
+            third
         } else {
             vsub(self.end(), self.start())
         }

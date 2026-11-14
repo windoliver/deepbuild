@@ -18,7 +18,7 @@ use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::hub::{Call, Eval, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
+use crate::hub::{Call, Eval, EvalTime, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// An operator's error as a revision's issue.
@@ -238,6 +238,35 @@ impl<'a> Hub<'a> {
     }
 
     /// One frame of a document's session (`eval`).
+    /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
+    /// through its groups' warps at their values then, each sub-path flattened to its points.
+    pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let planted = crate::warps::planted(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let (Some(form), Some(items)) = (
+            session.document().and_then(Value::as_object).cloned(),
+            crate::warps::items_at(&self.sched, session),
+        ) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        match crate::warps::drawn(&form, &items, item, planted) {
+            Ok(Some(subpaths)) => {
+                json!({"item": item, "t": t, "subpaths": subpaths, "notices": []})
+            }
+            Ok(None) => json!({"outcome": "refused", "code": "ref_unresolved", "item": item}),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
     pub fn eval(&mut self, e: &Eval) -> Value {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});

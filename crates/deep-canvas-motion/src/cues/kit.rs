@@ -18,7 +18,7 @@ use crate::eval::Validity;
 use crate::program::Program;
 
 /// The document a verb is expanded on, with `seed`: two boxes, two paths and two texts, each
-/// drawn and opaque, in a 2D film.
+/// drawn and opaque, and a group `g` with a linear warp over its one path `c`, in a 2D film.
 pub fn document(seed: u64) -> Value {
     json!({
         "format": 1, "profile": "film", "id": "cue-kit", "seed": seed,
@@ -37,6 +37,10 @@ pub fn document(seed: u64) -> Value {
                   "params": {"text": "Speed", "size": 32, "reveal": {"mode": "fade", "order": "reading", "progress": 1}}},
             "n": {"id": "n", "kind": "text@1", "name": "N", "order": "a4", "at": {"pos": [300, 300, 0]},
                   "params": {"text": "", "size": 32}},
+            "g": {"id": "g", "kind": "group@1", "name": "G", "order": "a6",
+                  "params": {"warp": {"map": {"linear": {"matrix": [[1, 1], [0, 1]]}}}}},
+            "c": {"id": "c", "kind": "path@1", "name": "C", "order": "a7", "parent": "g",
+                  "params": {"d": "M 0 0 L 100 0 L 100 100 L 0 100 Z", "paint": {"stroke": {"role": "ink", "width": 2}}}},
         }
     })
 }
@@ -370,6 +374,19 @@ fn planted(name: &str, class: &str, inputs: Value, params: Value) -> Value {
                            "steps": {"s": {"op": "cue", "params": params}}}})
 }
 
+/// The planted `warp`: keys `g`'s warp mix from 0 to 1, its last key one flick past its span.
+fn planted_warp() -> Value {
+    let mut w = planted(
+        "warp",
+        "change",
+        json!({"warp": {"type": "ID", "default": "g"}}),
+        json!({"on": "warp", "from": {"params/warp/mix": 0}, "set": {"params/warp/mix": 1},
+               "until": "1 + 1 / (d * 705600000)"}),
+    );
+    w["kit"] = json!({"targets": ["g"]});
+    w
+}
+
 /// The registry motion declares: `{owner: motion, fill: [first_party_pack, pack], resolve:
 /// check}`, its kit's five rules and a planted wrong entry breaking each alone.
 pub fn registry() -> RegistryDef {
@@ -399,7 +416,9 @@ pub fn registry() -> RegistryDef {
         .planted("shuffle", planted("shuffle", "move", none.clone(),
             json!({"set": {"at/pos/0": "now + seed % 7 + 1"}})))
         // A `fade_out` that stops at opacity 0.5.
-        .planted("fade_out", planted("fade_out", "exit", none, json!({"set": {"adjust/opacity": 0.5}})));
+        .planted("fade_out", planted("fade_out", "exit", none, json!({"set": {"adjust/opacity": 0.5}})))
+        // A `warp` over the group `g` whose mix's last key lands one flick past its span.
+        .planted("warp", planted_warp());
     def.resolve = "check";
     def
 }

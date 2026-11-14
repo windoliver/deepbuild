@@ -197,6 +197,8 @@ pub enum Form {
         over_y: [f64; 2],
         max_cells: usize,
     },
+    /// A plane's lines, each `[a, b, step]`: a vertical line per x, then a horizontal one per y.
+    Grid { x: [f64; 3], y: [f64; 3] },
 }
 
 /// A path function's drawing, in u: its sub-paths, whether each closes, the ranges it holds by
@@ -210,6 +212,42 @@ pub struct Drawn {
     pub estimates: Vec<[f64; 2]>,
     pub estimate_box: Option<[f64; 4]>,
     pub cells: Option<usize>,
+}
+
+/// The most lines a grid draws per axis.
+const MAX_GRID_LINES: usize = 1024;
+
+/// A grid axis `[a, b, step]`: finite, `a ≤ b`, `step > 0`, at most 1,024 lines.
+fn grid_axis(v: Option<&Value>, field: &'static str) -> Result<[f64; 3], Refusal> {
+    let n: Option<Vec<f64>> = v
+        .and_then(Value::as_array)
+        .and_then(|a| a.iter().map(Value::as_f64).collect());
+    match n.as_deref() {
+        Some(&[a, b, step]) if [a, b, step].iter().all(|v| v.is_finite()) => {
+            if step <= 0.0 || b < a {
+                return Err(refuse(field, "a grid axis has a ≤ b and step > 0"));
+            }
+            if grid_steps([a, b, step]) >= MAX_GRID_LINES as f64 {
+                return Err(refuse(field, "a grid axis draws at most 1,024 lines"));
+            }
+            Ok([a, b, step])
+        }
+        _ => Err(refuse(field, "a grid axis is [a, b, step], finite")),
+    }
+}
+
+/// The whole steps from a to b, b counting when within 1e-9 of a whole step.
+fn grid_steps([a, b, step]: [f64; 3]) -> f64 {
+    ((b - a) / step + 1e-9).floor()
+}
+
+/// a, a + step, … up to b: b too when within 1e-9 of a whole step, else the last whole step
+/// short of it.
+fn grid_values(axis: [f64; 3]) -> Vec<f64> {
+    let [a, b, step] = axis;
+    (0..=grid_steps(axis) as usize)
+        .map(|i| (a + step * i as f64).min(b))
+        .collect()
 }
 
 /// An ordered range `[a, b]` with finite ends.
@@ -233,6 +271,12 @@ impl Form {
         default_box: Option<([f64; 2], [f64; 2])>,
     ) -> Result<Form, Refusal> {
         let text = |k: &str| f.get(k).and_then(Value::as_str);
+        if let Some(g) = f.get("grid") {
+            return Ok(Form::Grid {
+                x: grid_axis(g.get("x"), "grid/x")?,
+                y: grid_axis(g.get("y"), "grid/y")?,
+            });
+        }
         if let Some(zero) = text("zero") {
             let g = Formula::compile(zero, &["x", "y"], fixed, &Nothing, "zero")?;
             let (over_x, over_y) = match (f.get("over_x"), f.get("over_y"), default_box) {
@@ -368,6 +412,21 @@ impl Form {
                     ..Drawn::default()
                 }
             }
+            // Each line one two-point sub-path, never split where lines cross, so a warp bends it.
+            Form::Grid { x, y } => {
+                let (xs, ys) = (grid_values(*x), grid_values(*y));
+                let u = |px: f64, py: f64| [axes.x.map(px), axes.y.map(py)];
+                let subpaths: Vec<Vec<[f64; 2]>> = xs
+                    .iter()
+                    .map(|&v| vec![u(v, y[0]), u(v, y[1])])
+                    .chain(ys.iter().map(|&v| vec![u(x[0], v), u(x[1], v)]))
+                    .collect();
+                Drawn {
+                    closed: vec![false; subpaths.len()],
+                    subpaths,
+                    ..Drawn::default()
+                }
+            }
         })
     }
 
@@ -398,7 +457,7 @@ impl Form {
     pub fn over(&self) -> Option<[f64; 2]> {
         match self {
             Form::Over { over, .. } | Form::Param { over, .. } => Some(*over),
-            Form::Zero { .. } => None,
+            Form::Zero { .. } | Form::Grid { .. } => None,
         }
     }
 
@@ -417,7 +476,7 @@ impl Form {
                 let dy = y.at(&[at + h]) - y.at(&[at - h]);
                 Some(([x.at(&[at]), y.at(&[at])], dy / dx))
             }
-            Form::Zero { .. } => None,
+            Form::Zero { .. } | Form::Grid { .. } => None,
         }
     }
 }
@@ -864,5 +923,52 @@ mod tests {
         assert!(
             derivative_misses(&form(json!({"y": "2 * x + 0.1", "over": [0, 2]})), &f, &y).is_some()
         );
+    }
+
+    fn near(p: [f64; 2], q: [f64; 2]) -> bool {
+        (p[0] - q[0]).abs() < 1e-12 && (p[1] - q[1]).abs() < 1e-12
+    }
+
+    #[test]
+    fn a_21_by_21_grid_draws_42_whole_lines() {
+        let d = draw(&json!({"grid": {"x": [-2, 2, 0.2], "y": [-2, 2, 0.2]}})).unwrap();
+        assert_eq!(d.subpaths.len(), 42);
+        assert_eq!(d.closed, vec![false; 42]);
+        for i in 0..21 {
+            let v = -2.0 + 0.2 * i as f64;
+            assert_eq!(d.subpaths[i].len(), 2, "vertical {i} split");
+            assert!(
+                near(d.subpaths[i][0], [v, -2.0]) && near(d.subpaths[i][1], [v, 2.0]),
+                "vertical {i}: {:?}",
+                d.subpaths[i]
+            );
+            let h = &d.subpaths[21 + i];
+            assert_eq!(h.len(), 2, "horizontal {i} split");
+            assert!(
+                near(h[0], [-2.0, v]) && near(h[1], [2.0, v]),
+                "horizontal {i}: {h:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_step_short_of_the_range_stops_at_its_last_whole_step() {
+        let d = draw(&json!({"grid": {"x": [0, 1, 0.3], "y": [0, 1, 1]}})).unwrap();
+        assert_eq!(d.subpaths.len(), 4 + 2, "{:?}", d.subpaths);
+        let xs: Vec<f64> = d.subpaths[..4].iter().map(|s| s[0][0]).collect();
+        for (x, want) in xs.iter().zip([0.0, 0.3, 0.6, 0.9]) {
+            assert!((x - want).abs() < 1e-12, "{xs:?}");
+        }
+        assert!(d.subpaths.iter().all(|s| s.len() == 2));
+        assert!(near(d.subpaths[5][0], [0.0, 1.0]) && near(d.subpaths[5][1], [1.0, 1.0]));
+    }
+
+    #[test]
+    fn a_zero_step_is_refused() {
+        // [1, 1, 0] too: an empty range with a zero step must not pass as one line.
+        for y in [json!([0, 1, 0]), json!([1, 1, 0])] {
+            let r = draw(&json!({"grid": {"x": [0, 1, 0.5], "y": y}})).unwrap_err();
+            assert_eq!(r.field, "grid/y");
+        }
     }
 }

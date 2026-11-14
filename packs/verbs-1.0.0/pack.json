@@ -67,7 +67,9 @@
     "verbs.match@1": "match@1.json",
     "verbs.match_twin@1": "match_twin@1.json",
     "verbs.count_to@1": "count_to@1.json",
-    "verbs.count_to_twin@1": "count_to_twin@1.json"
+    "verbs.count_to_twin@1": "count_to_twin@1.json",
+    "verbs.warp@1": "warp@1.json",
+    "verbs.warp_twin@1": "warp_twin@1.json"
   },
   "entries": {
     "cue.kind@1": [
@@ -342,6 +344,24 @@
             "value": 5
           }
         }
+      },
+      {
+        "name": "warp",
+        "class": "change",
+        "recipe": "verbs.warp@1",
+        "twin": "verbs.warp_twin@1",
+        "description": "A change: the warp of the group `warp` names comes in over its window, its mix keyed from 0 to 1.",
+        "kit": {
+          "targets": [
+            "g"
+          ],
+          "params": {
+            "warp": "g"
+          }
+        },
+        "joins": [
+          "warp"
+        ]
       }
     ]
   }

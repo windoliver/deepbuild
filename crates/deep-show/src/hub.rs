@@ -714,6 +714,8 @@ pub enum Call {
     Path {
         doc: String,
         item: String,
+        /// #223: the frame it is drawn at; an item under a warp draws at its frame.
+        t: Option<EvalTime>,
     },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
@@ -1870,7 +1872,11 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
-            Call::Path { doc, item } => match self.current(doc) {
+            Call::Path { doc, item, t } => match self.current(doc) {
+                Some(row) if crate::warps::under_warp(&row.doc, item) => {
+                    let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                    self.warped_path(doc, item, &t)
+                }
                 Some(row) => crate::function::path_reply(&row.doc, item),
                 None => json!({"outcome": "refused", "code": "no_revision"}),
             },

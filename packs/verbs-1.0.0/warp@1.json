@@ -1,0 +1,29 @@
+{
+  "id": "verbs.warp",
+  "version": "1.0",
+  "title": "Warp",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A change: the warp of the group `warp` names comes in over its window, its mix keyed from 0 to 1.",
+  "inputs": {
+    "warp": {
+      "type": "ID",
+      "default": "",
+      "about": "the group whose warp comes in"
+    }
+  },
+  "steps": {
+    "mix": {
+      "op": "cue",
+      "params": {
+        "on": "warp",
+        "from": {
+          "params/warp/mix": 0
+        },
+        "set": {
+          "params/warp/mix": 1
+        }
+      }
+    }
+  }
+}

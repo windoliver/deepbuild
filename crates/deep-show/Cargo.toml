@@ -210,6 +210,8 @@ test-scene3d-reads-vector = []
 test-mark = ["dep:deep-canvas-test-modules"]
 # Issue #202: the test canvas module test.weight, an item kind of 0.20 ms of CPU.
 test-weight = ["dep:deep-canvas-test-modules"]
+# Issue #223: the test canvas module test.swirl, a stream table in streams@1 for (−y, x).
+test-swirl = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
 # Issue #522 (tests/acceptance/522): the test canvas module test.launch, whose items fire a world's

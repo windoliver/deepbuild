@@ -638,6 +638,9 @@ alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
+alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
+timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
