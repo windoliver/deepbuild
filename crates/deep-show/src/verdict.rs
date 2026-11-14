@@ -8,7 +8,7 @@
 //! The verdict's key names each deliverable's revision by hash, so any writer's patch that makes
 //! a new revision leaves it stale, as a new commit would.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use deep_canvas::document::{check_packed, Issue, Notice, CHECK};
 use deep_canvas::registry::{Raised, CORE_CHECK_KINDS};
@@ -348,9 +348,21 @@ impl<'a> Hub<'a> {
         if let Some(against) = against {
             self.read_against(&mut rows, against);
         }
+        // Planted (#1941): each requirement's first row on the claim, whatever revision it's on.
+        if self.planted(Planted::LoopChecksCachedByDoc) {
+            if let Some(first) = self.verdicts_made.get(claim).and_then(|v| v.first()) {
+                for r in &mut rows {
+                    let old = first["requirements"].as_array().into_iter().flatten();
+                    if let Some(old) = old.into_iter().find(|o| o["id"] == r["id"]) {
+                        *r = old.clone();
+                    }
+                }
+            }
+        }
         if !missing && !docs.is_empty() {
             rows.extend(briefed);
         }
+        self.returned(claim, &revisions, &mut rows);
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
         // #409: craft checks never pass a film on their own.
@@ -385,6 +397,148 @@ impl<'a> Hub<'a> {
             .or_default()
             .push(recorded.clone());
         self.with_stale(recorded)
+    }
+
+    /// #1941: an issue the loop already fixed, raised again, stops the loop. It was fixed when an
+    /// earlier verdict on the claim named it with a fix as patch ops and a later one no longer
+    /// raised it where it judged (PASS or FAIL) the requirement that did. Raised again on another
+    /// revision, the verdict asks you once, naming it and the patches since, and names no fix as
+    /// patch ops until you say yes; a later verdict lists the ask as pending, never asking again.
+    fn returned(&mut self, claim: &str, revisions: &[Value], rows: &mut [Value]) {
+        type Key = (String, String, Vec<String>);
+        let sole = match revisions {
+            [only] => only["doc"].as_str().unwrap_or_default(),
+            _ => "",
+        };
+        let rev_of = |revisions: &Value, doc: &str| {
+            revisions
+                .as_array()?
+                .iter()
+                .find(|r| r["doc"] == doc)
+                .and_then(|r| r["rev"].as_u64())
+        };
+        // Each issue a judged row holds, by key, with its requirement and whether it names ops.
+        let judged = |rows: &[Value]| -> Vec<(Key, String, bool)> {
+            let mut out = Vec::new();
+            for r in rows
+                .iter()
+                .filter(|r| r["result"] == "PASS" || r["result"] == "FAIL")
+            {
+                for i in r["issues"].as_array().into_iter().flatten() {
+                    let mut ids: Vec<String> = i["ids"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect();
+                    ids.sort();
+                    let doc = i["doc"].as_str().unwrap_or(sole).to_string();
+                    let code = i["code"].as_str().unwrap_or_default().to_string();
+                    let ops = i["fix_ops"].is_array() || i["fix"].is_array();
+                    out.push((
+                        (doc, code, ids),
+                        r["id"].as_str().unwrap_or_default().into(),
+                        ops,
+                    ));
+                }
+            }
+            out
+        };
+        // Each issue named with ops, the requirements that raised it, and the revision it was
+        // last fixed at.
+        let mut named: BTreeMap<Key, BTreeSet<String>> = BTreeMap::new();
+        let mut fixed: BTreeMap<Key, u64> = BTreeMap::new();
+        for v in self.verdicts_made.get(claim).into_iter().flatten() {
+            let past = v["requirements"]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let held = judged(past);
+            let judging: BTreeSet<&str> = past
+                .iter()
+                .filter(|r| r["result"] == "PASS" || r["result"] == "FAIL")
+                .filter_map(|r| r["id"].as_str())
+                .collect();
+            for (k, reqs) in &named {
+                let gone = !held.iter().any(|(h, _, _)| h == k)
+                    && reqs.iter().any(|r| judging.contains(r.as_str()));
+                if let Some(rev) = rev_of(&v["key"]["revisions"], &k.0).filter(|_| gone) {
+                    fixed.insert(k.clone(), rev);
+                }
+            }
+            for (k, req, ops) in held {
+                if ops {
+                    named.entry(k).or_default().insert(req);
+                }
+            }
+        }
+        let now = Value::Array(revisions.to_vec());
+        let mut back: Vec<(Key, String, u64)> = Vec::new();
+        for (k, req, _) in judged(rows) {
+            let Some(&at) = fixed.get(&k) else { continue };
+            if rev_of(&now, &k.0).is_some_and(|rev| rev != at) && !back.iter().any(|b| b.0 == k) {
+                back.push((k, req, at));
+            }
+        }
+        let Some(((doc, _, _), req, at)) = back.first().cloned() else {
+            return;
+        };
+        let mut id = format!("{claim}/{req}/returned:{doc}@{at}");
+        // Planted (#1941): a new ask from every verdict that finds the issue back.
+        if self.planted(Planted::RegressionAsksEveryVerdict) {
+            let n = self.verdicts_made.get(claim).map_or(0, Vec::len);
+            id = format!("{id}#{n}");
+        }
+        let fresh = !self.audit_asks.contains_key(&id);
+        if fresh {
+            self.audit_asks.insert(id.clone(), None);
+        }
+        if self.audit_asks.get(&id) == Some(&Some(true)) {
+            return;
+        }
+        // The loop stops: no fix as patch ops anywhere in this verdict.
+        for r in rows.iter_mut() {
+            for i in r["issues"].as_array_mut().into_iter().flatten() {
+                if let Some(m) = i.as_object_mut() {
+                    m.remove("fix_ops");
+                    m.remove("chosen");
+                    if m.get("fix").is_some_and(Value::is_array) {
+                        m.insert("fix".into(), json!(format!("answer `{id}` first")));
+                    }
+                }
+            }
+        }
+        let Some(row) = rows.iter_mut().find(|r| r["id"] == req.as_str()) else {
+            return;
+        };
+        if fresh {
+            let patches: Vec<Value> = self
+                .shared
+                .get(&doc)
+                .into_iter()
+                .flat_map(|s| s.revs.iter().filter(|r| r.rev > at))
+                .map(|r| json!({"rev": r.rev, "patch": r.patch, "writer": r.writer.as_ref().map(|w| w.to_json())}))
+                .collect();
+            let returned: Vec<Value> = back
+                .iter()
+                .map(|((d, code, ids), _, at)| json!({"doc": d, "code": code, "ids": ids, "fixed_at": at}))
+                .collect();
+            let what = back
+                .iter()
+                .map(|((_, code, ids), _, _)| format!("{code} on {}", ids.join(", ")))
+                .collect::<Vec<_>>()
+                .join("; ");
+            let ask = json!({"kind": "approval", "id": id, "requirement": req, "returned": returned, "patches": patches,
+                "why": format!("{what} was fixed at revision {at} and is back: the loop stopped here. Go on fixing?")});
+            match row["asks"].as_array_mut() {
+                Some(list) => list.push(ask),
+                None => row["asks"] = json!([ask]),
+            }
+        }
+        match row["pending"].as_array_mut() {
+            Some(list) => list.push(json!(id)),
+            None => row["pending"] = json!([id]),
+        }
     }
 
     /// `{"call": "verdicts", "claim"}`: every verdict made on the claim, in the order made.

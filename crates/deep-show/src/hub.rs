@@ -71,6 +71,13 @@ pub enum Planted {
     /// #1938: the loop's pixel checks hold on any machine: a verdict read against another
     /// machine's keeps their PASS or FAIL.
     PixelChecksHoldAnywhere,
+    /// #1941: the ask for an issue the loop already fixed is raised again, as a new ask, by
+    /// every verdict that finds it back.
+    RegressionAsksEveryVerdict,
+    /// #1941: a requirement's first row on a claim is given again for any later revision.
+    LoopChecksCachedByDoc,
+    /// #1941: a stale patch is a conflict even when no ID it touches changed since its base.
+    StaleFixNeverRebases,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.

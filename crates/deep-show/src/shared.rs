@@ -846,6 +846,10 @@ impl Hub<'_> {
                     }
                 }
             }
+            // Planted (#1941): every stale patch a conflict, on all it touches.
+            if ids.is_empty() && self.scenario.planted == Some(Planted::StaleFixNeverRebases) {
+                ids = touches.clone();
+            }
             if !ids.is_empty() {
                 let by_path = self.scenario.planted == Some(Planted::RebaseByPath)
                     && written_paths(&patch).is_some_and(|written| {

@@ -21,6 +21,8 @@ pub const GEOMETRY_AUDIT: &str = "geometry.audit";
 pub enum Planted {
     SamplesOnly,
     OverlapsOnly,
+    /// #1941's: a floating item's fix deletes it instead of lowering it.
+    FloatingFixDeletes,
     /// #1700's, in the shape readings (`geometry.shape`).
     Shape(crate::geometry::shape::Planted),
     /// #409's, in the film audit's craft@1 checks.
@@ -33,6 +35,7 @@ pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
     Some(crate::hub::Planted::Audit(match name {
         "sweep_audits_samples_only" => Planted::SamplesOnly,
         "audit_checks_overlaps_only" => Planted::OverlapsOnly,
+        "floating_fix_deletes_item" => Planted::FloatingFixDeletes,
         _ => match crate::geometry::shape::planted(name) {
             Some(p) => Planted::Shape(p),
             None => Planted::Craft(crate::film_audit::craft::planted(name)?),
@@ -1053,6 +1056,7 @@ impl crate::hub::Hub<'_> {
         let mut out = std::collections::BTreeMap::new();
         let samples_only = self.planted(crate::hub::Planted::Audit(Planted::SamplesOnly));
         let overlaps_only = self.planted(crate::hub::Planted::Audit(Planted::OverlapsOnly));
+        let deletes = self.planted(crate::hub::Planted::Audit(Planted::FloatingFixDeletes));
         for r in c
             .requirements
             .iter()
@@ -1087,6 +1091,11 @@ impl crate::hub::Hub<'_> {
                 j.ms += run.ms;
                 for mut i in run.issues {
                     i["doc"] = json!(doc);
+                    if deletes && i["code"] == deep_canvas::geometry_audit::FLOATING {
+                        let ops = json!([{"op": "delete", "id": i["ids"][0]}]);
+                        i["fix"] = ops.clone();
+                        i["fix_ops"] = ops;
+                    }
                     j.issues.push(i);
                 }
                 for s in run.not_run {
