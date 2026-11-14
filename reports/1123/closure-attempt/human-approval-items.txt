@@ -1,4 +1,4 @@
-Merge base: f6d811c7947dea9d28bb64de8759dca02c1fa27c before the third merge of main; 23baa43b44e949482f4ab7f6b96b2213ff7f44cd after it.
+Merge base: b1a1ff86234e7e080e0e339774ac12ad05813e9b, after the fourth merge of main.
 .deepbuild/approvers at the merge base holds one key, JingW6's. Each tag is SSH-signed with a key on that list, sits on the exact commit, and names every file the commit touches. The commits below are the ones `node scripts/proof.mjs guard` names; regenerate this list if any is rewritten.
 
 Commit 76ddd340bd040f0f295d350d38444dbf2c8305e3 fix(proof): build per-run binary snapshots for each checkout
@@ -35,4 +35,8 @@ Commit 6c6cc8a31423b031ce3126adf73c5ce60ed63b9d Merge remote-tracking branch 'or
 The merge's one conflict: this branch's runLanes, with main's #12 lines carried into it.
 Approves: scripts/lanes.mjs
 
-No longer listed: 57d96a3f2bfc1fb88c2934165c48071c27c390dc (the #374 and #375 helpers). The guard run of 2026-11-13 names no file of it.
+Commit 3db311796a06052265941358fb5ddc43404e6181 Merge remote-tracking branch 'origin/main' into fix/1123-run-private-binaries
+The merge's one conflict: main's first `alone` line, with tests/acceptance/374/ and tests/acceptance/375/ left out of it.
+Approves: scripts/lanes.mjs
+
+No longer listed: 57d96a3f2bfc1fb88c2934165c48071c27c390dc (the #374 and #375 helpers). The guard runs of 2026-11-13 and 14 name no file of it.

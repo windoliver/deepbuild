@@ -10,6 +10,8 @@ Head `b0fddcd0b`, with main merged in at `23baa43b4`. One Mac, 2026-11-13, at a 
 - **trace:** `PASS trace: Closes #1123: each of its 2 criteria has a tagged test that ran, passed and failed on a wrong program`.
 - **guard:** FAIL, 12 lines over six commits, until each carries a signed tag ([../closure-attempt/human-approval-items.txt](../closure-attempt/human-approval-items.txt)).
 
+After main was merged once more (`3db311796`, main at `b1a1ff862`), the same lanes read the same: before 5 of 5 PASS, trace `Closes #1123`, and guard FAIL on 13 lines over seven commits, the new merge among them. 2,286 s: [proof-3db311796.txt](proof-3db311796.txt). `affected.mjs` was not run again on that head. Main's `generated.rs` there defines `RULE_340` once; that `deep-contracts` compiles again is not checked, since `cargo check` got no build grant within 10 minutes.
+
 [proof.txt](proof.txt) is the same run on `2968750f2`, before the last merge of main: the same before results, and trace reading "Part of", the word the commits then used.
 
 ## affected.mjs
