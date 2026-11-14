@@ -649,6 +649,10 @@ timed.push('tests/acceptance/548/ac3-budgets.test.ts');
 // #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
 alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
 timed.push('tests/acceptance/213/ac8-budgets.test.ts');
+// #213's criterion 3 went to a blind redraft once #548's logic replay began stopping at a trap
+// (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
+alone.push('tests/acceptance/213-redraft-ac3/');
+byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
