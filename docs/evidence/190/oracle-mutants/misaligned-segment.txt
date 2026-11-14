@@ -1,0 +1,58 @@
+# tests/acceptance/190/oracle as committed in d90302d72 (test code identical to d49221e13's), run against a mutant of 9a02471b6's crates/deep-canvas-sandbox/src/link.rs: each library segment placed at alignment 1, link order unchanged
+# Mutant: link.rs line 448
+#   let a = p.align.get(i).copied().unwrap_or(1).max(1);
+# replaced with
+#   let a = 1;
+# built and run in a scratch clone at d90302d72 (crates identical to 9a02471b6; link.rs restored with git checkout afterwards), spark-c89f (Linux arm64), 2026-11-12.
+# The program's data ends at 8195, so alpha@1 ("ALPHA") lands at 8195 and beta@1 ("BETA!!!") at 8200 instead of 8200 and 8208: alpha still before beta.
+# NO_COLOR=1 CARGO_TARGET_DIR=<clone-target> npx vitest run --root tests/acceptance/190/oracle --no-file-parallelism --reporter=verbose
+
+ RUN  v5.0.5 <clone>/tests/acceptance/190/oracle
+
+ × data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data 235ms
+   → data-layout.s's checks of our merged program:
+  alpha@1's data at 8200: expected 414c504841, got 4245544121
+  beta@1's data at 8208: expected 42455441212121, got 00000000000000
+  byte 8195 is 65, outside every object's data (expected 0): expected [ …(3) ] to deeply equal []
+ ✓ data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the layout check fails on a linker that lays libraries out in listing order (linker_links_in_listing_order) 90ms
+ ✓ function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the merged program of _start and ret32@1 imports nothing, holds (f32) -> (i32) and () -> (), and _start calls the internal ret32 121ms
+ ✓ function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the checks fail on a merged program that keeps an object's linking section (linker_adds_linking_section) and on the program object unlinked 45ms
+ ✓ undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 a program importing lib:grid_path.find_route and lib:turns.next_turn, linking only turns@1, is refused naming find_route and not next_turn 75ms
+ ✓ undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 the same program linking turns@1 and grid_path@1 is admitted, imports nothing and runs both calls 150ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data
+AssertionError: data-layout.s's checks of our merged program:
+  alpha@1's data at 8200: expected 414c504841, got 4245544121
+  beta@1's data at 8208: expected 42455441212121, got 00000000000000
+  byte 8195 is 65, outside every object's data (expected 0): expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "alpha@1's data at 8200: expected 414c504841, got 4245544121",
++   "beta@1's data at 8208: expected 42455441212121, got 00000000000000",
++   "byte 8195 is 65, outside every object's data (expected 0)",
++ ]
+
+ ❯ none ../helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** The first line two lists differ at, or null. */
+ ❯ data-layout.test.ts:123:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 5 passed (6)
+   Start at  04:31:21
+   Duration  5.82s (tests 98%, import 1%, transform 1%)
+
+exit 1

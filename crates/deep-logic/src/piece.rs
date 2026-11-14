@@ -14,6 +14,7 @@ use serde_json::{json, Map, Value};
 use wasmparser::{ExternalKind, Operator, Parser, Payload};
 
 use crate::lines::Lines;
+use crate::links::{self, Functions, Lib};
 use crate::Planted;
 
 pub const PAGE: u64 = 65_536;
@@ -87,7 +88,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 6] = ["fires", "links", "pages", "parallel", "services", "mirrors"];
+const LATER: [&str; 5] = ["fires", "pages", "parallel", "services", "mirrors"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -438,6 +439,15 @@ pub struct Item {
     /// The data assets it names, in order, by hash, and where they're copied: `assets_at`.
     pub assets: Vec<(String, Vec<u8>)>,
     pub assets_at: u32,
+    /// Its linked libraries in link order, the merged program's library functions, whether it was
+    /// linked and the link's time (#190).
+    pub libraries: Vec<Lib>,
+    pub functions: Functions,
+    /// `given` is the linker's output (#190).
+    pub linked: bool,
+    pub link_ns: u64,
+    /// Each library's fixture records, by its hash, as the logic module ran them.
+    pub fixtures: BTreeMap<String, Value>,
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
@@ -583,7 +593,19 @@ fn saves_of(
 
 impl Item {
     pub fn checked(&self) -> Value {
+        let b = &self.given;
+        let linked = if self.linked {
+            json!({"sha256": hash(b), "size": b.len(), "bytes": B64.encode(b)})
+        } else {
+            Value::Null
+        };
+        let libraries: Vec<Value> = self
+            .libraries
+            .iter()
+            .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([]))}))
+            .collect();
         json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
+            "linked": linked, "libraries": libraries, "link_ns": self.link_ns,
             "pipelined": crate::budget::pipelined(self)})
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
@@ -763,6 +785,7 @@ struct Declared {
     every: i64,
     ring: u64,
     assets: Vec<String>,
+    links: Vec<(String, String)>,
     saves: Option<Value>,
     emits: Vec<Emit>,
     preview: Option<(Vec<String>, Vec<Write>)>,
@@ -872,6 +895,7 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "budget",
             "checkpoint",
             "assets",
+            "links",
             "saves",
             "emits",
             "preview",
@@ -1063,7 +1087,10 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .ok_or_else(|| bad("assets", "assets is a list of asset IDs".into()))?,
         Some(_) => return Err(bad("assets", "assets is a list of asset IDs".into())),
     };
+    let links = links::declared(params.get("links"))
+        .ok_or_else(|| bad("links", "links is a list of {name, asset}".into()))?;
     Ok(Declared {
+        links,
         program,
         debug,
         step,
@@ -1387,6 +1414,34 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
+        // The linker first, before the subset check and the rewrite (#190); an item without links
+        // is never linked.
+        let (mut given, mut libraries, mut functions, mut lib_data, mut link_ns) =
+            (given, Vec::new(), Functions::new(), None, 0);
+        if !d.links.is_empty() {
+            let packs = links::packs(piece).ok_or_else(bad)?;
+            let link_refused = |refusals| {
+                Refused(
+                    json!({"ok": false, "code": "link_refused", "item": id, "refusals": refusals}),
+                )
+            };
+            let started = std::time::Instant::now();
+            libraries = links::resolve(&d.links, &packs, stored, planted).map_err(link_refused)?;
+            let (bytes, f, data) =
+                links::merge(&given, &libraries, planted).map_err(link_refused)?;
+            link_ns = started.elapsed().as_nanos() as u64;
+            given = bytes;
+            functions = f;
+            lib_data = data;
+            if d.debug.is_some() {
+                // A sidecar's DWARF stands for the program object, not the merged module.
+                return Err(logic_refused(id, vec![refusal("debug", "a debug sidecar isn't read for an item with links yet: its offsets stand for the program before the link".into(), json!({"field": "debug"}))]));
+            }
+        }
+        if planted.linker_adds_linking_section {
+            given = links::empty_linking(given);
+        }
+        let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
         let lines = match &d.debug {
             None => None,
             Some(sha) => {
@@ -1486,6 +1541,18 @@ pub fn check_in(
                 }
             }
         }
+        // The libraries' data, placed after the program's, must keep clear of its regions (#190).
+        if let Some((start, end)) = lib_data {
+            for (name, at, n) in &regions {
+                if *at < end && u64::from(start) < u64::from(*at) + u64::from(*n) {
+                    refused.push(refusal(
+                        "links",
+                        format!("the libraries' data, bytes {start} to {end}, overlaps {name}, {n} bytes at {at}"),
+                        json!({"region": name}),
+                    ));
+                }
+            }
+        }
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
         for sha in &d.assets {
@@ -1569,6 +1636,11 @@ pub fn check_in(
             content,
             assets,
             assets_at: assets_at.unwrap_or(0),
+            libraries: std::mem::take(&mut libraries),
+            functions: std::mem::take(&mut functions),
+            linked,
+            link_ns,
+            fixtures: BTreeMap::new(),
             saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),

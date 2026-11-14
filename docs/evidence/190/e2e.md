@@ -1,0 +1,703 @@
+# #190 by hand: `deep-logic` on linked libraries
+
+Run on spark-c89f (Linux aarch64), 2026-11-09, by the implementing session, on this branch's code before its commit
+(base 6042ef5a, main before the 2026-11-09 history rewrite; on today's main it is f61417522, the same tree, so 6042ef5a isn't an ancestor of this branch's
+rewritten history; the object is still in the repository). No raw output of this first run is saved: its replies are the text below. The rerun at 9a02471b6
+(further down) saves its raw files, and they give the same results, except where it says otherwise. The surface is the one `tests/acceptance/190/README.md` defines: `deep-logic`'s JSON lines.
+
+## How it was run
+
+1. The 14 request lines were written with the acceptance suite's own program builders (`tests/acceptance/190/libs.ts`,
+   `programs.ts`: grid_path@1 and its fixture, the planted corner-cutting twin, pathing@1, grid_path@2, the `maze`,
+   `chase`, `swarm`, `tactics` and `plain` items), by a throwaway vitest file under the ignored `target/` folder that
+   writes `requests.jsonl`, plus `plain.jsonl` and `tactics.jsonl` for the planted twins (each line a `check`, `bake`, `query`, `claim` or `pack_check` call as the README
+   gives it). Nothing in it judges a reply.
+2. The binary, by hand, one process for all 14 lines (so a fixture that ran once should show `ran: false` after; reply 12 below shows
+   it running again, the cache bug fixed in the rerun):
+
+   ```sh
+   cargo build --locked --bin deep-logic
+   ./target/debug/deep-logic < requests.jsonl > replies.jsonl     # exit 0, 14 replies
+   ./target/debug/deep-logic --planted linker_adds_linking_section < plain.jsonl
+   ./target/debug/deep-logic --planted linker_links_in_listing_order < tactics.jsonl
+   ```
+
+3. The replies below are excerpts: each keeps only the fields it shows, with fixture IDs in fixture records shortened,
+   `route` cut to its first 24 values and fixture times rounded to ms (`link_ns` stays raw); reply 10 keeps its full fixture ID and raw `ns`, and
+   refusals keep their full fixture IDs. Bakes show step 0's arrays as a top-level
+   `arrays`, and leave out the step items, so reply 7 doesn't show that swarm's step 0 failed (its trap does). The
+   rerun's replies, with every field kept (only long base64 cut short, as said below), are in
+   `e2e-raw/replies.jsonl`. The merged bytes were read back from each receipt's `linked`
+   and compiled with node's own WebAssembly to list their imports and exports.
+
+## Replies
+
+### 1 maze links grid_path@1: check
+{ "ok": true, "items": { "maze": { "hash": "7db71e9c8586b32c266d575ccd62a9e2a0cfabcb64cb3b39062d1f6f283f13f1", "linked": { "sha256": "4b72dd698454f2b11d15e6b0c3f6be02ac8b617866fc8dc0574ffb1646a6dbde", "size": 9394 }, "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "pack": "gridcore@1.0.0", "fixtures": [ { "fixture": "0b8d9f8abe45…", "verdict": "PASS", "ran": true, "ms": 199 } ] } ], "link_ns": 4852861 } } }
+### 2 maze: bake 1 step
+{ "ok": true, "items": { "maze": { "hash": "7db71e9c8586b32c266d575ccd62a9e2a0cfabcb64cb3b39062d1f6f283f13f1", "linked": { "sha256": "4b72dd698454f2b11d15e6b0c3f6be02ac8b617866fc8dc0574ffb1646a6dbde", "size": 9394 }, "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "pack": "gridcore@1.0.0", "fixtures": [ { "fixture": "0b8d9f8abe45…", "verdict": "PASS", "ran": false, "ms": 199 } ] } ], "link_ns": 97104 } }, "arrays": { "maze.route": "0,0,0,1,0,2,0,3,1,4,2,4,3,4,3,3,3,2,3,1,4,0,-1,-1,…", "maze.moves": [ 10 ] }, "traps": [] }
+### 3 chase: query (deep_query row)
+{ "ok": true, "items": { "chase": { "kind": "logic@1", "program": "441c1aa245fffb149a13d28ca5972a6372de807607b6fbfd24232ce33aff854c", "hash": "5171260aec70ad58e1ca157efdda28fa06561534ba52007f379103822af520c6", "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5" } ] } } }
+### 4 plain (no links): check
+{ "ok": true, "items": { "plain": { "hash": "342531a722a01595df4e9f2b6bc9353a536676f19c135fe056987d9f7edb74f2", "linked": null, "libraries": [], "link_ns": 0 } } }
+### 5 planted corner-cutting grid_path with grid_path@1 fixture: check
+{ "ok": false, "code": "link_refused", "item": "maze", "refusals": [ { "rule": "fixture", "library": "grid_path@1", "fixture": "05a1034ddff8acf0c68f00259a2b4a9b62e81e9ec6597a700dbbc457e04dd263", "step": 0, "array": "route", "index": 6, "expected": 0, "actual": 1 } ] }
+### 6 library with no fixture: check
+{ "ok": false, "code": "link_refused", "item": "maze", "refusals": [ { "rule": "fixture", "library": "grid_path@1" } ] }
+### 7 swarm (160x160): bake 1 step, fuel trap in grid_path
+{ "ok": true, "items": { "swarm": { "hash": "b51263f0a8381a5b70869b8d4445b9a142e9010f238deb460afb88850190b7ca", "linked": { "sha256": "0d484221a34f102edfa5e02867dd4f35ce9ad9afa8f9b67ef7889ddc2c0911f1", "size": 444168 }, "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "pack": "gridcore@1.0.0", "fixtures": [ { "fixture": "0b8d9f8abe45…", "verdict": "PASS", "ran": false, "ms": 199 } ] } ], "link_ns": 504737 } }, "arrays": { "swarm.route": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,…", "swarm.moves": [ 0 ] }, "traps": [ { "item": "swarm", "step": 0, "t": 0, "kind": "fuel", "function": 2, "offset": 451, "inputs": [], "source": null, "library": { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "function": "find_route" } } ] }
+### 8 claim from the agent's own pack
+{ "ok": true, "verdict": "INCONCLUSIVE", "asks": [ { "kind": "approval", "library": "grid_path@1", "why": "grid_path@1's only proof is fixtures the working agent wrote for its own library, in mine@1.0.0: they bind only its own claims until you approve the pack" } ] }
+### 9 claim from an installed pack
+{ "ok": true, "verdict": "PASS", "asks": [] }
+### 10 pack_check gridcore@1.0.0
+{ "ok": true, "pack": "gridcore@1.0.0", "installed": true, "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "pack": "gridcore@1.0.0", "fixtures": [ { "fixture": "0b8d9f8abe45b5238ebfcecb100acb965f44ef7fff8e6440f9312e96cafeb6d1", "verdict": "PASS", "ran": false, "ns": 199000257, "deep_hashes": { "0": "e5d18bfb5420fd13" } } ] } ] }
+### 11 pack_check hostpack (imports env.now)
+{ "ok": false, "code": "pack_refused", "pack": "hostpack@1.0.0", "refusals": [ { "rule": "import", "import": { "module": "env", "name": "now" }, "library": "grid_path@1" } ] }
+### 12 tactics links pathing@1 (needs grid_path@1): check
+{ "ok": true, "items": { "tactics": { "hash": "6fc85540c7566a1461e07463f4f5254d3e256e036b312a5b7ae476e54b616b9a", "linked": { "sha256": "79e47f3dbd442438245ad9e74567ec56715db146f5c17e0a24c9be57c76f1188", "size": 9385 }, "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "pack": "kit@1.0.0", "fixtures": [ { "fixture": "0b8d9f8abe45…", "verdict": "PASS", "ran": true, "ms": 107 } ] }, { "name": "pathing@1", "hash": "e080cfa0d88332b3dcc8778917659532828a8998fb6b7f89fc96c8454420f9dd", "pack": "kit@1.0.0", "fixtures": [ { "fixture": "c9b1c09fe27e…", "verdict": "PASS", "ran": true, "ms": 105 } ] } ], "link_ns": 72880 } } }
+### 13 needs reach grid_path@1 and grid_path@2: check
+{ "ok": false, "code": "link_refused", "item": "tactics", "refusals": [ { "rule": "versions", "versions": [ "grid_path@1", "grid_path@2" ] } ] }
+### 14 grid_path@1 fixture piece: check
+{ "ok": true, "items": { "fixture": { "hash": "7db71e9c8586b32c266d575ccd62a9e2a0cfabcb64cb3b39062d1f6f283f13f1", "linked": { "sha256": "4b72dd698454f2b11d15e6b0c3f6be02ac8b617866fc8dc0574ffb1646a6dbde", "size": 9394 }, "libraries": [ { "name": "grid_path@1", "hash": "dcb79acc656fffa03e88e6c2800d85d32f94694749783c2d63d84ac69dca9ec5", "pack": "gridcore@1.0.0", "fixtures": [ { "fixture": "0b8d9f8abe45…", "verdict": "PASS", "ran": false, "ms": 199 } ] } ], "link_ns": 55936 } } }
+
+### The merged programs, compiled in node (from the receipts' linked bytes)
+
+```text
+maze merged 9394 bytes; imports: [] exports: init:function step:function reads_at:global writes_at:global memory:memory
+swarm merged 444168 bytes; imports: [] exports: init:function step:function reads_at:global writes_at:global memory:memory
+tactics merged 9385 bytes; imports: [] exports: init:function step:function reads_at:global writes_at:global memory:memory
+```
+
+### Planted twins
+
+- `--planted linker_adds_linking_section`, `plain` (no links): rewritten hash
+  `a320863f1afd248ac216bc044c0664ddb0531079393657e64b3ba03db7805ebb`, where the shipped linker leaves
+  `342531a722a01595df4e9f2b6bc9353a536676f19c135fe056987d9f7edb74f2` (line 4 above): the twin changes an unlinked
+  program's hash; the shipped linker leaves it unlinked (`linked: null`), while the twin's reply carries a `linked`
+  program (sha256 `226acef4…`, 172 bytes, `e2e-raw/planted-plain.jsonl`): it ran on a program without links. (`link_ns`
+  is 0 for the twin too, so it shows nothing.) ac07 checks the rest.
+- `--planted linker_links_in_listing_order`, `tactics`: `{"ok":false,"code":"link_refused","item":"tactics",
+  "refusals":[{"rule":"link","import":{"module":"lib:grid_path","name":"find_route"}}]}`: pathing@1 placed before
+  grid_path@1 is refused by the listed-before rule, naming the import (the saved reply's `what`: "library pathing@1
+  imports lib:grid_path.find_route from grid_path@1, which isn't listed before it", `e2e-raw/planted-tactics.jsonl`).
+
+## What this shows, per criterion
+
+"Line N" is reply N above; the same request is line N of the rerun's saved `e2e-raw/replies.jsonl`, which gives the
+same results (see the rerun below).
+
+Each bullet sums up the proof for the issue's criterion of that number, in the issue's order; the criteria's own
+wording is the issue's (its Acceptance criteria), not repeated here.
+
+- 1: linked programs merge to modules with no imports that pass the subset check. At 9a02471b6 the saved proof is ac01 passing
+  (`acceptance-linux-9a02471b6.txt`) and `e2e-raw/web-plan-imports.txt`, where `e2e-tools/imports.mjs` compiles the
+  four `web_plan` rewritten programs, chase's included, and finds `imports []` for each. (The merged `linked` bytes
+  themselves are cut short in `e2e-raw`; node's `[]` above is from the 11-09 run.) Both items are admitted; maze's receipt (line 1), chase's
+  receipt (`e2e-raw/app-bakes-replies.jsonl` row 2) and chase's deep_query row (line 3) name grid_path@1 with its hash,
+  and ac01's first test (passing) asserts both receipts and both deep_query rows; `maze`'s bake gives the 10-move route. Changing one byte of
+  the library changes both pieces' rewritten hashes and bake keys, while a third piece that doesn't link it keeps its
+  own: ac01's second test, passing.
+- 2: the fixture passes and the library links (lines 1, 14); the fixture's 10-move route on its 5×5 grid is
+  `app-bakes-replies.jsonl` row 4 and screenshot 04, and ac02's first test (passing); the corner-cutting twin with grid_path@1's fixture is
+  refused naming the fixture, `route`, element 6, expected 0 and actual 1 (line 5); no fixture is refused naming the
+  library (line 6). The planted corner-cutter's 8-move route is ac02 (passing in `acceptance-linux-9a02471b6.txt`) and
+  screenshot 03.
+- 3: bytes off their hash (naming both hashes), a pack mapping the name@version to another hash (naming the pack), an
+  import no listed library exports (naming it), an import of a later-listed library (naming it) and a merged program
+  1 byte over 4 MiB (naming the limit) are each refused in ac03's test, passing in `acceptance-linux-9a02471b6.txt`; no
+  saved reply here shows them.
+- 4: the app-vs-headless-Chrome fixture test (ac04's second) passes in the acceptance suite
+  (`acceptance-linux-9a02471b6.txt`). That test compares only the fixture's `deep_hashes`, the state before step 0, which the honest and the
+  corner-cutting libraries share; the page's item-hash, route and moves comparison is what tells them apart, so the
+  browser half of 4 rests on the page too. The merged programs on macOS arm64 and Linux x86_64 are BLOCKED on this
+  host (ac04's first test) and proven on the Mac: at f55dc2e5a (this branch merged with main, 1c54f26d6) the whole
+  file ran there, on macOS 14.7.7 arm64 with Docker Desktop 4.65.0 and the linux/amd64 image pulled
+  (`mac/docker-pull.txt`), and both tests pass (`mac/ac04-f55dc2e5a.txt`, vitest exit 0): the two pieces' merged
+  programs byte for byte the same on the two machines, and the fixtures' hashes the same in the app and headless
+  Chrome there. The log's header carries the head, the merge base, `uname -a` and `docker version`; its host name is
+  redacted. The Mac was on battery, which no check of this file times. So 4 is proven.
+- 5: `swarm`'s fuel trap at step 0 names grid_path@1, its hash and `find_route` (line 7). The same offset on a second
+  machine is BLOCKED on this host (ac05 in `acceptance-linux-9a02471b6.txt`: no linux/amd64 emulation here, and an
+  x86_64 host fails ac05's check that the two machines differ in CPU architecture) and proven on the Mac: at
+  f55dc2e5a ac05 passes there (`mac/ac05-f55dc2e5a.txt`, vitest exit 0), its second machine the linux/amd64
+  container under the Mac's Docker, same header and redaction as ac04's log. So 5 is proven.
+- 6: INCONCLUSIVE with one approval ask from the agent's own pack, PASS from an installed one (lines 8, 9), and ac06's test, which holds both,
+  passes (`acceptance-linux-9a02471b6.txt`).
+- 7: `plain` isn't linked (line 4) and the planted twin changes its hash (above). The same hash, bake key and goldens as
+  the merge base, and the twin failing naming the piece, are ac07 (passing in `acceptance-linux-9a02471b6.txt`).
+- 8: gridcore@1.0.0 installs; hostpack@1.0.0 is refused naming `env.now` (lines 10, 11). A pack whose library fails a
+  fixture is refused naming the fixture, and the planted pack check that skips the subset check installs the first
+  pack and fails naming the import, in ac08 (both tests passing in
+  `acceptance-linux-9a02471b6.txt`).
+- 9: `tactics` links grid_path@1 then pathing@1 (line 12); grid_path@1 with grid_path@2 is refused naming both (13);
+  the listing-order twin is refused naming the import (above). The ping/pong cycle is refused by ac09's second test (passing in
+  `acceptance-linux-9a02471b6.txt`).
+- 10: both budget tests are BLOCKED on this host (ac10 in `acceptance-linux-9a02471b6.txt`) and pass on the Mac at
+  f55dc2e5a against the merge base 1c54f26d6 (`mac/ac10-f55dc2e5a.txt`, vitest exit 0): macOS 27.2.1 arm64, on AC
+  power, thermal state 0, load 2.80 at the start after the runner's five-minute quiet gate (9.55 at the end, the
+  test's own builds running). The thresholds are ac10's, which the log's two passing test names state; the log
+  carries no measured times. The run is of f55dc2e5a, not of the later heads: 1075519ba adds docs only, and
+  9882503c0 merges main 4950c76d5, which changes `crates/deep-logic` on both sides of the comparison and wasn't
+  timed. So 10 is proven at f55dc2e5a.
+- Oracle lane, criteria 1 and 3: INCONCLUSIVE for both; its 6 tests pass (`oracle-linux-9a02471b6.txt`). The map's upstream tests were in the
+  owner's oracle-tests zip all along; `tests/acceptance/190/README.md` lines 10–16 (not edited; by the session's report written
+  before the code, though it landed in the same commit, 85169f887) say the page answered 404 (its unblock ask, access for this account, is superseded: the tests came from the owner's
+  zip). By the session's report,
+  a blind job wrote `tests/acceptance/190/oracle/` from the issue, the map, the three vendored
+  wasm-ld tests (`function-imports.s`, `data-layout.s`, `undefined.s`, copied unchanged with a NOTICE) and the base
+  commit, never the implementation; its README lists what each test can't hold of the upstream one and why. The
+  oracle-tests README (line 27, citing #136) counts a linked test as evidence only when it rejects our output with a
+  planted fault, and "it" is the linked upstream test: so here only checks upstream's live CHECKs hold can count.
+  No planted twin is shown failing one. `linker_adds_linking_section` fails only function-imports' no-`linking` check,
+  which is ours (upstream's CHECKs read no custom section's name but `name`); its upstream-held "imports nothing"
+  check fails only on the unlinked input object, which isn't our output. LLVM's object reader, which obj2yaml uses in
+  upstream's RUN line, accepts our honest merged program and aborts on the twin's, whose `linking` section is empty
+  (`oracle-reader-function-imports.txt`: rust-objcopy 1.99.1, LLVM 23.1.1 rather than the vendored
+  tests' pinned 23.1.3, exit 0 against exit 134 in
+  `parseLinkingSection`; obj2yaml itself isn't installed). Upstream's whole RUN line would reject the honest program
+  too: it has no name section, which upstream's `Name: name` CHECK needs, and it defines `init` and `step` besides
+  `ret32` and `_start` (4 functions and a third signature, where upstream's CHECK-NEXTs want exactly two), by
+  `WebAssembly.Module` (no name section; `init` and `step` exported) and a parse of its type and function sections
+  (4 functions over (f32) -> (i32), (i64) -> () and () -> ()) on the honest program rebuilt as the reader file's header
+  says (sha256 `6afd1f32…`); only the
+  reader step tells the two apart.
+  `linker_links_in_listing_order`'s output is aligned and consistent in its own order (beta@1 at 8,200, alpha@1 at
+  8,208, v = 65,033, by validators' probes, not saved here), so it breaks only our rule that link order is dependency
+  order with ties by name; it fails data-layout's two fixed-address checks, which hold that order rule along with
+  alignment, and its zero-fill check (the stray byte at 8,205), which is ours. So the oracle lane is INCONCLUSIVE for
+  criterion 1: its tests pass and can fail, but no planted twin is shown failing a CHECK line upstream holds (a
+  hand-made mutant is, below; whether its saved run counts is the owner ask). Both planted twins are named by other
+  criteria (`linker_adds_linking_section` by 7, `linker_links_in_listing_order` by 9); criterion 1 names none, so
+  under the design's "Wrong programs" it has only a mutant, as criterion 3 does. One was run: a hand-made mutant of
+  9a02471b6's `link.rs` line 448 that places each library segment at alignment 1, link order unchanged, fails
+  data-layout's first test (`oracle-mutants/misaligned-segment.txt`: alpha@1 at 8,195 and beta@1 at 8,200, alpha still
+  first, so its two fixed-address checks fail on alignment, upstream's rule, and its zero-fill check on the byte at
+  8,195); every other oracle test passes on it. (LLVM's reader also tells criterion 7's twin's output from the honest
+  one, outside any test.)
+  undefined.s has no planted twin, so the lane is INCONCLUSIVE for criterion 3 too. The base (`BASE-FAILURE.txt`, all
+  6 fail) fails it before its import check. The design's "Wrong programs" accepts the twin a criterion names or a
+  mutant, and criterion 3 names no twin; two mutants of `link.rs` line 404 were made by hand in a scratch clone and
+  their runs saved. The trace lane can't make this proof today: its Rust mutation step (`scripts/proof-runs.mjs`) runs
+  cargo-mutants with cargo's own tests, never a vitest file, and says its kills prove no criterion. Its twins route
+  (`tests/acceptance/<issue>/twins.json`, folders that replace code under test, as #1113 uses) could run the two
+  mutants as rerunnable twins, but the blind job would have to add them, and the lane skips a test's twins once that
+  test fails on the merge base at its assertion (`prepareRuns`' twin loop in `scripts/proof-runs.mjs`, with `wrongProgram`), as all 6 oracle tests do (`BASE-FAILURE.txt`), so it
+  would report "failed on the merge base", which the design's "Wrong programs" doesn't accept for new code. The lane's one ask, to the owner, for
+  criteria 1 and 3 together: do saved runs of hand-made mutants count as line 27's planted fault? Yes: data-layout counts
+  for criterion 1 on `oracle-mutants/misaligned-segment.txt` (function-imports stays inventory) and undefined.s for
+  criterion 3 on `oracle-mutants/names-no-import.txt`, saved
+  runs rather than rerunnable checks; no: both stay INCONCLUSIVE. The lane is INCONCLUSIVE rather than BLOCKED: the oracle-tests README (line 30) asks for the
+  tool installed and a runner, and the issue's Oracle line for a runner; the translated vitest tests are that runner,
+  run on our output. Installing obj2yaml and FileCheck would unblock nothing, since our honest program can't pass
+  upstream's RUN line as written (above). One of those two mutants, which names no import, fails upstream's CHECK (`oracle-mutants/names-no-import.txt`). Upstream's CHECK-NOT (`baz`, a symbol only `--undefined` names) isn't held:
+  our linker has no `--undefined`. In its place the test checks something of our own, that no refusal names an import
+  a listed library defines, and the mutant that names every import of the program fails it
+  (`oracle-mutants/names-every-import.txt`). The blind job's first draft called that check the CHECK-NOT and put
+  data-layout.s's `aligned_bar` at 65552 (it is at 65568); round 32 disputed both, and the job's redraft (blind, by the session's report)
+  (2b38d894b, comments and docs only) corrected them. The 6 tests were rerun as committed there. The mutant runs used
+  d49221e13's test code (misaligned-segment's run used d90302d72's commit, code identical); the oracle test code is identical from d49221e13 to HEAD (every later oracle commit changes comments and docs only). The oracle README's "checks against a real linker" (rust-lld) is the blind
+  job's report: no output of that run is saved.
+
+
+## `node scripts/affected.mjs` at c26b91146 (2026-11-12, spark-c89f)
+
+Code identical to 9a02471b6 (later commits change only docs and the oracle folder's comments), against the merge base
+with origin/main, e7609b7b. Summary line: `FAIL affected: 1987 new, 181 already failing on main, 120 inconclusive or
+blocked, 0 listed skips, 749 passed, in 946 s at load 2`. No WIDE line. Its 36 INCONCLUSIVE lines are other issues'
+reference-Mac, GPU and platform gates and the 28 timed and 9 slow files it doesn't run; none is #190's. #190's own
+tests in that run: 20 pass (the 14 of `acceptance-linux-9a02471b6.txt` and the oracle lane's 6) and the same 4
+BLOCKED (ac04's first test, ac05, ac10's two). Its "new" failures in files this change touches are the four lint
+lines known from main here: rustfmt on `crates/deep-canvas-sandbox/src/lib.rs` (main's copy fails the same way),
+the `deps` lines for `tests/acceptance/190/wat/Cargo.toml` (#544's and #545's wat crates fail the same way), and the
+`cards` line on `crates/deep-canvas-sandbox/README.md`'s `lib.interface@1` (main's line names it too). The rest are in
+files this change doesn't touch: rustfmt over untouched sandbox files and other crates, #140.12's wasm32 build
+(meshopt's C sources don't build here), #1114's timed list, vendored gpui patches, and the deep-logic suites #544
+AC1, #545 AC4 and #546 AC1, which failed the same way at 7b5d9da1f and 1a9ad440d (no video encoder here; this box's
+fuel ceiling above #546's budget).
+
+## `node scripts/affected.mjs` at 34f30ffd5 (2026-11-13, spark-c89f)
+
+34f30ffd5 is this branch merged with main e0c90a5a5, plus the assembler's lockfile commit (below). Summary line:
+`FAIL affected: 404 new, 52 already failing on main, 149 inconclusive or blocked, 0 listed skips, 735 passed, in
+1176 s at load 7`. No WIDE line. Its 44 INCONCLUSIVE lines are other issues' (#1116, #317, #1874, #1427, #140 and
+nine more) and the timed and slow lists it doesn't run; none is #190's. #190's own tests: no failure, and the same 4
+BLOCKED (ac04's first test, ac05, ac10's two), which ran on the Mac at f55dc2e5a. Its "new" failures in files this
+change touches are three lint lines, the `deps` lines for `tests/acceptance/190/wat/Cargo.toml`'s two crates and the
+`cards` line for lib.interface@1, as at c26b91146; the rustfmt line on `crates/deep-canvas-sandbox/src/lib.rs` is
+gone, the merge keeping the module list as main's `cargo fmt` sorted it. #140's wasm32 test fails in a list of
+crates that includes deep-canvas-sandbox, on `meshopt 0.7.0`'s C++ build for wasm32, a dependency this change
+doesn't add. The `fmt`, `size` and `clippy` lines on `crates/deep-logic/src/world.rs`, `point.rs` and `lib.rs` line
+1196 are main's code: `world.rs` is byte for byte main's, 1504 lines.
+
+**The lockfile commit (34f30ffd5).** After the merge of e0c90a5a5 every #190 test failed in under 100 ms with
+`BLOCKED: this suite's assembler (tests/acceptance/190/wat) didn't build`: main's `.cargo/config.toml` gained #503's
+vendored `symphonia-codec-vorbis` patch, and `cargo build --locked` refuses a standalone lockfile that doesn't list
+it as unused. The commit adds the four lines cargo itself writes, the same as main's 70c95f542 did for #544's
+assembler; no dependency changes. With it the suite gives 20 passed and the 4 BLOCKED again, in a clone whose local
+`main` is e0c90a5a5.
+
+## Rerun with the browser leg and screenshots (2026-11-11 and 12), code at 9a02471b6
+
+Run on spark-c89f (Linux arm64). The code is commit 9a02471b6: the PR's head before these commits, 7b5d9da1f (main e7609b7b merged in),
+plus fixes to the fixture cache that the separate-agent checks and the code review below found (0ed3de856, 597d83692,
+eafa3d635) and one refactor with no change in behavior (9a02471b6: one reader for a piece's assets).
+
+**How to rebuild it.** From the repo root:
+
+```sh
+cargo build --locked --bin deep-logic
+mkdir -p target/e2e190 && cp docs/evidence/190/e2e-tools/gen.test.ts target/e2e190/
+npx vitest run --root target/e2e190 --testTimeout=600000   # the first run builds the assembler; writes requests.jsonl, plain.jsonl, tactics.jsonl, web.jsonl, app-bakes.jsonl, labels.json, grids.json
+cd target/e2e190
+../debug/deep-logic < requests.jsonl > replies.jsonl
+../debug/deep-logic --planted linker_adds_linking_section < plain.jsonl > planted-plain.jsonl
+../debug/deep-logic --planted linker_links_in_listing_order < tactics.jsonl > planted-tactics.jsonl
+../debug/deep-logic < web.jsonl > web-replies.jsonl          # line 1: web_runner's source; 2-5: web_plan replies {ok, request}
+../debug/deep-logic < app-bakes.jsonl > app-bakes-replies.jsonl
+```
+
+`e2e-raw/` holds those outputs. `web-replies.jsonl` is the 9a02471b6 build's output (an earlier build wrote it first, by
+the session's report; the rerun was byte-identical). In the replies, base64 strings over 200 characters (the merged programs' bytes) are cut
+short; no array here is long enough to be cut. The reply files were also re-serialized with `", "` and `": "`
+  spacing, so they are equal in content, not byte for byte, to `deep-logic`'s output. `web-replies.jsonl`, `labels.json` and `grids.json` are kept whole. The
+requests themselves aren't kept: they are 0.8 MB, and `gen.test.ts` rebuilds them.
+From `docs/evidence/190`, `node e2e-tools/imports.mjs e2e-raw/web-replies.jsonl > e2e-raw/web-plan-imports.txt` lists each `web_plan`
+item's rewritten program with its sha256 and WebAssembly imports.
+
+To serve the page and take the screenshots, from `docs/evidence/190`. Node resolves `playwright` from the repo's
+`node_modules`, so `e2e-tools` has to sit inside the repo:
+
+```sh
+HEAD_SHA=<the code's commit> node e2e-tools/server.mjs e2e-raw &   # 127.0.0.1:41190; saves each browser's replies into e2e-raw
+node e2e-tools/shoot.mjs screenshots
+```
+
+Then stop the server by its PID. Screenshots 00–06 here were taken exactly that way, from the saved `e2e-raw`.
+
+**The replies.** The 14 replies give the same results as the 2026-11-09 run above:
+
+- the same hashes and linked sizes (9394, 444168, 9385)
+- the same refusals and verdicts
+
+One thing changed: grid_path@1's fixture now runs once per `deep-logic` process. It shows `ran: true` in row 1 and
+`ran: false` in rows 2, 7, 10, 12 and 14. On 11-09 and at 7b5d9da1f, row 12 ran it again, because the cache was keyed
+by the piece's whole pack list.
+
+The cache lives in the process's memory: a new process, such as the one behind `app-bakes-replies.jsonl`, runs a
+library's fixtures again. The issue says the logic module "runs them once per library hash and module version". Nothing
+in the issue or the design names a store that would keep results across processes, and ac10 checks a second check in
+the same process.
+
+Since 11-09, main added `pipelined` to check and bake replies, `issues` to check replies, and `ranges`, `ring` and
+`occurrences` to bake replies. `assets_at` was
+already there. By 34f30ffd5 (2026-11-13) main had also added a `type` to each region of the web plan and grown
+the runner source in `web-replies.jsonl`'s first line from 488 to 566 lines, and the six bake `keys` in
+`replies.jsonl` (lines 2 and 7) and `app-bakes-replies.jsonl` (lines 1 to 4) are no longer what the head produces;
+so a rebuild at that head differs from `e2e-raw` in more than timings, though in nothing a screenshot shows (round
+50 below). The images' "this head" and "code at 9a02471b6" mean 9a02471b6.
+
+**The fixes**, in `crates/deep-logic/src/fixtures.rs`, with tests in `crates/deep-logic/tests/fixture_once.rs`. Each
+test feeds request lines through `Logic::handle`: `fixture-once.jsonl`'s are the acceptance suite's own; the exports tests'
+are derived from them (gridcore@1.0.0/1.0.1 and kit@1.0.0/1.0.1, with grid_path@1 exporting nothing in the older one).
+
+- **0ed3de856.** The cache key was the piece's whole pack list, so the same grid_path@1, reached through kit@1.0.0
+  after gridcore@1.0.0, ran its fixture again.
+- **597d83692.** 0ed3de856's key dropped the pack entries' `exports`, so a refusal under a pack version whose
+  grid_path@1 exported nothing was reused under a later version exporting `find_route`.
+- **eafa3d635.** The code review of those two found three more problems:
+  - a refusal that turned on what the piece carried (a fixture asset it lacked) was cached and replayed for a later
+    piece that carried it, which was already true on 7b5d9da1f
+  - 0ed3de856 (kept by 597d83692) walked the needs closure apart from `resolve`, as a new public `links::reach`
+  - unreadable packs fell back to none
+
+  Now `verify` resolves the library through the piece's packs with `links::resolve`, the same walk its fixture item
+  links by. It keys on the library's fixture IDs and each linked library's label, hash and exports. It reads the packs or refuses with `bad("packs")`.
+  It keeps only a fixture's own verdict (a value that differs, or `logic.determinism` failing), never a refusal from a
+  missing asset or from a fixture item the check refuses. `links.rs` is back to 7b5d9da1f.
+- **9a02471b6** (a refactor, not a fix). The reader closures that `verify`, `pack_check` and `claim` each passed to
+  `links::resolve` are now one `stored()` (`run_fixtures` and `pack_check`'s subset loop still decode inline). The four tests
+  give the same result on eafa3d635's source and on 9a02471b6's (`tests-on-eafa3d635-src.txt`).
+
+`fixture-cache/` has the four tests, as committed in 9a02471b6, run against each source:
+
+| Source | Failing tests |
+|---|---|
+| 7b5d9da1f | once-per-hash; missing-asset |
+| 0ed3de856 | exports; missing-asset; needs' exports |
+| 597d83692 | missing-asset |
+| eafa3d635 | none; all four pass |
+| 9a02471b6 | none; all four pass |
+
+The needs' exports test also fails on a mutant whose key keeps only the library's own entry
+(`mutant-key-without-needs.txt`).
+
+The code review's last round of the cache fixes found nothing new; that is the implementing session's report, not a
+saved check. One finding was kept on purpose: `verify` resolves, so it decodes and
+hashes, the libraries even when the result is cached. Its cost wasn't measured in a saved run.
+Criterion 10's budgets (linking a 1 MB program with two 500 KB libraries under 300 ms, fixtures once per hash under
+5 s, no added work for an item without links) were BLOCKED until ac10 ran on the Mac (2026-11-13, bullet 10 above).
+
+**The suite.** #190's acceptance suite at a clean checkout of 9a02471b6 is in `acceptance-linux-9a02471b6.txt`. It ran
+verbose, so each passing test is named:
+
+- 14 tests pass, including ac07, which fails on a twin that touches an unlinked piece, comparing with the merge base's
+  build.
+- 4 are BLOCKED, the same four as the 11-09 run (`acceptance-linux.txt`, base 6042ef5a with the then-uncommitted
+  change): ac04's first test, ac05, and ac10's two.
+
+**The browser leg.** The page imports deep-logic's own `web_runner` source. It runs each `web_plan` request in the
+browser's WebAssembly engine, for four programs:
+
+- `maze` with grid_path@1
+- `chase` with grid_path@1
+- the planted corner-cutter with its own fixture
+- grid_path@1's fixture piece
+
+For each one, the page draws the route on the grid with (x, y) coordinates. It then compares five things with the
+app's `bake` of the same piece, and shows ✓ only when all five are equal:
+
+- the route
+- the move count
+- the item's hash after step 0 (a hash of its globals, the arrays it wrote and the rows it emitted)
+- the checkpoint
+- the traps
+
+The checkpoint is labeled with the step about to run, so `0:` is the full state before step 0. grid_path@1's fixture
+records only that checkpoint too: `deep_hashes {"0": "e5d18bfb5420fd13"}`, in `e2e-raw/replies.jsonl` rows 1, 2, 7, 10, 12 and 14 (the page shows
+it in its rows 1, 2, 7, 12 and 14). The
+honest maze and the corner-cutter share it because they start from the same memory and differ only in code. So the
+checkpoint shows only that the browser and the app start from the same full state. The written route, moves and item
+hash show that they computed the same thing:
+
+| | moves | item hash |
+|---|---|---|
+| honest | 10 | `79f43f8d469c7abf` |
+| corner-cutter | 8 | `9b9dae75fbf04f72` |
+
+The page header shows two things the replies don't record:
+
+- the code's commit, from the server's `HEAD_SHA`
+- the host the page was served from
+
+The app's replies were made on that same machine; that is the implementing session's report, as no saved file records
+where `deep-logic` ran. The page ran in two browsers: Playwright's Chromium 156 on spark-c89f (`shoot.mjs` connects to 127.0.0.1), and the
+app's pane, Chromium 152, which by the session's report ran on the same machine (07a shows only where the page was
+served). `navigator.platform` says "Linux x86_64" in Chromium on every Linux, so this is
+not criterion 4's Linux x86_64 leg.
+
+| Browser | Screenshots | Replies |
+|---|---|---|
+| The Claude app's browser pane, Chromium 152 (the session's report; the JPEGs show Chromium 152, not the app) | 07a–07d, 800-pixel JPEGs that together cover the whole page | `browser-replies-chromium-152.json` |
+| Playwright's headless Chromium 156 | 00–06 | `browser-replies-chromium-156.json` |
+
+The two reply files are byte for byte the same. In both browsers, all four programs matched the app on all five.
+
+| Screenshot | What it shows |
+|---|---|
+| `screenshots/00-full-page.png` | the whole page |
+| `screenshots/01-maze-browser-vs-app.png` | maze: 10 moves around the wall, browser = app |
+| `screenshots/02-chase-browser-vs-app.png` | chase: 8 moves, browser = app |
+| `screenshots/03-corner-cutter-own-fixture.png` | the planted library cuts the wall's corner at (2,3) twice: 8 moves. It links only with a fixture of its own; with grid_path@1's fixture it is refused (row 5). |
+| `screenshots/04-grid-path-fixture.png` | grid_path@1's fixture piece, browser = app |
+| `screenshots/05-deep-logic-replies.png` | the 14 replies and what each one names, including whether each fixture ran in that call or had already run in the process. A reply that answered but whose step failed (row 7), or whose verdict is INCONCLUSIVE (row 8), is shown in amber, not green. |
+| `screenshots/06-planted-twins.png` | the two planted linker twins. One answers ok with a changed hash for an unlinked program, and ac07 is the test that fails on it. The other is refused naming `lib:grid_path.find_route`. |
+| `screenshots/07a`–`07d` | the same page in Chromium 152, the app's browser pane by the session's report |
+
+**Checked by separate agents.** These are the agents' reports, not proof: where a round says it reproduced
+something, its outputs weren't saved here, and the saved files named elsewhere in this document are the proof. Each round, a new agent that hadn't written the page read every screenshot against the
+raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over the grids, written to `programs.ts`'s
+`bfsRoute` rule.
+
+- **Round 1:**
+  - Found no wrong values. The routes are legal, and the corner-cutter's route cuts (2,3) twice in 8 moves.
+  - Running the web runner in node reproduced the browser column.
+  - Found nine labelling gaps on the page, all fixed.
+- **Round 2:**
+  - No wrong values. The sha256 of each `web_plan` request's rewritten program equals the app's rewritten-program
+    hash (`hash` in the receipt, not the page's item hash after step 0).
+  - Found eleven gaps in the page, the write-up and reproducibility, all fixed.
+- **Round 3:**
+  - No wrong values. Its own run of the server and `shoot.mjs` gave byte-identical screenshots.
+  - Found one code problem: grid_path@1's fixture ran again when the same library came through another pack. Fixed in
+    0ed3de856.
+  - Also found twelve smaller gaps, all fixed.
+- **Round 4:**
+  - No wrong values. Its rebuild from the documented steps gave byte-identical `web-replies`, `labels` and `grids`,
+    and replies that differ only in timings. The screenshots were byte-identical too.
+  - Found a problem in 0ed3de856's key: it dropped `exports`, and a probe reused a refusal across pack versions. Fixed
+    in 597d83692, with a test.
+  - Also found:
+    - the before-fix output came from an earlier text of the test
+    - the suite had run before its commit existed
+    - "arrays trimmed" was wrong
+    - `NODE_PATH` does nothing for ESM imports
+    - traps were listed as compared but weren't
+    - the header asserted where the app ran
+    - the circles were too small for "10"
+
+  All fixed. The before-fix outputs and the suite were redone from committed code.
+- **Round 5** checked `597d83692`'s evidence.
+  - Its two cache problems give the right answer at `9a02471b6`: a fixture's result is kept per library hash and the
+    exports its links resolve with, and a refusal that turns on what the piece carries isn't kept.
+  - Four small gaps, fixed here: the generator's cold first run timed out (the rebuild step now passes `--testTimeout`);
+    the saved test outputs dropped their assertion messages; the round-2 bullet said "item hash" for the rewritten
+    program's hash; table row 7 showed grid_path@1's fixture checkpoint where it could be read as swarm's (it now says
+    "the fixture's checkpoints"; swarm's own step 0 failed). Screenshots 00–07d were retaken after that label change.
+- **Round 6** checked this evidence.
+  - No wrong values. Every screenshot (00–07d) matches the raw files and the current page. Its rebuild gave
+    byte-identical generated inputs, replies (timings aside), screenshots 00–06 and Chromium 156 replies.
+  - Five wording gaps, fixed here: "committed `e2e-raw`" (it wasn't yet); an unrecorded timing comparison; criterion 1's
+    claim about chase's imports, now stated with its check; 9a02471b6 called a fix (it's a refactor); and
+    `mutant-key-without-needs.txt`, now rerun against 9a02471b6 with its assertion message and its mutant named.
+- **Round 7** checked these fixes and the whole set again.
+  - No wrong values; every screenshot (00–07d) is correct, its rerun gave byte-identical 00–06, and it reproduced the
+    mutant's single failure.
+  - Four wording gaps, fixed here: the chase-imports claim cited an agent, not a file (now `imports.mjs` and
+    `web-plan-imports.txt`); round 6's timing was an agent's number (dropped); criterion 3, 4 and 10 pointed at the
+    old suite file and called 10 covered; and this bullet pointed ahead to the PR.
+- **Round 8** checked these fixes and the whole set again.
+  - No wrong values; every screenshot (00–07d) is correct, and `imports.mjs` reproduces `web-plan-imports.txt`, whose
+    sha256s equal the app's program `hash`es.
+  - Fixed here: criterion 5's second machine is now called BLOCKED; criterion 1 now names its 9a02471b6 proof apart
+    from the 11-09 run; the 11-09 run says it has no saved raw output; these agent rounds and the code review are
+    marked as reports, not proof; the refactor claim now rests on `tests-on-eafa3d635-src.txt`.
+  - It flagged that nothing shows a fixture's ID includes the linked library's hash (the page's note on reply 5).
+- **Round 9** found no wrong values and one gap: round 8's bullet called that note the app's text, but it is the
+  page's. It rests on the suite's own definition: a fixture asset is JSON whose item links the library by its sha256
+  (`tests/acceptance/190/README.md` lines 112–113 and 128), and `helpers.ts`'s `fixtureBytes` and `fixtureId` build and
+  hash it that way (lines 370–375).
+- **Round 10** found no wrong values and five low gaps, fixed here: criteria 7 and 8 now cite ac07 and ac08 for their
+  parts the replies don't show; "line N" now says it maps to the saved `replies.jsonl`; where the replies ran and that
+  07a–07d come from the app's pane are marked as the session's report; the README citation is lines 112–113; and the
+  `imports.mjs` step says to run it from `docs/evidence/190`.
+- **Round 11** found no wrong values; fixed here: the oracle lane is now called BLOCKED with its unblock ask (P2; superseded by round 30);
+  criterion 2 cites ac02 and screenshot 03 for the 8-move corner-cutter; and the 11-09 base names why it isn't in
+  this branch's history.
+- **Round 12** found no wrong values and one low gap, fixed here: `links::reach` came in 0ed3de856, not 597d83692.
+- **Round 13** found no wrong values and two low gaps, fixed here: step 2's note on `ran: false` now names reply 12's
+  rerun, and `gen.test.ts`'s comment names all four `web_plan` requests.
+- **Round 14** found no wrong values (its rerun gave byte-identical 00–06) and one low gap, fixed here: 9a02471b6's
+  `stored()` replaces the three reader closures passed to `links::resolve`, not every asset decode.
+- **Round 15** found no wrong values (its rerun gave byte-identical 00–06) and one gap, fixed here: the code review's
+  last round was cited as "reported in the PR"; it is the implementing session's report.
+- **Round 16** found no wrong values (its rerun gave byte-identical 00–06) and four low gaps, fixed here: the 11-09
+  replies' list of cuts is complete; the fixture tests' pieces are the suite's or derived from them; the key includes
+  the fixture IDs; the earlier suite file is named; and criterion 4's summary names the one ac04 test that passes.
+- **Round 17** found no wrong values (its rerun gave byte-identical 00–06) and three low gaps, fixed here: where the
+  Chromium 152 pane ran is marked as the session's report; the reply files' re-serialization is stated; and
+  `acceptance-linux.txt`'s header says the amd64 image is missing, not that the box can't run it. Criterion 1 now also
+  cites ac01's one-byte test.
+- **Round 18** found no wrong values (its rerun gave byte-identical 00–06) and one low gap, fixed here: the 11-09
+  replies' list of cuts named `program`, which reply 3 keeps, and left out the bake fields cut, which hid swarm's
+  failed step 0 in reply 7.
+- **Round 19** found no wrong values (its rerun gave byte-identical 00–06) and two low gaps, fixed here: round 18's
+  field-by-field list of what the 11-09 excerpts leave out was still inexact (it named `occurrences`, which the 11-09
+  code didn't have, and missed `pages`), so the note now says each excerpt keeps only the fields it shows; and main's
+  `occurrences` is added to what main changed since 11-09.
+- **Round 20** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`) and one low gap,
+  fixed here: the excerpts' note said every fixture ID was shortened; reply 10 and the refusals keep theirs whole.
+- **Round 21** found no wrong values (its rerun gave byte-identical 00–06) and three low gaps, fixed here: the
+  generator's outputs now include `plain.jsonl` and `tactics.jsonl`; the `deep_hashes` rows name the file they count;
+  and `web-replies.jsonl`, first written by an earlier build, is now the 9a02471b6 build's output (byte-identical).
+- **Round 22** found no wrong values (its rerun gave byte-identical 00–06, `web-replies.jsonl`, `labels.json` and
+  `grids.json`) and two low gaps, fixed here: criterion 1's one-byte sentence now says what ac01 checks (rewritten
+  hashes and bake keys), and 7b5d9da1f is named as the PR's head before these commits.
+- **Round 23** found no wrong values (its rerun gave byte-identical 00–06, replies equal but for timings) and two low
+  gaps, fixed here: the 9a02471b6 suite file says how the clone's `main` was set (a report), and the fixture tests feed
+  request lines, one of them a `pack_check` with no piece.
+- **Round 24** found no wrong values (its rerun gave byte-identical 00–06; `fixture_once` 4 passed) and one low gap,
+  fixed here: the rerun's replies were called whole, though their long base64 is cut.
+- **Round 25** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`; `fixture_once` 4
+  passed) and three low gaps, fixed here: `link_ns: 0` no longer cited as proof for the no-links twin; ac04's
+  browser test is described with its limit and the page named as the stronger proof; and the earlier build that
+  wrote `web-replies.jsonl` first is marked as a report.
+- **Round 26** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`) and two low gaps,
+  fixed here: only fixture times are rounded in the excerpts (`link_ns` is raw); and criterion 1 now cites each
+  piece's receipt and deep_query row, with ac01's first test for the ones no saved reply shows.
+- **Round 27** found no wrong values (its rerun gave byte-identical 00–06) and two low citation gaps, fixed here:
+  criterion 2's 10-move fixture route and criterion 9's cycle now cite the reply, file and passing test that show them.
+- **Round 28** found no wrong values (its rerun gave byte-identical 00–06) and two low gaps, fixed here: main's
+  `issues` in check replies is listed with what main added since 11-09; and the Mac lines say those runs haven't
+  happened.
+- **Round 29** found no wrong values (its rerun gave byte-identical 00–06 and `web-replies.jsonl`; `fixture_once` 4
+  passed) and two low gaps, fixed here: criterion 10's budgets are named as the issue states them; and the
+  screenshot table marks 07a–07d's source as the session's report.
+- **Round 30** found no wrong values (its rerun gave byte-identical 00–06; `fixture_once` 4 passed) and one P2: the
+  oracle lane was called unreachable, though its tests were in the owner's zip. Fixed here: a blind job wrote the
+  oracle suite and it passes (above; its verdict is INCONCLUSIVE since round 39). Its three low gaps are fixed too: criteria 1, 3 and 8 are stated as the issue
+  states them, and the item hash after step 0 is described as `step_hash` computes it.
+- **Round 31** reproduced the oracle run (6 passed) and found one P2 and two low gaps, fixed here: undefined.s had
+  no wrong program reaching its import check (now two saved mutant runs; not sufficient alone, see round 41); the README's rust-lld run is marked as a
+  report; and only two test files show their own wrong program.
+- **Round 32** found no wrong values and one P2 and three low gaps, fixed here: the oracle suite called its own
+  defined-import check undefined.s's CHECK-NOT (sent back to the blind job, which redrafted its comments and README);
+  its data-layout comment put `aligned_bar` at 65552 (redrafted to 65568); the mutant files now carry the exact code
+  change, host and date; and the oracle run is redone on the tests as committed.
+- **Round 33** found no wrong values and no P2 (it reran the oracle lane, 6 passed, and checked every screenshot
+  against `e2e-raw`); its six low gaps are fixed here: two wordings in the oracle suite (upstream checks the segment
+  and a global, not foo's and aligned_bar's addresses; `--undefined` names a symbol rather than requiring it) went
+  back to the blind job, whose redraft (5779f0291) changes comments and docs only, so the oracle run on 2b38d894b's
+  tests stands; 5's unblock ask is named apart from the Mac runs; the blind job's inputs and the README's
+  timing are marked as the session's report; the planted-fault rule is cited to the oracle-tests README; and the
+  per-criterion bullets run 1 to 10, with ac06 cited under 6.
+- **Round 34** found no wrong values (it reran the oracle lane, 6 passed, matched the vendored files to the owner's
+  zip and checked all 11 screenshots against `e2e-raw`) and two P2s and three low gaps, fixed here: 4's unblock ask
+  now names Docker, the amd64 image and emulation on the Mac; 5's names emulation after the pull; 4 is one bullet; the
+  mutant runs' test text is named; and the no-links twin's `linked` program is cited.
+- **Round 35** found no wrong values (oracle rerun 6 passed; `imports.mjs` output byte-identical; all 11 screenshots
+  checked against `e2e-raw`) and one P2 and two low gaps, fixed here: 5's unblock ask no longer offers an x86_64 host,
+  where ac05's different-architecture check fails; 10 names its unblock ask; and the listing-order twin's refusal is
+  quoted as the listed-before rule it is.
+- **Round 36** found no wrong values (oracle rerun 6 passed; vendored files byte-identical to the owner's zip; all
+  11 screenshots and every `e2e-raw` value checked) and one P2 and two low gaps. The P2 and one low were in the oracle
+  suite, sent back to the blind job: upstream's live CHECKs never read `external_ref`'s resolved address, so that check
+  is our own, and five globals and both segment offsets are checked, not one global. Its redraft (317d82301) changes
+  comments and docs only, so the oracle run stands. The other low is fixed here: 4's unblock ask names its first
+  test, and Chrome on the Mac for the second.
+- **Round 37** found no wrong values (oracle rerun 6 passed; screenshots and `e2e-raw` checked) and one P2 and three
+  low gaps. The P2 and two lows were in the oracle suite, sent back to the blind job: function-imports presented its
+  no-`linking` check as upstream's, though upstream's live CHECKs never read section names, and its planted twin fails
+  only that check; data-layout's judge has its own export and zero-fill checks; and upstream's 2 pages are stack plus
+  data. Its redraft (f300d835d) changes comments and docs only. Fixed here: the oracle bullet says function-imports doesn't
+  count under the planted-fault rule, so criterion 1's oracle proof rests on data-layout (superseded by round 39); and the mutant runs'
+  provenance names the latest oracle commit.
+- **Round 38** found no wrong values (oracle rerun 6 passed; it probed both planted twins in a scratch copy of the
+  tests; screenshots and `e2e-raw` checked) and two P2s and three low gaps, fixed here: the oracle bullet called
+  data-layout's planted twin caught by an upstream-held check, though it fails only our own order rule (sent back to
+  the blind job too, whose redraft 2ce09306c changes comments and docs only); the bullet now applies the planted-fault rule
+  by its letter to all three tests and says undefined.s, which has no planted fault, doesn't count (superseded by round 39); an unfilled
+  commit placeholder is filled; `name` is named as the one custom section upstream reads; and the mutant runs'
+  provenance says the test code is identical from d49221e13 to HEAD.
+- **Round 39** found no wrong values (oracle rerun 6 passed, type check clean, both twins probed, screenshots and
+  `e2e-raw` checked) and one P2 and three low gaps. The P2: round 38's "counts by the rule's letter" overclaimed, since
+  the rule's "it" is the linked upstream test and no upstream-held check rejects either planted twin; rounds 37 and 38
+  had read the same facts two ways. Settled here on the strict reading: the oracle lane is INCONCLUSIVE for criteria 1
+  and 3, with an unblock ask, and the looser reading is left to the owner (superseded by rounds 40–41). The lows: the planted twin's layout is
+  stated as probed rather than shown by the test; and two oracle-file wordings went back to the blind job, whose
+  redraft (89ef55002) changes comments and docs only.
+- **Round 40** found no wrong values (oracle rerun 6 passed, code identical d49221e13 to HEAD after stripping
+  comments, twins probed, all screenshots and `e2e-raw` checked) and three P2s and five low gaps, all on the oracle
+  lane, fixed here: LLVM's object reader rejects the `linking` twin's empty section, which the bullet now reports
+  as unsettled and puts to the owner (superseded by round 44); the unblock example "a linker that leaves an import" can't work (the subset check
+  refuses it first) and is dropped; criterion 3 gets its own ask, the trace lane's mutation step on `link.rs` (superseded by round 41), and
+  the design's mutant route is cited correctly; the two asks replace the separate "looser reading" aside; rounds 30
+  and 37's verdicts are marked superseded; and three oracle-file wordings went back to the blind job, whose redraft
+  (8552bc983) changes comments and docs only.
+- **Round 41** found no wrong values (oracle rerun 6 passed, code identical after stripping comments, twins probed, all
+  screenshots and `e2e-raw` checked; it reproduced round 40's reader result) and two P2s and four low gaps, fixed here:
+  criterion 3's ask named a trace-lane step that runs no vitest test, so both asks now go to the owner as one question
+  each (superseded by round 44); the reader result is now run and saved (`oracle-reader-function-imports.txt`), on the honest program as well
+  as the twin's; data-layout's third failing check is named as the zero-fill check; 5's Mac route names the same
+  pull; rounds 11 and 31 are marked superseded; and two oracle-file wordings went back to the blind job, whose
+  redraft (06f5950da) changes comments and docs only and cites the saved reader result.
+- **Round 42** found no wrong values and no P1 or P2 (oracle rerun 6 passed; it reproduced the reader file's two
+  sha256s and exits; all screenshots, `e2e-raw` values and unblock asks checked) and five low gaps, fixed here: the
+  reader file says what its stderr drops and that it is LLVM 23.1.1, not the pinned 23.1.3; each oracle ask says what
+  a yes and a no lead to (superseded by round 44); round 38 is marked superseded; and the oracle README's zero-fill wording went back to the
+  blind job, whose redraft (5f765d3eb) changes the README only.
+- **Round 43** found no wrong values (oracle rerun 6 passed; the reader file's sha256s and exits reproduced; all
+  three twins probed; all screenshots and `e2e-raw` values checked) and one P2 and two low gaps, fixed here:
+  criterion 1's ask now says its twins are named by criteria 7 and 9, not 1, and asks the owner about that too (superseded by round 44); the
+  bullet says why the lane is INCONCLUSIVE rather than BLOCKED; and round 40's ask is marked superseded.
+- **Round 44** found no wrong values (oracle rerun 6 passed; the reader file reproduced; twins probed; screenshots and
+  `e2e-raw` checked) and one P2 and four low gaps. The P2: criterion 1's ask rested on a twin it doesn't name, while
+  a mutant route existed. Fixed here: a hand-made `link.rs` mutant that misaligns library segments with link order
+  unchanged was run and fails data-layout on alignment (`oracle-mutants/misaligned-segment.txt`), so criteria 1 and 3
+  now share one owner question, whether saved hand-made mutant runs count. The lows: a dangling "One" in the oracle
+  bullet; round 38's superseded note moved to the claim round 39 replaced; round 39's ask marked superseded; and the
+  oracle README and NOTICE omit FileCheck from upstream's tools, cosmetic, left in the blind job's files.
+- **Round 45** found no wrong values (oracle rerun 6 passed; the reader file reproduced; it reasoned the misaligned
+  mutant's three failures from `objects.ts` and the layout code) and one P2 and three low gaps, fixed here: the bullet
+  now names the trace lane's twins route and why it wouldn't settle the question (the merge base fails first); a yes
+  makes data-layout, not function-imports, count for criterion 1; rounds 41 to 43's asks are marked superseded by
+  round 44; and the misaligned mutant's test commit is named.
+- **Round 46** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file reproduced; all three
+  twins probed; the three mutants' outputs reasoned from `link.rs`; the `proof-runs.mjs` claims checked against its
+  code) and five low gaps, fixed here: round 40's ask is marked superseded; the twin skip is per test, not per
+  criterion; the honest program's sections are stated, not cited to a round; and two oracle-file wordings (ac05's
+  BLOCKED state, FileCheck among upstream's tools) went back to the blind job, whose redraft (34fd7469c) changes
+  docs only.
+- **Round 47** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file and the honest program's
+  facts reproduced; mutants reasoned; screenshots and `e2e-raw` checked) and three low gaps, fixed here: the twin
+  skip is cited to `prepareRuns`, not `runTests`; the honest program fails upstream's RUN line for its extra functions
+  and signature as well as its missing name section; and "no planted twin" replaces "no planted fault", since the
+  hand-made mutant does fail an upstream-held check.
+- **Round 48** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file and the honest program's
+  sections reproduced; twins probed; mutants reasoned; screenshots, `e2e-raw`, unblock asks and `proof-runs.mjs`
+  claims checked) and one low gap, fixed here: the honest program's function count is cited to a section parse, not
+  to `WebAssembly.Module`.
+- **Round 49** found no wrong values and no P1 or P2 (oracle rerun 6 passed; the reader file, the honest program's
+  sections and the listing-order twin reproduced; mutants reasoned; screenshots and `e2e-raw` checked) and three low
+  gaps, fixed here: the two import mutants' headers say the oracle folder was copied into the clone; the INCONCLUSIVE
+  reading cites the oracle-tests README's tool-and-runner rule; and the parent README's old access ask is marked
+  superseded.
+- **Mac run at f55dc2e5a** (2026-11-13, the owner's go at the Mac, ordered through the Mac runner): ac04 (2 tests) and
+  ac05 (1) pass on macOS 14.7.7 arm64; the logs are `mac/ac04-f55dc2e5a.txt` and `mac/ac05-f55dc2e5a.txt`, read
+  here before this bullet was written. f55dc2e5a is 487190352 merged with main (1c54f26d6); the merge's one conflict
+  was the sandbox crate's module list. Criterion 10 (ac10) and ac07's rerun on the Mac are still open: the Mac
+  rebooted onto macOS 27.2.1 before they ran, so their logs will name a different OS version than these two. On this
+  host ac07 fails against the stale local `main` (04f44a4ba) and passes in a clone whose `main` is 1c54f26d6.
+- **Mac run at f55dc2e5a, second half** (2026-11-13, after the Mac's restart onto macOS 27.2.1): ac10 (2 tests) and
+  ac07 (1) pass there on AC power (`mac/ac10-f55dc2e5a.txt`, `mac/ac07-f55dc2e5a.txt`, host name redacted, read
+  here before this bullet was written). Docker wasn't running for these two, which neither file calls. So the four
+  Mac logs span two OS versions: ac04 and ac05 on 14.7.7, ac10 and ac07 on 27.2.1. All four are of f55dc2e5a; the
+  merge of main 4950c76d5 (9882503c0) hasn't run on the Mac. At 9882503c0 the guard fails on 11 commits that await
+  the owner's signed tags (`scripts/lanes.mjs`'s edit and the blind job's ten oracle redrafts).
+- **Round 50** (2026-11-13, a separate agent, at 34f30ffd5) found no P1 and no P2: SCREENSHOTS STILL MATCH HEAD. It
+  read all 11 images against `e2e-raw`, rebuilt `deep-logic` at 34f30ffd5 in a clone, regenerated the requests with
+  `gen.test.ts`, and compared the five reply files field by field: every program, rewritten and linked hash, size,
+  library hash, fixture ID, verdict, `ran` flag, deep hash, route, move count, item hash, trap and refusal is equal;
+  the differences are timings, the six bake `keys`, the web plan's `type` fields and the longer runner source, none
+  shown in an image. The new runner on the new plans, run in node's V8, gives `browser-replies-chromium-152.json`
+  byte for byte. Not done: no screenshot was retaken and Chromium itself wasn't rerun. Its four low gaps are fixed
+  here (the paragraph on what main added since 11-09).
+- **Mac rerun at 34f30ffd5** (2026-11-13, the owner's go at the Mac; merge base e0c90a5a5, macOS 27.2.1 arm64, run
+  detached, since the branch head 64912f203 only adds evidence on top): ac10 (2 tests) and ac07 (1) pass
+  (`mac/ac10-34f30ffd5.txt`, `mac/ac07-34f30ffd5.txt`, `mac/exits-34f30ffd5.txt`, host name redacted, vitest exit 0
+  for both). The machine was on AC power, low-power mode off, thermalState 0, but busy: the owner dropped the load
+  condition at the Mac, and the load was 15.59 at ac10's start and 22.20 at its end. ac10's budgets are upper
+  bounds, so a pass under load is the harder case; the quiet reading is still f55dc2e5a's (load 2.80). The log has
+  no measured times. ac04 and ac05 are BLOCKED at this head (`mac/ac04-34f30ffd5.txt`, `mac/ac05-34f30ffd5.txt`:
+  Docker Desktop wasn't running), so criteria 4 and 5's Mac legs are proven at f55dc2e5a only; between that commit
+  and this one the branch adds two merges of main, the assembler's four lockfile lines and evidence. The guard at
+  64912f203 passes: 61 commits checked, the 12 flagged commits each by the owner's signed tag.
+- **The oracle lane's ask, answered on the owner's delegation** (2026-11-13). Asked whether saved runs of hand-made
+  mutants count as the planted fault for criteria 1 and 3, the owner typed "u do them" in this session, leaving the
+  call to it. The call is yes, on runs redone at 34f30ffd5 rather than the 11-12 ones (the bullet for criteria 1 and 3
+  above, written before this, still says INCONCLUSIVE and cites the older files): the lane as committed passes 6 of 6
+  (`oracle-mutants/honest-34f30ffd5.txt`); with each library segment placed at alignment 1, data-layout's first test
+  fails and the other five pass (`oracle-mutants/misaligned-segment-34f30ffd5.txt`); with the refusal naming no
+  import, undefined.s's first test fails and the other five pass (`oracle-mutants/names-no-import-34f30ffd5.txt`).
+  Each log opens with the mutant's diff; a script applied each in a scratch clone and put `link.rs` back. A separate
+  agent, given the files and not this verdict, read the vendored tests, the translations, `link.rs` and the logs and
+  found both count, each loosely, no P1: for criterion 1, upstream's `Value: 65552` is a fixed address that holds
+  alignment with order and base, as our 8,200 and 8,208 do, and order held, so alignment alone fails it (the
+  zero-fill failure beside it is our own check and doesn't count); for criterion 3, upstream's
+  `error: … undefined symbol: foo` is text on stderr and ours reads the refusal's `import` field, so a mutant that kept
+  the field and blanked the text would pass. Its two P2s are fixed here: the second mutant was rerun over the whole
+  lane, and this bullet names the new logs. So the lane counts for criteria 1 and 3 by a partly held upstream check
+  each, on the owner's delegation; the owner can overrule it. These are runs by hand, not checks the lanes rerun.
+- **Merge of main 93624580f (2755be633, 2026-11-14)**, after GitHub reported a conflict: `lib.rs` and `piece.rs` of
+  deep-logic keep #534's saves beside #190's links (both sets of planted twins and commands; an item declares
+  `links` and `saves`; the bake reply carries `saves` and `frames` beside the libraries' `traps`). On this host
+  19 of #190's tests pass, the same 4 are BLOCKED, and **ac07 fails** (`acceptance-linux-2755be633.txt`): "piece
+  plain: its golden isn't the merge base's". The hash, the bake key, every step hash and every checkpoint's deep hash
+  are the merge base's; what differs is `ns`, the CPU time main's #534 (55ea69078) now writes into each checkpoint,
+  which the golden's `checkpoint_hashes` carries. The merge base's own binary gives a different golden on each run
+  (the same file: base1 against base2), so ac07, which compares `checkpoint_hashes` whole and was written before #534,
+  can't pass against any base that has #534, whatever this change does. Criterion 7 is therefore **BLOCKED at this
+  head on main** (it passed at 34f30ffd5, on the Mac too); it isn't edited or skipped here. Unblock: main's golden
+  leaves each checkpoint's time out (`golden_verify` on main compares `checkpoint_hashes` whole too, so a golden no
+  longer verifies against a second run), then main is merged again; or the blind job redrafts ac07's comparison. The
+  Mac runs at 34f30ffd5 are of the head before this merge; none has run at 2755be633.
+- **Merge of main 0b4bc926c (4303f78ca, 2026-11-14)**, after a second conflict: main's #548 builds `preview` and this
+  change builds `links`, so `piece.rs` refuses neither as a field for later (the list is `fires`, `pages`,
+  `parallel`, `services`, `mirrors`). On this host the suite reads as at 2755be633 (`acceptance-linux-4303f78ca.txt`):
+  19 pass, 4 BLOCKED, and ac07 fails on its golden line only, for the reason above; main's `world.rs` still writes
+  each checkpoint's `ns`. Criterion 7 stays BLOCKED on main.
+- **Mac run with Docker at 34f30ffd5** (2026-11-14, the owner's go at the Mac; stopped at this session's request once
+  the head had moved): ac04 passes 2 of 2 on macOS 27.2.1 with a linux/amd64 container
+  (`mac/ac04-34f30ffd5-docker.txt`, `mac/exits-34f30ffd5-docker.txt`, host name redacted, load 46 at its end; it has
+  no timed check). ac05 has no result: the runner stopped it 34 minutes into its container's build (exit 143 is the
+  stop). Both are of the head before the two merges above.

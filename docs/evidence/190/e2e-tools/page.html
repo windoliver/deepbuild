@@ -1,0 +1,101 @@
+<!doctype html><meta charset="utf-8"><title>#190 e2e: linked logic libraries</title>
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+  h1 { font-size: 17px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 18px 0 6px; }
+  .meta { color: #555; font-size: 12px; }
+  .runs { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .run { border: 1px solid #ccc; border-radius: 6px; padding: 10px; width: 300px; }
+  .run h3 { font-size: 13px; margin: 0 0 6px; }
+  .ok { color: #0a7d2c; font-weight: 600; } .warn { color: #8a5a00; font-weight: 600; } .bad { color: #b3261e; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td, th { border: 1px solid #ddd; padding: 3px 6px; text-align: left; vertical-align: top; }
+  code { font: 11px ui-monospace, monospace; white-space: nowrap; }
+  .note { color: #b3261e; font-size: 12px; margin: 4px 0; }
+  .run { width: 340px; }
+  svg text { font: 10px ui-monospace, monospace; }
+</style>
+<h1>#190 linked logic libraries: end-to-end</h1>
+<div class="meta" id="meta">running…</div>
+<h2>1. Linked programs run in this browser's WebAssembly engine (web runner) vs the app's bake</h2>
+<div class="meta">Grid coordinates are (x, y): x across the top, y down the side. S is the start, G the goal.</div>
+<div class="runs" id="runs"></div>
+<div id="repliesbox"><h2>2. deep-logic replies (the app, JSON lines)</h2>
+<table id="replies"><tr><th>#</th><th>request</th><th>reply</th><th>what it names</th></tr></table></div>
+<div id="plantedbox"><h2>3. Planted twins</h2>
+<table id="planted"><tr><th>twin</th><th>result</th></tr></table></div>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const data = await (await fetch('/data.json')).json();
+const runner = await import('/runner.mjs');
+const brand = (navigator.userAgentData?.brands ?? []).map((b) => `${b.brand} ${b.version}`).join(', ');
+$('meta').textContent = `code at ${data.head} (the server's HEAD_SHA) · page served on ${data.host} · browser: ${brand || navigator.userAgent} (navigator.platform reports "${navigator.platform}", as Chromium does on every Linux)`;
+const browserReplies = [];
+const pick = (o, suffix) => o && Object.entries(o).find(([k]) => k.endsWith(suffix))?.[1];
+const cells = (route) => { const c = []; for (let i = 0; i + 1 < route.length; i += 2) { if (route[i] < 0) break; c.push([route[i], route[i + 1]]); } return c; };
+const gridFor = (i) => [data.grids.maze, data.grids.chase, data.grids.cut, data.grids.maze][i];
+function draw(g, path) {
+  const s = 40, W = g.w * s, H = g.h * s;
+  let out = `<svg width="${W + 16}" height="${H + 16}" viewBox="-15 -15 ${W + 16} ${H + 16}">`;
+  for (let x = 0; x < g.w; x++) out += `<text x="${x * s + s / 2}" y="-4" text-anchor="middle" fill="#666">${x}</text>`;
+  for (let y = 0; y < g.h; y++) out += `<text x="-8" y="${y * s + s / 2 + 3}" text-anchor="middle" fill="#666">${y}</text>`;
+  for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) {
+    const wall = g.walls.some(([wx, wy]) => wx === x && wy === y);
+    out += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${wall ? '#333' : '#f4f4f4'}" stroke="#bbb"/>`;
+  }
+  const pts = path.map(([x, y]) => `${x * s + s / 2},${y * s + s / 2}`).join(' ');
+  out += `<polyline points="${pts}" fill="none" stroke="#1565c0" stroke-width="4" stroke-linejoin="round"/>`;
+  path.forEach(([x, y], k) => { out += `<circle cx="${x * s + s / 2}" cy="${y * s + s / 2}" r="10" fill="#fff" stroke="#1565c0" stroke-width="2"/><text x="${x * s + s / 2}" y="${y * s + s / 2 + 3}" text-anchor="middle">${k}</text>`; });
+  const mark = ([x, y], t, c) => `<text x="${x * s + s - 9}" y="${y * s + s - 4}" fill="${c}" style="font-weight:700">${t}</text>`;
+  return out + mark(g.from, 'S', '#0a7d2c') + mark(g.to, 'G', '#b3261e') + '</svg>';
+}
+for (const [i, plan] of data.plans.entries()) {
+  const box = document.createElement('div'); box.className = 'run'; $('runs').append(box);
+  let web;
+  try { web = await runner.bake(plan); } catch (e) { box.innerHTML = `<h3>${esc(data.names[i])}</h3><span class="bad">runner threw: ${esc(e)}</span>`; continue; }
+  browserReplies.push(web);
+  const app = data.app[i];
+  const wr = pick(web.steps?.[0]?.arrays, '.route'), ar = pick(app.steps?.[0]?.arrays, '.route');
+  const wm = pick(web.steps?.[0]?.arrays, '.moves')?.[0], am = pick(app.steps?.[0]?.arrays, '.moves')?.[0];
+  const id = plan.items[0].id;
+  const wh = (web.checkpoints?.[id] ?? []).map((c) => `${c.step}:${c.deep_hash}`).join(' ');
+  const ah = (app.checkpoints?.[id] ?? []).map((c) => `${c.step}:${c.deep_hash}`).join(' ');
+  const wi = web.steps?.[0]?.items?.[id]?.hash, ai = app.steps?.[0]?.items?.[id]?.hash;
+  const same = JSON.stringify(wr) === JSON.stringify(ar) && wm === am && wh === ah && wh !== '' && wi === ai && !!wi && JSON.stringify(web.traps ?? []) === JSON.stringify(app.traps ?? []);
+  const libs = app.items?.[id]?.libraries ?? [];
+  const planted = i === 2 ? `<div class="note">Planted library: its route cuts the wall's corner at (2,3) twice, 8 moves where the honest route takes 10. It links only because it ships a fixture of its own, worked with the corner cut; with grid_path@1's fixture it is refused (table row 5).</div>` : '';
+  box.innerHTML = `<h3>${esc(data.names[i])}</h3>${draw(gridFor(i), cells(wr ?? []))}
+    <table><tr><th></th><th>browser</th><th>app</th></tr>
+    <tr><td>ok</td><td>${web.ok}</td><td>${app.ok}</td></tr>
+    <tr><td>moves</td><td>${wm}</td><td>${am}</td></tr>
+    <tr><td>item hash after step 0</td><td><code>${esc(wi)}</code></td><td><code>${esc(ai)}</code></td></tr>
+    <tr><td>checkpoint (state before step 0)</td><td><code>${esc(wh)}</code></td><td><code>${esc(ah)}</code></td></tr>
+    <tr><td>traps</td><td>${(web.traps ?? []).length}</td><td>${(app.traps ?? []).length}</td></tr>
+    <tr><td>linked program (app receipt)</td><td colspan="2"><code>${esc(app.items?.[id]?.linked?.sha256?.slice(0, 16) ?? 'none')}…</code></td></tr>
+    <tr><td>library (app receipt)</td><td colspan="2">${libs.map((l) => `${esc(l.name)} <code>${esc(l.hash.slice(0, 16))}…</code> from ${esc(l.pack)}`).join('<br>')}</td></tr></table>${planted}
+    <div class="${same ? 'ok' : 'bad'}">${same ? '✓ browser route, moves, item hash, checkpoint and traps equal the app\'s' : '✗ browser and app differ'}</div>`;
+}
+const names = (r) => {
+  if (r.ok === false) return (r.refusals ?? []).map((x) => [x.rule, x.library, x.fixture && `fixture ${x.fixture.slice(0, 16)}… step ${x.step} (a fixture's ID includes the linked library's hash, so with this library it isn't 0b8d9f8abe45…)`, x.array && `${x.array}[${x.index}] expected ${x.expected} actual ${x.actual}`, x.import && `${x.import.module}.${x.import.name}`, x.versions?.join(' + '), x.what].filter(Boolean).join(' · ')).join('; ');
+  if (r.verdict) return `${r.verdict}; asks: ${(r.asks ?? []).map((a) => `${a.kind} for ${a.library}`).join(', ') || 'none'}`;
+  if (Object.values(r.items ?? {}).some((it) => it.kind)) return Object.entries(r.items).map(([id, it]) => `deep_query row ${id}: ${it.kind}, libraries ${it.libraries.map((l) => `${l.name} ${l.hash.slice(0, 12)}…`).join(', ')}`).join('; ');
+  if (r.installed !== undefined) return `installed ${r.installed}: ${r.libraries.map((l) => `${l.name} fixtures ${l.fixtures.map((f) => f.verdict).join(',')}`).join('; ')}`;
+  const its = Object.entries(r.items ?? {}).map(([id, it]) => `${id}: ${it.linked ? `linked ${it.linked.size} B` : 'not linked'}; libs ${(it.libraries ?? []).map((l) => `${l.name} ${l.hash.slice(0, 12)}… from ${l.pack}${l.fixtures ? ` (fixture ${l.fixtures.map((f) => `${f.verdict}, ${f.ran ? 'ran in this call' : 'already ran in this process'}, the fixture's checkpoints ${Object.entries(f.deep_hashes ?? {}).map(([s, h]) => `${s}:${h}`).join(' ')}`).join('; ')})` : ''}`).join(', ') || 'none'}`).join('; ');
+  const traps = (r.traps ?? []).map((t) => `trap: item ${t.item}, step ${t.step}, kind ${t.kind}, function ${t.function} offset ${t.offset}, library ${t.library?.name} ${t.library?.hash?.slice(0, 12)}… ${t.library?.function}`).join('; ');
+  const failed = Object.entries(r.steps?.[0]?.items ?? {}).filter(([, s]) => s.failed).map(([id]) => `${id}'s step 0 failed (no item hash; arrays left at 0)`).join('; ');
+  const moves = failed || Object.entries(r.steps?.[0]?.arrays ?? {}).filter(([k]) => k.endsWith('.moves')).map(([k, v]) => `${k} ${v}`).join(' ');
+  return [its, moves, traps].filter(Boolean).join(' · ');
+};
+// A reply that answered but whose step failed, or whose verdict isn't PASS, isn't shown as a pass.
+const note = (r) => (Object.values(r.steps?.[0]?.items ?? {}).some((s) => s.failed) ? 'step failed' : r.verdict && r.verdict !== 'PASS' ? r.verdict : '');
+const cls = (r) => (!r.ok ? 'bad' : note(r) ? 'warn' : 'ok');
+data.replies.forEach((r, i) => {
+  const [n, ...rest] = data.labels[i].split(' ');
+  $('replies').insertAdjacentHTML('beforeend', `<tr><td>${n}</td><td>${esc(rest.join(' '))}</td><td class="${cls(r)}">${r.ok ? (note(r) ? `ok, ${note(r)}` : 'ok') : esc(r.code)}</td><td>${esc(names(r))}</td></tr>`);
+});
+const pp = data.planted.plain.items.plain, base = data.replies[3].items.plain;
+$('planted').insertAdjacentHTML('beforeend', `<tr><td>linker_adds_linking_section on plain (no links)</td><td>the twin answers ok: ${data.planted.plain.ok} with hash <code>${pp.hash.slice(0, 16)}…</code>; this head's shipped linker gives <code>${base.hash.slice(0, 16)}…</code> (row 4, linked: ${base.linked}). The hashes ${pp.hash !== base.hash ? 'differ' : 'are the same'}. Acceptance test ac07 is the check that fails on this twin naming the piece, against the merge base's build; it passes at this head (acceptance-linux-9a02471b6.txt), not on this page.</td></tr>`);
+$('planted').insertAdjacentHTML('beforeend', `<tr><td>linker_links_in_listing_order on tactics</td><td class="bad">${esc(data.planted.tactics.code)}: ${esc(names(data.planted.tactics))}</td></tr>`);
+await fetch(`/browser?chromium=${(navigator.userAgentData?.brands ?? []).find((b) => b.brand === 'Chromium')?.version ?? 'unknown'}`, { method: 'POST', body: JSON.stringify(browserReplies) });
+document.body.dataset.done = '1';
+</script>

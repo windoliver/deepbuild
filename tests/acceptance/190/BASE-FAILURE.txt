@@ -1,0 +1,445 @@
+Base failure run for tests/acceptance/190 (issue #190, linked logic libraries)
+Base commit: 6042ef5a29952e6a60dfdbc99d87352bd822fd22
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/190 --testTimeout=600000 --no-file-parallelism
+Tree: a pristine 'git archive HEAD' export of the base (the worktree had foreign uncommitted edits
+under crates/; the export excludes them). Host: Linux aarch64, Chrome 156 headless, no Mac.
+Result: Test Files 10 failed (10); Tests 18 failed (18); 0 passed; 0 reached a BLOCKED gate.
+An earlier run in the worktree itself gave the same 18 failures with identical messages.
+
+Why they fail (first failing assertion of each test; every one is the missing surface,
+see the run output below for which test hit which):
+- 9 tests: a check/bake that should admit is refused with logic_refused
+  "links isn't built yet in logic@1" (item params have no links at base).
+- 3 tests: a link that should be refused gets logic_refused, expected link_refused.
+- 2 tests: the claim call (ac06) and the pack_check call (ac08) are unknown -> bad_input.
+- 3 tests: deep-logic --planted linker_adds_linking_section / pack_check_skips_library_subset /
+  linker_links_in_listing_order is unknown -> bad_input, exit 2 (ac07, ac08, ac09).
+- 1 test (ac10, unlinked piece): Checked has no 'libraries' field at base (undefined).
+None reached a host gate: the Mac/Linux-x86_64 gates come after the first check, which fails.
+
+----- run output -----
+
+ RUN  v5.0.5 /tmp/claude-1000/-home-jing-deepbuild--claude-worktrees-wonderful-leavitt-57c12a/025b1c6d-212d-4fc8-81aa-86f001dc37d8/scratchpad/base-tree/tests/acceptance/190
+
+ ❯ ac01-two-pieces.test.ts (2 tests | 2 failed) 129630ms
+   ❯ #190.e0980599 two pieces link grid_path@1 by hash into programs that import nothing (2)
+     × #190.e0980599 each piece merges to a program that imports nothing and passes the subset check, and its receipt and deep_query name grid_path@1 with its hash 25795ms
+     × #190.e0980599 changing one byte of the library changes both programs' rewritten hashes and bake keys, while a third piece that doesn't link it keeps its own 163ms
+ ❯ ac10-budgets.test.ts (2 tests | 2 failed) 4026ms
+   ❯ #190.29b58f9e linking, fixtures and unlinked items keep their budgets (2)
+     × #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s 2782ms
+     × #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base 20ms
+ ❯ ac03-refusals.test.ts (1 test | 1 failed) 2146ms
+   ❯ #190.ea25cdd0 a link that doesn't resolve is refused at check, naming what doesn't (1)
+     × #190.ea25cdd0 bytes off their hash, a pack's other hash, an import no listed library exports, an import of a later library and a merged program 1 byte over 4 MiB are each refused, naming it 495ms
+ ❯ ac02-fixtures.test.ts (3 tests | 3 failed) 1458ms
+   ❯ #190.c4868d76 a library links only once its own fixtures pass (3)
+     × #190.c4868d76 grid_path@1's fixture finds the 10-move route from (0, 0) to (4, 0) round the wall, and the library links 215ms
+     × #190.c4868d76 a planted grid_path that cuts a wall's corner returns an 8-move route and is refused at link, naming the fixture, the route array and the first element that differs 55ms
+     × #190.c4868d76 a library that ships no fixture is refused, naming the library, and never links 21ms
+ ❯ ac09-needs.test.ts (3 tests | 3 failed) 849ms
+   ❯ #190.67822510 the linker follows each library's needs in dependency order (3)
+     × #190.67822510 a tactics item that links only pathing@1, which needs grid_path@1, merges both in dependency order, and its receipt names both 157ms
+     × #190.67822510 needs that reach both grid_path@1 and grid_path@2 are refused naming both versions, and two libraries that need each other are refused naming the cycle 73ms
+     × #190.67822510 a planted linker that links in listing order (linker_links_in_listing_order) leaves an import unresolved and is refused, naming the import 23ms
+ ❯ ac04-machines-browser.test.ts (2 tests | 2 failed) 826ms
+   ❯ #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host (2)
+     × #190.2d5bb5ea the two pieces' merged programs are byte for byte the same on macOS arm64 and Linux x86_64 144ms
+     × #190.2d5bb5ea grid_path@1's fixtures give the same full-state hashes in the app and in headless Chrome's own WebAssembly engine 9ms
+ ❯ ac08-pack-check.test.ts (2 tests | 2 failed) 765ms
+   ❯ #190.26483cb7 checking a pack's version checks each library against the one subset and runs its fixtures (2)
+     × #190.26483cb7 a pack whose library imports a host function is refused naming the import, one whose library fails a fixture is refused naming the fixture, and a sound pack installs 137ms
+     × #190.26483cb7 a planted pack check that skips the subset check for libraries (pack_check_skips_library_subset) installs the first pack and fails, naming the import 14ms
+ ❯ ac07-no-links.test.ts (1 test | 1 failed) 692ms
+   ❯ #190.2d024832 a piece without links is untouched by the linker (1)
+     × #190.2d024832 a piece without links keeps the merge base's rewritten program hash, bake key and golden, and a planted linker that adds an empty linking section to every program changes that hash and fails, naming the piece 93ms
+ ❯ ac05-library-trap.test.ts (1 test | 1 failed) 967ms
+   ❯ #190.99970527 a trap in library code names the library and its function (1)
+     × #190.99970527 a fuel trap inside grid_path on a grid too large for one step names the item, the step, the kind and find_route, at the same offset on two machines 336ms
+ ❯ ac06-own-claims.test.ts (1 test | 1 failed) 756ms
+   ❯ #190.949568c9 a library the working agent wrote binds only its own claims (1)
+     × #190.949568c9 the agent's own library and fixtures leave the claim INCONCLUSIVE with one ask, and the same fixtures in an installed pack count 170ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-two-pieces.test.ts > #190.e0980599 two pieces link grid_path@1 by hash into programs that import nothing > #190.e0980599 each piece merges to a program that imports nothing and passes the subset check, and its receipt and deep_query name grid_path@1 with its hash
+AssertionError: check of maze admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"maze","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ ac01-two-pieces.test.ts:27:23
+ ❯ ac01-two-pieces.test.ts:26:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  ac01-two-pieces.test.ts > #190.e0980599 two pieces link grid_path@1 by hash into programs that import nothing > #190.e0980599 changing one byte of the library changes both programs' rewritten hashes and bake keys, while a third piece that doesn't link it keeps its own
+AssertionError: maze with grid_path@1 baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"maze","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:512:77
+    510| /** A `bake` reply (or the web runner's `bake`): the fields this suite…
+    511| export function bakeOf(reply: JsonObject, what: string, web = false): …
+    512|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    513|   const steps = arr(reply['steps'], `${what}.steps`).map((s, i) => {
+    514|     const o = obj(s, `${what}.steps[${i}]`);
+ ❯ ac01-two-pieces.test.ts:58:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  ac02-fixtures.test.ts > #190.c4868d76 a library links only once its own fixtures pass > #190.c4868d76 grid_path@1's fixture finds the 10-move route from (0, 0) to (4, 0) round the wall, and the library links
+AssertionError: check of grid_path@1's fixture item admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"fixture","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ ac02-fixtures.test.ts:27:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  ac02-fixtures.test.ts > #190.c4868d76 a library links only once its own fixtures pass > #190.c4868d76 a planted grid_path that cuts a wall's corner returns an 8-move route and is refused at link, naming the fixture, the route array and the first element that differs
+AssertionError: the planted library under its own fixture baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"maze","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:512:77
+    510| /** A `bake` reply (or the web runner's `bake`): the fields this suite…
+    511| export function bakeOf(reply: JsonObject, what: string, web = false): …
+    512|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    513|   const steps = arr(reply['steps'], `${what}.steps`).map((s, i) => {
+    514|     const o = obj(s, `${what}.steps[${i}]`);
+ ❯ ac02-fixtures.test.ts:46:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  ac02-fixtures.test.ts > #190.c4868d76 a library links only once its own fixtures pass > #190.c4868d76 a library that ships no fixture is refused, naming the library, and never links
+AssertionError: check is refused at link, naming the item: expected [ 'logic_refused', 'maze' ] to deeply equal [ 'link_refused', 'maze' ]
+
+- Expected
++ Received
+
+  [
+-   "link_refused",
++   "logic_refused",
+    "maze",
+  ]
+
+ ❯ ac02-fixtures.test.ts:62:79
+     60|     for (const [reply, what] of [[check!, 'check'], [bake!, 'bake']] a…
+     61|       const r = refusedOf(reply, `${what} of a piece linking a library…
+     62|       expect([r.code, r.item], `${what} is refused at link, naming the…
+       |                                                                               ^
+     63|       expect(r.refusals.some((x) => x['library'] === 'grid_path@1' && …
+     64|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  ac03-refusals.test.ts > #190.ea25cdd0 a link that doesn't resolve is refused at check, naming what doesn't > #190.ea25cdd0 bytes off their hash, a pack's other hash, an import no listed library exports, an import of a later library and a merged program 1 byte over 4 MiB are each refused, naming it
+AssertionError: a link whose bytes differ from its hash is refused at check (link_refused), naming the item: expected [ 'logic_refused', 'maze' ] to deeply equal [ 'link_refused', 'maze' ]
+
+- Expected
++ Received
+
+  [
+-   "link_refused",
++   "logic_refused",
+    "maze",
+  ]
+
+ ❯ refusal ac03-refusals.test.ts:20:91
+     18| const refusal = (reply: JsonObject, what: string, item: string): Refus…
+     19|   const r = refusedOf(reply, what);
+     20|   expect([r.code, r.item], `${what} is refused at check (link_refused)…
+       |                                                                                           ^
+     21|   return r;
+     22| };
+ ❯ ac03-refusals.test.ts:42:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  ac04-machines-browser.test.ts > #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host > #190.2d5bb5ea the two pieces' merged programs are byte for byte the same on macOS arm64 and Linux x86_64
+AssertionError: check of maze admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"maze","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ ac04-machines-browser.test.ts:21:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  ac04-machines-browser.test.ts > #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host > #190.2d5bb5ea grid_path@1's fixtures give the same full-state hashes in the app and in headless Chrome's own WebAssembly engine
+AssertionError: check of the fixture item admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"fixture","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ ac04-machines-browser.test.ts:39:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  ac05-library-trap.test.ts > #190.99970527 a trap in library code names the library and its function > #190.99970527 a fuel trap inside grid_path on a grid too large for one step names the item, the step, the kind and find_route, at the same offset on two machines
+AssertionError: the bake on this host baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"swarm","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:512:77
+    510| /** A `bake` reply (or the web runner's `bake`): the fields this suite…
+    511| export function bakeOf(reply: JsonObject, what: string, web = false): …
+    512|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    513|   const steps = arr(reply['steps'], `${what}.steps`).map((s, i) => {
+    514|     const o = obj(s, `${what}.steps[${i}]`);
+ ❯ ac05-library-trap.test.ts:20:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  ac06-own-claims.test.ts > #190.949568c9 a library the working agent wrote binds only its own claims > #190.949568c9 the agent's own library and fixtures leave the claim INCONCLUSIVE with one ask, and the same fixtures in an installed pack count
+AssertionError: the claim on the agent's own library is decided: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac06-own-claims.test.ts:22:89
+     20|       claimCall(mazePiece(lib, [pack('gridcore', [lib])]), 'grid_path@…
+     21|     ]);
+     22|     expect(own!['ok'], `the claim on the agent's own library is decide…
+       |                                                                                         ^
+     23|     const asks = arr(own!['asks'], 'the claim\'s asks');
+     24|     expect([own!['verdict'], asks.length], 'the agent\'s own fixtures …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  ac07-no-links.test.ts > #190.2d024832 a piece without links is untouched by the linker > #190.2d024832 a piece without links keeps the merge base's rewritten program hash, bake key and golden, and a planted linker that adds an empty linking section to every program changes that hash and fails, naming the piece
+AssertionError: deep-logic --planted linker_adds_linking_section on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:184:138
+    182| export function replies(s: Started, calls: JsonValue[], what: string):…
+    183|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    184|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    185|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    186|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onHost helpers.ts:241:10
+ ❯ ac07-no-links.test.ts:40:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  ac08-pack-check.test.ts > #190.26483cb7 checking a pack's version checks each library against the one subset and runs its fixtures > #190.26483cb7 a pack whose library imports a host function is refused naming the import, one whose library fails a fixture is refused naming the fixture, and a sound pack installs
+AssertionError: the sound pack installs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac08-pack-check.test.ts:28:149
+     26|     const cut = gridPath1({ cut: true });
+     27|     const [host, failing, sound] = onHost([packCheckCall(hostPack()), …
+     28|     expect(sound!['ok'] === true && sound!['installed'] === true && so…
+       |                                                                                                                                                     ^
+     29|     const h = refusedOf(host!, 'the pack check of hostpack@1.0.0');
+     30|     expect([h.code, h.pack], 'the pack is refused, naming it').toEqual…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  ac08-pack-check.test.ts > #190.26483cb7 checking a pack's version checks each library against the one subset and runs its fixtures > #190.26483cb7 a planted pack check that skips the subset check for libraries (pack_check_skips_library_subset) installs the first pack and fails, naming the import
+AssertionError: deep-logic --planted pack_check_skips_library_subset on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:184:138
+    182| export function replies(s: Started, calls: JsonValue[], what: string):…
+    183|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    184|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    185|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    186|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onHost helpers.ts:241:10
+ ❯ ac08-pack-check.test.ts:38:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  ac09-needs.test.ts > #190.67822510 the linker follows each library's needs in dependency order > #190.67822510 a tactics item that links only pathing@1, which needs grid_path@1, merges both in dependency order, and its receipt names both
+AssertionError: check of tactics admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"tactics","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ ac09-needs.test.ts:31:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  ac09-needs.test.ts > #190.67822510 the linker follows each library's needs in dependency order > #190.67822510 needs that reach both grid_path@1 and grid_path@2 are refused naming both versions, and two libraries that need each other are refused naming the cycle
+AssertionError: refused at check, naming the item: expected [ 'logic_refused', 'tactics' ] to deeply equal [ 'link_refused', 'tactics' ]
+
+- Expected
++ Received
+
+  [
+-   "link_refused",
++   "logic_refused",
+    "tactics",
+  ]
+
+ ❯ ac09-needs.test.ts:45:69
+     43|     const [a, b] = onHost([checkCall(two), checkCall(cycle)]);
+     44|     const ra = refusedOf(a!, 'needs that reach grid_path@1 and grid_pa…
+     45|     expect([ra.code, ra.item], 'refused at check, naming the item').to…
+       |                                                                     ^
+     46|     const versions = ra.refusals.map((r) => r['versions']).find(Array.…
+     47|     expect([...(versions ?? [])].sort(), `a refusal names both version…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+ FAIL  ac09-needs.test.ts > #190.67822510 the linker follows each library's needs in dependency order > #190.67822510 a planted linker that links in listing order (linker_links_in_listing_order) leaves an import unresolved and is refused, naming the import
+AssertionError: deep-logic --planted linker_links_in_listing_order on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:184:138
+    182| export function replies(s: Started, calls: JsonValue[], what: string):…
+    183|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    184|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    185|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    186|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onHost helpers.ts:241:10
+ ❯ ac09-needs.test.ts:56:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/18]⎯
+
+ FAIL  ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s
+AssertionError: the first check admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"big","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ ac10-budgets.test.ts:38:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/18]⎯
+
+ FAIL  ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base
+AssertionError: check of the unlinked piece.items.plain.libraries is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:72:75
+     70| }
+     71| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     72|   expect(Array.isArray(value), `${what} is an array, got ${show(value)…
+       |                                                                           ^
+     73|   return value as JsonValue[];
+     74| }
+ ❯ checkedOf helpers.ts:463:21
+ ❯ helpers.ts:479:104
+ ❯ admitted helpers.ts:479:82
+ ❯ ac10-budgets.test.ts:54:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/18]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  18 failed (18)
+   Start at  01:42:26
+   Duration  144.51s (tests 99%)
+

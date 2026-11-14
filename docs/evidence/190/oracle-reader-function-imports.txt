@@ -1,0 +1,41 @@
+# LLVM's object reader (the one obj2yaml uses) on function-imports.test.ts's honest merged program and its linker_adds_linking_section twin's, code at 9a02471b6, spark-c89f (Linux arm64), 2026-11-12.
+# The two programs: a scratch copy of tests/acceptance/190/oracle/function-imports.test.ts (as committed in 8552bc983) that writes merged() and merged(['linker_adds_linking_section']) to files; the test's assertions unchanged (2 passed).
+# Command: LD_LIBRARY_PATH=<toolchain>/lib <toolchain>/lib/rustlib/aarch64-unknown-linux-gnu/bin/rust-objcopy <in>.wasm <out>.wasm (obj2yaml isn't installed; objcopy reads through the same llvm::object::createBinary)
+# The reader is LLVM 23.1.1 (rustup's 1.99.1 toolchain), not the vendored tests' pinned llvmorg-23.1.3, whose obj2yaml wasn't run.
+# Saved stderr drops LLVM's bug-report banner ("PLEASE submit a bug report …") and its "Stack dump" header lines; paths are shortened to <toolchain> and <scratch>.
+# rust-objcopy --version:
+#   llvm-objcopy, compatible with GNU objcopy
+#   LLVM (http://llvm.org/):
+#     LLVM version 23.1.1-rust-1.99.1-stable
+#     Optimized build.
+
+== honest.wasm sha256 6afd1f324492c48fab73a0b67794606ce59bec13c4309e6b97ec354608db3b87, 8353 bytes; last section: [11,8199,""]
+exit 0
+
+== planted.wasm sha256 afe87c35f2decd4741a82194e4ea5dcb632efb5aaa1b2b27e69bab3a2a47d574, 8363 bytes; last section: [0,8,"linking"]
+LLVM ERROR: malformed uleb128, extends past end
+0.	Program arguments: <toolchain>/lib/rustlib/aarch64-unknown-linux-gnu/bin/rust-objcopy <scratch>/planted.wasm <scratch>/planted.out.wasm
+0  libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd02fc410 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) + 64
+1  libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd02fcd84
+2  linux-vdso.so.1                    0x0000e6ffd2868a60 __kernel_rt_sigreturn + 0
+3  libc.so.6                          0x0000e6ffca3374d8
+4  libc.so.6                          0x0000e6ffca2ecb3c gsignal + 28
+5  libc.so.6                          0x0000e6ffca2d7e00 abort + 244
+6  libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd028a120 llvm::report_fatal_error(llvm::Twine const&, bool) + 216
+7  libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffcf745f38
+8  libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0f7e2e8
+9  libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0f7998c llvm::object::WasmObjectFile::parseLinkingSection(llvm::object::WasmObjectFile::ReadContext&) + 60
+10 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0f76f80 llvm::object::WasmObjectFile::parseCustomSection(llvm::object::WasmSection&, llvm::object::WasmObjectFile::ReadContext&) + 96
+11 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0f76dd0 llvm::object::WasmObjectFile::parseSection(llvm::object::WasmSection&) + 152
+12 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0f76a7c llvm::object::WasmObjectFile::WasmObjectFile(llvm::MemoryBufferRef, llvm::Error&) + 556
+13 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0f767ec llvm::object::ObjectFile::createWasmObjectFile(llvm::MemoryBufferRef) + 64
+14 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffcfd1cf58 llvm::object::ObjectFile::createObjectFile(llvm::MemoryBufferRef, llvm::file_magic, bool) + 344
+15 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffcfd1cd2c llvm::object::SymbolicFile::createSymbolicFile(llvm::MemoryBufferRef, llvm::file_magic, llvm::LLVMContext*, bool) + 416
+16 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0ef86e4 llvm::object::createBinary(llvm::MemoryBufferRef, llvm::LLVMContext*, bool) + 116
+17 libLLVM.so.23.1-rust-1.99.1-stable 0x0000e6ffd0ef8920 llvm::object::createBinary(llvm::StringRef, llvm::LLVMContext*, bool) + 188
+18 rust-objcopy                       0x0000bf9e32c1be14
+19 rust-objcopy                       0x0000bf9e32c1ba08
+20 libc.so.6                          0x0000e6ffca2d84c4
+21 libc.so.6                          0x0000e6ffca2d8598 __libc_start_main + 152
+22 rust-objcopy                       0x0000bf9e32c1c83c
+exit 134

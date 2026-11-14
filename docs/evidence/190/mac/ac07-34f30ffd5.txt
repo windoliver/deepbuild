@@ -1,0 +1,30 @@
+== git rev-parse HEAD: 34f30ffd561d742ea06d27e2246396ca8bc3c39c
+== git merge-base HEAD main: e0c90a5a5c11453bc41dfd4846703d054fa4a4d8
+== uname -a: Darwin <mac-host> 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:43:44 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T8122 arm64
+== sw_vers: 27.2.1
+== docker version:
+Client:
+ Version:           29.2.1
+ API version:       1.53
+ Go version:        go1.25.6
+ Git commit:        a5c7197
+ Built:             Mon Feb  2 17:16:37 2026
+ OS/Arch:           darwin/arm64
+ Context:           desktop-linux
+failed to connect to the docker API at unix://~/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix ~/.docker/run/docker.sock: connect: no such file or directory
+Now drawing from 'AC Power'
+== start 2026-11-13 22:09:36 22:09  up 15:11, 6 users, load averages: 22.20 18.76 13.36 thermalState 0
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac07-no-links.test.ts > #190.2d024832 a piece without links is untouched by the linker > #190.2d024832 a piece without links keeps the merge base's rewritten program hash, bake key and golden, and a planted linker that adds an empty linking section to every program changes that hash and fails, naming the piece 8357ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:09:37
+   Duration  9.58s (tests 100%)
+
+
+== end 2026-11-13 22:09:46 22:09  up 15:11, 6 users, load averages: 20.11 18.42 13.30 thermalState 0
+vitest exit=0

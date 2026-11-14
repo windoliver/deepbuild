@@ -1,0 +1,166 @@
+Base commit: e7609b7b (its tree exported with git archive, no worktree added), with the parent suite's helpers.ts,
+libs.ts, programs.ts, tsconfig.json and wat/ copied beside this folder, as they are; deep-logic and the assembler built
+from that tree by the tests themselves.
+Command: npx vitest run --root tests/acceptance/190/oracle --no-file-parallelism
+Date: 2026-11-12T11:00:21Z  Node v24.22.0  vitest 5.0.5 linux-arm64  cargo 1.99.1
+Where: the session that wrote these files may not read the checkout past the base, so the run used that exported
+tree outside the repo (shown below as <oracle>), with node_modules linked to the checkout's.
+Every one of the 6 tests fails at the base, each on the surface the base lacks: the base's deep-logic refuses any item
+with links (logic_refused, field links, "links isn't built yet in logic@1"), so no merged program is read and no
+link_refused is given (4 tests), and it answers bad_input with exit 2 to either --planted value (2 tests). Every object
+these tests write assembled, and the parent's layout probe was checked, before those failures.
+
+
+ RUN  v5.0.5 <oracle>
+
+ ❯ data-layout.test.ts (2 tests | 2 failed) 23596ms
+   ❯ #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned (2)
+     × #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data 4720ms
+     × #190.e0980599 the layout check fails on a linker that lays libraries out in listing order (linker_links_in_listing_order) 9ms
+ ❯ function-imports.test.ts (2 tests | 2 failed) 408ms
+   ❯ #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left (2)
+     × #190.e0980599 the merged program of _start and ret32@1 imports nothing, holds (f32) -> (i32) and () -> (), and _start calls the internal ret32 78ms
+     × #190.e0980599 the checks fail on a merged program that keeps an object's linking section (linker_adds_linking_section) and on the program object unlinked 5ms
+ ❯ undefined.test.ts (2 tests | 2 failed) 446ms
+   ❯ #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined (2)
+     × #190.ea25cdd0 a program importing lib:grid_path.find_route and lib:turns.next_turn, linking only turns@1, is refused naming find_route and not next_turn 77ms
+     × #190.ea25cdd0 the same program linking turns@1 and grid_path@1 is admitted, imports nothing and runs both calls 24ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data
+AssertionError: check of layout admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"layout","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted ../helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ mergedOf data-layout.test.ts:103:19
+ ❯ data-layout.test.ts:110:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the layout check fails on a linker that lays libraries out in listing order (linker_links_in_listing_order)
+AssertionError: deep-logic --planted linker_links_in_listing_order on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies ../helpers.ts:184:138
+    182| export function replies(s: Started, calls: JsonValue[], what: string):…
+    183|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    184|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    185|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    186|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onHost ../helpers.ts:241:10
+ ❯ mergedOf data-layout.test.ts:102:19
+ ❯ data-layout.test.ts:117:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the merged program of _start and ret32@1 imports nothing, holds (f32) -> (i32) and () -> (), and _start calls the internal ret32
+AssertionError: check of start admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"start","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted ../helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ merged function-imports.test.ts:98:19
+ ❯ function-imports.test.ts:106:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the checks fail on a merged program that keeps an object's linking section (linker_adds_linking_section) and on the program object unlinked
+AssertionError: deep-logic --planted linker_adds_linking_section on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies ../helpers.ts:184:138
+    182| export function replies(s: Started, calls: JsonValue[], what: string):…
+    183|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    184|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    185|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    186|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ onHost ../helpers.ts:241:10
+ ❯ merged function-imports.test.ts:97:19
+ ❯ function-imports.test.ts:112:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 a program importing lib:grid_path.find_route and lib:turns.next_turn, linking only turns@1, is refused naming find_route and not next_turn
+AssertionError: refused at check (link_refused), naming the item: expected [ 'logic_refused', 'both' ] to deeply equal [ 'link_refused', 'both' ]
+
+- Expected
++ Received
+
+  [
+-   "link_refused",
++   "logic_refused",
+    "both",
+  ]
+
+ ❯ undefined.test.ts:48:82
+     46|     const [reply] = onHost([checkCall(bothPiece([turns1()]))]);
+     47|     const r = refusedOf(reply!, 'check of both, linking only turns@1');
+     48|     expect([r.code, r.item], 'refused at check (link_refused), naming …
+       |                                                                                  ^
+     49|     const named = r.refusals.map(importOf);
+     50|     expect(named, `a refusal names the undefined import: ${show(r.refu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 the same program linking turns@1 and grid_path@1 is admitted, imports nothing and runs both calls
+AssertionError: check of both, linking turns@1 and grid_path@1 admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"both","refusals":[{"rule":"field","what":"links isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"links"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ admitted ../helpers.ts:478:78
+    476| /** A `check` reply's receipts, after it admitted the piece. */
+    477| export function admitted(reply: JsonObject, what: string): Record<stri…
+    478|   expect(reply['ok'], `${what} admits the piece (ok: true): ${show(rep…
+       |                                                                              ^
+    479|   return Object.fromEntries(Object.entries(obj(reply['items'], `${what…
+    480| }
+ ❯ undefined.test.ts:56:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Start at  02:58:18
+   Duration  24.82s (tests 99%)
+

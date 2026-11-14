@@ -14,10 +14,12 @@ pub mod bake;
 pub mod bindings;
 pub mod budget;
 pub mod checks;
+mod fixtures;
 pub mod judder;
 pub mod keyframes;
 pub mod lane;
 pub mod lines;
+pub mod links;
 pub mod live;
 pub mod module;
 pub mod piece;
@@ -25,7 +27,7 @@ pub mod point;
 pub mod saves;
 pub mod world;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
@@ -55,6 +57,9 @@ pub struct Planted {
     pub restore_keeps_regions_only: bool,
     pub restore_copies_assets: bool,
     pub simulate_runs_all_steps: bool,
+    pub linker_adds_linking_section: bool,
+    pub pack_check_skips_library_subset: bool,
+    pub linker_links_in_listing_order: bool,
     pub save_drops_globals: bool,
     pub save_drops_input_position: bool,
     pub open_reapplies_segments: bool,
@@ -108,6 +113,9 @@ impl Planted {
             "digest_compares_total_sizes" => p.digest_total_sizes = true,
             "mapper_ignores_fuel_shift" => p.mapper_ignores_shift = true,
             "budget_charges_function_first_line" => p.budget_first_line = true,
+            "linker_adds_linking_section" => p.linker_adds_linking_section = true,
+            "pack_check_skips_library_subset" => p.pack_check_skips_library_subset = true,
+            "linker_links_in_listing_order" => p.linker_links_in_listing_order = true,
             "replay_changes_step_37" => p.replay_changes_step_37 = true,
             "budget_counts_lane_reading" => p.budget_counts_lane_reading = true,
             "seek_repeats_occurrences" => p.seek_repeats_occurrences = true,
@@ -320,10 +328,31 @@ pub struct Logic {
     history: History,
     sessions: BTreeMap<String, World>,
     views: BTreeMap<String, live::View>,
+    /// Each library's fixture records by its hash and fixtures, once run on this core, and those running.
+    verified: BTreeMap<String, Result<Value, Vec<Value>>>,
+    verifying: BTreeSet<String>,
 }
 
 fn bad(what: &str) -> Value {
     json!({"ok": false, "code": "bad_input", "what": what})
+}
+
+/// Each trap with the library its function is in, by name and hash, or null in the program's own
+/// code (#190).
+fn libraries_in(p: &Piece, traps: Vec<Value>) -> Vec<Value> {
+    traps
+        .into_iter()
+        .map(|mut t| {
+            let lib = p
+                .items
+                .iter()
+                .find(|i| t["item"] == json!(i.id))
+                .and_then(|i| i.functions.get(&(t["function"].as_u64()? as u32)))
+                .map_or(Value::Null, |(name, hash, function)| json!({"name": name, "hash": hash, "function": function}));
+            t["library"] = lib;
+            t
+        })
+        .collect()
 }
 
 fn items(p: &Piece) -> Value {
@@ -536,6 +565,9 @@ impl Logic {
             Some("baked") => self.view_bake(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
+            Some("query") => self.query(line).unwrap_or_else(|e| e),
+            Some("pack_check") => self.pack_check(line).unwrap_or_else(|e| e),
+            Some("claim") => self.claim(line).unwrap_or_else(|e| e),
             Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),
         }
@@ -545,7 +577,9 @@ impl Logic {
         let piece = line
             .get("piece")
             .ok_or_else(|| json!({"ok": false, "code": "bad_input"}))?;
-        piece::check(piece, &self.planted, &mut self.history).map_err(|r| r.0)
+        let mut checked = piece::check(piece, &self.planted, &mut self.history).map_err(|r| r.0)?;
+        self.fixtures(piece, &mut checked)?;
+        Ok(checked)
     }
 
     fn bake(&mut self, line: &Value) -> Result<Value, Value> {
@@ -625,7 +659,7 @@ impl Logic {
         let keys = keys(&piece, &entries);
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece), "ring": world.ring(),
-            "traps": rec.traps, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": libraries_in(&piece, rec.traps), "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
     }

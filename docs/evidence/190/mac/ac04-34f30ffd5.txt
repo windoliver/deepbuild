@@ -1,0 +1,18 @@
+== git rev-parse HEAD: 34f30ffd561d742ea06d27e2246396ca8bc3c39c
+== git merge-base HEAD main: e0c90a5a5c11453bc41dfd4846703d054fa4a4d8
+== uname -a: Darwin <mac-host> 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:43:44 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T8122 arm64
+== sw_vers: 27.2.1
+== docker version:
+Client:
+ Version:           29.2.1
+ API version:       1.53
+ Go version:        go1.25.6
+ Git commit:        a5c7197
+ Built:             Mon Feb  2 17:16:37 2026
+ OS/Arch:           darwin/arm64
+ Context:           desktop-linux
+failed to connect to the docker API at unix://~/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix ~/.docker/run/docker.sock: connect: no such file or directory
+Now drawing from 'AC Power'
+== start 2026-11-13 22:09:36 22:09  up 15:11, 6 users, load averages: 22.20 18.76 13.36 thermalState 0
+
+BLOCKED: Docker Desktop is not running (docker info failed); ac04 and ac05 need it
