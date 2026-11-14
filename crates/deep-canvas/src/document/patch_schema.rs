@@ -160,13 +160,13 @@ pub const OPS: &[Op] = &[
     },
     Op {
         name: "break_out",
-        does: "takes an item a recipe instance derived and makes it your own, with its ID and the values it was expanded with; its example needs a recipe instance from a pack the document names, which the product reveal has none of",
+        does: "takes an item a recipe instance derived and makes it your own, with its ID and the values it was expanded with; it needs a recipe instance from a pack the document names, which the product reveal has none of, so its example is on a chart board whose pack's recipe derives c1's bars",
         fields: &[
             OP,
             required("instance", "the recipe instance's ID"),
             required("item", "the derived item's ID"),
         ],
-        example: r#"[{"op": "break_out", "instance": "chart", "item": "chart.bars.2"}]"#,
+        example: r#"[{"op": "break_out", "instance": "c1", "item": "c1.bars.2"}]"#,
     },
 ];
 
