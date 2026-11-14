@@ -1125,7 +1125,7 @@ impl World {
             let mut region = vec![0u8; (p.writes_at - p.at) as usize];
             for e in &p.reads {
                 if let Some(b) = values.get(&e.name).filter(|b| b.len() == e.size as usize) {
-                    region[e.offset as usize..][..b.len()].copy_from_slice(&b);
+                    region[e.offset as usize..][..b.len()].copy_from_slice(b);
                 }
             }
             let k = l.last;

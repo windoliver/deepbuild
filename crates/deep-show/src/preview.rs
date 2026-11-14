@@ -48,7 +48,7 @@ impl Hub<'_> {
         let key = format!(
             "{}|{}",
             piece.items.iter().map(|i| i.content.as_str()).collect::<Vec<_>>().join(","),
-            Value::Array(track).to_string()
+            Value::Array(track)
         );
         let len = piece.items.first().map_or(1, |i| i.step.max(1));
         let want = t.max(0) / len + 1;

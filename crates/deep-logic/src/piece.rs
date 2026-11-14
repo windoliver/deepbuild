@@ -1321,9 +1321,13 @@ fn region_map(
     (layout, refused, mirrors)
 }
 
+/// A piece's controls, its logic items' declared fields by ID, and the IDs of its same-machine
+/// fixture items.
+type Declarations = (Controls, Vec<(String, Declared)>, Vec<String>);
+
 /// A piece's controls, each with its slot's size and type in a read region, and every item's
 /// declared fields, so a read can name a later item's array.
-fn declarations(piece: &Value) -> Result<(Controls, Vec<(String, Declared)>, Vec<String>), Refused> {
+fn declarations(piece: &Value) -> Result<Declarations, Refused> {
     let controls: Controls = piece
         .get("controls")
         .and_then(Value::as_object)

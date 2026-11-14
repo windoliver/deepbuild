@@ -12,6 +12,7 @@ use crate::point::Point;
 /// `(cx, cy)` or a fed instancer's `(slot, gen)`, or a point control's press, move or release
 /// (Control: point).
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Given {
     Number(f64),
     Pick { set: u32, key: [i64; 2] },

@@ -189,9 +189,8 @@ fn determinism(doc: &Value, input: &Value) -> Report {
         Err(e) => out.blocked.push(e),
     }
     out.raised = raised("logic.determinism", &failures, &piece);
-    match input.get("compare").and_then(Value::as_str) {
-        Some(c @ ("cross_machine" | "web")) => out.blocked.push(json!({"compare": c, "ask": format!("logic.determinism {c} replays the golden on another host; it hasn't run")})),
-        _ => {}
+    if let Some(c @ ("cross_machine" | "web")) = input.get("compare").and_then(Value::as_str) {
+        out.blocked.push(json!({"compare": c, "ask": format!("logic.determinism {c} replays the golden on another host; it hasn't run")}));
     }
     out.results.push(json!({"kind": "logic.determinism", "steps": steps, "at": at}));
     out
