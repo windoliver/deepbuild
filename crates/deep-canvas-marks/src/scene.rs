@@ -1484,6 +1484,11 @@ fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
     }
 }
 
+/// A circle's `center`, at its listed default `[0, 0]` when left out (#1974).
+pub(crate) fn circle_center(v: Option<&Value>) -> Option<[f64; 2]> {
+    v.map_or(Some([0.0, 0.0]), |c| pair(Some(c)))
+}
+
 fn role(palette: &Palette, name: Option<&Value>, path: &str) -> Result<Rgb, Refused> {
     let Some(Value::String(name)) = name else {
         return refuse("bad_paint", path);
@@ -3452,7 +3457,7 @@ fn status_box(kind: &str, item: &Value, params: Option<&Value>) -> Option<([f64;
             ))
         }
         "circle@1" => {
-            let c = pair(p("center"))?;
+            let c = circle_center(p("center"))?;
             let r = num(p("r"))?;
             Some(([c[0] + pos[0] - r, c[1] + pos[1] - r, 2.0 * r, 2.0 * r], r))
         }
@@ -4604,7 +4609,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
             num(params.get("radius")).unwrap_or(0.0),
         ),
         "circle@1" => outline::circle(
-            pair(params.get("center"))?,
+            circle_center(params.get("center"))?,
             num(params.get("r")).unwrap_or(0.0),
             num(params.get("inner_r")).unwrap_or(0.0),
         ),
@@ -4752,7 +4757,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let stroke = paint.get("stroke").and_then(Value::as_object);
     let paint_path = format!("{path}/params/paint");
     let center = || {
-        pair(params.get("center")).ok_or(Refused {
+        let c = params.get("center");
+        let at = if item.get("kind").and_then(Value::as_str) == Some("circle@1") {
+            circle_center(c)
+        } else {
+            pair(c)
+        };
+        at.ok_or(Refused {
             code: "bad_doc",
             path: format!("{path}/params/center"),
         })

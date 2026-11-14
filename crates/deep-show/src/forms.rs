@@ -71,7 +71,9 @@ pub fn of(kind: &str) -> Vec<Value> {
                 field("grid.shape", "string", json!("square"), "square | isometric | hex"),
                 field("grid.hex.orient", "string", json!("pointy"), "flat | pointy"),
                 field("grid.hex.offset", "string", json!("odd"), "odd | even"),
-                field("recipe.rules", "string", json!("corners_and_sides"), "corners_and_sides | corners | sides | edges_6 (edges_6 on a hex grid, and its default there)"),
+                // #1974: its reader's default is the grid's (corners_and_sides, or edges_6 on a hex grid),
+                // so the line prints none, and the form says which.
+                field("recipe.rules", "string", Value::Null, "corners_and_sides | corners | sides | edges_6 (corners_and_sides by default; edges_6 on a hex grid, and its default there)"),
                 field("recipe.precedence", "json", Value::Null, "[<terrain>] (edges_6: an edge takes the neighbour's terrain where it comes first)"),
                 field("columns.<name>.copy", "string", Value::Null, "<table> (a text column: each row's string by its key)"),
                 field("columns.<name>.key", "string", Value::Null, "<column> (an i32 column, looked up by value)"),

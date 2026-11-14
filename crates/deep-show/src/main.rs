@@ -13,6 +13,7 @@ mod audio;
 mod bake;
 mod capture;
 mod costs;
+mod defaults;
 mod determinism;
 mod efficiency;
 mod evidence;
@@ -3170,7 +3171,8 @@ fn main() {
     }
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    // #412: `deep-show kinds --dump <dir>` and `--diff <a> <b>`, what `deep kinds` runs.
+    // #412: `deep-show kinds --dump <dir>` and `--diff <a> <b>`, what `deep kinds` runs; #1974:
+    // `--defaults`, the run that builds each printed default against the field left out.
     if command == "kinds" {
         let (line, code) = kinds::command(&args, |planted| {
             let start = planted.map(StartPlanted::Kinds);

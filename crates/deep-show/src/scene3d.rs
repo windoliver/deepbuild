@@ -299,11 +299,27 @@ pub fn points_at(
     sealed: &deep_canvas::registry::Sealed,
     planted: Option<&str>,
 ) -> Result<std::collections::BTreeMap<String, [f64; 3]>, Unfit> {
+    Ok(scene_at(doc, t, palette, sealed, planted)?
+        .layers
+        .iter()
+        .flat_map(|l| &l.points)
+        .map(|p| (p.id.clone(), p.pos))
+        .collect())
+}
+
+/// `doc`'s scene at `t` as the frame evaluates it, with the build's fills; where it sits reads no
+/// camera, so a document that names none is evaluated under a stand-in (#226, #1974).
+pub fn scene_at(
+    doc: &Value,
+    t: i64,
+    palette: &Palette,
+    sealed: &deep_canvas::registry::Sealed,
+    planted: Option<&str>,
+) -> Result<Scene, Unfit> {
     let mut doc = doc.clone();
     if doc.get("size").is_none() {
         doc["size"] = json!([640, 360]);
     }
-    // Where a point sits reads no camera: a document that names none is evaluated under a stand-in.
     let named = doc
         .get("camera")
         .and_then(Value::as_str)
@@ -317,15 +333,8 @@ pub fn points_at(
     }
     let look = Look3::from_roles(palette.clone());
     let fills = Fills::of(sealed, planted);
-    let scene =
-        evaluate_any(&doc, t, &look, &mut Labels::new(), None, fills).map_err(|r| Unfit {
-            code: r.code,
-            path: r.path,
-        })?;
-    Ok(scene
-        .layers
-        .iter()
-        .flat_map(|l| &l.points)
-        .map(|p| (p.id.clone(), p.pos))
-        .collect())
+    evaluate_any(&doc, t, &look, &mut Labels::new(), None, fills).map_err(|r| Unfit {
+        code: r.code,
+        path: r.path,
+    })
 }
