@@ -691,3 +691,13 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   leaves each checkpoint's time out (`golden_verify` on main compares `checkpoint_hashes` whole too, so a golden no
   longer verifies against a second run), then main is merged again; or the blind job redrafts ac07's comparison. The
   Mac runs at 34f30ffd5 are of the head before this merge; none has run at 2755be633.
+- **Merge of main 0b4bc926c (4303f78ca, 2026-11-14)**, after a second conflict: main's #548 builds `preview` and this
+  change builds `links`, so `piece.rs` refuses neither as a field for later (the list is `fires`, `pages`,
+  `parallel`, `services`, `mirrors`). On this host the suite reads as at 2755be633 (`acceptance-linux-4303f78ca.txt`):
+  19 pass, 4 BLOCKED, and ac07 fails on its golden line only, for the reason above; main's `world.rs` still writes
+  each checkpoint's `ns`. Criterion 7 stays BLOCKED on main.
+- **Mac run with Docker at 34f30ffd5** (2026-11-14, the owner's go at the Mac; stopped at this session's request once
+  the head had moved): ac04 passes 2 of 2 on macOS 27.2.1 with a linux/amd64 container
+  (`mac/ac04-34f30ffd5-docker.txt`, `mac/exits-34f30ffd5-docker.txt`, host name redacted, load 46 at its end; it has
+  no timed check). ac05 has no result: the runner stopped it 34 minutes into its container's build (exit 143 is the
+  stop). Both are of the head before the two merges above.
