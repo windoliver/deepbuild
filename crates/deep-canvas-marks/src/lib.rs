@@ -33,6 +33,7 @@ pub mod key;
 pub mod layout;
 pub mod look;
 pub mod modules;
+pub mod noise_fill;
 pub mod outline;
 pub mod outline_sources;
 pub mod paint;

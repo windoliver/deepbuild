@@ -817,6 +817,26 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             // A `gpu.material@1` item whose outputs lay over these per pixel (#429); the sweep
             // leaves it unset, since the fixture holds no operator.
             p("op", "ID", "", Value::Null, S, Value::Null, Value::Null),
+            // Material: texture maps (#423 reads them, #1938 declares them): each an image by
+            // hash; the sweep leaves them unset, since the fixture holds no image.
+            p(
+                "maps",
+                "{base_color, metallic_roughness, emission, occlusion: sha256 | {sha256, uv, transform, wrap, filter_taps, filter}}",
+                "",
+                Value::Null,
+                S,
+                Value::Null,
+                Value::Null,
+            ),
+            p(
+                "normal_map",
+                "sha256 | {sha256, uv, transform, wrap, filter_taps, filter}",
+                "",
+                Value::Null,
+                S,
+                Value::Null,
+                Value::Null,
+            ),
         ],
         reads: None,
         fixture: json!({"it": item("material@1", json!({"roughness": 0.4}))}),
