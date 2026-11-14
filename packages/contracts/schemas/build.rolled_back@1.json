@@ -61,12 +61,13 @@
         "commit": {
           "type": "string",
           "pattern": "^[0-9a-f]{40}$",
-          "description": "The promoted commit, whose build was rolled back."
+          "description": "The promoted commit, whose build was rolled back.",
+          "maxLength": 8192
         },
         "restored": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 200,
+          "maxLength": 8192,
           "description": "The build that came back: its folder under versions/, the commit a promoted build is named by."
         },
         "why": {
@@ -81,6 +82,14 @@
         "why"
       ],
       "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
     }
   },
   "required": [
