@@ -1,0 +1,48 @@
+At base 23baa43b4 ("Merge pull request #2453 …"), on 2026-11-13, on an arm64 Mac with 18 cores, no Rust was built: the one-minute load was 155 to 233 and `cargo` isn't on this shell's PATH. Lines marked "read" come from the base's code, not from a run. Lines marked "observed" are what ran here.
+
+The commands the implementing session runs, at the base and after (from <worktree>):
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1938 --no-file-parallelism
+  npx tsc -p tests/acceptance/1938/tsconfig.json
+
+Observed: `npx tsc -p tests/acceptance/1938/tsconfig.json` exits 0 (TypeScript 5.9.3, vitest 5.0.5, the repo's pins, after `npm ci --ignore-scripts`). Running the files here, all 10 tests fail with "INCONCLUSIVE: cargo could not run: spawnSync cargo ENOENT; this is not a pass"; none passes or skips. `spans` from scripts/proof-change.mjs reads all 10 test names with their IDs.
+
+Read: every scenario parses at the base: stored documents in `docs`, #403's `claims`, `verdict` (it ignores `against`), `environment` (#138), and `planted: audit_checks_overlaps_only` (#1936). `pixel_checks_hold_anywhere` isn't a planted name at the base (crates/deep-show/src/main.rs's planted match), so a scenario carrying it is refused as bad input; no test reaches it there. With cargo, each test meets this first:
+
+faults.test.ts (#1938.f19b61dd)
+
+- "a subject cut by the frame …", "clipped highlights …", "text under 4.5:1 …", "a 20 m door …", "a fill that reseeds each frame …". No module registers camera.framing, render.exposure, render.contrast, scene.scale or render.noise, so `judge` (crates/deep-show/src/verdict.rs) answers BLOCKED with {code: module_missing, kind, ids: []} and no `module` (`module_of_check` finds no module for the families camera, render or scene). Each fails at its first assertion, "<kind> fires on <fault> with its code and a fix as patch ops":
+    <kind> on <fault> is BLOCKED, not FAIL: {the row}
+    <kind> on <fault> raises no issue with a code by <kind> naming <item>; it raises: nothing
+  (The exposure test first checks it runs on macOS, which it does here; a BLOCKED module_missing row isn't the no-GPU case, so it doesn't turn INCONCLUSIVE.)
+
+- "a missing texture …". document.validate runs the document's own checks and reads no `assets`. `material@1` declares no `maps` param (crates/deep-canvas-scene3d/src/spec.rs), so the check raises `unknown_field` at items/crate-mat/params/maps on both documents, and nothing looks for the PNG in the store. The test fails at its first assertion:
+    document.validate on a missing texture raises no asset_missing by document.validate; it raises: unknown_field by document.validate [crate-mat]
+
+- "a scene over its class …". document.budget is one of the core's kinds that land with R6, so `judge` answers BLOCKED {code: not_run, kind: document.budget}. The test fails at its first assertion:
+    document.budget on a scene over its class is BLOCKED, not FAIL: {the row}
+    document.budget on a scene over its class raises no over_budget by document.budget; it raises: nothing
+
+- "two items passing into each other …" and "an item floating 0.2 m above the floor …" pass at the base, as read: #1936's scene audit reports `geometry.overlap` naming crate-a and crate-b, its fix [{op: set, id: crate-b, path: items/crate-b/at/pos, value: crate-b's place moved 0.2 m along x}] (`apart`, `fix_of`), and `geometry.floating` naming vase, its fix setting items/vase/at/pos to (0, 0.3, 0) (`fall`); the twins hold no fault. Under `audit_checks_overlaps_only` the vase isn't reported. These two pairs are criterion 1's but #1936's to build; the criterion fails on the base at its other seven.
+
+machines.test.ts (#1938.636cd049)
+
+- The test first checks it runs on macOS, which it does here. On machine A, geometry.shading FAILs the inward cube with loop.normals_inward (machines: any) and the scene audit FAILs the floating vase (machines: any). The other five rows are BLOCKED module_missing, and a kind no module registers says machines: any with no fingerprint (`judge`'s default). The test fails at its first assertion, "on machine A each planted fault is caught, each row says the machines its result holds on, and each pixel check names its fingerprint":
+    scene.scale on the 20 m door on machine A is BLOCKED, not FAIL: {the row}
+    camera.framing on the subject cut by the frame on machine A is BLOCKED, not FAIL: {the row}
+    render.exposure on clipped highlights on machine A is BLOCKED, not FAIL: {the row}
+    render.exposure on clipped highlights says machines: any, not same
+    render.exposure on clipped highlights on machine A carries no fingerprint: {the row}
+    (and the same three lines for render.contrast on text under 4.5:1 and render.noise on a fill that reseeds each frame)
+  Nothing after it runs.
+
+What the implementation meets behind these assertions, read: `material@1` must declare Material: texture maps' `maps` for the missing-texture twin to pass; the noise fixture keys the fill's `seed` (a whole number) through an `f32` channel; the over-class scene's own budget estimate already raises `over_budget` with a text fix (by document.validate), which may stay beside document.budget's.
+
+A scratch vitest file outside the repo (not kept) ran the generators and checked the fixtures (observed):
+- framing: the cube at x = 0 spans −40 to 40 px both ways (fill 0.333 of 240 rows); at x = 1.8 it spans 87.9 to 183.8 px right of the centre, the frame's edge at 160 px (focal 439.60 px).
+- the PNG is 83 bytes and inflates to 4 rows of 17 bytes; its SHA-256 is 9c594c92f07aafd56da1dbfc22d95413ea48f614a1c6f41febcf730b3ff194ab.
+- the inward cube's signed volume is −0.9999999999999999 m³, no corner normal points with its face's vector area, and every edge is held twice in opposite directions.
+- WCAG 2 ratios on the clean look's ground #ffffff: muted #8b8f97 3.2439, ink #1b1d22 16.8614; #767676 4.5422 and #777777 4.4781.
+- the over-class scene holds 1,600 specks (about 6.165 ms of GPU by the base's terms), its twin 16 (about 0.066 ms); the planted document is 287,246 bytes of JSON.
+- the noise channel holds 60 hold keys, the last at 693,840,000 flicks (59 frames) with seed 60.

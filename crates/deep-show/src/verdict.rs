@@ -19,10 +19,10 @@ use crate::kit::catalog::fix_of;
 use crate::shared::knows;
 
 /// A document the hub holds, at its current revision.
-struct Current<'h> {
+pub(crate) struct Current<'h> {
     rev: u64,
     hash: &'h str,
-    doc: &'h Value,
+    pub(crate) doc: &'h Value,
 }
 
 /// #405: a determinism check's canonical renders' wall time and their pixel hashes', in ms.
@@ -202,7 +202,7 @@ impl<'a> Hub<'a> {
 
     /// A document's current revision: a shared document's, or a session's. A view of the record
     /// has no revisions (Revision), so it is no deliverable a verdict can be keyed by.
-    fn current_of(&self, doc: &str) -> Option<Current<'_>> {
+    pub(crate) fn current_of(&self, doc: &str) -> Option<Current<'_>> {
         if let Some(shared) = self.shared.get(doc) {
             if shared.doc.get("source").is_some() {
                 return None;
@@ -224,7 +224,7 @@ impl<'a> Hub<'a> {
 
     /// `{"call": "verdict", "claim"}`: judges the claim on its deliverables' current revisions
     /// and records the verdict, keyed by those revisions' hashes.
-    pub fn verdict_call(&mut self, claim: &str) -> Value {
+    pub fn verdict_call(&mut self, claim: &str, against: Option<&Value>) -> Value {
         let scenario = self.scenario;
         let Some(c) = scenario.claims.get(claim) else {
             return json!({"result": "INVALID", "key": {"revisions": []}, "stale": false, "requirements": []});
@@ -246,6 +246,8 @@ impl<'a> Hub<'a> {
             c
         };
         let read = self.evaluated_reads(c);
+        // #1938: the frames each pixel check reads, drawn before judging.
+        let pixels = self.pixel_runs(c);
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
@@ -303,7 +305,15 @@ impl<'a> Hub<'a> {
                         row["counters"] = json!(counters);
                         row
                     }
-                    _ => self.judge(r, &docs, missing, &read, &c.session, compared),
+                    _ => self.judge(
+                        r,
+                        &docs,
+                        missing,
+                        &read,
+                        &c.session,
+                        compared,
+                        pixels.get(&r.id),
+                    ),
                 };
                 // #407: an unsourced number in a film names the frame its item first shows in.
                 if r.check["kind"] == HONEST {
@@ -334,6 +344,10 @@ impl<'a> Hub<'a> {
             })
             .collect();
         let mut rows = rows;
+        // #1938: read against another run's verdict, a pixel row holds only on its machine.
+        if let Some(against) = against {
+            self.read_against(&mut rows, against);
+        }
         if !missing && !docs.is_empty() {
             rows.extend(briefed);
         }
@@ -600,6 +614,7 @@ impl<'a> Hub<'a> {
         read: &BTreeMap<String, Value>,
         author: &str,
         compared: Option<&Vec<Value>>,
+        drawn: Option<&BTreeMap<String, crate::pixels::Drawn>>,
     ) -> Value {
         let kind = r.check["kind"].as_str().unwrap_or_default().to_string();
         let sealed = &self.startup.sealed;
@@ -665,7 +680,8 @@ impl<'a> Hub<'a> {
         }
         let honest = kind == HONEST;
         let rules = kind == KIND_RULES;
-        if core && kind != CHECK && !honest && !rules {
+        let budget = kind == crate::extended::BUDGET;
+        if core && kind != CHECK && !budget && !honest && !rules {
             // The core's other kinds land with R6 (Check input: Lands); unrun, they never pass.
             let b = json!({"code": "not_run", "kind": kind, "ids": []});
             return done(row, "BLOCKED", vec![b]);
@@ -684,6 +700,10 @@ impl<'a> Hub<'a> {
         // #1183: each length mapping with the ratio it is drawn at, and whether any went unread.
         let (mut lengths, mut unchecked) = (Vec::new(), false);
         let mut results: Vec<Value> = Vec::new();
+        // #1938: pixels that hold on another machine than the run's.
+        let mut elsewhere: Vec<Value> = Vec::new();
+        // #1938: the environment each deliverable's pixels were drawn in, by document.
+        let mut prints: Vec<(String, String)> = Vec::new();
         for (doc, cur) in docs {
             // Checked with the pack store, so a deliverable that names an installed pack resolves
             // it, as its show did (#200).
@@ -709,6 +729,25 @@ impl<'a> Hub<'a> {
             // document's own validation among them whatever kind runs; each names its document,
             // since item IDs are one document's.
             let mut raised: Vec<Value> = checked.issues.iter().map(Issue::to_json).collect();
+            // #1938: document.validate's `assets`, against the evidence store.
+            if let (true, Some(assets)) = (kind == CHECK, r.check.get("assets")) {
+                raised.extend(self.asset_issues(cur.doc, assets));
+            }
+            // #1938: document.budget runs the class budget: a document that names no class is
+            // checked against none, and a scene over its class names its fix as patch ops.
+            if budget {
+                if deep_canvas::budget::of(&checked.lowered).is_none() {
+                    blocked.push(json!({"code": "not_run", "kind": kind, "ids": [], "path": "budget/class"}));
+                }
+                let over = raised.iter().position(|i| i["code"] == "over_budget");
+                if let Some(k) = over {
+                    raised[k]["check"] = json!(kind);
+                    if let Some((ops, chosen)) = self.over_class_fix(cur.doc) {
+                        raised[k]["fix_ops"] = Value::Array(ops);
+                        raised[k]["chosen"] = chosen;
+                    }
+                }
+            }
             if rules {
                 ran.extend(checked.rules_ran.iter().cloned());
                 for i in &checked.issues {
@@ -751,7 +790,7 @@ impl<'a> Hub<'a> {
                         }
                     }
                 }
-                if let Some(report) = check.report {
+                if check.report.is_some() || check.frames.is_some() {
                     // #453: a check that measures reads the assets its items name, and only the
                     // proof surface plants its wrong program.
                     if let Some(map) = input.as_object_mut() {
@@ -761,16 +800,40 @@ impl<'a> Hub<'a> {
                             map.insert("planted".into(), json!(p));
                         }
                     }
-                    let out = report(&checked.lowered, &input);
+                    let in_doc = |mut v: Value| {
+                        v["doc"] = json!(doc);
+                        v
+                    };
+                    // #1938: a pixel check runs on the frames drawn for it here, or not at all.
+                    let out = match (check.frames, drawn.and_then(|d| d.get(doc))) {
+                        (Some((_, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
+                            prints.push((doc.clone(), fp.clone()));
+                            run(&checked.lowered, &input, f)
+                        }
+                        (Some(_), Some(crate::pixels::Drawn::Elsewhere(e))) => {
+                            elsewhere.push(in_doc(e.clone()));
+                            Default::default()
+                        }
+                        (Some(_), Some(crate::pixels::Drawn::Blocked(b))) => {
+                            let mut b = in_doc(b.clone());
+                            b["kind"] = json!(kind);
+                            blocked.push(b);
+                            Default::default()
+                        }
+                        (Some(_), None) => {
+                            blocked.push(in_doc(json!({"code": "not_drawn", "kind": kind})));
+                            Default::default()
+                        }
+                        (None, _) => check
+                            .report
+                            .map(|run| run(&checked.lowered, &input))
+                            .unwrap_or_default(),
+                    };
                     for (id, r, actual) in out.raised {
                         let mut issue = raised_json(self, &kind, &m.name, &id, r);
                         issue["actual"] = actual;
                         raised.push(issue);
                     }
-                    let in_doc = |mut v: Value| {
-                        v["doc"] = json!(doc);
-                        v
-                    };
                     results.extend(out.results.into_iter().map(in_doc));
                     blocked.extend(out.blocked.into_iter().map(in_doc));
                 } else {
@@ -824,6 +887,11 @@ impl<'a> Hub<'a> {
             "BLOCKED"
         } else if errors {
             "FAIL"
+        } else if !elsewhere.is_empty() {
+            // #1938: pixels hold on the machine that drew them; read for another, they decide
+            // nothing.
+            row.insert("inconclusive".into(), Value::Array(elsewhere));
+            "INCONCLUSIVE"
         } else if unchecked {
             // #1183: a length mapping the check couldn't read is never passed.
             "INCONCLUSIVE"
@@ -862,8 +930,19 @@ impl<'a> Hub<'a> {
                 row.insert("lengths".into(), Value::Array(lengths));
             }
         }
-        if registered.is_some_and(|(_, c)| c.report.is_some()) {
+        if registered.is_some_and(|(_, c)| c.report.is_some() || c.frames.is_some()) {
             row.insert("results".into(), Value::Array(results));
+        }
+        // #1938: a pixel row names the environment it holds in: one fingerprint, or one a
+        // deliverable where they differ.
+        if let Some((_, first)) = prints.first() {
+            let one = prints.iter().all(|(_, p)| p == first);
+            let fingerprint = if one {
+                json!(first)
+            } else {
+                Value::Object(prints.iter().map(|(d, p)| (d.clone(), json!(p))).collect())
+            };
+            row.insert("fingerprint".into(), fingerprint);
         }
         done(row, result, blocked)
     }
@@ -967,7 +1046,7 @@ pub fn run_check(
 }
 
 /// An issue a module's check raised, as a reply carries it, naming the check kind.
-fn raised_json(hub: &Hub<'_>, kind: &str, module: &str, id: &str, raised: Raised) -> Value {
+pub(crate) fn raised_json(hub: &Hub<'_>, kind: &str, module: &str, id: &str, raised: Raised) -> Value {
     let mut issue = Issue::error(raised.code, id, raised.path, Value::Null, &raised.what);
     issue.severity = raised.severity;
     issue.fix = fix_of(hub, module, raised.code);
