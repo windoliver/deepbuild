@@ -548,21 +548,48 @@ fn straight(p: [u8; 4]) -> [u8; 4] {
 
 #[cfg(test)]
 mod tests {
-    /// Each Vello renderer's version an answer names, as Cargo.lock holds it.
+    /// The version of `name` this crate resolves in Cargo.lock (#2497). The lock may hold several
+    /// versions of one name: it holds vello_cpu 0.0.8 for deep-typeset beside the 0.3.0 drawn here.
+    /// Then this crate's own entry lists the dependency with its version; with a single version it
+    /// lists the bare name, and the entry of that name holds the version.
+    fn resolved(name: &str) -> Option<String> {
+        let lock = include_str!("../../../Cargo.lock");
+        let entry = |of: &str| {
+            lock.split("[[package]]")
+                .find(|p| p.starts_with(&format!("\nname = \"{of}\"\n")))
+        };
+        let dependency = entry(env!("CARGO_PKG_NAME"))?
+            .split_once("dependencies = [")?
+            .1
+            .split_once(']')?
+            .0
+            .lines()
+            .map(|line| line.trim().trim_end_matches(',').trim_matches('"'))
+            .find(|line| line.split(' ').next() == Some(name))?;
+        let version = match dependency.split(' ').nth(1) {
+            Some(version) => version,
+            None => entry(name)?
+                .split("version = \"")
+                .nth(1)?
+                .split('"')
+                .next()?,
+        };
+        Some(version.to_string())
+    }
+
+    /// Each Vello renderer's version an answer names is the one this crate resolves.
     #[test]
     fn the_named_versions_are_the_locked_ones() {
-        let lock = include_str!("../../../Cargo.lock");
-        let locked = |name: &str| {
-            lock.split("[[package]]")
-                .find(|p| p.contains(&format!("name = \"{name}\"\n")))
-                .and_then(|p| p.split("version = \"").nth(1))
-                .and_then(|v| v.split('"').next())
-                .map(str::to_string)
-        };
-        assert_eq!(locked("vello_gpu").as_deref(), Some(super::VELLO_GPU));
-        assert_eq!(
-            locked("vello_cpu").as_deref(),
-            Some(crate::raster::VELLO_CPU)
-        );
+        for (name, named) in [
+            ("vello_gpu", super::VELLO_GPU),
+            ("vello_cpu", crate::raster::VELLO_CPU),
+        ] {
+            let locked = resolved(name)
+                .unwrap_or_else(|| panic!("Cargo.lock gives deep-marks-render no {name}"));
+            assert_eq!(
+                locked, named,
+                "an answer names {name} {named}, but deep-marks-render resolves {name} {locked}"
+            );
+        }
     }
 }
