@@ -1134,7 +1134,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // #462: at most two looks in one frame outside a transition window, checked before any
     // frame draws; status draws in the document's look whatever look a shot or region takes.
     if let Some(tl) = &timeline {
-        let outlines = &pack_sealed()?.outlines;
+        let outlines = deep_canvas_scene3d::contributed::Fills::of(
+            pack_sealed()?,
+            crate::axes::plant_name(app.planted),
+        );
         tl.check(|t| {
             let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)
                 .map_err(|r| refused(r.code, r.path))?;
