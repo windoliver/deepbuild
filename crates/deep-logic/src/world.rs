@@ -20,15 +20,18 @@ use wasmtime::Val;
 use crate::bake::{self, Range};
 use crate::budget::cpu_ns;
 use crate::piece::{h64, step_seed, Item, Piece, Read, Ty, PAGE, PER_STEP};
+use crate::point::Point;
 use crate::Planted;
 
-/// An entry's value: a number, or the row a pick wrote (Control: picks on rows and grid focus):
+/// An entry's value: a number, the row a pick wrote (Control: picks on rows and grid focus):
 /// its set's index in `rows` and its key, an integer key column's value and 0, a grid's
-/// `(cx, cy)` or a fed instancer's `(slot, gen)`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// `(cx, cy)` or a fed instancer's `(slot, gen)`, or a point control's press, move or release
+/// (Control: point).
+#[derive(Clone, Debug, PartialEq)]
 pub enum Given {
     Number(f64),
     Pick { set: u32, key: [i64; 2] },
+    Point(Point),
 }
 
 impl From<f64> for Given {
@@ -42,6 +45,9 @@ impl Given {
         if let Some(n) = v.as_f64() {
             return Some(Given::Number(n));
         }
+        if v.get("phase").is_some() {
+            return Point::parse(v).map(Given::Point);
+        }
         let set = v.get("set")?.as_u64().filter(|s| *s < 8)? as u32;
         match v.get("key")?.as_array()?.as_slice() {
             [a, b] => Some(Given::Pick {
@@ -51,15 +57,16 @@ impl Given {
             _ => None,
         }
     }
-    pub fn to_json(self) -> Value {
+    pub fn to_json(&self) -> Value {
         match self {
             Given::Number(n) => json!(n),
             Given::Pick { set, key } => json!({"set": set, "key": key}),
+            Given::Point(p) => p.to_json(),
         }
     }
-    /// The value as its control's read region lays it out: an f64 (8 B), or a pick's `u32 set,
-    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B).
-    pub fn bytes(self) -> Vec<u8> {
+    /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
+    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B), or a point's record (248 B).
+    pub fn bytes(&self) -> Vec<u8> {
         match self {
             Given::Number(n) => n.to_le_bytes().to_vec(),
             Given::Pick { set, key } => {
@@ -69,6 +76,7 @@ impl Given {
                 b.extend(key[1].to_le_bytes());
                 b
             }
+            Given::Point(p) => p.bytes().to_vec(),
         }
     }
 }
@@ -187,6 +195,9 @@ pub struct Record {
     pub traps: Vec<Value>,
     /// Each item's fuel at each step it ran.
     pub fuel: BTreeMap<usize, Vec<(i64, i64)>>,
+    /// #538: each item's comparison of its arrays after each step with their values before it,
+    /// as `(step, bytes compared, ms)`: a proof reading of the bake's cost, never part of a run.
+    pub compares: BTreeMap<String, Vec<(i64, usize, f64)>>,
 }
 
 impl Record {
@@ -916,6 +927,22 @@ impl World {
             match &e.read {
                 // A text commit's bytes come with its control kind (#542).
                 Read::Control if e.ty == "text" => {}
+                // #540: a point control's entries packed, each its 248 B record and, after a box
+                // release holding unit keys, their tail, so a step walks them by its flags.
+                Read::Control if e.ty == "point" => {
+                    let list = &taken[e.name.as_str()];
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    let mut o = at + 8;
+                    for x in list {
+                        let v = x.value.bytes();
+                        if !matches!(x.value, Given::Point(_)) || o + 8 + v.len() > at + e.size as usize {
+                            continue;
+                        }
+                        region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
+                        region[o + 8..o + 8 + v.len()].copy_from_slice(&v);
+                        o += 8 + v.len();
+                    }
+                }
                 Read::Control => {
                     // Each entry a u32 player, 4 zero bytes, then its value as the control's
                     // form lays it out; a value of another form leaves its bytes zero.
@@ -1034,7 +1061,10 @@ impl World {
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
         }
+        let started = std::time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
+        let ms = started.elapsed().as_secs_f64() * 1000.0;
+        rec.compares.entry(item.id.clone()).or_default().push((k, n, ms));
         if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
             changed.remove(1);
         }

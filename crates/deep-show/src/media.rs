@@ -101,9 +101,22 @@ pub struct Media {
     pub(crate) captions: Option<crate::narration::View>,
     pub(crate) captions_drawn:
         std::collections::BTreeMap<String, std::sync::Arc<crate::snapshot::Drawn>>,
+    /// #509: whether the state folder's narration exception asks were read back.
+    pub(crate) heard_restored: bool,
     /// #1967: each terminal recording a cell grid plays, by SHA-256, as the decode worker
     /// converted it: its keyframes and row patches, which sessions read as `terminal:<sha256>`.
     pub recordings: std::collections::BTreeMap<String, Value>,
+}
+
+/// #503: a worker's refusal answers with its `code` and what it names at the reply's top level
+/// too, beside `refused` (#498's place for it).
+fn hoist(mut reply: Value) -> Value {
+    if let Some(r) = reply.get("refused").and_then(Value::as_object).cloned() {
+        if let Some(o) = reply.as_object_mut() {
+            o.extend(r);
+        }
+    }
+    reply
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
@@ -144,11 +157,12 @@ impl Hub<'_> {
                 continue;
             };
             let path = format!("items/{id}/params/{param}");
-            let named = item
-                .pointer(&format!("/params/{param}"))
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
+            // #538: an item that names no asset there (a cell grid with a frame or a logic grid,
+            // not a recording) has nothing to probe.
+            let Some(named) = item.pointer(&format!("/params/{param}")) else {
+                continue;
+            };
+            let named = named.as_str().unwrap_or("").to_string();
             let sha = doc
                 .pointer(&format!("/assets/{named}/sha256"))
                 .and_then(Value::as_str)
@@ -196,6 +210,8 @@ impl Hub<'_> {
                 }
             }
         }
+        // #509: a document that names a narration line's time gets the script's spoken times.
+        out.extend(self.stamp_spoken(doc));
         out
     }
 
@@ -259,7 +275,7 @@ impl Hub<'_> {
                 let (mut reply, pid) =
                     self.media_job(DECODE_WORKER, json!({"op": "probe", "path": path}));
                 reply["worker"] = json!({"pid": pid});
-                reply
+                hoist(reply)
             }
             MediaCall::Decode(c) => {
                 let mut job = c.clone();
@@ -269,7 +285,7 @@ impl Hub<'_> {
                     Some(d) => d["worker"] = json!({"pid": pid}),
                     None => reply["worker"] = json!({"pid": pid}),
                 }
-                reply
+                hoist(reply)
             }
             MediaCall::Proxy(c) => {
                 let tmp = std::env::temp_dir().join(format!(

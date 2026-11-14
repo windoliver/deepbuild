@@ -1,0 +1,13 @@
+{
+  "issue": 503,
+  "criterion": "#503.07910052",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's standing delegation for taste calls, approved in this session's plan",
+  "when": "2026-11-11T06:26:08Z",
+  "screenshots": {
+    "depth-points.png": "6400e0d6ca09425099c916855ffbaa6d123122d8aaa5d5fcbf99d06fbfce628f",
+    "background-360.png": "cbd76dfeaba82c41860da1b4e613b9529d8fd46fc382a4d1447006ef60214193",
+    "background-360.apng": "36169a91d8142838aac3e6b2ddebdee43691467ed471b5752541c74a924cd0ec"
+  },
+  "note": "The depth video draws as a point cloud of its stepped depth sheets, coloured by the frame; the 360° background shows frame 75's number at 2.5 s and plays 0 to 89; the white metal sphere reflects the still sky and ground, never the video."
+}

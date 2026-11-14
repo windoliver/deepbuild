@@ -32,6 +32,10 @@ pub(crate) fn class_of(control: &Value) -> &str {
 /// longer offers, stays on the track and is left out of the form, so a revision that renames a
 /// stage never refuses the document for what you picked before it.
 pub(crate) fn reads(form: &Value, entry: &Value) -> bool {
+    // #507: present mode's own entries steer the timeline, whatever the form's controls.
+    if entry.get("present").is_some() {
+        return true;
+    }
     let Some(c) = form
         .get("controls")
         .and_then(|c| c.get(entry["control"].as_str().unwrap_or_default()))
@@ -142,6 +146,10 @@ impl Hub<'_> {
             .filter(|e| reads(form, e))
             .collect();
         let mut out = with_track(form, &entries);
+        // #507: present mode's span, which a stage marker holds through.
+        if let Some(present) = self.present_field(doc) {
+            out["present"] = present;
+        }
         let view = self
             .session_state
             .get(doc)

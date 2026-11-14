@@ -129,16 +129,22 @@ export class Libraries {
     return (this.d.host()?.libraries() ?? []).some((l) => l.name === library);
   }
 
+  /** Why `library` can't be turned on or given a rule, or, with `off`, turned off: read before the OS confirms you. Off also takes one a package that no longer loads left on. */
+  unchangeable(library: string, off = false): string | undefined {
+    return this.registered(library) || (off && this.saved.on.includes(library)) ? undefined : `no loaded package registers the library ${library}`;
+  }
   /** `library.on` and `library.off`: a library ships off; on puts it in search, off takes it out and refuses its fetches. */
   turn(library: string, on: boolean): { library: string; on: boolean } {
-    if (on && !this.registered(library)) throw new LibraryRefused(`no loaded package registers the library ${library}`);
+    const why = this.unchangeable(library, !on);
+    if (why) throw new LibraryRefused(why);
     this.saved.on = on ? [...new Set([...this.saved.on, library])] : this.saved.on.filter((l) => l !== library);
     this.save();
     return { library, on };
   }
   /** `library.rule`: your standing rule for a library, the licenses it may fetch under with no ask; any other is refused. */
   rule(library: string, licenses: string[]): { library: string; licenses: string[] } {
-    if (!this.registered(library)) throw new LibraryRefused(`no loaded package registers the library ${library}`);
+    const why = this.unchangeable(library);
+    if (why) throw new LibraryRefused(why);
     this.saved.rules[library] = [...new Set(licenses)];
     this.save();
     return { library, licenses: this.saved.rules[library]! };

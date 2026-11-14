@@ -2170,7 +2170,6 @@ impl Live {
                     operator_pipelines,
                 });
             }
-            timer.resolve(&mut encoder);
             let cpu_ms = began.elapsed().as_secs_f64() * 1e3;
             deep_gpu::alloc::outside(|| self.device.queue.submit([encoder.finish()]));
             for &s in &drew {
@@ -2222,6 +2221,7 @@ impl Live {
                     self.raised(of, Some(s), vec![("validation".to_string(), e.to_string())]);
                 }
             }
+            timer.resolve_after(&self.device);
             timer.read(&self.device);
             let views_end = self.views.len();
             for ses in &mut self.sessions {

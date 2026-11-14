@@ -20,6 +20,7 @@ pub mod lines;
 pub mod live;
 pub mod module;
 pub mod piece;
+pub mod point;
 pub mod saves;
 pub mod world;
 
@@ -1307,7 +1308,7 @@ mod tests {
                 document: String::new(),
             };
             let entries = track(&piece, &json!({}), 0).expect("a track");
-            let played: Vec<(i64, world::Given)> = entries.iter().map(|e| (e.t, e.value)).collect();
+            let played: Vec<(i64, world::Given)> = entries.iter().map(|e| (e.t, e.value.clone())).collect();
             tx.send(played).ok();
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));

@@ -462,6 +462,45 @@ pub fn mapped(read: &Read, array: &Value, t: i64, last: Option<&Mapped>) -> Opti
     Some(m)
 }
 
+/// #538: a reader's array path, `<logic>.<name>` or `<logic>.<name>[index]`: the array's form
+/// and the element it names (0 without an index); `None` for a malformed index.
+pub fn element_path(path: &str) -> Option<(&str, usize)> {
+    match path.strip_suffix(']').and_then(|p| p.rsplit_once('[')) {
+        Some((form, i)) => Some((form, i.trim().parse().ok()?)),
+        None => Some((path, 0)),
+    }
+}
+
+/// #538: element `index` of the scalar `array` (baked) as a frame at `t` reads it, with the
+/// frame's step; `None` past its count or for a vector array.
+pub fn element_at(array: &Value, index: usize, t: i64) -> Option<(f64, i64)> {
+    let read = Read::of(&Value::Null, array["type"].as_str()?)?;
+    let m = mapped(&read, array, t, None)?;
+    Some((*m.values.get(index)?, m.step))
+}
+
+/// #538: element `index` of the scalar `array` (baked) at step 0, whether or not step 0 wrote it,
+/// then at each later step that wrote it: `(step, value)`, by the baked steps alone.
+pub fn element_steps(array: &Value, index: usize) -> Vec<(i64, f64)> {
+    let mut out = vec![(0, 0.0)];
+    let mut one = [0.0];
+    for s in array["steps"].as_array().into_iter().flatten() {
+        let step = s["step"].as_i64().unwrap_or(0);
+        for run in s["values"].as_array().into_iter().flatten() {
+            let start = run[0].as_u64().unwrap_or(0) as usize;
+            let Some(v) = index.checked_sub(start).and_then(|j| run[1].get(j)) else {
+                continue;
+            };
+            numbers(v, &mut one);
+            match out.last_mut() {
+                Some(last) if last.0 == step => last.1 = one[0],
+                _ => out.push((step, one[0])),
+            }
+        }
+    }
+    out
+}
+
 /// The rows a mapped column hides: those that can't narrow, and for `alive` those whose value is
 /// false.
 pub fn hidden_rows(m: &Mapped, alive: bool) -> Vec<usize> {

@@ -41,7 +41,9 @@ pub fn form(control: &Value) -> (u32, &'static str) {
         && control.get("rows").is_some();
     match control.get("kind").and_then(Value::as_str) {
         _ if rows => (slot(24), "pick"),
-        Some("point") => (slot(248), "point"),
+        // A point's 248 B record and room for a box release's unit keys (`u32 n, u32 truncated`
+        // and up to 256 × 8 B), entries packed end to end.
+        Some("point") => (slot(248 + 8 + 8 * crate::point::MAX_UNITS as u32), "point"),
         Some("actions") => (slot(16), "action"),
         Some("text") => {
             let max = control
@@ -1524,7 +1526,7 @@ mod tests {
             .collect();
         let want = [
             ("place", 8 + 16 * 32, "pick"),
-            ("aim", 8 + 16 * 256, "point"),
+            ("aim", 8 + 16 * (8 + 248 + 8 + 8 * 256), "point"),
             ("moves", 8 + 16 * 24, "action"),
             ("name", 24, "text"),
             ("speed", SLOT, "control"),
