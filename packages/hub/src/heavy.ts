@@ -344,7 +344,8 @@ export class HeavyQueue {
     const h = this.mine(params);
     // The planted wrong program for AC4 releases on the parent's exit, whatever its group still runs.
     if (this.o.plant === 'releases-on-parent-exit') await this.end(h, true);
-    // Told again once the whole group has ended: proven gone, it gives its leases and tokens back before deep lease exits.
+    // Its group gone with it, proven so, it gives its leases and tokens back now; a group that runs on keeps them until
+    // the tick finds it gone.
     else if (h.group !== undefined && !groupAlive(h.group)) await this.end(h);
     return { ok: true };
   }
@@ -413,7 +414,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 /** Runs the command as it is when no hub can lease it, saying so. */
 function unleased(argv: string[], why: string): Promise<number> {
   process.stderr.write(`deep lease: ${why}, so \`${argv.join(' ')}\` runs unleased\n`);
-  return runGroup(argv, {}, () => undefined, () => undefined);
+  return runGroup(argv, {}, () => undefined, async () => undefined);
 }
 /**
  * How the command takes jobs, from the heavy.command@1 entry deep-hook's matcher finds for it here (#1016): `jobserver`
@@ -432,8 +433,13 @@ function jobsFor(argv: string[]): { jobs: Jobs; flag?: string } {
   return { jobs: 'none' };
 }
 
-/** The command in a process group of its own at nice 10; resolves with its status once the whole group has ended. */
-function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number) => void, exited: () => void, ended: () => Promise<unknown> = async () => undefined): Promise<number> {
+/**
+ * The command in a process group of its own at nice 10; resolves with its first process's status once that process has
+ * ended, as the shell would, after `exited` has been told. A child it leaves behind in the group runs on and keeps the
+ * command's leases (the hub's tick ends them once the whole group has gone), but never keeps the caller waiting: a test
+ * runner that crashes mid-suite leaves its pool workers and their tests' children there for hours.
+ */
+function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number) => void, exited: () => Promise<unknown>): Promise<number> {
   return new Promise((resolve) => {
     // A `deep lease` inside a leased command runs under its lease: it takes no slot of its own, so nested leases never wait on each other.
     const child = spawn('/usr/bin/nice', ['-n', '10', ...argv], { stdio: 'inherit', detached: true, env: { ...process.env, ...env, DEEP_LEASED: '1' } });
@@ -443,10 +449,7 @@ function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number)
     if (child.pid) started(child.pid);
     child.on('error', (error) => { process.stderr.write(`deep lease: ${argv[0]}: ${error.message}\n`); resolve(127); });
     child.on('exit', async (code, signal) => {
-      exited();
-      // The leases hold while any process of the group runs; the command's status is its first process's.
-      while (groupAlive(child.pid!)) await sleep(100);
-      await ended();
+      await exited();
       resolve(code ?? 128 + (signal ? ({ SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 } as Record<string, number>)[signal] ?? 1 : 1));
     });
   });
@@ -460,7 +463,7 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
-  if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined, () => undefined);
+  if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined, async () => undefined);
   let token: string;
   try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch { return unleased(argv, 'DeepBuild isn\'t set up here (no hub token)'); }
   const socket = hubAddress().path;
@@ -494,5 +497,5 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
   // A build joins the host's job pool; a runner starts with its share of the pool's free tokens as its worker count.
   const env: NodeJS.ProcessEnv = typeof granted.makeflags === 'string' ? { MAKEFLAGS: granted.makeflags, CARGO_MAKEFLAGS: granted.makeflags } : {};
   const run = flag && typeof granted.workers === 'number' ? [...argv, `${flag}=${granted.workers}`] : argv;
-  return runGroup(run, env, (pid) => { told = tell('lease.started', { pid, pgid: pid, cwd: process.cwd() }); }, () => { void told.then(() => tell('lease.exited')); }, () => told.then(() => tell('lease.exited')));
+  return runGroup(run, env, (pid) => { told = tell('lease.started', { pid, pgid: pid, cwd: process.cwd() }); }, () => told.then(() => tell('lease.exited')));
 }
