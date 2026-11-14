@@ -416,6 +416,7 @@ impl Hub<'_> {
                     dash: [0.0; 2],
                     dash_world: false,
                     cap: Default::default(),
+                    trail: None,
                 }],
                 ..Default::default()
             });

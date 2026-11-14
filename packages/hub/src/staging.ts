@@ -24,6 +24,7 @@ import { gitEnv } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { Holds } from './holds.js';
 import { deepHook } from './paths.js';
+import { sinceView } from './receipts.js';
 import { refusal, Refused, STAGE_HOLD_MS, type Gated, type HookMeta, type Plant, type StageReach } from './wire.js';
 
 /** The ceilings and the set time when config.json says nothing. */
@@ -212,13 +213,15 @@ export class Staging {
   }
 
   /** `deep undo staged:<id>`: each staged folder holds again what the copy holds, until the copy is let go. */
-  async undo(params: Record<string, unknown>): Promise<{ staged: string; folders: string[]; files: string[] }> {
+  async undo(params: Record<string, unknown>, as: Connection): Promise<{ staged: string; folders: string[]; files: string[] }> {
     const handle = params.staged;
     if (typeof handle !== 'string' || !/^staged:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/staged', 'Name the staging by its handle, staged:<id>.', handle));
     const id = handle.slice('staged:'.length);
     const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'command.staged' AND id = ?`, [id])) as { data: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/staged', `No staging ${handle} in the record.`, handle));
     const { folders, files = [], until, command } = JSON.parse(row.data) as { folders: string[]; files?: { path: string; digest: string }[]; until: number; command: string };
+    // Undone from a view (#1577): an undo of it since then stands, and the copy isn't put back over what came after.
+    await sinceView(this.o.raw, params, handle, { sql: `kind = 'staged.undone' AND json_extract(data, '$.staged') = ?`, values: [handle] }, () => 'it was undone already');
     const copy = join(this.dir, id);
     if (this.o.now() >= until || !(await there(copy))) {
       throw new Refused(refusal('not_found', '/params/staged', `The copy ${handle} kept of \`${command}\` was let go at ${new Date(until).toISOString()}, so the run can't be undone.`, handle));
@@ -236,6 +239,9 @@ export class Staging {
       const why = await clone(join(copy, 'files', String(i)), f.path, Infinity);
       if (why) throw new Refused(refusal('unavailable', '/params/staged', `${f.path} couldn't be put back from ${handle}: ${why}`, handle, true));
     }
+    // On the record as it lands, so a view read after it shows the undo (#1577).
+    const ts = this.o.now();
+    await this.o.append(as, { v: 1, id: ulid(ts), kind: 'staged.undone', ts, data: { staged: handle, folders, files: files.map((f) => f.path) } });
     return { staged: handle, folders, files: files.map((f) => f.path) };
   }
 

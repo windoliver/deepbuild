@@ -1655,7 +1655,8 @@ pub fn geometry(
                     answer["domain"] = data::domain_report(item, found, &items).map_err(story)?
                 }
                 Some("axis@1") => {
-                    answer["ticks"] = data::ticks_report(item, found, &items).map_err(story)?
+                    answer["ticks"] = data::ticks_report(item, found, (&items, doc.get("channels")))
+                        .map_err(story)?
                 }
                 _ => {}
             }

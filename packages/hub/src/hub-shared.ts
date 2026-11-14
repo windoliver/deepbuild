@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -10,7 +11,7 @@ import { AskRefused } from '@deepbuild/asks';
 
 import { canonicalize, isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
-import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { type Connection, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 
 import { readJson } from './claude-settings.js';
 import { statKey } from './agent-files.js';
@@ -310,6 +311,28 @@ export function readsLogged(record: RecordStore, file: string): RecordStore {
         return bound(...args);
       };
     },
+  });
+}
+
+/**
+ * The write an append runs inside (#1577): its receipt, until an event carrying it out takes it, the last position it
+ * reached, and what it does as it ends (spending its signature's once-only ID).
+ */
+export interface Write { receipt?: Receipt; effects: readonly string[]; carried: boolean; done: boolean; last: number; after: (() => void)[] }
+export const writing = new AsyncLocalStorage<Write>();
+
+/** The record whose appends inside a write carry its receipt, on the first event that carries the write out. */
+export function receipting(record: RecordStore): RecordStore {
+  return withAppend(record, async (connection, input, given) => {
+    const w = writing.getStore();
+    const live = w && !w.done ? w : undefined;
+    const receipt = given ?? (live?.receipt && !live.carried && live.effects.includes(input.kind) ? live.receipt : undefined);
+    const appended = await record.append(connection, input, receipt);
+    if (live) {
+      if (receipt && !given && !appended.existing) live.carried = true;
+      live.last = Math.max(live.last, appended.log_pos);
+    }
+    return appended;
   });
 }
 

@@ -71,6 +71,11 @@ export interface Event {
   unverified?: true;
 }
 export interface Appended { log_pos: number; existing: boolean }
+/**
+ * A write's receipt (#1577): the device and request ID that sent it, its method and the digest of its params. It
+ * commits in one transaction with the write's event, and the write's outcome joins it once the write is done.
+ */
+export interface Receipt { device: string; request: string; method: string; params: string }
 /** A forward-only migration of one kind's data from one schema version to the next. */
 export interface Migration { kind: string; from: number; to: number; up(data: JsonValue): JsonValue }
 
@@ -93,7 +98,10 @@ export interface TurnView { turn: number | null; stopped: boolean; events: strin
 export interface SessionView { id: string; status: string; readings: string[]; turns: TurnView[] }
 
 export interface RecordStore {
-  append(connection: Connection, event: EventInput): Promise<Appended>;
+  /** `receipt`: the write this event carries out, its receipt committed with the event, once (#1577). */
+  append(connection: Connection, event: EventInput, receipt?: Receipt): Promise<Appended>;
+  /** A write's outcome on its receipt, the receipt kept alone when no event carried it (#1577). */
+  keepReceipt(receipt: Receipt, outcome: JsonValue): Promise<void>;
   /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
   read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
   table(name: string): Promise<Table>;
@@ -219,6 +227,7 @@ CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELE
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS lost_sessions (session TEXT PRIMARY KEY) STRICT;
+CREATE TABLE IF NOT EXISTS receipts (device TEXT NOT NULL, request TEXT NOT NULL, method TEXT NOT NULL, params TEXT NOT NULL, log_pos INTEGER, outcome TEXT, PRIMARY KEY (device, request)) STRICT;
 `;
 
 type Obj = { [key: string]: JsonValue };
@@ -259,6 +268,8 @@ interface Prepared {
   hash: string;
   /** The whole scrubbed text when the event keeps only its first part. */
   whole?: string;
+  /** The write this event carries out: its receipt commits with it. */
+  receipt?: Receipt;
 }
 interface Pending { prepared: Prepared; resolve(appended: Appended): void; reject(error: Error): void }
 type Outcome = { ok: true; appended: Appended; prepared: Prepared; log_pos: number } | { ok: false; error: RecordError; prepared: Prepared };
@@ -500,14 +511,14 @@ class SqliteRecord implements RecordStore {
     return p;
   }
 
-  async append(connection: Connection, input: EventInput): Promise<Appended> {
+  async append(connection: Connection, input: EventInput, receipt?: Receipt): Promise<Appended> {
     if (this.closing) throw new RecordError('closed', 'the record is closed');
     // Counted from here until it is in the log or refused, so a close waits for it.
     this.inFlight++;
     try {
       const key = String(input.id);
       const before = this.byId.get(key);
-      const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input));
+      const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input, receipt));
       this.byId.set(key, run);
       try {
         const appended = await run;
@@ -523,8 +534,9 @@ class SqliteRecord implements RecordStore {
       this.inFlight--;
     }
   }
-  private async appendNow(connection: Connection, input: EventInput): Promise<Appended> {
+  private async appendNow(connection: Connection, input: EventInput, receipt?: Receipt): Promise<Appended> {
     const prepared = this.prepare(connection, input);
+    if (receipt) prepared.receipt = receipt;
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
       // An event the log already holds needs no store: its retry is the same event, or a conflict.
@@ -656,6 +668,8 @@ class SqliteRecord implements RecordStore {
             return { log_pos, refused: this.projector.apply(this.projected(q, log_pos)) };
           };
           const { log_pos, refused } = put(p);
+          // A write's receipt lands with its first event, in this commit, or not at all (#1577).
+          if (p.receipt) this.stmt('INSERT INTO receipts (device, request, method, params, log_pos) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING').run(p.receipt.device, p.receipt.request, p.receipt.method, p.receipt.params, log_pos);
           // A move its lifecycle table doesn't allow is refused and recorded in the same commit; the event stays.
           for (const data of refused) {
             const ts = this.options.now();
@@ -760,6 +774,17 @@ class SqliteRecord implements RecordStore {
     await this.settle();
     try {
       this.full(() => undefined);
+    } catch (error) {
+      throw new RecordError('storage', `the storage refused the write: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async keepReceipt(receipt: Receipt, outcome: JsonValue): Promise<void> {
+    if (this.closing) throw new RecordError('closed', 'the record is closed');
+    await this.settle();
+    const keep = this.stmt('INSERT INTO receipts (device, request, method, params, outcome) VALUES (?, ?, ?, ?, ?) ON CONFLICT (device, request) DO UPDATE SET outcome = excluded.outcome');
+    try {
+      this.backend.commit(this.db, 'normal', () => keep.run(receipt.device, receipt.request, receipt.method, receipt.params, JSON.stringify(outcome)));
     } catch (error) {
       throw new RecordError('storage', `the storage refused the write: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -1,0 +1,14 @@
+Base commit: 9b77cd2cd ("Merge pull request #2438 from windoliver/docs/cross-reference-design-lines-1112")
+Machine: macOS on Apple silicon (Mac17,10), the Metal device (the #226 suite's BASE-FAILURE.txt has the builds).
+Command, once:
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/226-oracle --no-file-parallelism --testTimeout=600000 point-through-three-scales.test.ts
+Type-check: npx tsc -p tests/acceptance/226-oracle/tsconfig.json passes (exit 0, no output).
+
+Result: 1 file, 2 tests, both failed at a named assertion.
+
+point-through-three-scales.test.ts
+  Oracle #226.c218cc0a on linear scales over [−4, 4], the points (2, 3, 1) and (−4, −4, −4)
+    AssertionError: linear axes: the frame's `axes` (README: Assumed surfaces 2) is an array, got undefined
+  Oracle #226.c218cc0a its log twin: on log scales over [1, 1000], the points (10, 1000, 100) and (1, 1, 1)
+    AssertionError: log axes: the frame's `axes` (README: Assumed surfaces 2) is an array, got undefined
+  (view3d drew the frame and answered; it has no `axes` or `world` report)

@@ -1,0 +1,33 @@
+#162 Oracle lane: why each test fails at the base 53c0e72a3 ("Merge pull request #2356"), from a run of each file there.
+
+Run on November 12, 2026, one file at a time, through scripts/lease, with `node node_modules/vitest/vitest.mjs run
+--root tests/acceptance/162-oracle <file> --testTimeout=600000`, CARGO_INCREMENTAL=0 and CARGO_PROFILE_DEV_DEBUG=0, on
+the builds the #162 suite's run made. 5 tests in 4 files; all 5 fail. `tsc -p tests/acceptance/162-oracle/tsconfig.json`
+exits 0.
+
+The base has no Lottie target (every Lottie export answers `{"outcome": "refused", "code": "unknown_target",
+"target": "lottie", "codec": "lottie"}`) and no import plug-in (`packages/jobs/import` doesn't exist). Each test's
+harness checks pass first: the port of the spec's validation gives the upstream verdict on the spec's 20 examples, 9
+valid and 3 invalid files (the merged schema defines layer types 0 to 4 and no repeater or merge path), and the corpus
+holds what AC5 reads (lights.json's expression on `orange`, banner.json's 11 text layers, adrock.json's merge paths).
+
+schema.test.ts (1 failed)
+- AC1: "title.json is exported: {"code":"unknown_target","target":"lottie","codec":"lottie","outcome":"refused",…}:
+  expected 'refused' to be 'exported'".
+
+roundtrip.test.ts (2 failed)
+- AC1, the round trip: "the title is exported: {"code":"unknown_target",…}: expected 'refused' to be 'exported'".
+- AC1, the ease and the spring: "the eased title is exported: {"code":"unknown_target",…}: expected 'refused' to be
+  'exported'".
+
+examples.test.ts (1 failed)
+- AC3: "the import plug-in is at packages/jobs/import (README: the import); it isn't: expected false to be true".
+
+corpus.test.ts (1 failed)
+- AC5: "the import plug-in is at packages/jobs/import (README: the import); it isn't: expected false to be true" (after
+  its harness checks on the vendored files pass).
+
+What the runs didn't reach: the hub was never started (each import test fails before it), so the import's surface was
+not exercised at the base. The suite's readers were checked on the vendored files by hand while it was written:
+banner.json's spatial layer, by arc length and by parameter, is up to 147.8 u apart over its keys, so the planted
+by-parameter reading fails AC5's 0.1 u.

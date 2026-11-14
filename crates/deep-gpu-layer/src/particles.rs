@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use deep_canvas_effects::particles::bake::{self, Inputs};
+use deep_canvas_effects::particles::draws::Ribbon;
 use deep_canvas_effects::particles::eval::{self, Baked};
 use deep_canvas_effects::particles::pack::{self, Tables};
 use deep_canvas_effects::particles::{
@@ -402,20 +403,31 @@ fn outside(scene: &Scene, bx: [[f64; 3]; 2], reach: f64, pad: f64) -> bool {
 
 /// The evaluated-data hash of an item at t (tests/acceptance/449/README.md: view3d's
 /// `particles`): SHA-256 over its rows, a live row as the byte 1 then its CPU f64 position as
-/// three little-endian f64, an empty row as the byte 0; with how many rows are live.
-fn evaluated(b: &Baked, t: f64, now: Option<&[[f64; 3]]>) -> (String, usize) {
+/// three little-endian f64, an empty row as the byte 0; with how many rows are live. A ribbon's
+/// live row holds its ribbon's points in place of its position (tests/acceptance/450/README.md).
+fn evaluated(
+    b: &Baked,
+    t: f64,
+    now: Option<&[[f64; 3]]>,
+    ribbon: Option<&Ribbon>,
+) -> (String, usize) {
     let cpu = eval::columns_on(b, t, now);
     let mut bytes = Vec::with_capacity(cpu.len() * 4);
     let mut live = 0;
-    for row in cpu.chunks(eval::FLOATS) {
+    for (e, row) in cpu.chunks(eval::FLOATS).enumerate() {
         if row[3] < 0.0 {
             bytes.push(0);
-        } else {
-            live += 1;
-            bytes.push(1);
-            for x in &row[..3] {
-                bytes.extend(x.to_le_bytes());
-            }
+            continue;
+        }
+        live += 1;
+        bytes.push(1);
+        let points = match ribbon {
+            Some(r) => closed::draws::ribbon(b, r, e as u32, (t * FLICKS).round() as i64, now)
+                .unwrap_or_default(),
+            None => vec![[row[0], row[1], row[2]]],
+        };
+        for x in points.iter().flatten() {
+            bytes.extend(x.to_le_bytes());
         }
     }
     (crate::frames::hex(&bytes), live)
@@ -469,40 +481,104 @@ pub(crate) fn frame(
             .as_ref()
             .and_then(|h| h.0.surface.as_ref().filter(|_| h.0.spec.follow))
             .map(|sf| sf.now(scene));
+        // #450: a ribbon's rows back along its length, one dispatch a segment end.
+        let ribbon = closed::draws::read(&sp.item, &o.params)
+            .map_err(|r| refusal(&r))?
+            .ribbon;
         if let Some(h) = &held {
             let (b, tables) = &**h;
             if extended {
                 sp.count = b.spec.count;
-                sp.closed = Some((
-                    pack::uniform(b, t, tables, flags),
-                    tables.words.clone(),
-                    flat(now.as_deref()),
-                ));
+                let uniforms = match &ribbon {
+                    Some(r) => pack::ribbon(b, r, t, tables, flags, true),
+                    None => vec![pack::uniform(b, t, tables, flags)],
+                };
+                sp.ribbon = ribbon.map(|r| (r.segments, r.width, r.taper, r.fade));
+                // Its rows draw as a ribbon's quads, never as sprites (particles.wgsl: kind 4).
+                if sp.ribbon.is_some() {
+                    sp.draw = 4;
+                }
+                sp.closed = Some((uniforms, tables.words.clone(), flat(now.as_deref())));
             }
             if cull {
                 let pad = 0.5 * sp.size[0].max(sp.size[1]).max(1.0) * sp.size_px + 2.0;
-                let reach = if sp.draw == 3 {
-                    bounds::speed(b, t) / 30.0
-                } else {
-                    0.0
+                // A streak reaches a 30th of a second ahead, a ribbon its length behind (#450).
+                let reach = match (&ribbon, sp.draw) {
+                    (Some(r), _) => {
+                        bounds::speed(b, t).max(bounds::speed(b, t - r.length)) * r.length
+                    }
+                    (None, 3) => bounds::speed(b, t) / 30.0,
+                    _ => 0.0,
                 };
                 culled = bounds::bounds(b, t).is_none_or(|bx| outside(scene, bx, reach, pad));
             }
             if asked.contains(&sp.item.as_str()) {
-                let (hash, live) = evaluated(b, t, now.as_deref());
+                let (hash, live) = evaluated(b, t, now.as_deref(), ribbon.as_ref());
                 report.insert(
                     sp.item.clone(),
                     json!({"hash": hash, "live": live, "culled": culled}),
                 );
             }
         }
-        if !culled {
+        // A mesh draw's particles draw as its instancer's elements (#450), never as sprites.
+        let mesh = closed::draws::read(&sp.item, &o.params).is_ok_and(|d| d.mesh.is_some());
+        if !culled && !mesh {
             kept.push(sp);
         }
     }
     settings.sparks = kept;
     DRAWN.lock().unwrap_or_else(|e| e.into_inner()).push(t);
     Ok((!asked.is_empty()).then_some(Value::Object(report)))
+}
+
+/// #450: the document with each `draw: mesh` particles item's live particles at `t` (s) as the
+/// columns of an instancer of its prototypes, `<item>_mesh`, in the item's layer and order: its
+/// rows each live particle's slot, place, rotation and scale from the f64 closed form. `None`
+/// when no item draws meshes, so the scene drawn first stands.
+pub(crate) fn meshes(
+    doc: &Value,
+    scene: &Scene,
+    t: f64,
+    planted: Option<Planted>,
+) -> Result<Option<Value>, Value> {
+    let (plants, _, _) = plants(planted);
+    let doc_seed = doc["seed"].as_u64().unwrap_or(0);
+    let mut out: Option<Value> = None;
+    for (id, item) in rule::items(doc) {
+        let Some(m) = closed::draws::read(id, &item["params"])
+            .map_err(|r| refusal(&r))?
+            .mesh
+        else {
+            continue;
+        };
+        let held = baked(
+            doc,
+            scene,
+            id,
+            item_seed(doc_seed, id),
+            plants,
+            &mut Vec::new(),
+        )
+        .map_err(|r| refusal(&r))?;
+        let b = &held.0;
+        let now = b
+            .surface
+            .as_ref()
+            .filter(|_| b.spec.follow)
+            .map(|sf| sf.now(scene));
+        let rows: Vec<(u32, closed::draws::Instance)> = (0..b.spec.count)
+            .filter_map(|e| Some((e, closed::draws::instance(b, &m, e, t, now.as_deref())?)))
+            .collect();
+        let col = |f: &dyn Fn(&closed::draws::Instance) -> Value| {
+            rows.iter().map(|(_, i)| f(i)).collect::<Vec<_>>()
+        };
+        let instancer = json!({"id": format!("{id}_mesh"), "kind": "instance@1", "layer": item["layer"], "order": item["order"],
+            "params": {"of": m.of, "ids": rows.iter().map(|(e, _)| e).collect::<Vec<_>>(), "pos": col(&|i| json!(i.pos)),
+                       "rot": col(&|i| json!(i.rot)), "scale": col(&|i| json!(i.scale)), "proto": col(&|i| json!(i.proto))}});
+        let fed = out.get_or_insert_with(|| doc.clone());
+        fed["items"][format!("{id}_mesh")] = instancer;
+    }
+    Ok(out)
 }
 
 /// The check's refusal of a document's particles before anything draws: `{"code": "refused",

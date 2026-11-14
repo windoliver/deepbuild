@@ -12,6 +12,7 @@ pub mod camera;
 pub mod canon;
 pub mod color;
 pub mod columns;
+pub mod contributed;
 pub mod cost;
 pub mod craft;
 pub mod document;

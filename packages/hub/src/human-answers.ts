@@ -31,6 +31,11 @@ import type { CallContext } from './session-types.js';
 
 import { letters, LATER_BEFORE_MS, signInCommands, type Obj, asRefused } from "./hub-shared.js";
 import type { HumanControlPort } from './human-control-port.js';
+import { about, sinceView } from './receipts.js';
+
+/** The events that close or open an ask itself, as its table names them (ask.machine@1): what an undo from a view can't go past. */
+const ASK_MOVES = ['ask.answered', 'ask.defaulted', 'default.undone', 'ask.cancelled', 'ask.escalated', 'ask.moot', 'ask.superseded'];
+
 export interface HumanAnswersOptions {
  settings: CoreOptions;
  services: {
@@ -130,7 +135,7 @@ export class HumanAnswers {
    * (#85), saves none.
    */
   async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
-    const { ask: handle, device: _device, signature: _signature, revision, ...input } = params;
+    const { ask: handle, device: _device, signature: _signature, revision, request: _request, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.options.services.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = ? AND e.kind = 'ask.created'`, [handle.slice(4)])) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
@@ -278,6 +283,8 @@ export class HumanAnswers {
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
     const [row] = (await this.options.services.record.raw(`SELECT question, status, pinned_to FROM asks WHERE id = ?`, [handle.slice(4)])) as { question: string; status: string; pinned_to: string | null }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
+    // Undone from a view (#1577): what reached the ask after it stands, an answer from another device above all.
+    if (this.options.settings.plant !== 'applies-stale-undo') await sinceView(this.options.services.record.raw, params, handle, about(handle, ASK_MOVES), async (c) => (c.kind === 'ask.answered' ? `it was answered ${String(c.data.answer)} ${(await this.firstAnswer(handle))?.where ?? ''}`.trimEnd() : `${c.kind} reached it`));
     if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.options.services.tasks.lockedOn(handle);
@@ -294,6 +301,7 @@ export class HumanAnswers {
     if (!id) throw new Refused(refusal('pattern', '/params/decision', 'Name the decision as decision:<id>.', params.decision));
     const [row] = (await this.options.services.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
+    await sinceView(this.options.services.record.raw, params, id, about(id, ['decision.overruled', 'decision.revoked']), (c) => (c.kind === 'decision.overruled' ? 'it was overruled already' : 'it was revoked'));
     if (row.state === 'revoked') return { overruled: id };
     await this.options.control().trusted('decision.overrule', params, context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.

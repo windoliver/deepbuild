@@ -41,6 +41,8 @@ pub enum MixCall {
         segments: Vec<(i64, i64, bool)>,
         /// #544: the input track the document's logic items read.
         track: Vec<Value>,
+        /// #507: a document whose session is replayed, its played form in place of `doc`.
+        session: Option<String>,
     },
     Handed {
         panel: String,
@@ -73,7 +75,11 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
     let t = |k: &str| c.get(k)?.as_i64();
     Some(match name {
         "media_mix" => MixCall::Mix {
-            doc: c.get("doc").filter(|d| d.is_object())?.clone(),
+            session: c.get("session").and_then(Value::as_str).map(str::to_string),
+            doc: match c.get("session") {
+                Some(_) => Value::Null,
+                None => c.get("doc").filter(|d| d.is_object())?.clone(),
+            },
             segments: c
                 .get("segments")?
                 .as_array()?
@@ -432,6 +438,8 @@ impl Hub<'_> {
                 duck: None,
             });
         }
+        // #507: the timeline's holds and jumps, which the strips and the ducking follow.
+        let path = crate::present::path_of(d);
         // #502: each ducking entry's law on its target bus, keyed by the narration's speech
         // spans or by spans the document carries.
         let mut ducked: BTreeMap<usize, &String> = BTreeMap::new();
@@ -473,7 +481,7 @@ impl Hub<'_> {
                 (e.get(k).and_then(Value::as_f64).unwrap_or(default) * FLICKS as f64).round() as i64
             };
             buses[b].duck = Some(deep_canvas_media::duck::Duck::new(
-                &spans,
+                &crate::present::clock_spans(&path, &spans),
                 e.get("depth").and_then(Value::as_f64).unwrap_or(-12.0),
                 seconds("attack", 0.2),
                 seconds("hold", 0.3),
@@ -636,6 +644,8 @@ impl Hub<'_> {
             strips.extend(voices);
             extra.insert("voices".into(), Value::Array(report));
         }
+        let strips =
+            crate::present::clocked(strips, &path, &crate::present::playing(d), FLICKS / rate);
         let mix =
             Mix::new(rate, strips, buses).map_err(|b| json!({"code": "bus_cycle", "bus": b}))?;
         Ok((mix, extra))
@@ -647,8 +657,16 @@ impl Hub<'_> {
                 doc,
                 segments,
                 track,
+                session,
             } => {
-                let mut doc = doc.clone();
+                // #507: a session replays its played form, track and present mode inline.
+                let mut doc = match session {
+                    Some(id) => match self.played_form(id) {
+                        Some(form) => form,
+                        None => return refused("no_revision"),
+                    },
+                    None => doc.clone(),
+                };
                 // #525: its recipes' strips, and the track its worlds' inputs and runs read.
                 if let Err(e) = crate::stepped::expand(&mut doc, &self.scenario.packs) {
                     return e;

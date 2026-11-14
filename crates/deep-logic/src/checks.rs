@@ -8,12 +8,14 @@
 //! that differ are named.
 
 use std::collections::BTreeMap;
+use std::f64::consts::FRAC_1_SQRT_2;
 use std::rc::Rc;
 
 use serde_json::{json, Map, Value};
 
 use crate::bake::{self, Player};
 use crate::piece::{h64, Piece, Read};
+use crate::point::Point;
 use crate::world::{track_of, Entry, Given, Record, StepRow, World};
 use crate::Planted;
 
@@ -39,13 +41,20 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
             b.extend(control.as_bytes());
             b.extend(s.to_le_bytes());
             // A value in (0, 1]: a press or a slider's move, never a release to 0; for a pick,
-            // a row of its first set.
+            // a row of its first set; for a point, a press on the ground under a ray from above.
             let h = h64(&b);
             let value = match piece.controls.get(&control) {
                 Some((_, "pick")) => Given::Pick {
                     set: 0,
                     key: [(h & 0xff) as i64, (h >> 8 & 0xff) as i64],
                 },
+                Some((_, "point")) => {
+                    let (x, z) = ((h & 0xff) as f64, (h >> 8 & 0xff) as f64);
+                    let down = [0.0, -FRAC_1_SQRT_2, -FRAC_1_SQRT_2];
+                    let press = json!({"phase": "press", "button": "primary", "ground": [x, 0.0, z],
+                        "ray": {"origin": [x, 10.0, z + 10.0], "dir": down}});
+                    Given::Point(Point::parse(&press).expect("a seeded press is a point"))
+                }
                 _ => Given::Number(((h >> 11) as f64 + 1.0) / (1u64 << 53) as f64),
             };
             let entry = Entry {

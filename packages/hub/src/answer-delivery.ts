@@ -293,8 +293,14 @@ export class AnswerDelivery {
     await this.options.state().attention(session, agent, 'stuck');
   }
 
+  /** What the record holds for delivery after a restart: the promises that still wait, and your notes no turn carried. */
+  async restore(): Promise<void> {
+    await this.restorePromises().catch(() => undefined);
+    await this.restoreNotes().catch(() => undefined);
+  }
+
   /** The promises the record holds that still wait, after a restart: each set one is armed again, each due one waits for its hook. */
-  async restorePromises(): Promise<void> {
+  private async restorePromises(): Promise<void> {
     const rows = (await this.options.services.record.raw(`SELECT session_id AS session, kind, data, ts FROM events WHERE kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked', 'session.end') AND session_id IS NOT NULL ORDER BY log_pos`)) as { session: string; kind: string; data: string | Obj; ts: number }[];
     const handedAt = new Map<string, number>();
     for (const row of rows) {
@@ -314,6 +320,16 @@ export class AnswerDelivery {
       if (p.status === 'set') this.armPromise(session);
       else if (p.status === 'due' && p.handed) this.armPromiseGrace(session, p, WAKE_GRACE - (this.options.services.now() - (handedAt.get(session) ?? this.options.services.now())));
       else if (p.status === 'due') this.options.schedule.askingSoon();
+    }
+  }
+
+  /** Your words the record holds that no turn has carried yet, after a restart: each waits for its session's next route (#1577). */
+  private async restoreNotes(): Promise<void> {
+    const raw = this.options.services.record.raw;
+    const carried = new Set(((await raw(`SELECT json_extract(data, '$.request') AS request FROM events WHERE kind = 'user.ask' AND json_extract(data, '$.from') = 'app'`)) as { request: string | null }[]).map((r) => r.request));
+    for (const { data } of (await raw(`SELECT data FROM events WHERE kind = 'session.note' ORDER BY log_pos`)) as { data: string }[]) {
+      const note = JSON.parse(data) as Note;
+      if (!carried.has(note.request)) this.notes.set(note.session, [...(this.notes.get(note.session) ?? []), note]);
     }
   }
 
@@ -370,21 +386,37 @@ export class AnswerDelivery {
     }
   }
 
+  /**
+   * The notes a prompt's reply carries, once (#340): those its hook recorded; or, while the prompt is set aside for its
+   * transcript entry (#567), those waiting for its session, recorded with that prompt as they would be when it's placed,
+   * so a note the record held across a restart goes with the first prompt after it (#1577).
+   */
+  takeCarried(session: string, held?: Draft[]): Note[] | undefined {
+    if (held && !this.carried.has(session)) this.appNotes(held, session);
+    const notes = this.carried.get(session);
+    this.carried.delete(session);
+    return notes;
+  }
+
   /** The notes as the agent reads them, each labelled as yours, sent from the app, with its request ID. */
   noteText(notes: Note[]): string {
     return `DeepBuild delivers your words, sent from the app:\n${notes.map((n) => `(request ${n.request}) ${n.text}`).join('\n')}`;
   }
 
   /** session.note, from the app: your words into a session, by the route its flags allow, as an answer goes (#25). */
-  note(params: Obj): Obj {
+  async note(params: Obj): Promise<Obj> {
     const { session, text, request } = params;
     if (typeof session !== 'string' || !session) throw refuse('type', '/params/session', 'Name the session by its ID, as its hooks carry it.', session);
     if (typeof text !== 'string' || !text.trim() || text.length > 8192) throw refuse('type', '/params/text', 'Send the note\'s words as a string of 1 to 8192 characters.', text);
     if (typeof request !== 'string' || !/^[0-9A-Za-z_-]{1,64}$/.test(request)) throw refuse('type', '/params/request', 'Give the delivery\'s request ID: 1 to 64 letters, digits, - or _.', request);
     if (!this.options.state().live.has(session)) throw refuse('not_found', '/params/session', `No session ${session} has reached the hub; send the note to one deep status lists.`, session);
-    // A request ID applies once: a retried send changes nothing.
-    const known = [...(this.notes.get(session) ?? []), ...this.handedNotes.values()].some((n) => n.request === request);
-    if (!known) {
+    // A request ID applies once: a retried send changes nothing, after delivery too, as the record keeps every note (#1577).
+    const known = await this.options.services.record.raw(`SELECT 1 FROM events WHERE kind = 'session.note' AND json_extract(data, '$.request') = ? LIMIT 1`, [request]);
+    if (!known.length) {
+      // Your words are in the record before the hub says it has them, and a write that fails refuses the send.
+      const ts = this.options.services.now();
+      await this.options.events.append(this.options.events.connection('app'), { v: 1, id: ulid(ts), kind: 'session.note', ts, data: { session, text: scrubText(text, { held: this.options.settings.held }), request } })
+        .catch((error: unknown) => { throw refuse('unavailable', '/params/text', `Your words weren't saved, so they weren't sent: ${error instanceof Error ? error.message : String(error)}. Send them again.`, request, true); });
       this.notes.set(session, [...(this.notes.get(session) ?? []), { session, text, request }]);
       // Your words, sent while a turn runs or between turns: the next green turn end starts a loop's held checks (#965).
       if (this.options.settings.plant !== 'words-only-at-turn-start') this.options.state().live.get(session)!.words = 'words';

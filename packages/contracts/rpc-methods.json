@@ -569,6 +569,15 @@
     "called_by": "deep workspace drift"
   },
   {
+    "method": "workspace.task",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#1347",
+    "preview_since": "R2",
+    "decide_by": "R5",
+    "called_by": "deep workspace task"
+  },
+  {
     "method": "project.views",
     "since": "R2",
     "stability": "preview",

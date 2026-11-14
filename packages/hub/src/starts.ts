@@ -219,6 +219,8 @@ export class Starts {
       `Each in its own worktree from the default branch; commands reach ${hosts.length ? hosts.join(', ') : 'no host'} beside the agent's own API. ${agents.map(held).join('. ')}.`,
       // A work run (#1332) lands what it works: each session's push and PR are part of what you approve.
       ...(params.lands === true ? ['Each session pushes its own branch and opens a pull request for its issue, which lands only on its own PASS.'] : []),
+      // A workspace's run (#1347) has no forge: each task's change finishes on the workspace's own main.
+      ...(params.lands === 'workspace' ? ["Each task's change finishes on the workspace's own main, only on its own PASS; no forge is read or written."] : []),
     ].join(' ');
     const ask = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'start.approve', {
       kind: 'authority', question: question.slice(0, 2000),
@@ -544,7 +546,9 @@ export class Starts {
     const git = (...args: string[]) => exec('git', ['-C', repo, ...args]).then((o) => o.trim());
     const head = await git('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD').catch(() => '');
     let ref = head;
-    for (const candidate of ['refs/remotes/origin/main', 'refs/remotes/origin/master']) {
+    // A workspace has no forge and no remote (#1347): its own main is the default branch.
+    const remote = await git('remote').catch(() => '');
+    for (const candidate of remote ? ['refs/remotes/origin/main', 'refs/remotes/origin/master'] : ['refs/heads/main']) {
       if (ref) break;
       if (await git('rev-parse', '--verify', '--quiet', candidate).then(() => true, () => false)) ref = candidate;
     }

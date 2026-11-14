@@ -43,6 +43,7 @@ mod media;
 mod mixdown;
 mod modes;
 mod narration;
+mod net;
 mod packs;
 mod physics;
 mod picks;
@@ -50,6 +51,8 @@ mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod played;
+mod points;
+mod present;
 mod print;
 mod probe;
 mod query;
@@ -417,6 +420,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(g) = gate::parse_call(name, c) {
         return Some(Call::Gate(Box::new(g)));
     }
+    if let Some(p) = present::parse_call(name, c) {
+        return Some(Call::Present(p));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -473,6 +479,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 panel: c.get("panel")?.as_str()?.to_string(),
                 event: input::event(c.get("event")?)?,
                 t: optional(c.get("event")?.get("t"), Value::as_i64)?,
+                gesture: points::gesture(c.get("event")?),
             })
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
@@ -607,6 +614,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "spatial" => return spatial::parse(c).map(|s| Call::Spatial(Box::new(s))),
         "logic" => return picks::parse(c).map(|l| Call::Logic(Box::new(l))),
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
+        "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
+        "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
+        "match" => return points::parse_match(c).map(|(doc, steps)| Call::Match { doc, steps }),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -712,6 +722,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
                 paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
+                texts: flag("texts")?,
             })));
         }
         "frames" => {
@@ -1201,6 +1212,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                     .map(|o| o.get("label")?.as_str().map(str::to_string))
                     .collect::<Option<_>>()?,
                 slot,
+                deadline: c.get("deadline").and_then(Value::as_i64),
             })
         }
     };
@@ -1248,7 +1260,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
                 // #1967's wrong programs live in the cells module's playback and conversion.
                 || deep_canvas_cells::recording::PLANTED.contains(p)
+                || deep_canvas_export::lottie::PLANTED.contains(p)
                 || deep_canvas_input::rows::PLANTED.contains(p)
+                // #540's in the input module's point control and scene3d's pointer math.
+                || deep_canvas_input::point::PLANTED.contains(p)
+                || deep_canvas_scene3d::pointer::PLANTED.contains(p)
                 // #538's in the cells, text and motion modules.
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
                 || deep_canvas_marks::copy::PLANTED.contains(p)
@@ -2024,8 +2040,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_media::module::module()
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
-        out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
         out.extend(physics::module());
+        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
+        out.push(net::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -3124,6 +3142,8 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #162: this binary's copy as the Lottie export's reference reader.
+        "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}
     }
     let stdout = io::stdout();

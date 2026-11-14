@@ -142,12 +142,13 @@ impl Hub<'_> {
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
     fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
-        self.inline_worlds(form)?;
+        self.inline_worlds(form, track)?;
         let Some(piece) = self.logic_piece(form)? else {
             return Ok(());
         };
         let entries: Vec<Entry> = track
             .iter()
+            .filter(|e| e.get("present").is_none())
             .map(Entry::parse)
             .collect::<Option<_>>()
             .ok_or_else(|| refused(json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"})))?;

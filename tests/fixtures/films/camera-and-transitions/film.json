@@ -1,0 +1,542 @@
+{
+  "format": 1,
+  "id": "camera-and-transitions",
+  "profile": "film",
+  "title": "Camera and transitions",
+  "description": "Three panels side by side: a push on the title card, a cross-fade to a pan across a bar chart, and a wipe to a pull back from a ring.",
+  "size": [
+    1280,
+    720
+  ],
+  "camera": "cam",
+  "look": {
+    "asset": "clean@1",
+    "theme": "light"
+  },
+  "budget": {
+    "class": "showpiece"
+  },
+  "transport": {
+    "span": "10s",
+    "frame_rate": [
+      30,
+      1
+    ],
+    "sample_rate": 48000,
+    "reduced_motion": "slow"
+  },
+  "requires": {
+    "modules": {
+      "marks2d": "^1",
+      "motion": "^1",
+      "media": "^1"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a00",
+      "params": {
+        "projection": "orthographic",
+        "target": [
+          640,
+          360,
+          0
+        ],
+        "view_width": 1280
+      }
+    },
+    "card-1": {
+      "id": "card-1",
+      "kind": "rect@1",
+      "name": "Card one",
+      "order": "a01",
+      "params": {
+        "box": [
+          80,
+          80,
+          1120,
+          560
+        ],
+        "paint": {
+          "fill": {
+            "role": "raised"
+          }
+        }
+      }
+    },
+    "title": {
+      "id": "title",
+      "kind": "text@1",
+      "name": "Title",
+      "order": "a02",
+      "params": {
+        "text": "Camera and transitions",
+        "font": "body",
+        "size": 64,
+        "box": {
+          "w": 900,
+          "h": 90
+        },
+        "align": "center"
+      },
+      "at": {
+        "pos": [
+          190,
+          130,
+          0
+        ]
+      }
+    },
+    "block-1": {
+      "id": "block-1",
+      "kind": "rect@1",
+      "name": "Block one",
+      "order": "a03",
+      "params": {
+        "box": [
+          260,
+          320,
+          220,
+          220
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "block-2": {
+      "id": "block-2",
+      "kind": "rect@1",
+      "name": "Block two",
+      "order": "a04",
+      "params": {
+        "box": [
+          530,
+          320,
+          220,
+          220
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "block-3": {
+      "id": "block-3",
+      "kind": "rect@1",
+      "name": "Block three",
+      "order": "a05",
+      "params": {
+        "box": [
+          800,
+          320,
+          220,
+          220
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    },
+    "card-2": {
+      "id": "card-2",
+      "kind": "rect@1",
+      "name": "Card two",
+      "order": "a10",
+      "params": {
+        "box": [
+          1680,
+          80,
+          1120,
+          560
+        ],
+        "paint": {
+          "fill": {
+            "role": "raised"
+          }
+        }
+      }
+    },
+    "bar-1": {
+      "id": "bar-1",
+      "kind": "rect@1",
+      "name": "Bar 1",
+      "order": "a20",
+      "params": {
+        "box": [
+          1800,
+          420,
+          110,
+          180
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "bar-2": {
+      "id": "bar-2",
+      "kind": "rect@1",
+      "name": "Bar 2",
+      "order": "a21",
+      "params": {
+        "box": [
+          1950,
+          300,
+          110,
+          300
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "bar-3": {
+      "id": "bar-3",
+      "kind": "rect@1",
+      "name": "Bar 3",
+      "order": "a22",
+      "params": {
+        "box": [
+          2100,
+          360,
+          110,
+          240
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    },
+    "bar-4": {
+      "id": "bar-4",
+      "kind": "rect@1",
+      "name": "Bar 4",
+      "order": "a23",
+      "params": {
+        "box": [
+          2250,
+          200,
+          110,
+          400
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "bar-5": {
+      "id": "bar-5",
+      "kind": "rect@1",
+      "name": "Bar 5",
+      "order": "a24",
+      "params": {
+        "box": [
+          2400,
+          270,
+          110,
+          330
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "bar-6": {
+      "id": "bar-6",
+      "kind": "rect@1",
+      "name": "Bar 6",
+      "order": "a25",
+      "params": {
+        "box": [
+          2550,
+          140,
+          110,
+          460
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    },
+    "card-3": {
+      "id": "card-3",
+      "kind": "rect@1",
+      "name": "Card three",
+      "order": "a30",
+      "params": {
+        "box": [
+          3280,
+          80,
+          1120,
+          560
+        ],
+        "paint": {
+          "fill": {
+            "role": "raised"
+          }
+        }
+      }
+    },
+    "dot-1": {
+      "id": "dot-1",
+      "kind": "rect@1",
+      "name": "Dot 1",
+      "order": "a40",
+      "params": {
+        "box": [
+          3990,
+          310,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "dot-2": {
+      "id": "dot-2",
+      "kind": "rect@1",
+      "name": "Dot 2",
+      "order": "a41",
+      "params": {
+        "box": [
+          3931.42,
+          451.42,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    },
+    "dot-3": {
+      "id": "dot-3",
+      "kind": "rect@1",
+      "name": "Dot 3",
+      "order": "a42",
+      "params": {
+        "box": [
+          3790,
+          510,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "dot-4": {
+      "id": "dot-4",
+      "kind": "rect@1",
+      "name": "Dot 4",
+      "order": "a43",
+      "params": {
+        "box": [
+          3648.58,
+          451.42,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    },
+    "dot-5": {
+      "id": "dot-5",
+      "kind": "rect@1",
+      "name": "Dot 5",
+      "order": "a44",
+      "params": {
+        "box": [
+          3590,
+          310,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "dot-6": {
+      "id": "dot-6",
+      "kind": "rect@1",
+      "name": "Dot 6",
+      "order": "a45",
+      "params": {
+        "box": [
+          3648.58,
+          168.58,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    },
+    "dot-7": {
+      "id": "dot-7",
+      "kind": "rect@1",
+      "name": "Dot 7",
+      "order": "a46",
+      "params": {
+        "box": [
+          3790,
+          110,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "dot-8": {
+      "id": "dot-8",
+      "kind": "rect@1",
+      "name": "Dot 8",
+      "order": "a47",
+      "params": {
+        "box": [
+          3931.42,
+          168.58,
+          100,
+          100
+        ],
+        "paint": {
+          "fill": {
+            "role": "focus"
+          }
+        }
+      }
+    }
+  },
+  "shots": {
+    "push": {
+      "start": "0s",
+      "end": "4s",
+      "camera": "cam",
+      "move": "push",
+      "by": 0.04,
+      "target": [
+        640,
+        360,
+        0
+      ],
+      "view_width": 1280
+    },
+    "pan": {
+      "start": "4s",
+      "end": "7.5s",
+      "camera": "cam",
+      "move": "pan",
+      "by": 0.15,
+      "target": [
+        2336,
+        360,
+        0
+      ],
+      "view_width": 1280
+    },
+    "pull": {
+      "start": "7.5s",
+      "end": "10s",
+      "camera": "cam",
+      "move": "pull",
+      "target": [
+        3840,
+        360,
+        0
+      ],
+      "view_width": 1280
+    }
+  },
+  "transitions": {
+    "fade": {
+      "from": "push",
+      "to": "pan",
+      "kind": "cross_fade",
+      "span": "1s",
+      "progress": "linear"
+    },
+    "wipe": {
+      "from": "pan",
+      "to": "pull",
+      "kind": "wipe",
+      "span": "1s",
+      "progress": "linear"
+    }
+  },
+  "assets": {
+    "clean": {
+      "sha256": "0871a696920e76b6aed4753972137c9805e4f503844d154c883457a928954002",
+      "license": {
+        "id": "Apache-2.0",
+        "terms": "Apache License 2.0.",
+        "shareable": true,
+        "credit": "A look bundled with DeepBuild."
+      }
+    },
+    "chime": {
+      "sha256": "826b9a81a3d4e94d73368ac19a2561c0be3dec2861d049a6b6f223ad26c08002",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "Public domain dedication.",
+        "shareable": true,
+        "credit": "Made for the #239 fixture films."
+      }
+    }
+  },
+  "strips": {
+    "sound": {
+      "track": 1,
+      "src": "826b9a81a3d4e94d73368ac19a2561c0be3dec2861d049a6b6f223ad26c08002",
+      "start": 0,
+      "in": 0,
+      "out": "4s",
+      "rate": 1,
+      "loop": true
+    }
+  }
+}

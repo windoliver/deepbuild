@@ -68,6 +68,7 @@ import { refuse, Refused, refusal, type CoreOptions } from './wire.js';
 import { reported } from './setup-steps.js';
 import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
+import { Writes } from './receipts.js';
 
 import { type Obj } from "./hub-shared.js";
 
@@ -145,7 +146,14 @@ export class HubControl {
   /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
   private draining = false;
 
-  async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
+  /** Every app or CLI write with an effect runs once per request ID, and its reply names its log position (#1577). */
+  private readonly writes = new Writes({ record: () => this.options.services.record, plant: () => this.options.settings.plant });
+
+  dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
+    return this.writes.run(method, params, context, () => this.route(method, params, context));
+  }
+
+  private async route(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health':
       case 'health': return this.health();
@@ -189,7 +197,7 @@ export class HubControl {
       case 'ask.undo': return this.human.undo(params, context);
       case 'ask.take_over': return this.human.takeOver(params, context);
       case 'offer.save': return this.options.delivery().saveOffered(params, context);
-      case 'staged.undo': return this.options.services.staging.undo(params);
+      case 'staged.undo': return this.options.services.staging.undo(params, this.options.events.connection(context.role === 'app' ? 'app' : 'cli'));
       case 'agents.propose': await this.options.kernel.ready; return this.options.services.agents.propose(params);
       case 'agents.read': return this.options.services.agents.read();
       case 'box.say': await this.options.kernel.ready; return this.options.services.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
@@ -306,7 +314,8 @@ export class HubControl {
       case 'work.fix': return await this.work.workspaceCall(() => this.work.fixItem(String(params.id ?? ''), typeof params.cwd === 'string' ? params.cwd : homedir()));
       case 'workspace.new': return await this.work.workspaceCall(() => this.options.services.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
       case 'workspace.move': return await this.work.workspaceCall(() => this.options.services.spaces.move(String(params.id), String(params.folder)));
-      case 'workspace.revert': return await this.work.workspaceCall(() => this.options.services.spaces.revert(String(params.id), String(params.commit)));
+      case 'workspace.revert': return await this.work.workspaceCall(() => (params.commit === undefined ? this.options.services.spaces.back(String(params.id)) : this.options.services.spaces.revert(String(params.id), String(params.commit))));
+      case 'workspace.task': return await this.work.workspaceCall(() => this.options.services.spaces.task(String(params.id), params));
       case 'workspace.diff': return await this.work.workspaceCall(() => this.options.services.spaces.diff(String(params.id)));
       case 'workspace.drift': return await this.work.workspaceCall(() => this.options.services.spaces.drift(String(params.id)));
       case 'project.views': return { views: this.options.services.extensions!.projectViews() };

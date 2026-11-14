@@ -1,0 +1,7 @@
+{
+  "about": "The pinned looping playback test of the upstream engine that #507's Oracle page links to criterion 5, by its commit and the SHA-256 of its bytes. The lane finds it by that hash in the vendored folder for the commit (a folder under vendor/ whose name ends with -<short>), in $DEEP_ORACLES or ../deep-oracles/doneright/oracles; no name or path of it is written here.",
+  "commit": "396c9f059903aed5fec78ecd3d437a40c6415368",
+  "short": "396c9f0599",
+  "sha256": "67f85901edc781946b60d044904d202106b2976b34c3e248c6264524e80f9242",
+  "bytes": 39323
+}

@@ -6,15 +6,16 @@
 use deep_canvas::canon::sha256_hex;
 use serde_json::{json, Value};
 
-use crate::backend::{Canonical, FIELDS};
+use crate::backend::{Canonical, JointState, FIELDS};
 
 /// A u64 hash as 16 hex: the first 8 bytes of the SHA-256 of `bytes`.
 fn h64(bytes: &[u8]) -> String {
     sha256_hex(bytes)[..16].to_string()
 }
 
-/// The step hash of a state: each body's ID, then its pose and velocity, by bits.
-pub fn step_hash(state: &[Canonical]) -> String {
+/// The step hash of a state: each body's ID, then its pose and velocity, by bits; then each
+/// joint's ID, its whole turns and its steps past `breaks_at` (#523: Joint).
+pub fn step_hash(state: &[Canonical], joints: &[JointState]) -> String {
     let mut bytes = Vec::new();
     for b in state {
         bytes.extend_from_slice(&(b.id.len() as u64).to_le_bytes());
@@ -22,6 +23,12 @@ pub fn step_hash(state: &[Canonical]) -> String {
         for v in b.values {
             bytes.extend_from_slice(&v.to_bits().to_le_bytes());
         }
+    }
+    for j in joints {
+        bytes.extend_from_slice(&(j.id.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(j.id.as_bytes());
+        bytes.extend_from_slice(&j.turns.to_le_bytes());
+        bytes.extend_from_slice(&j.past.to_le_bytes());
     }
     h64(&bytes)
 }

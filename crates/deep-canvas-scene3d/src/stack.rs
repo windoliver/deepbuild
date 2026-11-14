@@ -57,6 +57,8 @@ pub struct Run {
     pub rotate: usize,
     /// The build's outline sources an `extrude` reads (#443).
     pub outlines: Vec<deep_canvas::registry::SealedOutline>,
+    /// The deforms modules fill in the core's `modifier@1` (#226).
+    pub fills: Vec<deep_canvas::contributed::Sealed>,
     /// A monotonic clock in milliseconds that times each step into its row (#2017): the
     /// `geometry` call's `timings` hand one in; no check runs with one.
     pub clock: Option<fn() -> f64>,
@@ -405,6 +407,7 @@ pub fn apply(
         // A line's stroke modifiers (but `build`) are no builder's.
         let (class, gpu, timed) = kind_row(&kind)
             .filter(|_| kind == "mod.build@1" || !STROKE.contains(&kind.as_str()))
+            .or_else(|| crate::contributed::row(&kind))
             .ok_or_else(|| at("kind"))?;
         let on = enabled(modifier);
         rows.push(Row {
@@ -623,6 +626,9 @@ pub fn apply(
                     .ok_or_else(|| at("params/axis"))?;
                 let a = rad(num("rate", 90.0)? * t);
                 deform(&m, &only, |p, _| rotate(p, axis, a), |n| rotate(n, axis, a))
+            }
+            name if crate::contributed::named(name) => {
+                crate::contributed::mesh(&m, &only, modifier, (doc, id, k), run)?
             }
             _ => return Err(at("kind")),
         };

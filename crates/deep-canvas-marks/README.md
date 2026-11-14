@@ -6,7 +6,7 @@ R1's and R2's 2D marks on the CPU (issues #391, #374, #375): a writer layer's dr
 
 ## Where new code goes
 
-- Draw-list building goes in `src/scene.rs`; path geometry in `src/path.rs`; stars, polygons and arcs in `src/outline.rs`; gradients and adjustments in `src/paint.rs`.
+- Draw-list building goes in `src/scene.rs`; where an item draws (its scale, position and turn about z) in `src/place.rs`; path geometry in `src/path.rs`; stars, polygons and arcs in `src/outline.rs`; gradients and adjustments in `src/paint.rs`.
 - Looks and the status guard go in `src/look.rs`; a shipped look is data in `looks/`.
 - Mark sets, scales and axes go in `src/data.rs`; auto layout in `src/layout.rs`; content keys in `src/key.rs`; dirty classes in `src/dirty.rs`; the module manifests in `src/modules.rs`; the module check in `src/check.rs`.
 - Tests sit in a `#[cfg(test)]` module at the end of each file; acceptance tests are in `tests/acceptance/<issue>`.

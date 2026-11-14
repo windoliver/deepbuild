@@ -106,6 +106,28 @@ pub fn tables(b: &Baked) -> Tables {
     out
 }
 
+/// #450: a ribbon's uniform blocks at t, one a segment end j = 0 to segments: the particle
+/// evaluated j × length ÷ segments back along its age, written j × count rows on (`placed`), or
+/// at row 0 as a capture reads them one at a time.
+pub fn ribbon(
+    b: &Baked,
+    r: &super::draws::Ribbon,
+    t: f64,
+    tables: &Tables,
+    flags: u32,
+    placed: bool,
+) -> Vec<Vec<u32>> {
+    (0..=r.segments)
+        .map(|j| {
+            let mut u = uniform(b, t, tables, flags);
+            let step = (r.length * 705_600_000.0 / f64::from(r.segments)).floor();
+            u[29 * 4] = f(f64::from(j) * step / 705_600_000.0);
+            u[29 * 4 + 1] = if placed { j * b.spec.count } else { 0 };
+            u
+        })
+        .collect()
+}
+
 /// One frame's uniform block at t, `SLOTS × 4` words, with the tables' offsets.
 pub fn uniform(b: &Baked, t: f64, tables: &Tables, flags: u32) -> Vec<u32> {
     let s = &b.spec;

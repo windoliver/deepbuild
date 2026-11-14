@@ -162,15 +162,6 @@ export class Landing {
   private async fetch(checkout: string, branches: string[]): Promise<void> {
     await must(checkout, ['fetch', '-q', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main', ...branches.map((b) => `+refs/heads/${b}:refs/remotes/origin/${b}`)], authEnv(await this.o.token()));
   }
-  /** The merge of `head` into `main` as one commit, or the files that conflict. */
-  private async merge(checkout: string, main: string, head: string): Promise<{ commit: string; tree: string } | { files: string[] }> {
-    const r = await git(checkout, ['merge-tree', '--write-tree', '--name-only', '--no-messages', main, head]);
-    const [tree, ...files] = r.out.split('\n').filter(Boolean);
-    if (r.code === 1) return { files };
-    if (r.code !== 0 || !tree || !SHA.test(tree)) throw Error(`git merge-tree: ${r.err || r.out}`);
-    const commit = await must(checkout, ['commit-tree', tree, '-p', main, '-p', head, '-m', `DeepBuild: ${head} merged with main ${main}`], FIXED);
-    return { commit, tree };
-  }
 
   /**
    * `deep land judge`: each open pull request that links an issue, judged on its merge with the default branch's
@@ -207,7 +198,7 @@ export class Landing {
   }
   /** One change judged on its merge with `main`, or sent back with the files that conflict. */
   private async judgeOne(s: State, checkout: string, c: Change, head: string, main: string): Promise<Judged | { files: string[] }> {
-    const merged = await this.merge(checkout, main, head);
+    const merged = await mergeOf(checkout, main, head);
     if ('files' in merged) {
       await this.step('sent_back', s.repo, c, { head, main, files: merged.files });
       await this.o.sendBack({ checkout, issue: c.issue, pr: c.pr, files: merged.files, text: `DeepBuild: pull request #${c.pr} no longer merges with main (${main.slice(0, 12)}): ${merged.files.join(', ')} conflict. Merge main into ${c.branch}, resolve them and push.` });
@@ -278,7 +269,7 @@ export class Landing {
       const stale = c.judged!.head !== head || c.judged!.main !== main;
       let judged: Judged | { files: string[] } = stale && this.o.plant !== 'lands-unjudged-commit' ? await this.judgeOne(s, checkout, c, head, main) : c.judged!;
       if (stale && this.o.plant === 'lands-unjudged-commit') {
-        const m = await this.merge(checkout, main, head);
+        const m = await mergeOf(checkout, main, head);
         if (!('files' in m)) judged = { ...c.judged!, ...m, head, main };
       }
       this.save(s);
@@ -371,6 +362,15 @@ export class Landing {
   }
 }
 
+/** The merge of `head` into `main` as one commit, the same two sides giving the same commit, or the files that conflict. */
+export async function mergeOf(checkout: string, main: string, head: string): Promise<{ commit: string; tree: string } | { files: string[] }> {
+  const r = await git(checkout, ['merge-tree', '--write-tree', '--name-only', '--no-messages', main, head]);
+  const [tree, ...files] = r.out.split('\n').filter(Boolean);
+  if (r.code === 1) return { files };
+  if (r.code !== 0 || !tree || !SHA.test(tree)) throw Error(`git merge-tree: ${r.err || r.out}`);
+  const commit = await must(checkout, ['commit-tree', tree, '-p', main, '-p', head, '-m', `DeepBuild: ${head} merged with main ${main}`], FIXED);
+  return { commit, tree };
+}
 /** Whether a verdict's only open requirements are ones the scheduled budget window alone settles. */
 export function onlyWindow(j: Pick<Judged, 'outcome' | 'requirements'>): boolean {
   const open = j.requirements.filter((q) => q.outcome !== 'PASS');

@@ -63,6 +63,9 @@ pub struct Output {
     pub to: Option<String>,
     /// `interpolate: hold`: a frame between two steps shows the earlier; else it lerps.
     pub hold: bool,
+    /// #523: the levels whose crossings its reading writes (`crossing {t, output, level,
+    /// direction}`); a joint's reading only.
+    pub crossings: Vec<f64>,
 }
 
 /// A kinematic solve (Kinematic solve): in kinematic mode, each step sets each driven joint's
@@ -73,6 +76,28 @@ pub struct Solve {
     pub drivers: Vec<(String, String)>,
     pub iterations: u32,
     pub tolerance: f64,
+}
+
+/// #523: what couples a gear's or a pulley's joint (Joint: `ratio`, `of`, `pulley`), which the
+/// kinematic solve runs: a gear's second hinge's coordinate is `ratio` × its first's; a pulley's
+/// two lengths, each from its ground point to its body's anchor, keep `a + ratio × b` at their sum
+/// at build, its first within `length_min` and `length_max`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Coupling {
+    /// 1 when absent.
+    pub ratio: f64,
+    /// A gear's two hinges, the driving one first.
+    pub of: Vec<String>,
+    pub pulley: Option<Pulley>,
+}
+
+/// A pulley's ground points and the range its first length keeps (Joint: `pulley`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pulley {
+    pub ground_a: [f64; 3],
+    pub ground_b: [f64; 3],
+    pub length_min: Option<f64>,
+    pub length_max: Option<f64>,
 }
 
 /// A physics output's fields.
@@ -87,6 +112,7 @@ const OUTPUT_KEYS: &[&str] = &[
     "keep",
     "expr",
     "unit",
+    "crossings",
 ];
 
 impl Reader {
@@ -125,6 +151,74 @@ impl Reader {
             );
         }
         follow
+    }
+
+    /// #523: a joint's `ratio`, `of` and `pulley`; a gear needs its two hinges and a pulley its
+    /// ground points.
+    pub(super) fn coupling(
+        &mut self,
+        j: &Map<String, Value>,
+        p: &str,
+        kind: JointKind,
+    ) -> Coupling {
+        let of = match j.get("of") {
+            None => Vec::new(),
+            Some(v) => {
+                let ids = v.as_array().and_then(|a| {
+                    a.iter()
+                        .map(|x| x.as_str().map(String::from))
+                        .collect::<Option<Vec<_>>>()
+                });
+                ids.unwrap_or_else(|| {
+                    let what = format!("{p}/of must be a list of joint IDs");
+                    self.refuse("out_of_range", join(p, "of"), v, what);
+                    Vec::new()
+                })
+            }
+        };
+        if kind == JointKind::Gear && of.len() != 2 {
+            let at = j.get("of").unwrap_or(&Value::Null);
+            let what = format!("gear {p} needs of: its two hinges");
+            self.refuse("physics.missing_field", join(p, "of"), at, what);
+        }
+        let pulley = j.get("pulley").map(|v| {
+            let pp = join(p, "pulley");
+            let keys = ["ground_a", "ground_b", "length_min", "length_max"];
+            let m = &self.obj(v, &pp, &keys);
+            Pulley {
+                ground_a: self.vec3(m, "ground_a", &pp, [0.0; 3]),
+                ground_b: self.vec3(m, "ground_b", &pp, [0.0; 3]),
+                length_min: self.opt_num(m, "length_min", &pp, 0.0),
+                length_max: self.opt_num(m, "length_max", &pp, 0.0),
+            }
+        });
+        if kind == JointKind::Pulley && pulley.is_none() {
+            let what = format!("pulley {p} needs pulley: its ground points");
+            self.refuse(
+                "physics.missing_field",
+                join(p, "pulley"),
+                &Value::Null,
+                what,
+            );
+        }
+        Coupling {
+            ratio: self.num(j, "ratio", p, 1.0, f64::MIN, f64::MAX),
+            of,
+            pulley,
+        }
+    }
+
+    /// #523: each gear's `of` names two hinges of this world.
+    pub(super) fn gears(&mut self, joints: &BTreeMap<String, Joint>) {
+        for (id, j) in joints.iter().filter(|(_, j)| j.kind == JointKind::Gear) {
+            for (i, h) in j.coupling.of.iter().enumerate() {
+                if joints.get(h).map(|x| x.kind) != Some(JointKind::Hinge) {
+                    let what = format!("{h} is not a hinge of this world, which gear {id} joins");
+                    let at = Value::String(h.clone());
+                    self.refuse("ref_unresolved", format!("joints/{id}/of/{i}"), &at, what);
+                }
+            }
+        }
     }
 
     /// A joint's `breaks_at {force, torque, over_steps = 1}`, which names a force or a torque.
@@ -287,6 +381,7 @@ impl Reader {
                 read,
                 to,
                 hold,
+                crossings: Vec::new(),
             });
         }
         let found = from.as_str().filter(|id| {
@@ -306,11 +401,30 @@ impl Reader {
             );
             return None;
         };
+        let mut crossings = Vec::new();
+        if let Some(v) = o.get("crossings") {
+            let path = join(p, "crossings");
+            match v
+                .as_array()
+                .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
+            {
+                Some(Some(levels)) if read.of_joint() => crossings = levels,
+                Some(Some(_)) => {
+                    let what = format!("{p} reads {name}; crossings watch a joint's reading, joint_coordinate or joint_force");
+                    self.refuse("out_of_range", path, v, what);
+                }
+                _ => {
+                    let what = format!("{path} must be a list of levels");
+                    self.refuse("out_of_range", path, v, what);
+                }
+            }
+        }
         Some(Output {
             from: id.into(),
             read,
             to,
             hold,
+            crossings,
         })
     }
 }

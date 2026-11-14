@@ -253,6 +253,7 @@ mod tests {
             dash: [0.0; 2],
             dash_world: false,
             cap,
+            trail: None,
         };
         let (p, q) = (|x: f64| [x, 0.0, 0.0], |x: f64| [x, 1.0, 0.0]);
         let pairs = line(vec![seg(p(0.0), p(1.0)), seg(q(0.0), q(1.0))], Cap::Butt);

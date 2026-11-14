@@ -508,6 +508,7 @@ impl<'a> Hub<'a> {
                     at_times: at_times.clone(),
                     compare: crate::determinism::Compare::SameMachine,
                     session: false,
+                    track: None,
                 };
                 let compared = self.determinism(&d);
                 if compared["code"] == "gpu_unavailable" {

@@ -11,14 +11,47 @@ use crate::roles::{self, Row};
 pub const BACKEND_CAP: &str = "physics.backend_cap";
 
 /// The codes this module adds to the check catalog: each with its meaning and fix.
-pub const CODES: [(&str, &str, &str); 6] = [
+pub const CODES: [(&str, &str, &str); 7] = [
     (BACKEND_CAP, "The backend this build pins can't run the field as written; the issue names the field and the backend.", "Set the field to what the backend runs (most often 0), or use a construct the backend has."),
     ("physics.unsupported", "The field is in physics.world@1 but this backend interface doesn't run it yet; the issue names the issue that brings it.", "Remove the field until that issue lands."),
     ("physics.missing_field", "A required world field is missing.", "Add the field."),
     ("physics.role", "A shape use's role can't expand: it also names explicit groups, the role isn't in the table, or its owner isn't a shot's or isn't a body.", "Give the shape a role or explicit member and collides, not both; a shot's owner names the body that fired it."),
     ("physics.no_group", "A shape is a member of no collision group, so physics.pairs can't place it in the matrix.", "Name at least one group in the shape's member, or give it a role."),
     (SCALED, "A body is bound to an item, or built per element of an instancer, whose world transform scales it; a body's shapes carry sizes in metres and its pose has no scale.", "Size the shape in metres instead (double a box's half extents rather than scale its item) and draw the item at scale 1."),
+    (MASS_RATIO, "A joint's two dynamic bodies' masses, declared or density × volume, differ by more than 10:1, so the chain jitters or blows apart.", "Bring the two masses within 10:1: declare the lighter body's mass, or raise its density."),
 ];
+
+/// #523: the code of a joint whose two dynamic bodies' masses differ by more than 10:1.
+pub const MASS_RATIO: &str = "physics.mass_ratio";
+
+/// The most two jointed dynamic bodies' masses may differ by (#523).
+pub const MOST_MASS_RATIO: f64 = 10.0;
+
+/// #523: each joint of `w` whose two dynamic bodies' masses, as `mass` gives each (declared, or
+/// density × volume), differ by more than 10:1, naming the joint, both bodies and the ratio.
+pub fn mass_ratios(
+    w: &World,
+    mass: impl Fn(&str) -> Option<f64>,
+) -> Vec<(String, String, String, f64)> {
+    let dynamic = |e: &crate::doc::End| {
+        let id = e.body.as_ref()?;
+        (w.bodies.get(id)?.kind == crate::doc::BodyKind::Dynamic).then(|| id.clone())
+    };
+    let mut out = Vec::new();
+    for (id, j) in &w.joints {
+        let (Some(a), Some(b)) = (dynamic(&j.a), dynamic(&j.b)) else {
+            continue;
+        };
+        let (Some(ma), Some(mb)) = (mass(&a), mass(&b)) else {
+            continue;
+        };
+        let ratio = ma.max(mb) / ma.min(mb);
+        if ma > 0.0 && mb > 0.0 && ratio > MOST_MASS_RATIO {
+            out.push((id.clone(), a, b, ratio));
+        }
+    }
+    out
+}
 
 /// The code of a body whose item or element is drawn scaled (#1921).
 pub const SCALED: &str = "physics.scaled";
@@ -164,14 +197,12 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                     "has no {k} joint in dynamic mode (joint {id}); it runs only in kinematic mode"
                 ),
             ));
-        } else if kinematic {
+        } else if kinematic && matches!(k, "rack" | "path") {
             out.push(Refusal {
                 code: "physics.unsupported",
                 path: format!("joints/{id}/kind"),
                 actual: j["kind"].clone(),
-                what: format!(
-                    "a {k} joint isn't run by this backend interface yet; #523 brings it"
-                ),
+                what: format!("a {k} joint isn't run by this backend interface yet"),
             });
         }
     }
