@@ -6,6 +6,7 @@ use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
 use serde_json::{json, Map, Value};
 
+use crate::audit;
 use crate::check;
 use crate::fx::Named;
 use crate::graph::{self, Class, Kind, Origin};
@@ -736,6 +737,17 @@ fn register(r: &mut Registrar) {
     }
     r.fixture("shadowed-box", shadowed_box(), None)
         .sidecar(json!({"codes": [], "covers": {"kinds": ["light.sun@1"], "fields": ["light.sun@1/params/shadow"]}}));
+    // #1940: effects.audit is the effects module's, so the loop module depends only on scene3d
+    // and look; it reads nothing yet (#2485), so its fixture raises its unread error.
+    r.check(audit::KIND, "same", &[audit::UNREAD], audit::issues).check_report(audit::report);
+    r.code(
+        audit::UNREAD,
+        "effects.audit couldn't read an effect's peak count, bounds, overdraw or GPU time.",
+        "Nothing in the document fixes it: the check's readings land with #2485.",
+        false,
+    );
+    r.fixture("audit-unread", box_figure("An effects audit with nothing read", "figure", json!({})), None)
+        .sidecar(json!({"checks": [{"kind": audit::KIND}], "oracles": ["analytic"], "codes": [audit::UNREAD]}));
 }
 
 /// A figure of one box, its camera and `extra` items, in budget class `class`.

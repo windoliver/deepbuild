@@ -241,6 +241,8 @@ test-rules-shared = ["dep:deep-canvas-test-modules"]
 test-rules-isolated = ["dep:deep-canvas-test-modules"]
 test-registries-load = ["dep:deep-canvas-test-modules"]
 test-leave-out-effects = []
+# Issue #1940: a planted loop module that registers effects.audit itself and so requires effects.
+test-effects-audit-in-loop = []
 # Issue #499: a build without the media module; the test module that probes an asset through the
 # decode worker, and its planted twin that calls through media; the planted media@1 whose reverb
 # checkpoint leaves out its tail.
