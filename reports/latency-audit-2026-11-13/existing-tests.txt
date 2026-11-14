@@ -1,0 +1,211 @@
+# The existing test files that exercise what changed, each run once on the change, one file at a time.
+# node scripts/throttle.mjs test --wait 45 -- scripts/lease node node_modules/vitest/vitest.mjs run packages/cli/test/cli.test.ts packages/cli/test/engines.test.ts packages/hub/test/hub-down.test.ts packages/hub/test/status-rows.test.ts packages/hub/test/onboarding.test.ts tests/acceptance/1338/generation.test.ts tests/acceptance/1338/port.test.ts tests/acceptance/1338/proof.test.ts tests/acceptance/1463/inbox.test.ts tests/acceptance/19/authority/authority.test.ts --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+ RUN  v5.0.5 <repo>
+
+ ✓ packages/hub/test/onboarding.test.ts > deep doctor in a home nobody set up > names deep setup as the fix for the hub, not deep hub start, which starts a hub no hook reaches 221ms
+ × packages/hub/test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds 1791ms
+   → Its hooks and status line forwarder are in <tmp>/deep-test/h/.claude/settings.json, beside yours; its MCP server in <tmp>/deep-test/h/.claude.json; its skill at <tmp>/deep-test/h/.claude/skills/deepbuild; its safety rules at <tmp>/deep-test/h/.deepbuild/rules.json.
+Wiki: rules.md
+Wiki: setup.md
+Wiki: you.md
+DeepBuild's hooks are in Claude Code's settings, and it read their history into the wiki with your own agent, on your plan; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks, and the hub starts at login.
+: expected [ …(2) ] to have a length of 1 but got 2
+ ✓ packages/hub/test/onboarding.test.ts > deep status with no session yet > says how a session comes to be listed, beside the count 1ms
+ ✓ packages/hub/test/onboarding.test.ts > deep status with no session yet > says nothing more once a session is listed 0ms
+ ✓ packages/hub/test/onboarding.test.ts > the Node that files outliving this run name > is Homebrew's opt link, which the next upgrade keeps, when that link runs the same Node 1ms
+ ✓ packages/hub/test/onboarding.test.ts > the Node that files outliving this run name > stays the Node running when the opt link names another version, or there is none 1ms
+ ✓ packages/hub/test/onboarding.test.ts > the Node that files outliving this run name > is the path as it is for a Node outside a Cellar 0ms
+ ✓ packages/hub/test/onboarding.test.ts > the hub's login service on macOS > never starts a job another home's plist loaded under the same label, and names that plist 813ms
+ ✓ packages/hub/test/onboarding.test.ts > the hub's login service on macOS > starts its own job again when that job is the one loaded 15404ms
+ ✓ packages/hub/test/onboarding.test.ts > the hub's login service on macOS > gives the hub its own HOME, so a hub launchd starts reads and writes only its own home 15237ms
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > never starts a unit another home's file loaded under the same name, and names that file
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > starts its own unit again when that unit is the one loaded
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > gives the hub its own HOME, so a hub systemd starts reads and writes only its own home
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > starts through the real user manager from a home whose units it doesn't read
+ ✓ packages/hub/test/onboarding.test.ts > setup on a machine without what it needs > says to install Rust when cargo is missing, never a bare ENOENT 1ms
+ ✓ packages/hub/test/onboarding.test.ts > setup on a machine without what it needs > keeps a failed build's own message when cargo ran 0ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > shows help without claiming that a hub is running 221ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > opens its help with a one-line banner, plain text with no escape when stdout is not a terminal 95ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > shows the same help for deep help as for --help 156ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > shows the same help for deep -h as for --help 172ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > prints its checkout version 70ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > refuses commands that have not been implemented, with the usage exit code 94ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > deep env up --root <dev hub> --json in a fresh home sets nothing up there 119ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > deep env up --root, with no folder in a fresh home sets nothing up there 104ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > deep env up --root --json, a flag where the folder goes in a fresh home sets nothing up there 98ms
+ ✓ packages/cli/test/cli.test.ts > deep checkout command > deep run follow in a home where no hub ever ran says so on one line, with no stack trace 138ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep status --help in a fresh home prints its usage and leaves the home byte-identical 84ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep inbox -h in a fresh home prints its usage and leaves the home byte-identical 113ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep memory help in a fresh home prints its usage and leaves the home byte-identical 88ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep start --help names every flag the command says it takes 198ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep rules --help names every flag the command says it takes 227ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep session --help names every flag the command says it takes 191ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep show --help names every flag the command says it takes 206ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep read --help names every flag the command says it takes 246ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep find --help names every flag the command says it takes 288ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep hub --help names every flag the command says it takes 207ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep backup --help with a hub running writes no folder and calls no hub 112ms
+ ✓ packages/cli/test/cli.test.ts > deep <command> --help > deep backup -h with a hub running writes no folder and calls no hub 97ms
+ ✓ packages/cli/test/cli.test.ts > an unknown command > names the command a typo meant, on one stderr line 105ms
+stderr | packages/cli/test/cli.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  96313 (node)
+
+ ✓ packages/cli/test/cli.test.ts > an unknown command > names deep --help and no command when nothing is within reach 91ms
+ × packages/cli/test/cli.test.ts > deep on a Node older than its engines field > names the Node it needs and the one it found, and exits 2 before anything runs 2ms
+   → BLOCKED: no Node older than 24.22.0 on this machine to run the CLI with
+ ✓ packages/hub/test/status-rows.test.ts > a session more in a worktree the record holds adds no read to deep status, and every row says what its own read says 319ms
+stdout | tests/acceptance/1463/inbox.test.ts > #1463.8ad45787 > #1463.8ad45787: an ask that defaults to No at 16:40 today reads "If you don't answer: No, at 16:40" in deep inbox, and its --json row holds default and default_at
+deep inbox:
+Keep the changelog as a list or as prose?  choice  docs  c0024732-48ef-4de4-bcc1-9865693c142b  0s  If you don't answer: A list, tomorrow at 12:10  ask:01M7CCHJG0FBMAJ0AP31M74YKW
+Ship the cart page today?  choice  shop  36a544df-a2c4-4844-acde-6599c2a54373  0s  If you don't answer: No, at 16:40  ask:01M7CCHJG0N4C1QE7AFA9A7S8A
+Which header colour on the login page?  taste  shop  36a544df-a2c4-4844-acde-6599c2a54373  0s  If you don't answer: Blue header, on Mon 16 Nov at 12:10  ask:01M7CCHJG0QE5H148F0TE553XG
+3 asks need you
+
+
+ ✓ tests/acceptance/1463/inbox.test.ts > #1463.8ad45787 > #1463.8ad45787: an ask that defaults to No at 16:40 today reads "If you don't answer: No, at 16:40" in deep inbox, and its --json row holds default and default_at 6193ms
+ ✓ tests/acceptance/1463/inbox.test.ts > #1463.8ad45787 > #1463.8ad45787: a planted line with no default fails, naming the ask 69ms
+ ✓ tests/acceptance/1463/inbox.test.ts > #1463.91324b7e > #1463.91324b7e: deep inbox prints each question before its handle 66ms
+ ✓ tests/acceptance/1463/inbox.test.ts > #1463.91324b7e > #1463.91324b7e: deep inbox answer <handle> still works 623ms
+stdout | tests/acceptance/1463/inbox.test.ts > #1463.dacb7e33 > #1463.dacb7e33: deep inbox undo says when the ask now defaults as a clock time in your time zone
+deep inbox undo:
+ask:01M7CCHJG0R0D0NVVYXJW7JFXW is open again, its default undone; it now takes its default at 12:21
+
+
+stdout | tests/acceptance/1463/inbox.test.ts > #1463.dacb7e33 > #1463.dacb7e33: deep inbox undo says when the ask now defaults as a clock time in your time zone
+the ask now defaults at 2026-11-14T06:51:03.338Z, 12:21 in Asia/Kolkata
+
+stderr | tests/acceptance/1463/inbox.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  98199 (node)
+  98227 (node)
+
+ ✓ tests/acceptance/1463/inbox.test.ts > #1463.dacb7e33 > #1463.dacb7e33: deep inbox undo says when the ask now defaults as a clock time in your time zone 186ms
+ ✓ tests/acceptance/1338/generation.test.ts > AC3 #1338.33efbf60 a client that has seen generation 3 refuses a hub at generation 2, naming both > AC3 #1338.33efbf60 the CLI and deep-hook, having seen generation 3, refuse the hub left behind at generation 2, naming 3 and 2 5717ms
+ ✓ packages/cli/test/engines.test.ts > deep --version orders no strings by locale, so no command loads collation data to start 41ms
+ ✓ packages/cli/test/engines.test.ts > the versions tried fall on both sides of the Node the CLI needs 5ms
+ ✓ packages/cli/test/engines.test.ts > on Node 0.0.1 deep runs, or names the Node it needs and exits 2, as the numbers order them 43ms
+ ✓ packages/cli/test/engines.test.ts > on Node 9.0.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 43ms
+ ✓ packages/cli/test/engines.test.ts > on Node 23.99.99 deep runs, or names the Node it needs and exits 2, as the numbers order them 40ms
+ ✓ packages/cli/test/engines.test.ts > on Node 24.9.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 43ms
+ ✓ packages/cli/test/engines.test.ts > on Node 24.21.9 deep runs, or names the Node it needs and exits 2, as the numbers order them 40ms
+ ✓ packages/cli/test/engines.test.ts > on Node 24.22.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 43ms
+ ✓ packages/cli/test/engines.test.ts > on Node 24.22.0-nightly20261111abcdef0123 deep runs, or names the Node it needs and exits 2, as the numbers order them 34ms
+ ✓ packages/cli/test/engines.test.ts > on Node 24.22.1 deep runs, or names the Node it needs and exits 2, as the numbers order them 45ms
+ ✓ packages/cli/test/engines.test.ts > on Node 24.100.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 45ms
+ ✓ packages/cli/test/engines.test.ts > on Node 25.0.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 42ms
+ ✓ packages/cli/test/engines.test.ts > on Node 25.0.0-pre deep runs, or names the Node it needs and exits 2, as the numbers order them 60ms
+stderr | packages/cli/test/engines.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  99043 (node)
+  99059 (node)
+
+ ✓ packages/cli/test/engines.test.ts > on Node 100.0.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 44ms
+ ✓ packages/cli/test/engines.test.ts > on Node 999.0.0 deep runs, or names the Node it needs and exits 2, as the numbers order them 46ms
+ ✓ tests/acceptance/1338/port.test.ts > AC4 #1338.b9228a01 a hub with no members opens no port; a planted hub that does fails, naming the port > AC4 #1338.b9228a01 a hub told where to listen opens no port with no members, and opens one once a person is invited 6116ms
+ ✓ tests/acceptance/1338/port.test.ts > AC4 #1338.b9228a01 a hub with no members opens no port; a planted hub that does fails, naming the port > AC4 #1338.b9228a01 (wrong program) a hub that listens with no members (DEEP_HUB_PLANT=listen-without-members) fails, naming the port 4524ms
+ ✓ tests/acceptance/19/authority/authority.test.ts > AC21 #19.0694d419 double-forked `deep off`, `deep hub stop` and `deep setup --undo`, the prompt cancelled, leave the next hook reply gated, the hub running and setup's files in place, each exiting 3 and saying why; a confirmed one `deep off` makes the next reply watch-only within a second, and a cancelled `deep on` after it leaves it watch-only 16490ms
+ ✓ tests/acceptance/19/authority/authority.test.ts > AC22 #19.a4f7c68a double-forked `deep hub use --root <dev hub folder>`, the prompt cancelled, leaves the worktree's next session on the installed hub and says why; confirmed, the next session reaches the dev hub 7293ms
+ × tests/acceptance/1338/proof.test.ts > AC5 #1338.4e201b52 a credential copied to a machine without its key is refused, naming the proof > AC5 #1338.4e201b52 bob's credential copied to carol's machine, without bob's key, is refused there, naming the proof 3868ms
+   → bob's read lists maya's session f8235555: exit 0; stdout: Working:
+shop
+  Claude Code  claude-code  working · at work, 0s
+1 session
+0 asks need you; stderr: : expected 'Working:\nshop\n  Claude Code  claude…' to contain 'f8235555'
+stderr | packages/hub/test/hub-down.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  5971 (node)
+
+ ✓ packages/hub/test/hub-down.test.ts > deep hub status with no hub exits 3 naming the socket, well inside the 2 s it would wait for an answer 79ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/onboarding.test.ts [ packages/hub/test/onboarding.test.ts ]
+Error: ENOTEMPTY, Directory not empty: '<tmp>/deep-test'
+ ❯ packages/hub/test/onboarding.test.ts:20:27
+     18|   // Only the hubs this file's launcher started, by PID.
+     19|   for (const pid of started) try { process.kill(pid); } catch { /* gon…
+     20|   for (const dir of made) rmSync(dir, { recursive: true, force: true }…
+       |                           ^
+     21| });
+     22| /** A home with nothing of DeepBuild, and an environment that reaches …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { errno: 66, code: 'ENOTEMPTY', path: '<tmp>/deep-test', syscall: 'rm' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/cli/test/cli.test.ts > deep on a Node older than its engines field > names the Node it needs and the one it found, and exits 2 before anything runs
+Error: BLOCKED: no Node older than 24.22.0 on this machine to run the CLI with
+ ❯ packages/cli/test/cli.test.ts:191:23
+    189|   });
+    190|   it('names the Node it needs and the one it found, and exits 2 before…
+    191|     if (!older) throw Error('BLOCKED: no Node older than 24.22.0 on th…
+       |                       ^
+    192|     const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-nod…
+    193|     try {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  packages/hub/test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds
+AssertionError: Its hooks and status line forwarder are in <tmp>/deep-test/h/.claude/settings.json, beside yours; its MCP server in <tmp>/deep-test/h/.claude.json; its skill at <tmp>/deep-test/h/.claude/skills/deepbuild; its safety rules at <tmp>/deep-test/h/.deepbuild/rules.json.
+Wiki: rules.md
+Wiki: setup.md
+Wiki: you.md
+DeepBuild's hooks are in Claude Code's settings, and it read their history into the wiki with your own agent, on your plan; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks, and the hub starts at login.
+: expected [ …(2) ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ packages/hub/test/onboarding.test.ts:65:31
+     63|     expect(ran.status, ran.stderr).toBe(0);
+     64|     const lines = ran.stdout.split('\n').filter((l) => l && !l.startsW…
+     65|     expect(lines, ran.stdout).toHaveLength(1);
+       |                               ^
+     66|     expect(lines[0]).toMatch(/deep setup --undo/);
+     67|   }, 150_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1338/proof.test.ts > AC5 #1338.4e201b52 a credential copied to a machine without its key is refused, naming the proof > AC5 #1338.4e201b52 bob's credential copied to carol's machine, without bob's key, is refused there, naming the proof
+AssertionError: bob's read lists maya's session f8235555: exit 0; stdout: Working:
+shop
+  Claude Code  claude-code  working · at work, 0s
+1 session
+0 asks need you; stderr: : expected 'Working:\nshop\n  Claude Code  claude…' to contain 'f8235555'
+
+- Expected
++ Received
+
+- f8235555
++ Working:
++ shop
++   Claude Code  claude-code  working · at work, 0s
++ 1 session
++ 0 asks need you
++
+
+ ❯ tests/acceptance/1338/proof.test.ts:22:84
+     20|     const own = await readOn(bob);
+     21|     expect(own.code, `bob's machine reads the project: ${shown(own)}`)…
+     22|     expect(own.stdout, `bob's read lists maya's session ${prefix}: ${s…
+       |                                                                                    ^
+     23|
+     24|     copyWithoutKeys(bob, carol);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 7 passed (10)
+      Tests  3 failed | 62 passed | 4 skipped (69)
+   Start at  14:25:49
+   Duration  95.10s (tests 97%, transform 2%, import 1%)
+
+vitest exit 1
