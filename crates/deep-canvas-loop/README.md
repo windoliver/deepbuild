@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The loop canvas module's check kinds (issue #453 lands the first, `geometry.shading`): on every `mesh.asset@1` a document holds, its positions welded, then its flipped, degenerate, non-manifold, inconsistent and boundary defects counted per face or edge, its signed volume, and its quad ratio, which a mesh that deforms must keep; then (issue #1935) each UV set's charts, flipped triangles, overlap, area outside the unit square, fill, smallest gap and texel density, and the mesh's hidden faces, unused vertices and islands. A primitive it can't read raises `BLOCKED` naming it. It never repairs or remeshes anything. deep-show registers the module in its full build set.
+The loop canvas module's check kinds (issue #453 lands the first, `geometry.shading`): on every `mesh.asset@1` a document holds, its positions welded, then its flipped, degenerate, non-manifold, inconsistent and boundary defects counted per face or edge, its signed volume, and its quad ratio, which a mesh that deforms must keep; then (issue #1935) each UV set's charts, flipped triangles, overlap, area outside the unit square, fill, smallest gap and texel density, and the mesh's hidden faces, unused vertices and islands. A primitive it can't read raises `BLOCKED` naming it, and so does a UV set asked at a `resolution` over 4,096 px, never read on a coarser raster. It never repairs or remeshes anything. deep-show registers the module in its full build set.
 
 ## Where new code goes
 

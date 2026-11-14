@@ -9,9 +9,11 @@ use deep_canvas::ops::sqrt;
 
 pub type V2 = [f64; 2];
 
-/// The largest raster side, pixels; a larger `resolution` is read on this raster, its pixel
-/// readings still in its own pixels.
-const RASTER_MAX: f64 = 4096.0;
+/// The largest raster side, pixels. A larger `resolution` is BLOCKED, never read coarser.
+pub const RASTER_MAX: f64 = 4096.0;
+
+/// A row distance meaning no covered pixel in the row: past any raster's side.
+const FAR: u32 = u16::MAX as u32;
 
 /// One triangle of a UV set: its index across the read primitives, its corners' UVs, its
 /// corners' welded vertices and its surface area, m².
@@ -213,6 +215,99 @@ fn cover(t: [V2; 3], win: [usize; 4], out: &mut Vec<usize>) {
     }
 }
 
+/// Each pixel of the raster window `win`, how many charts cover its centre, and whether each
+/// chart shares a pixel with another. With `boxes`, the planted reading, each chart's bounding
+/// box stands for its triangles.
+fn coverage(
+    px: &[[V2; 3]],
+    members: &[Vec<usize>],
+    win: [usize; 4],
+    boxes: bool,
+) -> (Vec<u8>, Vec<bool>) {
+    let (w, h) = (win[1].saturating_sub(win[0]), win[3].saturating_sub(win[2]));
+    let mut count = vec![0u8; w * h];
+    // The last chart, plus one, that counted each pixel: a chart counts a pixel once.
+    let mut stamp = vec![0u32; w * h];
+    let mut over = vec![false; members.len()];
+    let mut cells = Vec::new();
+    for (c, fs) in members.iter().enumerate() {
+        cells.clear();
+        if boxes {
+            let (mut l, mut u) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+            for p in fs.iter().flat_map(|&i| px[i]) {
+                for k in 0..2 {
+                    l[k] = l[k].min(p[k]);
+                    u[k] = u[k].max(p[k]);
+                }
+            }
+            cover([l, [u[0], l[1]], u], win, &mut cells);
+            cover([l, u, [l[0], u[1]]], win, &mut cells);
+        } else {
+            for &i in fs {
+                cover(px[i], win, &mut cells);
+            }
+        }
+        let mark = c as u32 + 1;
+        for &p in &cells {
+            if stamp[p] == mark {
+                continue;
+            }
+            if count[p] == 1 {
+                over[(stamp[p] - 1) as usize] = true;
+            }
+            if count[p] > 0 {
+                over[c] = true;
+            }
+            stamp[p] = mark;
+            count[p] = count[p].saturating_add(1);
+        }
+    }
+    (count, over)
+}
+
+/// How many of a raster column's pixels lie within `r2` (squared) of a covered pixel's centre,
+/// given each row's squared distance `f` to its nearest covered pixel: the lower envelope of
+/// the parabolas `f[q] + (y − q)²`, so the cost doesn't grow with the padding.
+fn within(f: &[f64], r2: f64, v: &mut Vec<usize>, z: &mut Vec<f64>) -> usize {
+    v.clear();
+    z.clear();
+    for (q, &fq) in f.iter().enumerate() {
+        if !fq.is_finite() {
+            continue;
+        }
+        let qf = q as f64;
+        // Drop each parabola the new one is under from where it starts; `s` is where the new one
+        // starts. The first never drops: it starts at −∞.
+        let mut s = f64::NEG_INFINITY;
+        while let Some(&p) = v.last() {
+            let pf = p as f64;
+            s = ((fq + qf * qf) - (f[p] + pf * pf)) / (2.0 * (qf - pf));
+            if s > z[z.len() - 1] {
+                break;
+            }
+            v.pop();
+            z.pop();
+        }
+        z.push(s);
+        v.push(q);
+    }
+    let (mut j, mut n) = (0, 0);
+    for y in 0..f.len() {
+        if v.is_empty() {
+            break;
+        }
+        let yf = y as f64;
+        while j + 1 < v.len() && z[j + 1] < yf {
+            j += 1;
+        }
+        let d = yf - v[j] as f64;
+        if d * d + f[v[j]] <= r2 {
+            n += 1;
+        }
+    }
+    n
+}
+
 /// The smallest distance between two segments (0 where they cross or touch).
 fn segment_gap(a: [V2; 2], b: [V2; 2]) -> f64 {
     let orient = |p: V2, q: V2, r: V2| cross(sub(q, p), sub(r, p));
@@ -285,8 +380,9 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
     r.out_of_unit = if total > 0.0 { outside / total } else { 0.0 };
     r.outside = (0..n).filter(|c| out_by[*c]).collect();
 
-    // The raster: the unit square at the resolution (capped), over the window the set covers
-    // widened by the padding. Each pixel counts the charts whose triangles cover its centre.
+    // The raster: the unit square at the resolution, over the window the set covers widened by
+    // the padding. Each pixel counts the charts whose triangles cover its centre. The caller
+    // blocks a resolution past RASTER_MAX; the clamp only bounds the memory.
     let side = o.resolution.clamp(1.0, RASTER_MAX).round();
     let pad = o.padding.max(0.0) * side / o.resolution.max(1.0);
     let px: Vec<[V2; 3]> = faces
@@ -309,61 +405,28 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
         edge((hi[1] + grow).ceil()),
     ];
     let (w, h) = (win[1].saturating_sub(win[0]), win[3].saturating_sub(win[2]));
-    let mut count = vec![0u8; w * h];
-    // The last chart, plus one, that counted each pixel: a chart counts a pixel once.
-    let mut stamp = vec![0u32; w * h];
-    let mut over = vec![false; n];
     let mut members: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (i, &c) in chart.iter().enumerate() {
         members[c].push(i);
     }
-    let mut cells = Vec::new();
-    for (c, fs) in members.iter().enumerate() {
-        cells.clear();
-        if o.boxes {
-            // The planted reading: the chart's bounding box stands for the chart.
-            let (mut l, mut u) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
-            for p in fs.iter().flat_map(|&i| px[i]) {
-                for k in 0..2 {
-                    l[k] = l[k].min(p[k]);
-                    u[k] = u[k].max(p[k]);
-                }
-            }
-            cover([l, [u[0], l[1]], u], win, &mut cells);
-            cover([l, u, [l[0], u[1]]], win, &mut cells);
-        } else {
-            for &i in fs {
-                cover(px[i], win, &mut cells);
-            }
-        }
-        let mark = c as u32 + 1;
-        for &p in &cells {
-            if stamp[p] == mark {
-                continue;
-            }
-            if count[p] == 1 {
-                over[(stamp[p] - 1) as usize] = true;
-            }
-            if count[p] > 0 {
-                over[c] = true;
-            }
-            stamp[p] = mark;
-            count[p] = count[p].saturating_add(1);
-        }
-    }
-    let covered = count.iter().filter(|&&k| k > 0).count();
+    let (count, over) = coverage(&px, &members, win, false);
     let multi = count.iter().filter(|&&k| k > 1).count();
+    // The planted reading takes `uv_overlap`, and only it, from the charts' bounding boxes.
+    let planted = o.boxes.then(|| coverage(&px, &members, win, true));
+    let (oc, oo) = planted.as_ref().map_or((&count, &over), |(c, v)| (c, v));
+    let covered = oc.iter().filter(|&&k| k > 0).count();
+    let shared = oc.iter().filter(|&&k| k > 1).count();
     r.overlap = if covered > 0 {
-        multi as f64 / covered as f64
+        shared as f64 / covered as f64
     } else {
         0.0
     };
-    r.overlapping = (0..n).filter(|c| over[*c]).collect();
+    r.overlapping = (0..n).filter(|c| oo[*c]).collect();
 
     // The fill: covered pixels dilated by the padding, a pixel filled when a covered pixel's
-    // centre lies within it, over the whole square.
-    let reach = pad.floor() as usize;
-    let mut near = vec![u32::from(u16::MAX); w * h];
+    // centre lies within it, over the whole square. `near` is each pixel's distance along its
+    // row to the nearest covered pixel.
+    let mut near = vec![FAR; w * h];
     for y in 0..h {
         let row = &count[y * w..(y + 1) * w];
         let mut last: Option<usize> = None;
@@ -386,21 +449,23 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
         }
     }
     let mut filled = 0usize;
-    for y in 0..h {
-        for x in 0..w {
-            let hit = count[y * w + x] > 0
-                || (y.saturating_sub(reach)..(y + reach + 1).min(h)).any(|yy| {
-                    let (dx, dy) = (near[yy * w + x] as f64, yy.abs_diff(y) as f64);
-                    dx * dx + dy * dy <= pad * pad
-                });
-            if hit {
-                filled += 1;
-            }
+    let (mut f, mut v, mut z) = (vec![0.0; h], Vec::new(), Vec::new());
+    for x in 0..w {
+        for (y, fy) in f.iter_mut().enumerate() {
+            let d = near[y * w + x];
+            *fy = if d == FAR {
+                f64::INFINITY
+            } else {
+                f64::from(d) * f64::from(d)
+            };
         }
+        filled += within(&f, pad * pad, &mut v, &mut z);
     }
     r.fill = filled as f64 / (side * side);
 
     // The smallest gap: 0 where two charts share a pixel, else between their boundary edges.
+    // With a `min_gap_px` the edges are swept even beside an overlap, so every chart closer
+    // than it is named.
     let mut edges: BTreeMap<(Corner, Corner), (usize, usize, [V2; 2])> = BTreeMap::new();
     for (i, f) in faces.iter().enumerate() {
         for k in 0..3 {
@@ -425,10 +490,11 @@ pub fn read(faces: &[Face], o: &Opts) -> Reading {
     let mut close = vec![false; n];
     if multi > 0 {
         best = Some(0.0);
-        for c in &r.overlapping {
-            close[*c] = limit.is_some();
+        for c in (0..n).filter(|c| over[*c]) {
+            close[c] = limit.is_some();
         }
-    } else {
+    }
+    if multi == 0 || limit.is_some() {
         for i in 0..segs.len() {
             for j in i + 1..segs.len() {
                 let cut = best.unwrap_or(f64::INFINITY).max(limit.unwrap_or(0.0));
@@ -535,5 +601,61 @@ mod tests {
             r.out_of_unit
         );
         assert_eq!(r.outside, [0]);
+    }
+
+    #[test]
+    fn charts_closer_than_min_gap_px_are_named_though_two_others_overlap() {
+        let d = 2.0 / 1024.0;
+        let faces = [
+            // Charts 0 and 1 lie on one another.
+            face(0, [[0.1, 0.1], [0.3, 0.1], [0.1, 0.3]], [0, 1, 2]),
+            face(1, [[0.1, 0.1], [0.3, 0.1], [0.1, 0.3]], [3, 4, 5]),
+            // Charts 2 and 3, far from them, 2 px apart.
+            face(2, [[0.6, 0.6], [0.8, 0.6], [0.6, 0.8]], [6, 7, 8]),
+            face(3, [[0.8 + d, 0.6], [0.9, 0.6], [0.9, 0.8]], [9, 10, 11]),
+        ];
+        let r = read(
+            &faces,
+            &Opts {
+                min_gap_px: Some(4.0),
+                ..opts()
+            },
+        );
+        assert_eq!(r.min_gap_px, Some(0.0));
+        assert_eq!(r.close, [0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn a_padding_past_the_square_fills_all_of_it() {
+        let faces = [face(0, [[0.1, 0.1], [0.3, 0.1], [0.1, 0.3]], [0, 1, 2])];
+        let r = read(
+            &faces,
+            &Opts {
+                padding: 1e30,
+                ..opts()
+            },
+        );
+        assert_eq!(r.fill, 1.0);
+    }
+
+    #[test]
+    fn the_planted_bounding_boxes_change_uv_overlap_and_nothing_else() {
+        // Two triangles whose bounding boxes overlap and whose areas don't: 0.05 / √2 apart.
+        let faces = [
+            face(0, [[0.1, 0.1], [0.5, 0.1], [0.1, 0.5]], [0, 1, 2]),
+            face(1, [[0.5, 0.5], [0.15, 0.5], [0.5, 0.15]], [3, 4, 5]),
+        ];
+        let o = Opts {
+            min_gap_px: Some(4.0),
+            ..opts()
+        };
+        let shipped = read(&faces, &o);
+        let planted = read(&faces, &Opts { boxes: true, ..o });
+        assert_eq!(shipped.overlap, 0.0);
+        assert!(planted.overlap > 0.0, "{}", planted.overlap);
+        assert_eq!(planted.overlapping, [0, 1]);
+        assert_eq!(planted.fill, shipped.fill);
+        assert_eq!(planted.min_gap_px, shipped.min_gap_px);
+        assert_eq!(planted.close, shipped.close);
     }
 }

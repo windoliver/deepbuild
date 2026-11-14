@@ -106,8 +106,8 @@ fn register(r: &mut Registrar) {
     .check_report(report);
     r.code(
         "loop.unreadable",
-        "A mesh geometry.shading can't read: missing, compressed data no pinned tool decoded, not triangles, or away from its bind pose.",
-        "Convert the asset to plain triangles at its bind pose, or pin the tool that decodes it.",
+        "A mesh geometry.shading can't read: missing, compressed data no pinned tool decoded, not triangles, away from its bind pose, or UV sets asked at a resolution over 4,096 px.",
+        "Convert the asset to plain triangles at its bind pose, pin the tool that decodes it, or ask for a resolution of 4,096 px or less.",
         false,
     );
     r.code(
@@ -340,6 +340,15 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             out.blocked.push(unread(None, "file"));
             continue;
         };
+        // A UV set is read at the resolution asked or not at all: a coarser raster could pass
+        // an overlap or a fill that the resolution would fail.
+        let has_uv = read
+            .iter()
+            .any(|(p, _)| sets.get(*p).is_some_and(|s| !s.is_empty()));
+        if has_uv && uv_opts.resolution > uv::RASTER_MAX {
+            out.blocked.push(unread(None, "resolution"));
+            continue;
+        }
         let prims: Vec<&Prim> = read.iter().map(|(_, p)| p).collect();
         let c = count::count(&prims, &opts);
         let tris: Vec<[count::V3; 3]> = prims
@@ -641,5 +650,58 @@ mod tests {
         assert_eq!(got[0].0, "loop.uv");
         assert_eq!(got[0].1["set"], 1);
         assert_eq!(got[0].1["reading"], "uv_overlap");
+    }
+
+    #[test]
+    fn primitives_that_share_one_vertex_list_leave_none_of_it_unused() {
+        // Two primitives over one list of six positions, each drawing three of them.
+        let positions = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [5.0, 0.0, 0.0],
+            [6.0, 0.0, 0.0],
+            [5.0, 1.0, 0.0],
+        ];
+        let prim = |indices: Vec<u32>| Prim {
+            positions: positions.clone(),
+            normals: None,
+            indices,
+        };
+        let (a, b) = (prim(vec![0, 1, 2]), prim(vec![3, 4, 5]));
+        let o = Opts {
+            weld: 0.00001,
+            degenerate_area: 1e-12,
+            normal_max: 30.0,
+            corner_max: 30.0,
+            planted: None,
+        };
+        assert_eq!(count::count(&[&a, &b], &o).unused, Vec::<usize>::new());
+        // A position neither draws is still unused, named by its first copy.
+        let mut stray = positions.clone();
+        stray.push([9.0, 9.0, 9.0]);
+        let (a, b) = (
+            Prim {
+                positions: stray.clone(),
+                ..prim(vec![0, 1, 2])
+            },
+            Prim {
+                positions: stray,
+                ..prim(vec![3, 4, 5])
+            },
+        );
+        assert_eq!(count::count(&[&a, &b], &o).unused, [6]);
+    }
+
+    #[test]
+    fn a_resolution_past_the_raster_is_blocked_never_read_coarser() {
+        let bytes = fixtures::past_unit(None);
+        let sha = deep_canvas::canon::sha256_hex(&bytes);
+        let lowered = json!({"items": {"a": {"kind": "mesh.asset@1", "params": {"sha256": sha}}}});
+        let input = |resolution: f64| json!({"kind": KIND, "resolution": resolution, "assets": {sha.clone(): deep_canvas::base64::encode(&bytes)}});
+        let blocked = report(&lowered, &input(8192.0)).blocked;
+        assert_eq!(blocked.len(), 1, "{blocked:?}");
+        assert_eq!(blocked[0]["why"], "resolution");
+        assert_eq!(report(&lowered, &input(4096.0)).blocked.len(), 0);
     }
 }

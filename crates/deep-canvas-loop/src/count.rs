@@ -85,7 +85,8 @@ pub struct Counts {
     pub vertices: Vec<u32>,
     /// Each face's area, m².
     pub areas: Vec<f64>,
-    /// The positions no triangle uses, by index across the primitives.
+    /// The welded vertices no triangle uses, each by its first member's index across the
+    /// primitives: primitives that share one vertex list use each other's vertices.
     pub unused: Vec<usize>,
     /// The islands (faces that share a welded vertex are one), and the smallest by area: its
     /// share of the mesh's area and its faces.
@@ -194,12 +195,8 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
         } else {
             dot(sub(hi, lo), sub(hi, lo))
         };
-        let mut used = vec![false; prim.positions.len()];
         for t in prim.indices.as_chunks::<3>().0 {
             let i = [t[0], t[1], t[2]].map(|i| i as usize);
-            for k in i {
-                used[k] = true;
-            }
             let p = i.map(|i| prim.positions[i]);
             let area2 = cross(sub(p[1], p[0]), sub(p[2], p[0]));
             let f = faces.len();
@@ -222,10 +219,19 @@ pub fn count(prims: &[&Prim], o: &Opts) -> Counts {
                 area2,
             });
         }
-        c.unused
-            .extend((0..used.len()).filter(|k| !used[*k]).map(|k| base + k));
         base += prim.positions.len();
     }
+    let mut used = vec![false; nwelded];
+    for f in &faces {
+        for w in f.v {
+            used[w as usize] = true;
+        }
+    }
+    c.unused = (0..nwelded)
+        .filter(|w| !used[*w])
+        .map(|w| c.first[w])
+        .collect();
+    c.unused.sort_unstable();
     c.vertices = welded;
     c.triangles = faces.len();
     islands(&faces, nwelded, &mut c);
