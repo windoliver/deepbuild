@@ -12,14 +12,19 @@ use deep_canvas_marks::finish::{srgb_decode, srgb_encode, tone, ToneMap};
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::morph;
 use deep_canvas_motion::program::{Planted, Program};
-use deep_canvas_motion::shots::{At, Kind, Plan, Pose};
+use deep_canvas_motion::shots::{At, Kind, Plan, Pose, Under};
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::Affine;
 
 /// The motion module's compiled program for a session, where its document has one.
+/// #466: with each operator transition that aligns on its reveal placed there.
 pub(crate) fn program_of(sched: &Scheduler<'_>, session: &DocSession) -> Option<Arc<Program>> {
     let v = session.value(sched, "motion.program", None)?;
-    v.as_typed::<Arc<Program>>().map(|p| Arc::clone(&*p))
+    let program = v.as_typed::<Arc<Program>>().map(|p| Arc::clone(&*p))?;
+    Some(match session.document() {
+        Some(doc) => crate::film_operator::placed(program, doc),
+        None => program,
+    })
 }
 
 /// The plan of a 2D film with timeline shots, and the index of its document camera.
@@ -42,9 +47,35 @@ pub(crate) struct Side {
 /// How two sides blend: the incoming side's share, and the kind's shape.
 pub(crate) enum Mix {
     Fade(f64),
-    Dip(f64),
-    Wipe { angle: f64, feather: f64, p: f64 },
-    Push { angle: f64, p: f64 },
+    /// #466: a look role's weight over what lies under it.
+    Dip {
+        weight: f64,
+        under: Under,
+        role: String,
+    },
+    Wipe {
+        angle: f64,
+        feather: f64,
+        p: f64,
+    },
+    Push {
+        angle: f64,
+        p: f64,
+    },
+    /// #466: a circle at `center` of `radius`, in the frame's units on a frame `frame` wide and
+    /// high; the outgoing side inside it while it closes, the incoming side while it opens.
+    Iris {
+        center: [f64; 2],
+        radius: f64,
+        closing: bool,
+        frame: [f64; 2],
+    },
+    /// #466: a pack's pass over the two finished sides at the transition's progress.
+    Operator {
+        id: String,
+        op: deep_canvas_motion::shots::Operator,
+        p: f64,
+    },
 }
 
 /// What a frame draws: one side, or two blended, and the side whose status marks draw on top.
@@ -80,7 +111,21 @@ pub(crate) fn sides(program: &Program, doc: &Value, t: i64, reduced: bool) -> Op
         let p = tr.progress(t);
         let mix = match (&tr.kind, reduced) {
             (Kind::Cut | Kind::Whip { .. }, _) => continue,
-            (Kind::Dip, _) => Mix::Dip(p),
+            (Kind::Dip(d), _) => {
+                let cross = program.options.planted == Planted::DipCrossFadesUnderInk;
+                let (weight, under) = d.at(tr, t, cross);
+                Mix::Dip {
+                    weight,
+                    under,
+                    role: d.color.clone(),
+                }
+            }
+            (Kind::Iris(iris), false) => iris_mix(program, doc, plan, tr, iris, t, &at, &state),
+            (Kind::Operator(op), false) => Mix::Operator {
+                id: tr.id.clone(),
+                op: op.clone(),
+                p,
+            },
             (Kind::Wipe { angle, feather }, false) => Mix::Wipe {
                 angle: *angle,
                 feather: *feather,
@@ -129,6 +174,33 @@ pub(crate) fn sides(program: &Program, doc: &Value, t: i64, reduced: bool) -> Op
     })
 }
 
+/// An iris at t (canvas primitives: Transition: operator, iris and dip), in the frame's units.
+#[allow(clippy::too_many_arguments)]
+fn iris_mix(
+    program: &Program,
+    doc: &Value,
+    plan: &Plan,
+    tr: &deep_canvas_motion::shots::Transition,
+    iris: &deep_canvas_motion::shots::Iris,
+    t: i64,
+    at: &At,
+    state: &deep_canvas_motion::program::State,
+) -> Mix {
+    let frame = match doc.get("size").and_then(Value::as_array).map(Vec::as_slice) {
+        Some([w, h]) => [w.as_f64().unwrap_or(1920.0), h.as_f64().unwrap_or(1080.0)],
+        _ => [1920.0, 1080.0],
+    };
+    let empty = Map::new();
+    let map = doc.as_object().unwrap_or(&empty);
+    let i = iris.at(program, map, state, plan, tr, t, at, frame, false);
+    Mix::Iris {
+        center: i.center,
+        radius: i.radius,
+        closing: !i.inside_incoming,
+        frame,
+    }
+}
+
 /// A flat pose as the affine from the document's units to its pixels: the target at the frame's
 /// centre, the view width across it, turned by the roll.
 pub(crate) fn view(pose: &Pose, size: [f64; 2]) -> Affine {
@@ -155,8 +227,19 @@ pub(crate) fn finish(rgba: &mut [u8], map: ToneMap) {
     }
 }
 
-/// Two finished sides blended by `mix` (Transition), per 8-bit channel; `ink` is a dip's color.
-pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3]) -> Vec<u8> {
+/// Two finished sides blended by `mix` (Transition), per 8-bit channel; `ink` is a dip's color,
+/// and `pass` an operator transition's output, drawn by its caller.
+pub(crate) fn blend(
+    a: &[u8],
+    b: &[u8],
+    mix: &Mix,
+    size: [u16; 2],
+    ink: [u8; 3],
+    pass: Option<&[u8]>,
+) -> Vec<u8> {
+    if let (Mix::Operator { .. }, Some(out)) = (mix, pass) {
+        return out.to_vec();
+    }
     let (w, h) = (usize::from(size[0]), usize::from(size[1]));
     let lerp =
         |x: u8, y: u8, p: f64| (f64::from(x) + (f64::from(y) - f64::from(x)) * p).round() as u8;
@@ -186,20 +269,50 @@ pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3])
                         o[c] = lerp(pa[c], pb[c], p);
                     }
                 }
-                Mix::Dip(p) => {
-                    let (from, to, q) = if p < 0.5 {
-                        (pa, None, p * 2.0)
-                    } else {
-                        (pb, Some(()), p * 2.0 - 1.0)
-                    };
+                Mix::Dip { weight, under, .. } => {
                     for c in 0..3 {
-                        o[c] = if to.is_none() {
-                            lerp(from[c], ink[c], q)
+                        let below = match under {
+                            Under::Outgoing => pa[c],
+                            Under::Incoming => pb[c],
+                            Under::Cross(q) => lerp(pa[c], pb[c], q),
+                        };
+                        o[c] = if weight >= 1.0 {
+                            ink[c]
                         } else {
-                            lerp(ink[c], from[c], q)
+                            lerp(below, ink[c], weight)
                         };
                     }
                     o[3] = 255;
+                }
+                Mix::Iris {
+                    center,
+                    radius,
+                    closing,
+                    frame,
+                } => {
+                    let k = [w as f64 / frame[0], h as f64 / frame[1]];
+                    let (dx, dy) = (
+                        (x as f64 + 0.5) - center[0] * k[0],
+                        (y as f64 + 0.5) - center[1] * k[1],
+                    );
+                    let d = deep_canvas::ops::sqrt(dx * dx + dy * dy);
+                    // The share inside the circle, over a one-pixel edge.
+                    let inside = (radius * k[0] - d + 0.5).clamp(0.0, 1.0);
+                    let (inn, out) = if closing { (pa, pb) } else { (pb, pa) };
+                    for c in 0..4 {
+                        o[c] = if inside >= 1.0 {
+                            inn[c]
+                        } else if inside <= 0.0 {
+                            out[c]
+                        } else {
+                            lerp(out[c], inn[c], inside)
+                        };
+                    }
+                }
+                Mix::Operator { p, .. } => {
+                    for c in 0..4 {
+                        o[c] = lerp(pa[c], pb[c], p);
+                    }
                 }
                 Mix::Wipe { angle, feather, p } => {
                     let (c, s, lo, len) = along(angle);

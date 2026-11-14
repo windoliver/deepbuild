@@ -19,7 +19,10 @@ mod evidence;
 mod export;
 mod extended;
 mod familiar;
+mod caption_design;
 mod film;
+mod film_operator;
+mod films;
 mod film_audit;
 mod film_layout;
 mod film_viewer;
@@ -1295,6 +1298,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
+                // #466's boil and blur in deep-show's frames.
+                || films::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.

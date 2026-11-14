@@ -168,6 +168,7 @@ impl Hub<'_> {
             path: "frames".into(),
         };
         let drawing = drawing_of(sched, session).ok_or_else(|| unfit("no_drawing"))?;
+        let drawing = self.boiled(doc, t, false, drawing);
         #[allow(unused_mut)]
         let (mut rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             self.rgba3d(doc, t, &drawing, size)?

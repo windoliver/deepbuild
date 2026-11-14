@@ -15,6 +15,8 @@ pub mod animator;
 pub mod arrays;
 pub mod atlas;
 pub mod axes3d;
+pub mod boil;
+pub mod build;
 pub mod check;
 pub mod code;
 pub mod copy;

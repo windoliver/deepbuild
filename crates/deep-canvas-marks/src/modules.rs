@@ -412,12 +412,14 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
+    let params = item.get("params");
     is_text(doc, id, item)
-        && item
-            .get("params")
+        && (params
             .and_then(|p| p.get("animators"))
             .and_then(Value::as_array)
             .is_some_and(|a| !a.is_empty())
+            // #466: a reveal fades its units by the progress the frame evaluated.
+            || params.and_then(|p| p.get("reveal")).is_some_and(|r| !r.is_null()))
 }
 
 /// What a bound value or counter shows, its numbers in the view's locale.
@@ -518,6 +520,16 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
             if let Some(o) = fade {
                 unit[1] = (unit[1] + w * (o - 1.0)).clamp(0.0, 1.0);
+            }
+        }
+    }
+    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    if let Some(Value::Object(params)) = fields.get("params") {
+        if let Some(shares) =
+            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
+        {
+            for (unit, share) in out.iter_mut().zip(shares) {
+                unit[1] *= share;
             }
         }
     }

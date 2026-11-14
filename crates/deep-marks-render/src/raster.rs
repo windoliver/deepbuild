@@ -792,62 +792,13 @@ impl<C: Glyphs> Painter<'_, C> {
 /// The document's evaluated items at `t`, placed by their relations (#221), each vector item
 /// drawn as marks2d's items (#398), and each graph laid out and drawn as them (#399), with each
 /// graph's view.
-/// #1646: each revealed unit's reveal time, compiled from the document: the first whole flick at
-/// which the reveal's progress reaches the unit's level ([`animator::reveal_levels`]), searched
-/// through the program between the progress's key times (as a reveal's progress is keyed to run
-/// forward), never from the frame drawn. A unit the progress never reaches reveals at no time.
-///
-/// [`animator::reveal_levels`]: deep_canvas_marks::animator::reveal_levels
+/// #1646: each revealed unit's reveal time, compiled from the document (#466: the one rule
+/// motion compiles `<item>.reveal` by).
 fn reveal_times(doc: &Map<String, Value>, id: &str, levels: &[f64]) -> Result<Vec<i64>, Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-    let field = ["params", "reveal", "progress"].map(String::from);
-    let Some(slot) = program.slot_of(id, &field) else {
-        // An unkeyed progress is the same at every time: each unit revealed from the start, or
-        // never.
-        let p = doc
-            .get("items")
-            .and_then(|i| i.get(id))
-            .and_then(|i| i.pointer("/params/reveal/progress"))
-            .and_then(Value::as_f64)
-            .unwrap_or(0.0);
-        return Ok(levels
-            .iter()
-            .map(|l| if p >= *l { 0 } else { i64::MAX })
-            .collect());
-    };
-    let mut state = program.state();
-    let mut at = |t: i64| {
-        program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
-        state.slots[slot]
-    };
-    let mut keys = program.slot_key_times(slot);
-    keys.sort_unstable();
-    keys.dedup();
-    let (Some(&first), Some(&last)) = (keys.first(), keys.last()) else {
-        return Ok(vec![i64::MAX; levels.len()]);
-    };
-    let mut out = Vec::with_capacity(levels.len());
-    for level in levels {
-        if at(first) >= *level {
-            out.push(0);
-            continue;
-        }
-        if at(last) < *level {
-            out.push(i64::MAX);
-            continue;
-        }
-        let (mut lo, mut hi) = (first, last);
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            if at(mid) >= *level {
-                hi = mid;
-            } else {
-                lo = mid;
-            }
-        }
-        out.push(hi);
-    }
-    Ok(out)
+    Ok(deep_canvas_motion::emits::reveal_times(
+        &program, doc, id, levels,
+    ))
 }
 
 fn items_at(

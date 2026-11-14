@@ -2589,7 +2589,20 @@ pub fn path_report(
         verbs
     };
     let place = Place::of(item);
-    let paint = object_or_empty(params.get("paint"));
+    // #466: a build draws its strokes on in turn, and its fill when its fill says.
+    let build = crate::build::read(params).map_err(|f| Refused {
+        code: "out_of_range",
+        path: format!("{path}/params/{f}"),
+    })?;
+    let verbs: Vec<Verb> = match &build {
+        Some(b) => b.drawn(&verbs, id),
+        None => verbs,
+    };
+    let unfilled: Option<Map<String, Value>> = build
+        .as_ref()
+        .filter(|b| !b.fills())
+        .map(|_| without_fill(params));
+    let paint = object_or_empty(unfilled.as_ref().unwrap_or(params).get("paint"));
     let built = build_path(&ctx, id, verbs, params, paint, place)?;
     let has_repeater = pathops::read(params.get("ops"), "")
         .map(|ops| ops.iter().any(|o| matches!(o, pathops::Op::Repeater(_))))
@@ -2633,6 +2646,15 @@ pub fn path_report(
         digest: built.digest,
         built: Some(built),
     }))
+}
+
+/// A path's params with its paint's fill taken off (#466: a build's fill before it draws).
+fn without_fill(params: &Map<String, Value>) -> Map<String, Value> {
+    let mut p = params.clone();
+    if let Some(Value::Object(paint)) = p.get_mut("paint") {
+        paint.remove("fill");
+    }
+    p
 }
 
 /// The segments the ops of `id` declare, for a refusal that names the count.

@@ -641,6 +641,8 @@ byHand.push('tests/acceptance/226-oracle/');
 // #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU; so do its
 // regressions in 2D films, exports, the live window and 3D motifs.
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
+// #466's files each build deep-show, deep-motion or deep-gpu and draw films through them (AC1 on the Metal GPU).
+alone.push('tests/acceptance/466/');
 // #222's files each build deep-show and expand cue lists through it; budgets.test.ts times 512 cues in release.
 // AC7's blind redraft runs the same way, and the first draft's budgets file is kept by hand: its per-frame half
 // reads check-phase nodes as frame work, so it fails on whichever film loads first (222/REDRAFT-AC7.md).
