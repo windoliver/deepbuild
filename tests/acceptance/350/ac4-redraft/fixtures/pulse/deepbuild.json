@@ -1,0 +1,11 @@
+{
+  "id": "test/pulse",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "actions": ["ext.pulse.ping"],
+  "templates": [
+    { "name": "beat", "hook": "tool.before", "text": "pulse load {load} beat {beat}", "fields": { "load": { "type": "number" }, "beat": { "type": "number" } } }
+  ],
+  "requires": { "preview": ["deep.on", "deep.registerAction"] }
+}

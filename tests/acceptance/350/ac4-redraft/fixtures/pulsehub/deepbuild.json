@@ -1,0 +1,8 @@
+{
+  "id": "deepbuild/pulsehub",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "actions": ["ext.pulsehub.ping"],
+  "requires": { "preview": ["deep.on", "deep.registerAction"] }
+}

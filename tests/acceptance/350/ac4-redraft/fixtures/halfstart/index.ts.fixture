@@ -1,0 +1,30 @@
+// A first-party test package (#350 AC4, blind redraft), loaded from the release in the hub. It registers a
+// tool.before handler and an action, says so in the test's log, and then, only when the test's folder holds a file
+// named `fail-start`, waits (until the folder holds `release`, or 3 s) and fails to start. The test writes
+// `fail-start` after the package's conformance passed, and the folder is outside the package, so the package's
+// bytes and digest are the same for the load that fails and the control that starts.
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const probe: { out: string } = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// The log is outside the package: where the package can't write it (its conformance run in the sandbox), it says nothing.
+const log = (line: string): void => { try { appendFileSync(join(probe.out, 'log'), `${line}\n`); } catch { /* not the hub */ } };
+const has = (name: string): boolean => { try { return existsSync(join(probe.out, name)); } catch { return false; } };
+
+export default async function (deep: any): Promise<void> {
+  deep.on('tool.before', async () => {
+    log('handler');
+    return { context: 'halfstart-handler-reached' };
+  });
+  deep.registerAction('ext.halfstart.ping', { declares: 'read', input: { type: 'object' } }, async () => {
+    log('action');
+    return { pong: 'halfstart-action-reached' };
+  });
+  log('registered');
+  if (has('fail-start')) {
+    for (const end = Date.now() + 3000; Date.now() < end && !has('release');) await sleep(20);
+    log('failing');
+    throw Error('deepbuild/halfstart: a planted failure to start');
+  }
+}

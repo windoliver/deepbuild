@@ -1,0 +1,22 @@
+// A first-party test package (#350 AC4, blind redraft), loaded from the release in the hub, so a disabled load's
+// code is still in the hub's process and only the host can stop its handler and action from being called. Each load
+// draws its own ID; every run of any load's handler or action writes a line with that ID to the test's log, so a
+// handler or an action a disabled load left behind shows as a line the test didn't cause.
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const probe: { out: string } = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const log = (line: string): void => { try { appendFileSync(join(probe.out, 'log'), `${line}\n`); } catch { /* not the hub */ } };
+
+export default function (deep: any): void {
+  const me = randomUUID();
+  deep.on('tool.before', async () => {
+    log(`handler ${me}`);
+    return { context: `pulsehub load ${me}` };
+  });
+  deep.registerAction('ext.pulsehub.ping', { declares: 'read', input: { type: 'object' } }, async () => {
+    log(`action ${me}`);
+    return { me };
+  });
+}

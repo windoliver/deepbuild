@@ -1,0 +1,54 @@
+// A first-party test package (#350 AC4, blind redraft), loaded from the release in the hub at two versions, so a
+// removed version's code is still in the hub's process and can finish a call after its replacement is active.
+// - ping: says which version ran.
+// - hold: waits until the test's folder holds `go`; then, as that version, tries to register one more tool.before
+//   handler and to append the event its input carries, and returns which version ran.
+// - its tool.before handler adds a block naming its version; when the test's folder holds `hold-hook-<version>` it
+//   first waits for `go` and then answers with a block that says it is the late reply.
+// Every step writes a line to the test's log, which is outside the package.
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const VERSION: string = JSON.parse(readFileSync(new URL('./deepbuild.json', import.meta.url), 'utf8')).version;
+const probe: { out: string } = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const log = (line: string): void => { try { appendFileSync(join(probe.out, 'log'), `${line}\n`); } catch { /* not the hub */ } };
+const has = (name: string): boolean => { try { return existsSync(join(probe.out, name)); } catch { return false; } };
+const text = (e: unknown): string => String((e as Error)?.message ?? e).replace(/\s+/g, ' ');
+
+export default function (deep: any): void {
+  deep.on('tool.before', async () => {
+    log(`handler-entered ${VERSION}`);
+    if (has(`hold-hook-${VERSION}`)) {
+      while (!has('go')) await sleep(20);
+      log(`handler-released ${VERSION}`);
+      return { context: `swap ${VERSION} late handler reply` };
+    }
+    return { context: `swap ${VERSION} handler` };
+  });
+  deep.registerAction('ext.swap.ping', { declares: 'read', input: { type: 'object' } }, async () => {
+    log(`ping ${VERSION}`);
+    return { from: VERSION };
+  });
+  deep.registerAction('ext.swap.hold', { declares: 'read', input: { type: 'object' } }, async (input: any) => {
+    log(`hold-entered ${VERSION}`);
+    while (!has('go')) await sleep(20);
+    try {
+      deep.on('tool.before', async () => {
+        log(`late-registered-handler ${VERSION}`);
+        return { context: `swap ${VERSION} handler registered after go` };
+      });
+      log(`late-on-returned ${VERSION}`);
+    } catch (e) {
+      log(`late-on-refused ${VERSION} ${text(e)}`);
+    }
+    try {
+      await deep.record.append(input.event);
+      log(`append-returned ${VERSION}`);
+    } catch (e) {
+      log(`append-refused ${VERSION} ${text(e)}`);
+    }
+    log(`hold-finished ${VERSION}`);
+    return { from: VERSION };
+  });
+}
