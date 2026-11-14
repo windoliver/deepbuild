@@ -11,3 +11,8 @@ AssertionError: expected [ { id: 'env-2437107', …(2) }, …(1) ] to deep equal
  FAIL  packages/extension-host/test/environment-runtime.test.ts > starts and stops its kitted provider, and disabling it cleans up the active handle
 AssertionError: expected [] to deeply equal [ { id: 'env-2443217', …(2) } ]
       Tests  1 failed (1)
+
+# after review: the timeout test requires exactly its own stop after the install-time ones; 5 runs of 5 pass
+# wrong host 1 again (the late handle's down removed):
+AssertionError: expected [] to deeply equal [ { id: 'env-467771', …(2) } ]
+      Tests  1 failed (1)

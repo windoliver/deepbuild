@@ -55,6 +55,9 @@ it('unloads a timed-out provider and cleans its late handle after the caller alr
     while (!existsSync(path) && Date.now() < end) await new Promise(done => setTimeout(done, 10));
     expect(existsSync(path), path.endsWith('started.json') ? 'the environment started' : 'the environment stopped').toBe(true);
   };
+  // Every down is listed, the install-time kit's first: after those, the late handle's own stop is the only one.
+  const stops = (): unknown[] => existsSync(stopped) ? readFileSync(stopped, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+  const before = stops().length;
   const pending = runtime.up({ health: '/health', token: 'timed-runtime', warmup: 0 }, { port: address.port, token: `run-timed-${address.port}` }, temp(), 1000)
     .then(value => ({ value }), error => ({ error }));
   try {
@@ -63,9 +66,7 @@ it('unloads a timed-out provider and cleans its late handle after the caller alr
     expect(result).toHaveProperty('error');
     await expect(host.environment('timed')).rejects.toThrow(/no loaded.*environment/);
     writeFileSync(release, 'go');
-    // Every down is listed, the install-time kit's among them: the late handle's own is the one waited for.
-    const stops = (): unknown[] => existsSync(stopped) ? readFileSync(stopped, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
-    await expect.poll(stops, { timeout: 10_000 }).toContainEqual(JSON.parse(readFileSync(started, 'utf8')));
+    await expect.poll(() => stops().slice(before), { timeout: 10_000 }).toEqual([JSON.parse(readFileSync(started, 'utf8'))]);
     await expect(fetch(`http://127.0.0.1:${address.port}/health`)).rejects.toThrow();
   } finally {
     writeFileSync(release, 'go'); await pending;
