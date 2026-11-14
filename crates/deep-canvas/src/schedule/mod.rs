@@ -43,6 +43,7 @@ use crate::canon::{self, NoShape};
 use crate::registry::{Per, Sealed, TableValue};
 
 pub use bytes::Canonical;
+pub use steps::CarriedState;
 pub use tree::KeyTree;
 pub use view::View;
 

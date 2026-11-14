@@ -838,10 +838,7 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
                 minor: 0,
                 params: vec![Param {
                     name: "cues",
-                    // Cue list `cues@1`'s cues, in order (#1973's forms).
-                    ty: ParamType::Json(
-                        "[{id?, when?, gap?, span?, ease?, lag?, order?, targets?, set?, kind?, params?}] ≤ 512",
-                    ),
+                    ty: ParamType::Json("[{id?, when?, gap?, span?, ease?, lag?, order?, targets?, set?, kind?, params?}] ≤ 512"),
                     unit: "",
                     default: json!([]),
                     min: None,
