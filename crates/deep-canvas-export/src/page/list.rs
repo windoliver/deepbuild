@@ -550,4 +550,20 @@ mod tests {
         assert_eq!(refused["controls"], json!([]));
         assert_eq!(refused["carried"][0]["module"], "test.count");
     }
+
+    #[test]
+    fn a_change_a_follow_channel_eases_in_rests_where_the_ease_ends() {
+        // A lid that fades in over 1 s once the toggle turns on, turned on at 0.
+        let form = json!({
+            "id": "lid", "title": "Lid", "size": [320, 180],
+            "transport": {"span": "2s", "frame_rate": [30, 1]},
+            "items": {"lid": {"kind": "rect@1", "params": {"box": [100, 60, 120, 25]}}},
+            "controls": {"explode": {"kind": "toggle", "label": "Explode", "default": false}},
+            "channels": {"fade": {"target": "items/lid/adjust/opacity", "type": "f32", "mode": "follow",
+                "follow": {"source": "controls/explode/value", "model": {"transition": {"span": "1s", "interp": "linear"}}}}},
+            "track": [{"t": 0, "control": "explode", "value": true}],
+        });
+        let at = rest(&form, FRAME, FRAME).expect("rests");
+        assert_eq!(at.t, FLICKS_PER_SECOND, "rests a frame in, mid-fade");
+    }
 }
