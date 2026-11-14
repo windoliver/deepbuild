@@ -1,0 +1,37 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/344/deliver.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+··x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/344/deliver.test.ts > #344 rules reach sessions > AC9 #344.d074b17a a scoped rule reaches a session as one notice at its first call inside the scope, once more after /compact or a resume, and never in a start slice or for a session that stays outside
+AssertionError: session Y (session:bb5cdb2d-862c-4755-aa11-f3eec0133daa) hears the rule once, at its third call and not at its fourth (calls 1 to 4): expected [ false, false, false, false ] to deeply equal [ false, false, true, false ]
+
+- Expected
++ Received
+
+  [
+    false,
+    false,
+-   true,
++   false,
+    false,
+  ]
+
+ ❯ tests/acceptance/344/deliver.test.ts:81:129
+     79|       const heardAt: boolean[] = [];
+     80|       for (const file of ['web/app.ts', 'web/app.ts', 'packages/dev/sr…
+     81|       expect(heardAt, `session Y (${handleOf(y)}) hears the rule once,…
+       |                                                                                                                                 ^
+     82|       await y.start('compact');
+     83|       expect(await note(y, 'packages/dev/src/a.ts'), `after /compact, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  12:07:34
+   Duration  4.37s (tests 90%, transform 7%, import 2%)
