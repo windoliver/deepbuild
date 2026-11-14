@@ -290,6 +290,16 @@ export class StopJudging {
   async recoverGateAnswers(): Promise<void> {
     const pending = this.gateAnswers.then(async () => {
       for (const a of await this.gateAsks()) await this.applyGateAnswer(a);
+      const missing = (await this.options.services.record.raw(`SELECT p.subject AS claim, p.session_id AS session, p.agent, json_extract(p.data, '$.rounds') AS round,
+        (SELECT handle FROM verdicts v WHERE 'claim:' || v.claim_id = p.subject ORDER BY created DESC LIMIT 1) AS verdict
+        FROM events p WHERE p.kind = 'claim.progress' AND p.writer = 'core' AND json_extract(p.data, '$.rounds') > 0 AND json_extract(p.data, '$.stalled') IS NULL
+        AND NOT EXISTS (SELECT 1 FROM events sent WHERE sent.kind = 'claim.sent_back' AND sent.subject = p.subject AND json_extract(sent.data, '$.round') = json_extract(p.data, '$.rounds'))`)) as { claim: string; session: string; agent: string; round: number; verdict: string | null }[];
+      for (const r of missing) if (r.verdict) {
+        const ts = this.options.services.now();
+        await this.options.events.append(this.options.events.connection('core', { session: r.session, agent: r.agent }), {
+          v: 1, id: ulid(ts), kind: 'claim.sent_back', ts, subject: r.claim, data: { claim: r.claim, verdict: r.verdict, round: r.round, to: `session:${letters(r.session)}` },
+        });
+      }
     });
     this.gateAnswers = pending;
     await pending;
@@ -459,7 +469,7 @@ export class StopJudging {
     const count = await this.stallCount(task);
     // The planted wrong program counts any new run as new evidence, whatever its result.
     const fate = judgeStop(count, { items, passing: standing.filter((c) => c.result === 'PASS').map((c) => c.check), runs }, this.options.settings.plant === 'new-run-is-evidence');
-    await this.saveStall(meta, claim, task, count);
+    if (!held || !fate.sendBack) await this.saveStall(meta, claim, task, count);
     if (fate.sendBack) {
       if (held) return undefined;
       const [verdict] = (await this.options.services.record.raw(`SELECT handle FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [claim.slice(6)])) as { handle: string | null }[];
