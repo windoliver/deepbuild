@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -59,9 +60,16 @@ test('a clean run forgotten past the newest 64 still answers status and cleanup 
 
 // The denial stream filters by the subsystem macOS's sandbox reports carry, so `log` isn't sent every message the
 // machine writes. On a macOS whose reports carry another one (planted here: the filter names a subsystem no report
-// has) the canary never shows through it, and the stream starts again on the sender alone. Without that second
-// start no denial is recorded, and this fails waiting for it.
-test.skipIf(process.platform !== 'darwin')('a refused write is recorded on a macOS whose sandbox reports carry another subsystem', async () => {
+// has) the canary never shows through it, and the stream starts again on a wider filter. Without that second
+// start no denial is recorded, and this fails waiting for it. The second start names the kernel as the reports'
+// process, where the sandbox extension writes them, before the sender alone: sent every process's messages, `log`
+// costs several times what it does sent the kernel's. A second start on the sender alone fails the last line. Where
+// the kernel's messages show no report either (planted: the filter names a process that writes none), the stream
+// starts a third time, on the sender alone, and a supervisor that stops at the second records no denial.
+test.skipIf(process.platform !== 'darwin').each([
+  ['carry another subsystem', 'reports-other-subsystem', '--predicate process == "kernel" AND sender =='],
+  ['carry another subsystem and come from another process', 'reports-other-process', '--predicate sender =='],
+] as const)('a refused write is recorded on a macOS whose sandbox reports %s', async (_world, plant, filter) => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
   dirs.push(dir);
   mkdirSync(join(dir, 'in'));
@@ -69,7 +77,7 @@ test.skipIf(process.platform !== 'darwin')('a refused write is recorded on a mac
   const target = join(dir, 'outside', 'w.txt');
   const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
-  const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } }, plant: 'reports-other-subsystem' });
+  const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } }, plant });
   try {
     const started = await sup.start({ run: 'run:DENIED', argv: ['/usr/bin/touch', target], cwd: join(dir, 'in'), grant: { write: [join(dir, 'in')] } });
     expect(started.status).toBe('started');
@@ -79,6 +87,9 @@ test.skipIf(process.platform !== 'darwin')('a refused write is recorded on a mac
     const until = Date.now() + 15_000;
     while (!(await denied()).length && Date.now() < until) await new Promise((done) => setTimeout(done, 100));
     expect((await denied()).length, `a sandbox.denied for run:DENIED naming ${target}`).toBe(1);
+    const streams = spawnSync('ps', ['-A', '-o', 'ppid=,command='], { encoding: 'utf8' }).stdout.split('\n')
+      .filter((line) => Number(line.trim().split(/\s+/)[0]) === process.pid && line.includes('/usr/bin/log stream'));
+    expect(streams.map((line) => line.includes(filter)), `the one stream left is the narrowest that shows a report (${filter}):\n${streams.join('\n')}`).toEqual([true]);
   } finally {
     await sup.close();
     await record.close();
