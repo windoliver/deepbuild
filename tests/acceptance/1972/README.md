@@ -6,9 +6,16 @@ sections it links, and base commit `e0c90a5a5` (`origin/main`, "Merge pull reque
 an implementation; none existed. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to
 a blind redraft of this job (design: Dogfooding).
 
+AC1 was amended by the owner on Nov 14 (the issue's "Amended (Nov 14): break_out's example" paragraph): `break_out`
+takes an item a recipe instance derived, which needs a pack the document names, and the product reveal names none. So
+`break_out`'s example is held to #306's chart board with its test pack `test/chart@1.0.0` installed, and every other
+op's to the product reveal. The suite was updated for that from its first commit (`1ffe75347`), still without seeing
+any implementation; the base wasn't run again (below).
+
 ## What was read
 
-- The issue, read live with `gh issue view 1972`, and its parent #1658, whose "Amended again (Nov 8)" paragraph gives
+- The issue, read live with `gh issue view 1972` (again on Nov 14, for the amended AC1), and its parent #1658, whose
+  "Amended again (Nov 8)" paragraph gives
   the patch's shape (`{patch: ULID, doc, base: rev, reason, ops: [{op: set, id, path, value} | create | unset | delete
   | move | reorder]}`, paths rooted at `items/<id>/…`) and the dry run's two refusals: a bare op list refused
   `out_of_range` with "a patch is an object" and the fix "Give the field a value of its type inside its range", and a
@@ -21,7 +28,9 @@ a blind redraft of this job (design: Dogfooding).
 - At the base, for surfaces and conventions only: `tests/acceptance/1971/` (deep_kinds `op: field` on `deep-show
   run`, the line reading, the README and BASE-FAILURE layout), `tests/acceptance/412/` (deep_kinds `read` and
   `gallery`, plants by `--planted <name>`), `tests/acceptance/306/` (patches sent as you through `deep show` with a
-  peer outside every agent's process tree, shared documents stored in a scenario); `crates/deep-show/src/kinds.rs`
+  peer outside every agent's process tree, shared documents stored in a scenario, packs installed through the
+  scenario's `packs` as `{id, dir}`, the fixture `chart-board.json` and its pack folder `packs/test-chart-1.0.0/`, and
+  `break-out.test.ts`'s break_out of `c1.bars.2` from `c1`); `crates/deep-show/src/kinds.rs`
   (`kinds_reply`, `kinds_field`, `kinds_read_guide`, `kinds_gallery`, `Planted::named`),
   `crates/deep-show/src/main.rs` (`via`, `start_args`, `planted_named`, the scenario's `docs`, `processes`,
   `panels`), `crates/deep-show/src/shared.rs` (`open_shared`, `check_patch`, the patch reply's `outcome` and
@@ -44,6 +53,11 @@ From the base run (`BASE-FAILURE.txt`):
   the fix "Give the field a value of its type inside its range." Neither fix names what the criteria ask.
 - The three plants are unknown startup arguments: `deep-show run --planted <name>` answers
   `{"ok":false,"code":"bad_input"}` and exits 2.
+- Not run at the base for the amendment: whether a break_out applies to #306's chart board as this suite stores and
+  sends it (no `sessions`, the peer below). #306's own suite applies `break_out {instance: c1, item: c1.bars.2}` to the
+  same board with the same pack, sent as you, in its build without scene3d; a probe of it in this suite's shape found
+  the base's build already removed from `target/`, and the base wasn't rebuilt for it. The amended test failed at the
+  base anyway, before any example is applied: the guide holds none.
 
 ## Run them
 
@@ -84,6 +98,12 @@ minutes on a loaded Mac.
   <the patch>}` sends the patch as you (the peer runs in no agent's process tree). The reply's `outcome` is read
   (`applied` or `refused`), and on a refusal its `issues`, each with `code`, `path`, `what`, `fix` and any `fix_ops`.
   Each patch goes to a fresh copy, one scenario each.
+- **#306's chart board, for break_out's example** (AC1 as amended): the same scenario with `"document"` the parsed
+  contents of `tests/acceptance/306/fixtures/chart-board.json` as the file stands (c1 and c2, `chart.bars@1` instances
+  with n = 5, and a rect, all in layer `you-main` whose writer is `you:you`; `"packs": ["test/chart@1.0.0"]`) and
+  `"packs": [{"id": "test/chart", "dir": "<checkout>/tests/acceptance/306/fixtures/packs/test-chart-1.0.0"}]`, which
+  installs the pack before the first call, as #306's suite installs it. The patch is sent as you, as above, so it writes
+  your own layer.
 - **Planted twins** are startup arguments, `deep-show run --planted <name>`, as #412's and #1971's are; each name below
   is this job's invention, for the implementer to add.
 
@@ -97,7 +117,7 @@ minutes on a loaded Mac.
 
 | Criterion | Tests |
 |---|---|
-| AC1 | `guide.test.ts` (3): the guide holds an example of every op the patch schema lists (and the schema lists the six the issue's parent names); for every op, one of its examples applies to the product reveal with outcome `applied`; `patches_guide_without_reorder` fails the first check naming reorder and no other op, while `op: field` still lists reorder |
+| AC1 | `guide.test.ts` (3): the guide holds an example of every op the patch schema lists (and the schema lists the six the issue's parent names); for every op, one of its examples applies with outcome `applied`, break_out's to #306's chart board with test/chart@1.0.0 installed and every other op's to the product reveal; `patches_guide_without_reorder` fails the first check naming reorder and no other op, while `op: field` still lists reorder |
 | AC2 | `refusal.test.ts` (4): the `at/pos` patch is refused with a fix naming `items/name/at/pos`; its twin `patch_fix_path_without_id` fails naming it; the bare op list is refused with a fix naming patch, doc, base, reason and ops; its twin `patch_fix_envelope_without_reason` fails naming reason. Each runs the control first: the same op in its envelope with path `items/name/at/pos` applies |
 
 Each test's name starts with its criterion. Where a criterion or the Proof line names a wrong program, the test runs
@@ -120,12 +140,16 @@ its plant and asserts the criterion's check fails, its failure naming what the c
 - **"Each example applies"**: every op the schema lists has at least one example that applies. The guide may also show
   patches that are refused on purpose (a stale base, the two refusals), so an op passes when one of its examples
   applies; every example's outcome is printed.
-- **"Applies to the gallery's product reveal through `deep-show run` with outcome `applied`"**: each example on its
-  own, as written, to a fresh copy of the product reveal as deep_kinds serves it, stored as a shared document under the
-  doc ID the example's `doc` names, at revision 0 (the stored document, so an example made for it says `base: 0`), and
-  sent as you. You, because the stored product reveal has no layers: only your patch takes an item into your layer,
-  and an agent's patch to one of its items is `not_your_layer` (Writer layer), which the issue doesn't change. An
-  example whose `doc` isn't a non-empty string can't be stored under it and doesn't apply.
+- **"Applies through `deep-show run` with outcome `applied`: `break_out`'s to #306's chart board …, and every other
+  op's to the gallery's product reveal"**: each example on its own, as written, to a fresh copy of its document, stored
+  as a shared document under the doc ID the example's `doc` names, at revision 0 (the stored document, so an example
+  made for it says `base: 0`), and sent as you. An example holding a break_out op goes to the chart board, with
+  test/chart@1.0.0 installed; an example holding any other op goes to the product reveal (as deep_kinds serves it,
+  with no pack); one holding both goes to both, and counts for break_out on the board and for its other ops on the
+  reveal. You, because the stored product reveal has no layers: only your patch takes an item into your layer, and an
+  agent's patch to one of its items is `not_your_layer` (Writer layer), which the issue doesn't change; the chart
+  board's items are already in your layer. An example whose `doc` isn't a non-empty string can't be stored under it
+  and doesn't apply.
 - **"A planted guide missing `reorder` fails, naming it"**: AC1's first check run on the plant: a failure starts with
   the op it names, and every failure names reorder. The plant must leave `op: field` alone, so the test first checks
   that the planted build still lists reorder.
@@ -150,7 +174,8 @@ JSON text; an agent's patches.
 ## Files
 
 - `helpers.ts`: the full build, `deep-show run`, the patch schema's ops, the guide and its patches, the product
-  reveal, the fixtures and the criteria's checks.
+  reveal and #306's chart board with its pack, the fixtures and the criteria's checks.
 - `guide.test.ts` (AC1), `refusal.test.ts` (AC2).
 - `tsconfig.json`: type-checks the suite under the root's strict options with `allowImportingTsExtensions`.
-- `BASE-FAILURE.txt`: the run at the base.
+- `BASE-FAILURE.txt`: the run at the base, before the amendment; the amended applies test is named differently now
+  (it names the chart board), and at the base it failed before applying any example.

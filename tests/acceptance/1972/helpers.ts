@@ -1,13 +1,14 @@
 // Test-side tools for the #1972 acceptance tests: the full build of `deep-show` (built once per file), its `deep_kinds`
 // calls and patches through `deep-show run` (one scenario per input line, one reply per call), the patch schema's ops
-// as `deep_kinds op: field` answers them, the patches guide read in pages, the patches it holds, the gallery's product
-// reveal, and the criteria's checks. Nothing here stands in for deep_kinds, the guide or the patch apply: every answer
+// as `deep_kinds op: field` answers them, the patches guide read in pages, the patches it holds, the two documents its
+// examples apply to (the gallery's product reveal, and for break_out #306's chart board with its pack, as the criterion
+// was amended on Nov 14), and the criteria's checks. Nothing here stands in for deep_kinds, the guide or the patch apply: every answer
 // read here is the binary's own. Each `...Failures` function is a criterion's check: it returns sentences naming what
 // failed, so a test runs it on the right program (no failures) and on the criterion's planted program (a failure
 // naming what the criterion says). This suite starts no long-lived process; every temporary folder is removed.
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -265,31 +266,60 @@ export function productReveal(bin: string): { hash: string; document: JsonObject
   return { hash, document: document as JsonObject };
 }
 
+/** What a guide example is applied to: a stored document, and the packs installed in its scenario. */
+export interface Target { name: string; document: JsonObject; packs: JsonObject[] }
+
+/** The gallery's product reveal as a target: no pack. */
+export function revealTarget(bin: string): Target {
+  const { hash, document } = productReveal(bin);
+  return { name: `the gallery's product reveal (${hash})`, document, packs: [] };
+}
+
+/** The op whose example the amended criterion (Nov 14) holds to #306's chart board instead of the product reveal. */
+export const BREAK_OUT = 'break_out';
+const FIXTURES_306 = join(REPO, 'tests/acceptance/306/fixtures');
+/**
+ * #306's chart board (`tests/acceptance/306/fixtures/chart-board.json`: c1 and c2, `chart.bars@1` instances with n = 5,
+ * and a rect, all in layer `you-main` written by `you:you`), with its test pack `test/chart@1.0.0` installed from
+ * `tests/acceptance/306/fixtures/packs/test-chart-1.0.0`, as #306's suite installs it (the scenario's `packs`).
+ */
+export function chartBoardTarget(): Target {
+  const document = JSON.parse(readFileSync(join(FIXTURES_306, 'chart-board.json'), 'utf8')) as JsonValue;
+  expect(isObject(document) && isObject(document['items']), `#306's chart board is a document with items: ${show(document, 600)}`).toBe(true);
+  return { name: '#306\'s chart board with test/chart@1.0.0 installed', document: document as JsonObject, packs: [{ id: 'test/chart', dir: join(FIXTURES_306, 'packs', 'test-chart-1.0.0') }] };
+}
+
 /** The process table the peer check reads: `deep show` from your shell, in no agent's process tree, so it writes as you. */
 const PROCESSES: JsonObject[] = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3002, ppid: 1, start: 3_000 }];
 const YOU: JsonObject = { pid: 3002, start: 3_000 };
 const PANELS: JsonObject = { main: { rect: [0, 0, 800, 600] } };
 
-/** A scenario where `document` is stored as shared document `doc` at revision 0, with `calls`. */
-export const scenarioOn = (doc: string, document: JsonObject, calls: JsonObject[]): JsonObject =>
-  ({ evidence: tempDir('ev'), processes: PROCESSES, panels: PANELS, docs: { [doc]: { panel: 'main', document } }, calls });
+/** A scenario where `document` is stored as shared document `doc` at revision 0, with `packs` installed and `calls`. */
+export const scenarioOn = (doc: string, document: JsonObject, calls: JsonObject[], packs: JsonObject[] = []): JsonObject =>
+  ({ evidence: tempDir('ev'), processes: PROCESSES, panels: PANELS, docs: { [doc]: { panel: 'main', document } }, ...(packs.length ? { packs } : {}), calls });
 /** Your patch to `doc`, as `deep show` sends it. */
 export const patchCall = (doc: string, patch: JsonValue): JsonObject => ({ call: 'deep show', peer: YOU, doc, patch });
 
 /** One patch's reply, or why it couldn't be sent. */
 export type Applied = { reply: JsonObject } | { unsent: string };
 
-/** Each patch applied on its own to a fresh product reveal, stored under the doc ID the patch names, at revision 0. */
-export function applyEach(bin: string, document: JsonObject, patches: readonly JsonObject[], planted?: string): Applied[] {
+/**
+ * Each patch `send` picks, applied on its own to a fresh copy of the target, stored under the doc ID the patch names,
+ * at revision 0, with the target's packs installed; a patch not picked answers `unsent`.
+ */
+export function applyEach(bin: string, target: Target, patches: readonly JsonObject[], send: (p: JsonObject) => boolean = () => true): Applied[] {
   const docOf = (p: JsonObject): string | undefined => (typeof p['doc'] === 'string' && p['doc'] !== '' ? p['doc'] : undefined);
   const scenarios: JsonObject[] = [];
   for (const p of patches) {
     const doc = docOf(p);
-    if (doc) scenarios.push(scenarioOn(doc, document, [patchCall(doc, p)]));
+    if (doc && send(p)) scenarios.push(scenarioOn(doc, target.document, [patchCall(doc, p)], target.packs));
   }
-  const replies = scenarios.length ? runScenarios(bin, scenarios, planted) : [];
+  const replies = scenarios.length ? runScenarios(bin, scenarios) : [];
   let k = 0;
-  return patches.map((p) => (docOf(p) ? { reply: replies[k++]![0]! } : { unsent: `its doc ${show(p['doc'] ?? null)} names no document to store the product reveal under` }));
+  return patches.map((p) => {
+    if (!send(p)) return { unsent: `not sent to ${target.name}` };
+    return docOf(p) ? { reply: replies[k++]![0]! } : { unsent: `its doc ${show(p['doc'] ?? null)} names no document to store ${target.name} under` };
+  });
 }
 
 /** An applied patch's outcome, or a refusal's codes, paths and reasons, in a line. */
@@ -302,16 +332,21 @@ export function outcomeOf(a: Applied): string {
 }
 export const applied = (a: Applied): boolean => 'reply' in a && a.reply['outcome'] === 'applied';
 
+/** The outcomes of the guide's patches on one target, aligned with the patches. */
+export interface Outcomes { target: Target; outcomes: readonly Applied[] }
+
 /**
- * AC1's second check: for every op the patch schema lists, an example of it in the guide applies to the product reveal
- * with outcome `applied`. Each failure starts with the op and lists its examples' outcomes.
+ * AC1's second check, as amended (Nov 14): for every op the patch schema lists, an example of it in the guide applies
+ * with outcome `applied`: break_out's on #306's chart board (`board`), every other op's on the product reveal
+ * (`reveal`). Each failure starts with the op and names the target and its examples' outcomes there.
  */
-export function appliedFailures(ops: readonly string[], patches: readonly JsonObject[], outcomes: readonly Applied[]): string[] {
+export function appliedFailures(ops: readonly string[], patches: readonly JsonObject[], reveal: Outcomes, board: Outcomes): string[] {
   const failures: string[] = [];
   for (const op of ops) {
-    const mine = patches.map((p, i) => ({ p, a: outcomes[i]! })).filter(({ p }) => opsOf(p).includes(op));
+    const on = op === BREAK_OUT ? board : reveal;
+    const mine = patches.map((p, i) => ({ p, a: on.outcomes[i]! })).filter(({ p }) => opsOf(p).includes(op));
     if (!mine.length) failures.push(`${op}: the guide holds no example of it to apply`);
-    else if (!mine.some(({ a }) => applied(a))) failures.push(`${op}: none of its ${mine.length} example(s) applies to the product reveal: ${mine.map(({ p, a }) => `${show(p, 400)} → ${outcomeOf(a)}`).join(' | ')}`);
+    else if (!mine.some(({ a }) => applied(a))) failures.push(`${op}: none of its ${mine.length} example(s) applies to ${on.target.name}: ${mine.map(({ p, a }) => `${show(p, 400)} → ${outcomeOf(a)}`).join(' | ')}`);
   }
   return failures;
 }
