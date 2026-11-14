@@ -1,0 +1,10 @@
+Repository lint comparison (not a waiver or change to known-failures.json)
+
+Merge-base-only lint findings: 154
+Head hub/acceptance lint findings: 154
+Head snapshot-service lint findings: 154
+Same normalized findings, including duplicates: True
+
+Normalization: only the scripts/canvas-closures.mjs/Map projections drift line. Its closures and drift commands write the same log concurrently; one run reports the drift directly and another reports the interleaved wrapper output. All other NEW FAIL lines compared exactly.
+
+New after-fix findings absent on merge base: none.

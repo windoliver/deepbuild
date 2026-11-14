@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/gate/test/checkouts.test.ts packages/gate/test/snapshot-reuse.test.ts packages/hub/test/checkouts.test.ts tests/acceptance/1906/exit/children-at-exit.test.ts tests/acceptance/1906/exit/sync-children-at-exit.test.ts tests/acceptance/31/retention.test.ts tests/acceptance/31/snapshot.test.ts` runs unleased
+
+ RUN  v5.0.5 <work>
+
+········································
+
+ Test Files  7 passed (7)
+      Tests  40 passed (40)
+   Start at  12:09:43
+   Duration  167.63s (tests 97%, transform 2%)

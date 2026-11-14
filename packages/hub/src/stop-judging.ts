@@ -1032,7 +1032,7 @@ export class StopJudging {
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
     this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
-    // Nothing but reads since the session's last claim: its snapshot and the lines it added stand, and its results carry (#82).
+    // Only reads seen by hooks: a reuse hint (#82), never proof that outside work left the tree unchanged (#2078).
     const same = this.options.state().live.get(r.session)?.workedSinceClaim === false && this.options.state().live.get(r.session)?.claim !== undefined;
     const lane = (async () => {
       const message = this.lastMessage.get(r.session) ?? '';
