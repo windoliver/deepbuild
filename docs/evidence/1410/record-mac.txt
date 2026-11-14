@@ -1,0 +1,16 @@
+# packages/record, tests named #1410 (two: lines 1102 and 1134 of test/record.test.ts), at dca3811e on the owner's Mac (load 17), same run as acceptance-mac.txt; as the Mac runner saved it (no colour codes, home folder as ~)
+
+== head dca3811e7d4b230f1313bd6da40a49e92aabe975 packages/record test/record.test.ts -t 1410
+load start { 17.15 10.54 8.23 }
+
+ RUN  v5.0.5 ~/private/dbc-1410c/packages/record
+
+ ✓ test/record.test.ts (75 tests | 73 skipped) 49ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 73 skipped (75)
+   Start at  22:02:04
+   Duration  295ms (transform 61%, tests 21%, import 17%, worker 1%)
+
+load end { 17.15 10.54 8.23 }
+vitest exit=0
