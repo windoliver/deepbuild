@@ -56,6 +56,9 @@ import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, 
 
 /** How long a landing's judgement waits for its verdict (#1331). */
 const VERDICT_WAIT_MS = 30 * 60_000;
+/** Older answers without words/images unambiguously selected an option; @6 records that choice explicitly. */
+const SELECTED_OPTION = `CASE WHEN answered.v >= 6 THEN json_extract(answered.data, '$.option')
+  WHEN json_extract(answered.data, '$.words') IS NULL AND json_extract(answered.data, '$.image') IS NULL THEN json_extract(answered.data, '$.answer') END`;
 
 type GateAction = { kind: 'budget.issue'; scope: { kind: 'issue'; ref: string }; runs: number; cap_usd: number; ends: number }
   | { kind: 'claim.stalled'; task: string }
@@ -152,6 +155,7 @@ export class StopJudging {
   /** Only in-flight work lives here; asks, decisions and stall counts come from the record (#2065). */
   private gateAnswers: Promise<void> = Promise.resolve();
   private switching: Promise<unknown> = Promise.resolve();
+  private readonly stallWrites = new Map<string, Promise<string | undefined>>();
 
   /** Claims in an untrusted repo whose spec names checks (#322): watch-only, so none of them passes. */
   private readonly watchOnlyClaims = new Set<string>();
@@ -264,9 +268,7 @@ export class StopJudging {
   private async gateAsks(ask?: string): Promise<GateAsk[]> {
     const rows = (await this.options.services.record.raw(`SELECT e.id, e.data, e.session_id AS session, e.agent, a.status,
       CASE a.status WHEN 'answered' THEN
-        (SELECT CASE WHEN answered.v >= 6 THEN json_extract(answered.data, '$.option')
-          WHEN json_extract(answered.data, '$.words') IS NULL AND json_extract(answered.data, '$.image') IS NULL THEN json_extract(answered.data, '$.answer') END
-          FROM events answered WHERE answered.kind = 'ask.answered' AND answered.writer = 'core' AND answered.subject = 'ask:' || e.id ORDER BY answered.log_pos DESC LIMIT 1)
+        (SELECT ${SELECTED_OPTION} FROM events answered WHERE answered.kind = 'ask.answered' AND answered.writer = 'core' AND answered.subject = 'ask:' || e.id ORDER BY answered.log_pos DESC LIMIT 1)
         WHEN 'defaulted' THEN json_extract(a.answer, '$')
         WHEN 'decided' THEN (SELECT json_extract(d.answer, '$') FROM events applied JOIN decisions d ON 'decision:' || d.id = json_extract(applied.data, '$.decision')
           WHERE applied.kind = 'decision.applied' AND json_extract(applied.data, '$.ask') = 'ask:' || e.id ORDER BY applied.log_pos DESC LIMIT 1) END AS answer
@@ -435,6 +437,14 @@ export class StopJudging {
     const [row] = (await this.options.services.record.raw(`SELECT subject_ref FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null }[];
     const task = row?.subject_ref;
     if (!task) return sendBack;
+    const run = () => this.countStop(meta, claim, task, sendBack);
+    const pending = (this.stallWrites.get(task) ?? Promise.resolve()).then(run, run);
+    this.stallWrites.set(task, pending);
+    try { return await pending; }
+    finally { if (this.stallWrites.get(task) === pending) this.stallWrites.delete(task); }
+  }
+
+  private async countStop(meta: HookMeta, claim: string, task: string, sendBack: string | undefined): Promise<string | undefined> {
     const standing = this.options.services.gate.standing(claim);
     if (!sendBack) {
       // A green claim starts the count again.
@@ -458,9 +468,14 @@ export class StopJudging {
       return sendBack;
     }
     if (fate.stalled) await this.stalled(meta, claim, task, fate.stalled);
-    else if (count.stalled && !(await this.gateAsks()).some((a) => a.action.kind === 'claim.stalled' && a.action.task === task)) {
-      // A crash after the count but before the ask cannot strand this task with nobody told.
-      await this.stalled(meta, claim, task, count.stalled as StallRule);
+    else if (count.stalled) {
+      // Only an ask since this episode's reset counts: a funded or newly proven earlier episode isn't this one.
+      const [reset] = (await this.options.services.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind = 'claim.progress' AND writer = 'core'
+        AND json_extract(data, '$.task') = ? AND json_extract(data, '$.stalled') IS NULL`, [task])) as { pos: number }[];
+      const since = Math.max(reset?.pos ?? 0, await this.fundedAt(task));
+      const asked = await this.options.services.record.raw(`SELECT 1 FROM events WHERE kind = 'ask.created' AND writer = 'core' AND log_pos > ?
+        AND json_extract(data, '$.action.kind') = 'claim.stalled' AND json_extract(data, '$.action.task') = ? LIMIT 1`, [since, task]);
+      if (!asked.length) await this.stalled(meta, claim, task, count.stalled as StallRule);
     }
     return undefined;
   }
@@ -672,12 +687,17 @@ export class StopJudging {
   private async stallCount(task: string): Promise<StallCount> {
     const [row] = (await this.options.services.record.raw(`SELECT data, log_pos FROM events WHERE kind = 'claim.progress' AND writer = 'core' AND json_extract(data, '$.task') = ? ORDER BY log_pos DESC LIMIT 1`, [task])) as { data: string; log_pos: number }[];
     if (!row) return freshCount();
-    const funded = await this.options.services.record.raw(`SELECT 1 FROM events e JOIN asks a ON e.subject = 'ask:' || a.id JOIN events raised ON raised.id = a.id
-      WHERE e.kind = 'ask.answered' AND e.writer = 'core' AND e.log_pos > ? AND json_extract(e.data, '$.answer') = 'fund'
-      AND json_extract(raised.data, '$.action.kind') = 'claim.stalled' AND json_extract(raised.data, '$.action.task') = ? LIMIT 1`, [row.log_pos, task]);
-    if (funded.length) return freshCount();
+    if (await this.fundedAt(task) > row.log_pos) return freshCount();
     const d = JSON.parse(row.data) as { rounds: number; last: { items: string; passing: string[] } | null; seen: string[]; stalled: string | null };
     return { rounds: d.rounds, seen: new Set(d.seen), ...(d.last ? { last: { items: d.last.items, passing: new Set(d.last.passing) } } : {}), ...(d.stalled ? { stalled: d.stalled } : {}) };
+  }
+
+  private async fundedAt(task: string): Promise<number> {
+    const [row] = (await this.options.services.record.raw(`SELECT COALESCE(MAX(answered.log_pos), 0) AS pos FROM events answered JOIN events raised ON answered.subject = 'ask:' || raised.id
+      WHERE answered.kind = 'ask.answered' AND answered.writer = 'core' AND (${SELECTED_OPTION}) = 'fund'
+      AND raised.kind = 'ask.created' AND raised.writer = 'core' AND json_extract(raised.data, '$.action.kind') = 'claim.stalled'
+      AND json_extract(raised.data, '$.action.task') = ?`, [task])) as { pos: number }[];
+    return row?.pos ?? 0;
   }
 
   private async saveStall(meta: HookMeta, claim: string, task: string, count: StallCount): Promise<void> {

@@ -19,7 +19,7 @@ it.each(['accept', 'split'])('typing %s without choosing an option does not sett
   try {
     await record.append({ ...core, writer: 'hook' }, { v: 1, id: ulid(now()), kind: 'session.start', ts: now(), data: { agent: 'claude-code', worktree: dir, branch: 'fix', thread: 'S1' } });
     await record.append(core, { v: 1, id: ulid(now()), kind: 'task.created', ts: now(), data: { task_ref: task, thread: 'S1', owner: 'you', title: 'Retry dropped connections' } });
-    const locked = fixtures('definition.locked@1')[0] as unknown as EventInput & { data: Record<string, unknown> };
+    const locked = fixtures('definition.locked@1')[0] as unknown as { data: Record<string, unknown> };
     await record.append(core, { v: 1, id: ulid(now()), kind: 'definition.locked', ts: now(), data: { ...locked.data, task_ref: task } as EventInput['data'] });
     const asks = await openAsks({ record, now, deliver: () => undefined });
     const ask = await asks.raise(core, 'claim.stalled', {

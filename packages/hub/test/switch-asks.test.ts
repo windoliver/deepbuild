@@ -30,7 +30,7 @@ it('two first Closes checks in linked worktrees raise only one switch ask', asyn
       const task = `task:item${41 + i}`;
       await record.append({ ...core, session, writer: 'hook' }, { v: 1, id: ulid(now()), kind: 'session.start', ts: now(), data: { agent: 'claude-code', worktree: i ? other : repo, branch: i ? 'second' : 'main', thread: session } });
       await record.append({ ...core, session }, { v: 1, id: ulid(now()), kind: 'task.created', ts: now(), data: { task_ref: task, thread: session, owner: 'you', title: 'fixture' } });
-      const fixture = fixtures('definition.locked@1')[0] as unknown as EventInput & { data: Record<string, unknown> };
+      const fixture = fixtures('definition.locked@1')[0] as unknown as { data: Record<string, unknown> };
       await record.append(core, { v: 1, id: ulid(now()), kind: 'definition.locked', ts: now(), data: { ...fixture.data, task_ref: task, requirements: [], base_commit: base } as EventInput['data'] });
     }
     const raw = record.raw.bind(record);
