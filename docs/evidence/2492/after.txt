@@ -1,0 +1,18 @@
+# with the tests corrected, run 1 of 5 (all five alike)
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+
+# wrong host 1: the late handle's down removed; environment-timeout.test.ts
+ FAIL  packages/extension-host/test/environment-timeout.test.ts > unloads a timed-out provider and cleans its late handle after the caller already received the timeout
+AssertionError: expected [ { id: 'env-2437107', …(2) }, …(1) ] to deep equally contain { Object (id, port, ...) }
+      Tests  1 failed (1)
+
+# wrong host 2: the active handle not listed for disable; environment-runtime.test.ts
+ FAIL  packages/extension-host/test/environment-runtime.test.ts > starts and stops its kitted provider, and disabling it cleans up the active handle
+AssertionError: expected [] to deeply equal [ { id: 'env-2443217', …(2) } ]
+      Tests  1 failed (1)
+
+# after review: the timeout test requires exactly its own stop after the install-time ones; 5 runs of 5 pass
+# wrong host 1 again (the late handle's down removed):
+AssertionError: expected [] to deeply equal [ { id: 'env-467771', …(2) } ]
+      Tests  1 failed (1)
