@@ -396,6 +396,8 @@ timed.push('tests/acceptance/202/budgets.test.ts');
 // #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
 alone.push('tests/acceptance/1971/');
 timed.push('tests/acceptance/1971/budget.test.ts');
+// #1973's files each build deep-show and run the full build's dump through op: field and deep_show.
+alone.push('tests/acceptance/1973/');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
@@ -617,6 +619,9 @@ timed.push('tests/acceptance/226/ac7-budgets.test.ts');
 // one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/226-oracle-redraft/');
 byHand.push('tests/acceptance/226-oracle/');
+// #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU; so do its
+// regressions in 2D films, exports, the live window and 3D motifs.
+alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -15,5 +15,6 @@ pub mod pairs;
 pub mod query;
 pub mod ring;
 pub mod roles;
+pub mod skin;
 pub mod track;
 pub mod written;

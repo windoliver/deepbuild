@@ -37,19 +37,20 @@ pub const INTERFACE: &str = "logic@1";
 pub const STATE: &str = "logic.state";
 /// A step at 60 Hz, in flicks: the rate of a document whose items name none.
 const STEP: i64 = 11_760_000;
-/// The params a logic item takes here; `wasm` is the program's bytes, which whoever holds the
-/// evidence store inlines by the program's hash before a frame, as a vector's outline is.
-const PARAMS: [&str; 10] = [
-    "program",
-    "step_rate",
-    "reads",
-    "writes",
-    "emits",
-    "fires",
-    "budget",
-    "checkpoint",
-    "assets",
-    "wasm",
+/// The params a logic item takes here, each with the form its reader takes (#1973); `wasm` is the
+/// program's bytes, which whoever holds the evidence store inlines by the program's hash before
+/// a frame, as a vector's outline is.
+const PARAMS: [(&str, &str); 10] = [
+    ("program", "asset ID"),
+    ("step_rate", "Hz"),
+    ("reads", "[control ID | reading ID | path]"),
+    ("writes", "{name → {type, count?: u32, interpolate?, unit?}}"),
+    ("emits", "{kind → {fields, max_per_step?: u16}}"),
+    ("fires", "{world → [input ID]}"),
+    ("budget", "{fuel?: integer, memory?: number, stack?: number}"),
+    ("checkpoint", "{every?: integer, budget?: bytes}"),
+    ("assets", "[asset ID]"),
+    ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
 /// The shipped module.
@@ -104,9 +105,9 @@ pub fn implementation(version: Semver) -> Module {
 }
 
 fn kind() -> KindEntry {
-    let param = |name| Param {
+    let param = |(name, form)| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
