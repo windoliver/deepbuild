@@ -98,7 +98,7 @@ import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, login
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
 import { CHROME, EXTENSION_HOOK_MS, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
-import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting } from "./hub-shared.js";
+import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE } from "./hub-shared.js";
 
 import { HubCanvas } from './hub-canvas.js';
 import { TranscriptReader } from './transcript-reader.js';
@@ -2305,11 +2305,16 @@ export class Core {
       // an answer or a send-back waits for the agent at this prompt: that is never lost, so the prompt goes on
       // with it, and the status rides beside it where the chat shows it.
       const reply = await this.queue(async (): Promise<{ context?: string; block?: string; message?: string }> => {
-        // Another session's message past the loop rule's count waits for your answer, at its submit (#352).
+        const hasRule = [...prompt.matchAll(TYPED_RULE)].some((m) => m[1]!.trim());
+        const from = hasRule || prompt.includes('rejected:') || isStatusQuestion(prompt) ? await this.promptOrigin(meta) : undefined;
+        if (from !== 'person' && hasRule) {
+          const reading = `A rule line in a prompt nobody typed was not saved (origin: ${from ?? 'unknown'}).`;
+          const [seen] = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.reading' AND json_extract(data, '$.reading') = ? LIMIT 1`, [meta.session, reading]);
+          if (!seen) await this.appendReading(meta.session, meta.agent, reading);
+        }
         const held = await this.loopHeld(meta);
         if (held) return { block: held, message: held.split(':')[0]! };
-        // Behind this prompt's own hook, so its origin is recorded (its event, or the queue's) when read.
-        const status = await this.statusReply(meta);
+        const status = await this.statusReply(meta, from);
         for (const [ask, handed] of [...this.delivery.handed]) if (handed.session === meta.session) await this.delivery.unwoken(meta.session, ask, prompt);
         // A continue a waiter took is shown by the wake that carries it; any other prompt carries it instead (#85).
         r.later.unshift(...(r.handed ?? []).filter((text) => !prompt.includes(text)));
@@ -2343,7 +2348,7 @@ export class Core {
         const ack = this.acknowledge(meta.session);
         const promised = await this.delivery.promiseCarried(meta.session, 'next_prompt', prompt);
         // What you reject while a session runs stops it now, not at the next wiki build (#111).
-        if (prompt.includes('rejected:')) {
+        if (from === 'person' && prompt.includes('rejected:')) {
           const message = { id: meta.id, role: 'user', text: prompt, outside: false } as Message;
           await captureRejected(this.record, this.connection('cli'), this.now, [{ session: meta.session.replace(/[^0-9A-Za-z]/g, ''), project: repoOf(meta.cwd) ?? null, messages: [message], from: 0 }], true);
           await syncRejected(this.raw, this.root.dir).catch(() => undefined);
@@ -2353,7 +2358,7 @@ export class Core {
         this.memory.firstPrompted.add(meta.session);
         const taste = first ? await this.memory.tasteAt(meta.session, meta.cwd, prompt, false) : undefined;
         // A rule you typed anywhere, or every one after a compaction or a resume (#344).
-        const rules = await this.memory.promptRules(meta, prompt).catch((error: unknown) => { process.stderr.write(`deep hub: rules at ${meta.session}'s prompt: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
+        const rules = await this.memory.promptRules(meta, prompt, from).catch((error: unknown) => { process.stderr.write(`deep hub: rules at ${meta.session}'s prompt: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
         const siblings = await this.siblings.deliver(meta, until);
         const later = r.later.splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'continues', text }));
         const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'promised checks', text: promised }, { name: 'notes', text: notes ? this.delivery.noteText(notes) : undefined }, ...later, { name: 'verdict', text: landed ? `DeepBuild: ${landed}` : undefined }, { name: 'slow verdicts', text: slow }, { name: 'acknowledgement', text: ack.context, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
@@ -2453,26 +2458,20 @@ export class Core {
   callGone(call: string, closed = false): void {
     this.jobKinds?.gone(call, closed);
   }
-  /**
-   * A status question a person typed ("still going?", "all done?", "what's next?", "anything for me?"), answered from
-   * the record with no model call: the answer the prompt is blocked with. Undefined for any other prompt, and for
-   * the same words from a scheduled task, a subagent's report, another session or a prompt the adapter can't place.
-   */
-  private async statusReply(meta: HookMeta): Promise<string | undefined> {
+  private async promptOrigin(meta: HookMeta): Promise<string | undefined> {
+    const spliced = this.state.sessions.get(meta.session)?.spliced;
+    const from = spliced?.get(meta.id)?.from;
+    spliced?.delete(meta.id);
+    if (from !== undefined) return from;
+    await Promise.allSettled([...this.inflight]);
+    const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
+    return row ? row.f ?? 'unknown' : undefined;
+  }
+  /** Only a person's status question is answered from the record, without a model call (#83). */
+  private async statusReply(meta: HookMeta, from: string | undefined): Promise<string | undefined> {
     const prompt = meta.fields?.prompt ?? '';
     // #669's planted wrong program: a status question goes on to the model as any prompt does.
-    if (!isStatusQuestion(prompt) || this.options.plant === 'status-from-model') return undefined;
-    // The prompt's origin as the hook mapped it: kept at the splice for one the transcript's queue had shown first
-    // (#25), else on its own event, once its append has settled (one that never lands has no origin: not a person's).
-    const spliced = this.state.sessions.get(meta.session)?.spliced;
-    let from = spliced?.get(meta.id)?.from;
-    spliced?.delete(meta.id);
-    if (from === undefined) {
-      await Promise.allSettled([...this.inflight]);
-      const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
-      from = row ? row.f ?? 'unknown' : undefined;
-    }
-    if (from !== 'person') return undefined;
+    if (!isStatusQuestion(prompt) || this.options.plant === 'status-from-model' || from !== 'person') return undefined;
     const live = this.state.live.get(meta.session);
     // A turn newer than the claim's that has not finished (going, waiting, stuck, failed or gone quiet) answers with
     // the session's own state, whatever the earlier claim says; one that finished unjudged has no claim of its own.

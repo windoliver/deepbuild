@@ -867,6 +867,22 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
         Some(Value::Object(f)) => {
             if let Some(p) = f.get("param").and_then(Value::as_str) {
                 From::Param(p.into())
+            } else if let Some(side) = f.get("transition").and_then(Value::as_str) {
+                // #466: an operator transition's two finished sides and its progress.
+                match side {
+                    "progress" => From::Param(side.into()),
+                    "outgoing" | "incoming" => From::Target {
+                        op: crate::transition::SIDES.into(),
+                        output: side.into(),
+                    },
+                    _ => {
+                        bad(
+                            issues,
+                            "a transition input is outgoing, incoming or progress",
+                        );
+                        return None;
+                    }
+                }
             } else if let Some(p) = f.get("channel").and_then(Value::as_str) {
                 From::Channel(p.into())
             } else if let Some(sha) = f.get("texture").and_then(Value::as_str) {

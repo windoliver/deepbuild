@@ -290,6 +290,8 @@ pub(crate) struct Facts<'e> {
     counts: Vec<Counts>,
     applies: Vec<bool>,
     named: Vec<(usize, &'e str)>,
+    /// Whether each item is `visible: false`, which no pass draws (#1938).
+    hidden: Vec<bool>,
 }
 
 fn facts<'e>(
@@ -303,8 +305,10 @@ fn facts<'e>(
         counts: Vec::with_capacity(run.len()),
         applies: Vec::with_capacity(run.len() * item_ops.len()),
         named: Vec::new(),
+        hidden: Vec::with_capacity(run.len()),
     };
     for &(i, id, item) in run {
+        f.hidden.push(item.get("visible") == Some(&Value::Bool(false)));
         f.fulls.push(
             item.get("kind")
                 .and_then(Value::as_str)
@@ -393,12 +397,14 @@ pub(crate) fn estimate_by(
         counts: Vec::with_capacity(items.len()),
         applies: Vec::with_capacity(items.len() * item_ops.len()),
         named: Vec::new(),
+        hidden: Vec::with_capacity(items.len()),
     };
     for part in split(&mut entries, &|run| facts(doc, items, &item_ops, run)) {
         f.fulls.extend(part.fulls);
         f.counts.extend(part.counts);
         f.applies.extend(part.applies);
         f.named.extend(part.named);
+        f.hidden.extend(part.hidden);
     }
     let ids: Vec<&str> = items.keys().map(String::as_str).collect();
     let evaluated = moving(&item_ops, &f, &ids);
@@ -425,6 +431,11 @@ pub(crate) fn estimate_by(
                 continue;
             }
             bytes += t.bytes_per_item;
+            // #1938: an item `visible: false` draws nothing, and the frame's evaluation skips
+            // it; a document's operator still works over it.
+            if f.hidden[i] && !document {
+                continue;
+            }
             // What it declares is work the frame that shows or changes its item holds, whatever
             // moves after (#1417); its terms only while the frame evaluates the item.
             let mut ns = op.op.cost.map_or(0.0, |cost| cost(item) * 1e6);
@@ -448,9 +459,14 @@ pub(crate) fn estimate_by(
             .map(|k| format!("{}.{}", k.entry.family, k.entry.name))
             .collect();
         // A GPU operator item (`gpu.*`, #429) runs as its own pass, never as the module's
-        // shipped ones, so it doesn't charge them.
+        // shipped ones, so it doesn't charge them; nor does an item `visible: false` (#1938),
+        // which no pass draws.
         let drawn: Vec<usize> = (0..f.fulls.len())
-            .filter(|&i| !f.fulls[i].starts_with("gpu.") && kinds.iter().any(|x| x == f.fulls[i]))
+            .filter(|&i| {
+                !f.hidden[i]
+                    && !f.fulls[i].starts_with("gpu.")
+                    && kinds.iter().any(|x| x == f.fulls[i])
+            })
             .collect();
         if drawn.is_empty() {
             continue;
@@ -469,6 +485,9 @@ pub(crate) fn estimate_by(
     }
     let mut costs: BTreeMap<&str, Vec<_>> = BTreeMap::new();
     for (i, item) in items.values().enumerate() {
+        if f.hidden[i] {
+            continue;
+        }
         let registered = costs
             .entry(f.fulls[i])
             .or_insert_with(|| sealed.costs_for(f.fulls[i]));

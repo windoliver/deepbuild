@@ -397,6 +397,11 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/1936/');
 // #1935's files each build deep-show.
 alone.push('tests/acceptance/1935/');
+// #1938's files each build deep-show and draw on the GPU. The first draft's faults file and its Oracle lane are kept by
+// hand: their text-under-4.5:1 twin, "Seventy percent", fails the document's own honest-numbers check before contrast
+// decides anything (tests/acceptance/1938-redraft-contrast/DISPUTE.md); the blind redraft runs in their place.
+alone.push('tests/acceptance/1938/machines.test.ts', 'tests/acceptance/1938-redraft-contrast/');
+byHand.push('tests/acceptance/1938/faults.test.ts', 'tests/acceptance/1938-oracle/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
@@ -644,6 +649,11 @@ byHand.push('tests/acceptance/226-oracle/');
 // #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU; so do its
 // regressions in 2D films, exports, the live window and 3D motifs.
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
+// #466's files each build deep-show, deep-motion or deep-gpu and draw films through them (AC1 on the Metal GPU).
+// AC3, AC6 and AC7 are proved by their blind redraft, on the owner's ruling; the first draft's three files can't pass
+// on any program and are kept by hand (466/DISPUTE.md).
+alone.push('tests/acceptance/466/', 'tests/acceptance/466-redraft-ac3/', 'tests/acceptance/466-redraft-ac6/', 'tests/acceptance/466-redraft-ac7/');
+byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/acceptance/466/${f}.test.ts`));
 // #222's files each build deep-show and expand cue lists through it; budgets.test.ts times 512 cues in release.
 // AC7's blind redraft runs the same way, and the first draft's budgets file is kept by hand: its per-frame half
 // reads check-phase nodes as frame work, so it fails on whichever film loads first (222/REDRAFT-AC7.md).
@@ -662,6 +672,9 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
+// after, so nothing else may build deep-marks-render in the checkout while it runs.
+alone.push('tests/acceptance/2497/');
 // #2073's file starts a real hub and an agent stand-in with its deep mcp for each test.
 alone.push('tests/acceptance/2073/');
 // #2073 has deep_run ask the project's trust first and run on the claim's commit as a claim's checks run, so the older

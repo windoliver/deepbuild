@@ -1,0 +1,12 @@
+SHA-256 of task inputs, reused fixture support and supplied runtime entries (not rebuilt):
+7ba3103eb68b4fc82af8aff5441bd9a02cfc1126bba687c16c2b375417807ed6  ../issue.json
+fc3aca95172313bfd618ef1afaf1c0bfa6060bf4faa0722ac8195d5b7a285d55  AGENTS.md
+c5e547e50703db9c553eeb2403ce07a99d6215ce81270c14ac67819587075dd5  docs/technical-design.md
+3ae5004765fc1d25824465e1fe06c914b80ba795a2c64df0c132b258936069db  tests/acceptance/325/helpers.ts
+ab32b931a2b1af6256cf159e6697559ad1731a0ae9b57355311f98b83db1c3cd  tests/acceptance/325/scenarios.ts
+a03080ce8c2e9ed0873cb77cf70e25a3e9823c16d6ec7d807a81884d813a1bd2  tests/acceptance/325/fixtures/agent.mjs
+e28ad31c1133832e026f6374b99fa133c947846d0867f7df2be76eb99a7cb978  tests/acceptance/1537/fixtures/fake-reviewer.pl
+3ed5b0aceafe493b4d98be46493378971c3614e203faf87ff8cad9b3e4167051  tests/acceptance/1537/fixtures/rubric.md
+63630c9a4648384eff527f34a98bcdf17cc646d84607c0dd53479a84ff0fc6cf  packages/cli/dist/main.js
+d2e429bd3602cad08d472757888de6d26cc54a4f29423b493da74dc5b75d415d  target/debug/deep-hook
+79709daed00474f8125e612133a7f264753af045ee478ebffed8ad561d906b0d  packages/*/dist tree manifest (472 files; sorted "<sha256>  <relative path>\n")
