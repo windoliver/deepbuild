@@ -67,7 +67,9 @@
     "verbs.match@1": "match@1.json",
     "verbs.match_twin@1": "match_twin@1.json",
     "verbs.count_to@1": "count_to@1.json",
-    "verbs.count_to_twin@1": "count_to_twin@1.json"
+    "verbs.count_to_twin@1": "count_to_twin@1.json",
+    "verbs.type@1": "type@1.json",
+    "verbs.type_twin@1": "type_twin@1.json"
   },
   "entries": {
     "cue.kind@1": [
@@ -167,6 +169,24 @@
             "t"
           ]
         }
+      },
+      {
+        "name": "type",
+        "class": "enter",
+        "recipe": "verbs.type@1",
+        "twin": "verbs.type_twin@1",
+        "description": "An enter: each target's text is typed on one grapheme a key, in reading order, behind the item `cursor` names, which rides the text's #head.",
+        "kit": {
+          "targets": [
+            "t"
+          ],
+          "params": {
+            "cursor": "b"
+          }
+        },
+        "joins": [
+          "cursor"
+        ]
       },
       {
         "name": "in_turn",
