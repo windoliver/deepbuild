@@ -626,6 +626,8 @@ alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
+alone.push('tests/acceptance/1969/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
