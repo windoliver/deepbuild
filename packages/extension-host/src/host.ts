@@ -1773,10 +1773,9 @@ class Host implements ExtensionHost {
       // Its connection gone, it is gone: a load still running is unloaded.
       socket.once('close', () => { if (this.exts.get(ext.entry.id) === ext) void this.unload(ext); });
       ext.ask = (method, params) => wire.call(method, params);
-      ext.stop = async () => {
-        socket.end();
-        ext.cleaned = await supervisor.cleanup(run).catch(() => undefined);
-      };
+      ext.stop = async () => { socket.end(); ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
+      // On Linux the package's process is the launcher's child: one scan, so it is tracked before the load answers.
+      await supervisor.lives(run);
     } finally {
       server.close();
       rmSync(dir, { recursive: true, force: true });

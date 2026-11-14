@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <clone>
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  02:13:26
+   Duration  3.82s (tests 94%, transform 4%, import 2%)
+
