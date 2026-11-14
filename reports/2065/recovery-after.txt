@@ -1,0 +1,20 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ ✓ packages/hub/test/switch-asks.test.ts > two first Closes checks in linked worktrees raise only one switch ask 314ms
+ ✓ packages/hub/test/gate-answer-origin.test.ts > typing accept without choosing an option does not settle a stalled task after restart 95ms
+ ✓ packages/hub/test/gate-answer-origin.test.ts > typing split without choosing an option does not settle a stalled task after restart 71ms
+ ✓ packages/hub/test/stall-recovery.test.ts > the next unchanged stop repairs a stall whose count committed but whose ask did not 119ms
+ ✓ packages/hub/test/gate-recovery.test.ts > an approved budget cut before its spend event does not prevent startup after its end 85ms
+ ✓ packages/hub/test/stall-progress.test.ts > free text fund does not reset a persisted stall 89ms
+ ✓ packages/hub/test/stall-progress.test.ts > concurrent send-backs on one task advance distinct rounds 48ms
+ ✓ packages/hub/test/stall-progress.test.ts > an old funded ask does not hide the missing ask of a later stalled episode 69ms
+ ✓ packages/hub/test/stall-receipt.test.ts > a committed round without its sent-back receipt is recovered once, before the next stop 87ms
+
+ Test Files  6 passed (6)
+      Tests  9 passed (9)
+   Start at  12:06:46
+   Duration  3.92s (tests 42%, import 31%, transform 25%, setup 1%)
+
+    Isolate  6 workers spawned · ~83ms startup each (spawn + environment, per file)
+             at least ~414ms faster with isolate: false — reuses workers across files instead of one per file

@@ -1,0 +1,41 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ × packages/hub/test/gate-answer-origin.test.ts > typing accept without choosing an option does not settle a stalled task after restart 1016ms
+   → words alone cannot accept task:item42: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ × packages/hub/test/gate-answer-origin.test.ts > typing split without choosing an option does not settle a stalled task after restart 3545ms
+   → words alone cannot split task:item42: expected [ { v: 1, …(12) } ] to have a length of +0 but got 1
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/gate-answer-origin.test.ts > typing accept without choosing an option does not settle a stalled task after restart
+AssertionError: words alone cannot accept task:item42: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ packages/hub/test/gate-answer-origin.test.ts:41:117
+     39|     await judging.recoverGateAnswers();
+     40|     expect(await record.read({ after: 0, kinds: ['issue.drafted'] }), …
+     41|     expect(await judging.closesGate('S1', 'gh pr create --body "Closes…
+       |                                                                                                                     ^
+     42|   } finally { await record.close(); rmSync(dir, { recursive: true, for…
+     43| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/gate-answer-origin.test.ts > typing split without choosing an option does not settle a stalled task after restart
+AssertionError: words alone cannot split task:item42: expected [ { v: 1, …(12) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ packages/hub/test/gate-answer-origin.test.ts:40:107
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  11:24:27
+   Duration  29.34s (transform 78%, tests 18%, import 4%)

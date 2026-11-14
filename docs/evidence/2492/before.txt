@@ -1,0 +1,6 @@
+# main 19c97e276, both test files, run 1 of 3 (all three alike)
+ FAIL  packages/extension-host/test/environment-runtime.test.ts > starts and stops its kitted provider, and disabling it cleans up the active handle
+Error: test/runtime-env's environment local reads FAIL on environment@1's kit at health-route: the fill threw: TypeError: Cannot read properties of undefined (reading 'up'); it isn't installed
+ FAIL  packages/extension-host/test/environment-timeout.test.ts > unloads a timed-out provider and cleans its late handle after the caller already received the timeout
+AssertionError: expected { Object (id, port, ...) } to deeply equal { Object (id, port, ...) }
+      Tests  5 failed | 2 passed (7)

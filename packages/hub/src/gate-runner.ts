@@ -581,21 +581,25 @@ export class GateRunner {
     // Compared by tree: a snapshot of a dirty folder is a new commit even when its files are the last one's.
     let tree: string | undefined;
     let checkout: string | null = null;
-    // A session that changed nothing since its last claim (`same`: no call but reads), whose every check ended there,
-    // takes that claim's snapshot and no checkout: its results carry, and nothing runs (#82).
-    const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
+    // Hooks cannot see an outside edit (#2078). Read the tree and HEAD under the snapshot budget before deciding
+    // whether the last claim's results can carry without a checkout (#82).
     const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0;
     // What a workspace's checks read is one of their inputs: another reading on the same tree is new work (#67).
     const stated = (t: string | undefined): string | undefined => (t !== undefined && r.state?.digests.length ? sha256Hex(new TextEncoder().encode(`${t}\n${r.state.digests.join('\n')}`)) : t);
-    if (r.same && !r.joins && prior?.tree !== undefined && r.checks.length && prior.state?.digests.join() === r.state?.digests.join() && r.checks.every((c) => ended(prior.entries.get(c.check)))) ({ snapshot, tree } = prior);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
-    else if (r.checks.length || r.joins) {
+    if (r.checks.length || r.joins) {
       try {
         installs = installsOf(r.cwd);
         ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
         tree = stated(tree);
-        checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
-        if (r.state) await hold(checkout, r.state.files);
+        // A sibling claim may have landed while Git read the tree; compare against the last claim now.
+        const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
+        // The snapshot's deterministic commit pins both tree and HEAD; tree alone would reuse the wrong parent.
+        const reuse = r.same && !r.joins && tree !== undefined && prior?.tree === tree && prior.snapshot === snapshot && r.checks.every((c) => ended(prior.entries.get(c.check)));
+        if (!reuse) {
+          checkout = (await this.o.checkouts().checkout({ worktree: r.cwd, commit: snapshot, dependencies: DEPENDENCIES, runs: [r.claim], budget })).dir;
+          if (r.state) await hold(checkout, r.state.files);
+        }
       } catch (error) {
         if (!(error instanceof OverBudget)) throw error;
         await this.o.invalid(r.claim, snapshot, error.message, 'INCONCLUSIVE');

@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The core's gate runner (#29): which stops and calls make a claim, the floor every claim passes before any check runs, head trust, the lanes and queue on a virtual clock, and the real runs under `cpu.slot` leases. The hub drives it from its stops; checks-command reads its masked-exit rule.
+The core's gate runner (#29): which stops and calls make a claim, the floor every claim passes before any check runs, head trust, the lanes and queue on a virtual clock, and the real runs under `cpu.slot` leases. The hub drives it from its stops; checks-command reads its masked-exit rule, github its head trust, checks-journey the tree a stack served and config-eval its error shape.
 
 ## Where new code goes
 
