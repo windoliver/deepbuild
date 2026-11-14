@@ -10,7 +10,7 @@ The PR says **Closes #1123**. Where the history below differs from this section,
 - **Reading.** [ac4-reading/README.md](ac4-reading/README.md): the 8 files took 127.76, 22.01 and 22.74 s in the alone block before; after, the alone block holds none of them and the parallel block runs them in 4.99, 4.58 and 4.28 s. The whole alone block's wall time is not measured.
 - **Main.** Merged in three times on 2026-11-13. The third merge, `6c6cc8a31`, resolves one conflict in `scripts/lanes.mjs`: this branch's `runLanes`, with main's #12 lines (a failing test run names its first failing test) carried into it. The first two merged clean.
 - **Owed: six signed tags**, each from a key on `.deepbuild/approvers`, which holds one key today, JingW6's: the five commits the guard names and the third merge. [closure-attempt/human-approval-items.txt](closure-attempt/human-approval-items.txt) lists each tag's files.
-- **Later checks.** What ran after this file's last commit is in the PR's description.
+- **Final head.** On `b0fddcd0b` trace reads "Closes #1123: each of its 2 criteria has a tagged test that ran, passed and failed on a wrong program", and `affected.mjs` reads FAIL: 253 new, 3 known, 69 inconclusive or blocked, 730 passed. [final-head/README.md](final-head/README.md) says what those are, with main's broken `deep-contracts` build and the two tests of this change that failed under load.
 - **No longer running.** The 12-hour wait for a whole-lane pair was stopped on 2026-11-13 before it asked for a grant, and a restart of the machine then removed its frozen workspaces. The unproven `lists_1477` watchdog change is not in this PR.
 
 ## History, 2026-11-11 to 2026-11-13
