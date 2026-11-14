@@ -18,13 +18,19 @@ const out: string[] = [];
 const log = (s: string) => { out.push(s); writeFileSync(join(OUT, 'app-run.txt'), `${out.join('\n')}\n`); };
 // The app's own window only, so nothing else on the screen is kept; the display is woken first (a sleeping one is black).
 const windowOf = (pid: number) => execFileSync('swift', ['-e', `import CoreGraphics
-let all = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as! [[String: Any]]
-print(all.first { ($0["kCGWindowOwnerPID"] as? Int) == ${pid} && ($0["kCGWindowLayer"] as? Int) == 0 }?["kCGWindowNumber"] as? Int ?? 0)`], { encoding: 'utf8' }).trim();
+import Foundation
+let all = (CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as NSArray? as? [[String: Any]]) ?? []
+let int = { (w: [String: Any], k: CFString) in (w[k as String] as? NSNumber)?.intValue ?? -1 }
+let mine = all.filter { int($0, kCGWindowOwnerPID) == ${pid} }
+let shown = mine.first { int($0, kCGWindowLayer) == 0 && int($0, kCGWindowIsOnscreen) == 1 }
+// The id, then what was seen, for the BLOCKED line: every window count, and each of the app's as layer/onscreen.
+print(shown.map { int($0, kCGWindowNumber) } ?? 0, "windows", all.count, "onscreen", all.filter { int($0, kCGWindowIsOnscreen) == 1 }.count, "app's", mine.map { "\\(int($0, kCGWindowLayer))/\\(int($0, kCGWindowIsOnscreen))" })`], { encoding: 'utf8' }).trim();
 let appPid = 0;
 const shot = (name: string) => {
   execFileSync('caffeinate', ['-u', '-t', '3']);
-  const id = windowOf(appPid);
-  if (id === '0') throw Error(`BLOCKED: no on-screen window for deep-app pid ${appPid}, so ${name} wasn't taken`);
+  const seen = windowOf(appPid);
+  const id = seen.split(' ')[0];
+  if (id === '0') throw Error(`BLOCKED: no on-screen window for deep-app pid ${appPid}, so ${name} wasn't taken (${seen})`);
   execFileSync('screencapture', ['-x', '-o', '-l', id, join(OUT, name)]);
   log(`   screenshot ${name} (window ${id})`);
 };
