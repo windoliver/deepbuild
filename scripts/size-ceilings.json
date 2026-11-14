@@ -45,7 +45,7 @@
   "crates/deep-show/src/main.rs": 3104,
   "crates/deep-show/src/shared.rs": 2169,
   "packages/asks/src/index.ts": 2059,
-  "packages/extension-host/src/host.ts": 3201,
+  "packages/extension-host/src/host.ts": 3200,
   "packages/hub/src/core.ts": 2638,
   "tests/acceptance/1407/twins/allow-noted/crates/deep-hook/src/main.rs": 1904,
   "tests/acceptance/1407/twins/denial-reworded/crates/deep-hook/src/main.rs": 1901,
