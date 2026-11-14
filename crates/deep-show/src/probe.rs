@@ -129,7 +129,7 @@ impl Hub<'_> {
         let Some((rgba, targets)) = gpu.draw_scene(&scene, &look, depth) else {
             return refused("unsupported_platform");
         };
-        let light = self.light3d(&doc, t, Some(size));
+        let light = self.light3d(&doc, t);
         let png = crate::snapshot::png(rgba, size);
         let Ok(sha) = crate::evidence::put(&self.scenario.evidence, &png) else {
             return refused("not_written");

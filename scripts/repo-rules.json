@@ -1641,6 +1641,10 @@
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #464: the look's print fields the print pass draws."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2513: render.exposure's query and sums, which its GPU reduction answers; already in the tree."
         }
       },
       "dev-dependencies": {

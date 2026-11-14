@@ -404,6 +404,10 @@ byHand.push('tests/acceptance/1938/faults.test.ts', 'tests/acceptance/1938-oracl
 // Mac (building deep-show for release where it times).
 alone.push('tests/acceptance/1939/');
 timed.push('tests/acceptance/1939/ac2-budget.test.ts');
+// #2513's files each build deep-show and draw on the GPU; ac2-budget times the readings on a reference Mac (building
+// deep-show for release there).
+alone.push('tests/acceptance/2513/');
+timed.push('tests/acceptance/2513/ac2-budget.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and

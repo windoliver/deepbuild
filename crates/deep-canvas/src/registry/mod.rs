@@ -657,6 +657,45 @@ pub struct Frame {
     pub picks: BTreeMap<u32, String>,
     /// The look's roles it was drawn in, sRGB.
     pub roles: BTreeMap<String, [u8; 3]>,
+    /// #2513: the light of its px reduced on the GPU that drew it, which render.exposure reads in
+    /// place of `linear`, then left empty: a few KB cross to the CPU, never its px.
+    pub reduce: Option<Reduce>,
+}
+
+/// What render.exposure asks of a frame's px (#2513): those whose pick is one of `picks`
+/// (sorted; `None`, every px), each px's linear RGB times `exposure`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LightQuery {
+    pub picks: Option<Vec<u32>>,
+    pub exposure: f64,
+    /// A px is over when its brightest exposed channel is above `white`, under when below `black`.
+    pub white: f64,
+    pub black: f64,
+    /// Its luminance, `weights` over its exposed RGB, is floored at `floor` before its log2.
+    pub weights: [f64; 3],
+    pub floor: f64,
+}
+
+/// The px a [`LightQuery`] read, those over and under, and the sum of their luminances' log2.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LightSums {
+    pub px: u64,
+    pub over: u64,
+    pub under: u64,
+    pub log2: f64,
+}
+
+/// What a host's reduction runs: a query in, its sums out.
+pub type Reducing = dyn Fn(&LightQuery) -> Option<LightSums> + Send + Sync;
+
+/// A host's reduction of one frame it drew (#2513), run on the GPU that drew it.
+#[derive(Clone)]
+pub struct Reduce(pub std::sync::Arc<Reducing>);
+
+impl std::fmt::Debug for Reduce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reduce")
+    }
 }
 
 /// A pixel check's run: the lowered document, the check input and the frames drawn for it.

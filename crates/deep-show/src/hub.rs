@@ -73,6 +73,9 @@ pub enum Planted {
     PixelChecksHoldAnywhere,
     /// #1939: a snapshot's light readings measure the whole frame, not the kept subject.
     LightFromWholeFrame,
+    /// #2513: render.exposure's reduction leaves out the frame's last rows, as a dispatch that
+    /// rounds them down to whole 32-row groups would.
+    ReductionLeavesOutLastRows,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.
@@ -2557,7 +2560,7 @@ impl<'a> Hub<'a> {
             let shown = self.shown_at(&show.doc, &self.with_outputs(&show.doc, &doc), show.t);
             let placed = self.arranged(&show.doc, &shown);
             self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
-            self.pending_light = self.light3d(&placed, show.t, show.size);
+            self.pending_light = self.light3d(&placed, show.t);
         }
         self.present(show, visible, drawn.as_ref(), reply)
     }

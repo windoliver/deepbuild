@@ -18,6 +18,7 @@ pub mod flare;
 mod glass;
 pub mod held;
 pub mod history;
+pub mod exposure;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -8269,23 +8270,12 @@ impl Renderer {
         Some((floats, ids))
     }
 
-    /// #1939: the px `at` of the image [`Self::read_pre_tone`] reads (indices into its rows,
-    /// top-down), each as f32 RGBA, in order, converting only those px.
-    pub fn read_pre_tone_at(&self, device: &Device, at: &[usize]) -> Option<Vec<f32>> {
+    /// #2513: what render.exposure's reduction reads of the last frame: the linear image the
+    /// output pass read (as [`Self::read_pre_tone`] reads it), its object-ID target, their size.
+    pub fn light_source(&self) -> Option<(&wgpu::TextureView, &wgpu::TextureView, [u32; 2])> {
         let t = self.targets.as_ref()?;
-        let texture = self.pre_tone.as_ref().map_or(&t.linear, |v| v.texture());
-        let half = read_texture(device, texture, t.size, 8)?;
-        let mut out = Vec::with_capacity(at.len() * 4);
-        for &i in at {
-            let px = half.get(i * 8..i * 8 + 8)?;
-            out.extend(
-                px.as_chunks::<2>()
-                    .0
-                    .iter()
-                    .map(|h| f16_to_f32(u16::from_le_bytes(*h))),
-            );
-        }
-        Some(out)
+        let pre_tone = self.pre_tone.as_ref().unwrap_or(&t.linear_view);
+        Some((pre_tone, &t.ids_view, t.size))
     }
 
     /// The frame's object-ID target alone, each pixel's u32 in little-endian bytes, rows top-down
