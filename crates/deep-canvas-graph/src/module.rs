@@ -60,9 +60,12 @@ fn manifest(implementation: &str) -> Manifest {
 fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>) {
     // #494: the kind (Graph and layout memory `graph@1`), so a document's graph is kept and a
     // match morph pairs its nodes by key; it draws as its laid-out nodes' boxes.
-    let field = |name: &'static str| Param {
+    // Each field with the forms its reader takes (#1973): `read_graph`, `read_layout` (which
+    // reads `spacing`'s fields only from an object), `read_memory`, and `groups` as `place` reads
+    // it.
+    let field = |(name, form): (&'static str, &'static str)| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
@@ -78,10 +81,21 @@ fn register(r: &mut Registrar, layout: fn(&mut View<'_>) -> Result<(), OpError>)
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["graph", "layout", "memory", "groups"]
-                    .into_iter()
-                    .map(field)
-                    .collect(),
+                params: [
+                    (
+                        "graph",
+                        "{nodes: [{id: ID, w: u, h: u, group?: ID, item?: item ID}], edges: [{id: ID, a: node ID, b: node ID, min_len?: u16}]}",
+                    ),
+                    (
+                        "layout",
+                        "{algo: name (layered or pinned), direction?: down | right, seed: u64, spacing?} (spacing: {node, rank, edge} in u)",
+                    ),
+                    ("memory", "{node ID → [rank: u32, order: u32, x: u, y: u]}"),
+                    ("groups", "box | none"),
+                ]
+                .into_iter()
+                .map(field)
+                .collect(),
             }],
             migrations: Vec::new(),
         },

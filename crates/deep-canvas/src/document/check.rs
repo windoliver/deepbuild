@@ -1933,8 +1933,13 @@ fn check_params(
             }
         }
         match param.ty {
-            // The kind's own reader checks the value's shape when it evaluates the item.
-            ParamType::Json => {}
+            // The forms the kind's reader declares (#1973): a value none takes is refused here,
+            // naming the form it expected and the one it got; the reader checks the rest.
+            ParamType::Json(declared) => {
+                if let Some(issue) = form_issue(key, name, param.unit, declared, value) {
+                    issues.push(issue);
+                }
+            }
             ParamType::Str => {
                 if !value.is_string() {
                     // The closed code list has no type code; a value of another type is out of
@@ -2009,6 +2014,27 @@ fn check_params(
     for (name, n) in converted {
         params.insert(name, json!(n));
     }
+}
+
+/// A structured value no declared form takes, as `out_of_range` at its path: `size takes 3
+/// numbers in m; got 2 numbers`, with the forms it takes. A declaration the form language can't
+/// read refuses nothing here; the kit refuses it (#1973).
+fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) -> Option<Issue> {
+    let form = crate::form::parse(declared).ok()?;
+    let got = form.miss(value)?;
+    let gist = form.gist(unit);
+    let forms: Vec<String> = form.alternatives().iter().map(|f| f.print()).collect();
+    Some(Issue {
+        fix: format!("Write {name} as {}: {gist}.", forms.join(" or ")),
+        forms,
+        ..Issue::error(
+            "out_of_range",
+            key,
+            format!("items/{key}/params/{name}"),
+            value.clone(),
+            &format!("{name} takes {gist}; got {got}"),
+        )
+    })
 }
 
 /// A document's design size, as `fw` and `fh` read it.
