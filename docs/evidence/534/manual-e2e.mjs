@@ -34,14 +34,21 @@ const piece = (program) => ({
   seed: 534, items: { game: { kind: 'logic@1', params: { program: sha(program), writes: { count: { type: 'i32' }, request: { type: 'i32' } }, checkpoint: { every: 5 }, saves: { slots: 1, request: 'request' } } } },
   assets: { [sha(program)]: program.toString('base64') },
 });
+// Each runner process's exit status and whether it wrote to stderr, printed at the end.
+const exits = [];
 function call(c) {
   const program = c.piece.items.game.params.program.slice(0, 12);
   say(`deep-logic stdin ← ${JSON.stringify({ ...c, piece: `<the counter piece, program ${program}…>` })}`);
   const r = spawnSync(bin, [], { input: `${JSON.stringify(c)}\n`, encoding: 'utf8', maxBuffer: 1 << 28 });
-  const reply = JSON.parse(r.stdout);
-  return reply;
+  exits.push([r.status, r.stderr.length]);
+  return JSON.parse(r.stdout);
 }
-const short = (o) => `${JSON.stringify(o, (k, v) => (k === 'steps' || k === 'file' ? undefined : v))}   (steps and file paths left out)`;
+// A reply without its `steps` and `file` keys; the note names the ones this reply had.
+function short(o) {
+  const cut = new Set();
+  const text = JSON.stringify(o, (k, v) => (k === 'steps' || k === 'file' ? (cut.add(k), undefined) : v));
+  return `${text}   (left out: ${[...cut].sort().join(', ') || 'nothing'})`;
+}
 
 const dir = join(work, 'saves');
 mkdirSync(dir, { recursive: true });
@@ -76,8 +83,9 @@ say(`(node) cut the last byte of saves/${newest.hash}.save  →  ${before} bytes
 const o2 = call({ call: 'open_save', piece: p, saves_dir: dir, slot: 1, track: [], steps: 15 });
 say(short(o2));
 say(`opened at the deep hash recorded at step 10: ${o2.deep_hash.game === baked.saves[0].deep_hash.game}`);
-say('# 4. Change the program (one nop) and open with no migration: refused, naming both layout hashes. While no program exports layout_at, a save\'s layout is the sha256 of the program bytes (the header\'s `program` field is the program after the rewrite).');
+say('# 4. Change the program (one nop) and open with no migration: refused, naming both layout hashes. The step-20 save is still cut, so the save refused is the one at step 10. While no program exports layout_at, a save\'s layout is the sha256 of the program bytes (the header\'s `program` field is the program after the rewrite).');
 const changed = piece(counter(true));
 const o3 = call({ call: 'open_save', piece: changed, saves_dir: dir, slot: 1, track: [], steps: 15 });
 say(short(o3));
 say(`sha256 of the old program bytes ${sha(counter(false))}, of the new ${sha(counter(true))}`);
+say(`(node) each deep-logic process's [exit status, bytes on stderr], in order  →  ${JSON.stringify(exits)}`);
