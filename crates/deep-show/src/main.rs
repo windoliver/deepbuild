@@ -3089,6 +3089,10 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             export_planted(twin).map(StartPlanted::Run).ok_or(())
         }
         "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
+        "patch_fix_path_without_id" => Ok(StartPlanted::Run(Planted::PatchFixPathWithoutId)),
+        "patch_fix_envelope_without_reason" => {
+            Ok(StartPlanted::Run(Planted::PatchFixEnvelopeWithoutReason))
+        }
         "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)

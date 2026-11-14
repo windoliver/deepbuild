@@ -716,6 +716,7 @@ impl Hub<'_> {
         reply.insert("achieved".into(), achieved);
         // Errors first, inlined up to the read cap, with `truncated` when cut.
         let mut issues: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        planted_fix(self.scenario.planted, &mut issues);
         order_issues(&mut issues);
         let shown = inline_count(&issues);
         if shown < issues.len() {
@@ -1789,6 +1790,30 @@ impl Hub<'_> {
             self.stamp(reply);
         }
         replies
+    }
+}
+
+/// #1972's planted fixes: a full path's fix that names `items/<path>` without the item's ID, and
+/// the envelope's fix without `reason`.
+fn planted_fix(planted: Option<Planted>, issues: &mut [Value]) {
+    let reason = deep_canvas::document::patch_schema::ENVELOPE
+        .iter()
+        .find(|f| f.name == "reason")
+        .map(|f| format!("\"reason\": <{}>, ", f.takes))
+        .unwrap_or_default();
+    for issue in issues {
+        let Some(fix) = issue["fix"].as_str() else {
+            continue;
+        };
+        let fix = match planted {
+            Some(Planted::PatchFixPathWithoutId) if fix.contains("items/<id>/") => {
+                let actual = issue["actual"].as_str().unwrap_or_default();
+                format!("Write the path from its section: items/{actual}.")
+            }
+            Some(Planted::PatchFixEnvelopeWithoutReason) => fix.replace(&reason, ""),
+            _ => continue,
+        };
+        issue["fix"] = json!(fix);
     }
 }
 
