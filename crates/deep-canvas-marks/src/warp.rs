@@ -537,7 +537,7 @@ impl Warp {
                     let piece = piece_of(c, k, n);
                     let end = self.point(piece[3]);
                     let m = self.mapped(&piece, start, end);
-                    if !last && self.strays(&piece, &m, tolerance) {
+                    if !last && (folds(&m, tolerance) || self.strays(&piece, &m, tolerance)) {
                         return None;
                     }
                     ps.push([m[1], m[2], m[3]]);
@@ -626,6 +626,15 @@ fn flow_of(
         time,
         table: streams::encode(&table),
     })
+}
+
+/// Whether a mapped cubic folds back onto its start: its ends meet within `tolerance` while its
+/// handles reach past it, as a line through a fold of the map does (z² takes the imaginary axis
+/// out to 0 and back). Such a cubic has a cusp where it turns and no chord to stroke along, and
+/// the renderer draws nothing for it, so the piece is cut until each part runs one way.
+fn folds(m: &[P; 4], tolerance: f64) -> bool {
+    let d = |a: P, b: P| deep_canvas::ops::hypot(a[0] - b[0], a[1] - b[1]);
+    d(m[0], m[3]) <= tolerance && d(m[0], m[1]).max(d(m[0], m[2])) > tolerance
 }
 
 /// A sub-path as cubics `[start, c1, c2, end]`; a line is a cubic with its handles at its thirds.
@@ -1046,6 +1055,27 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_line_through_a_fold_is_cut_so_each_part_runs_one_way() {
+        // z² takes the imaginary axis to the negative reals, out to 0 and back to −1.
+        let w = warp(json!({"map": {"complex": {"f": "cmul(z, z)"}}}));
+        let verbs = vec![Verb::Move([0.0, -100.0]), Verb::Line([0.0, 100.0])];
+        let (out, n, _) = w.carry(&verbs, 0.5);
+        assert!(n >= 2, "the folded line is cut, not drawn as one cubic back onto its start");
+        let mut at = [0.0, 0.0];
+        for v in &out {
+            match *v {
+                Verb::Move(p) => at = p,
+                Verb::Cubic(a, b, p) => {
+                    assert!(!folds(&[at, a, b, p], 0.5), "a piece folds back: {at:?} → {p:?}");
+                    at = p;
+                }
+                _ => {}
+            }
+        }
+        assert!(worst(&w, &verbs, &out) <= 0.5);
     }
 
     #[test]
