@@ -3961,10 +3961,17 @@ mod tests {
         // five, the core raises its exception, and a sixth folds into it; sa asks one.
         let mut view = crate::record::View::default();
         let ask = |id: &str, kind: &str, writer: &str| {
-            let session = if id == "a1" { "sa" } else { "sd" };
+            let session = if id.starts_with('a') { "sa" } else { "sd" };
             serde_json::json!({"kind": "ask.created", "id": id, "session": session, "writer": writer,
                                "data": {"kind": kind, "question": format!("{id}?")}})
         };
+        // The record is a batching core's: it showed an earlier ask, answered since.
+        view.apply(ask("a0", "taste", "mcp:agent"));
+        view.apply(
+            serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T00:00:00.000Z", "asks": [{"ask": "ask:a0"}]}}),
+        );
+        view.apply(serde_json::json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a0", "data": {}}));
         for id in ["a1", "d1", "d2", "d3", "d4", "d5"] {
             view.apply(ask(id, "taste", "mcp:agent"));
         }

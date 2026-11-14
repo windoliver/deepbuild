@@ -107,6 +107,8 @@ pub struct View {
     pub inbox: Vec<Value>,
     /// The events applied since the reads, folded: what the views and the notifier read, through [`View::table`].
     table: Table,
+    /// Whether the core has shown asks in this record: an `ask.batched` of its was applied.
+    batched: bool,
     /// The planted walker's every event.
     #[cfg(feature = "plant-walks-events")]
     all: Vec<Value>,
@@ -176,10 +178,18 @@ impl View {
     /// The rows Needs you draws, oldest first: each open ask the core has shown, or put off with Later, as the hub's
     /// list holds them. One waiting for its batch, or held for the agent's next step, isn't one, and one folded into
     /// an exception shows through that exception (#22).
+    ///
+    /// A record with neither the hub's list nor any showing of the core's, a fixture's or an older hub's, has no
+    /// batch to wait for: its open asks draw at once, as its count counts them.
     pub fn needs_you(&self) -> Vec<&Value> {
+        let unbatched = !self.batched && !self.table().listed();
         self.inbox
             .iter()
-            .filter(|row| row["status"] == "shown" || row["status"] == "later")
+            .filter(|row| {
+                row["status"] == "shown"
+                    || row["status"] == "later"
+                    || (unbatched && row["status"] == "queued")
+            })
             .collect()
     }
 
@@ -208,6 +218,7 @@ impl View {
             }
         } else if kind == "ask.batched" && event["writer"] == "core" {
             // Shown, at a batch or at once, or again when its Later ends; a folded ask shows inside its exception.
+            self.batched = true;
             let asks = event["data"]["asks"]
                 .as_array()
                 .cloned()
