@@ -2,7 +2,7 @@
 
 The commands you run most start 12 to 23% lighter, two tests that are red on this tree pass again, and every package and crate is placed in one picture below, with the pieces the product does not reach named.
 
-Base: `41d712bf9`, main at `9b77cd2cd` merged into PR #2334's branch. The change is five source files (+19 −12) and three test files (+226), uncommitted on branch `perf/latency-audit-1113`. Every number below was read after the change was final. Outputs are in [latency-audit-2026-11-13/](latency-audit-2026-11-13/).
+Base: `41d712bf9`, main at `9b77cd2cd` merged into PR #2334's branch. The change is five source files (+19 −12) and three test files (+226), in PR #2334. Every number below was read on that base, after the change was final. Outputs are in [latency-audit-2026-11-13/](latency-audit-2026-11-13/).
 
 ## Not everything was read
 
@@ -199,8 +199,9 @@ These are on top of PR #2334, whose three changes are in the base.
 ## Deviations and unrun checks
 
 - **The main checkout was not pulled.** It holds uncommitted edits to `Cargo.lock` and `scripts/repo-rules.json`, both changed on main since, 535 untracked files of other sessions, and an untracked `tests/acceptance/2072/README.md` that differs from main's. A fast-forward there stops on those files unless that work is stashed or overwritten. Its branch tracks an old PR branch, so a plain `git pull` would merge that, not main. Four agent processes were running in it when I started.
-- **One merge commit was made**, `41d712bf9`, main into the new branch. Nothing else is committed and nothing is pushed.
-- **Main moved 142 commits during the session**, to `23baa43b4`. None touches a file this change edits, and a trial merge is clean. It was not merged again, so nothing here was run on it.
+- **Main was merged twice:** `41d712bf9` before the work, and `9ebdab71f` (main at `e0c90a5a5`, 150 commits later) before the push. None of those commits touches a file this change edits.
+- **After the second merge** the three test files pass again, 16 of 16, and `tsc --noEmit` over the eight changed files is clean. Nothing else was rerun there: every reading and the ten existing test files are from the first merge.
+- **`deep-hook` does not build on main at `e0c90a5a5`.** `cargo build --locked -p deep-hook` stops in `crates/deep-contracts/src/generated.rs`, which defines `RULE_340` and `RULE_341` twice (E0428). The crate is byte-identical to main's and this change touches no Rust. I found no open issue for it. The tests above ran with the `deep-hook` built at the first merge.
 - **`node scripts/affected.mjs` was not run.** It selects 1,072 test files and `cargo test` for `deep-app` for this change, with no WIDE line ([affected-selection.txt](latency-audit-2026-11-13/affected-selection.txt)). Thirteen test files ran.
 - **I started it once by mistake**, with a flag it does not have, and stopped it by PID after 40 s. It had begun the workspace build, which I let finish; no test of it ran.
 - **Not run:** the root `tsc --noEmit`, the timed and slow lanes, the perf lane, the preflight, clippy and `cargo test`. Of `tests/acceptance/1463` only `inbox.test.ts` ran (5 of 5).
