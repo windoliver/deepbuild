@@ -179,7 +179,7 @@ impl Session {
                 .filter(|_| checkpoints)
             {
                 Some(c) => {
-                    self.steps.failed = self.steps.failed_at.get(&c).cloned().unwrap_or_default();
+                    self.steps.failed = self.steps.failed_at[&c].clone();
                     self.steps.values = self.steps.checkpoints[&c].clone();
                     self.steps.at = Some(c);
                     self.steps.checkpointed = Some(c);

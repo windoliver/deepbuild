@@ -159,21 +159,20 @@ fn a_seek_back_onto_a_checkpoint_shows_the_trap_playing_there_shows() {
     );
     // Two steps past the checkpoint at half a second, then back to a flick after it: the seek
     // restores that checkpoint and runs no step, and the item is as failed as when played there.
+    // Then back to a flick after the start, where no step is due either: the checkpoint at the
+    // start holds no error, and neither does the frame.
     let eval = |t: i64| json!({"call": "eval", "doc": DOC, "t": t, "arrays": ["trap.k"]});
-    let (_, replies) = run(
-        &root,
-        &doc,
-        vec![eval(F / 2 + 2 * (F / 60)), eval(F / 2 + 1)],
-    );
+    let times = [F / 2 + 2 * (F / 60), F / 2 + 1, 1];
+    let (_, replies) = run(&root, &doc, times.map(eval).to_vec());
     std::fs::remove_dir_all(&root).ok();
-    for (n, reply) in replies.iter().enumerate() {
+    for (reply, wanted) in replies.iter().zip([true, true, false]) {
         let trapped =
             reply["issues"].as_array().into_iter().flatten().any(|i| {
                 i["code"] == "logic.trap" && i["severity"] == "error" && i["path"] == "trap"
             });
-        assert!(
-            trapped,
-            "a logic.trap error on the item trap in frame {n}: {reply}"
+        assert_eq!(
+            trapped, wanted,
+            "a logic.trap error on the item trap: {reply}"
         );
     }
 }
