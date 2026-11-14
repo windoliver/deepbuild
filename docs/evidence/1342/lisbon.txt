@@ -1,6 +1,4 @@
-   × AC9 #1342.d387be11 Each promise maps to a check of a named kind or to a taste call. A planted brief with a promise mapped to neither is refused, naming the promise 1076ms
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
- Test Files  1 failed (1)
-      Tests  1 failed | 6 passed (7)
-   Start at  03:02:51
-   Duration  731.95s (tests 100%)
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  08:11:46
+   Duration  736.04s (tests 100%)

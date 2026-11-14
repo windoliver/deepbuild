@@ -1,7 +1,8 @@
 # Evidence for #1342: one input to one card to a running project
 
 Runs on this Mac (18 cores, 1-minute load about 200 to 250), Node v24.22.2, on 2026-11-14, against the change in this
-branch. The blind suite is `tests/acceptance/1342/`, committed first and unchanged.
+branch. The blind suite is `tests/acceptance/1342/`, committed first; its world's one approved change came later, in a
+commit of its own.
 
 ## The blind suite as written can't reach a card
 
@@ -17,36 +18,26 @@ Run unchanged, `lisbon.test.ts` failed all 7 tests at `lisbon.test.ts:94`: `deep
 Every job on the runner waits for its account's first plan-window reading (`packages/runner/src/runner.ts`, `window`),
 and after 30 minutes with none it raises a `runner.window` ask. The suites that run a runner job give the account a
 sign-in and report one reading first (`tests/acceptance/1328/helpers.ts`, "A window reading with room";
-`tests/acceptance/63/world.ts`). The 1342 world does neither, so no right program can pass it. That is disputed and
-sent to a blind redraft of the job (AGENTS.md, Proof); the redraft is `tests/acceptance/1342-redraft/` once it lands,
-and swapping it in needs your approval.
+`tests/acceptance/63/world.ts`). The 1342 world does neither, so no right program can pass it. That was disputed and sent
+to a blind redraft (`50697f597` on `worktree-agent-a8877d81b96755549`), which confirmed the gap but chose another contract.
 
-## The blind suite with only a window reading added
+## The approved fix, and the runs
 
-To check everything else, the unchanged test files ran with one setup file outside the folder that, after each
-`World.open`, writes `.claude.json` with an `oauthAccount` into the world's home and sends one `windows.report` with
-room, exactly as 1328 does. It touches nothing else, and isn't committed:
-
-```ts
-const open = World.open.bind(World);
-World.open = async (o = {}) => {
-  const w = await open(o);
-  writeFileSync(join(w.home, '.claude.json'), JSON.stringify({ oauthAccount: { accountUuid: ACCOUNT, emailAddress: 'dh1342@example.invalid' }, mcpServers: {}, projects: {} }));
-  await control(w.hub, 'windows.report', { agent: 'claude-code', account: ACCOUNT, rate_limits: { five_hour: { used_percentage: 5, resets_at: now + 10_800 }, seven_day: { used_percentage: 20, resets_at: now + 400_000 } } });
-  return w;
-};
-```
+On 2026-11-14 the owner chose to keep this suite with the window reading in its world
+(`tests/acceptance/1342/APPROVED-WORLD-FIX.md`). `helpers.ts`'s `World.open` now writes `.claude.json` with an
+`oauthAccount` into the world's home and reports one `windows.report` with room, as 1328 does; nothing else in the
+suite changed. Run once each on the branch after merging main:
 
 | File | Result | Log |
 | --- | --- | --- |
-| `home.test.ts` (AC2, AC4, AC5, AC6, AC11, and the plants `asks-which-home`, `creates-before-approval`, `repo-public-by-default`, `empty-list-while-researching`) | 5 of 5 pass | `home.txt` |
-| `lisbon.test.ts` (AC1, AC3, AC7, AC8, AC9, AC10, AC12) | 6 of 7 pass; AC9 failed | `lisbon.txt` |
-| `lisbon.test.ts -t AC9`, after the fix below | passes | `ac9.txt` |
+| `home.test.ts` (AC2, AC4, AC5, AC6, AC11, and the plants `asks-which-home`, `creates-before-approval`, `repo-public-by-default`, `empty-list-while-researching`) | 5 of 5 pass, 204 s | `home.txt` |
+| `lisbon.test.ts` (AC1, AC3, AC7, AC8, AC9, AC10, AC12) | 7 of 7 pass, 736 s | `lisbon.txt` |
 
-AC9 failed because the research prompt listed your projects by name: the Lisbon workspace's name holds "five-day trip
-to Lisbon", so the played agent, which answers the first entry whose words are in its prompt, gave the birthday job
-the Lisbon answer. The prompt now lists projects by id alone. AC12 passed rather than reading INCONCLUSIVE, so the card came within
-5 minutes of Send at that load.
+Before the fix was approved, the same reading came from a setup file outside the folder. That run found one bug of
+this change: the research prompt listed your projects by name, so the Lisbon workspace's name ("five-day trip to
+Lisbon") put that answer's words into the birthday job's prompt, and the played agent answered it with the Lisbon
+answer (AC9). The prompt now lists projects by id alone. AC12 passed rather than reading INCONCLUSIVE, so the card
+came within 5 minutes of Send at a load of about 200 on 18 cores.
 
 ## Unit tests
 
