@@ -1,0 +1,67 @@
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/351 zz-e2e-demo --reporter=verbose
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/351
+
+=== commit 284a5852d0f9937e8e2fe970626185bab8d02042
+=== linux 7.0.0-1024-nvidia arm64, node v24.22.0, python3 Python 3.12.3
+
+=== The guide's typescript example ===
+ ✓ zz-e2e-demo.test.ts > says what ran where 57ms
+1 build     copied docs/extension-guide/typescript, stamped digest d1:c228f86b1dc8534b…
+2 install   example/paths@1.0.0 (built by: no agent)
+3 conform   passed=true reasons=[]
+4 load      {"status":"loaded","id":"example/paths","version":"1.0.0","place":"sandbox","run":"run:01M7AME7VMF70GBQMDN813QPRG"}
+            its process: pid 133603, started and tracked by the supervisor; this test's own pid 133386
+5 in use    [{"kind":"ext.paths.relative","extension":"example/paths"}]
+6 run       inputs ["src/cart.mjs","spec/cart.test.mjs"]
+            -> outcome=passed testsRun=2 (example.json expects passed/2)
+6 run       inputs ["src/cart.mjs","../secrets.env","/etc/hosts"]
+            -> outcome=failed testsRun=3 (example.json expects failed/3)
+               failure: ../secrets.env is outside the checkout
+               failure: /etc/hosts is outside the checkout
+
+ ✓ zz-e2e-demo.test.ts > walks the guide's TypeScript example 413ms
+=== The guide's json-rpc example ===
+1 build     copied docs/extension-guide/json-rpc, stamped digest d1:6f956c4be7695e46…, main's first line #!/usr/bin/python3.12
+2 install   example/rpcpaths@1.0.0 (built by: no agent)
+3 conform   passed=false reasons=["its code didn't register in the platform sandbox: the connection closed"]
+=== node scripts/guide.mjs --check ===
+PASS guide: docs/extension-guide.md has one entry per published method (42) and slot (16), each as the contract has it
+exit 0
+ × zz-e2e-demo.test.ts > walks the guide's JSON-RPC example 99ms
+   → it passes conformance: expected { id: 'example/rpcpaths', …(4) } to match object { passed: true }
+(4 matching properties omitted from actual)
+ ✓ zz-e2e-demo.test.ts > runs the guide's drift test 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  zz-e2e-demo.test.ts > walks the guide's JSON-RPC example
+AssertionError: it passes conformance: expected { id: 'example/rpcpaths', …(4) } to match object { passed: true }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "passed": true,
++   "passed": false,
+  }
+
+ ❯ walk zz-e2e-demo.test.ts:38:38
+     36|   const c = await h.check(p);
+     37|   say(`3 conform   passed=${c.passed} reasons=${JSON.stringify(c.reaso…
+     38|   expect(c, 'it passes conformance').toMatchObject({ passed: true });
+       |                                      ^
+     39|   const load = await h.load(p);
+     40|   say(`4 load      ${JSON.stringify(load)}`);
+ ❯ zz-e2e-demo.test.ts:66:57
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  06:19:29
+   Duration  912ms (tests 79%, transform 13%, import 8%)
+
+exit 1
