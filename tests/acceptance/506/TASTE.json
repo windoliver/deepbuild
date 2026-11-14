@@ -1,0 +1,18 @@
+{
+  "issue": 506,
+  "criterion": "#506.58529d4d",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in session (\"validate and clseo whever agaps\")",
+  "when": "2026-11-14T17:09:02+00:00",
+  "screenshots": {
+    "screen-inset.png": "4fe25a616efee3e09276c9fe59419c9437500869f57002f0212ed46140741c69",
+    "second-camera-inset.png": "f7671f413a9dd7111148e5696a9dfb9ba87d07559f6fbe85e001485ddfc88149",
+    "terrain-heatmap.png": "fd16babcb446afb8020de06ae0886c5fab6eca1e928e2b268929bda29a7afde6",
+    "overlay-view.png": "7540a614d0d8600bb712a605df8d40eea913736eec58710e8d9fc2c4fdf22771",
+    "lamp-card.png": "3b1a5d866d38f16540d51bad8d31fba501cedb195c980977bfaacc1a4dfda5bd"
+  },
+  "recordings": {
+    "masked-inset.apng": "fea0938283fd367157fb4eb428fc45d93548604b0cdea818aa1adfb43c76020f"
+  },
+  "note": "Checked each still whole and at 4x crops of its edges, and all 40 frames of the recording as a contact sheet. The screen's green ground and blue bar stop at the window's edge inside the white bezel in every frame, through the turn, the lift and the return of the take-apart (frames 10 to 15 and 30 to 35). The second-camera inset shows the side camera's ball and grey wall filling the window. The heatmap drapes over the 40 m relief with square cells following the slopes, the tree standing uncovered through it, the terrain outside the box in its own colour. The overlay sits in the safe frame's bottom-right quarter with a clean 1 px ink border, showing the film from the side camera. The card draws over the sofa with its title, image and close button crisp; its edges are soft by a sub-pixel, as it is placed on the lamp's projection to the sub-pixel. Re-recorded after the card's placement moved to the sub-pixel: only lamp-card.png changed."
+}
