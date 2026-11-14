@@ -1,0 +1,164 @@
+Planted twins: a copy of the built base ede4b367 in a scratch dir, packages/hub/dist/core.js patched (diffs below), the same test file.
+Command in the twin: npx vitest run tests/acceptance/1632/redraft-ac2 (--silent=false for twin0)
+
+################ twin0: patch to packages/hub/dist/core.js
+7095,7097d7094
+<             if (!required)
+<                 return undefined;
+<             throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+---------------- twin0: output
+
+ RUN  v5.0.5 ~/<scratchpad>/twin
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH0Y0YWEZKPFNMAGVPSC11, stamped by B: refused not_found: Wait on an ask this session raised, by the handle deep_ask returned.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH0Y0YWEZKPFNMAGVPSC11, with no PreToolUse: refused unbound: This deep_wait call binds to no session: no PreToolUse stamped for it is unspent.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_status: ok {"session":"475893f5-68f1-476e-a1fe-3223ba6dac0f","gates":{"watch_only":false,"reason":null},"claims":[]}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's own deep_ask: ok {"ask":"ask:01M6YH0YKE63VZE2XFQ6YWX5F6","status":"provisional","answer":"thinqfd75b","note":"Go on with Thin qdc4e7: it is provisional and can be undone, and on
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_claim: ok {"session":"475893f5-68f1-476e-a1fe-3223ba6dac0f","claim":"claim:01M6YH0YMG3HZYTP48GP4CVHYQ","event":"01M6YH0YMG3HZYTP48GP4CVHYQ"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_open_item: ok {"task_ref":"task:01M6YH0YJ500000000A8CXSE8F","event":"01M6YH0YMTCCCMDRRY5VYXPRB0"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH0Y0YWEZKPFNMAGVPSC11 again, stamped by B: refused not_found: Wait on an ask this session raised, by the handle deep_ask returned.
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:28:53
+   Duration  3.04s (tests 93%, transform 4%, import 2%, setup 1%)
+
+
+################ twin1: patch to packages/hub/dist/core.js
+7095,7097c7095
+<             if (!required)
+<                 return undefined;
+<             throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+---
+>             return context.session;
+---------------- twin1: output
+
+ RUN  v5.0.5 ~/<scratchpad>/twin
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YGZZ4QBXT78BVB1M500T2N, stamped by B: ok {"ask":"ask:01M6YGZZ4QBXT78BVB1M500T2N","status":"answered","answer":"pickq15d90"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YGZZ4QBXT78BVB1M500T2N, with no PreToolUse: ok {"ask":"ask:01M6YGZZ4QBXT78BVB1M500T2N","status":"answered","answer":"pickq15d90"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_status: ok {"session":"86bf2ac8-7c38-46f2-b868-3f008c61d1d8","gates":{"watch_only":false,"reason":null},"claims":[]}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's own deep_ask: ok {"ask":"ask:01M6YH009FN37QQW4N6MQHH18M","status":"provisional","answer":"thinqbbb27","note":"Go on with Thin q73e71: it is provisional and can be undone, and on
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_claim: ok {"session":"86bf2ac8-7c38-46f2-b868-3f008c61d1d8","claim":"claim:01M6YH00A3EXFCN04A42J0FW23","event":"01M6YH00A3EXFCN04A42J0FW23"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_open_item: ok {"task_ref":"task:01M6YH008700000000SKWRJ3DE","event":"01M6YH00B5V37GQ82YX2293HJP"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YGZZ4QBXT78BVB1M500T2N again, stamped by B: ok {"ask":"ask:01M6YGZZ4QBXT78BVB1M500T2N","status":"answered","answer":"pickq15d90"}
+
+ ❯ tests/acceptance/1632/redraft-ac2/ac2.test.ts (1 test | 1 failed) 2822ms
+   × #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes 2767ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+AssertionError: after the clear (A 86bf2ac8-7c38-46f2-b868-3f008c61d1d8 ended with reason clear, B e66dba51-51e4-4ca8-9f21-64a5d40d6a02 started in the same process), no call B makes through deep mcp returns your answer "pickq15d90" (Pick qc1399 amber) to A's ask:01M6YGZZ4QBXT78BVB1M500T2N as B's: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "B's deep_wait on A's ask:01M6YGZZ4QBXT78BVB1M500T2N, stamped by B carried your answer to A's ask (its answer is \"pickq15d90\"): {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#4\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M6YGZZ4QBXT78BVB1M500T2N\\\",\\\"status\\\":\\\"answered\\\",\\\"answer\\\":\\\"pickq15d90\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M6YGZZ4QBXT78BVB1M500T2N\",\"status\":\"answered\",\"answer\":\"pickq15d90\"}}}",
++   "B's deep_wait on A's ask:01M6YGZZ4QBXT78BVB1M500T2N, with no PreToolUse carried your answer to A's ask (its answer is \"pickq15d90\"): {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#5\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M6YGZZ4QBXT78BVB1M500T2N\\\",\\\"status\\\":\\\"answered\\\",\\\"answer\\\":\\\"pickq15d90\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M6YGZZ4QBXT78BVB1M500T2N\",\"status\":\"answered\",\"answer\":\"pickq15d90\"}}}",
++   "B's deep_wait on A's ask:01M6YGZZ4QBXT78BVB1M500T2N again, stamped by B carried your answer to A's ask (its answer is \"pickq15d90\"): {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#10\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M6YGZZ4QBXT78BVB1M500T2N\\\",\\\"status\\\":\\\"answered\\\",\\\"answer\\\":\\\"pickq15d90\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M6YGZZ4QBXT78BVB1M500T2N\",\"status\":\"answered\",\"answer\":\"pickq15d90\"}}}",
++ ]
+
+ ❯ tests/acceptance/1632/redraft-ac2/ac2.test.ts:64:224
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:28:22
+   Duration  3.07s (tests 96%, transform 2%, import 2%)
+
+
+################ twin2: patch to packages/hub/dist/core.js
+7095,7097d7094
+<             if (!required)
+<                 return undefined;
+<             throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+7520c7517
+<                 if (!row || row.session_id !== session)
+---
+>                 if (!row)
+---------------- twin2: output
+
+ RUN  v5.0.5 ~/<scratchpad>/twin
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH036Z04CA8D4VCCA0VEXV, stamped by B: ok {"ask":"ask:01M6YH036Z04CA8D4VCCA0VEXV","status":"answered","answer":"pickq7eed2"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH036Z04CA8D4VCCA0VEXV, with no PreToolUse: refused unbound: This deep_wait call binds to no session: no PreToolUse stamped for it is unspent.
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_status: ok {"session":"058feb92-7fb5-4073-be7c-7197e64dd5e6","gates":{"watch_only":false,"reason":null},"claims":[]}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's own deep_ask: ok {"ask":"ask:01M6YH03PKKD617ES0RT0J2X7S","status":"provisional","answer":"thinqd76f6","note":"Go on with Thin q8ff0c: it is provisional and can be undone, and on
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_claim: ok {"session":"058feb92-7fb5-4073-be7c-7197e64dd5e6","claim":"claim:01M6YH03QCTZY6RT7ZWT0E7KAK","event":"01M6YH03QCTZY6RT7ZWT0E7KAK"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_open_item: ok {"task_ref":"task:01M6YH03N70000000067F1NJ20","event":"01M6YH03QP563ENPEBNKHWVNQ5"}
+
+stdout | tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+B's deep_wait on A's ask:01M6YH036Z04CA8D4VCCA0VEXV again, stamped by B: ok {"ask":"ask:01M6YH036Z04CA8D4VCCA0VEXV","status":"answered","answer":"pickq7eed2"}
+
+ ❯ tests/acceptance/1632/redraft-ac2/ac2.test.ts (1 test | 1 failed) 2499ms
+   × #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes 2474ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1632/redraft-ac2/ac2.test.ts > #1632.681ec30e after /clear, your answer to the ask A raised before it never comes back through deep mcp as B's: not by B's deep_wait on it, nor by any other session-bound call B makes
+AssertionError: after the clear (A 369644ab-1e0b-4f60-b139-a13e0a7c6378 ended with reason clear, B 058feb92-7fb5-4073-be7c-7197e64dd5e6 started in the same process), no call B makes through deep mcp returns your answer "pickq7eed2" (Pick q5eb0b amber) to A's ask:01M6YH036Z04CA8D4VCCA0VEXV as B's: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "B's deep_wait on A's ask:01M6YH036Z04CA8D4VCCA0VEXV, stamped by B carried your answer to A's ask (its answer is \"pickq7eed2\"): {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#4\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M6YH036Z04CA8D4VCCA0VEXV\\\",\\\"status\\\":\\\"answered\\\",\\\"answer\\\":\\\"pickq7eed2\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M6YH036Z04CA8D4VCCA0VEXV\",\"status\":\"answered\",\"answer\":\"pickq7eed2\"}}}",
++   "B's deep_wait on A's ask:01M6YH036Z04CA8D4VCCA0VEXV again, stamped by B carried your answer to A's ask (its answer is \"pickq7eed2\"): {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#10\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M6YH036Z04CA8D4VCCA0VEXV\\\",\\\"status\\\":\\\"answered\\\",\\\"answer\\\":\\\"pickq7eed2\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M6YH036Z04CA8D4VCCA0VEXV\",\"status\":\"answered\",\"answer\":\"pickq7eed2\"}}}",
++ ]
+
+ ❯ tests/acceptance/1632/redraft-ac2/ac2.test.ts:64:224
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  13:28:26
+   Duration  2.83s (tests 93%, transform 4%, import 3%)
+

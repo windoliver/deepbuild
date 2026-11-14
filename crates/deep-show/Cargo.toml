@@ -182,6 +182,8 @@ test-look-finish-off = []
 # a layered layout that breaks a tie by registration order, and currentColor drawn in ink.
 test-data-m4-drops-last = []
 test-graph-tie-by-registration = []
+# #1417: a planted graph@1 whose layout declares no cost, which the kit fails.
+test-graph-layout-no-cost = []
 test-vector-currentcolor-ink = []
 test-sim = ["dep:deep-canvas-test-modules"]
 test-sim-a = ["test-sim"]

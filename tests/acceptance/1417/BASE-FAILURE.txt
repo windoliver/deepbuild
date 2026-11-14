@@ -1,0 +1,10 @@
+At base ede4b367 (2026-11-08, Linux arm64, 20 cores, 1-minute load 37 to 61), `npx vitest run --root tests/acceptance/1417 --no-file-parallelism --testTimeout=7200000`: 3 of 6 tests fail, 3 pass. `npx tsc -p tests/acceptance/1417/tsconfig.json` exits 0.
+
+Failing, each for the reason the issue gives:
+- over-budget.test.ts, "is refused at check with over_budget, naming graph.layout and its estimate": the 100,000-node graph in a data view is presented with no issue (`outcome: "presented"`, `issues: []`). The base charges `graph.layout` a flat 10,792 ns per item whatever the graph's size, so nothing is over the class.
+- estimate.test.ts: fails at its structural part, before the gate. Under the 1e-6 ms cap the base does refuse with `over_budget`, but its `actual` is only `{cpu_ms, gpu_ms, gpu_mb, fingerprint}` (no `operators`), so there is no per-operator estimate for `graph.layout`. The base's `deep-graph layout` also ignores `timed: true` and answers a fresh layout with no `ms` (checked by hand: release build, wall times about 2.4, 6.8, 68.5 and 927 ms per line at 100, 1,000, 10,000 and 100,000 nodes, at load about 58; readings off the reference Mac, not evidence).
+- planted.test.ts: the feature `test-graph-layout-no-cost` doesn't exist ("none of the selected packages contains this feature"), so the planted build fails.
+
+Passing at the base, not credited as the issue's work:
+- over-budget.test.ts, "on main (the merge base) the same graph passes the check": the merge base (here ede4b367 itself) presents the 100,000-node graph with no issue. This is the criterion's "on main it passes" half and must keep passing.
+- layered.test.ts (both tests): the graph module passes its kit with every `parity/graph/layered.board` case PASS, the board is presented with no error, and its item `flow`'s memory is fixtures/layered-layout.json's, which this job recorded from this base.
