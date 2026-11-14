@@ -1,0 +1,53 @@
+#1882 acceptance tests on the merge base 72fe11a11 (origin/main), November 14, 2026.
+Build: npm run build -w @deepbuild/conformance -w @deepbuild/cli (the CLI's tsc reports the base's type errors in
+packages it reaches that weren't built here, such as ../hub/src/intake.ts, and exits 2, but emits dist/main.js).
+Command: node node_modules/vitest/vitest.mjs run tests/acceptance/1882
+Trimmed to each failure's reason; the code frames are left out. Every failure is at an assertion, past the
+preconditions: each AC1 failure names what the base CLI printed (BLOCKED, where INVALID is expected), and the AC2
+failure names the list the base holds (packages/cli/src/main.ts:110). The 18 tests that pass on the base are the
+detector's own proofs (11) and the pairs of the precedence line the base already orders as the design does (7).
+
+ ❯ tests/acceptance/1882/one-order.test.ts (12 tests | 1 failed) 719ms
+   ❯ AC2 packages/cli/src holds no list of the five verdicts in order (12)
+     × AC2 no file under packages/cli/src holds a list of the five verdicts 151ms
+ ❯ tests/acceptance/1882/precedence.test.ts (14 tests | 7 failed) 1680ms
+   ❯ AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result (7)
+     × AC1 outcome missing (BLOCKED) with the finding exit_masked (INVALID) prints INVALID, never BLOCKED, and exits 3 103ms
+     × AC1 outcome missing (BLOCKED) with the finding no_tests_ran (INVALID) prints INVALID, never BLOCKED, and exits 3 81ms
+     × AC1 outcome missing (BLOCKED) with the finding crashed_before_first_assertion (INVALID) prints INVALID, never BLOCKED, and exits 3 70ms
+     × AC1 outcome missing (BLOCKED) with the finding type_error_as_assertion (INVALID) prints INVALID, never BLOCKED, and exits 3 110ms
+     × AC1 outcome missing (BLOCKED) with the INVALID finding before an INCONCLUS… prints INVALID and exits 3 107ms
+     × AC1 outcome missing (BLOCKED) with the INVALID finding after an INCONCLUSI… prints INVALID and exits 3 115ms
+     × AC1 outcome missing (BLOCKED) with two INVALID findings prints INVALID and exits 3 131ms
+ FAIL  tests/acceptance/1882/one-order.test.ts > AC2 packages/cli/src holds no list of the five verdicts in order > AC2 no file under packages/cli/src holds a list of the five verdicts
+AssertionError: AC2: packages/cli/src keeps no order of its own; the worst verdict is conformance's: expected [ Array(1) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "packages/cli/src/main.ts:110 lists FAIL, BLOCKED, INVALID, INCONCLUSIVE, PASS",
++ ]
+ ❯ tests/acceptance/1882/one-order.test.ts:38:116
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with the finding exit_masked (INVALID) prints INVALID, never BLOCKED, and exits 3
+AssertionError: AC1: a result that is both INVALID (exit_masked) and BLOCKED (missing) prints INVALID; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code exit_masked reads INVALID: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:48:180
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with the finding no_tests_ran (INVALID) prints INVALID, never BLOCKED, and exits 3
+AssertionError: AC1: a result that is both INVALID (no_tests_ran) and BLOCKED (missing) prints INVALID; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code no_tests_ran reads INVALID: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:48:180
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with the finding crashed_before_first_assertion (INVALID) prints INVALID, never BLOCKED, and exits 3
+AssertionError: AC1: a result that is both INVALID (crashed_before_first_assertion) and BLOCKED (missing) prints INVALID; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code crashed_before_first_assertion reads INVALID: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:48:180
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with the finding type_error_as_assertion (INVALID) prints INVALID, never BLOCKED, and exits 3
+AssertionError: AC1: a result that is both INVALID (type_error_as_assertion) and BLOCKED (missing) prints INVALID; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code type_error_as_assertion reads INVALID: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:48:180
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with the INVALID finding before an INCONCLUS… prints INVALID and exits 3
+AssertionError: AC1: INVALID is above BLOCKED wherever its finding stands; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code exit_masked reads INVALID; check code output_dropped reads INCONCLUSIVE: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:59:156
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with the INVALID finding after an INCONCLUSI… prints INVALID and exits 3
+AssertionError: AC1: INVALID is above BLOCKED wherever its finding stands; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code output_dropped reads INCONCLUSIVE; check code exit_masked reads INVALID: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:59:156
+ FAIL  tests/acceptance/1882/precedence.test.ts > AC1 a result that judges one INVALID and one BLOCKED prints INVALID from deep run --result > AC1 outcome missing (BLOCKED) with two INVALID findings prints INVALID and exits 3
+AssertionError: AC1: INVALID is above BLOCKED wherever its finding stands; deep run --result printed: BLOCKED run code missing reads BLOCKED; check code no_tests_ran reads INVALID; check code exit_masked reads INVALID: expected 'BLOCKED' to be 'INVALID' // Object.is equality
+ ❯ tests/acceptance/1882/precedence.test.ts:59:156
+ Test Files  2 failed (2)
+      Tests  8 failed | 18 passed (26)
