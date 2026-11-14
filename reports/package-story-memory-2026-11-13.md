@@ -142,6 +142,23 @@ request had waited behind four others; deep-hook, the root type-check and every 
 The worktree's `node_modules` is a clone of another worktree's with the same lockfile. The measuring scripts are not
 in the repo.
 
+## After merging main
+
+Main was merged once at `e0c90a5a5`, 150 commits past the base, with no conflict. Two of the corrected cards
+(deep-canvas-marks, deep-canvas-motion) had changed on main elsewhere in the file and merged clean. Main's #162 gave
+deep-show a link to deep-lottie-reader, which its card now names too. The counts above are the base's: main has 47
+crates now, and the four it added were not checked.
+
+| Check on the merged tree | Result |
+|---|---|
+| `tsc` builds of contracts, record, hub and cli, the packages main changed that the tests load | each exits 0 |
+| `startup-memory`, `state-table`, `codex-files` and `packages/asks/test` | 111 of 111 pass |
+| The eleven cards' crates against `cargo metadata` | ten link what they linked at the base; deep-show gained the one above |
+
+Not run again after the merge: the measurements, the acceptance suites, the root `tsc --noEmit`, `repo-rules`,
+`public-text` and `design-links`. deep-hook was not rebuilt: a build request waited behind nine others and was
+withdrawn, so the hub tests ran against the base's binary.
+
 ## Red on main, not from this change
 
 None is in `scripts/known-failures.json`. Each fails the same way on a copy of the tree at `9b77cd2cd`.

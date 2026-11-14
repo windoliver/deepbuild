@@ -16,7 +16,7 @@ The canvas side behind deep_show (#393). `deep-show run` plays a scenario of dee
 
 ## What it may import
 
-The canvas's host binary at the top of the Rust stack: every canvas crate, deep-gpu and the render crates, deep-marks-vello and deep-text, deep-images (the one image service), deep-codecs (the decode worker and the encode tool), deep-relay (the network seam's backend and relay), deep-logic with deep-sandbox-wasmtime (the logic module and its sandbox) and deep-physics-rapier (the physics backend), and on macOS deep-replica, deep-text-gpui and GPUI, each by crate name; libc for terminals' PTYs and processes. It draws canvas text (`canvas_text = true`), so scripts/text-lint.mjs holds it to the canvas's shaper, never GPUI's text system.
+The canvas's host binary at the top of the Rust stack: every canvas crate, deep-gpu and the render crates, deep-marks-vello and deep-text, deep-images (the one image service), deep-codecs (the decode worker and the encode tool), deep-relay (the network seam's backend and relay), deep-logic with deep-sandbox-wasmtime (the logic module and its sandbox), deep-physics-rapier (the physics backend) and deep-lottie-reader (the Lottie export's fidelity reader, run as `deep-show lottie-reader`, #162), and on macOS deep-replica, deep-text-gpui and GPUI, each by crate name; libc for terminals' PTYs and processes. It draws canvas text (`canvas_text = true`), so scripts/text-lint.mjs holds it to the canvas's shaper, never GPUI's text system.
 
 ## Deviations
 
