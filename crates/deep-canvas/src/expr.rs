@@ -959,14 +959,7 @@ impl Binder<'_> {
                     "tau" | "τ" => return Ok((Node::Num(ops::TAU), 1)),
                     _ => {}
                 }
-                let i = match self.vars.iter().position(|v| v == n) {
-                    Some(i) => i,
-                    None => {
-                        self.vars.push(n.clone());
-                        self.vars.len() - 1
-                    }
-                };
-                (Node::Var(i), 1)
+                (Node::Var(self.var(n)), 1)
             }
             P::Neg(a) => {
                 let (a, s) = self.bind(a)?;
@@ -1001,6 +994,11 @@ impl Binder<'_> {
                         return Ok((Node::Call(Fun::CellsOut(k as u8), nodes), size));
                     }
                 }
+                // #540: names that aren't a swizzle, after a plain name, are one var by their
+                // path, as `aim.ray.dir` reads a point control's entry by field.
+                if let (None, Some(path)) = (swizzle(s), self.path(a)) {
+                    return Ok((Node::Var(self.var(&format!("{path}.{s}"))), 1));
+                }
                 let (a, sa) = self.bind(a)?;
                 let Some(idx) = swizzle(s) else {
                     return Err(refuse(s, "is no swizzle of x, y, z, w (or r, g, b, a)"));
@@ -1009,6 +1007,27 @@ impl Binder<'_> {
             }
             P::Call(name, args, call) => self.call(name, args, call)?,
         })
+    }
+
+    /// The var `n`'s index, added at its first use.
+    fn var(&mut self, n: &str) -> usize {
+        self.vars.iter().position(|v| v == n).unwrap_or_else(|| {
+            self.vars.push(n.into());
+            self.vars.len() - 1
+        })
+    }
+
+    /// `p` as a dotted path of names from a plain name (not a sum's index or a constant).
+    fn path(&self, p: &P) -> Option<String> {
+        match p {
+            P::Name(n)
+                if !self.indices.contains(n) && !matches!(&**n, "pi" | "π" | "tau" | "τ") =>
+            {
+                Some(n.clone())
+            }
+            P::Swizzle(a, s) => Some(format!("{}.{s}", self.path(a)?)),
+            _ => None,
+        }
     }
 
     fn call(&mut self, name: &str, args: &[P], call: &str) -> Result<(Node, usize), Refusal> {

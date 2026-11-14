@@ -118,7 +118,9 @@ describe('AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub 
 
 const RESTORE = 'deep restore ~/backup';
 describe('AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails', () => {
-  it.each(['stopped', 'up'] as Mode[])('AC9 deep restore is denied in every form, naming the command for you to run, %s; git restore src/cart.ts and deep status are allowed', async (mode) => {
+  // The hub-stopped case is redraft-ac9/plan.test.ts's, which the owner chose over this one's: with the hub stopped,
+  // #1294's no-discarding-edits denies the twin `git restore src/cart.ts` too.
+  it.each(['up'] as Mode[])('AC9 deep restore is denied in every form, naming the command for you to run, %s; git restore src/cart.ts and deep status are allowed', async (mode) => {
     const repo = makeRepo({ README: 'shop\n', 'src/cart.ts': 'export const total = 0;\n' }).dir;
     const w = await world({ rules: defaultRules(), mode, cwd: repo });
     await expectDenied(w, shForms(RESTORE));

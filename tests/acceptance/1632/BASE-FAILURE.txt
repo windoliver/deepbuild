@@ -1,0 +1,66 @@
+Acceptance tests for #1632 on the base ede4b367 (origin/main, no fix applied), run on 2026-11-08 on Linux (so the
+reference-Mac budget is skipped INCONCLUSIVE), Node v24.22.0, with packages/cli/dist built by npm run build --workspaces
+and target/debug/deep-hook built from this checkout:
+
+  npx vitest run tests/acceptance/1632 --reporter=verbose
+  npx tsc -p tests/acceptance/1632          -> no errors
+
+Full output below; home paths redacted to ~.
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1501-3907b7
+
+ ↓ tests/acceptance/1632/budgets.test.ts > #1632.c4de6dbc on the reference Mac, a bound deep_open_item's p95 is unchanged from the merge base's 510ms [INCONCLUSIVE (reading only): platform linux, not a reference Mac]
+ ✓ tests/acceptance/1632/exited.test.ts > #1632.a3eebb10 a session that exited keeps its deep mcp's session-bound calls refused, naming it, though a live session in its worktree holds a matching stamp 3391ms
+ × tests/acceptance/1632/rotation.test.ts > #1632.62d3152b after /clear, a deep_claim stamped by the new session's PreToolUse is recorded under the new session, not refused naming the old 5358ms
+   → deep_claim #1 after /clear, stamped by B ae162f3d-ea10-46d0-b86c-b0a9f26a4caf's PreToolUse (A b4d83fee-0477-4dcf-8db8-2b5ce43c7898 ended with reason clear) must succeed: {"jsonrpc":"2.0","id":"tools/call#4","result":{"content":[{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"Session b4d83fee-0477-4dcf-8db8-2b5ce43c7898 has ended; this deep mcp acts for no session now.\",\"path\":\"/params/tool\",\"actual\":\"deep_claim\",\"evidence\":[]}"}],"isError":true}}: expected true to be false // Object.is equality
+ × tests/acceptance/1632/answers.test.ts > #1632.681ec30e an ask A raised before /clear and you answer after it reaches none of B's hooks, calls or deliveries 7698ms
+   → your answer to A 8faeb0c5-5890-47b3-9e06-387f5bd00c21's ask:01M6XJB9DFYFN2G93DDA97MKQ6 (Teal q131e115 header) reaches nothing B a4178e56-09a6-4f50-8b6c-f0fed233320e hears: expected [ …(2) ] to deeply equal []
+ ✓ tests/acceptance/1632/exited.test.ts > #1632.a3eebb10 a session cleared with no successor in its own process keeps refusing, naming it, though the next clear start in its worktree is another process's 4579ms
+ ✓ tests/acceptance/1632/rotation.test.ts > #1632.be55c5e4 deep_search after /clear goes on as before it: it still finds a past decision, stamped or not 5514ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1632/answers.test.ts > #1632.681ec30e an ask A raised before /clear and you answer after it reaches none of B's hooks, calls or deliveries
+AssertionError: your answer to A 8faeb0c5-5890-47b3-9e06-387f5bd00c21's ask:01M6XJB9DFYFN2G93DDA97MKQ6 (Teal q131e115 header) reaches nothing B a4178e56-09a6-4f50-8b6c-f0fed233320e hears: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "B's prompt hook reply after the answer: exit 0 stdout {\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions), new since your last prompt:\\n- tealq131e115\\n\\nDeepBuild delivers your answers:\\nYour answer to ask:01M6XJB9DFYFN2G93DDA97MKQ6 (\\\"Which header colour for q131e115?\\\"): Teal q131e115 header (tealq131e115), in place of Blue header, which you went on with. Undo it, then move to Teal q131e115 header.\"}} stderr ",
++   "B's second prompt hook reply: exit 0 stdout {\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"DeepBuild delivers your answers:\\nYour answer to ask:01M6XJB9DFYFN2G93DDA97MKQ6 (\\\"Which header colour for q131e115?\\\"): Teal q131e115 header (tealq131e115), in place of Blue header, which you went on with. Undo it, then move to Teal q131e115 header.\"}} stderr ",
++ ]
+
+ ❯ tests/acceptance/1632/answers.test.ts:44:88
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1632/rotation.test.ts > #1632.62d3152b after /clear, a deep_claim stamped by the new session's PreToolUse is recorded under the new session, not refused naming the old
+AssertionError: deep_claim #1 after /clear, stamped by B ae162f3d-ea10-46d0-b86c-b0a9f26a4caf's PreToolUse (A b4d83fee-0477-4dcf-8db8-2b5ce43c7898 ended with reason clear) must succeed: {"jsonrpc":"2.0","id":"tools/call#4","result":{"content":[{"type":"text","text":"{\"code\":\"unbound\",\"retryable\":false,\"remediation\":\"Session b4d83fee-0477-4dcf-8db8-2b5ce43c7898 has ended; this deep mcp acts for no session now.\",\"path\":\"/params/tool\",\"actual\":\"deep_claim\",\"evidence\":[]}"}],"isError":true}}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ valueOf tests/acceptance/1632/helpers.ts:287:88
+    285| /** The tool's value, which must not be an error. */
+    286| export function valueOf(o: Outcome, what: string): any {
+    287|   expect(o.isError, `${what} must succeed: ${JSON.stringify(o.reply).s…
+       |                                                                                        ^
+    288|   return o.value;
+    289| }
+ ❯ tests/acceptance/1632/rotation.test.ts:26:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  2 failed | 3 passed | 1 skipped (6)
+   Start at  04:32:43
+   Duration  11.42s (tests 96%, transform 2%, import 2%)
+

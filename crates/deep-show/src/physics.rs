@@ -418,6 +418,12 @@ impl Hub<'_> {
     /// its transport's span in its scene, on the core's input track `b.track` with every entry a
     /// canvas module fires: its key, steps, step hashes and the entries it keeps.
     pub(crate) fn physics_bake(&self, b: &Bake) -> Value {
+        self.physics_bake_read(b, false)
+    }
+
+    /// The bake `physics_bake` answers; with `bodies`, also every body's state after each step
+    /// and the occurrences (#540's `world`).
+    pub(crate) fn physics_bake_read(&self, b: &Bake, bodies: bool) -> Value {
         let Some(doc) = self
             .sessions
             .get(&b.doc)
@@ -462,8 +468,11 @@ impl Hub<'_> {
             Err(r) => return json!({"ok": false, "code": r.code, "path": r.path, "what": r.what}),
         };
         let steps = crate::stepped::steps_of(&doc, world, span, step_flicks(&w));
-        let call = json!({"call": "bake", "scene": doc, "world": b.world, "steps": steps, "frame_rate": rate,
+        let mut call = json!({"call": "bake", "scene": doc, "world": b.world, "steps": steps, "frame_rate": rate,
                           "track": derive::track_of(&kept), "read": []});
+        if bodies {
+            call.as_object_mut().map(|c| c.remove("read"));
+        }
         let reply = Run::new(None)
             .expect("the unplanted runner")
             .answer(&call)
@@ -471,7 +480,12 @@ impl Hub<'_> {
         if reply["ok"] != json!(true) {
             return reply;
         }
-        json!({"ok": true, "key": reply["key"], "steps": steps, "step_hashes": reply["step_hashes"], "inputs": kept})
+        let mut out = json!({"ok": true, "key": reply["key"], "steps": steps, "step_hashes": reply["step_hashes"], "inputs": kept});
+        if bodies {
+            out["bodies"] = reply["bodies"].clone();
+            out["occurrences"] = reply["occurrences"].clone();
+        }
+        out
     }
 
     /// #2293: `document` with the channels of the form `doc`'s session loads, which hold each

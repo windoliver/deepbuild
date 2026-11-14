@@ -1,0 +1,16 @@
+# scripts/spine.mjs judge --issue 44, from a local copy (no reopen; cp -a; each part and each non-PASS test printed), #44's row at b57b5536 (this change's code; the evidence files are all the commit adds beside it). Linux arm64, 2026-11-09.
+# Each part: its verdict, then each criterion not PASS. Then each non-PASS test.
+#348 FAIL: 12 criteria; not PASS: #348.1f4cd69b FAIL, #348.7391eba7 FAIL, #348.4c1dd1d8 FAIL, #348.b0d5cd73 FAIL
+#349 FAIL: 8 criteria; not PASS: #349.2eb6c029 FAIL
+#350 PASS: 9 criteria; not PASS: none
+#351 FAIL: 7 criteria; not PASS: #351.1d3d1e53 FAIL
+
+#348 FAIL AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base AC8 the perf lane has a extension-host task running node benchmarks/extension-host.
+#348 BLOCKED AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per
+#348 FAIL AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check AC4 the Python package passes conformance, loads out of process in the sandbox, and its check kind ext.pycheck.lint is in use
+#348 FAIL AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check AC4 running ext.pycheck.lint through the host reaches the Python runner: its result names Python 3 and the command passed
+#348 FAIL AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub AC5 a package an agent session built loads in the sandbox, out of the hub's process, and can't read a file outside its grant
+#348 FAIL AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub AC5 a release package your agent changed is no longer the release's: it loads in the sandbox, while the unchanged copy loads in the hub and rea
+#348 FAIL AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the packag
+#349 FAIL AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill AC5 the published contract passes the preflight's slot check, w
+#351 FAIL AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming 

@@ -1,0 +1,58 @@
+# The spine judge for #17 on the reference Mac, at e574148ba8f360598d43fbce968e027ead9118dc (PR #2096's head), 2026-11-13.
+# Run by the Mac runner after the owner's go at the Mac, from a git worktree whose path has no "deep-hook". The judge is
+# main's scripts/spine.mjs at e0c90a5a (has #2252, the #1816 fix), in a copy that pins #17 to this head and whose
+# reopen() returns early, so it writes nothing to GitHub; the runner checked the copy (the three counts below).
+# Load: the runner's gate (load <= 4) held when the judge started (3.94); it ended at 6.21. The per-test run of suite 315
+# after it ran at load 8-14, above the gate: its timed tests passed, and their readings are not baseline readings.
+# The Mac is on macOS 27.2.1; the earlier reference readings (mac-315.txt) were on 14.7.7.
+# Machine:
+#   Mac15,12
+#   Apple M3
+#   17179869184
+#   ProductName:		macOS
+#   ProductVersion:		27.2.1
+#   BuildVersion:		26B131
+#   Now drawing from 'AC Power'
+#   hyperfine 1.19.0
+#   judge start 2026-11-13 21:45:07 21:45  up 14:47, 2 users, load averages: 3.94 4.80 5.44 thermal 0
+#   judge end 2026-11-13 21:54:16 21:54  up 14:56, 2 users, load averages: 6.21 5.65 5.57 thermal 0
+#   r315 start 2026-11-13 21:55:11 21:55  up 14:57, 2 users, load averages: 14.18 8.11 6.49 thermal 0
+#   r315 end 2026-11-13 22:00:42 22:00  up 15:02, 2 users, load averages: 8.11 8.45 7.38 thermal 0
+# Run log:
+#   free KB 89847744 20:42:08 load { 5.27 7.46 20.93 } thermal 0
+#   main e0c90a5a5c11453bc41dfd4846703d054fa4a4d8 has 4950c76d: yes 20:42:12 load { 7.49 7.88 21.00 } thermal 0
+#   setup exit=0 20:43:04 load { 21.79 11.62 21.63 } thermal 0
+#   copy checks: e574148b=1 reopen-early-return=1 other-gh-calls=0 20:43:04 load { 21.79 11.62 21.63 } thermal 0
+#   judge exit=0 21:54:16 load { 6.21 5.65 5.57 } thermal 0
+#   head e574148ba8f360598d43fbce968e027ead9118dc setup exit=0 21:55:11 load { 14.18 8.11 6.49 } thermal 0
+#   r315 exit=0 22:00:42 load { 8.11 8.45 7.38 } thermal 0
+#   secret scan hits=0 22:00:42 load { 8.11 8.45 7.38 } thermal 0
+# judge-17-mac.json (stderr empty):
+{"issue":17,"commit":"e574148ba8f360598d43fbce968e027ead9118dc","verdict":"PASS","criteria":[{"id":"#17.dd3b43a1","outcome":"PASS"},{"id":"#17.0c1c8a6d","outcome":"PASS"},{"id":"#17.ee21dc5a","outcome":"PASS"}],"reopen":null}
+
+# npx vitest run --root tests/acceptance/315 --no-file-parallelism at the same head. Per test (status, ms, name):
+# 24 tests, 24 passed, 0 failed, 0 skipped
+passed 1599 AC3 #315.c8a3b16d with ANTHROPIC_API_KEY set, the SessionStart event carries true for it, and no log, spool or record row holds its value AC3 hub up and hub stopped: the request and the recorded session.start carry billing.ANTHROPIC_API_KEY true (false where unset), and the value is nowhere
+passed 20248 AC2 #315.9543886e overhead under 10 ms at p95 on top of process start, measured over 1,000 calls (redraft) AC2 1,000 PreToolUse calls for ls forwarded to a running hub, each matched by a watch-mode entry and allowed, cost under 10 ms at p95 over a native no-op binary
+passed 64 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base (redraft) AC8 on the reference Mac, the forwarded call's p95 overhead on top of process start, measured with hyperfine against the no-op floor, is under 10 ms
+passed 115 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 the perf lane has deep-hook's two tasks, each a #315 first measurement, valid against the merge base's budgets
+passed 49412 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 `node benchmarks/deep-hook.mjs overhead` runs and exits 0
+passed 2514 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 `node benchmarks/deep-hook.mjs fail-open` runs and exits 0
+passed 10055 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 under 50 ms to fail open: a PreToolUse against a hub stopped with SIGSTOP, from spawn to exit, p95 of 50 calls
+passed 5055 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 peak memory under 10 MB forwarding, failing open and failing closed, and a release binary under 3 MB
+passed 5114 AC9 #315.23cd76ed overhead is measured with hyperfine against a native no-op binary as the floor AC9 `node benchmarks/deep-hook.mjs overhead` runs hyperfine, timing deep-hook beside a native binary that does nothing
+passed 3047 AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept AC10 1,000 hooks eight at a time with the hub stopped, hook 400 killed mid-write after 650 more ran, then the hub starts
+passed 11876 AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept AC10 (wrong program) a hub that stops at the first bad line fails this test, naming the first ID lost
+passed 1544 AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool AC11 200 hooks spooled with the hub stopped; the test VFS cuts power right after the spool's removal; the hub restarts
+passed 9650 AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool AC11 (wrong program) a hub that removes the spool after a synchronous=NORMAL batch fails this test, naming the first ID
+passed 2713 AC1 #315.f0560928 with the hub stopped, a normal command is allowed in under 50 ms AC1 a PreToolUse for `ls` is allowed in under 50 ms, ten times each, with no hub, a hub stopped by SIGTERM, one killed with its socket left behind, and one stopped with SIGSTOP
+passed 31242 AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer AC13 against a hub that accepts and never reads, one that reads and never replies and one stopped with SIGSTOP, then a hub that holds a push 30 s, then a working hub reading the spool
+passed 112049 AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer AC13 (wrong program) a deep-hook with only a connect timeout waits for the agent's hook timeout and fails this test, naming the hub
+passed 14968 AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer AC13 (wrong program) a deep-hook that cuts every reply at a fixed deadline lets the held push through before its answer and fails this test
+passed 7654 AC5 #315.f8b9a600 a turn with tool calls but no hook event at the hub shows a "hooks not reaching DeepBuild" reading AC5 turn 2 ran a Bash call and no hook of it reached the hub: the session reads "hooks not reaching DeepBuild"; a session whose every turn reached the hub doesn't
+passed 15136 AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled AC12 the hub refuses a request carrying the planted field f_test; a test hub replies with a line that doesn't parse
+passed 14194 AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled AC12 (wrong program) a deep-hook that prints the reply as it came fails this test
+passed 1206 AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record (redraft) AC7 hub up: two PreToolUse hooks of one session stamped …789 carry that stamp, two different IDs, and are two events stamped …789
+passed 971 AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record (redraft) AC7 hub stopped, then started: two PreToolUse hooks of one session stamped …790 are spooled with that stamp and two different IDs, and are two events stamped …790
+passed 1876 AC4 #315.bf6d3707 events from hooks that ran while the hub was stopped are in the record after it starts, in order, with none lost AC4 two sessions' hooks, run one after another with the hub stopped mid-session, are each in the record once, in the order they ran, after the turn the hub saw
+passed 6494 AC6 #315.8366a61c with the clock fixed, hooks stamped …789 and …790 are spooled with those exact strings and recorded in that order; replaying the spool again appends nothing AC6 the two stamps, spooled, recorded as two events in order, and the same spool put back and replayed appends nothing

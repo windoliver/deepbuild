@@ -3238,7 +3238,9 @@ pub(crate) fn evaluate_compiled(
                             (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
                                 [m.base[0], m.base[1], m.base[2]].map(encode8)
                             }
-                            (None, _) => paint(look, params, &path)?,
+                            // #540: the box, cylinder and sphere marks wrap their builders (Marks
+                            // in 3D), so an unpainted one draws as an unpainted built mesh does.
+                            (None, _) => paint_or_muted(look, params, &path)?,
                         },
                         stroke: inked(
                             stroke(look, params, shape, &path)?,
