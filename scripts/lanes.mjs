@@ -31,6 +31,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/431/', 'tests/acceptance/432/', 'tests/acceptance/483/', 'tests/acceptance/484/', 'tests/acceptance/252/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   'tests/acceptance/453/',
+  'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
   'tests/acceptance/1172/',
   'tests/acceptance/1454/',
@@ -59,6 +60,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
  */
 export const slow = [
   'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
+  'packages/hub/test/reopened-items.test.ts', 'tests/acceptance/1633/reopened.test.ts',
   'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
   'tests/acceptance/1002/cli.test.ts', 'tests/acceptance/1002/screens.test.ts',
   'tests/acceptance/1002/twins.test.ts', 'tests/acceptance/1015/claude.test.ts',
@@ -249,6 +251,8 @@ alone.push('tests/acceptance/1485-redraft-ac2/');
 byHand.push('tests/acceptance/1485/cap.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
+// #1816's live file runs the spine judge for #44 for hours and reopens #44 on GitHub if it doesn't read PASS.
+byHand.push('tests/acceptance/1816/judged-again.live.test.ts');
 
 // #1515's files each start a hub on a 500-session record, and its budgets must run with nothing beside them.
 alone.push('tests/acceptance/1515/');
@@ -285,6 +289,9 @@ alone.push('tests/acceptance/532/');
 alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #534's files build deep-logic, write 64 MiB saves and freeze and kill their writer by PID; its budgets are timed.
+alone.push('tests/acceptance/534/');
+timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 // #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
