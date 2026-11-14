@@ -1,0 +1,9 @@
+✔ killing the recorded supervisor wrapper cannot strand Cargo (1895.577916ms)
+✔ successful build leader cannot leave a writer behind (2120.306417ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4275.149334

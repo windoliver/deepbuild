@@ -1,0 +1,32 @@
+
+ ▐▛███▛█   Claude Code v2.1.317
+▝▜██████▀  Haiku 5.5 · [plan]
+ ▝▝   ▝▝   /tmp/e2e1773-Gwub/fix/proj
+
+▎ Auto mode is now Claude Code's default permission mode.
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for risky actions and prompt injection before executing, runs the
+▎ ones it assesses as lower-risk, and blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+
+❯ This is an e2e test of DeepBuild. Use only the deepbuild MCP tools. 1) Call deep_ask with question 'e2e 1773: which letter?', options ['A','B'], kind choice,
+  filling other fields with null. 2) Call deep_wait on the ask it returns. 3) Call deep_wait on the same ask once more. Then stop, replying with one short
+  line per call saying what it returned.
+
+  Called deepbuild
+
+● 1. deep_ask returned an error: unbound, not retryable. The message says no PreToolUse stamp is unspent for this call, so the ask never bound to a session and
+     no ask ID was issued.
+  2. Not run. deep_wait needs the ask ID from step 1, and there isn't one.
+  3. Not run, for the same reason.
+
+  I didn't retry or work around the stamp, since the error says the call isn't retryable and the stamp comes from the harness. The DeepBuild hook at session
+  start may not have stamped this session, so that's the first thing to check.
+  ⎿  Stop says: says done · next: DeepBuild · session/7789fe46/01M7C6HXSZMJKETMKBFH9ASA4F
+
+✻ Cogitated for 8s · done 8:55 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ retry the deep_ask call
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ⏵⏵ auto mode on (shift+tab to cycle)

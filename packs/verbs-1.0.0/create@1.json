@@ -1,0 +1,19 @@
+{
+  "id": "verbs.create",
+  "version": "1.0",
+  "title": "Create",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: each target's outline builds from its start to its end over its window, as a path build.",
+  "inputs": {},
+  "steps": {
+    "build": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "params/ops/0/trim/end": 0
+        }
+      }
+    }
+  }
+}

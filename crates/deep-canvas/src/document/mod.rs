@@ -19,6 +19,7 @@
 mod apply;
 mod check;
 mod close;
+pub mod expands;
 mod merge;
 mod order;
 pub mod pack_kinds;

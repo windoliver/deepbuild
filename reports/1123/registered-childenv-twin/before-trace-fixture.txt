@@ -1,0 +1,4 @@
+PASS before: tests/acceptance/1123/environment.test.mjs › #1123.cd6b3dd8 childEnv discards a shell binary directory: failed on the merge base at its assertion
+PASS before: tests/acceptance/1123/environment.test.mjs › #1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory: failed on child-env-delete-after-merge at its assertion
+PASS trace: Part of #1123; open: #1123.4ed9aa75, #1123.07de86fd, #1123.273f1f14
+proof: wall time 23.9 s

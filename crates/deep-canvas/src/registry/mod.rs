@@ -174,6 +174,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("effect", "scene3d"),
     // #1732: placement by relation in 3D is the motion module's.
     ("arrange", "motion"),
+    // #222: a cue list is the motion module's, expanded at check.
+    ("cues", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -713,6 +715,8 @@ pub struct Registrar {
     pub costs: Vec<(String, Cost)>,
     /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
     pub elements: Vec<(String, Elements)>,
+    /// Its kinds expanded at check, by kind (`family.name`; #222).
+    pub expands: Vec<(String, crate::document::expands::Expand)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).

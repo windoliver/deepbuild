@@ -1,0 +1,19 @@
+Base of tests/acceptance/222-redraft-ac7 at f6d811c7947dea9d28bb64de8759dca02c1fa27c ("Merge pull request #2392 …"),
+main with no implementation of #222, plus the original suite tests/acceptance/222/ from 61308d52 as data.
+
+Not run against a binary. At the base nothing #222 names exists: no item kind `cues@1` (the document check flags an
+unknown kind with a notice, `unknown_kind`, and skips the item), no `markers` on a `deep show` reply's `expansions` and
+no entry there for a cue list, and no `timing.expand_ms`. No Rust was built for this record (the redraft's brief: don't
+build or run Rust); where each test fails was read from the base's code, not observed:
+
+- "a cue list costs nothing per frame beyond the channels it writes": both films present (the cue film's `cues@1` item
+  skipped with a notice, not an error). The hand film's channels move every square at 1.07 s; the cue film's squares
+  never move, so its frame at 1.07 s holds no work for them, and the test fails on assertion 1: "the cue film: nothing
+  of s0 ran at 1.07 s, so the cue list doesn't move it in that frame" (and s1 to s7).
+- "512 cues expand in under 10 ms at check on the reference Mac": off a reference Mac, or under load, judgeLimit's
+  machine check answers INCONCLUSIVE and the test fails "INCONCLUSIVE: the timing: this machine can't judge it now: …",
+  never passing. On one, the release build presents the film but its reply's expansions hold none for `list`: "the 512-cue
+  film: the reply's expansions hold one for the cue list list".
+
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/222-redraft-ac7/tsconfig.json, exits 0 (with
+the original suite beside it, which the test imports).

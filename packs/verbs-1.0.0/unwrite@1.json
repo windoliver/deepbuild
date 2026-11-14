@@ -1,0 +1,19 @@
+{
+  "id": "verbs.unwrite",
+  "version": "1.0",
+  "title": "Unwrite",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An exit: each target's text unwrites over its window, its reveal running from all to none.",
+  "inputs": {},
+  "steps": {
+    "unwrite": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/reveal/progress": 0
+        }
+      }
+    }
+  }
+}

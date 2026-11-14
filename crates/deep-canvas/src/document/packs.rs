@@ -27,6 +27,7 @@ use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
 pub mod deps;
+mod entries;
 pub mod module_fields;
 pub mod retired;
 
@@ -61,6 +62,8 @@ pub struct Planted {
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
     pub orphan_hands_id: bool,
+    /// #222: a canvas module's planted wrong expansion of its own kind, by name.
+    pub expander: Option<&'static str>,
 }
 
 /// A planted expander's walk over an instance's inputs (#202).
@@ -259,7 +262,8 @@ pub struct Pack {
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
-const STEP_OPS: &[&str] = &["mark", "item", "builder", "recipe"];
+/// `cue` writes a cue over the calling cue's targets; only a `cue.kind@1` verb runs it (#222).
+const STEP_OPS: &[&str] = &["mark", "item", "builder", "recipe", "cue"];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
     "number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record",
@@ -441,7 +445,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         .unwrap_or_default();
     let entries = match fields.get("entries") {
         None => Vec::new(),
-        Some(e) => check_entries(&id, e, &assets, sealed, &mut issues),
+        Some(e) => {
+            let recipes = fields.get("recipes");
+            check_entries(&id, e, &assets, recipes, sealed, &mut issues)
+        }
     };
     let aliases = match fields.get("aliases") {
         None => BTreeMap::new(),
@@ -516,6 +523,7 @@ fn check_entries(
     id: &PackId,
     entries: &Value,
     assets: &[Value],
+    recipes: Option<&Value>,
     sealed: &Sealed,
     issues: &mut Vec<Issue>,
 ) -> Vec<registry::lists::SealedEntry> {
@@ -574,8 +582,10 @@ fn check_entries(
                 ));
                 continue;
             };
+            // An entry that names one of the pack's recipes carries it, for its kit and its use.
+            let value = &entries::with_recipes(value, recipes);
             let own = format!("{}.", id.name);
-            if !entry.starts_with(&own) {
+            if !entry.starts_with(&own) && !entries::bare(id, reg, entry) {
                 let what = match reg.entry(entry) {
                     Some(first) => format!(
                         "`{entry}` would take the first-party entry `{entry}` of `{name}` (`{}`'s); a pack's entry is named `{}{entry}`",
@@ -847,12 +857,16 @@ fn check_recipe(
                 }
                 let op = s.get("op").and_then(Value::as_str).unwrap_or_default();
                 if !STEP_OPS.contains(&op) {
-                    let what = "not a step op of this slice (mark, item, builder, recipe)";
+                    let what = "not a step op of this slice (mark, item, builder, recipe, cue)";
                     issues.push(bad(&format!("{at}/op"), json!(op), what));
                     continue;
                 }
                 let kind = s.get("kind").and_then(Value::as_str).unwrap_or_default();
-                let Some((kind_name, _)) = crate::kinds::parse_kind(kind) else {
+                let parsed = match op {
+                    "cue" => Some((String::new(), 0)),
+                    _ => crate::kinds::parse_kind(kind),
+                };
+                let Some((kind_name, _)) = parsed else {
                     issues.push(bad(
                         &format!("{at}/kind"),
                         json!(kind),
@@ -1654,6 +1668,8 @@ pub struct Expansion {
     pub orphaned: Vec<(usize, String)>,
     /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
     pub channels: Map<String, Value>,
+    /// A module kind's expansion's section entries, by section (#222); a recipe's is empty.
+    pub sections: Map<String, Value>,
 }
 
 impl Expansion {
@@ -1663,7 +1679,7 @@ impl Expansion {
             .iter()
             .map(|d| (d.id.clone(), json!(format!("{:016x}", d.seed))))
             .collect();
-        json!({
+        let mut row = json!({
             "instance": self.instance,
             "kind": self.kind,
             "pack": self.pack,
@@ -1672,7 +1688,12 @@ impl Expansion {
             "seeds": seeds,
             "broken_out": self.broken_out,
             "channels": self.channels,
-        })
+        });
+        // A module kind's expansion lists its sections beside its derived items (#222).
+        for (section, entries) in &self.sections {
+            row[section.as_str()] = entries.clone();
+        }
+        row
     }
 }
 
@@ -2119,7 +2140,7 @@ fn expand_one(
     // One scope for every derived item: the inputs and lets, then each item's own names.
     let base = env.len();
     let mut scope = env;
-    for step in &recipe.steps {
+    for step in recipe.steps.iter().filter(|s| s.op != "cue") {
         // A repeat along a curve: its points, and its count from the spacing when it has one.
         let curve = match &step.along {
             None => None,
@@ -2612,6 +2633,7 @@ fn expand_one(
         broken_out,
         orphaned,
         channels,
+        sections: Map::new(),
     })
 }
 
