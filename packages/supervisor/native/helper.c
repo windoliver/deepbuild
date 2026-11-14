@@ -12,6 +12,10 @@
 //                               it follows that one and every process it forks, through kqueue, writing
 //                               "exit <root> <pid> <status>" as each ends, <status> as wait(2) gives it, <root> the
 //                               pid it was named by. "sync <n>" is echoed once every end that came before it is written.
+//   helper leash <program> [<arg>...]
+//                               execs <program> with a watcher forked beside it, which ends the program once the
+//                               process that started this helper is gone, however it went: for a child that writes
+//                               nothing for hours, so no closed pipe ever tells it its reader has gone.
 //   helper probe <file> <op> <arg> ...
 //                               the seam suite's sandboxed process: tries each operation and appends one JSON line per
 //                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), unix <path>, and
@@ -240,14 +244,41 @@ static int watch(void) {
   }
 }
 
+// ---- leash.
+
+static int leash(char **argv) {
+  pid_t owner = getppid(), program = getpid();
+  pid_t watcher = fork();
+  if (watcher < 0) { perror("helper leash"); return 2; }
+  if (watcher == 0) {
+    // Nothing of the program's is held: its output pipe stays the program's alone.
+    for (int fd = 0; fd < 256; fd++) close(fd);
+    int q = kqueue();
+    struct kevent on, got;
+    EV_SET(&on, owner, EVFILT_PROC, EV_ADD, NOTE_EXIT, 0, NULL);
+    // An owner already gone can't be followed, so the program ends now.
+    if (q < 0 || owner <= 1 || kevent(q, &on, 1, NULL, 0, NULL) != 0) { kill(program, SIGTERM); _exit(0); }
+    EV_SET(&on, program, EVFILT_PROC, EV_ADD, NOTE_EXIT, 0, NULL);
+    if (kevent(q, &on, 1, NULL, 0, NULL) != 0) _exit(0);
+    int n;
+    while ((n = kevent(q, NULL, 0, &got, 1, NULL)) < 0 && errno == EINTR) {}
+    if (n == 1 && (pid_t)got.ident == owner) kill(program, SIGTERM);
+    _exit(0);
+  }
+  execvp(argv[0], argv);
+  perror(argv[0]);
+  return 127;
+}
+
 #include "pty.c"
 
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
   if (argc >= 4 && strcmp(argv[1], "limit") == 0) return limit(argv[2], argv + 3);
   if (argc == 2 && strcmp(argv[1], "watch") == 0) return watch();
+  if (argc >= 3 && strcmp(argv[1], "leash") == 0) return leash(argv + 2);
   if (argc >= 9 && strcmp(argv[1], "pty") == 0) return host(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6], argv[7], argv + 8);
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | limit <bytes> <program> [<arg>...] | watch | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | limit <bytes> <program> [<arg>...] | watch | leash <program> [<arg>...] | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();

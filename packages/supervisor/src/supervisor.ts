@@ -371,10 +371,11 @@ class LocalSupervisor implements Supervisor {
    * only once it has seen a denial of its own: the helper, refused a write in a canary's sandbox, until its report
    * comes through. A macOS whose reports carry another subsystem, or none, shows the canary's through that filter
    * never: the stream then starts again on the next filter, the kernel's messages, and only where that shows none
-   * either on the sender alone.
+   * either on the sender alone. The stream writes nothing while no report matches, so no closed pipe tells it that
+   * this process has gone: it runs on the helper's leash, which ends it when this process ends, however it ends.
    */
   private watchDenials([filter, ...wider]: readonly string[]): void {
-    const log = spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', filter!], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const log = spawn(HELPER, ['leash', '/usr/bin/log', 'stream', '--style', 'ndjson', '--predicate', filter!], { stdio: ['ignore', 'pipe', 'ignore'] });
     this.log = log;
     log.unref();
     (log.stdout as unknown as { unref?: () => void }).unref?.();
