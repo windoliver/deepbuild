@@ -365,6 +365,13 @@ alone.push('tests/acceptance/1819/');
 // #502's files each build deep-show, export films through the GPU and the encode tool and speak their fixture with
 // `say`; onsets.test.ts also starts a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/502/', 'tests/acceptance/502-oracle/');
+// #503's files each build deep-show or deep-gpu, draw on the GPU, decode every listed audio format in the decode worker
+// and rebake a spectrum in a linux/amd64 container; its oracle lane fetches and decodes the FATE audio samples; so does
+// the blind redraft of AC1's bar chart, which builds deep-show and plays and seeks the chart's 600 frames.
+alone.push('tests/acceptance/503/', 'tests/acceptance/503-oracle/', 'tests/acceptance/503-redraft-ac1/');
+// #503's blind redraft of AC4's lossy test is kept by hand, as the record of its dispute: it also failed on the work
+// (FFmpeg's arm64 Vorbis decode and its HE-AAC v2 decode at 32k), so the first draft stands and runs in its place.
+byHand.push('tests/acceptance/503-redraft-ac4/');
 // #935's files each build deep-show and run audio.gen on 38.4 s beds and the EBU loudness set; tempo.test.ts also starts
 // a hub and the model host on its fixed port 8719: one file at a time.
 alone.push('tests/acceptance/935/', 'tests/acceptance/935-oracle/');
@@ -463,6 +470,10 @@ alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
+// #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
+alone.push('tests/acceptance/1802/');
+// #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
+alone.push('tests/acceptance/139-redraft-1802/');
 // #154's files each start hubs that render stems through the supervisor, and build deep-show once; AC9 times a 60 s
 // six-stem render against the reference Mac.
 alone.push('tests/acceptance/154/', 'tests/acceptance/154-oracle/');
@@ -494,12 +505,35 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #162's files each build deep-show (atomic.test.ts with test-export-guards) and export to Lottie through the pinned
+// reference renderer; the import legs start a hub and run its import job; budgets.test.ts times both.
+alone.push('tests/acceptance/162/', 'tests/acceptance/162-oracle/');
+timed.push('tests/acceptance/162/budgets.test.ts');
+// #162's first-draft AC6 file keys a twist whose outline's corners all lie as far as the twist reaches, so its output never
+// changes (tests/acceptance/162-redraft-ac6/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/162-redraft-ac6/');
+byHand.push('tests/acceptance/162/repeater.test.ts');
 // #1183's files each build deep-show and judge 3D figures whose logic runs in the sandbox.
 alone.push('tests/acceptance/1183/');
 // #537's files build deep-gpu (most also deep-show, and #544's assembler), run logic programs and draw on the GPU;
 // ac4-budget times 2,000 units at 1080p against the showpiece class's GPU budget.
 alone.push('tests/acceptance/537/', 'tests/acceptance/537-oracle/');
 timed.push('tests/acceptance/537/ac4-budget.test.ts');
+// #539's files each build deep-show and #544's assembler, run logic programs, export on the GPU and draw the app's window.
+alone.push('tests/acceptance/539/');
+// #539's first-draft Oracle lane takes the upstream answer for Up and Down past a cell that can't take focus, where the
+// design's grid rule gives another (tests/acceptance/539-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/539-oracle-redraft/');
+byHand.push('tests/acceptance/539-oracle/');
+// #538's files build deep-show (ac8 also deep-gpu) and #544's assembler, run logic programs and draw; ac8-budgets
+// judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/538/', 'tests/acceptance/538-oracle/', 'tests/acceptance/538-redraft-ac8/');
+timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts');
+// #538's first AC8 draft is kept by hand until the owner swaps it: its heap, crowd and fogger programs run out of the
+// default fuel at step 0, so their arrays never change; its blind redraft, 538-redraft-ac8/, runs in its place.
+byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
+// #540's files each build deep-show (most also #544's assembler), run logic programs, draw 3D and bake a world.
+alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -532,12 +566,55 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #509's files each build deep-show and speak their fixtures with macOS say; most start a hub and deepbuild/speech's
+// model host on its fixed port 8720 (recording.test.ts also deepbuild/bakes' on 8719); budgets.test.ts times them.
+alone.push('tests/acceptance/509/', 'tests/acceptance/509-oracle/');
+timed.push('tests/acceptance/509/budgets.test.ts');
 // #2197's files each start a real hub and one or two agent processes, each with its own deep mcp; budget.test.ts times
 // deep_status against #26's 100 ms on the reference Mac.
 alone.push('tests/acceptance/2197/');
 timed.push('tests/acceptance/2197/budget.test.ts');
 // #2144's AC1 runs the canvas lint on the checkout, a cargo clippy over every scope crate in its target/.
 alone.push('tests/acceptance/2144/');
+// #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
+alone.push('tests/acceptance/1332/');
+// #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
+alone.push('tests/acceptance/1347/');
+// #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
+alone.push('tests/acceptance/525/');
+// Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.
+alone.push('tests/acceptance/525-device/');
+timed.push('tests/acceptance/525-device/device.test.ts');
+slow.push('tests/acceptance/525-device/device.test.ts');
+// #204's files each build deep-show and mix seconds of synth through it; export.test.ts encodes a film, and
+// budgets.test.ts times renders, seeks and a pack's sweep.
+alone.push('tests/acceptance/204/', 'tests/acceptance/204-oracle/');
+timed.push('tests/acceptance/204/budgets.test.ts');
+// AC7's blind redraft runs the same way. The first draft's export file is kept by hand: its film names its own layers,
+// which `deep show` from your shell refuses before any export (tests/acceptance/204-redraft-ac7/DISPUTE.md).
+alone.push('tests/acceptance/204-redraft-ac7/');
+// #204's gap test builds deep-show and reads the registries around a pack's install.
+alone.push('tests/acceptance/204-gaps/');
+byHand.push('tests/acceptance/204/export.test.ts');
+// #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
+alone.push('tests/acceptance/450/');
+// #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU, and its
+// look-type regression builds deep-show; seek-play,
+// budget and off-reference read this machine's fingerprint, budget its load too. exports (289 s) and checks (151 s)
+// were over two minutes on their recorded runs.
+alone.push('tests/acceptance/239/', 'tests/look-type.test.ts');
+timed.push('tests/acceptance/239/seek-play.test.ts', 'tests/acceptance/239/budget.test.ts', 'tests/acceptance/239/off-reference.test.ts');
+slow.push('tests/acceptance/239/exports.test.ts', 'tests/acceptance/239/checks.test.ts');
+// #507's files each build deep-show with cargo; ac6 reads PDFs with poppler, ac3 renders a 50 s session's sound.
+alone.push('tests/acceptance/507/', 'tests/acceptance/507-oracle/');
+// #226's files each build deep-gpu, deep-show (full and without data) or deep-canvas-render and draw on the Metal GPU;
+// ac7-budgets judges the task's budgets on the reference Mac.
+alone.push('tests/acceptance/226/');
+timed.push('tests/acceptance/226/ac7-budgets.test.ts');
+// #226's first-draft Oracle lane needs a tick at every whole number on [−4, 4], where axis@1's rule ticks every other
+// one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/226-oracle-redraft/');
+byHand.push('tests/acceptance/226-oracle/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -1034,7 +1111,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
       let found = run.found;
       if (result.status !== 0 && !run.explained) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
+        // A test run's first error is its first failing test, as its runner's report names it: an output line can't
+        // stand in, since a coloured assertion misses the pattern and a line the lease prints matches the fallback (#12).
+        const failed = results?.failures?.find(({ state }) => state === 'FAIL');
         const error = result.error?.message
+          ?? (failed && `${failed.id}${failed.message ? `: ${failed.message}` : ''}`)
           ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
           ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
           ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;

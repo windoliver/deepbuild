@@ -421,6 +421,8 @@ pub enum DriverInput {
     Remap(String, bool),
     /// `<module>.<name>`: a canvas module's array, such as one a stepping module writes (#497).
     Array(String),
+    /// #539: `controls/<id>/hover/<k>`, a pick control.s hover, keyed `<id>/hover/<k>` (crate::hover).
+    Hover(String),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -445,7 +447,7 @@ pub enum Kind {
     },
     FollowPath {
         points: Vec<[f64; 2]>,
-        fraction: f64,
+        fraction: crate::constraint::Fraction,
         orient: bool,
         offset: [f64; 2],
     },
@@ -1412,6 +1414,10 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
             inputs.push((name.clone(), DriverInput::Time));
             continue;
         }
+        if let Some(h) = crate::hover::input(text) {
+            inputs.push((name.clone(), h));
+            continue;
+        }
         if let Some(c) = text
             .strip_prefix("controls/")
             .and_then(|r| r.strip_suffix("/value"))
@@ -1647,7 +1653,8 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             }
             Kind::FollowPath {
                 points,
-                fraction: num_or("fraction", 0.0)?,
+                fraction: crate::constraint::Fraction::of(c.get("fraction"))
+                    .or_else(|code| refuse(code, at("fraction")))?,
                 orient: flag("orient"),
                 offset: pair(c.get("offset"), &at("offset"))?,
             }
@@ -2566,6 +2573,7 @@ pub fn read_with(
             _ => 0.0,
         };
         control_defaults.push((id.clone(), default));
+        control_defaults.extend(crate::hover::defaults(id, c));
     }
     let mut limits = Vec::new();
     let mut constraints = Vec::new();
@@ -2894,9 +2902,7 @@ fn cuts_of(
 }
 
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
-/// never spans. #407: a stage marker plays through outside present mode (Marker: present mode);
-/// one that waits for a control holds even there, which motion doesn't land yet, so that one is
-/// refused rather than played through.
+/// never spans; #507's present-mode fields are read in `present`.
 pub(crate) const MARKER_KINDS: [&str; 9] = [
     "cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold",
 ];
@@ -2909,16 +2915,13 @@ pub(crate) fn markers_of(
     doc: &Map<String, Value>,
     ctx: &mut Ctx,
 ) -> Result<(Vec<Marker>, Vec<First>), Refused> {
-    let mut pending = Vec::new();
-    let mut firsts = Vec::new();
+    let (mut pending, mut firsts) = (Vec::new(), Vec::new());
+    crate::pace::seed(doc, ctx);
     for (id, m) in section(doc, "markers")? {
         let path = format!("markers/{id}");
         let kind = m.get("kind").and_then(Value::as_str).unwrap_or("cue");
         if !MARKER_KINDS.contains(&kind) {
             return refuse("bad_marker_kind", format!("{path}/kind"));
-        }
-        if kind == "stage" && m.get("waits_for").is_some() {
-            return refuse("bad_marker_kind", format!("{path}/waits_for"));
         }
         // Word markers come only from a bake; beat markers from the tempo map or a beats bake.
         let on_beat = matches!(
@@ -2962,7 +2965,7 @@ pub(crate) fn markers_of(
     let (pins, moved) = crate::cue::align(doc, &done, ctx.tempo.as_ref())?;
     if !pins.is_empty() {
         let notices = ctx.notices.borrow().len();
-        ctx.markers.clear();
+        crate::pace::reseed(doc, ctx);
         done = resolve_markers(pending, ctx, &pins)?;
         crate::cue::landed(doc, &done, ctx.tempo.as_ref(), &pins)?;
         ctx.notices.borrow_mut().truncate(notices);
@@ -3099,7 +3102,7 @@ fn first_of(marker: Marker, f: &Map<String, Value>, path: &str) -> Result<First,
 }
 
 /// A placement's start before series are resolved: its own time, or after another placement.
-enum Start {
+pub(crate) enum Start {
     At(i64),
     After { placement: String, offset: i64 },
 }
@@ -3198,7 +3201,7 @@ fn placement_of(
         }
     };
     timing.trim = flick("in")?.unwrap_or(0);
-    timing.span = flick("span")?;
+    timing.span = crate::pace::span(p, &start, flick("span")?, ctx, &path)?;
     timing.hold_at = flick("hold_at")?;
     if let Some(rate) = p.get("rate") {
         timing.rate = ratio_of(rate, &format!("{path}/rate"))?;
@@ -3392,7 +3395,8 @@ fn take_apart_of(
 
 /// #504: the input track a played form carries inline, `track: [{t: flick, control, value,
 /// seq, player}]`, as the hub inlines it beside the saved document; `None` without one. An
-/// entry's `seq` is its place in the list where it names none, and its player is 1.
+/// entry's `seq` is its place in the list where it names none, and its player is 1. #507: a
+/// `{t, present}` entry is kept with no control and the present value as its value.
 pub fn track(doc: &Map<String, Value>) -> Result<Option<Vec<crate::input::Entry>>, Refused> {
     let list = match doc.get("track") {
         None | Some(Value::Null) => return Ok(None),
@@ -3405,11 +3409,15 @@ pub fn track(doc: &Map<String, Value>) -> Result<Option<Vec<crate::input::Entry>
         let Some(t) = e.get("t").and_then(Value::as_i64) else {
             return refuse("bad_doc", at("t"));
         };
-        let Some(control) = e.get("control").and_then(Value::as_str) else {
-            return refuse("bad_doc", at("control"));
-        };
-        let Some(value) = e.get("value") else {
-            return refuse("bad_doc", at("value"));
+        let (control, value) = match (
+            e.get("present"),
+            e.get("control").and_then(Value::as_str),
+            e.get("value"),
+        ) {
+            (Some(present), None, _) => ("", present),
+            (None, Some(control), Some(value)) => (control, value),
+            (None, None, _) => return refuse("bad_doc", at("control")),
+            _ => return refuse("bad_doc", at("value")),
         };
         let seq = match e.get("seq") {
             None => i as i64,
@@ -3524,7 +3532,7 @@ fn filter_named(list: &str) -> crate::occurrence::Filter {
 }
 
 /// An occurrence list and its filter: its name, or `{list, kinds, a, b, tags, where}`.
-fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
+pub(crate) fn list_of(v: &Value, path: &str) -> Result<crate::occurrence::Filter, Refused> {
     match v {
         Value::String(list) => Ok(filter_named(list)),
         Value::Object(f) => filter_of(f, path),

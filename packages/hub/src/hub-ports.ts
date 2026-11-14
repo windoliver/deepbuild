@@ -71,10 +71,10 @@ export interface AnswerDeliveryPort {
   promised(meta: HookMeta): Promise<void>;
   promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt?: string): Promise<string | undefined>;
   promiseDueFor(session: string): boolean;
-  restorePromises(): Promise<void>;
+  restore(): Promise<void>;
   appNotes(drafts: Draft[], session: string): void;
   noteText(notes: Note[]): string;
-  note(params: Obj): Obj;
+  note(params: Obj): Promise<Obj>;
   routesOf(session: string, cwd?: string): Routes;
   track(meta: HookMeta): void;
   cap(): number;

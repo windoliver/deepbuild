@@ -40,7 +40,7 @@ pub struct Band {
 }
 
 /// One band's coefficients, normalized by a0: b0, b1, b2, a1, a2.
-fn coefficients(b: &Band, rate: f64) -> [f64; 5] {
+pub(crate) fn coefficients(b: &Band, rate: f64) -> [f64; 5] {
     let w0 = 2.0 * ops::PI * b.freq.clamp(1.0, rate / 2.0 - 1.0) / rate;
     let (sin, cos) = (ops::sin(w0), ops::cos(w0));
     let alpha = sin / (2.0 * b.q.max(1e-3));

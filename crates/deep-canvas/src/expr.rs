@@ -493,71 +493,90 @@ enum Tok {
     Sym(&'static str),
 }
 
-fn tokens(text: &str) -> Result<Vec<(Tok, usize)>, Refusal> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut out = Vec::new();
-    let mut i = 0;
-    let bad = |c: char| Refusal {
-        call: text.into(),
-        why: format!("unexpected `{c}`"),
-        missing: None,
-    };
-    while i < chars.len() {
-        let c = chars[i];
-        let start = i;
-        if c.is_whitespace() {
-            i += 1;
-            continue;
+/// The tokens of a text, read one at a time as the parser asks, so a refusal partway reads no
+/// further: nothing grows with the text past where it stops.
+struct Lexer<'a> {
+    text: &'a str,
+    /// The byte at which the next token starts its search, and the chars before it.
+    at: usize,
+    chars: usize,
+}
+
+impl Lexer<'_> {
+    fn ahead(&self, k: usize) -> Option<char> {
+        self.text[self.at..].chars().nth(k)
+    }
+
+    fn bump(&mut self) {
+        if let Some(c) = self.ahead(0) {
+            self.at += c.len_utf8();
+            self.chars += 1;
         }
-        if c.is_ascii_digit() || (c == '.' && chars.get(i + 1).is_some_and(char::is_ascii_digit)) {
-            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-                i += 1;
+    }
+
+    /// The next token and its offset in chars, or `None` at the end.
+    fn next(&mut self) -> Result<Option<(Tok, usize)>, Refusal> {
+        while self.ahead(0).is_some_and(char::is_whitespace) {
+            self.bump();
+        }
+        let Some(c) = self.ahead(0) else {
+            return Ok(None);
+        };
+        let (from, start) = (self.at, self.chars);
+        if c.is_ascii_digit() || (c == '.' && self.ahead(1).is_some_and(|d| d.is_ascii_digit())) {
+            while self
+                .ahead(0)
+                .is_some_and(|d| d.is_ascii_digit() || d == '.')
+            {
+                self.bump();
             }
-            if i < chars.len() && (chars[i] == 'e' || chars[i] == 'E') {
-                let mut j = i + 1;
-                if j < chars.len() && (chars[j] == '+' || chars[j] == '-' || chars[j] == '−') {
+            if matches!(self.ahead(0), Some('e' | 'E')) {
+                let mut j = 1;
+                if matches!(self.ahead(j), Some('+' | '-' | '−')) {
                     j += 1;
                 }
-                if j < chars.len() && chars[j].is_ascii_digit() {
-                    i = j;
-                    while i < chars.len() && chars[i].is_ascii_digit() {
-                        i += 1;
+                if self.ahead(j).is_some_and(|d| d.is_ascii_digit()) {
+                    for _ in 0..j {
+                        self.bump();
+                    }
+                    while self.ahead(0).is_some_and(|d| d.is_ascii_digit()) {
+                        self.bump();
                     }
                 }
             }
-            let s: String = chars[start..i]
-                .iter()
-                .map(|&c| if c == '−' { '-' } else { c })
+            let s: String = self.text[from..self.at]
+                .chars()
+                .map(|c| if c == '−' { '-' } else { c })
                 .collect();
             let n: f64 = s.parse().map_err(|_| Refusal {
                 call: s.clone(),
                 why: "is not a number".into(),
                 missing: None,
             })?;
-            out.push((Tok::Num(n), start));
-            continue;
+            return Ok(Some((Tok::Num(n), start)));
         }
         if c.is_alphabetic() || c == '_' {
-            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
-                i += 1;
+            while self
+                .ahead(0)
+                .is_some_and(|d| d.is_alphanumeric() || d == '_')
+            {
+                self.bump();
             }
-            out.push((Tok::Name(chars[start..i].iter().collect()), start));
-            continue;
+            return Ok(Some((Tok::Name(self.text[from..self.at].into()), start)));
         }
-        let two: String = chars[i..(i + 2).min(chars.len())].iter().collect();
-        let sym = match two.as_str() {
-            "==" => Some("=="),
-            "!=" => Some("!="),
-            "<=" => Some("<="),
-            ">=" => Some(">="),
-            "&&" => Some("&&"),
-            "||" => Some("||"),
+        let two = match (c, self.ahead(1)) {
+            ('=', Some('=')) => Some("=="),
+            ('!', Some('=')) => Some("!="),
+            ('<', Some('=')) => Some("<="),
+            ('>', Some('=')) => Some(">="),
+            ('&', Some('&')) => Some("&&"),
+            ('|', Some('|')) => Some("||"),
             _ => None,
         };
-        if let Some(s) = sym {
-            out.push((Tok::Sym(s), start));
-            i += 2;
-            continue;
+        if let Some(s) = two {
+            self.bump();
+            self.bump();
+            return Ok(Some((Tok::Sym(s), start)));
         }
         let one = match c {
             '+' => "+",
@@ -578,12 +597,17 @@ fn tokens(text: &str) -> Result<Vec<(Tok, usize)>, Refusal> {
             '≤' => "<=",
             '≥' => ">=",
             '≠' => "!=",
-            _ => return Err(bad(c)),
+            _ => {
+                return Err(Refusal {
+                    call: self.text.into(),
+                    why: format!("unexpected `{c}`"),
+                    missing: None,
+                })
+            }
         };
-        out.push((Tok::Sym(one), start));
-        i += 1;
+        self.bump();
+        Ok(Some((Tok::Sym(one), start)))
     }
-    Ok(out)
 }
 
 // ---- parse
@@ -602,18 +626,39 @@ enum P {
     Swizzle(Box<P>, String),
 }
 
+/// The most levels a parse nests: parentheses, unary operators, the conditional's branches, a
+/// power's exponent and a call's arguments each take one. Binding, evaluating and dropping the
+/// tree recurse over the same levels, so none of them can overflow the stack.
+pub(crate) const MAX_NEST: usize = 64;
+
 struct Parser<'a> {
+    lexer: Lexer<'a>,
+    /// The tokens read so far; the parser goes back only within a `dotted` name.
     toks: Vec<(Tok, usize)>,
+    /// A token that couldn't be read: the parse ends there, and compiling refuses with it.
+    bad: Option<Refusal>,
     at: usize,
     text: &'a str,
+    depth: usize,
+    /// The nodes made so far, and the most it may make (see `Expr::compile`).
+    nodes: usize,
+    max_nodes: usize,
+    cap: usize,
 }
 
 impl Parser<'_> {
-    fn peek(&self) -> Option<&Tok> {
+    fn peek(&mut self) -> Option<&Tok> {
+        if self.at == self.toks.len() && self.bad.is_none() {
+            match self.lexer.next() {
+                Ok(Some(t)) => self.toks.push(t),
+                Ok(None) => {}
+                Err(r) => self.bad = Some(r),
+            }
+        }
         self.toks.get(self.at).map(|(t, _)| t)
     }
 
-    fn sym(&self, s: &str) -> bool {
+    fn sym(&mut self, s: &str) -> bool {
         matches!(self.peek(), Some(Tok::Sym(x)) if *x == s)
     }
 
@@ -634,21 +679,50 @@ impl Parser<'_> {
         }
     }
 
-    fn offset(&self) -> usize {
+    fn offset(&mut self) -> usize {
+        self.peek();
         self.toks
             .get(self.at)
-            .map_or(self.text.chars().count(), |(_, o)| *o)
+            .map_or_else(|| self.text.chars().count(), |(_, o)| *o)
+    }
+
+    /// `f` one level deeper, refused past [`MAX_NEST`] before it reads anything.
+    fn nest<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, Refusal>) -> Result<T, Refusal> {
+        if self.depth == MAX_NEST {
+            return Err(self.fail(format!("nests past the cap of {MAX_NEST} levels")));
+        }
+        self.depth += 1;
+        let p = f(self);
+        self.depth -= 1;
+        p
+    }
+
+    /// A new node, counted against the most the parse may make.
+    fn node(&mut self, p: P) -> Result<P, Refusal> {
+        self.count()?;
+        Ok(p)
+    }
+
+    fn count(&mut self) -> Result<(), Refusal> {
+        self.nodes += 1;
+        if self.nodes > self.max_nodes {
+            return Err(self.fail(format!(
+                "takes more than {} nodes as written, twice the cap of {}",
+                self.max_nodes, self.cap
+            )));
+        }
+        Ok(())
     }
 
     fn expr(&mut self) -> Result<P, Refusal> {
         let c = self.or()?;
         if self.eat("?") {
-            let a = self.expr()?;
+            let a = self.nest(Self::expr)?;
             if !self.eat(":") {
                 return Err(self.fail("a `?` without its `:`"));
             }
-            let b = self.expr()?;
-            return Ok(P::If(Box::new(c), Box::new(a), Box::new(b)));
+            let b = self.nest(Self::expr)?;
+            return self.node(P::If(Box::new(c), Box::new(a), Box::new(b)));
         }
         Ok(c)
     }
@@ -663,7 +737,7 @@ impl Parser<'_> {
             for (s, op) in ops {
                 if self.eat(s) {
                     let right = next(self)?;
-                    left = P::Bin(*op, Box::new(left), Box::new(right));
+                    left = self.node(P::Bin(*op, Box::new(left), Box::new(right)))?;
                     continue 'outer;
                 }
             }
@@ -710,19 +784,21 @@ impl Parser<'_> {
                 return Ok(left);
             };
             let right = self.unary()?;
-            left = P::Bin(op, Box::new(left), Box::new(right));
+            left = self.node(P::Bin(op, Box::new(left), Box::new(right)))?;
         }
     }
 
     fn unary(&mut self) -> Result<P, Refusal> {
         if self.eat("-") {
-            return Ok(P::Neg(Box::new(self.unary()?)));
+            let a = self.nest(Self::unary)?;
+            return self.node(P::Neg(Box::new(a)));
         }
         if self.eat("+") {
-            return self.unary();
+            return self.nest(Self::unary);
         }
         if self.eat("!") {
-            return Ok(P::Not(Box::new(self.unary()?)));
+            let a = self.nest(Self::unary)?;
+            return self.node(P::Not(Box::new(a)));
         }
         self.power()
     }
@@ -731,8 +807,8 @@ impl Parser<'_> {
         let base = self.postfix()?;
         if self.eat("^") {
             // Right-associative, and binding tighter than a leading minus: −x^2 is −(x²).
-            let exp = self.unary()?;
-            return Ok(P::Bin(Op::Pow, Box::new(base), Box::new(exp)));
+            let exp = self.nest(Self::unary)?;
+            return self.node(P::Bin(Op::Pow, Box::new(base), Box::new(exp)));
         }
         Ok(base)
     }
@@ -744,7 +820,7 @@ impl Parser<'_> {
             match self.peek().cloned() {
                 Some(Tok::Name(s)) => {
                     self.at += 1;
-                    e = P::Swizzle(Box::new(e), s);
+                    e = self.node(P::Swizzle(Box::new(e), s))?;
                 }
                 _ => return Err(self.fail("a `.` names no component")),
             }
@@ -757,11 +833,11 @@ impl Parser<'_> {
         match self.peek().cloned() {
             Some(Tok::Num(n)) => {
                 self.at += 1;
-                Ok(P::Num(n))
+                self.node(P::Num(n))
             }
             Some(Tok::Sym("(")) => {
                 self.at += 1;
-                let e = self.expr()?;
+                let e = self.nest(Self::expr)?;
                 if !self.eat(")") {
                     return Err(self.fail("missing `)`"));
                 }
@@ -770,49 +846,58 @@ impl Parser<'_> {
             Some(Tok::Name(name)) => {
                 self.at += 1;
                 if !self.eat("(") {
-                    return Ok(P::Name(name));
+                    return self.node(P::Name(name));
                 }
-                let mut args = Vec::new();
-                if !self.eat(")") {
-                    loop {
-                        // `table` and `ease` name a pack's entry as `<pack>.<name>`.
-                        if (name == "table" || name == "ease") && args.is_empty() {
-                            if let Some(n) = self.dotted() {
-                                args.push(P::Name(n));
-                                if self.eat(",") {
-                                    continue;
-                                }
-                                if self.eat(")") {
-                                    break;
-                                }
-                                return Err(self.fail("missing `)`"));
-                            }
-                        }
-                        args.push(self.expr()?);
-                        if self.eat(",") {
-                            continue;
-                        }
-                        if self.eat(")") {
-                            break;
-                        }
-                        return Err(self.fail("missing `)`"));
-                    }
-                }
+                let args = self.nest(|p| p.args(&name))?;
                 let end = self.offset();
                 let call: String = self.text.chars().skip(start).take(end - start).collect();
-                Ok(P::Call(name, args, call.trim().to_string()))
+                self.node(P::Call(name, args, call.trim().to_string()))
             }
             Some(Tok::Sym(s)) => Err(self.fail(format!("unexpected `{s}`"))),
             None => Err(self.fail("the expression ends early")),
         }
     }
 
-    /// A name with dots (`physics.drag`), if the next tokens are one followed by `,` or `)`.
-    fn dotted(&mut self) -> Option<String> {
-        let save = self.at;
+    /// A call's arguments after its `(`, through its `)`.
+    fn args(&mut self, name: &str) -> Result<Vec<P>, Refusal> {
+        let mut args = Vec::new();
+        if self.eat(")") {
+            return Ok(args);
+        }
+        loop {
+            // `table` and `ease` name a pack's entry as `<pack>.<name>`.
+            if (name == "table" || name == "ease") && args.is_empty() {
+                if let Some(n) = self.dotted()? {
+                    args.push(P::Name(n));
+                    if self.eat(",") {
+                        continue;
+                    }
+                    if self.eat(")") {
+                        break;
+                    }
+                    return Err(self.fail("missing `)`"));
+                }
+            }
+            args.push(self.expr()?);
+            if self.eat(",") {
+                continue;
+            }
+            if self.eat(")") {
+                break;
+            }
+            return Err(self.fail("missing `)`"));
+        }
+        Ok(args)
+    }
+
+    /// A name with dots (`physics.drag`), if the next tokens are one followed by `,` or `)`. Each
+    /// part counts as a node while it reads, and the name as one node once it is one.
+    fn dotted(&mut self) -> Result<Option<String>, Refusal> {
+        let (save, nodes) = (self.at, self.nodes);
         let mut out = String::new();
-        while let Some(Tok::Name(n)) = self.peek() {
-            out.push_str(n);
+        while let Some(Tok::Name(n)) = self.peek().cloned() {
+            self.count()?;
+            out.push_str(&n);
             self.at += 1;
             if self.sym(".") {
                 out.push('.');
@@ -822,10 +907,11 @@ impl Parser<'_> {
             break;
         }
         if !out.is_empty() && !out.ends_with('.') && (self.sym(",") || self.sym(")")) {
-            return Some(out);
+            self.nodes = nodes + 1;
+            return Ok(Some(out));
         }
-        self.at = save;
-        None
+        (self.at, self.nodes) = (save, nodes);
+        Ok(None)
     }
 }
 
@@ -873,14 +959,7 @@ impl Binder<'_> {
                     "tau" | "τ" => return Ok((Node::Num(ops::TAU), 1)),
                     _ => {}
                 }
-                let i = match self.vars.iter().position(|v| v == n) {
-                    Some(i) => i,
-                    None => {
-                        self.vars.push(n.clone());
-                        self.vars.len() - 1
-                    }
-                };
-                (Node::Var(i), 1)
+                (Node::Var(self.var(n)), 1)
             }
             P::Neg(a) => {
                 let (a, s) = self.bind(a)?;
@@ -915,6 +994,11 @@ impl Binder<'_> {
                         return Ok((Node::Call(Fun::CellsOut(k as u8), nodes), size));
                     }
                 }
+                // #540: names that aren't a swizzle, after a plain name, are one var by their
+                // path, as `aim.ray.dir` reads a point control's entry by field.
+                if let (None, Some(path)) = (swizzle(s), self.path(a)) {
+                    return Ok((Node::Var(self.var(&format!("{path}.{s}"))), 1));
+                }
                 let (a, sa) = self.bind(a)?;
                 let Some(idx) = swizzle(s) else {
                     return Err(refuse(s, "is no swizzle of x, y, z, w (or r, g, b, a)"));
@@ -923,6 +1007,27 @@ impl Binder<'_> {
             }
             P::Call(name, args, call) => self.call(name, args, call)?,
         })
+    }
+
+    /// The var `n`'s index, added at its first use.
+    fn var(&mut self, n: &str) -> usize {
+        self.vars.iter().position(|v| v == n).unwrap_or_else(|| {
+            self.vars.push(n.into());
+            self.vars.len() - 1
+        })
+    }
+
+    /// `p` as a dotted path of names from a plain name (not a sum's index or a constant).
+    fn path(&self, p: &P) -> Option<String> {
+        match p {
+            P::Name(n)
+                if !self.indices.contains(n) && !matches!(&**n, "pi" | "π" | "tau" | "τ") =>
+            {
+                Some(n.clone())
+            }
+            P::Swizzle(a, s) => Some(format!("{}.{s}", self.path(a)?)),
+            _ => None,
+        }
     }
 
     fn call(&mut self, name: &str, args: &[P], call: &str) -> Result<(Node, usize), Refusal> {
@@ -1105,10 +1210,33 @@ impl Expr {
     /// `text` parsed and checked, with `cap` the most nodes it may take once its sums expand
     /// (64 ops for a driver, 256 nodes for a field, 512 for a path function).
     pub fn compile(text: &str, resolve: &dyn Resolve, cap: usize) -> Result<Expr, Refusal> {
-        let toks = tokens(text)?;
-        let mut p = Parser { toks, at: 0, text };
-        let parsed = p.expr()?;
-        if p.at < p.toks.len() {
+        // Every node bound counts against `cap` once its sums expand, and a parsed tree has at
+        // most twice its bound nodes (a `table` name or a sum's index is a node only as written),
+        // unless an empty sum drops a term; so past twice the cap nothing is bound or kept, and
+        // binding, evaluating and dropping a tree recurse at most that deep.
+        let mut p = Parser {
+            lexer: Lexer {
+                text,
+                at: 0,
+                chars: 0,
+            },
+            toks: Vec::new(),
+            bad: None,
+            at: 0,
+            text,
+            depth: 0,
+            nodes: 0,
+            max_nodes: cap.saturating_mul(2),
+            cap,
+        };
+        let parsed = p.expr();
+        // Past a refusal nothing more is read, so what follows it never replaces it.
+        let trailing = parsed.is_ok() && p.peek().is_some();
+        if let Some(bad) = p.bad {
+            return Err(bad);
+        }
+        let parsed = parsed?;
+        if trailing {
             return Err(p.fail("trailing text after the expression"));
         }
         let mut b = Binder {
@@ -2532,179 +2660,4 @@ pub mod noise {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn num(text: &str, vars: &[f64]) -> f64 {
-        Expr::compile(text, &Nothing, 512).unwrap().eval_num(vars)
-    }
-
-    #[test]
-    fn arithmetic_and_precedence() {
-        assert_eq!(num("1 + 2 * 3", &[]), 7.0);
-        assert_eq!(num("-2^2", &[]), -4.0);
-        assert_eq!(num("2^3^2", &[]), 512.0);
-        assert_eq!(num("x > 1 ? 10 : 20", &[2.0]), 10.0);
-        assert_eq!(num("2x + 1", &[3.0]), 7.0);
-        assert_eq!(num("(−1)^3 · 4 ÷ 2", &[]), -2.0);
-    }
-
-    struct Max19;
-    impl Resolve for Max19 {
-        fn var_max(&self, name: &str) -> Option<f64> {
-            (name == "n").then_some(19.0)
-        }
-    }
-
-    #[test]
-    fn a_bounded_sum_is_sin_by_its_series() {
-        let e = Expr::compile(
-            "sum(k, 0, n, (−1)^k · x^(2k+1) ÷ factorial(2k+1))",
-            &Max19,
-            512,
-        )
-        .unwrap();
-        assert_eq!(e.vars, ["n", "x"]);
-        for i in 0..1000 {
-            let x = -6.0 + 12.0 * f64::from(i) / 999.0;
-            let v = e.eval_num(&[19.0, x]);
-            assert!((v - ops::sin(x)).abs() < 1e-12, "{x}: {v}");
-        }
-    }
-
-    #[test]
-    fn refusals_name_the_call() {
-        let e = Expr::compile("factorial(171)", &Nothing, 64).unwrap_err();
-        assert_eq!(e.call, "factorial(171)");
-        let e = Expr::compile("1 + factorial(2.5)", &Nothing, 64).unwrap_err();
-        assert_eq!(e.call, "factorial(2.5)");
-        let e = Expr::compile("sum(k, 0, 256, k)", &Nothing, 4096).unwrap_err();
-        assert_eq!(e.call, "sum(k, 0, 256, k)");
-        assert!(Expr::compile("sum(k, 0, 255, k)", &Nothing, 4096).is_ok());
-        let e = Expr::compile("sum(k, 0, m, k)", &Nothing, 4096).unwrap_err();
-        assert!(e.why.contains("declared max"), "{e}");
-    }
-
-    #[test]
-    fn cpow_squares_within_two_ulp() {
-        let e = Expr::compile("cpow(vec2(x, y), 2)", &Nothing, 64).unwrap();
-        let f = Expr::compile("vec2(x^2 - y^2, 2 x y)", &Nothing, 64).unwrap();
-        for (x, y) in [(1.5, -2.25), (0.1, 0.3), (-7.0, 3.5)] {
-            let (a, b) = (e.eval(&[V::S(x), V::S(y)]), f.eval(&[V::S(x), V::S(y)]));
-            assert_eq!(a, b);
-        }
-    }
-
-    #[test]
-    fn interval_forms_hold_through_an_expression() {
-        let e = Expr::compile("sin(x) * x + sinc(x)", &Nothing, 64).unwrap();
-        let b = e.bound_num(&[Iv::new(-3.0, 4.0)]);
-        for i in 0..=1000 {
-            let x = -3.0 + 7.0 * f64::from(i) / 1000.0;
-            assert!(b.contains(e.eval_num(&[x])));
-        }
-    }
-
-    #[test]
-    fn noise_forms_hold() {
-        let mut s = 99u64;
-        let mut next = || {
-            s ^= s << 13;
-            s ^= s >> 7;
-            s ^= s << 17;
-            (s >> 11) as f64 / (1u64 << 53) as f64
-        };
-        for _ in 0..500 {
-            let (a, b) = (next() * 20.0 - 10.0, next() * 20.0 - 10.0);
-            let r = Iv::new(a.min(b), a.max(b));
-            let nb = noise::noise_bound(&[r], Some(3));
-            let fb = noise::fbm_bound(&[r], Some(3), 6, 2.0, 0.5);
-            for _ in 0..40 {
-                let p = r.lo + (r.hi - r.lo) * next();
-                assert!(nb.contains(noise::noise(&[p], 3)));
-                assert!(fb.contains(noise::fbm(&[p], 3, 6, 2.0, 0.5)));
-            }
-        }
-    }
-
-    struct MaxN;
-    impl Resolve for MaxN {
-        fn var_max(&self, _: &str) -> Option<f64> {
-            Some(3.0)
-        }
-    }
-
-    /// Every finite point value at `xs` lies inside the form over `[lo, hi]` (x the one var, or
-    /// the first; `n` held over `[n_lo, n_hi]`).
-    fn holds(text: &str, lo: f64, hi: f64, xs: &[f64]) {
-        let e = Expr::compile(text, &MaxN, 512).unwrap();
-        let b = e.bound_num(&e.vars.iter().map(|_| Iv::new(lo, hi)).collect::<Vec<_>>());
-        for &x in xs {
-            let v = e.eval_num(&e.vars.iter().map(|_| x).collect::<Vec<_>>());
-            if v.is_finite() {
-                assert!(b.contains(v), "{text} at {x} reads {v}, outside {b:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn an_undefined_argument_decides_nothing() {
-        holds("min(sqrt(x), 2)", -1.0, 1.0, &[-0.5, 0.25, 1.0]);
-        holds("(log(x) < 1) ? 0.5 : 100", -1.0, 0.5, &[-0.5, 0.25]);
-        holds("sign(log(x))", -1.0, 0.5, &[-0.5, 0.25]);
-    }
-
-    #[test]
-    fn a_negative_base_takes_its_whole_powers() {
-        let e = Expr::compile("x ^ n", &MaxN, 64).unwrap();
-        let b = e.bound_num(&[Iv::new(-2.0, -1.0), Iv::new(1.0, 3.0)]);
-        assert!(b.contains(4.0) && b.contains(-8.0), "{b:?}");
-        holds("x ^ 2000", -1.0001, -1.0, &[-1.0001, -1.00005]);
-    }
-
-    #[test]
-    fn whole_powers_hold_libm_and_powi_alike() {
-        holds(
-            "pow(x, 100)",
-            1.006_670_209_655_188_7,
-            1.006_670_209_655_188_7,
-            &[1.006_670_209_655_188_7],
-        );
-        holds(
-            "x ^ 100",
-            1.006_670_209_655_188_7,
-            1.006_670_209_655_188_7,
-            &[1.006_670_209_655_188_7],
-        );
-    }
-
-    #[test]
-    fn a_remainder_near_a_multiple_holds() {
-        holds(
-            "x % 0.1",
-            0.5,
-            0.50001,
-            &[0.5, 0.500_000_000_000_000_1, 0.500_005],
-        );
-        holds(
-            "mod(x, 0.1)",
-            0.5,
-            0.50001,
-            &[0.5, 0.500_000_000_000_000_1, 0.500_005],
-        );
-    }
-
-    #[test]
-    fn an_ease_past_its_ends_reads_its_end() {
-        holds("ease(in_quad, x)", 1.5, 2.0, &[1.5, 2.0]);
-        holds("ease(in_elastic, x)", 0.0, 0.01, &[1e-9, 0.005]);
-        holds("ease(out_elastic, x)", 0.99, 1.0, &[1.0 - 1e-9]);
-    }
-
-    #[test]
-    fn atan2_takes_zero_unsigned_in_both_forms() {
-        holds("atan2(-x, -1)", -1.0, 0.0, &[-1.0, -0.5, 0.0]);
-        holds("atan2(0, x * 0)", -1.0, -0.5, &[-1.0, -0.75, -0.5]);
-        holds("carg(conj(vec2(x, 0)))", -2.0, -1.0, &[-2.0, -1.5, -1.0]);
-    }
-}
+mod tests;

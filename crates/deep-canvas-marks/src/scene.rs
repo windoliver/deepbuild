@@ -32,7 +32,7 @@ use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
 use crate::pathops;
-use crate::relations;
+use crate::place::Place;
 use crate::story;
 use deep_canvas::schedule::{Key, KeyTree};
 use deep_canvas::template;
@@ -40,12 +40,12 @@ use deep_canvas::template;
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
     "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
-    "group@1", "star@1", "frame@1", "series@1", "matte@1",
+    "group@1", "star@1", "frame@1", "series@1", "matte@1", "axes3d@1",
 ];
 
 /// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
 /// draws for it (the data module's manifest). A build without the data module lacks them.
-pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1"];
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1"];
 
 /// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
 pub fn module_of(kind: &str) -> &'static str {
@@ -1549,87 +1549,6 @@ pub(crate) fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
 fn four(v: Option<&Value>) -> Option<[f64; 4]> {
     let b: Option<Vec<f64>> = v?.as_array()?.iter().map(|v| num(Some(v))).collect();
     <[f64; 4]>::try_from(b?.as_slice()).ok()
-}
-
-/// Where an item draws: `x ↦ scale·x + pos` from its evaluated `at`, which already rides its
-/// parents as the evaluator composes them; with a box-point pivot it scales about that point of
-/// its own box (#221). Rotation, shear and a numeric pivot wait for the GPU layer, as R1's
-/// marks' do.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Place {
-    scale: [f64; 2],
-    offset: [f64; 2],
-}
-
-impl Place {
-    const NONE: Place = Place {
-        scale: [1.0, 1.0],
-        offset: [0.0, 0.0],
-    };
-
-    fn of(item: &Value) -> Place {
-        let pivots = item
-            .get("at")
-            .and_then(|a| a.get("pivot"))
-            .is_some_and(Value::is_string);
-        let local = pivots
-            .then(|| {
-                let kind = item.get("kind").and_then(Value::as_str)?;
-                relations::own_box(kind, object_or_empty(item.get("params")))
-            })
-            .flatten();
-        let (scale, offset) = relations::place_of(item, local);
-        Place { scale, offset }
-    }
-
-    fn at(&self, p: [f64; 2]) -> [f64; 2] {
-        [
-            self.scale[0] * p[0] + self.offset[0],
-            self.scale[1] * p[1] + self.offset[1],
-        ]
-    }
-
-    /// True when the place only moves what it holds, as R1's marks can draw.
-    fn moves(&self) -> bool {
-        self.scale == [1.0, 1.0]
-    }
-
-    /// As a gradient's transform.
-    fn affine(&self) -> [f64; 6] {
-        [
-            self.scale[0],
-            0.0,
-            0.0,
-            self.scale[1],
-            self.offset[0],
-            self.offset[1],
-        ]
-    }
-
-    /// A box `[x, y, w, h]` where it draws.
-    fn rect(&self, [x, y, w, h]: [f64; 4]) -> [f64; 4] {
-        let (a, b) = (self.at([x, y]), self.at([x + w, y + h]));
-        [
-            a[0].min(b[0]),
-            a[1].min(b[1]),
-            (b[0] - a[0]).abs(),
-            (b[1] - a[1]).abs(),
-        ]
-    }
-
-    fn verbs(&self, verbs: Vec<Verb>) -> Vec<Verb> {
-        let m = |p: [f64; 2]| self.at(p);
-        verbs
-            .into_iter()
-            .map(|v| match v {
-                Verb::Move(p) => Verb::Move(m(p)),
-                Verb::Line(p) => Verb::Line(m(p)),
-                Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
-                Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
-                Verb::Close => Verb::Close,
-            })
-            .collect()
-    }
 }
 
 /// The most dashes one path draws (Paint: "at most 10,000 dashes per path").
@@ -4359,7 +4278,9 @@ pub fn frame_planted(
     let items = moved.as_ref().unwrap_or(items);
     // #1653: terrain drawn as its atlas set, and each animated atlas row at its frame.
     let tiled = crate::atlas::apply(doc, items, record.pinned)?;
-    let items = tiled.as_ref().unwrap_or(items);
+    // #538: keyed copy at the record's time, in the document's locale.
+    let copied = crate::copy::apply(doc, tiled.as_ref().unwrap_or(items), record.pinned, doc.get("locale").and_then(Value::as_str).unwrap_or("en"));
+    let items = copied.as_ref().or(tiled.as_ref()).unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
         doc,
@@ -4372,13 +4293,13 @@ pub fn frame_planted(
     )
 }
 
-/// The draw list for evaluated `items`, with what each bound value and counter shows already
-/// formatted (the text module's counters, in the view's locale); `record` gives the readings
-/// bound to mark sets' rows.
+/// The draw list for evaluated `items` in a look's palette and type (#239: text set in the look's
+/// font roles), with what each bound value and counter shows already formatted (the text module's
+/// counters, in the view's locale); `record` gives the readings bound to mark sets' rows.
 pub fn frame_with(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
@@ -4387,7 +4308,7 @@ pub fn frame_with(
     frame_shown(
         doc,
         items,
-        (palette, &Type::default()),
+        (palette, ty),
         zoom,
         Planted::None,
         bound,
@@ -4708,7 +4629,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
 
 /// A 2D item's outline where it draws, for a union outline or an attachment at `outline`: a
 /// rect, a circle, a star or a path through its ops.
-fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
+pub fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
     let item = items.get(id)?;
     let kind = item.get("kind").and_then(Value::as_str)?;
     let params = object_or_empty(item.get("params"));
@@ -4943,7 +4864,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
         // A readout (#419, #1183) draws over the frame, in scene3d's view.
         "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1"
-        | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
+        | "axes3d@1" | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
@@ -5084,7 +5005,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             drawing.marks
         }
         "axis@1" => {
-            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos, ctx.size)?;
+            let channels = ctx.paints.doc.get("channels");
+            let drawing = data::axis(id, item, (ctx.items, channels), ctx.palette, pos, ctx.size)?;
             fades = drawing.fades;
             drawing.marks
         }
@@ -5129,7 +5051,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             };
             // #535: `at.rot`'s z (degrees) turns the image about its origin.
             let turn = num(item.pointer("/at/rot/2")).unwrap_or(0.0);
-            let origin = place.at([0.0, 0.0]);
+            let origin = place.offset;
             vec![Mark::Image {
                 item: id.clone(),
                 asset: asset.to_ascii_lowercase(),
@@ -5642,7 +5564,7 @@ fn shaded(
 pub fn item_placed(
     id: &str,
     item: &Value,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     shown: Option<&Shown>,
 ) -> Option<Placed> {
     let kind = item.get("kind").and_then(Value::as_str)?;
@@ -5679,7 +5601,7 @@ pub fn item_placed(
         items: &empty,
         size: [0.0; 2],
         palette,
-        ty: &Type::default(),
+        ty,
         paints: &paints,
         scopes: &scopes,
         bound: &bound,
@@ -5698,7 +5620,7 @@ pub fn item_placed(
 pub fn frame_prebuilt(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
@@ -5708,7 +5630,7 @@ pub fn frame_prebuilt(
     let (frame, wants_boxes, places) = build(
         doc,
         (items, prebuilt),
-        (palette, &Type::default()),
+        (palette, ty),
         (bound, &row_readings),
         zoom,
         Planted::None,

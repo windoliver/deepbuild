@@ -8479,6 +8479,25 @@ export interface SessionNeverStarted {
   evidence?: Array<string>;
 }
 
+/** session.note@1 */
+export interface SessionNote {
+  v: 1;
+  id: string;
+  kind: "session.note";
+  writer: "app";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    text: string;
+    request: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.paused@1 */
 export interface SessionPaused {
   v: 1;
@@ -8945,6 +8964,25 @@ export interface StackWaiting {
     check: string;
     wait_ms: number;
     expected_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** staged.undone@1 */
+export interface StagedUndone {
+  v: 1;
+  id: string;
+  kind: "staged.undone";
+  writer: "app" | "cli";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    staged: string;
+    folders: Array<string>;
+    files: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -10677,6 +10715,35 @@ export interface WikiRead {
   evidence?: Array<string>;
 }
 
+/** work.attempt@1 */
+export interface WorkAttempt {
+  v: 1;
+  id: string;
+  kind: "work.attempt";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "started" | "ended";
+    issue: number;
+    attempt: number;
+    run: string;
+    agent: string;
+    model: string | null;
+    worktree: string | null;
+    branch: string | null;
+    reason: string | null;
+    cause: "none" | "PASS" | "landed with the budget window open" | "gave up its slot" | "replaced by you" | "sent back past its rounds" | "stalled" | "context full" | "plan window or spend cap" | "crashed or interrupted";
+    verdict: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** work.broke@1 */
 export interface WorkBroke {
   v: 1;
@@ -10768,6 +10835,48 @@ export interface WorkRead {
   evidence?: Array<string>;
 }
 
+/** work.run@1 */
+export interface WorkRun {
+  v: 1;
+  id: string;
+  kind: "work.run";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "asked" | "paused";
+    scope: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** work.state@1 */
+export interface WorkState {
+  v: 1;
+  id: string;
+  kind: "work.state";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    issue: number;
+    word: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "finished" | "closed" | "closed before the gate";
+    waits_on: string | null;
+    why: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** workspace.created@1 */
 export interface WorkspaceCreated {
   v: 1;
@@ -10803,6 +10912,39 @@ export interface WorkspaceMoved {
     workspace: string;
     folder: string;
     from: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** workspace.task@1 */
+export interface WorkspaceTask {
+  v: 1;
+  id: string;
+  kind: "workspace.task";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    workspace: string;
+    task: number;
+    step: "entered" | "finished" | "filed";
+    source_id: string;
+    link: string;
+    title: string;
+    body: string;
+    criteria: Array<string>;
+    authors: Array<{
+      handle: string;
+      role: "owner" | "collaborator" | "outside";
+    }>;
+    updated: string;
+    blocked_by: Array<number>;
+    issue: number | null;
+    commit: string | null;
+    kept: string | null;
   };
   evidence?: Array<string>;
 }

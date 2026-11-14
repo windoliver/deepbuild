@@ -49,6 +49,9 @@ test-glyph-label = ["dep:deep-canvas-test-modules"]
 # stricter rule; nothing else changes.
 test-hold-min-2s = []
 test-leave-out-logic = []
+# #538: the planted data module whose operator reads a logic array itself, not through the core's
+# column view; built with test-leave-out-logic, the seal refuses it.
+test-data-reads-logic-array = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
 # Issue #1919: the full set without the physics module, whose physics shapes mode answers
@@ -95,6 +98,9 @@ test-export-guards = ["dep:deep-canvas-test-modules"]
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
 test-preview = ["dep:deep-canvas-test-modules"]
+# Issue #1802: `test.preview` once it removed its preview kind, with a migration and, planted, without.
+test-preview-removed = ["dep:deep-canvas-test-modules"]
+test-preview-removed-bare = ["dep:deep-canvas-test-modules"]
 test-cue = ["dep:deep-canvas-test-modules"]
 test-cue-span = ["dep:deep-canvas-test-modules"]
 test-ring-a = ["dep:deep-canvas-test-modules"]
@@ -204,6 +210,14 @@ test-mark = ["dep:deep-canvas-test-modules"]
 test-weight = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
+# Issue #522 (tests/acceptance/522): the test canvas module test.launch, whose items fire a world's
+# launch input, writing a step's entries after the input module's, or with -first before them.
+test-launch-module = ["dep:deep-canvas-test-modules"]
+test-launch-module-first = ["dep:deep-canvas-test-modules"]
+# Issue #522's planted physics modules: one whose manifest requires logic, and one whose checkpoints
+# leave out each joint's steps past breaks_at.
+test-physics-needs-logic = []
+test-physics-checkpoint-drops-break-steps = []
 test-mark-dot-9 = ["dep:deep-canvas-test-modules"]
 test-mark-no-planted = ["dep:deep-canvas-test-modules"]
 test-mark-no-since = ["dep:deep-canvas-test-modules"]
@@ -270,6 +284,8 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #499: the media module, media@1; the logic module's world, which a live play steps on the
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
+deep-canvas-export = { path = "../deep-canvas-export" }
+deep-lottie-reader = { path = "../deep-lottie-reader" }
 deep-logic = { path = "../deep-logic" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
 deep-canvas-physics = { path = "../deep-canvas-physics" }

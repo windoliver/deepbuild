@@ -2,6 +2,7 @@
 
 pub mod chrome;
 pub mod closed;
+pub mod cloud;
 pub mod compile;
 pub mod docops;
 pub mod frame;

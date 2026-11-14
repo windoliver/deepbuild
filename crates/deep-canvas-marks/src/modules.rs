@@ -270,6 +270,7 @@ fn fonts() -> TableValue {
 
 fn register_text(r: &mut Registrar) {
     r.built_table("text.fonts", fonts);
+    crate::copy::register(r);
     // #443: a shaped run's glyph outlines, text's entry in the core's `outline.source@1`.
     r.outline_source(
         "text",
@@ -282,7 +283,7 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.fields", "refs", "reading", "view(locale)"],
+        &["core.fields", "refs", "reading", "view(locale)", "text.copy"],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -295,6 +296,7 @@ fn register_text(r: &mut Registrar) {
             "text.counter",
             "view(locale)",
             "table:text.fonts",
+            "look",
         ],
         &["text.run"],
     )
@@ -400,7 +402,7 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
         .is_some()
         || scene::copy_key(item).is_some();
     let template = scene::template_of(item).is_some();
-    bound || counter || template
+    bound || counter || template || crate::copy::is_keyed(doc, id, item)
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
@@ -416,6 +418,10 @@ fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
 fn counter(v: &mut View<'_>) -> Result<(), OpError> {
     // The evaluated item: a keyed data value its template reads rides on it (motion@1).
     let item = fields_of(v)?;
+    // #538: keyed copy, as the copy operator showed it at t.
+    if let Some(copy) = v.typed::<Option<Shown>>("text.copy")? {
+        return v.write("text.counter", Val::typed((*copy).clone()));
+    }
     let doc = v.document()?;
     let record = record_of(v.outside()?);
     let locale = v.locale()?;
@@ -442,7 +448,9 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     let _ = v.locale()?;
     let id = v.id().unwrap_or_default();
     let params = object_or_empty(fields.get("params"));
-    let spec = scene::text_spec(id, params, shown.as_ref()).map_err(refused)?;
+    // #239: set in the look's type, as the live view sets it.
+    let ty = type_of(v.look()?);
+    let spec = scene::text_spec_in(id, params, shown.as_ref(), &ty).map_err(refused)?;
     // The size is an f32 (Text `text@1`: `size: f32`): one past its range is an infinity.
     if !(spec.size as f32).is_finite() {
         return Err(OpError::new(
@@ -780,11 +788,13 @@ pub fn look_finish_off() -> Module {
     }
 }
 
-/// A look as the frame reads it: each role's color and the status map.
+/// A look as the frame reads it: each role's color, the status map, and the type its text is set
+/// in (#239).
 #[derive(Debug)]
 pub struct LookValue {
     pub palette: Palette,
     pub status: Option<Status>,
+    pub ty: scene::Type,
 }
 
 impl Canonical for Status {
@@ -796,7 +806,13 @@ impl Canonical for Status {
 
 impl deep_canvas::schedule::Canonical for LookValue {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
+        // A look that sets no font role apart from the bundled ones keys as it did before #239.
+        if self.ty.fonts.is_empty() {
+            deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
+        } else {
+            let fonts: Vec<(&String, &str)> = self.ty.fonts.iter().map(|(k, v)| (k, *v)).collect();
+            deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status, &fonts), out);
+        }
     }
 }
 
@@ -992,11 +1008,52 @@ pub fn tokens(palette: &Palette) -> BTreeMap<String, Value> {
         .collect()
 }
 
+/// The session token that carries a look's font roles beside its colors (#239).
+pub const TYPE_TOKEN: &str = "type";
+
+/// [`tokens`] of the look's light theme, and under [`TYPE_TOKEN`] each font role it sets in
+/// another family than the bundled role's, so text is shaped in the look's type (Look `look@1`:
+/// a role may name a font) while a look that names none keeps its tokens as they were (#239).
+pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
+    let mut out = tokens(&look.light);
+    let bundled = scene::Type::default();
+    let fonts: Map<String, Value> = look
+        .light_fonts
+        .keys()
+        .filter_map(|role| {
+            let family = look.light_type.family(role)?;
+            (bundled.family(role) != Some(family)).then(|| (role.clone(), json!(family)))
+        })
+        .collect();
+    if !fonts.is_empty() {
+        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts }));
+    }
+    out
+}
+
+/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
+fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
+    let mut ty = scene::Type::default();
+    let fonts = tokens
+        .get(TYPE_TOKEN)
+        .and_then(|t| t.get("fonts"))
+        .and_then(Value::as_object);
+    for (role, family) in fonts.into_iter().flatten() {
+        let face = family
+            .as_str()
+            .and_then(|f| deep_text::FACES.iter().find(|face| face.family == f));
+        if let Some(face) = face {
+            ty.fonts.insert(role.clone(), face.family);
+        }
+    }
+    ty
+}
+
 /// The roles from the session's tokens, with the clean look's status map.
 fn palette(v: &mut View<'_>) -> Result<(), OpError> {
     let tokens = v.look()?;
     let mut palette = Palette::new();
-    for (role, value) in tokens {
+    for (role, value) in tokens.iter().filter(|(role, _)| *role != TYPE_TOKEN) {
         let rgb: Option<Rgb> = value.as_array().and_then(|c| {
             let c: Vec<u8> = c
                 .iter()
@@ -1017,7 +1074,15 @@ fn palette(v: &mut View<'_>) -> Result<(), OpError> {
             Datum::Typed(Val::typed(status.clone())),
         )),
     )?;
-    v.write("look.palette", Val::typed(LookValue { palette, status }))
+    let ty = type_of(tokens);
+    v.write(
+        "look.palette",
+        Val::typed(LookValue {
+            palette,
+            status,
+            ty,
+        }),
+    )
 }
 
 fn roles_board() -> Value {
@@ -1101,6 +1166,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         .applies(is_line_series)
         .run(decimate);
     crate::arrays::register(r);
+    // #226: 3D axes' marks and their deform, through the core's fills.
+    crate::axes3d::register(r);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1784,7 +1851,7 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
         .ok_or_else(|| OpError::new("input_missing", "look"))?;
     let placed = fields.and_then(|f| {
         let item = item_json(&f, world.as_deref());
-        scene::item_placed(id, &item, &look.palette, shown.as_ref())
+        scene::item_placed(id, &item, (&look.palette, &look.ty), shown.as_ref())
     });
     v.write("marks2d.item", Val::typed(placed))
 }
@@ -1998,27 +2065,35 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             bound.insert(id.clone(), shown);
         }
     }
-    let (frame, basis) =
-        match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed)
-            .map_err(refused)?
-        {
-            // A list of items that each placed their own marks is one the next frame can
-            // replace marks in.
-            Some((frame, places)) => (
-                frame,
-                items.is_empty().then_some(Basis { envelope, places }),
-            ),
-            // A paint spanning boxes reads every item's: the frame builds them all.
-            None => {
-                let all: Map<String, Value> = fields
-                    .iter()
-                    .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
-                    .collect();
-                let frame = scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record)
+    let (frame, basis) = match scene::frame_prebuilt(
+        doc,
+        &items,
+        (&look.palette, &look.ty),
+        1.0,
+        &bound,
+        &record,
+        &placed,
+    )
+    .map_err(refused)?
+    {
+        // A list of items that each placed their own marks is one the next frame can
+        // replace marks in.
+        Some((frame, places)) => (
+            frame,
+            items.is_empty().then_some(Basis { envelope, places }),
+        ),
+        // A paint spanning boxes reads every item's: the frame builds them all.
+        None => {
+            let all: Map<String, Value> = fields
+                .iter()
+                .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
+                .collect();
+            let frame =
+                scene::frame_with(doc, &all, (&look.palette, &look.ty), 1.0, &bound, &record)
                     .map_err(refused)?;
-                (frame, None)
-            }
-        };
+            (frame, None)
+        }
+    };
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         check_font(drawn)?;
     }

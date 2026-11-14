@@ -171,6 +171,9 @@ pub enum JointKind {
     Slider,
     Distance,
     Rope,
+    /// #523: couplings the kinematic solve runs (`reads::Coupling`).
+    Gear,
+    Pulley,
 }
 
 /// One end of a joint: a body (and the local point it's held at), or the world.
@@ -212,6 +215,7 @@ pub struct Joint {
     pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+    pub coupling: reads::Coupling,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -268,8 +272,9 @@ pub struct World {
     pub restitution_rule: Rule,
     pub defaults: Material,
     pub contact_materials: BTreeMap<String, Material>,
-    /// Steps between deep checkpoints (Checkpoint ring: `every`).
+    /// Steps between deep checkpoints, and the ring's bytes (Checkpoint ring: `every`, `budget`).
     pub checkpoint_every: u64,
+    pub checkpoint_budget: u64,
     /// ms: the 95th percentile of a step's time each host it ships to holds (World: `budget`).
     pub step_p95: f64,
     pub groups: Vec<String>,
@@ -278,13 +283,18 @@ pub struct World {
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
     pub outputs: BTreeMap<String, Output>,
+    /// The inputs it declares (#522).
+    pub inputs: BTreeMap<String, Input>,
     /// In kinematic mode, what sets each driven joint's coordinate (#1918).
     pub solve: Option<Solve>,
 }
 
+pub mod data;
 mod heightfield;
+mod inputs;
 mod reads;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
+pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
@@ -314,8 +324,6 @@ const WORLD_KEYS: &[&str] = &[
     "outputs",
     "solve",
 ];
-/// Fields this backend interface doesn't run yet, each with the issue that brings it.
-const LATER: &[(&str, &str)] = &[("inputs", "#522")];
 const RULES: &[(&str, Rule)] = &[
     ("geometric", Rule::Geometric),
     ("average", Rule::Average),
@@ -536,18 +544,6 @@ impl Reader {
                 );
             }
         }
-        for (key, issue) in LATER {
-            if m.get(*key)
-                .is_some_and(|v| v.as_object().is_none_or(|o| !o.is_empty()))
-            {
-                self.refuse(
-                    "physics.unsupported",
-                    (*key).into(),
-                    &m[*key],
-                    format!("{key} isn't run by this backend interface yet; {issue} brings it"),
-                );
-            }
-        }
         let dimensions = self.num(m, "dimensions", "", 3.0, 2.0, 3.0) as u8;
         if dimensions != 2 && dimensions != 3 {
             self.refuse(
@@ -637,13 +633,7 @@ impl Reader {
                 },
             );
         }
-        let cp = &self.obj(
-            m.get("checkpoint").unwrap_or(&Value::Null),
-            "checkpoint",
-            &["every", "budget"],
-        );
-        let checkpoint_every =
-            self.num(cp, "every", "checkpoint", 60.0, 1.0, f64::from(u32::MAX)) as u64;
+        let (checkpoint_every, checkpoint_budget) = self.checkpoint(m);
         let budget = &self.obj(
             m.get("budget").unwrap_or(&Value::Null),
             "budget",
@@ -683,6 +673,7 @@ impl Reader {
                 joints.insert(id.clone(), j);
             }
         }
+        self.gears(&joints);
         let mut forces = BTreeMap::new();
         for (id, v) in self.map(m, "forces") {
             if let Some(f) = self.force(v, &format!("forces/{id}"), &bodies, &groups) {
@@ -690,6 +681,7 @@ impl Reader {
             }
         }
         let solve = self.solve(m, mode == Mode::Kinematic, &joints);
+        let inputs = self.inputs(m, &bodies);
         let mut outputs = BTreeMap::new();
         for (id, v) in self.map(m, "outputs") {
             if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies, &joints) {
@@ -709,6 +701,7 @@ impl Reader {
             defaults,
             contact_materials: materials,
             checkpoint_every,
+            checkpoint_budget,
             step_p95,
             groups,
             shapes,
@@ -716,6 +709,7 @@ impl Reader {
             joints,
             forces,
             outputs,
+            inputs,
             solve,
         }
     }
@@ -1363,8 +1357,10 @@ impl Reader {
             Some("slider") => JointKind::Slider,
             Some("distance") => JointKind::Distance,
             Some("rope") => JointKind::Rope,
-            // Couplings: the check refuses them by caps() (crate::check); their run is #523's.
-            Some("gear" | "rack" | "pulley" | "path") => return None,
+            Some("gear") => JointKind::Gear,
+            Some("pulley") => JointKind::Pulley,
+            // The check refuses these by caps() and as unsupported (crate::check).
+            Some("rack" | "path") => return None,
             _ => {
                 self.refuse("out_of_range", join(p, "kind"), j.get("kind").unwrap_or(&Value::Null), "a joint's kind must be fixed, ball, hinge, slider, distance, rope, gear, rack, pulley or path".into());
                 return None;
@@ -1440,6 +1436,7 @@ impl Reader {
             breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
+            coupling: self.coupling(j, p, kind),
         })
     }
 
@@ -1472,7 +1469,7 @@ impl Reader {
             "drag" => {
                 let m = &self.obj(fields, &kp, &["linear", "quadratic", "medium"]);
                 if let Some(x) = m.get("medium").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "medium"), x, "a drag medium read from a channel isn't run by this backend interface yet; #522 brings it".into());
+                    self.refuse("physics.unsupported", join(&kp, "medium"), x, "a drag medium read from a channel isn't run by this backend interface yet; #2371 brings it".into());
                 }
                 ForceKind::Drag {
                     linear: self.num(m, "linear", &kp, 0.0, 0.0, f64::MAX),
@@ -1487,7 +1484,7 @@ impl Reader {
             "spring_to_point" => {
                 let m = &self.obj(fields, &kp, &["point", "hz", "damping_ratio", "max_force"]);
                 if let Some(x) = m.get("point").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "point"), x, "a spring point read from a channel isn't run by this backend interface yet; #522 brings it".into());
+                    self.refuse("physics.unsupported", join(&kp, "point"), x, "a spring point read from a channel isn't run by this backend interface yet; #2371 brings it".into());
                 }
                 ForceKind::SpringToPoint {
                     point: if m.get("point").is_some_and(Value::is_array) {
@@ -1541,7 +1538,7 @@ impl Reader {
             }
         });
         if f.get("strength").is_some_and(|s| !s.is_number()) {
-            self.refuse("physics.unsupported", join(p, "strength"), &f["strength"], "a strength set by an input isn't run by this backend interface yet; #522 brings it".into());
+            self.refuse("physics.unsupported", join(p, "strength"), &f["strength"], "a strength set by an input isn't run by this backend interface yet; #2371 brings it".into());
         }
         let mut applies_to = Vec::new();
         for (i, t) in f

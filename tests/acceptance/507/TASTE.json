@@ -1,0 +1,14 @@
+{
+  "issue": 507,
+  "criterion": "#507.0ee140b7",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's standing delegation of taste calls (Nov 13: \"show me screenshot or video and validate it and close any gaps\"); the owner can overrule it on the PR",
+  "when": "2026-11-13T19:11:29Z",
+  "screenshots": {
+    "stage-full-screen.png": "541214367e29a1ad787d141fe8d394e0f3ef9074ca08f1f544c8007037eed3f4",
+    "presenter-view.png": "8a028b986313c15dc39dc99a0106d3fab1422048ceb5fad77d43ead2049dded7",
+    "handout-page.png": "3815f6e15624ce0b1ad336e190da6dea73bba4eb3da5f409d30b0deb32a6feaf",
+    "held-loop.apng": "c2e18c7399d36cfff22ecb224f017c89a34e6c929679091d1df7580a18ce107a"
+  },
+  "note": "Every picture is one deep-show draws, taken by docs/evidence/507/shoot.ts at the reference window (3024 × 1964 px). The talk and loop pieces are made there to be read: each stage shows its title and a bar along the bottom grows with the timeline position. Stage full screen: present {pixels} on display B while stage 3, Method, holds; its 16:9 frame letterboxed in black, the bar at 8 s of 36. Presenter view: presenter {pixels} on display A at the same moment: stage 3 of 9, Method, elapsed 12.8 s, the notes, and the next stage (4, Results) framed; no ask in it. Handout page: page 3 of the pdf export with notes, stills at 1920 × 1080 on a 10 in page, rendered by poppler. Held loop: the presented display at 12 fps for 14 s: it plays to the looped stage, holds 7 s while the block and the bar swing back over [4 s, 6 s), then the advance goes on from the stage. Read at full size and through contact sheets; validated after the first takes showed a loop too small to see, a cut-off title and a soft handout page, each fixed."
+}

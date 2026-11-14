@@ -214,6 +214,27 @@ pub fn filtered(filter: &Filter, list: Vec<Occurrence>) -> Result<Vec<Occurrence
     Ok(matched)
 }
 
+/// #450: the matches of a list `v` names (its name, or `{list, kinds, a, b, tags, where}`) as a
+/// driver var reads them, in time order: a trail's `since` starts and `until` ends. A list that
+/// names nothing the document holds is refused `ref_unresolved` at `path`.
+pub fn matches(
+    program: &crate::program::Program,
+    doc: &serde_json::Map<String, Value>,
+    v: &Value,
+    path: &str,
+) -> Result<Vec<Occurrence>, crate::doc::Refused> {
+    let refused = |code, path: &str| crate::doc::Refused {
+        code,
+        path: path.to_string(),
+        detail: None,
+    };
+    let filter = crate::doc::list_of(v, path)?;
+    let list = program
+        .occurrences(&filter, doc, path, &[])?
+        .ok_or_else(|| refused("ref_unresolved", path))?;
+    filtered(&filter, list).map_err(|r| refused(r.code, path))
+}
+
 /// A payload field's number, NaN where the occurrence lacks one.
 fn field(payload: &Value, path: &[String]) -> f64 {
     path.iter()
@@ -369,10 +390,63 @@ pub fn read_of(found: &Found, list: &[Occurrence]) -> Result<Read, Refusal> {
     })
 }
 
+/// #503: a driver var `spectrum.<bake ID>[i]`, band i of a spectrum's bands, from the array the
+/// host baked into `doc`'s `arrays` at check (Analysis bake): each row's level from its step on,
+/// on the driver's clock as `last(list).field` reads a payload field, so seeking equals playing.
+/// `None` where `var` names no band of a spectrum the document holds.
+pub fn band(doc: &serde_json::Map<String, Value>, var: &str, start: i64) -> Option<Read> {
+    let (name, index) = var.strip_suffix(']')?.split_once('[')?;
+    let i: usize = index.parse().ok()?;
+    let array = doc
+        .get("arrays")?
+        .get(name)
+        .filter(|_| name.starts_with("spectrum."))?;
+    let every = array["every"].as_i64()?;
+    if i as u64 >= array["count"].as_u64()? {
+        return None;
+    }
+    let (mut times, mut values, mut level) = (Vec::new(), Vec::new(), f64::NAN);
+    for step in array["steps"].as_array()? {
+        for run in step["values"].as_array()? {
+            let at = i.checked_sub(run[0].as_u64()? as usize);
+            if let Some(v) = at.and_then(|j| run[1].get(j)) {
+                level = v.as_f64()?;
+            }
+        }
+        times.push(step["step"].as_i64()? * every - start);
+        values.push(level);
+    }
+    let ends = times.clone();
+    Some(Read {
+        how: How::LastField(values),
+        times,
+        ends,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Band i holds each row's level from its step until a later row changes it, and a var that
+    /// names no spectrum's band reads nothing.
+    #[test]
+    fn a_band_reads_its_row_at_t() {
+        let array = json!({"type": "f64", "count": 2, "every": 10, "linear": false, "steps": [
+            {"step": 0, "changed": [[0, 2]], "values": [[0, [-120.0, -120.0]]]},
+            {"step": 3, "changed": [[1, 2]], "values": [[1, [-6.0]]]},
+            {"step": 5, "changed": [[0, 1]], "values": [[0, [-20.0]]]}]});
+        let doc = json!({"arrays": {"spectrum.m": array, "logic.m": array}})
+            .as_object()
+            .cloned()
+            .unwrap();
+        let b1 = band(&doc, "spectrum.m[1]", 0).unwrap();
+        let at: Vec<Option<f64>> = [0, 29, 30, 55].iter().map(|t| b1.at(*t)).collect();
+        assert_eq!(at, [Some(-120.0), Some(-120.0), Some(-6.0), Some(-6.0)]);
+        assert_eq!(band(&doc, "spectrum.m[0]", 0).unwrap().at(50), Some(-20.0));
+        assert!(band(&doc, "spectrum.m[2]", 0).is_none() && band(&doc, "logic.m[0]", 0).is_none());
+    }
 
     fn kick(t: f64, gain: f64, tag: &str) -> Occurrence {
         let t = (t * F) as i64;

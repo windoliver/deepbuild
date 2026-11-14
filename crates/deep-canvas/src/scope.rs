@@ -370,7 +370,7 @@ struct Target {
 
 /// What a press landed on.
 #[derive(Clone, Debug, PartialEq)]
-enum Hit {
+pub enum Hit {
     Button,
     Item(String),
     Empty,
@@ -415,7 +415,7 @@ pub struct Scope {
     view: View,
     planted: Planted,
     /// #504: the Tab stop with focus: a control's own UI, or one of its targets by option.
-    focus: Option<(String, Option<String>)>,
+    pub focus: Option<(String, Option<String>)>,
 }
 
 fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -986,7 +986,7 @@ impl Scope {
             .find(|t| &t.control == control && &t.option == option)
     }
 
-    fn hit(&self, doc: &Value, p: [f64; 2]) -> Hit {
+    pub fn hit(&self, doc: &Value, p: [f64; 2]) -> Hit {
         if self.button().is_some_and(|b| within(b, p)) {
             return Hit::Button;
         }

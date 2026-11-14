@@ -26,6 +26,12 @@ export type Plant =
   | 'lands-unjudged-commit' | 'lander-reruns-all' | 'closes-on-open' | 'second-attempt-beside-pr' | 'trusts-forge-merged'
   // #1331's Scope: a lander that merges with your login though the gate's app is named, landing through the admin's bypass.
   | 'lands-as-person'
+  // #1332's: a run that starts an issue before everything it's blocked by is done, a `deep work show` that takes an
+  // issue's state word from a comment on it, a breaker that counts an issue's replaced attempts per agent, and a run that
+  // keeps a budget-only blocker's dependents waiting for the window.
+  | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
+  // #1347's: a run over a workspace's tasks that reads or writes a forge.
+  | 'workspace-calls-forge'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -238,6 +244,8 @@ export type Plant =
   | 'job-second-call' | 'job-joiner-cancels-job'
   // #1819's: a runner whose job is done, each output an empty record, when its tool's host doesn't answer.
   | 'job-host-down-done'
+  // #509's: a hub that keeps the speech kind's tools as a list in code, the three first-party names, and so lists and runs no other.
+  | 'job-speech-tools-enum'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
   | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
   // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
@@ -253,7 +261,9 @@ export type Plant =
   // #2043's: a parser pool that hears its workers' messages only, and one that replaces an ended worker but leaves its lines waiting.
   | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting'
   // #2197's: a deep_status that lists every session's open asks.
-  | 'status-lists-every-ask';
+  | 'status-lists-every-ask'
+  // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
+  | 'pending-across-restart' | 'applies-stale-undo';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -342,12 +352,14 @@ const PLANTS: readonly string[] = [
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
+  'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
+  'workspace-calls-forge',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
-  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
+  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done', 'job-speech-tools-enum',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
   'figure-in-needs-you', 'figure-feeds-verdict',
@@ -355,6 +367,7 @@ const PLANTS: readonly string[] = [
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
+  'pending-across-restart', 'applies-stale-undo',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
