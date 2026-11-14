@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use deep_canvas_scene3d::light::{Maps, Texels, Wrap};
+use deep_canvas_scene3d::light::{InsetMap, Maps, Texels, Wrap};
 use deep_canvas_scene3d::terrain::Normals;
 
 /// The maps in the order the shader numbers them: base color, metallic-roughness, normal,
@@ -105,6 +105,9 @@ pub struct Store {
     samplers: BTreeMap<([Wrap; 2], u8), wgpu::Sampler>,
     /// This frame's texels by image hash (the scene's).
     pub texels: BTreeMap<String, Arc<Texels>>,
+    /// #506: each view inset's picture by its key, with a count that moves when its target is
+    /// made again, so a bind group made on the old one is never reused.
+    views: BTreeMap<String, (wgpu::TextureView, u64)>,
     groups: BTreeMap<String, (u32, wgpu::BindGroup)>,
     pub none: wgpu::BindGroup,
     white: wgpu::TextureView,
@@ -168,6 +171,7 @@ impl Store {
             textures: BTreeMap::new(),
             samplers: BTreeMap::new(),
             texels: BTreeMap::new(),
+            views: BTreeMap::new(),
             groups: BTreeMap::new(),
             white,
             uploads: 0,
@@ -194,6 +198,7 @@ impl Store {
             .iter()
             .map(|(_, s)| match s {
                 Some(s) if self.texels.contains_key(&s.sha) => '1',
+                Some(s) if self.views.contains_key(&s.sha) => '1',
                 _ => '0',
             })
             .collect();
@@ -201,7 +206,12 @@ impl Store {
             return 0;
         }
         let normals = terrain.map_or(String::new(), |n| format!("|{:016x}", n.key));
-        let key = format!("{}|{present}|{taps}{normals}", maps.key);
+        let made = maps
+            .base_color
+            .as_ref()
+            .and_then(|s| self.views.get(&s.sha))
+            .map_or(String::new(), |(_, n)| format!("|view {n}"));
+        let key = format!("{}|{present}|{taps}{normals}{made}", maps.key);
         if !self.groups.contains_key(&key) {
             let layout = self.layout.clone();
             let g = self.bind_with(d, queue, maps, taps, terrain, &layout, Vec::new());
@@ -210,6 +220,19 @@ impl Store {
             self.groups.insert(key.clone(), (n, g));
         }
         self.groups[&key].0
+    }
+
+    /// #506: this frame's view pictures by key; one whose target was made again counts anew.
+    pub fn set_views(&mut self, views: BTreeMap<String, wgpu::TextureView>) {
+        let old = std::mem::take(&mut self.views);
+        for (key, view) in views {
+            let n = match old.get(&key) {
+                Some((v, n)) if *v == view => *n,
+                Some((_, n)) => n + 1,
+                None => 0,
+            };
+            self.views.insert(key, (view, n));
+        }
     }
 
     /// The bind group of maps with key `n`, or the stand-in.
@@ -372,10 +395,15 @@ impl Store {
                 v: [0.0, 1.0, 0.0, 0.0],
             };
             let Some(s) = slot else { continue };
-            let Some(key) = self.texture(d, queue, &s.sha) else {
-                continue;
+            let (key, format) = match self.views.get(&s.sha) {
+                Some(_) => (s.sha.clone(), String::new()),
+                None => {
+                    let Some(key) = self.texture(d, queue, &s.sha) else {
+                        continue;
+                    };
+                    (key, self.texels[&s.sha].format.clone())
+                }
             };
-            let format = self.texels[&s.sha].format.clone();
             let [r0, r1] = s.transform;
             u.slots[k] = SlotUniform {
                 u: [r0[0] as f32, r0[1] as f32, r0[2] as f32, 0.0],
@@ -392,6 +420,11 @@ impl Store {
             // A map's own taps, else the look's; a planted look of 1 holds every map to 1.
             wraps[k] = (s.wrap, if taps == 1 { 1 } else { s.taps.unwrap_or(taps) });
         }
+        u.has[0] |= match maps.inset {
+            InsetMap::Map => 0,
+            InsetMap::Over => 256,
+            InsetMap::AtPixel => 512,
+        };
         u.values = [
             maps.normal_scale as f32,
             maps.occlusion_strength as f32,
@@ -410,7 +443,10 @@ impl Store {
         }
         let views: Vec<&wgpu::TextureView> = keys
             .iter()
-            .map(|k| k.as_ref().map_or(&self.white, |k| &self.textures[k].1))
+            .map(|k| match k {
+                Some(k) => self.views.get(k).map_or_else(|| &self.textures[k].1, |v| &v.0),
+                None => &self.white,
+            })
             .collect();
         let mut entries = vec![wgpu::BindGroupEntry {
             binding: 0,

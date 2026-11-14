@@ -1,0 +1,18 @@
+{
+  "#506.ed43cc07": [],
+  "#506.9d6f96ee": [],
+  "#506.fad8bc6e": [],
+  "#506.2393e811": [],
+  "#506.f7b7c9cf": [],
+  "#506.0c1bce3a": [
+    "eye_inset_centred_frustum"
+  ],
+  "#506.1bab76b5": [
+    "one_backdrop_per_frame",
+    "one_mirror_per_frame",
+    "one_light_cut_per_frame"
+  ],
+  "#506.2b4f3d4f": [
+    "inset_premultiplied_as_straight"
+  ]
+}

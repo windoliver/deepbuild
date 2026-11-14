@@ -366,6 +366,40 @@ impl Hub<'_> {
                 };
             }
         }
+        // #506: Enter on a focused toggle or press control presses it, as its own UI would: a
+        // toggle turns over from the value it holds, a press gives 1.
+        if let (Event::Key { key, cmd: false, .. }, Some(id)) = (event, doc_id.as_deref()) {
+            let focused = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.focus.clone())
+                .filter(|(_, option)| option.is_none())
+                .map(|(c, _)| c);
+            let control = focused.as_deref().and_then(|c| Some((c, doc.get("controls")?.get(c)?)));
+            let kind = control.and_then(|(_, c)| c.get("kind")).and_then(Value::as_str);
+            if let (true, Some((c, spec)), Some(kind @ ("toggle" | "press"))) =
+                (matches!(key.as_str(), "Enter" | "Return"), control, kind)
+            {
+                let value = match kind {
+                    "toggle" => {
+                        let held = self
+                            .session_state
+                            .get(id)
+                            .and_then(|s| s["view"].get(c))
+                            .or_else(|| spec.get("default"))
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false);
+                        json!(!held)
+                    }
+                    _ => json!(1),
+                };
+                return match self.enter(id, c, value, now, serial) {
+                    Ok(entry) => json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                        "commits": [{"gesture": serial}], "appended": entry.into_iter().collect::<Vec<_>>()}),
+                    Err(e) => e,
+                };
+            }
+        }
         // #540: a press of a point control's button, and the drag and release it starts, are the
         // control's entries and never the scope's pan or turn.
         match self.point_pointer(panel, &doc, event, g, serial) {
@@ -496,7 +530,22 @@ impl Hub<'_> {
         };
         // #539: the live view draws the viewer state of its pick controls, hover and focus.
         self.viewer_into(panel, &mut played);
-        let shown = crate::shared::drawable(&s.scope.view_document(&played, before.as_ref()));
+        let viewed = s.scope.view_document(&played, before.as_ref());
+        let shown = crate::shared::drawable(&viewed);
+        // #506: a 3D panel draws its frame, its 2D items and its overlays on top, its materials
+        // and lights read as the 3D frame reads them.
+        if deep_canvas_scene3d::scene::has_3d(&shown) {
+            match self.view3d(&viewed, &shown, 0) {
+                Ok(Some((rgba, size))) => {
+                    let png = crate::snapshot::png(rgba, size);
+                    return crate::evidence::put(&self.scenario.evidence, &png)
+                        .map(|sha| json!({"snapshot": {"sha256": sha, "w": size[0], "h": size[1]}}))
+                        .unwrap_or_else(|_| refused("not_written"));
+                }
+                Ok(None) => {}
+                Err(e) => return e,
+            }
+        }
         match self.snapshot(&shown, 0, None) {
             Ok(snap) => json!({"snapshot": snap}),
             Err(e) => e,

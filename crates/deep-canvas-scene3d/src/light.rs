@@ -178,6 +178,20 @@ pub struct Maps {
     pub normal_scale: f64,
     pub occlusion_strength: f64,
     pub alpha_cutoff: f64,
+    /// #506: how an inset's picture in the base color slot draws.
+    pub inset: InsetMap,
+}
+
+/// How an inset's picture draws in a solid's base color slot (#506).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InsetMap {
+    /// A material's map: it multiplies the base color and the coverage.
+    #[default]
+    Map,
+    /// Its straight-alpha color over the face's base color, the coverage the face's.
+    Over,
+    /// A view's linear picture, read at the frame's own px: the window of an eye inset.
+    AtPixel,
 }
 
 impl Maps {
@@ -335,6 +349,7 @@ pub fn maps<'a>(
             .unwrap_or(1.0)
             .clamp(0.0, 1.0),
         alpha_cutoff: num(p.get("alpha_cutoff")).unwrap_or(0.5),
+        inset: InsetMap::Map,
     };
     if out.slots().iter().all(|(_, s)| s.is_none()) {
         return Ok(None);

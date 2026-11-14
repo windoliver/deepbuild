@@ -256,6 +256,9 @@ pub fn knows(kind: &str) -> bool {
         || kind == deep_canvas_scene3d::scene::OVERLAY
         // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
         || kind == "overlay.text@1"
+        // #506: an inset, and a view of the document from another camera in a rect of the frame.
+        || kind == deep_canvas_scene3d::inset::KIND
+        || kind == deep_canvas_scene3d::views::KIND
         // The vector module's kind (#1162): an item the view draws, hears and points at.
         || kind == "vector@1"
         // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
