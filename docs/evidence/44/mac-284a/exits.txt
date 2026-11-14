@@ -1,0 +1,9 @@
+free KB 113067576 15:16:38 load { 2.45 2.70 3.30 }
+head 284a5852d0f9937e8e2fe970626185bab8d02042 origin/main 092754bb14a75cd07157e623e21b0d9e7a51677a branch now 284a5852d0f9937e8e2fe970626185bab8d02042 15:19:43 load { 2.35 2.35 3.02 }
+scripts/spine-44-mac.mjs: OK
+setup exit=0 15:23:05 load { 3.58 2.86 3.09 }
+gate passed after 30643 s 23:53:48 load { 3.69 8.29 6.04 }
+acceptance exit=0 23:56:01 load { 2.76 6.32 5.56 }
+spine exit=0 00:02:08 load { 6.74 6.66 6.05 }
+status after [] 00:02:08 load { 6.36 6.58 6.03 }
+secret scan hits=0 00:02:08 load { 6.36 6.58 6.03 }

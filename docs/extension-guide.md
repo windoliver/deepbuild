@@ -507,7 +507,7 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerSource` | `stream` | `source@1` | many | `source@1` | `skips-first-after-resume` | R1 |
 | `deep.registerSource` | `polled` | `reading.source@1` | many | `reading.source@1` | `cache-as-of` | R2 |
 | `deep.registerSource` | `mcp` | `reading.source@1` | many | `reading.source@1` | `stale-mcp-digest` | R2 |
-| `deep.registerSource` | `library` | `asset.library@1` | many | none | none | R6 |
+| `deep.registerSource` | `library` | `asset.library@1` | many | `asset.library@1` | `measures-by-download`, `reports-cc0`, `keeps-unsized`, `drops-sidecars` | R6 |
 | `deep.registerEnvironment` | - | `environment@1` | one | `environment@1` | `ready-before-health`, `unleased-port`, `leaves-grandchild`, `starts-in-worktree` | R1 |
 | `deep.registerView` | - | `panel@1` | many | `panel@1` | `reaches-network`, `runs-a-program`, `moves-focus-unasked`, `draws-outside`, `covers-the-card` | R1 |
 | `deep.registerAdapter` | - | `adapter@1` | one per agent | `adapter@1` | `duplicate-event-id`, `event-after-stop`, `answer-to-other-session`, `steer-outlives-interrupt`, `acknowledged-without-sign` | R1 |
