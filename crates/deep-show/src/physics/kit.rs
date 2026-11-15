@@ -156,8 +156,8 @@ pub(crate) fn behavior(module: &str) -> Option<super::super::kit::PartRun> {
     let reply =
         deep_physics_rapier::runner::Run::new(None)?.answer(&json!({"call": "behavior_kit"}))?;
     let results = reply["results"].as_array().cloned().unwrap_or_default();
-    let mut part = PartRun::new(results.len().max(1) as u64);
     if reply["admitted"] != true {
+        let mut part = PartRun::new(1);
         let mut case = Case::new("behavior:refused", Verdict::Pass);
         case.fail(
             Verdict::Fail,
@@ -169,6 +169,8 @@ pub(crate) fn behavior(module: &str) -> Option<super::super::kit::PartRun> {
     let (excluded, ran): (Vec<Value>, Vec<Value>) = results
         .into_iter()
         .partition(|r| r["result"] == "excluded_by_caps");
+    // Each fixture that runs is a case; one its caps exclude is listed beside them, never a case.
+    let mut part = PartRun::new(ran.len() as u64);
     for r in ran {
         let mut case = Case::new(
             format!("behavior:{}", r["fixture"].as_str().unwrap_or("")),

@@ -1586,6 +1586,24 @@
       ]
     },
     {
+      "id": "physics-behavior-kit",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "kit"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "kit_native_s": 60,
+        "kit_wasm32_s": 60
+      },
+      "initialReason": "Issue #191 first measurement: the merge base has no behavior kit. Release deep-physics runs the whole kit on Rapier in one process, and scripts/physics-wasm32.mjs runs it in wasm32; each run's wall time, one warm-up and five runs each. physics.mjs judge holds each target, 60 s per backend and target, on a reference Mac. The trial's 15 minutes and the bakes' no added work stay in tests/acceptance/191/ac8-budgets.test.ts. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#191.8b5fd147"
+      ]
+    },
+    {
       "id": "canvas-logic-budgets",
       "command": [
         "node",
