@@ -110,6 +110,9 @@ pub(crate) struct Args {
     pub(crate) meter: Option<StubMeter>,
     timer: Option<StubTimer>,
     pub(crate) environment: Option<Value>,
+    /// The store's packs, `[{id, dir}]` as a `deep-show run` scenario offers them, so a document
+    /// naming a pack is checked, expanded and drawn as there (#142).
+    packs: Vec<(String, PathBuf)>,
 }
 
 pub(crate) fn parse(call: &Value) -> Result<Args, Value> {
@@ -156,6 +159,13 @@ pub(crate) fn parse(call: &Value) -> Result<Args, Value> {
         ));
     }
     let environment = test_only("stub_environment")?.cloned();
+    let mut packs = Vec::new();
+    for p in call["packs"].as_array().into_iter().flatten() {
+        match (p["id"].as_str(), p["dir"].as_str()) {
+            (Some(id), Some(dir)) => packs.push((id.to_string(), PathBuf::from(dir))),
+            _ => return Err(bad("packs is [{id, dir}]")),
+        }
+    }
     Ok(Args {
         look,
         writer: writer.to_string(),
@@ -168,6 +178,7 @@ pub(crate) fn parse(call: &Value) -> Result<Args, Value> {
         meter,
         timer,
         environment,
+        packs,
     })
 }
 
@@ -337,6 +348,7 @@ pub fn call(app: &mut App, call: &Value) -> Value {
 /// The call's document checked as the writer's revision, or the refusal naming its issues.
 pub(crate) fn admitted(args: &Args, labels: &mut Labels) -> Result<Admitted, Value> {
     read_payload(&args.doc)
+        .and_then(|payload| expanded(payload, &args.packs))
         .and_then(|payload| {
             admit(
                 payload,
@@ -353,6 +365,78 @@ pub(crate) fn admitted(args: &Args, labels: &mut Labels) -> Result<Admitted, Val
             )
         })
         .map_err(|issues| json!({"code": "refused", "issues": issues}))
+}
+
+/// #142: a document that names packs, checked against the store's packs and drawn as its
+/// expansions make it: each recipe instance and cue list replaced by what it expanded to, so the
+/// run draws what the canvas draws; a refused one is refused with its errors.
+fn expanded(payload: Value, packs: &[(String, PathBuf)]) -> Result<Value, Vec<Value>> {
+    use deep_canvas::document::{check_packed, expands, packs as pk};
+    if packs.is_empty() {
+        return Ok(payload);
+    }
+    let sealed = crate::live::sealed();
+    let mut store = pk::Packs::new(pk::Planted::default());
+    let mut manifests: Vec<Value> = Vec::new();
+    for (id, dir) in packs {
+        let read = |file: &str| std::fs::read(dir.join(file)).map_err(|e| e.to_string());
+        match pk::manifest_of(id, &read) {
+            Ok(m) => manifests.push(m),
+            Err(issues) => return Err(issues.iter().map(|i| i.to_json()).collect()),
+        }
+    }
+    // A pack the others require first: admit in passes until none more admits.
+    let mut left = manifests;
+    while !left.is_empty() {
+        let before = left.len();
+        let mut failed = Vec::new();
+        for m in left {
+            if store.admit(&m, sealed).is_err() {
+                failed.push(m);
+            }
+        }
+        if failed.len() == before {
+            let m = &failed[0];
+            let issues = store.admit(m, sealed).err().unwrap_or_default();
+            return Err(issues.iter().map(|i| i.to_json()).collect());
+        }
+        left = failed;
+    }
+    // Checked as a stored revision: an ID and one layer holding every item, which the payload as
+    // a writer sends it leaves to the hub.
+    let mut stored = payload.clone();
+    stored["id"] = json!("01jb3790000000000000000000");
+    stored["layers"] = json!({"main": {"writer": "agent:alpha", "title": "Main", "order": "a0"}});
+    if let Some(items) = stored.get_mut("items").and_then(Value::as_object_mut) {
+        for item in items.values_mut() {
+            item["layer"] = json!("main");
+        }
+    }
+    let checked = check_packed(&stored, sealed, &store);
+    let errors: Vec<Value> = checked
+        .issues
+        .iter()
+        .filter(|i| i.severity == "error")
+        .map(|i| i.to_json())
+        .collect();
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    let mut drawn = expands::drawn(&payload, &checked.expansions);
+    if let Some(d) = drawn.as_object_mut() {
+        d.remove("packs");
+        for item in d
+            .get_mut("items")
+            .and_then(Value::as_object_mut)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(i) = item.1.as_object_mut() {
+                i.remove("layer");
+            }
+        }
+    }
+    Ok(drawn)
 }
 
 /// The run's view: the document's frames drawn as a canonical render draws them.
