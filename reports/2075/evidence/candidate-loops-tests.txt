@@ -35,4 +35,3 @@ AC3: line "says done 1/1 · 2 checks wait for the loop · cron · 1 test · next
       Tests  5 passed (5)
    Start at  17:20:20
    Duration  164.40s (tests 100%)
-

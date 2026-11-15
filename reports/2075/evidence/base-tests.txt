@@ -218,4 +218,3 @@ AssertionError: the slow check .deepbuild/checks/slow.sh has no run in the recor
       Tests  7 failed | 5 passed (12)
    Start at  17:14:20
    Duration  114.29s (tests 99%, transform 1%)
-

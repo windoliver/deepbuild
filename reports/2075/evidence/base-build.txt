@@ -177,4 +177,3 @@ npm error command sh -c tsc -p tsconfig.json && node native/build.mjs
 
 > @deepbuild/workspaces@0.0.0 build
 > tsc -p tsconfig.json
-
