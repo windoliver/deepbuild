@@ -211,7 +211,11 @@ export class Intake implements IntakeService {
       if (!started.length) await this.o.start(f.ask!, made.folder, scope([...numbers.values()]));
       await this.o.appendCore('brief.made', { step: 'applied', key, project: made.project, folder: made.folder, tasks: [...numbers.values()] }, { subject: f.ask! });
     } catch (error) {
-      process.stderr.write(`deep hub: the brief ${key.slice(0, 12)} was not applied: ${error instanceof Error ? error.message : String(error)}\n`);
+      const why = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`deep hub: the brief ${key.slice(0, 12)} was not applied: ${why}\n`);
+      // On the record and its row too (#1349), so what stopped it, such as the git call that failed, is said where you look.
+      const f = (await this.folds()).get(key);
+      await this.refuse(key, f?.heading ?? '', `Your approved card wasn't applied: ${why}`).catch(() => undefined);
     } finally {
       this.busy.delete(key);
     }

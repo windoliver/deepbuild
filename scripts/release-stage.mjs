@@ -12,6 +12,10 @@
 //               linux-arm64: bin/deep-hook and SQLite's native module; built-<platform>-<arch>/ holds the same files as
 //               built, for release-verify.
 // <dir>/stage.json lists the package folders, each with its built tree when it has one.
+//   node scripts/release-stage.mjs --out <dir> --here
+// lays out the same two packages for this host alone, from this checkout as it is already built (no npm ci, no
+// workspace build, no Linux deep-hook), for the app's runtime folder on a machine that can't link for Linux (#1349).
+// A release never passes it: scripts/release-pack.mjs runs the full stage.
 import { spawnSync } from 'node:child_process';
 import { chmodSync, constants, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
@@ -24,6 +28,7 @@ const fail = (message) => {
 const at = process.argv.indexOf('--out');
 if (at < 0 || !process.argv[at + 1]) fail('usage: release-stage.mjs --out <dir>');
 const out = resolve(process.argv[at + 1]);
+const here = process.argv.includes('--here');
 const REPO = realpathSync(process.cwd());
 const run = (cmd, args, env = process.env) => {
   const r = spawnSync(cmd, args, { cwd: REPO, env, encoding: 'utf8', maxBuffer: 1 << 28 });
@@ -37,8 +42,10 @@ const copy = (from, to, filter) => {
 };
 
 // The build, from this checkout's lockfiles alone.
-run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
-run('npm', ['run', 'build', '--workspaces', '--if-present']);
+if (!here) {
+  run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']);
+  run('npm', ['run', 'build', '--workspaces', '--if-present']);
+}
 const home = userInfo().homedir;
 const cargoHome = process.env.CARGO_HOME ?? join(home, '.cargo');
 const cargo = existsSync(join(cargoHome, 'bin', 'cargo')) ? join(cargoHome, 'bin', 'cargo') : 'cargo';
@@ -51,7 +58,7 @@ const builds = new Map([[`${process.platform}-${process.arch}`, join(REPO, 'targ
 const LINUX = { x64: ['x86_64-unknown-linux-musl', 'x86_64-linux-musl'], arm64: ['aarch64-unknown-linux-musl', 'aarch64-linux-musl'] };
 const zig = [...(process.env.PATH ?? '').split(':'), '/opt/homebrew/bin', '/usr/local/bin'].map((d) => join(d, 'zig')).find((p) => existsSync(p));
 for (const [arch, [triple, zigTarget]] of Object.entries(LINUX)) {
-  if (builds.has(`linux-${arch}`)) continue;
+  if (here || builds.has(`linux-${arch}`)) continue;
   if (!zig) fail(`no zig on PATH, /opt/homebrew/bin or /usr/local/bin to link deep-hook for linux-${arch}`);
   // rustc's own musl start files are left out, since zig links its own; zig refuses one aarch64 linker flag it doesn't need.
   const linker = join(out, `.cc-${triple}`);
