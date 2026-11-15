@@ -925,6 +925,10 @@ export class AnswerDelivery {
     const since = typeof params.since === 'number' ? params.since : this.options.services.now();
     if (this.options.kernel.stopping) throw refuse('unavailable', '', 'The hub is stopping; ask again once it is back.', session, true);
     if (this.options.settings.plant === 'waiter-gives-up-at-600s' && this.options.services.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
+    // deep-hook's waiter waits only on the session its connection is bound to (#1851).
+    if (context.role.startsWith('waiter:') && context.session !== session) {
+      throw refuse('role', '/params/session', `This waiter is bound to session ${context.session} by its agent, process ${context.parent?.pid} started ${context.parent?.start}; it waits only on that session's answers, not on ${session}'s.`, session);
+    }
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
     // paseo's plugin on deep-hook's behalf, for a session deep-hook gates inside paseo (#55).
     if (params.relay === true) {

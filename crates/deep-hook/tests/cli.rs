@@ -1411,3 +1411,70 @@ fn the_mcp_servers_facts_name_a_tools_path_arguments_only_for_a_server_loaded_as
     );
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[test]
+fn the_waiter_waits_on_its_session_without_the_control_token() {
+    // The waiter says hello bound to its own session and never opens control.token (#1851): here the token is a FIFO
+    // nobody writes, so opening it would hang the waiter, and the hub's answer must still wake the session in 2 s.
+    use std::io::{BufRead, BufReader, Write};
+    let home = short_home("token");
+    let made = Command::new("/usr/bin/mkfifo")
+        .arg(home.join(".deepbuild/control.token"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let hub = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(10 * SECOND)).unwrap();
+        let mut reader = BufReader::new(stream);
+        reader
+            .get_mut()
+            .write_all(b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n")
+            .unwrap();
+        let mut hello = String::new();
+        reader.read_line(&mut hello).unwrap();
+        reader
+            .get_mut()
+            .write_all(b"{\"role\":\"waiter:s1851\"}\n")
+            .unwrap();
+        let mut request = String::new();
+        reader.read_line(&mut request).unwrap();
+        reader
+            .get_mut()
+            .write_all(b"{\"v\":1,\"id\":1,\"result\":{\"session\":\"s1851\",\"text\":\"Your answer: North\"}}\n")
+            .unwrap();
+        (hello, request)
+    });
+    let mut waiter = hook(&home, "waiter");
+    let start = std::time::Instant::now();
+    feed(
+        &mut waiter,
+        br#"{"session_id":"s1851","cwd":"/tmp","hook_event_name":"Stop"}"#,
+    );
+    let exited = exit_within(&mut waiter, start, 2 * SECOND);
+    let said = stderr_of(&mut waiter);
+    let _ = std::fs::remove_dir_all(&home);
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(2),
+        "the waiter must wake its session with the answer within 2 s, with no readable control.token; stderr: {said}"
+    );
+    assert!(
+        said.contains("Your answer: North"),
+        "the answer on stderr: {said}"
+    );
+    let (hello, request) = hub.join().unwrap();
+    assert!(
+        hello.contains("\"hello\":\"waiter\"")
+            && hello.contains("\"session\":\"s1851\"")
+            && !hello.contains("token"),
+        "the waiter's hello names its role and session and carries no token: {hello}"
+    );
+    assert!(
+        request.contains("\"method\":\"session.wait\"")
+            && request.contains("\"session\":\"s1851\""),
+        "it waits on its own session: {request}"
+    );
+}

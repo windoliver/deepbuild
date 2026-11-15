@@ -832,6 +832,28 @@ export class SessionState {
     });
   }
 
+  /**
+   * Binds deep-hook's waiter to the session its hello names (#1851), as a deep mcp is bound: only where the process the
+   * OS reports at the other end of its connection `fd` is a child of that session's agent, checked by the agent's start
+   * time. The hub's waiter entry execs deep-hook, so no shell stays between them. A session this hub hasn't met since it
+   * started binds by the agent the last hub watched for it. Otherwise the refusal names the process.
+   */
+  async waiterHello(fd: number | undefined, session: string): Promise<{ session: string; parent: { pid: number; start: string } } | { refused: string }> {
+    let hook: string | undefined;
+    try { hook = deepHook(); } catch { /* no deep-hook here to ask the OS: no peer */ }
+    const peer = hook && fd !== undefined && fd >= 0 ? await peerOf(hook, fd) : undefined;
+    if (peer === undefined) return { refused: `The OS reports no process at the other end of this connection, so it can't be bound as session ${session}'s waiter: a waiter binds by its agent's process.` };
+    const above = await parentOf(peer);
+    const start = above === undefined ? undefined : await this.startOf(above, true);
+    const known = this.sessions.get(session);
+    const agent = known ? (known.ended ? undefined : { pid: known.pid, start: known.start }) : this.options.transcripts().cursors.get(session)?.watch;
+    if (!agent) return { refused: `Process ${peer} can't wait as session ${session}'s waiter: the hub knows no live session ${session} to bind it to.` };
+    if (above !== agent.pid || start !== agent.start) {
+      return { refused: `Process ${peer} isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${above === undefined ? 'gone' : `process ${above}${start ? ` started ${start}` : ''}`}, so it can't wait as that session's waiter.` };
+    }
+    return { session, parent: { pid: agent.pid, start: agent.start } };
+  }
+
   /** The sessions' rows; one paseo runs whose answer no route could carry reads "answer waiting" (#55). */
   async sessionRows(seen = ''): Promise<Record<string, unknown>[]> {
     let rows = (await this.options.services.record.table('sessions')).rows as Record<string, unknown>[];

@@ -49,7 +49,7 @@ const BEHIND_BYTES = 8 << 20;
 const STALL_MS = 100;
 
 /** A person's connection (#1337) reads only what that person may see. */
-type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
+type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person' | 'waiter';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   // A promotion (#1334): the drain, the health check's fixture claim and the rollback's one notice.
@@ -105,7 +105,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['canvas.show', ['cli']], ['canvas.export', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
-  ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
+  ['session.wait', ['cli', 'mcp', 'waiter']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
@@ -1290,7 +1290,22 @@ class Hub {
       conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
-    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });
+    if (value.hello === 'waiter') {
+      // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
+      const session = typeof value.session === 'string' ? value.session : '';
+      const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
+      const bound = (await this.core.request({ op: 'waiter-hello', fd, session }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error) }))) as { session: string; parent: { pid: number; start: string } } | { refused: string };
+      if ('refused' in bound) {
+        conn.write({ id: null, error: refusal('role', '/hello', bound.refused, session) });
+        return conn.end();
+      }
+      conn.role = 'waiter';
+      conn.session = bound.session;
+      conn.parent = bound.parent;
+      conn.name = `waiter:${bound.session}`;
+      return conn.write({ role: conn.name });
+    }
+    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli, mcp or waiter.', value.hello) });
     conn.end();
   }
 
@@ -1378,7 +1393,7 @@ class Hub {
       }
       case 'session.wait':
         conn.waiter = true;
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
       default:
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.

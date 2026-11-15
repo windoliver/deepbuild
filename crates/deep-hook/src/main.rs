@@ -1601,6 +1601,8 @@ fn send(line: &str) {
 
 /// How often a waiter looks whether its session's agent still runs, and how long it waits to ask a hub that is away.
 const WAITER_LOOK: Duration = Duration::from_millis(500);
+/// How long a waiter the hub refused to bind waits before it asks again: each hello costs the hub a look at processes.
+const WAITER_REFUSED: Duration = Duration::from_secs(5);
 
 extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
@@ -1708,13 +1710,13 @@ enum Waited {
     Done,
     /// The hub is away, or went: ask again once it is back.
     Away,
+    /// The hub refused this waiter, saying why: ask again after a while.
+    Refused(String),
 }
 
-/// One wait on the hub's socket as the cli role: the call is answered when the session has an answer for it.
-fn wait_once(request: &str, gone: &dyn Fn() -> bool) -> Waited {
-    let Ok(token) = fs::read_to_string(home().join("control.token")) else {
-        return Waited::Away;
-    };
+/// One wait on the hub's socket as its session's waiter (#1851): the hub binds the connection to the session by this
+/// process's parent, the agent, and its start time, as it binds a deep mcp; no control token is read or sent.
+fn wait_once(session: &str, request: &str, gone: &dyn Fn() -> bool) -> Waited {
     let Ok(stream) = UnixStream::connect(address()) else {
         return Waited::Away;
     };
@@ -1724,13 +1726,23 @@ fn wait_once(request: &str, gone: &dyn Fn() -> bool) -> Waited {
         return Waited::Away;
     }
     let hello = format!(
-        "{{\"v\":1,\"hello\":\"cli\",\"token\":{}}}\n",
-        quoted(token.trim())
+        "{{\"v\":1,\"hello\":\"waiter\",\"session\":{}}}\n",
+        quoted(session)
     );
-    if reader.get_mut().write_all(hello.as_bytes()).is_err()
-        || !matches!(read_line(&mut reader, soon()), Got::Line(_))
-        || reader.get_mut().write_all(request.as_bytes()).is_err()
-    {
+    if reader.get_mut().write_all(hello.as_bytes()).is_err() {
+        return Waited::Away;
+    }
+    match read_line(&mut reader, soon()) {
+        // A hub that won't bind this process to the session (it hasn't met the session since it started, say) is
+        // asked again later, less often than one that is away.
+        Got::Line(text) => match parse(text.trim_end()) {
+            Ok(reply) if member(&reply, "error").is_some() => return refused(&reply),
+            Ok(_) => {}
+            Err(_) => return Waited::Away,
+        },
+        _ => return Waited::Away,
+    }
+    if reader.get_mut().write_all(request.as_bytes()).is_err() {
         return Waited::Away;
     }
     loop {
@@ -1747,11 +1759,21 @@ fn wait_once(request: &str, gone: &dyn Fn() -> bool) -> Waited {
                         Some(Value::String(answer)) => Waited::Answer(answer.clone()),
                         _ => Waited::Done,
                     },
+                    None if member(&reply, "error").is_some() => refused(&reply),
                     None => Waited::Away,
                 };
             }
         }
     }
+}
+
+/// The hub's refusal of a waiter, by its remediation.
+fn refused(reply: &Value) -> Waited {
+    let why = member(reply, "error").and_then(|error| member(error, "remediation"));
+    Waited::Refused(match why {
+        Some(Value::String(text)) => text.clone(),
+        _ => "the hub refused this waiter".to_string(),
+    })
 }
 
 /// `deep-hook <agent> waiter`: waits, as long as Claude Code lets the entry run, for an answer to the session the
@@ -1797,18 +1819,27 @@ fn waiter() -> ExitCode {
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
     let watched = hub_plant().as_deref() != Some("waiter-outlives-session");
     let gone = || watched && (agent_pid() != agent || !alive(agent));
+    // Each refusal the hub gives is said once on stderr, which wakes nothing while the waiter doesn't exit 2.
+    let mut said = String::new();
     loop {
         std::hint::black_box(&kept);
         if gone() {
             return ExitCode::SUCCESS;
         }
-        match wait_once(&request, &gone) {
+        match wait_once(&session, &request, &gone) {
             Waited::Answer(text) => {
                 eprintln!("{text}");
                 return ExitCode::from(2);
             }
             Waited::Done => return ExitCode::SUCCESS,
             Waited::Away => std::thread::sleep(WAITER_LOOK),
+            Waited::Refused(why) => {
+                if why != said {
+                    eprintln!("deep-hook waiter: {why}");
+                    said = why;
+                }
+                std::thread::sleep(WAITER_REFUSED);
+            }
         }
     }
 }
