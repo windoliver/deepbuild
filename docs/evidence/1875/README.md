@@ -1,6 +1,6 @@
 # #1875 evidence: affected.mjs reads PASS only when it ran what the change reaches
 
-These runs were on the Spark (Linux arm64) on 2026-11-15, at load 90 to 220, with the base c740dede7 and the
+These runs were on the Spark (Linux arm64) on 2026-11-15, at load 30 to 220, with the base c740dede7 and the
 branch at 8cd443e7. Home paths read `~`.
 
 ## The proof the issue names: the acceptance suite
@@ -72,3 +72,8 @@ this machine reads FAIL, and a real-tree summary can't show PASS. The lines that
     `lanes.mjs` therefore reads INCONCLUSIVE and needs the release preflight.
 - A deleted setup file counts only when the config lists it with its extension, as `vitest.config.ts` does. An
   extensionless entry such as `./tests/boot` resolves against what's on disk.
+- A file a setup file imports from outside the test paths isn't named, since `namedByConfig` follows only imports
+  under the test paths. `tests/vitest-setup.ts` imports only `node:` modules and vitest today.
+- Config modules count by `namedByConfig`'s keyword heuristic (`configures`). `scripts/lanes.mjs` matches it through
+  comment and string text, and other modules `lanes.mjs` imports at config load, such as `scripts/config-eval.mjs`,
+  don't.
