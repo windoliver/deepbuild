@@ -1348,6 +1348,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
                 "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
                 "pixel_checks_hold_anywhere" => Planted::PixelChecksHoldAnywhere,
+                "light_from_whole_frame" => Planted::LightFromWholeFrame,
+                "reduction_leaves_out_last_rows" => Planted::ReductionLeavesOutLastRows,
                 "regression_asks_every_verdict" => Planted::RegressionAsksEveryVerdict,
                 "loop_checks_cached_by_doc" => Planted::LoopChecksCachedByDoc,
                 "stale_fix_never_rebases" => Planted::StaleFixNeverRebases,

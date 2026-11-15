@@ -1,0 +1,45 @@
+#2067 supplementary blind scope acceptance — unchanged base
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Node v24.22.0; rustc 1.99.1; git 2.56.0
+Run once through scripts/affected.mjs, explicit three new *.test.ts paths (README).
+Exit 1. No implementation/source/check/decision changes. No retries.
+
+Expected regression failures, not setup/loader/timeout failures:
+
+1. promisor.test.ts
+   Positive control: real merge-tree + fetch from the local bare origin.
+   Product observation: merge-tree, fetch, merge-tree.
+   AssertionError: nothing is fetched, including Git internal promisor retrieval:
+     expected [ 'fetch' ] to have a length of +0 but got 1
+   Claim actual PASS, expected BLOCKED.
+   Receipt actual review: passed, preflight: passed; expected missing preflight.
+   Missing mainline-read cause/owner assertions also fail.
+   Closes actual allowed true, expected false.
+
+2. review-name.test.ts
+   Automatic review completed with no findings (receipt review: passed).
+   AssertionError: review cannot vanish or be replaced by another check:
+     expected 'PASS' to be 'BLOCKED'
+   Missing release-review receipt, undefined-check cause and owner assertions fail.
+   Guard already holds: Closes refused naming review still to run on the merge.
+
+Passing regression guard, already correct on base:
+
+3. inherited-reuse.test.ts
+   Real merged and base runs both failed tests/release.test.js:4, release is ready,
+   false !== true, each tests_run=1.
+   First claim BLOCKED, preflight inherited: also fails on the merge base.
+   Distinct second claim, same head: BLOCKED with the same inherited reason.
+   Total releaseRuns=2; identical run IDs, no rerun on second claim.
+
+Vitest: Test Files 2 failed | 1 passed (3); Tests 2 failed | 1 passed (3).
+Affected: 174 new (2 test failures + 172 unrelated lint findings),
+11 already failing on main, 0 inconclusive or blocked, 0 listed skips,
+1 passed, in 134 s at load 203.
+WIDE lines: none. INCONCLUSIVE lines: none.
+
+Environment caveat: normal lease wrapper reported DeepBuild not set up here
+(no hub token), so the test process ran unleased. No throttle/lease bypass set.
+Unrelated base lint failures remain untouched; full listings in evidence/affected.txt.
+No implementation verification, full preflight, broad suites or mutant run performed.
+Full scrubbed output: evidence/vitest.txt and evidence/reporter.jsonl.
