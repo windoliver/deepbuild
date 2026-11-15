@@ -18,7 +18,7 @@ use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::hub::{Call, Eval, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
+use crate::hub::{Call, Eval, EvalTime, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// An operator's error as a revision's issue.
@@ -27,7 +27,13 @@ pub fn op_issue(i: &OpIssue) -> Issue {
     let actual = i.actual.clone().unwrap_or(Value::Null);
     // #544: a read a logic item doesn't declare names its close declared names as the canvas
     // does an unknown kind's.
-    let close = actual.get("close").and_then(Value::as_array).into_iter().flatten().map(|n| json!({"name": n})).collect();
+    let close = actual
+        .get("close")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|n| json!({"name": n}))
+        .collect();
     let issue = match &i.item {
         Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
         None => Issue::envelope(i.code, i.path.clone(), actual, &what),
@@ -232,6 +238,35 @@ impl<'a> Hub<'a> {
     }
 
     /// One frame of a document's session (`eval`).
+    /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
+    /// through its groups' warps at their values then, each sub-path flattened to its points.
+    pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let planted = crate::warps::planted(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let (Some(form), Some(items)) = (
+            session.document().and_then(Value::as_object).cloned(),
+            crate::warps::items_at(&self.sched, session),
+        ) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        match crate::warps::drawn(&form, &items, item, planted) {
+            Ok(Some(subpaths)) => {
+                json!({"item": item, "t": t, "subpaths": subpaths, "notices": []})
+            }
+            Ok(None) => json!({"outcome": "refused", "code": "ref_unresolved", "item": item}),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
     pub fn eval(&mut self, e: &Eval) -> Value {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
@@ -245,17 +280,34 @@ impl<'a> Hub<'a> {
             Some(track) => self.load_with(&e.doc, track, t),
             None => self.load_frame(&e.doc, t),
         }
+
         // Planted (#504): a document with controls runs a program through the sandbox each frame.
         if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
-            && self.forms.get(&e.doc).is_some_and(|f| f.get("controls").is_some())
+            && self
+                .forms
+                .get(&e.doc)
+                .is_some_and(|f| f.get("controls").is_some())
         {
             self.sandbox.runs += 1;
         }
+        // #169: every row of the core's carried-state list as a play on this track leaves it at
+        // `t`, so steps the live session ran under another track never answer for it.
+        let carried: Option<Value> = self.played_form(&e.doc).filter(|_| e.carried).map(|form| {
+            let form = e
+                .track
+                .as_ref()
+                .map_or(form.clone(), |t| crate::played::with_track(&form, t));
+            (self.carried_at(&form, t).into_iter())
+                .map(|c| json!({"owner": c.module, "kind": c.kind, "key": c.key, "hash": c.hash}))
+                .collect()
+        });
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
         // #544's planted start_on: a run starts at the session's first frame at or after it.
-        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame) && !self.first_frames.contains_key(&e.doc) {
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame)
+            && !self.first_frames.contains_key(&e.doc)
+        {
             self.first_frames.insert(e.doc.clone(), t);
             if let Some(mut d) = session.document().cloned() {
                 crate::logic::from_first_frame(&mut d, t);
@@ -312,10 +364,12 @@ impl<'a> Hub<'a> {
         // #535: a logic column's row whose value goes out of range raises column.out_of_range at
         // the frame of the step its excursion begins.
         if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
-            // #537: and scene3d's readers', an instancer's columns and a line's points.
+            // #537: and scene3d's readers', an instancer's columns and a line's points; #538: and
+            // the cell grid's, keyed copy's and flip's, in the session's locale.
             let raised = [
                 deep_canvas::columns::raised_at(doc, t),
                 deep_canvas_scene3d::arrays::raised_at(doc, t),
+                crate::logic::raised_at(doc, Some(t), view[deep_canvas::schedule::LOCALE].as_str().unwrap_or("en")),
             ];
             list.extend(raised.iter().flatten().map(|i| i.to_json()));
         }
@@ -326,15 +380,48 @@ impl<'a> Hub<'a> {
                 .iter()
                 .map(|name| {
                     let v = evaluated.array(&self.sched, name);
-                    let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
-                    let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
-                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                    let n = v
+                        .as_ref()
+                        .and_then(|v| v.as_typed::<i64>())
+                        .map(|n| json!(*n));
+                    let x = v
+                        .as_ref()
+                        .and_then(|v| v.as_typed::<f64>())
+                        .map(|x| json!(*x));
+                    // #533: a logic item's array `<logic ID>.<name>` of count 1, as the logic
+                    // module's last step at or before the frame left it.
+                    let logic = || {
+                        let state = evaluated.array(&self.sched, deep_logic::module::STATE)?;
+                        let state = state.as_typed::<deep_logic::module::State>()?;
+                        match state.arrays.get(name)?.as_slice() {
+                            [one] => Some(one.clone()),
+                            _ => None,
+                        }
+                    };
+                    // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
+                    let doc = evaluated.document();
+                    let bands = || {
+                        doc.and_then(|d| {
+                            deep_canvas::columns::map(d.get("arrays")?.get(name)?, t, None, false)
+                        })
+                        .map(|m| json!(m.values))
+                    };
+                    (
+                        name.clone(),
+                        n.or(x).or_else(logic).or_else(bands).unwrap_or(Value::Null),
+                    )
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
         }
         if !e.paths.is_empty() {
             reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
+        if let Some(rows) = carried {
+            reply["carried"] = rows;
+        }
+        if e.data_hash {
+            reply["data_hash"] = json!(crate::data_hash::of(&self.sched, evaluated));
         }
         if self.startup.test_build {
             reply["access"] = json!(report
@@ -344,15 +431,25 @@ impl<'a> Hub<'a> {
                 .collect::<Vec<_>>());
         }
         // #493: a 2D film's shots: the sides its frame draws, and the film block.
-        let reduced = e.view.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+        let reduced = e
+            .view
+            .get("reduced_motion")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let program = crate::film::program_of(&self.sched, evaluated);
         let document = evaluated.document().cloned();
         let sides = match (&program, &document) {
             (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
             _ => None,
         };
-        let drawing = if e.pixels || e.film {
-            drawing_of(&self.sched, evaluated)
+        // #507: the timeline position the frame at this clock time shows.
+        reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
+        let drawing = if e.pixels || e.film || e.texts {
+            drawing_of(&self.sched, evaluated).map(|p| match &document {
+                // #466: the look's boil on the frame's lines.
+                Some(d) => self.boiled(d, t, reduced, p),
+                None => p,
+            })
         } else {
             None
         };
@@ -368,13 +465,30 @@ impl<'a> Hub<'a> {
         if e.film {
             let glyphs = drawing
                 .as_ref()
-                .and_then(|d| self.renderer.prepare_drawing(d, &self.scenario.evidence).ok())
+                .and_then(|d| {
+                    self.renderer
+                        .prepare_drawing(d, &self.scenario.evidence)
+                        .ok()
+                })
                 .map(|d| d.glyphs())
                 .unwrap_or_default();
             reply["film"] = match (&program, &document) {
                 (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
                 _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
             };
+            // #466: every list the document's reveals compile.
+            if let Some(d) = &document {
+                reply["film"]["occurrences"] = Value::Object(self.reveal_lists(d));
+            }
+        }
+        if e.texts {
+            reply["texts"] = Value::Object(
+                drawing
+                    .as_ref()
+                    .and_then(|d| d.drawing.as_deref())
+                    .map(crate::film_audit::drawn_texts)
+                    .unwrap_or_default(),
+            );
         }
         let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self
@@ -435,9 +549,15 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let rgba = if self.renderer.caption.is_some() {
             // #502: the caption layer draws over every item and under the status marks.
-            let mut rgba = self.renderer.raster(&drawn.part(drawn.view, true, false), size, self.ground(opaque));
+            let mut rgba = self.renderer.raster(
+                &drawn.part(drawn.view, true, false),
+                size,
+                self.ground(opaque),
+            );
             self.caption_over(&mut rgba, size);
-            let status = self.renderer.raster(&drawn.part(drawn.view, false, true), size, None);
+            let status = self
+                .renderer
+                .raster(&drawn.part(drawn.view, false, true), size, None);
             snapshot::over(&mut rgba, &status);
             rgba
         } else {
@@ -490,12 +610,28 @@ impl<'a> Hub<'a> {
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let ground = self.ground(opaque);
-        let ink = self.look.light.get("ink").copied().unwrap_or([0; 3]);
+        // #466: a dip's color is a look role, ink unless it names another.
+        let role = match &sides.mix {
+            Some(crate::film::Mix::Dip { role, .. }) => role.as_str(),
+            _ => "ink",
+        };
+        let Some(ink) = self.look.light.get(role).copied() else {
+            return Err(Unfit {
+                code: "role_unresolved",
+                path: "transitions".into(),
+            });
+        };
         let frame = drawn.frame.size;
         let mut pictures = Vec::with_capacity(sides.sides.len());
         for side in &sides.sides {
             let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
-            let printed = match print_at.filter(|_| opaque).and_then(|t| Some((t, self.print_look(doc, side.look.as_deref())?))) { Some((t, def)) => self.print_part(&def, doc, &part, size, t)?, None => None };
+            let printed = match print_at
+                .filter(|_| opaque)
+                .and_then(|t| Some((t, self.print_look(doc, side.look.as_deref())?)))
+            {
+                Some((t, def)) => self.print_part(&def, doc, &part, size, t)?,
+                None => None,
+            };
             let mut rgba = printed.unwrap_or_else(|| self.renderer.raster(&part, size, ground));
             if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
                 crate::film::finish(&mut rgba, map);
@@ -503,7 +639,10 @@ impl<'a> Hub<'a> {
             pictures.push(rgba);
         }
         let mut rgba = match (&sides.mix, pictures.len()) {
-            (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
+            (Some(mix), 2) => {
+                let pass = self.transition_pass(doc, mix, &pictures, size)?;
+                crate::film::blend(&pictures[0], &pictures[1], mix, size, ink, pass.as_deref())
+            }
             _ => pictures.swap_remove(0),
         };
         self.caption_over(&mut rgba, size);
@@ -512,6 +651,28 @@ impl<'a> Hub<'a> {
         let over = self.renderer.raster(&status, size, None);
         crate::film::over(&mut rgba, &over);
         Ok((rgba, status, size))
+    }
+
+    /// #466: an operator transition's pass over the two finished sides, or `None` for a mix of
+    /// another kind.
+    fn transition_pass(
+        &self,
+        doc: &Value,
+        mix: &crate::film::Mix,
+        pictures: &[Vec<u8>],
+        size: [u16; 2],
+    ) -> Result<Option<Vec<u8>>, Unfit> {
+        let crate::film::Mix::Operator { id, op, p } = mix else {
+            return Ok(None);
+        };
+        let roles = self
+            .look
+            .light
+            .iter()
+            .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+            .collect();
+        let sides = [pictures[0].as_slice(), pictures[1].as_slice()];
+        crate::film_operator::draw(doc, id, op, *p, sides, size, &roles).map(Some)
     }
 
     /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
@@ -531,16 +692,16 @@ impl<'a> Hub<'a> {
         drawing: &Painted,
         size: Option<[u16; 2]>,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
-        let drawn = self
-            .renderer
-            .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|()| Unfit {
-            code: "gpu_unavailable",
-            path: "snapshots".into(),
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        // #506: with its insets' pictures, its overlay frames at their anchors and its view
+        // overlays (over3d.rs).
+        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
+            "unsupported_platform" => Unfit {
+                code: "gpu_unavailable",
+                path: "snapshots".into(),
+            },
+            _ => u,
         })?;
-        let over = self.renderer.raster(&drawn, size, None);
-        snapshot::over(&mut rgba, &over);
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
@@ -566,6 +727,7 @@ impl<'a> Hub<'a> {
         let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
         let mut out = Vec::with_capacity(f.count);
         let mut revised_now = false;
+        let mut seen = BTreeMap::new();
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -596,6 +758,7 @@ impl<'a> Hub<'a> {
                 break;
             };
             let view = session_view(session, &Map::new());
+            let before = f.timings.then(|| crate::timings::mappings(&self.sched, session));
             let _ = self.sched.take_json();
             let frame_started = Instant::now();
             let (ran, allocs) =
@@ -615,6 +778,10 @@ impl<'a> Hub<'a> {
             // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
             frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
             frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
+            if let (Some(before), Some(doc)) = (&before, self.sessions[&f.doc].document()) {
+                let after = crate::timings::mappings(&self.sched, &self.sessions[&f.doc]);
+                crate::timings::add(&mut frame, (doc, before, &after, t), &mut seen);
+            }
             revised_now = false;
             let mut capture = 0;
             if f.pixels {
@@ -975,12 +1142,17 @@ fn cell_grids(
                     to: *to,
                     role: String::new(),
                     color: *c,
+                    opacity: 1.0,
                 })
                 .collect();
+            let text = row.text.trim_end().to_string();
             out.push(mark(Mark::Text {
                 item: id.clone(),
                 spec: scene::TextSpec {
-                    text: row.text.trim_end().to_string(),
+                    spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
+                    gap: 0.0,
+                    indent: 0.0,
+                    text,
                     font: "mono".into(),
                     family: Some(deep_text::Role::Mono.family()),
                     fallback: Vec::new(),
@@ -992,7 +1164,6 @@ fn cell_grids(
                     mask: false,
                     align: scene::Align::Start,
                     bound: false,
-                    spans: Vec::new(),
                 },
                 origin: [g.origin[0], y],
                 role: None,
@@ -1570,7 +1741,12 @@ mod story_tests {
             (2 * SECOND, "30", "2002", "140", "100", 140.0),
         ] {
             live.frame(&mut s, t, &default_view(&doc));
-            let refused: Vec<_> = live.report.issues.iter().map(|i| (i.code, &i.path)).collect();
+            let refused: Vec<_> = live
+                .report
+                .issues
+                .iter()
+                .map(|i| (i.code, &i.path))
+                .collect();
             assert!(refused.is_empty(), "at {t}: {refused:?}");
             let drawing = live
                 .value(&s, "marks2d.frame", None)

@@ -13,12 +13,14 @@ use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
 pub mod kinds;
+pub mod launch;
 mod time;
-pub use time::{cache, held, tick};
+pub use time::{cache, held, latch, tick};
 pub mod probe;
 pub mod registries;
 pub mod sandbox;
 pub mod sim;
+pub mod swirl;
 pub mod weight;
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
@@ -46,7 +48,10 @@ fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
         feature: name.replace('.', "-"),
         license: "Apache-2.0".into(),
         implements: format!("{name}@1"),
-        implementation: deep_canvas::registry::Implementation::reference(name, Semver::parse("1.0.0").expect("a version")),
+        implementation: deep_canvas::registry::Implementation::reference(
+            name,
+            Semver::parse("1.0.0").expect("a version"),
+        ),
     }
 }
 
@@ -54,7 +59,7 @@ fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
 fn box_param() -> Param {
     Param {
         name: "box",
-        ty: ParamType::Json,
+        ty: ParamType::Json("[x, y, w, h]"),
         unit: "",
         default: Value::Null,
         min: None,
@@ -112,7 +117,7 @@ fn register_b(r: &mut Registrar) {
     // feature of b that reads a.
     let echo = Param {
         name: "echo",
-        ty: ParamType::Json,
+        ty: ParamType::Json("number"),
         unit: "",
         default: Value::Null,
         min: None,
@@ -232,10 +237,11 @@ fn number(name: &'static str) -> Param {
     }
 }
 
-fn json_param(name: &'static str) -> Param {
+/// A structured param and the forms its reader takes (#1973).
+fn json_param(name: &'static str, form: &'static str) -> Param {
     Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
@@ -508,8 +514,8 @@ fn register_scatter(r: &mut Registrar) {
             "scatter",
             vec![
                 box_param(),
-                json_param("source"),
-                json_param("column"),
+                json_param("source", "name"),
+                json_param("column", "column"),
                 number("n"),
             ],
         ),
@@ -628,7 +634,7 @@ fn str_param(name: &'static str, default: &str) -> Param {
     Param {
         ty: ParamType::Str,
         default: json!(default),
-        ..json_param(name)
+        ..json_param(name, "text")
     }
 }
 
@@ -643,9 +649,9 @@ fn register_test_gpu(r: &mut Registrar) {
             "test",
             "texture",
             vec![
-                json_param("size"),
+                json_param("size", "[w, h]"),
                 str_param("format", "rgba8"),
-                json_param("mips"),
+                json_param("mips", "all"),
                 str_param("pattern", ""),
             ],
         ),
@@ -657,7 +663,7 @@ fn register_test_gpu(r: &mut Registrar) {
             "test",
             "mesh",
             vec![
-                json_param("vertices"),
+                json_param("vertices", "u32"),
                 str_param("seed", ""),
                 str_param("asset", ""),
             ],
@@ -665,7 +671,11 @@ fn register_test_gpu(r: &mut Registrar) {
         &[],
         "",
     );
-    r.kind(kind("test", "burn", vec![json_param("loops")]), &[], "");
+    r.kind(
+        kind("test", "burn", vec![json_param("loops", "u32")]),
+        &[],
+        "",
+    );
     // #1413: a labeled buffer and a labeled pipeline, each built as its revision latches.
     r.kind(
         kind(
@@ -673,8 +683,8 @@ fn register_test_gpu(r: &mut Registrar) {
             "alloc",
             vec![
                 str_param("label", ""),
-                json_param("bytes"),
-                json_param("uses"),
+                json_param("bytes", "bytes"),
+                json_param("uses", "integer"),
             ],
         ),
         &[],
@@ -888,9 +898,28 @@ pub fn label() -> Module {
 }
 
 fn register_guards(r: &mut Registrar) {
-    r.kind(kind("test", "nonfinite", vec![json_param("frame"), json_param("pixel")]), &[], "");
-    r.kind(kind("test", "device_loss", vec![json_param("frame")]), &[], "");
-    let redraw = ["box", "fill", "again", "frame"].map(json_param).to_vec();
+    r.kind(
+        kind(
+            "test",
+            "nonfinite",
+            vec![json_param("frame", "frame"), json_param("pixel", "[x, y]")],
+        ),
+        &[],
+        "",
+    );
+    r.kind(
+        kind("test", "device_loss", vec![json_param("frame", "frame")]),
+        &[],
+        "",
+    );
+    let redraw = [
+        ("box", "[x, y, w, h]"),
+        ("fill", "role"),
+        ("again", "role"),
+        ("frame", "frame"),
+    ]
+    .map(|(name, form)| json_param(name, form))
+    .to_vec();
     r.kind(kind("test", "redraw", redraw), &[], "");
 }
 

@@ -1,0 +1,25 @@
+# 2326 criterion 3: which workspace crates link a moved crate, from cargo metadata --locked --offline on the change (reach.mjs)
+workspace crates: 47; reached through normal or build dependencies: 16; only through dev-dependencies: 0; not at all: 31
+
+# reached through normal or build dependencies: crate [binaries] <- moved crates
+deep-relay [deep-relay, deep-relay-suite] <- rustls-webpki
+deep-hook [deep-hook] <- rustls-webpki
+deep-app [deep-app] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+deep-gpu [] <- tokio
+deep-marks-gpui [] <- ctutils, rustix, rustls-webpki, tokio
+deep-text-gpui [] <- ctutils, rustix, rustls-webpki, tokio
+deep-effects-render [] <- tokio
+deep-scene3d-render [] <- tokio
+deep-panel-host [deep-panel-host, deep-panel-host-jit-control] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+deep-gpu-layer [deep-gpu] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+deep-logic [deep-logic] <- rustix
+deep-sandbox-wasmtime [deep-sandbox] <- rustix
+deep-marks-render [deep-canvas-render] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+deep-replica [deep-drive, deep-live, deep-plain-words, deep-replica, deep-replica-canvas] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+deep-show [deep-show] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+deep-text-render [deep-text-render] <- crypto-bigint, ctutils, rustix, rustls-webpki, tokio, zstd, zstd-safe
+
+# reached only through dev-dependencies (their tests)
+
+# not reached
+deep-contracts, deep-canvas-seams, deep-canvas, deep-codecs, deep-canvas-cells, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-images, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-marks-vello, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-typeset, deep-lottie, deep-synth-job

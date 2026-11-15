@@ -4,8 +4,9 @@ export type JsonObject = { [key: string]: JsonValue };
 export type Schema = JsonObject;
 export interface SchemaEntry { name: string; schema: Schema }
 
-export const isObject = (value: unknown): value is JsonObject =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+export const isObject = (value: unknown): value is JsonObject => isRecord(value);
 
 /** How deep a document may nest, counted from its root, as deep-contracts' parser counts it. */
 const MAX_DEPTH = 256;

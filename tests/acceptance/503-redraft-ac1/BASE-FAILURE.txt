@@ -1,0 +1,22 @@
+The expected first failure at the base, 014344430 (main plus the design commit for #503), November 10, 2026.
+
+Not run: the job's brief forbids building Rust or running the suite on this heavily loaded machine. What follows is
+read from the base's code, not from a run. Only the type check ran:
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/503-redraft-ac1/tsconfig.json
+(no output, exit 0)
+
+AC1 #503.385199c8 (bar chart): fails at the first reply. `deep show` of the chart is refused, not presented:
+crates/deep-canvas/src/document/mod.rs lists the envelope's keys (ENVELOPE_KEYS) and `bakes` isn't one of them, so the
+check raises `unknown_field` at `bakes`; and the data module reads no `{array: "spectrum.music"}` column (no module
+fills it). The assertion that fails:
+
+  the chart: deep show of the chart is presented: {"outcome":"refused", … "unknown_field" … "bakes" …}
+  expected 'refused' to be 'presented'
+
+AC1 #503.385199c8 (bar chart, wrong program): fails before any reply. The scenario's `planted` value
+"spectrum_plays_a_row_late" is no name the base knows (crates/deep-show/src/main.rs), so `deep-show run` answers
+{"ok":false,"code":"bad_input"} and #501's runShow fails on it ("deep-show run answers the scenario ok").
+
+Neither failure is a pass, and neither reaches the height check; the first run on an implementation shows the check
+itself.

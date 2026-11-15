@@ -256,6 +256,9 @@ pub fn knows(kind: &str) -> bool {
         || kind == deep_canvas_scene3d::scene::OVERLAY
         // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
         || kind == "overlay.text@1"
+        // #506: an inset, and a view of the document from another camera in a rect of the frame.
+        || kind == deep_canvas_scene3d::inset::KIND
+        || kind == deep_canvas_scene3d::views::KIND
         // The vector module's kind (#1162): an item the view draws, hears and points at.
         || kind == "vector@1"
         // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
@@ -716,6 +719,7 @@ impl Hub<'_> {
         reply.insert("achieved".into(), achieved);
         // Errors first, inlined up to the read cap, with `truncated` when cut.
         let mut issues: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        planted_fix(self.scenario.planted, &mut issues);
         order_issues(&mut issues);
         let shown = inline_count(&issues);
         if shown < issues.len() {
@@ -845,6 +849,10 @@ impl Hub<'_> {
                         writers.push(w.clone());
                     }
                 }
+            }
+            // Planted (#1941): every stale patch a conflict, on all it touches.
+            if ids.is_empty() && self.scenario.planted == Some(Planted::StaleFixNeverRebases) {
+                ids = touches.clone();
             }
             if !ids.is_empty() {
                 let by_path = self.scenario.planted == Some(Planted::RebaseByPath)
@@ -1540,6 +1548,7 @@ impl Hub<'_> {
         if three && visible && show.include.iter().any(|i| matches!(i, Include::Pixels)) {
             let shown = self.shared[&show.doc].doc.clone();
             self.pending3d = Some(self.draw3d(&shown, show.t, show.size));
+            self.pending_light = self.light3d(&shown, show.t);
         }
         self.present(show, visible, drawn.as_ref(), reply)
     }
@@ -1789,6 +1798,30 @@ impl Hub<'_> {
             self.stamp(reply);
         }
         replies
+    }
+}
+
+/// #1972's planted fixes: a full path's fix that names `items/<path>` without the item's ID, and
+/// the envelope's fix without `reason`.
+fn planted_fix(planted: Option<Planted>, issues: &mut [Value]) {
+    let reason = deep_canvas::document::patch_schema::ENVELOPE
+        .iter()
+        .find(|f| f.name == "reason")
+        .map(|f| format!("\"reason\": <{}>, ", f.takes))
+        .unwrap_or_default();
+    for issue in issues {
+        let Some(fix) = issue["fix"].as_str() else {
+            continue;
+        };
+        let fix = match planted {
+            Some(Planted::PatchFixPathWithoutId) if fix.contains("items/<id>/") => {
+                let actual = issue["actual"].as_str().unwrap_or_default();
+                format!("Write the path from its section: items/{actual}.")
+            }
+            Some(Planted::PatchFixEnvelopeWithoutReason) => fix.replace(&reason, ""),
+            _ => continue,
+        };
+        issue["fix"] = json!(fix);
     }
 }
 

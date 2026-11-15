@@ -31,83 +31,10 @@ pub type Vet<'v> =
 
 /// Reads a pack folder as one manifest: `pack.json`, its `id` set to `owner/name`, and each
 /// `recipes` entry's file inlined.
-fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
-    let read = |path: &Path| -> Result<Value, Vec<Issue>> {
-        let bytes = fs::read(path).map_err(|e| {
-            vec![Issue::envelope(
-                "ref_unresolved",
-                path.to_string_lossy().into_owned(),
-                json!(path.to_string_lossy()),
-                &format!("can't read the pack file: {e}"),
-            )]
-        })?;
-        serde_json::from_slice(&bytes).map_err(|e| {
-            vec![Issue::envelope(
-                "out_of_range",
-                path.to_string_lossy().into_owned(),
-                json!(path.to_string_lossy()),
-                &format!("not JSON: {e}"),
-            )]
-        })
-    };
-    let mut manifest = read(&dir.join("pack.json"))?;
-    let Some(fields) = manifest.as_object_mut() else {
-        return Err(vec![Issue::envelope(
-            "out_of_range",
-            "pack.json".into(),
-            manifest.clone(),
-            "a pack is an object",
-        )]);
-    };
-    fields.insert("id".into(), json!(id));
-    // #238: each asset's bytes, in hex, once its sha256 and size match what the manifest lists, for
-    // the programs and data the sandbox module runs at the pack check.
-    if let Some(Value::Array(assets)) = fields.get_mut("assets") {
-        for (i, a) in assets.iter_mut().enumerate() {
-            // Network assets are fetched and admitted by the hub on first use, never at pack check.
-            if a.get("url").and_then(Value::as_str).is_some() {
-                continue;
-            }
-            let path = a
-                .get("path")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            let bytes = fs::read(dir.join(&path)).ok();
-            let sha = bytes.as_deref().map(deep_canvas::schedule::sha256_hex);
-            let listed = a.get("sha256").and_then(Value::as_str);
-            let size = a.get("size").and_then(Value::as_u64);
-            match bytes {
-                Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
-                    a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
-                }
-                _ => {
-                    return Err(vec![Issue::envelope(
-                        "ref_unresolved",
-                        format!("assets/{i}"),
-                        a.clone(),
-                        &format!(
-                        "the asset `{path}` isn't there with the sha256 and size the pack lists"
-                    ),
-                    )])
-                }
-            }
-        }
-    }
-    if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
-        for (kind, entry) in recipes.iter_mut() {
-            if let Some(file) = entry.as_str() {
-                let path = dir.join(file);
-                *entry = read(&path).map_err(|mut issues| {
-                    for i in &mut issues {
-                        i.path = format!("recipes/{kind}");
-                    }
-                    issues
-                })?;
-            }
-        }
-    }
-    Ok(manifest)
+pub(crate) fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
+    deep_canvas::document::packs::manifest_of(id, &|file| {
+        fs::read(dir.join(file)).map_err(|e| e.to_string())
+    })
 }
 
 thread_local! {
@@ -272,18 +199,10 @@ pub fn reply(
 }
 
 /// The document as it draws: each recipe instance replaced by the derived items its expansion
-/// made, which draw in its place; everything else as the writer sent it.
+/// made, which draw in its place, and each cue list by what it expanded to; everything else as
+/// the writer sent it.
 pub fn drawn(doc: &Value, expansions: &[Expansion]) -> Value {
-    let mut out = doc.clone();
-    if let Some(Value::Object(items)) = out.get_mut("items") {
-        for e in expansions {
-            items.shift_remove(&e.instance);
-            for (id, item) in &e.derived {
-                items.insert(id.clone(), item.clone());
-            }
-        }
-    }
-    out
+    deep_canvas::document::expands::drawn(doc, expansions)
 }
 
 /// Each derived item the expansions wrote, with its expansion key and instance: what the 2D draw
@@ -388,16 +307,76 @@ pub fn timings(
     let mut out = Map::new();
     out.insert(
         "kind_rules_ms".into(),
-        json!(kind_rules_ms(doc, checked, &resolved, packs)),
+        json!(kind_rules_ms(doc, checked, &resolved, (packs, sealed))),
     );
     out.insert("resolve_ms".into(), json!(resolve_ms));
     out.insert("migrate_ms".into(), json!(migrate_ms));
+    // #222: each cue list's expansion at check, the expander's own time.
+    let entries = deep_canvas::document::expands::Entries::new(sealed, &resolved);
+    let verbs = |n: &str| {
+        entries
+            .get(deep_canvas_motion::cues::REGISTRY, n)
+            .map(|(v, _)| v.clone())
+    };
+    let lists: Map<String, Value> = items
+        .iter()
+        .filter(|(_, item)| item.get("kind").and_then(Value::as_str) == Some("cues@1"))
+        .map(|(id, item)| {
+            let started = std::time::Instant::now();
+            let _ = deep_canvas_motion::cues::lower(
+                doc,
+                &items,
+                id,
+                item,
+                &verbs,
+                packs.planted.expander,
+            );
+            (id.clone(), json!(started.elapsed().as_secs_f64() * 1000.0))
+        })
+        .collect();
+    // #142: each film recipe instance's whole expansion, its cue lists' lowering included.
+    let mut lists = lists;
+    for (id, item) in &items {
+        let Some(kind) = item.get("kind").and_then(Value::as_str) else {
+            continue;
+        };
+        if resolved.recipe(kind).is_none() {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        let mut one = Map::new();
+        one.insert(id.clone(), item.clone());
+        let mut issues = Vec::new();
+        let _ =
+            deep_canvas::document::packs::expand(&mut one, &resolved, packs.planted, &mut issues);
+        for (d, derived) in &one {
+            if derived.get("kind").and_then(Value::as_str) == Some("cues@1") {
+                let _ = deep_canvas_motion::cues::lower(
+                    doc,
+                    &one,
+                    d,
+                    derived,
+                    &verbs,
+                    packs.planted.expander,
+                );
+            }
+        }
+        lists.insert(id.clone(), json!(started.elapsed().as_secs_f64() * 1000.0));
+    }
+    if !lists.is_empty() {
+        out.insert("expand_ms".into(), Value::Object(lists));
+    }
     out
 }
 
 /// `timing.kind_rules_ms` (#202): the core's `kind_rules` check over a checked revision, run
 /// again on its lowered items.
-fn kind_rules_ms(doc: &Value, checked: &CheckResult, resolved: &Resolved, packs: &Packs) -> f64 {
+fn kind_rules_ms(
+    doc: &Value,
+    checked: &CheckResult,
+    resolved: &Resolved,
+    (packs, sealed): (&Packs, &Sealed),
+) -> f64 {
     let empty = Map::new();
     let items = checked
         .lowered
@@ -411,6 +390,7 @@ fn kind_rules_ms(doc: &Value, checked: &CheckResult, resolved: &Resolved, packs:
         &checked.expansions,
         resolved,
         packs.planted,
+        sealed,
     );
     let ms = started.elapsed().as_secs_f64() * 1000.0;
     std::hint::black_box(run);

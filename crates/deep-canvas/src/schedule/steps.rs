@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 use super::view::StepCtx;
-use super::{Mode, Report, Run, Scheduler, Session, StepLog, Val};
+use super::{Bound, Key, Mode, OpError, Report, Run, Scheduler, Session, StepLog, Val};
 use crate::registry::Sealed;
 use crate::time::CHECKPOINT_EVERY;
 
@@ -31,6 +31,13 @@ pub(super) struct Steps {
     checkpoints: BTreeMap<i64, BTreeMap<String, Val>>,
     /// The last checkpoint flick taken, so the next frame takes the ones after it.
     checkpointed: Option<i64>,
+    /// The revision the steps ran on: its document's key and the keys of the tables they read.
+    inputs: Vec<Key>,
+    /// Each stepping node's error from its last step, which its node reports until a step of
+    /// its own succeeds or the steps start again.
+    failed: BTreeMap<usize, OpError>,
+    /// `failed` as of each checkpoint, which a seek onto it restores with the arrays.
+    failed_at: BTreeMap<i64, BTreeMap<usize, OpError>>,
 }
 
 impl Steps {
@@ -43,6 +50,7 @@ impl Steps {
         };
         while c <= upto {
             self.checkpoints.insert(c, self.values.clone());
+            self.failed_at.insert(c, self.failed.clone());
             self.checkpointed = Some(c);
             c += CHECKPOINT_EVERY;
         }
@@ -64,7 +72,49 @@ impl Steps {
     }
 }
 
+/// One row of the core's carried-state list as a session holds it now (Carried state; #169):
+/// the canvas module that declared it, the row's kind and key, and the hash of what it carries.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CarriedState {
+    pub module: String,
+    pub kind: String,
+    pub key: String,
+    pub hash: String,
+}
+
 impl Session {
+    /// Every row of carried state the sealed modules declare, as this session holds it after
+    /// its last frame, read through the core and never by module (#169): a `checkpoint` row
+    /// hashes its module's stepping arrays as the last step left them, a `tail` row the tail
+    /// under its key, and a `bake` row, which no session holds, nothing. Only values are hashed,
+    /// never the time stepped to or the checkpoints taken, so two sessions that carry the same
+    /// state hash equal whatever clock brought them there. Sorted by module, kind and key.
+    pub fn carried(&self, s: &Scheduler<'_>) -> Vec<CarriedState> {
+        let sealed: &Sealed = s.sealed;
+        let mut out = Vec::new();
+        for m in &sealed.modules {
+            for c in &m.shapes.carried {
+                let values: Vec<Val> = match c.kind.as_str() {
+                    "checkpoint" => (sealed.ops.iter())
+                        .filter(|o| o.module == m.name && o.op.step.is_some())
+                        .flat_map(|o| &o.op.writes)
+                        .map(|w| self.steps.values.get(w).cloned().unwrap_or(Val::None))
+                        .collect(),
+                    "tail" => vec![self.tails.get(&c.key).cloned().unwrap_or(Val::None)],
+                    _ => Vec::new(),
+                };
+                out.push(CarriedState {
+                    module: m.name.clone(),
+                    kind: c.kind.clone(),
+                    key: c.key.clone(),
+                    hash: super::result_digest(self.hash, &values, None),
+                });
+            }
+        }
+        out.sort();
+        out
+    }
+
     /// Runs every step up to the frame's time once, then gives each stepping node its result.
     pub(super) fn visit_steps(
         &mut self,
@@ -99,7 +149,8 @@ impl Session {
             if run == Run::Ran {
                 report.ran += 1;
             }
-            self.settle(s, n, key, out, None, run, frame, report);
+            let err = self.steps.failed.get(&n).cloned();
+            self.settle(s, n, key, out, err, run, frame, report);
         }
     }
 
@@ -114,7 +165,12 @@ impl Session {
                 let sop = &sealed.ops[g.op];
                 if let (Some(step), Some(&n)) = (sop.op.step, g.nodes.first()) {
                     // A step the document sets (#497), which the check holds to whole flicks.
-                    let step = sop.op.rate.and_then(|rate| rate(&l.doc)).filter(|s| *s > 0).unwrap_or(step);
+                    let step = sop
+                        .op
+                        .rate
+                        .and_then(|rate| rate(&l.doc))
+                        .filter(|s| *s > 0)
+                        .unwrap_or(step);
                     steppers.push((n, step, sop.module.clone()));
                 }
             }
@@ -133,11 +189,28 @@ impl Session {
                 .find(|m| &m.name == module)
                 .is_some_and(|m| m.shapes.carried.iter().any(|c| c.kind == "checkpoint"))
         });
-        if self.mode == Mode::Clean {
-            // A clean evaluation steps from the start; the frame stays, since it is the guard
-            // that runs the steps once a frame for every stepping operator.
+        // The revision the steps run on: its document and each table a stepper reads. Never a
+        // view or another array, which change from frame to frame without a new revision.
+        let mut inputs: Vec<Key> = Vec::new();
+        if let Some(l) = &self.loaded {
+            inputs.push(l.doc_key);
+            for (n, _, _) in &steppers {
+                self.tables_of(s, *n);
+                for b in &l.nodes[*n].reads {
+                    if let Bound::Table(name) = b {
+                        inputs.push(s.tables.get(name).map(|(_, k)| *k).unwrap_or_default());
+                    }
+                }
+            }
+        }
+        if self.mode == Mode::Clean || self.steps.inputs != inputs {
+            // A clean evaluation steps from the start, and so does a revision whose steps read
+            // something else (design: Saves; anything not carried on restarts at step 0). The
+            // frame stays, since it is the guard that runs the steps once a frame for every
+            // stepping operator.
             self.steps = Steps {
                 frame: self.steps.frame,
+                inputs,
                 ..Steps::default()
             };
         } else if self.steps.at.is_some_and(|at| at > to) {
@@ -148,14 +221,17 @@ impl Session {
                 .filter(|_| checkpoints)
             {
                 Some(c) => {
+                    self.steps.failed = self.steps.failed_at[&c].clone();
                     self.steps.values = self.steps.checkpoints[&c].clone();
                     self.steps.at = Some(c);
                     self.steps.checkpointed = Some(c);
                 }
                 None => {
+                    self.steps.failed.clear();
                     self.steps.at = None;
                     self.steps.values.clear();
                     self.steps.checkpoints.clear();
+                    self.steps.failed_at.clear();
                     self.steps.checkpointed = None;
                 }
             }
@@ -187,9 +263,11 @@ impl Session {
                     earlier: &earlier,
                 };
                 let (out, err, noted, tails) = self.call(s, *n, Some(ctx), report);
-                if err.is_some() {
+                if let Some(e) = err {
+                    self.steps.failed.insert(*n, e);
                     continue;
                 }
+                self.steps.failed.remove(n);
                 self.tails.extend(tails);
                 let op = self.loaded.as_ref().expect("loaded").nodes[*n].op;
                 for (w, v) in sealed.ops[op].op.writes.iter().zip(out) {

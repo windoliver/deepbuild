@@ -123,16 +123,7 @@ struct Ctx {
 }
 
 fn kind_name(k: &Kind) -> String {
-    match k {
-        Kind::Cut => "cut".into(),
-        Kind::CrossFade => "cross_fade".into(),
-        Kind::Dip => "dip".into(),
-        Kind::Wipe { .. } => "wipe".into(),
-        Kind::Push { .. } => "push".into(),
-        Kind::ZoomThrough { .. } => "zoom_through".into(),
-        Kind::Whip { .. } => "whip".into(),
-        Kind::Other(s) => s.clone(),
-    }
+    k.name().to_string()
 }
 
 /// A time a brief writes: seconds as a number, or `"<n>s"` / `"<n>ms"`.
@@ -570,8 +561,8 @@ impl Hub<'_> {
         if checks.is_empty() {
             return Vec::new();
         }
-        let mut found: Vec<(Vec<Value>, Vec<Value>, Map<String, Value>)> =
-            checks.iter().map(|_| Default::default()).collect();
+        type Found = Vec<(Vec<Value>, Vec<Value>, Map<String, Value>)>;
+        let mut found: Found = checks.iter().map(|_| Default::default()).collect();
         for doc in &c.deliverables {
             let Some(r) = self.query_revision(doc, None) else {
                 continue;

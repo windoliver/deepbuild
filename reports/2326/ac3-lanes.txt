@@ -1,0 +1,49 @@
+# 2326 criterion 3: the preflight lanes that build the workspace and drive its binaries, on the merge base f6d811c79
+# and on the change (the tree of c6bfc4eb3), 2026-11-14. Each lane's result lines are compared after build chatter,
+# paths and run times are taken out. noop's test lines are sorted first, since cargo prints them in thread order.
+
+## workspace-build: exit 0 on the merge base, 0 on the change; 0 result lines, the same on both sides
+(no error line; cargo build --workspace --locked --offline)
+
+## parity: exit 0 on the merge base, 0 on the change; 1 result lines, the same on both sides
+PASS built/source CLI parity and cross-binary version agreement
+
+## seams: exit 1 on the merge base, 1 on the change; 14 result lines, the same on both sides
+BLOCKED gpu: gpu.conformance (run deep-gpu's seam_suite on a Mac whose GPU is of another family than apple10 (an M1 beside this M3) and pass its record here)
+FAIL fonts: fonts.glyph-runs
+PASS headless: headless.golden
+BLOCKED cpu: cpu.exact-records (the exact-class records of a second architecture are needed to compare with this one)
+PASS network: network.conformance@1
+PASS input: input.capabilities
+BLOCKED surface: surface.color-check (needs the app's shown window: tests/acceptance/140 runs it live with DEEP_140_LIVE=1 (deep-app --color-check))
+BLOCKED color: color.swatches (needs the app's shown window: tests/acceptance/140 runs it live with DEEP_140_LIVE=1 (deep-app --color-check))
+BLOCKED display: display.presentation (needs the app's shown window: tests/acceptance/140 runs it live with DEEP_140_LIVE=1 (deep-show live, paced at 60 and 120 Hz))
+BLOCKED accessibility: accessibility.tree (needs the app's shown window: tests/acceptance/140 runs it live with DEEP_140_LIVE=1 (deep-show live with tree), and a person listening to VoiceOver)
+BLOCKED capture: capture.picker (needs a person to answer the system capture picker (deep-app --capture-seam))
+BLOCKED codecs: codecs.decode (no codecs backend ships in R2, so documents that need one are refused module_missing)
+BLOCKED audio: audio.clock (no audio backend ships in R2, so documents that need one are refused module_missing)
+{"conformance":{"gpu":{"suite":"gpu.conformance","status":"BLOCKED","backend":{"name":"wgpu-metal","version":"30.0.1"},"reason":"run deep-gpu's seam_suite on a Mac whose GPU is of another family than apple10 (an M1 beside this M3) and pass its record here"},"fonts":{"suite":"fonts.glyph-runs","status":"FAIL","backend":{"name":"fonts.bundled","version":"1.0.0"}},"headless":{"suite":"headless.golden","status":"PASS","backend":{"name":"headless.vello-cpu","version":"0.3.0"}},"cpu":{"suite":"cpu.exact-records","status":"BLOCKED","backend":{"name":"aarch64","version":"1.0.0"},"reason":"the exact-cl
+
+## relay: exit 0 on the merge base, 0 on the change; 4 result lines, the same on both sides
+PASS relay suite on deep-relay
+PASS interop deep-relay
+PASS interop relay.test
+{"relay_kit":{"status":"PASS","suite":"PASS","protocol_changed":false,"implementations":["deep-relay","relay.test"],"interop":["deep-relay","relay.test"],"left_out":[]}}
+
+## motion: exit 1 on the merge base, 1 on the change; 3 result lines, the same on both sides
+thread 'main' (n) panicked at vendor/gpui-pre/src/app/entity_map.rs:174:9:
+used a entity with the wrong context
+BLOCKED motion: motion_check: undefined; pacing not measured
+
+## noop: exit 0 on the merge base, 0 on the change; 59 result lines, the same on both sides
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in <t>s
+test result: ok. 45 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in <t>s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in <t>s
+
+## canvas-kit: exit 1 on the merge base, 1 on the change; 3 result lines, the same on both sides
+core: FAIL {"code":"twin_passed","module":"core","part":"time_order","case":"parity/framework/code-pack-missing.board#time_order"}
+motion: FAIL {"code":"failed_case","module":"motion","part":"catalog","case":"code:score.pad_too_low"} {"code":"unproved","module":"motion","part":"catalog","case":"code:score.pad_too_low","probe":"planted_fixture","issue_code":"score.pad_too_low"} {"code":"unproved","module":"motion","part":"catalog","case":"code:score.note_too_long","probe":"planted_fixture","issue_code":"score.note_too_long"}
+canvas kit: FAIL over core, building, cells, data, effects, export, graph, input, logic, look, loop, marks2d, media, motion, physics, record, sandbox, scene3d, sheet, text, vector (seed 138)
+
+## canvas kit ledger written by each side: sha256 a34d3be2b6a1be6ed50dea2ed0bd3d156d48cef42f9cca0749d3c1666fcacd42 on the merge base, a34d3be2b6a1be6ed50dea2ed0bd3d156d48cef42f9cca0749d3c1666fcacd42 on the change
+against the committed ledger, both: 1 file changed, 17 insertions(+), 1 deletion(-)

@@ -1,0 +1,9 @@
+{
+  "at": "2026-11-13T04:55:49.626092+00:00",
+  "pid": 85948,
+  "start": "Thu Nov 12 20:41:18 2026",
+  "action": "SIGTERM queued owned throttle only",
+  "testsAdmitted": false,
+  "reason": "desktop locked; do not run another invalid GUI check",
+  "startAndCommandVerified": true
+}

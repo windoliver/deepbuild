@@ -1,0 +1,8 @@
+{
+  "id": "deepbuild/swap",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "actions": ["ext.swap.ping", "ext.swap.hold"],
+  "requires": { "preview": ["deep.on", "deep.record.append", "deep.registerAction"] }
+}

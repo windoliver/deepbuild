@@ -1,0 +1,48 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ × packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours, ahead of the tool call that follows it 1824ms
+   → ENOTEMPTY, Directory not empty: '<fixture-home>'
+ ✓ packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours when no hook follows it 4739ms
+ ✓ packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent 3353ms
+ ✓ packages/hub/test/prompt-items.test.ts > does not read the forge again for a spooled copy of a prompt whose live read is still pending 3125ms
+ ✓ packages/hub/test/prompt-items.test.ts > records a prompt whose spooled copy starts replay before its live read joins intake 2297ms
+ ✓ packages/hub/test/prompt-items.test.ts > processes a fresh hook normally after the spool it triggers, including queued words 2325ms
+ ✓ packages/hub/test/prompt-items.test.ts > retains criteria when GitHub returns a canonical HTTPS link for an HTTP prompt link 1941ms
+ ✓ packages/hub/test/prompt-items.test.ts > keeps issue criteria when an authenticated app note is carried by the prompt 2312ms
+ ✓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write 5112ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > says so when deep-hook spooled as late a call the hub had answered and recorded 2150ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > says so when the spooled copy comes while the live one is still being recorded 1593ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > replays the spool once a hook reaches it, with no restart 1357ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > replays a kept file before the spool after it, whatever the clock says 1622ms
+ ✓ packages/hub/test/queued.test.ts > messages typed while the agent works > records a queued message as your prompt at the next hook, once, whether the queue or its UserPromptSubmit shows it first 2309ms
+ ✓ packages/hub/test/queued.test.ts > a message typed while the agent works > is acknowledged at a later call, never in place of a guard's block on the next one 1569ms
+ ✓ packages/hub/test/prompt-start-replay.test.ts > starts when a live issue hook arrives after the startup spool was renamed 1823ms
+ ✓ packages/hub/test/github-deadline.test.ts > cancels the real gh token child at the caller deadline without reading credentials 356ms
+ ✓ packages/hub/test/github-deadline.test.ts > cancels an unfinished JSON body with the same signal that reached the headers 116ms
+ ✓ packages/hub/test/github-source.test.ts > readIssue > reads every page of an issue's comments: a second page's comment is a reading too 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours, ahead of the tool call that follows it
+Error: ENOTEMPTY, Directory not empty: '<fixture-home>'
+ ❯ withHub packages/hub/test/hub.ts:98:5
+     96|   } finally {
+     97|     await stop();
+     98|     rmSync(home, { recursive: true, force: true });
+       |     ^
+     99|   }
+    100| }
+ ❯ packages/hub/test/prompt-flush.test.ts:40:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { errno: 66, code: 'ENOTEMPTY', path: '<fixture-home>', syscall: 'rm' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 6 passed (7)
+      Tests  1 failed | 18 passed (19)
+   Start at  15:50:54
+   Duration  42.94s (tests 97%, import 1%, transform 1%)
+
+JSON report written to <proof-output>/head-regressions.json

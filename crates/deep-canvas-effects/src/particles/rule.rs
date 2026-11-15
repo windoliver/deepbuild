@@ -35,7 +35,7 @@ fn class_budget(class: &str) -> (Option<f64>, u64) {
 
 /// The canvas core's issue for a refusal of item `id`.
 pub fn issue(id: &str, r: &Refusal) -> Issue {
-    let mut i = Issue::error(r.code, id, r.path.clone(), r.actual.clone(), &r.what);
+    let mut i = Issue::error(r.code, id, r.path.clone(), (*r.actual).clone(), &r.what);
     i.ids.extend(r.also.iter().filter(|a| *a != id).cloned());
     i
 }

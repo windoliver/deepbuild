@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { constants, existsSync, readFileSync, realpathSync, statfsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import net from 'node:net';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
@@ -15,15 +15,15 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, installedRoot, rootOf, underTemp } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
 import { claudeHomes, denyHolds, homeMods, managedSettings, overrideWords } from './mods.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
@@ -204,8 +204,6 @@ function serviceItem(root: string): Item {
     : [...(/^ExecStart=(.*)$/m.exec(text)?.[1] ?? '').matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!.replace(/\\(.)/g, '$1'));
   const programs = args.filter((a) => a.startsWith('/'));
   const versions = join(root, 'versions') + sep;
-  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
-  const temps = [tmpdir(), process.env.TMPDIR ?? '', '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'].filter(Boolean).flatMap((t) => [t, real(t)]).map((t) => (t.endsWith(sep) ? t : t + sep));
   const where = (program: string): string | undefined => {
     if (program.startsWith(versions)) return undefined;
     // A worktree's .git is a file naming its folder under the main checkout's; a checkout's is a folder.
@@ -213,7 +211,7 @@ function serviceItem(root: string): Item {
       const git = join(dir, '.git');
       if (existsSync(git)) return /^gitdir:.*[\\/]worktrees[\\/]/m.test((() => { try { return readFileSync(git, 'utf8'); } catch { return ''; } })()) ? `a git worktree, ${dir}` : `a checkout, ${dir}`;
     }
-    return temps.some((t) => program.startsWith(t) || real(program).startsWith(t)) ? 'a temp folder' : undefined;
+    return underTemp(program) ? 'a temp folder' : undefined;
   };
   for (const program of programs) {
     const found = where(program);

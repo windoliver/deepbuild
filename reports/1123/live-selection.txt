@@ -1,0 +1,9 @@
+✔ path-skipped lane ignores an actual binary prerequisite; a planted selector is rejected (3955.303916ms)
+✔ Vitest exclude ignores an actual binary prerequisite; a planted selector is rejected (3988.673125ms)
+ℹ tests 2
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8058.062375

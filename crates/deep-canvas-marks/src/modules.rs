@@ -139,17 +139,26 @@ pub fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
         return item;
     };
     let mut placed = at.to_json();
-    if let (Some(own), Some(out)) = (fields.lowered.get("at"), placed.as_object_mut()) {
+    let own = fields.lowered.get("at");
+    if let Some(out) = placed.as_object_mut() {
         for k in ["place", "align", "anchor"] {
-            if let Some(v) = own.get(k) {
-                let mut v = v.clone();
-                if let Some(e) = edited.as_ref().and_then(|e| e.get(k)) {
-                    overlay(&mut v, e);
+            let edit = edited.as_ref().and_then(|e| e.get(k));
+            let v = match (own.and_then(|o| o.get(k)), edit) {
+                (Some(v), edit) => {
+                    let mut v = v.clone();
+                    if let Some(e) = edit {
+                        overlay(&mut v, e);
+                    }
+                    v
                 }
-                out.insert(k.into(), v);
-            }
+                // #1969: an anchor a channel keys on an item that names none (a `type` cue's
+                // cursor).
+                (None, Some(e)) if k == "anchor" => e.clone(),
+                (None, _) => continue,
+            };
+            out.insert(k.into(), v);
         }
-        if let Some(p) = own.get("pivot").filter(|p| p.is_string()) {
+        if let Some(p) = own.and_then(|o| o.get("pivot")).filter(|p| p.is_string()) {
             out.insert("pivot".into(), p.clone());
         }
     }
@@ -270,6 +279,7 @@ fn fonts() -> TableValue {
 
 fn register_text(r: &mut Registrar) {
     r.built_table("text.fonts", fonts);
+    crate::copy::register(r);
     // #443: a shaped run's glyph outlines, text's entry in the core's `outline.source@1`.
     r.outline_source(
         "text",
@@ -282,7 +292,13 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.fields", "refs", "reading", "view(locale)"],
+        &[
+            "core.fields",
+            "refs",
+            "reading",
+            "view(locale)",
+            "text.copy",
+        ],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -295,6 +311,7 @@ fn register_text(r: &mut Registrar) {
             "text.counter",
             "view(locale)",
             "table:text.fonts",
+            "look",
         ],
         &["text.run"],
     )
@@ -400,22 +417,28 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
         .is_some()
         || scene::copy_key(item).is_some();
     let template = scene::template_of(item).is_some();
-    bound || counter || template
+    bound || counter || template || crate::copy::is_keyed(doc, id, item)
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
+    let params = item.get("params");
     is_text(doc, id, item)
-        && item
-            .get("params")
+        && (params
             .and_then(|p| p.get("animators"))
             .and_then(Value::as_array)
             .is_some_and(|a| !a.is_empty())
+            // #466: a reveal fades its units by the progress the frame evaluated.
+            || params.and_then(|p| p.get("reveal")).is_some_and(|r| !r.is_null()))
 }
 
 /// What a bound value or counter shows, its numbers in the view's locale.
 fn counter(v: &mut View<'_>) -> Result<(), OpError> {
     // The evaluated item: a keyed data value its template reads rides on it (motion@1).
     let item = fields_of(v)?;
+    // #538: keyed copy, as the copy operator showed it at t.
+    if let Some(copy) = v.typed::<Option<Shown>>("text.copy")? {
+        return v.write("text.counter", Val::typed((*copy).clone()));
+    }
     let doc = v.document()?;
     let record = record_of(v.outside()?);
     let locale = v.locale()?;
@@ -442,7 +465,9 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     let _ = v.locale()?;
     let id = v.id().unwrap_or_default();
     let params = object_or_empty(fields.get("params"));
-    let spec = scene::text_spec(id, params, shown.as_ref()).map_err(refused)?;
+    // #239: set in the look's type, as the live view sets it.
+    let ty = type_of(v.look()?);
+    let spec = scene::text_spec_in(id, params, shown.as_ref(), &ty).map_err(refused)?;
     // The size is an f32 (Text `text@1`: `size: f32`): one past its range is an infinity.
     if !(spec.size as f32).is_finite() {
         return Err(OpError::new(
@@ -504,6 +529,16 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
             if let Some(o) = fade {
                 unit[1] = (unit[1] + w * (o - 1.0)).clamp(0.0, 1.0);
+            }
+        }
+    }
+    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    if let Some(Value::Object(params)) = fields.get("params") {
+        if let Some(shares) =
+            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
+        {
+            for (unit, share) in out.iter_mut().zip(shares) {
+                unit[1] *= share;
             }
         }
     }
@@ -780,11 +815,13 @@ pub fn look_finish_off() -> Module {
     }
 }
 
-/// A look as the frame reads it: each role's color and the status map.
+/// A look as the frame reads it: each role's color, the status map, and the type its text is set
+/// in (#239).
 #[derive(Debug)]
 pub struct LookValue {
     pub palette: Palette,
     pub status: Option<Status>,
+    pub ty: scene::Type,
 }
 
 impl Canonical for Status {
@@ -796,7 +833,13 @@ impl Canonical for Status {
 
 impl deep_canvas::schedule::Canonical for LookValue {
     fn encode(&self, out: &mut Vec<u8>) {
-        deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
+        // A look that sets no font role apart from the bundled ones keys as it did before #239.
+        if self.ty.fonts.is_empty() {
+            deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status), out);
+        } else {
+            let fonts: Vec<(&String, &str)> = self.ty.fonts.iter().map(|(k, v)| (k, *v)).collect();
+            deep_canvas::schedule::Canonical::encode(&(&self.palette, &self.status, &fonts), out);
+        }
     }
 }
 
@@ -876,14 +919,41 @@ fn finish_kind() -> deep_canvas::kinds::Entry {
             major: 1,
             minor: 0,
             params: vec![
-                param("tone_map", ParamType::Json, json!("none")),
+                // The forms each reader takes (#1973): `read_tone_map` takes any object holding
+                // `agx`, whatever its value; `read_grade` any white balance; the finish skips a
+                // deband_lsb that is no number; ao and bloom as look@1's readers take them.
+                param(
+                    "tone_map",
+                    ParamType::Json(
+                        "none | filmic | agx | neutral | {agx} (agx: {white: f32, contrast: f32})",
+                    ),
+                    json!("none"),
+                ),
                 // EV100; the default's exposure scale is 1.
-                param("exposure", ParamType::Json, Value::Null),
-                param("grade", ParamType::Json, json!({})),
+                param("exposure", ParamType::Json("EV100"), Value::Null),
+                param(
+                    "grade",
+                    ParamType::Json(
+                        "{white_balance, slope: linear RGB, offset: linear RGB, power: linear RGB, saturation: f32} (white_balance: {temperature: K, tint})",
+                    ),
+                    json!({}),
+                ),
                 param("deband", ParamType::Str, json!("none")),
-                param("deband_lsb", ParamType::Json, json!(1)),
-                param("ao", ParamType::Json, json!("none")),
-                param("bloom", ParamType::Json, json!("none")),
+                param("deband_lsb", ParamType::Json("0..2 (8-bit steps)"), json!(1)),
+                param(
+                    "ao",
+                    ParamType::Json(
+                        "none | {radius, strength, samples, resolution, multi_bounce, specular} (radius: m, samples: 8 | 16, resolution: half | full)",
+                    ),
+                    json!("none"),
+                ),
+                param(
+                    "bloom",
+                    ParamType::Json(
+                        "none | {intensity, radius, threshold, tint, dirt} (threshold: EV100 | none, tint: linear RGB, dirt: {texture: sha256 | seeded, intensity})",
+                    ),
+                    json!("none"),
+                ),
             ],
         }],
         migrations: vec![],
@@ -992,11 +1062,52 @@ pub fn tokens(palette: &Palette) -> BTreeMap<String, Value> {
         .collect()
 }
 
+/// The session token that carries a look's font roles beside its colors (#239).
+pub const TYPE_TOKEN: &str = "type";
+
+/// [`tokens`] of the look's light theme, and under [`TYPE_TOKEN`] each font role it sets in
+/// another family than the bundled role's, so text is shaped in the look's type (Look `look@1`:
+/// a role may name a font) while a look that names none keeps its tokens as they were (#239).
+pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
+    let mut out = tokens(&look.light);
+    let bundled = scene::Type::default();
+    let fonts: Map<String, Value> = look
+        .light_fonts
+        .keys()
+        .filter_map(|role| {
+            let family = look.light_type.family(role)?;
+            (bundled.family(role) != Some(family)).then(|| (role.clone(), json!(family)))
+        })
+        .collect();
+    if !fonts.is_empty() {
+        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts }));
+    }
+    out
+}
+
+/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
+fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
+    let mut ty = scene::Type::default();
+    let fonts = tokens
+        .get(TYPE_TOKEN)
+        .and_then(|t| t.get("fonts"))
+        .and_then(Value::as_object);
+    for (role, family) in fonts.into_iter().flatten() {
+        let face = family
+            .as_str()
+            .and_then(|f| deep_text::FACES.iter().find(|face| face.family == f));
+        if let Some(face) = face {
+            ty.fonts.insert(role.clone(), face.family);
+        }
+    }
+    ty
+}
+
 /// The roles from the session's tokens, with the clean look's status map.
 fn palette(v: &mut View<'_>) -> Result<(), OpError> {
     let tokens = v.look()?;
     let mut palette = Palette::new();
-    for (role, value) in tokens {
+    for (role, value) in tokens.iter().filter(|(role, _)| *role != TYPE_TOKEN) {
         let rgb: Option<Rgb> = value.as_array().and_then(|c| {
             let c: Vec<u8> = c
                 .iter()
@@ -1017,7 +1128,15 @@ fn palette(v: &mut View<'_>) -> Result<(), OpError> {
             Datum::Typed(Val::typed(status.clone())),
         )),
     )?;
-    v.write("look.palette", Val::typed(LookValue { palette, status }))
+    let ty = type_of(tokens);
+    v.write(
+        "look.palette",
+        Val::typed(LookValue {
+            palette,
+            status,
+            ty,
+        }),
+    )
 }
 
 fn roles_board() -> Value {
@@ -1101,6 +1220,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         .applies(is_line_series)
         .run(decimate);
     crate::arrays::register(r);
+    // #226: 3D axes' marks and their deform, through the core's fills.
+    crate::axes3d::register(r);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1412,6 +1533,19 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
     )
     .applies(is_placed)
     .run(place_op);
+    // #223: a group's warp whose vars read time takes the frame's seconds into its fields, so the
+    // frame carries its paths through the formula at t; no other item reads t here.
+    r.contribution(
+        "marks2d.warp",
+        "fields",
+        "item",
+        "geometry",
+        "items",
+        "core.fields",
+    );
+    r.operator("warp", "items", &["self", "t"], &["marks2d.warp"])
+        .applies(|_, _, item| crate::warp::reads_time(item))
+        .run(warp_time);
     r.code(
         relations::CYCLE,
         "Items placed by relation that read each other back, through relations or parents.",
@@ -1667,11 +1801,16 @@ impl Runs<'_> {
 
 impl relations::Bounds for Runs<'_> {
     fn own(&mut self, id: &str, item: &Value, part: Option<&str>) -> Option<relations::Box4> {
-        if part.is_some() {
-            return None;
-        }
         let kind = item.get("kind").and_then(Value::as_str)?;
         let params = object_or_empty(item.get("params"));
+        // #1966: a text's line or token, `<id>#line:n` or `<id>#tok:k`, in its shaped run.
+        if let Some(part) = part {
+            if kind != "text@1" {
+                return None;
+            }
+            let local = crate::lines::anchor_box(params, &*self.shaped(id, item)?, part)?;
+            return Some(relations::placed(local, relations::place_of(item, None)));
+        }
         if kind == "text@1" {
             let shaped = self.shaped(id, item)?;
             let w = params
@@ -1784,7 +1923,7 @@ fn item(v: &mut View<'_>) -> Result<(), OpError> {
         .ok_or_else(|| OpError::new("input_missing", "look"))?;
     let placed = fields.and_then(|f| {
         let item = item_json(&f, world.as_deref());
-        scene::item_placed(id, &item, &look.palette, shown.as_ref())
+        scene::item_placed(id, &item, (&look.palette, &look.ty), shown.as_ref())
     });
     v.write("marks2d.item", Val::typed(placed))
 }
@@ -1904,6 +2043,27 @@ fn check_font(drawn: &scene::Drawn) -> Result<(), OpError> {
     Ok(())
 }
 
+/// #223: each of a group's warp vars that reads `time` as the frame's seconds.
+fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
+    let item = v.item()?;
+    let seconds = v.t()? as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+    let edits = item
+        .pointer("/params/warp/vars")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, v)| v.as_str() == Some("time"))
+        .map(|(name, _)| deep_canvas::schedule::core_ops::Edit {
+            add: false,
+            path: ["params", "warp", "vars", name]
+                .map(str::to_string)
+                .to_vec(),
+            value: Datum::Num(seconds),
+        })
+        .collect();
+    v.write("marks2d.warp", Val::typed(Edits(edits)))
+}
+
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
@@ -1998,27 +2158,48 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             bound.insert(id.clone(), shown);
         }
     }
-    let (frame, basis) =
-        match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed)
-            .map_err(refused)?
-        {
-            // A list of items that each placed their own marks is one the next frame can
-            // replace marks in.
-            Some((frame, places)) => (
-                frame,
-                items.is_empty().then_some(Basis { envelope, places }),
-            ),
-            // A paint spanning boxes reads every item's: the frame builds them all.
-            None => {
-                let all: Map<String, Value> = fields
-                    .iter()
-                    .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
-                    .collect();
-                let frame = scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record)
-                    .map_err(refused)?;
-                (frame, None)
-            }
-        };
+    // #223's twin: a flow that finds its stream table by a vector field's kind.
+    let planted = match v.planted() {
+        Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
+        _ => scene::Planted::None,
+    };
+    let (frame, basis) = match scene::frame_prebuilt(
+        doc,
+        &items,
+        (&look.palette, &look.ty),
+        1.0,
+        &bound,
+        &record,
+        &placed,
+        planted,
+    )
+    .map_err(refused)?
+    {
+        // A list of items that each placed their own marks is one the next frame can
+        // replace marks in.
+        Some((frame, places)) => (
+            frame,
+            items.is_empty().then_some(Basis { envelope, places }),
+        ),
+        // A paint spanning boxes reads every item's: the frame builds them all.
+        None => {
+            let all: Map<String, Value> = fields
+                .iter()
+                .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
+                .collect();
+            let frame = scene::frame_with(
+                doc,
+                &all,
+                (&look.palette, &look.ty),
+                1.0,
+                &bound,
+                &record,
+                planted,
+            )
+            .map_err(refused)?;
+            (frame, None)
+        }
+    };
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         check_font(drawn)?;
     }

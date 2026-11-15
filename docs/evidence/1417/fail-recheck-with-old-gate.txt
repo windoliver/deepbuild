@@ -1,0 +1,3 @@
+cost::tests::a_patch_to_one_costly_item_is_warned_on_what_the_whole_document_declares --- FAILED
+a recheck of the patched item alone misses the other's 10 ms
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 269 filtered out; finished in 0.01s

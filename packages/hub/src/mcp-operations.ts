@@ -1,21 +1,21 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import type { AnswerDeliveryPort, StopJudgingPort, SessionStatePort, HubControlPort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 
 import { Numbers } from './numbers.js';
 
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 
 import { AskRefused, duration, type Asks } from '@deepbuild/asks';
 
 import { canonicalize, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { type ExtensionHost } from '@deepbuild/extension-host';
+import type { Checkouts } from '@deepbuild/gate';
 import { RecordError, type Connection, type RecordStore } from '@deepbuild/record';
 
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
-import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, relations, words } from './claude-settings.js';
 
 import { codexRelations } from './codex-settings.js';
@@ -28,6 +28,7 @@ import type { Hosts } from './hosts.js';
 import { couldDo, struck } from './could-do.js';
 
 import { repoOf, type Root } from './paths.js';
+import { OWNER } from './people.js';
 
 import { type About } from './standing.js';
 
@@ -35,6 +36,7 @@ import { aboutSessions, pageClaims, search, type IndexFill } from './search.js';
 
 import { slackConfig, slackThread } from './reach.js';
 
+import { DEPENDENCIES } from './gate-runner.js';
 import { Runs } from './runs.js';
 
 import { Stacks } from './stacks.js';
@@ -53,6 +55,7 @@ import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused 
 
 export interface McpOperationsOptions {
   settings: CoreOptions;
+  doneSpec(cwd: string): unknown;
   services: {
     readonly sessionStarts: Starts;
     readonly hosts: Hosts;
@@ -68,11 +71,12 @@ export interface McpOperationsOptions {
     readonly raw: RecordStore['raw'];
     readonly runs: Runs;
     readonly stacks: Stacks;
+    readonly checkouts: Checkouts;
   };
   control: () => Pick<HubControlPort, "attach" | "job">;
   state: () => Pick<SessionStatePort, "live" | "rows" | "sessions">;
-  judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession">;
-  delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "waitingFor">;
+  judging: () => Pick<StopJudgingPort, "claimed" | "reachOfSession" | "projectTrusted" | "runApproved">;
+  delivery: () => Pick<AnswerDeliveryPort, "askWaits" | "deliver" | "routes" | "settling" | "answers" | "binds">;
   events: Pick<HubEvents, "connection" | "appendReading" | "append">;
 kernel: Pick<HubRuntime, "blocked" | "stopping">;
 schedule: Pick<HookSchedule, "replaying" | "queue" | "askingNow" | "wakeable">;
@@ -86,8 +90,8 @@ export class McpOperations {
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   stamps: Stamp[] = [];
 
-  /** The ask each plug-in change or send waits on, by its session and request ID (#363). */
-  private readonly actionAsks = new Map<string, string>();
+  /** A held request's exact call and ask; reserve both before raising the ask yields (#2072). */
+  private readonly actionAsks = new Map<string, { digest: string; ask: Promise<string> }>();
 
   /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
   index!: Promise<IndexFill | undefined>;
@@ -114,11 +118,12 @@ export class McpOperations {
       await (this.options.schedule.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.options.schedule.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'deep_job' && tool !== 'find_actions'));
+      const session = await this.options.schedule.queue(async () => this.bind(tool, sent, await this.rebound(context), !['deep_status', 'deep_search', 'deep_show', 'deep_query', 'deep_kinds', 'deep_job', 'find_actions'].includes(tool)));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args));
+        case 'deep_query': return await this.options.services.canvasSide.query(session ?? null, args);
         case 'deep_kinds': return await this.options.services.canvasSide.kinds(args);
         case 'deep_job': return await this.options.control().job(args, context.call);
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
@@ -149,6 +154,29 @@ export class McpOperations {
     return new Refused(out as Refusal);
   }
 
+  /** Whether a paseo plugin's token ever named this session (#55): a deep mcp bound by it is bound by no process. */
+  private byToken(session: string): boolean {
+    return [...this.options.delivery().binds.values()].includes(session);
+  }
+  /**
+   * A deep mcp whose session `/clear` rotated in its own process (#1632): another session of the same process, by PID and
+   * start time, is live on its thread, which only a rotation joins it to. Its start says so whether the old ID's
+   * SessionEnd came yet or was recorded unverified. Two live on one thread in one process bind no call to either but by
+   * its stamp. Its calls then bind one by one by their own stamps, as an unbound
+   * connection's do, so each acts for the new ID and none for the old. A session that ended with no successor in its
+   * process keeps its binding, and its calls are refused naming it.
+   */
+  private async rebound(context: CallContext): Promise<CallContext> {
+    const { session: id, parent } = context;
+    if (!id || !parent || this.byToken(id)) return context;
+    const sessions = this.options.state().sessions;
+    const was = sessions.get(id);
+    // Forgotten past ENDED_KEPT (#824): the record keeps its thread.
+    const [row] = was ? [] : (await this.options.services.raw(`SELECT thread_id FROM sessions WHERE id = ?`, [id])) as { thread_id: string | null }[];
+    const thread = was ? was.thread : row?.thread_id ?? id;
+    const rotated = [...sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
+    return rotated ? { ...context, session: null } : context;
+  }
   /**
    * The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call,
    * by its tool and the digest of its arguments as sent. A call more than one unspent stamp matches binds to none.
@@ -157,9 +185,12 @@ export class McpOperations {
   private bind(tool: string, args: Obj, context: CallContext, required: boolean): string | undefined {
     const live = (id: string) => { const s = this.options.state().sessions.get(id); return s && !s.ended ? s : undefined; };
     if (context.session) {
-      if (live(context.session)) return context.session;
+      const own = live(context.session);
+      // A session resumed in another process since its deep mcp's hello is that process's now (#1632).
+      const elsewhere = own && context.parent && !this.byToken(own.id) && (own.pid !== context.parent.pid || own.start !== context.parent.start);
+      if (own && !elsewhere) return context.session;
       if (!required) return undefined;
-      throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+      throw refuse('unbound', '/params/tool', elsewhere ? `Session ${context.session} runs in another process now; this deep mcp acts for no session.` : `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
     }
     const parent = context.parent;
     const digest = sha256Hex(canonicalize(args as JsonValue));
@@ -208,29 +239,38 @@ export class McpOperations {
     } catch {
       throw refuse('type', '/params/arguments/input', 'Give the input as one string holding its JSON text.', args.input);
     }
+    const target = { handle: `ext:${listed.extension}`, version: listed.version };
+    const digest = sha256Hex(canonicalize({ action: name, target, input: input as JsonValue }));
+    const key = `${session}|${request}`;
+    let approval = this.actionAsks.get(key);
+    // Compare before reading the answer or reaching the host, even if the retry names a read action.
+    if (approval && approval.digest !== digest) throw refuse('unavailable', '/params/arguments/request', `The request ID ${request} belongs to another call; nothing ran or was written. Retry the original action, plug-in version and input.`, request);
     const held = schemas([{ name, schema: listed.input as Schema }]).validate(name, input);
     if (!held.ok) throw refuse('type', `/params/arguments/input${held.issues[0]!.path}`, `Give input that ${name}'s input schema takes: ${held.issues[0]!.remediation}`, input);
     if (listed.declares !== 'read') {
       const s = this.options.state().sessions.get(session)!;
-      const key = `${session}|${request}`;
-      let ask = this.actionAsks.get(key);
-      if (!ask) {
+      if (!approval) {
+        const text = JSON.stringify(input);
+        const preview = text.length > 500 ? `${text.slice(0, 500)}… (cut; ${text.length} characters)` : text;
         // A send's ask names its request, so no saved decision ever answers it; a change's is answered by a standing rule.
         const about: About = {
           source: `action.${listed.declares}`,
           subject: { effect: `action.${listed.declares}`, target: { kind: 'action', ref: listed.declares === 'send' ? `${name}#${request}` : name, owner: listed.extension }, change: null },
-          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}'s ${name}, given ${JSON.stringify(input).slice(0, 500)}?`,
+          question: `Let this session ${listed.declares === 'send' ? 'send with' : 'change your data with'} ${listed.extension}@${listed.version}'s ${name}, given ${preview}?`,
           options: [listed.declares === 'send' ? 'Send it' : 'Change it', 'Don\'t'],
         };
-        ask = (await this.options.services.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)).ask;
-        this.actionAsks.set(key, ask);
+        const ask = this.options.services.holds.asked({ session, agent: s.agent, cwd: s.cwd }, about)
+          .then(({ ask }) => ask).catch((error: unknown) => { this.actionAsks.delete(key); throw error; });
+        approval = { digest, ask };
+        this.actionAsks.set(key, approval);
       }
+      const ask = await approval.ask;
       const [row] = (await this.options.services.record.raw('SELECT decision FROM asks WHERE id = ?', [ask.slice(4)])) as { decision: string | null }[];
       if (row?.decision === 'deny') return { status: 'declined', ask };
       if (row?.decision !== 'allow') return { status: 'held', ask, reason: `DeepBuild is holding ${name}: it waits for your answer to ${ask}; once you say yes, call it again with the same request ID.` };
     }
     const result = await this.options.services.extensions!.callAction({
-      action: name, target: { handle: `ext:${listed.extension}`, version: listed.version }, input, caller: this.agentConnection(session), request,
+      action: name, target, input, caller: this.agentConnection(session), request,
     });
     // Refused before its handler started, it did not run; one that started and failed reaches the agent as an error,
     // with what the hub wrote for it on record as unverified.
@@ -244,7 +284,12 @@ export class McpOperations {
     return { ...result, report: reported ? report : null };
   }
 
-  /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
+  /**
+   * deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its
+   * contradictions, and where it starts (#2197): the checks its repo's spec names, its own open asks, each with its
+   * state, its default and its deadline as deep_wait names them, and the open items it recorded. The planted wrong
+   * program lists every session's asks.
+   */
   private async status(session: string | undefined): Promise<Obj> {
     const gates = { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null };
     if (!session) return { session: null, gates, claims: [] };
@@ -272,9 +317,15 @@ export class McpOperations {
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
     }
+    const whose = this.options.settings.plant === 'status-lists-every-ask' ? '' : ' AND session_id = ?';
+    const asks = ((await this.options.services.record.raw(`SELECT id, status, default_option, deadline FROM asks WHERE status IN ('open', 'later')${whose} ORDER BY created, id`, whose ? [session] : [])) as { id: string; status: string; default_option: string | null; deadline: number }[])
+      .map((a) => ({ ask: `ask:${a.id}`, state: a.status, default: a.default_option === null ? null : JSON.parse(a.default_option) as unknown, deadline: a.deadline }));
+    const open_items = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND (task_ref, text) IN
+      (SELECT json_extract(data, '$.task_ref'), json_extract(data, '$.text') FROM events WHERE session_id = ? AND kind = 'open_item.opened') ORDER BY opened, text`, [session])) as { text: string }[];
+    const reply = { session, gates, claims, checks: this.checkNames(this.options.state().sessions.get(session)!.cwd), asks, open_items };
     // An agent's deep_status is its own session's (#1463): the planted wrong program leaks every session's asks into it.
-    if (this.options.settings.plant === 'status-row-leak') return { session, gates, claims, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
-    return { session, gates, claims };
+    if (this.options.settings.plant === 'status-row-leak') return { ...reply, rows: [...this.options.state().rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
+    return reply;
   }
 
   /**
@@ -285,11 +336,16 @@ export class McpOperations {
     const worktree = session ? this.options.state().sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session && this.options.settings.plant === 'unbound-reads-all';
     // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
-    const [project] = session ? (await this.options.services.record.raw(`SELECT project_id FROM sessions WHERE id = ?`, [session])) as { project_id: string | null }[] : [];
+    // A session is the person's whose connection first sent its hooks (#1337).
+    const [project] = session ? (await this.options.services.record.raw(`SELECT project_id, (SELECT actor FROM events WHERE session_id = ? ORDER BY log_pos LIMIT 1) AS person FROM sessions WHERE id = ?`, [session, session])) as { project_id: string | null; person: string | null }[] : [];
     const scopes = new Set(session ? [`session:${letters(session)}`, 'all', ...(project?.project_id ? [`repo:${letters(project.project_id)}`] : [])] : []);
     const covers = (scope: string): boolean => everyone || (session ? scopes.has(scope) : scope === 'all' || scope.startsWith('repo:'));
+    // A person's session reads the decisions saved at its own scope or its project's (#1840): one saved for all repos is
+    // its saver's personal scope. The planted wrong program reads every decision.
+    const person = project?.person && project.person !== OWNER && this.options.settings.plant !== 'search-decisions-unfiltered';
     return search({
-      query, index: await this.wikiIndex(), raw: (q, params) => this.options.services.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
+      query, index: await this.wikiIndex(), raw: this.options.services.raw, worktree, session: everyone ? { everyone: true } : session, covers,
+      ...(person ? { decides: (scope: string) => scope !== 'all' && scopes.has(scope) } : {}),
       trustsIndex: this.options.settings.plant === 'trusts-index',
       readings: (q) => this.options.services.numbers.search(q, everyone ? { everyone: true } : session),
       ...(session ? { past: await this.pastSessions(project?.project_id ?? null, file, worktree) } : {}),
@@ -307,7 +363,7 @@ export class McpOperations {
       const by = new Set((await this.options.services.record.touched(file, worktree)).map((t) => t.session));
       sessions = sessions.filter((id) => by.has(id));
     }
-    return { sessions, messages: (terms, ids) => this.options.services.record.findMessages(terms, ids), about: (ids) => aboutSessions((sql, params) => this.options.services.record.raw(sql, params), ids) };
+    return { sessions, messages: (terms, ids) => this.options.services.record.findMessages(terms, ids), about: (ids) => aboutSessions(this.options.services.raw, ids) };
   }
 
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
@@ -331,8 +387,7 @@ export class McpOperations {
 
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
   checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }> {
-    let spec: unknown;
-    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
@@ -340,8 +395,12 @@ export class McpOperations {
     }));
   }
 
+  private checkNames(worktree: string): string[] {
+    return [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
+  }
+
   private unknownCheck(worktree: string, check: unknown): Refused {
-    const names = [...this.checksOf(worktree).keys(), ...this.options.services.canvasSide.docChecksOf(worktree).keys()];
+    const names = this.checkNames(worktree);
     const near = typeof check === 'string' ? nearest(check, names) : undefined;
     return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
@@ -357,7 +416,7 @@ export class McpOperations {
       const thread = args.thread as { link: string; expect: string } | null | undefined;
       if (thread) {
         if (!slackThread(thread.link)) throw refuse('format', '/params/arguments/thread/link', 'Give a Slack thread link: https://<workspace>.slack.com/archives/<channel>/p<timestamp>.', thread.link);
-        if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your bot token and user ID in the hub\'s slack.json, mode 0600, to read this thread.', null);
+        if (!slackConfig(this.options.services.root.dir)) throw refuse('required', '/params/arguments/thread', 'No Slack connector: put your Slack user ID in the hub\'s slack.json as {"you": "U…"}, mode 0600, and enter your bot token with deep secret add slack token, to read this thread.', null);
       } else {
         need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
         if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
@@ -396,8 +455,9 @@ export class McpOperations {
     const subject = this.options.settings.plant === 'repeat-reaches-you' ? undefined
       : kind === 'choice' && typeof about.point === 'string' ? { point: about.point }
       : kind === 'taste' && typeof about.screen === 'string' && typeof about.element === 'string' ? { screen: about.screen, element: about.element } : undefined;
-    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84).
-    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined;
+    // A taste call or a choice with a recommendation goes on at once with it, marked as undoable (#84); in a session a
+    // work run started, the issue waits on you instead and gives up its slot (#1332).
+    const provisional = kind !== 'unblock' && raised.recommended !== null && raised.recommended !== undefined && !(await this.options.services.sessionStarts.inWorkRun(session));
     const ask = { ...raised, fallback: 'you', provisional, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.options.services.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     if (provisional) {
@@ -551,7 +611,7 @@ export class McpOperations {
     if (live && unseenTools(this.options.state().sessions.get(session)?.agent)) live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
     const task = sql(String(args.task_ref));
-    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
+    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
       AND a.session_id IN (SELECT session_id FROM events WHERE kind = 'session.end')`), 'next_prompt'));
     return { session, claim: `claim:${id}`, event: id, ...(answers ? { answers } : {}) };
   }
@@ -570,12 +630,21 @@ export class McpOperations {
     const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
     const [claim] = (await this.options.services.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
+    if (!await this.options.judging().projectTrusted(cwd)) {
+      throw refuse('unconfirmed', '/params/arguments/check', `${cwd} isn't a project you trust, so ${String(args.check)} didn't run: its spec checks run only once you trust it, by your answer in the app or by Claude Code's or Codex's own trust of it.`, args.check);
+    }
     const commit = String((JSON.parse(claim.data) as Obj).commit);
     // A document check runs on its current revision (#1723); a host check runs at your remote home (#1942).
     const at = doc && await this.options.services.canvasSide.docRevision(doc.doc);
-    const { run } = doc
-      ? await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', docCommand(doc, at)], command: docCommand(doc, at), spec: docSpec(doc, at) as unknown as Obj, cwd })
-      : await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check!.run], ...(check!.host === undefined ? { cwd } : { host: check!.host }) }, deadline);
+    let run: unknown;
+    if (doc) ({ run } = await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', docCommand(doc, at)], command: docCommand(doc, at), spec: docSpec(doc, at) as unknown as Obj, cwd }));
+    else if (check!.host !== undefined) ({ run } = await this.options.services.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check!.run], host: check!.host }, deadline));
+    else {
+      const tree = await this.options.services.checkouts.checkout({ worktree: cwd, commit, dependencies: DEPENDENCIES, runs: [`claim:${claim.id}`] });
+      const started = this.options.judging().runApproved({ claim: `claim:${claim.id}`, check: String(args.check), approved: null, command: check!.run, commit, cwd: tree.dir, deadline_ms: deadline ?? null });
+      void started.then((ran) => this.options.services.runs.ended(ran)).catch(() => undefined).then(() => this.options.services.checkouts.ended(tree, `claim:${claim.id}`)).catch(() => undefined);
+      run = await started;
+    }
     // A run on a host is long work, such as a model download: it answers once started there, and the claim waits for it.
     if (check?.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.

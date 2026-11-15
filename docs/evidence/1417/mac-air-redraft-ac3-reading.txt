@@ -1,0 +1,14 @@
+# #1417 AC3, blind redraft (tests/acceptance/1417-redraft-ac3), on the MacBook Air M3: INCONCLUSIVE, not proof
+# Run once by the Mac runner on 2026-11-09 at f735d8b954538268c3d1099c606ea3752d9a0425 (clean tree).
+# Machine: Mac15,12, Apple M3, 8 cores, macOS 23H723, AC power, Low Power Mode 0.
+# Load 1 min: 2.55 before, 9.54 after. The suite's own release builds ran right before measuring; nothing else ran.
+# vitest exit 1: all three size tests INCONCLUSIVE, "loaded: a 1-minute load average of 9.5 on 8 cores" (gate: <= 4).
+# The full output stays on the Mac (~/mac-1417-redraft-ac3.txt); these readings were relayed from it.
+
+size     estimate ms   measured ms (5 runs)                     band [est/2, est*2]   reading
+100      0.1040        0.0980 0.0935 0.0940 0.0931 0.0977      [0.0520, 0.2081]      would PASS
+1,000    1.2634        1.4080 1.3924 1.3775 1.3959 1.3632      [0.6317, 2.5268]      would PASS
+10,000   16.5409       24.33 23.16 24.49 24.42 27.48           [8.27, 33.08]         would PASS (margin 19%)
+
+# Every run sits inside its band, but the load gate failed, so by the design's timing rule this is INCONCLUSIVE.
+# A rerun in the kept worktree (builds done) would measure without the build load.

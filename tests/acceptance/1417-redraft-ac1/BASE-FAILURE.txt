@@ -1,0 +1,19 @@
+At base d4ed7be7 (HEAD = merge base with origin/main, no tracked change), run on Linux (aarch64) with
+CARGO_TARGET_DIR holding a debug build of the same commit:
+
+  npx vitest run --root tests/acceptance/1417-redraft-ac1 --no-file-parallelism --testTimeout=600000
+  -> 1 failed, 1 passed (97.8 s, the build check included)
+  npx tsc -p tests/acceptance/1417-redraft-ac1/tsconfig.json
+  -> exit 0
+
+FAILS, for the expected reason:
+  #1417.52357c9c is refused at check with over_budget, naming the operator graph.layout and its estimate
+  -> "the board is refused at check: expected 'presented' to be 'refused'". The reply is
+     {"rev":1,"issues":[],"snapshots":[],"created":["g"],"outcome":"presented",…}: the check raises no issue.
+     graph's `layout` registers no cost, and the estimate charges graph.layout its costs.json 10,792 ns per graph
+     item whatever its nodes, so the 100,000-node board in a data view stays far under every cap and is presented.
+
+PASSES:
+  #1417.52357c9c on main the same document passes the check
+  -> HEAD is the merge base here, so the base build is this checkout's: no error, no over_budget, outcome
+     "presented" (about 6 s of the run; standalone, the same scenario took 12 s wall and 1.3 GB peak RSS).

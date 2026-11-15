@@ -1,0 +1,84 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Animation",
+    "description": "Top level object, describing the animation",
+    "allOf": [
+        {
+            "$ref": "#/$defs/helpers/visual-object"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "ver": {
+                    "title": "Specification Version",
+                    "description": "Specification version this Lottie is targeting. This is a 6 digit number with version components encoded as `MMmmpp`, with `MM` being major version, `mm` being minor and `pp` being patch.",
+                    "type": "integer",
+                    "minimum": 10000
+                },
+                "fr": {
+                    "title": "Framerate",
+                    "description": "Framerate in frames per second",
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                },
+                "ip": {
+                    "title": "In Point",
+                    "description": "Frame the animation starts at (inclusive; usually 0)",
+                    "type": "number"
+                },
+                "op": {
+                    "title": "Out Point",
+                    "description": "Frame the animation stops/loops at (exclusive). The frame at `op` is NOT rendered; the animation duration in frames is `op - ip`.",
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                },
+                "w": {
+                    "title": "Width",
+                    "description": "Width of the animation",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "h": {
+                    "title": "Height",
+                    "description": "Height of the animation",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "assets": {
+                    "title": "Assets",
+                    "type": "array",
+                    "description": "List of assets that can be referenced by layers",
+                    "items": {
+                        "$ref": "#/$defs/assets/all-assets"
+                    }
+                },
+                "markers": {
+                    "title": "Markers",
+                    "description": "Markers defining named sections of the composition.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/helpers/marker"
+                    }
+                },
+                "slots": {
+                    "title": "Slots",
+                    "description": "Dictionary of slot ids that will replace matching properties.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/$defs/helpers/slot"
+                    }
+                },
+                "meta": {
+                    "title": "Metadata",
+                    "description": "Metadata about the animation",
+                    "$ref": "#/$defs/helpers/metadata"
+                }
+            },
+            "required": ["w", "h", "fr", "op", "ip"]
+        },
+        {
+            "$ref": "#/$defs/composition/composition"
+        }
+    ]
+}

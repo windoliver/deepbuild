@@ -1,0 +1,58 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ✓ tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once 5628ms
+ × tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run 2891ms
+   → a refused call writes nothing to the record: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"The request ID req-88ff2cd874ff604a belongs to another call; nothing ran or was written. Retry the original action, plug-in version and input.\",\"path\":\"/params/arguments/request\",\"actual\":\"req-88ff2cd874ff604a\",\"evidence\":[]}"}],"isError":true}}; action.entered for r1: []: expected 29 to be 26 // Object.is equality
+ × tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run 3304ms
+   → a refused call writes nothing to the record: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"The request ID req-22394e46e3bf7371 belongs to another call; nothing ran or was written. Retry the original action, plug-in version and input.\",\"path\":\"/params/arguments/request\",\"actual\":\"req-22394e46e3bf7371\",\"evidence\":[]}"}],"isError":true}}; action.entered for r1: []: expected 29 to be 26 // Object.is equality
+ ✓ tests/acceptance/2072/held-action.test.ts > #2072 AC3 An input longer than the question shows is marked as cut, with its length > AC3 an input of 2,000 characters shows on the ask as cut, with its length 1866ms
+ ✓ tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > the whole input: B, equal to A in its first 500 characters and in length, is refused after A's yes, and A alone then runs once 3419ms
+ ✓ tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > positive control: the same input as A in other JSON formatting is A, so it runs once and enters no second call 2058ms
+ ✓ tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > the plug-in version: the same action, request ID and input from another version is refused after the yes at the first, which alone then runs once 3793ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: a refused call writes nothing to the record: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"The request ID req-88ff2cd874ff604a belongs to another call; nothing ran or was written. Retry the original action, plug-in version and input.\",\"path\":\"/params/arguments/request\",\"actual\":\"req-88ff2cd874ff604a\",\"evidence\":[]}"}],"isError":true}}; action.entered for r1: []: expected 29 to be 26 // Object.is equality
+
+- Expected
++ Received
+
+- 26
++ 29
+
+ ❯ tests/acceptance/2072/held-action.test.ts:93:85
+     91|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+     92|     expect.soft(all.filter((e) => e.kind === ALERT), `the change wrote…
+     93|     expect.soft(all.length, `a refused call writes nothing to the reco…
+       |                                                                                     ^
+     94|     expect.soft((await ran(w)).set_alert, `the change's handler did no…
+     95|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run
+AssertionError: a refused call writes nothing to the record: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"The request ID req-22394e46e3bf7371 belongs to another call; nothing ran or was written. Retry the original action, plug-in version and input.\",\"path\":\"/params/arguments/request\",\"actual\":\"req-22394e46e3bf7371\",\"evidence\":[]}"}],"isError":true}}; action.entered for r1: []: expected 29 to be 26 // Object.is equality
+
+- Expected
++ Received
+
+- 26
++ 29
+
+ ❯ tests/acceptance/2072/held-action.test.ts:115:85
+    113|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+    114|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+    115|     expect.soft(all.length, `a refused call writes nothing to the reco…
+       |                                                                                     ^
+    116|     expect.soft((await ran(w)).send_digest, `the send's handler did no…
+    117|   }, 360_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 5 passed (7)
+   Start at  16:34:32
+   Duration  30.17s (tests 98%, import 1%, transform 1%)

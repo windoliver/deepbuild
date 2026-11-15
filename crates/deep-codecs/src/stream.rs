@@ -125,22 +125,13 @@ fn audio(
     file: &File,
     planted: &Planted,
 ) -> Result<(Value, Vec<u8>), String> {
-    let (rate, channels) = (t.entry.sample_rate.max(1), t.entry.channels.max(1) as u32);
     let mut packets = Vec::with_capacity(t.samples.len());
     for (i, s) in t.samples.iter().enumerate() {
         packets.push(read_at(file, s).map_err(|e| format!("sound packet {i}: {e}"))?);
     }
-    let samples: Vec<f32> = match &t.entry.config {
-        _ if matches!(&t.entry.fourcc, b"fpcm" | b"lpcm") => packets
-            .iter()
-            .flat_map(|p| p.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)))
-            .collect(),
-        #[cfg(target_os = "macos")]
-        Some((k, esds)) if k == b"esds" => {
-            crate::apple::decode_aac(esds, rate, channels, &packets)?
-        }
-        _ => return Err(format!("no decoder for {}", codec(&t.entry.fourcc))),
-    };
+    // #503: by our own decoders, as a whole file's decode reads the track.
+    let decoded = crate::audio::mp4_decode(t, packets)?;
+    let (rate, channels, samples) = (decoded.rate.max(1), decoded.channels, decoded.samples);
     let mut shown = t.edits.clone();
     if planted.is("reader_pads_last_packet") {
         for e in shown.iter_mut().filter(|e| e.media_time >= 0) {

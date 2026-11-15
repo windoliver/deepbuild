@@ -152,6 +152,109 @@ fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
 }
 
 #[test]
+fn a_hook_given_no_time_past_the_watchdog_with_its_call_sent_is_still_spooled() {
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh17-starved-{}", std::process::id())));
+    let signal = |sig: &str, pid: u32| {
+        let sent = Command::new("kill")
+            .args([sig, &pid.to_string()])
+            .status()
+            .unwrap();
+        assert!(sent.success());
+    };
+    // Each hook starts and waits for its call; the machine then gives it no time (SIGSTOP stands in for a loaded
+    // CPU) while the agent sends the call, and gives it time again only past the watchdog's 48 ms. The call was
+    // there to read all along, so the hook was slow, not stuck: it is allowed and spooled, never dropped.
+    for round in 0..5 {
+        let start = std::time::Instant::now();
+        let mut child = hook(&home, "PreToolUse");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        signal("-STOP", child.id());
+        feed(
+            &mut child,
+            format!(r#"{{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"echo {round}"}}}}"#).as_bytes(),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        signal("-CONT", child.id());
+        let exited = exit_within(&mut child, start, SECOND);
+        assert_eq!(
+            exited.and_then(|s| s.code()),
+            Some(0),
+            "round {round}: the call is allowed: {}",
+            stderr_of(&mut child)
+        );
+    }
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    let lost: Vec<_> = (0..5)
+        .filter(|round| !spooled.contains(&format!("echo {round}")))
+        .collect();
+    assert!(
+        lost.is_empty(),
+        "rounds {lost:?} were let through and not spooled: {spooled:?}"
+    );
+}
+
+#[test]
+fn a_call_its_agent_sends_past_the_watchdog_is_still_spooled() {
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh17-late-call-{}", std::process::id())));
+    // An agent the machine gives no time writes the call 150 ms after it started the hook, past the watchdog's 48 ms.
+    let start = std::time::Instant::now();
+    let mut child = hook(&home, "PreToolUse");
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    // A hook that already let the call through has closed its stdin: the write fails, and the spool says the rest.
+    let _ = std::io::Write::write_all(
+        &mut child.stdin.take().unwrap(),
+        br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo sent late"}}"#,
+    );
+    let exited = exit_within(&mut child, start, SECOND);
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "the call is allowed"
+    );
+    assert!(
+        spooled.contains("echo sent late"),
+        "the call is spooled: {spooled:?}"
+    );
+}
+
+#[test]
+fn a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it() {
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh17-late-close-{}", std::process::id())));
+    // The agent writes the whole call at once and closes stdin only later, as one the machine gives no time may.
+    let start = std::time::Instant::now();
+    let mut child = hook(&home, "PreToolUse");
+    let mut stdin = child.stdin.take().unwrap();
+    std::io::Write::write_all(
+        &mut stdin,
+        br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo closed late"}}"#,
+    )
+    .unwrap();
+    // stdin closes only after the hook has had its second: a hook that waits for the close is killed by then.
+    let exited = exit_within(&mut child, start, SECOND);
+    drop(stdin);
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "the call is allowed before its agent closes stdin"
+    );
+    assert!(
+        spooled.contains("echo closed late"),
+        "the call is spooled: {spooled:?}"
+    );
+}
+
+#[test]
 fn a_hook_with_no_shell_call_is_spooled_whatever_rules_json_does() {
     let home = fresh_home(std::env::temp_dir().join(format!("dh315-start-{}", std::process::id())));
     // rules.json is a FIFO nobody writes, and no hub is there: guards can't touch a SessionStart, so it is spooled.
@@ -280,6 +383,156 @@ fn fake_hub(
         let _ = reader.get_mut().write_all(answer(id).as_bytes());
         std::thread::sleep(linger);
     })
+}
+
+/// A hub's acknowledgement of request `id` with no hold, and the empty reply.
+fn empty_reply(id: &str) -> String {
+    format!(
+        "{{\"v\":1,\"ack\":\"{id}\",\"hold_until_ms\":null}}\n{{\"v\":1,\"exit\":0,\"stdout\":\"\",\"stderr\":\"\"}}\n"
+    )
+}
+
+#[test]
+fn a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too() {
+    let newer = RULES.replacen(
+        r#""entries":{"#,
+        r#""entries":{"newer":{"match":"effect:not-a-class","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":false},"#,
+        1,
+    );
+    for (case, text, why) in [
+        ("cut to 40 bytes", &RULES[..40], "isn't JSON"),
+        ("an entry with a match it doesn't know", &newer, "newer"),
+    ] {
+        for answering in [true, false] {
+            // A try the hub was late for (the call is spooled marked late) is the hub away: it is made again.
+            let mut tries = 0;
+            let (out, spooled) = loop {
+                let home = short_home("unread");
+                std::fs::write(home.join(".deepbuild/rules.json"), text).unwrap();
+                let hub = answering
+                    .then(|| fake_hub(&home, empty_reply, std::time::Duration::from_millis(50)));
+                let mut child = hook(&home, "PreToolUse");
+                feed(&mut child, PKILL);
+                let out = child.wait_with_output().unwrap();
+                let spooled = std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl"))
+                    .unwrap_or_default();
+                if let Some(hub) = hub {
+                    hub.join().unwrap();
+                }
+                std::fs::remove_dir_all(&home).unwrap();
+                tries += 1;
+                if !answering || !spooled.contains("\"late\":true") {
+                    break (out, spooled);
+                }
+                assert!(
+                    tries < 20,
+                    "INCONCLUSIVE: the hub was late for 20 tries; rerun alone"
+                );
+            };
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let hub = if answering { "answering" } else { "away" };
+            assert_eq!(
+                out.status.code(),
+                Some(2),
+                "rules.json {case}, the hub {hub}: `pkill -f node` is denied: {stderr}"
+            );
+            assert!(
+                stderr.contains("rules.json") && stderr.contains(why),
+                "rules.json {case}, the hub {hub}: the denial names the file and {why:?}: {stderr}"
+            );
+            // The call reaches the hub when it answers, and the spool when it doesn't, as before.
+            assert_eq!(
+                spooled.contains("pkill -f node"),
+                !answering,
+                "rules.json {case}, the hub {hub}: the spool: {spooled:?}"
+            );
+        }
+    }
+}
+
+/// A hub's hello, written to whoever connects.
+const HELLO: &[u8] = b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n";
+
+#[test]
+fn a_rules_json_removed_after_setup_is_denied_with_the_hub_away_and_read_again_once_a_hub_says_hello(
+) {
+    // Before setup a missing rules.json is no entries: the call runs.
+    let home = short_home("gone");
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    let (code, _, _) = pre_tool_use(&home, "pkill -f node");
+    assert_eq!(code, Some(0), "before setup, no rules.json: the call runs");
+
+    // After setup, with no hub, it is denied naming the file.
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "after setup, rules.json removed, no hub: `pkill -f node` is denied: {stderr}"
+    );
+    assert!(
+        stderr.contains("rules.json"),
+        "the denial names the file: {stderr}"
+    );
+
+    // A hub that puts the file back before its hello, as the running hub does: the call is matched against it. The
+    // hub then goes away, so the entry's own denial shows what deep-hook matched.
+    use std::io::Write;
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let rules = home.join(".deepbuild/rules.json");
+    let hub = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        std::fs::write(rules, RULES).unwrap();
+        let _ = stream.write_all(HELLO);
+    });
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "rules.json put back by the hub: `pkill -f node` is denied: {stderr}"
+    );
+    assert!(
+        stderr.contains("no-kill-by-name") && !stderr.contains("rules.json"),
+        "the denial is the entry's, read from the file the hub put back: {stderr}"
+    );
+}
+
+#[test]
+fn a_hub_that_never_says_hello_holds_a_call_for_a_removed_rules_json_no_longer_than_the_design_allows(
+) {
+    // After setup, rules.json removed, and a hub that takes connections and says nothing: deep-hook waits 250 ms for
+    // the hello, then the hub's 20 ms, and denies the call naming the file. A loaded machine can be slow to start the
+    // hook, so the fastest of five tries is the one read: a longer wait is in every one of them.
+    let home = short_home("mute");
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let mut fastest = std::time::Duration::MAX;
+    for _ in 0..5 {
+        let (code, took, _) = pre_tool_use(&home, "pkill -f node");
+        assert_eq!(code, Some(2), "the call is denied");
+        fastest = fastest.min(took);
+    }
+    drop(listener);
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        fastest >= std::time::Duration::from_millis(250),
+        "deep-hook gave the hub its 250 ms to say hello: {fastest:?}"
+    );
+    assert!(
+        fastest < std::time::Duration::from_millis(400),
+        "the wait for a hub's hello stays at 250 ms, with the 20 ms to acknowledge after it: {fastest:?}"
+    );
 }
 
 /// Runs deep-hook's PreToolUse for `command` against `home`, and returns its exit code, how long it took, and the spool.
@@ -941,11 +1194,74 @@ fn runners_fetched_and_written_programs_meet_the_floor_with_the_hub_away() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+#[test]
+fn a_call_naming_links_that_loop_is_ruled_by_what_matches_with_the_hub_away() {
+    // #2174: the shipped entries and no hub. A path through a link that names itself, or two that name each other,
+    // is read as written, where the reader once recursed until the watchdog denied the call or the stack ran out.
+    use std::os::unix::fs::symlink;
+    let home = fresh_home(format!("/tmp/dh2174-{}", std::process::id()).into());
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        include_str!("../default-rules.json"),
+    )
+    .unwrap();
+    let work = home.join("w");
+    std::fs::create_dir_all(&work).unwrap();
+    symlink("self", work.join("self")).unwrap();
+    symlink("b", work.join("a")).unwrap();
+    symlink("a", work.join("b")).unwrap();
+    let decide = |tool: &str, input: &str| {
+        let payload = format!(
+            r#"{{"session_id":"s2174","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_input":{input}}}"#,
+            json_string(&work.to_string_lossy()),
+        );
+        let start = std::time::Instant::now();
+        let mut child = hook(&home, "PreToolUse");
+        feed(&mut child, payload.as_bytes());
+        let stderr = stderr_of(&mut child);
+        let status = child.wait().unwrap();
+        (status, start.elapsed(), stderr)
+    };
+    let mut wrong = Vec::new();
+    for link in ["self", "a"] {
+        let path = json_string(&work.join(link).to_string_lossy());
+        for (tool, input, code) in [
+            ("Bash", format!(r#"{{"command":"ls {link}"}}"#), 0),
+            ("Read", format!(r#"{{"file_path":{path}}}"#), 0),
+            // The link is read, and so is the rest of its line.
+            (
+                "Bash",
+                format!(r#"{{"command":"ls {link}; pkill -f node"}}"#),
+                2,
+            ),
+        ] {
+            let (status, took, stderr) = decide(tool, &input);
+            eprintln!("{tool} {input}: {status} after {took:?}");
+            // Exit code 2 is also the watchdog's, for a call still unread after its 500 ms.
+            if status.code() != Some(code) || stderr.contains("couldn't read this call") {
+                wrong.push(format!(
+                    "{tool} {input}: {status} after {took:?}, where exit code {code} is its ruling: {stderr}"
+                ));
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&home);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
 /// `deep-hook clone <from> <to>`, its exit code and stderr.
 #[cfg(target_os = "linux")]
 fn clone_tree(from: &std::path::Path, to: &std::path::Path) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_deep-hook")).arg("clone").arg(from).arg(to).output().unwrap();
-    (out.status.code(), String::from_utf8_lossy(&out.stderr).into_owned())
+    let out = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .arg("clone")
+        .arg(from)
+        .arg(to)
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
 }
 
 /// A folder of what staging meets: a file, an executable, a subfolder and a link.
@@ -966,12 +1282,20 @@ fn tree(at: &std::path::Path) {
 #[cfg(target_os = "linux")]
 fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot() {
     use std::os::unix::fs::PermissionsExt;
-    let cow = std::path::PathBuf::from(std::env::var("DEEP_TEST_COW_DIR").unwrap_or_else(|_| "/var/tmp".into()));
+    let cow = std::path::PathBuf::from(
+        std::env::var("DEEP_TEST_COW_DIR").unwrap_or_else(|_| "/var/tmp".into()),
+    );
     let dir = cow.join(format!("deep-hook-clone-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("probe"), "p").unwrap();
-    let reflinks = Command::new("cp").arg("--reflink=always").arg(dir.join("probe")).arg(dir.join("probe.copy")).status().unwrap().success();
+    let reflinks = Command::new("cp")
+        .arg("--reflink=always")
+        .arg(dir.join("probe"))
+        .arg(dir.join("probe.copy"))
+        .status()
+        .unwrap()
+        .success();
     if !reflinks {
         let _ = std::fs::remove_dir_all(&dir);
         panic!("BLOCKED: {} can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink", cow.display());
@@ -981,9 +1305,23 @@ fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_
     assert_eq!(code, Some(0), "clone on {}: {err}", cow.display());
     let to = dir.join("to");
     assert_eq!(std::fs::read(to.join("a.txt")).unwrap(), b"a\n");
-    assert_eq!(std::fs::read(to.join("sub/b.bin")).unwrap(), vec![7u8; 1 << 16]);
-    assert_eq!(std::fs::read_link(to.join("link")).unwrap(), std::path::PathBuf::from("a.txt"), "a link stays a link");
-    assert_eq!(std::fs::metadata(to.join("run.sh")).unwrap().permissions().mode() & 0o777, 0o755);
+    assert_eq!(
+        std::fs::read(to.join("sub/b.bin")).unwrap(),
+        vec![7u8; 1 << 16]
+    );
+    assert_eq!(
+        std::fs::read_link(to.join("link")).unwrap(),
+        std::path::PathBuf::from("a.txt"),
+        "a link stays a link"
+    );
+    assert_eq!(
+        std::fs::metadata(to.join("run.sh"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o755
+    );
     let _ = std::fs::remove_dir_all(&dir);
 
     let shm = std::path::PathBuf::from(format!("/dev/shm/deep-hook-clone-{}", std::process::id()));
@@ -992,6 +1330,84 @@ fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_
     let (code, err) = clone_tree(&shm.join("from"), &shm.join("to"));
     let left = shm.join("to").exists();
     let _ = std::fs::remove_dir_all(&shm);
-    assert_eq!(code, Some(3), "tmpfs makes no copy-on-write copy, so clone must exit 3: {err}");
-    assert!(!left, "a clone that can't be copy-on-write leaves nothing at the target");
+    assert_eq!(
+        code,
+        Some(3),
+        "tmpfs makes no copy-on-write copy, so clone must exit 3: {err}"
+    );
+    assert!(
+        !left,
+        "a clone that can't be copy-on-write leaves nothing at the target"
+    );
+}
+
+#[test]
+fn the_mcp_servers_facts_name_a_tools_path_arguments_only_for_a_server_loaded_as_they_describe_it()
+{
+    // #1848: the facts list GitHub's remote server's file tools with no local path argument, so a repo path one names
+    // passes the spec guard while your user config loads that server as the facts match it; a server loaded under the
+    // same name with another config has each whitespace-free string read as a path. DeepBuild's own deep_propose, which
+    // the spec guard's denial points to, is never read for a path.
+    let home = fresh_home(format!("/tmp/dh1848-{}", std::process::id()).into());
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        include_str!("../default-rules.json"),
+    )
+    .unwrap();
+    let repo = home.join("w");
+    std::fs::create_dir_all(&repo).unwrap();
+    let decide = |github: &str, tool: &str, input: &str| {
+        std::fs::write(
+            home.join(".claude.json"),
+            format!(r#"{{"mcpServers":{{"github":{github}}}}}"#),
+        )
+        .unwrap();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+            .args(["claude-code", "PreToolUse"])
+            .env_clear()
+            .env("HOME", &home)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let payload = format!(
+            r#"{{"session_id":"s1848","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_input":{input}}}"#,
+            json_string(&repo.to_string_lossy()),
+        );
+        feed(&mut child, payload.as_bytes());
+        let output = child.wait_with_output().unwrap();
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )
+    };
+    let official = r#"{"type":"http","url":"https://api.githubcopilot.com/mcp/"}"#;
+    let other = r#"{"type":"stdio","command":"github-files"}"#;
+    let spec = r#"{"owner":"o","repo":"r","path":".deepbuild/done.yaml","content":"x","message":"m","branch":"b"}"#;
+    let (code, said) = decide(official, "mcp__github__create_or_update_file", spec);
+    assert_eq!(
+        code,
+        Some(0),
+        "the facts name no local path argument for GitHub's remote server: {said}"
+    );
+    let (code, said) = decide(other, "mcp__github__create_or_update_file", spec);
+    assert_eq!(
+        code,
+        Some(2),
+        "a server the facts don't describe has its strings read as paths: {said}"
+    );
+    assert!(
+        said.contains("no-deepbuild-spec-write") && said.contains("Its argument path names it"),
+        "{said}"
+    );
+    let propose =
+        r#"{"target":".deepbuild/done.yaml","change":"Add a criterion.","evidence":null}"#;
+    let (code, said) = decide(official, "mcp__deepbuild__deep_propose", propose);
+    assert_eq!(
+        code,
+        Some(0),
+        "deep_propose is where the denial points: {said}"
+    );
+    let _ = std::fs::remove_dir_all(&home);
 }

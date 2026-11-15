@@ -6,9 +6,9 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { run } from './children.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
 
 const sha = (parts: (string | Buffer)[]): string => {

@@ -212,6 +212,8 @@ fn main() {
                 eprintln!("deep-app: couldn't claim the app, so no notifications: {error}")
             }
         }
+        // A key an older app kept in a file moves into the OS secret store, once, as the app starts (#1606).
+        deep_app::device::Device::moved();
     }
     // A `deepbuild://` link the OS hands the app waits for the tick, which can open it (#1460).
     let (links, linked) = std::sync::mpsc::channel::<String>();

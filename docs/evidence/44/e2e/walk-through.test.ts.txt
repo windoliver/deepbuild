@@ -1,0 +1,73 @@
+// Scratch end-to-end walk-through of the extension guide's two worked examples, for screenshots (#44).
+// Never committed. It follows the guide's own steps with the real host: build the folder, install it,
+// run its conformance, load it, list the check kinds in use, run its check on each spec in example.json.
+// Each step prints what the host returned, then asserts it, so a wrong answer fails the test after showing it.
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { arch, platform, release } from 'node:os';
+import { join } from 'node:path';
+import { expect, it } from 'vitest';
+import { buildExample, exampleRun, openHost, openWorld, REPO, runGuideCheck, tempDir, type ExampleName, type World } from './helpers.ts';
+
+const say = (line = '') => process.stdout.write(`${line}\n`);
+
+/** The pids the supervisor recorded as started for a run (its process.tracked events). */
+async function tracked(w: World, run: string): Promise<number[]> {
+  const pids: number[] = [];
+  for (let after = 0; ;) {
+    const page = await w.record.read({ after, limit: 1000 });
+    for (const e of page) if (e.kind === 'process.tracked' && (e.data as { run?: string }).run === run) pids.push((e.data as { pid: number }).pid);
+    if (page.length < 1000) return pids;
+    after = page[page.length - 1]!.log_pos;
+  }
+}
+
+async function walk(name: ExampleName): Promise<void> {
+  say(`=== The guide's ${name} example ===`);
+  const dir = await buildExample(name);
+  const manifest = JSON.parse(readFileSync(join(dir, 'deepbuild.json'), 'utf8')) as { id: string; version: string; digest: string };
+  const shebang = name === 'json-rpc' ? `, main's first line ${readFileSync(join(dir, 'main'), 'utf8').split('\n', 1)[0]}` : '';
+  say(`1 build     copied docs/extension-guide/${name}, stamped digest ${manifest.digest.slice(0, 19)}…${shebang}`);
+  const run = exampleRun(dir);
+  const w = await openWorld();
+  const h = await openHost(w);
+  const p = await h.install({ from: dir, builtBy: null });
+  say(`2 install   ${manifest.id}@${manifest.version} (built by: no agent)`);
+  const c = await h.check(p);
+  say(`3 conform   passed=${c.passed} reasons=${JSON.stringify(c.reasons)}`);
+  expect(c, 'it passes conformance').toMatchObject({ passed: true });
+  const load = await h.load(p);
+  say(`4 load      ${JSON.stringify(load)}`);
+  expect(load, 'it loads in the sandbox').toMatchObject({ status: 'loaded', place: 'sandbox' });
+  const pids = await tracked(w, (load as { run: string }).run);
+  say(`            its process: pid ${pids.join(', ')}, started and tracked by the supervisor; this test's own pid ${process.pid}`);
+  expect(pids.length, 'the supervisor started a process for it').toBeGreaterThan(0);
+  expect(pids, 'it runs out of this process').not.toContain(process.pid);
+  const inUse = (await h.checks()).filter((k) => k.extension === manifest.id);
+  say(`5 in use    ${JSON.stringify(inUse)}`);
+  expect(inUse, 'its check kind is in use').toContainEqual({ kind: run.check, extension: manifest.id });
+  for (const r of run.runs) {
+    const result = await h.runCheck(run.check, r.spec, { checkout: tempDir('checkout'), deadline: 30_000 });
+    say(`6 run       inputs ${JSON.stringify(r.spec.inputs)}`);
+    say(`            -> outcome=${result.outcome} testsRun=${result.testsRun} (example.json expects ${r.expect.outcome}/${r.expect.testsRun})`);
+    for (const f of result.failures ?? []) say(`               failure: ${f.message}`);
+    expect(result, `its run on ${JSON.stringify(r.spec.inputs)}`).toMatchObject(r.expect);
+  }
+  say();
+}
+
+it('says what ran where', () => {
+  const git = (...args: string[]) => execFileSync('git', ['-C', REPO, ...args], { encoding: 'utf8' }).trim();
+  say(`=== commit ${git('rev-parse', 'HEAD')}${git('status', '--porcelain', '--untracked-files=no') ? ' (with local changes)' : ''}`);
+  say(`=== ${platform()} ${release()} ${arch()}, node ${process.version}, python3 ${execFileSync('python3', ['--version'], { encoding: 'utf8' }).trim()}`);
+  say();
+});
+it('walks the guide\'s TypeScript example', async () => { await walk('typescript'); }, 120_000);
+it('walks the guide\'s JSON-RPC example', async () => { await walk('json-rpc'); }, 120_000);
+it('runs the guide\'s drift test', () => {
+  say('=== node scripts/guide.mjs --check ===');
+  const r = runGuideCheck();
+  say(r.stdout.trim());
+  say(`exit ${r.status}`);
+  expect(r.status).toBe(0);
+}, 300_000);

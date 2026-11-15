@@ -1,0 +1,129 @@
+{
+  "verb": "write",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Write fixture",
+    "description": "Write fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "tx": {
+        "id": "tx",
+        "kind": "text@1",
+        "name": "Text tx",
+        "order": "ctx",
+        "params": {
+          "text": "Cue lists",
+          "font": "body",
+          "size": 32,
+          "reveal": {
+            "mode": "write",
+            "order": "reading",
+            "progress": 1
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "write",
+              "targets": [
+                "tx"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Write fixture written by hand",
+    "description": "Write fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "tx": {
+        "id": "tx",
+        "kind": "text@1",
+        "name": "Text tx",
+        "order": "ctx",
+        "params": {
+          "text": "Cue lists",
+          "font": "body",
+          "size": 32,
+          "reveal": {
+            "mode": "write",
+            "order": "reading",
+            "progress": 1
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "write": {
+        "target": "items/tx/params/reveal/progress",
+        "type": "f32",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": 0,
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": 1,
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/tx/params/reveal/progress"
+  ]
+}

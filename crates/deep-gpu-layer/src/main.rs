@@ -15,6 +15,7 @@
 
 #[cfg(feature = "test-meter")]
 mod allocations;
+mod axes;
 mod blur;
 mod budget;
 mod calibrate;
@@ -28,8 +29,8 @@ mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
 mod fed;
-mod fix;
 mod film;
+mod fix;
 mod fixtures;
 mod flat;
 mod frames;
@@ -37,6 +38,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod insets;
 mod indexed;
 mod interp_suite;
 mod levels;
@@ -53,10 +55,13 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
+mod op_transition;
+mod regions;
 mod scene;
 mod seam;
 mod session3;
 mod simplify;
+mod spawn;
 mod status;
 mod steps_ref;
 #[cfg(feature = "test-meter")]
@@ -64,7 +69,9 @@ mod testgpu;
 mod textures;
 mod timing;
 mod tone;
+mod trails;
 mod validation;
+mod video;
 mod view3d;
 mod warm;
 mod window;
@@ -88,6 +95,8 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #466: an operator transition aligned on its progress's half, not its output's coverage.
+    MosaicRevealByProgress,
     /// #432's wrong warm-ups (tests/acceptance/432/README.md: Planted programs): only the
     /// feature sets in use at t = 0; only each variant set's default option's fused chain; only
     /// the pipelines that draw into the view.
@@ -244,6 +253,13 @@ pub enum Planted {
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
+    /// #462's wrong programs (tests/acceptance/462/README.md: Planted programs): strokes drawn
+    /// where the previous frame's camera put them; each side of a region's edge clipped by its own
+    /// copy of the edge; status drawn in the look under it; motifs written into the document.
+    StrokesFromPreviousFrame,
+    RegionSidesClipIndependently,
+    StatusInLook,
+    MotifsWriteDocument,
     /// #421's wrong programs (tests/acceptance/421/README.md: Planted programs): front faces
     /// chosen without the world determinant; coplanar ties left to a submission order that turns
     /// over each frame; a spot's lumens spread over its cone; status outlines tone mapped.
@@ -320,6 +336,15 @@ pub enum Planted {
     /// the live rung; a frame-health drop climbed again without a view change.
     BandHysteresis,
     LightCutHysteresis,
+    /// #506's wrong programs (tests/acceptance/506/README.md: Planted programs): an eye inset
+    /// drawn from the eye through a frustum centred on the window, its picture laid on the face's
+    /// corners; a view overlay that reads the main view's backdrop, mirror or light cut from the
+    /// same frame; an inset's premultiplied render sampled as straight alpha.
+    EyeInsetCentredFrustum,
+    OneBackdropPerFrame,
+    OneMirrorPerFrame,
+    OneLightCutPerFrame,
+    InsetPremultipliedAsStraight,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -403,6 +428,11 @@ pub enum Planted {
     WaitClockAfterWarmup,
     /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
     PicksLargestGain,
+    /// #503's wrong programs: a point set's video frame chosen at a time that advances only on a
+    /// played step, so a session opened later or a seek keeps the frame decoded before it; the
+    /// video background's frame prefiltered into the environment, keyed per frame.
+    PointVideoKeepsFrameBeforeSeek,
+    VideoBackgroundPrefiltered,
     /// #449's wrong programs (tests/acceptance/449/README.md: Planted programs).
     CountCap65536EveryClass,
     CountCap1048576EveryClass,
@@ -417,6 +447,12 @@ pub enum Planted {
     SurfaceBindPose,
     InheritPreviousFrame,
     BoundsBindPose,
+    /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
+    TrailAppendsPerFrame,
+    /// #226's wrong programs (tests/acceptance/226/README.md: The planted programs).
+    AxesModAppliesTransform,
+    Axes3dOwnTickRule,
+    AxesModMapsEveryFrame,
 }
 
 impl Planted {
@@ -532,6 +568,10 @@ impl Planted {
             "surface_bind_pose" => Planted::SurfaceBindPose,
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
+            "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
+            "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
+            "axes_mod_maps_every_frame" => Planted::AxesModMapsEveryFrame,
             "velocity_from_transform" => Planted::VelocityFromTransform,
             "sampler_steps_world" => Planted::SamplerStepsWorld,
             "velocity_pairs_by_index" => Planted::VelocityPairsByIndex,
@@ -548,6 +588,11 @@ impl Planted {
             "edges_dash_other_space" => Planted::EdgesDashOtherSpace,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
+            "strokes_from_previous_frame" => Planted::StrokesFromPreviousFrame,
+            "region_sides_clip_independently" => Planted::RegionSidesClipIndependently,
+            "mosaic_reveal_by_progress" => Planted::MosaicRevealByProgress,
+            "status_in_look" => Planted::StatusInLook,
+            "motifs_write_document" => Planted::MotifsWriteDocument,
             "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
             "ties_by_submission" => Planted::TiesBySubmission,
             "spot_counts_cone" => Planted::SpotCountsCone,
@@ -604,6 +649,11 @@ impl Planted {
             "premixed_metallic" => Planted::PremixedMetallic,
             "band_hysteresis" => Planted::BandHysteresis,
             "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "eye_inset_centred_frustum" => Planted::EyeInsetCentredFrustum,
+            "one_backdrop_per_frame" => Planted::OneBackdropPerFrame,
+            "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
+            "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
+            "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,
@@ -668,6 +718,8 @@ impl Planted {
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
             "picks_largest_gain" => Planted::PicksLargestGain,
+            "point_video_keeps_frame_before_seek" => Planted::PointVideoKeepsFrameBeforeSeek,
+            "video_background_prefiltered" => Planted::VideoBackgroundPrefiltered,
             "instancer_addresses_by_slot" => Planted::InstancerAddressesBySlot,
             "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
             "line_reads_previous_step" => Planted::LineReadsPreviousStep,
@@ -902,6 +954,7 @@ impl App {
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
             Some("particles") => particles::call(self, out, call),
+            Some("trail") => trails::call(self, out, call),
             Some("simplify") => simplify::call(out, call),
             Some("workers") => textures::workers(self),
             Some("tone") => tone::call(self, out, call),
@@ -1026,10 +1079,6 @@ fn main() {
             "--planted" => match args.next().and_then(|n| Some((Planted::parse(&n)?, n))) {
                 Some((p, name)) => {
                     planted_name = Some(name);
-                    if p == Planted::DropsDispersion {
-                        deep_canvas_scene3d::gltf::DROPS_DISPERSION
-                            .store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
                     planted = Some(p)
                 }
                 None => bad_input(),

@@ -14,7 +14,11 @@ use crate::doc::Refused;
 /// A 3 × 4 affine transform: each row its linear part, then its translation.
 pub type Affine3 = [[f64; 4]; 3];
 
-pub const IDENTITY: Affine3 = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
+pub const IDENTITY: Affine3 = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+];
 
 /// Most assemblies one chain nests (Assembly: "nest more than 4 deep").
 pub const DEPTH: usize = 4;
@@ -64,19 +68,28 @@ impl Assembly {
         let value = self.held(value);
         let moved = match self.joint {
             None => IDENTITY,
-            Some(Joint { kind: Kind::Slide, axis, .. }) => {
+            Some(Joint {
+                kind: Kind::Slide,
+                axis,
+                ..
+            }) => {
                 let mut m = IDENTITY;
                 for k in 0..3 {
                     m[k][3] = axis[k] * value;
                 }
                 m
             }
-            Some(Joint { kind: Kind::Turn, axis, pivot, .. }) => turned(axis, value, pivot),
+            Some(Joint {
+                kind: Kind::Turn,
+                axis,
+                pivot,
+                ..
+            }) => turned(axis, value, pivot),
         };
         let mut m = matmul(&self.at, &moved);
         let share = share.clamp(0.0, 1.0);
-        for k in 0..3 {
-            m[k][3] += self.apart[k] * share;
+        for (row, apart) in m.iter_mut().zip(self.apart) {
+            row[3] += apart * share;
         }
         m
     }
@@ -88,9 +101,21 @@ fn turned(u: Vec3, degrees: f64, pivot: Vec3) -> Affine3 {
     let (c, s) = (cos(a), sin(a));
     let k = 1.0 - c;
     let r = [
-        [c + u[0] * u[0] * k, u[0] * u[1] * k - u[2] * s, u[0] * u[2] * k + u[1] * s],
-        [u[1] * u[0] * k + u[2] * s, c + u[1] * u[1] * k, u[1] * u[2] * k - u[0] * s],
-        [u[2] * u[0] * k - u[1] * s, u[2] * u[1] * k + u[0] * s, c + u[2] * u[2] * k],
+        [
+            c + u[0] * u[0] * k,
+            u[0] * u[1] * k - u[2] * s,
+            u[0] * u[2] * k + u[1] * s,
+        ],
+        [
+            u[1] * u[0] * k + u[2] * s,
+            c + u[1] * u[1] * k,
+            u[1] * u[2] * k - u[0] * s,
+        ],
+        [
+            u[2] * u[0] * k - u[1] * s,
+            u[2] * u[1] * k + u[0] * s,
+            c + u[2] * u[2] * k,
+        ],
     ];
     let mut m = [[0.0; 4]; 3];
     for i in 0..3 {
@@ -134,7 +159,11 @@ pub fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Affine3 {
         [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
         [-sy, cy * sx, cy * cx],
     ];
-    let s = [sc[0] * extra_scale[0], sc[1] * extra_scale[1], sc[2] * extra_scale[2]];
+    let s = [
+        sc[0] * extra_scale[0],
+        sc[1] * extra_scale[1],
+        sc[2] * extra_scale[2],
+    ];
     let mut m = [[0.0; 4]; 3];
     for i in 0..3 {
         for j in 0..3 {
@@ -156,7 +185,15 @@ pub(crate) fn placed(a: &Affine3, t: &mut [f64]) {
         }
         return;
     }
-    let m = matmul(a, &local_of([t[0], t[1], t[2]], [t[3], t[4], t[5]], [t[6], t[7], t[8]], [1.0; 3]));
+    let m = matmul(
+        a,
+        &local_of(
+            [t[0], t[1], t[2]],
+            [t[3], t[4], t[5]],
+            [t[6], t[7], t[8]],
+            [1.0; 3],
+        ),
+    );
     let mut r = [[0.0; 3]; 3];
     for j in 0..3 {
         let s = sqrt(m[0][j] * m[0][j] + m[1][j] * m[1][j] + m[2][j] * m[2][j]);
@@ -181,7 +218,11 @@ pub(crate) fn placed(a: &Affine3, t: &mut [f64]) {
 }
 
 fn refused<T>(code: &'static str, path: String, why: &str) -> Result<T, Refused> {
-    Err(Refused { code, path, detail: Some(Box::new(json!({"why": why}))) })
+    Err(Refused {
+        code,
+        path,
+        detail: Some(Box::new(json!({"why": why}))),
+    })
 }
 
 fn vec3(v: Option<&Value>, default: Vec3, path: &str) -> Result<Vec3, Refused> {
@@ -190,7 +231,10 @@ fn vec3(v: Option<&Value>, default: Vec3, path: &str) -> Result<Vec3, Refused> {
         Some(Value::Array(a)) if a.len() == 3 => {
             let mut out = [0.0; 3];
             for (o, x) in out.iter_mut().zip(a) {
-                *o = x.as_f64().filter(|x| x.is_finite()).ok_or(())
+                *o = x
+                    .as_f64()
+                    .filter(|x| x.is_finite())
+                    .ok_or(())
                     .or_else(|()| refused("out_of_range", path.to_string(), "three numbers"))?;
             }
             Ok(out)
@@ -218,19 +262,42 @@ pub fn read(doc: &Map<String, Value>) -> Result<Vec<Assembly>, Refused> {
             return refused("out_of_range", path, "an assembly is an object");
         };
         if a.contains_key("repeat") {
-            return refused("out_of_range", format!("{path}/repeat"), "an assembly's repeat is not in this build");
+            return refused(
+                "out_of_range",
+                format!("{path}/repeat"),
+                "an assembly's repeat is not in this build",
+            );
         }
         let parent = match a.get("parent") {
             None | Some(Value::Null) => None,
             Some(Value::String(p)) => match ids.iter().position(|x| *x == p) {
                 Some(i) => Some(i),
-                None => return refused("ref_unresolved", format!("{path}/parent"), "an assembly's parent is an assembly"),
+                None => {
+                    return refused(
+                        "ref_unresolved",
+                        format!("{path}/parent"),
+                        "an assembly's parent is an assembly",
+                    )
+                }
             },
-            Some(_) => return refused("out_of_range", format!("{path}/parent"), "an assembly's ID"),
+            Some(_) => {
+                return refused("out_of_range", format!("{path}/parent"), "an assembly's ID")
+            }
         };
         let at = a.get("at");
-        let field = |name: &str, default: Vec3| vec3(at.and_then(|at| at.get(name)), default, &format!("{path}/at/{name}"));
-        let at = local_of(field("pos", [0.0; 3])?, field("rot", [0.0; 3])?, field("scale", [1.0; 3])?, [1.0; 3]);
+        let field = |name: &str, default: Vec3| {
+            vec3(
+                at.and_then(|at| at.get(name)),
+                default,
+                &format!("{path}/at/{name}"),
+            )
+        };
+        let at = local_of(
+            field("pos", [0.0; 3])?,
+            field("rot", [0.0; 3])?,
+            field("scale", [1.0; 3])?,
+            [1.0; 3],
+        );
         let joint = match a.get("motion") {
             None | Some(Value::Null) => None,
             Some(Value::Object(m)) => {
@@ -238,24 +305,46 @@ pub fn read(doc: &Map<String, Value>) -> Result<Vec<Assembly>, Refused> {
                 let kind = match m.get("kind").and_then(Value::as_str) {
                     Some("slide") => Kind::Slide,
                     Some("turn") => Kind::Turn,
-                    Some("path") => return refused("out_of_range", format!("{mpath}/kind"), "a path motion is not in this build"),
+                    Some("path") => {
+                        return refused(
+                            "out_of_range",
+                            format!("{mpath}/kind"),
+                            "a path motion is not in this build",
+                        )
+                    }
                     _ => return refused("out_of_range", format!("{mpath}/kind"), "slide or turn"),
                 };
                 let Some(axis) = m.get("axis") else {
-                    return refused("out_of_range", format!("{mpath}/axis"), "a slide or turn names its axis");
+                    return refused(
+                        "out_of_range",
+                        format!("{mpath}/axis"),
+                        "a slide or turn names its axis",
+                    );
                 };
                 let axis = vec3(Some(axis), [0.0; 3], &format!("{mpath}/axis"))?;
                 let n = length(axis);
                 if n == 0.0 {
-                    return refused("out_of_range", format!("{mpath}/axis"), "an axis has a direction");
+                    return refused(
+                        "out_of_range",
+                        format!("{mpath}/axis"),
+                        "an axis has a direction",
+                    );
                 }
                 let range = match m.get("range") {
                     None | Some(Value::Null) => None,
                     Some(Value::Array(r)) if r.len() == 2 => match (r[0].as_f64(), r[1].as_f64()) {
                         (Some(lo), Some(hi)) if lo <= hi => Some((lo, hi)),
-                        _ => return refused("out_of_range", format!("{mpath}/range"), "[min, max], min first"),
+                        _ => {
+                            return refused(
+                                "out_of_range",
+                                format!("{mpath}/range"),
+                                "[min, max], min first",
+                            )
+                        }
                     },
-                    Some(_) => return refused("out_of_range", format!("{mpath}/range"), "[min, max]"),
+                    Some(_) => {
+                        return refused("out_of_range", format!("{mpath}/range"), "[min, max]")
+                    }
                 };
                 Some(Joint {
                     kind,
@@ -298,11 +387,19 @@ pub fn read(doc: &Map<String, Value>) -> Result<Vec<Assembly>, Refused> {
         let mut at = a.parent;
         while let Some(p) = at {
             if chain.contains(&p) {
-                return refused("cycle", format!("assemblies/{}/parent", a.id), "an assembly's parents loop back to it");
+                return refused(
+                    "cycle",
+                    format!("assemblies/{}/parent", a.id),
+                    "an assembly's parents loop back to it",
+                );
             }
             chain.push(p);
             if chain.len() > DEPTH {
-                return refused("out_of_range", format!("assemblies/{}/parent", a.id), "assemblies nest at most 4 deep");
+                return refused(
+                    "out_of_range",
+                    format!("assemblies/{}/parent", a.id),
+                    "assemblies nest at most 4 deep",
+                );
             }
             at = out[p].parent;
         }

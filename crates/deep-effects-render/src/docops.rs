@@ -19,11 +19,11 @@ use deep_gpu::device::Device;
 use serde_json::{json, Value};
 
 use crate::compile::{compile_planted, compile_with, Compiled};
-use deep_scene3d_render::created::{key128, Created, Log};
 use crate::mips::{Chain, Fill, Fills, Mips};
 use crate::planted::Pre;
 use crate::runner::{texture_format, Frame, Runner, LINEAR};
 use crate::structural::{Plan, Structural};
+use deep_scene3d_render::created::{key128, Created, Log};
 
 /// How one operator draws this frame, and what it drew.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,7 +102,11 @@ impl Pool {
         self.log.push(Created {
             key,
             items: items.to_vec(),
-            feature_set: if items.len() > 1 { format!("fused {kind}") } else { kind.to_string() },
+            feature_set: if items.len() > 1 {
+                format!("fused {kind}")
+            } else {
+                kind.to_string()
+            },
             target: "view".into(),
         });
         (key, runner)
@@ -164,7 +168,9 @@ pub struct Op {
 
 /// What an operator's pipeline is built from: its fused graph, or its item's own.
 fn op_build(op: &Op, builds: &BTreeMap<String, (Value, Compiled)>) -> Option<Compiled> {
-    op.fused.clone().or_else(|| builds.get(&op.item).map(|b| b.1.clone()))
+    op.fused
+        .clone()
+        .or_else(|| builds.get(&op.item).map(|b| b.1.clone()))
 }
 
 /// The frame's row for one operator: its resolution this frame and what it drew.
@@ -254,7 +260,8 @@ pub fn feeders(doc: &Value) -> BTreeSet<String> {
             let inputs = doc["items"][&id]["params"]["inputs"].as_object();
             for i in inputs.into_iter().flat_map(|m| m.values()) {
                 if let Some(op) = i["from"]["storage"]["op"].as_str() {
-                    grew |= items.is_some_and(|m| m.contains_key(op)) && early.insert(op.to_string());
+                    grew |=
+                        items.is_some_and(|m| m.contains_key(op)) && early.insert(op.to_string());
                 }
             }
         }
@@ -285,7 +292,11 @@ fn fused_marks(doc: &Value) -> Vec<(String, f64)> {
         .filter(|(id, _)| !in_groups.contains(id.as_str()))
         .filter_map(|(id, item)| {
             let g = operator_of(id, item).filter(|g| g["kind"] == "pass")?;
-            Some((g["order"].as_str().unwrap_or("a0").to_string(), id.clone(), g))
+            Some((
+                g["order"].as_str().unwrap_or("a0").to_string(),
+                id.clone(),
+                g,
+            ))
         })
         .collect();
     chain.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
@@ -295,7 +306,10 @@ fn fused_marks(doc: &Value) -> Vec<(String, f64)> {
         .filter(|run| run.len() > 1)
         .map(|run| {
             let names: Vec<&str> = run.iter().map(|&k| chain[k].0.as_str()).collect();
-            let ns = run.iter().map(|&k| chain[k].1["cost"]["ns_per_px"].as_f64().unwrap_or(0.0)).sum();
+            let ns = run
+                .iter()
+                .map(|&k| chain[k].1["cost"]["ns_per_px"].as_f64().unwrap_or(0.0))
+                .sum();
             (mark_of(&names.join("+")).to_string(), ns)
         })
         .collect()
@@ -307,12 +321,7 @@ fn item_marks(doc: &Value) -> Vec<(String, f64)> {
         .as_object()
         .into_iter()
         .flatten()
-        .filter(|(_, item)| {
-            matches!(
-                item["kind"].as_str(),
-                Some("gpu.pass@1" | "gpu.compute@1")
-            )
-        })
+        .filter(|(_, item)| matches!(item["kind"].as_str(), Some("gpu.pass@1" | "gpu.compute@1")))
         .map(|(id, item)| {
             let p = &item["params"]["cost"];
             let ns = p["ns_per_px"].as_f64().or(p["ns_per_element"].as_f64());
@@ -414,10 +423,16 @@ impl Times for Untimed {
 
 /// Records `parts` in order into a command buffer of their own and submits it.
 fn submit(device: &Device, parts: Vec<Part>) {
-    let mut enc = device.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("stepped operators"),
-    });
-    Rec { mark: "op.steps", parts }.record_passes(&mut enc, &mut Untimed, None);
+    let mut enc = device
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("stepped operators"),
+        });
+    Rec {
+        mark: "op.steps",
+        parts,
+    }
+    .record_passes(&mut enc, &mut Untimed, None);
     device.queue.submit([enc.finish()]);
 }
 
@@ -482,7 +497,11 @@ fn reads_items(c: &Checked) -> Vec<String> {
     c.op.inputs
         .values()
         .filter_map(|i| match &i.from {
-            From::Storage { op, previous: false, .. }
+            From::Storage {
+                op,
+                previous: false,
+                ..
+            }
             | From::Texture3d { op, .. }
             | From::Target { op, .. }
                 if op != "core" =>
@@ -538,7 +557,15 @@ impl DocOps {
         planted: CheckOptions,
         fail: &[String],
     ) -> DocOps {
-        Self::with(device, doc, options, planted, fail, Hooks::default(), BTreeMap::new())
+        Self::with(
+            device,
+            doc,
+            options,
+            planted,
+            fail,
+            Hooks::default(),
+            BTreeMap::new(),
+        )
     }
 
     /// [`DocOps::new`] under `hooks`, with `core` the core's storage inputs by name (#483:
@@ -553,7 +580,17 @@ impl DocOps {
         core: BTreeMap<String, wgpu::Buffer>,
     ) -> DocOps {
         let mut pool = Pool::default();
-        Self::pooled(device, doc, options, planted, fail, hooks, core, &mut pool, &Fusing::default())
+        Self::pooled(
+            device,
+            doc,
+            options,
+            planted,
+            fail,
+            hooks,
+            core,
+            &mut pool,
+            &Fusing::default(),
+        )
     }
 
     /// [`DocOps::with`], its pipelines from the session's `pool` and its chain fused as
@@ -578,11 +615,8 @@ impl DocOps {
         for (name, b) in core {
             out.storage.insert(("core".into(), name), b);
         }
-        let mut items: Vec<(&String, &Value)> = doc["items"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .collect();
+        let mut items: Vec<(&String, &Value)> =
+            doc["items"].as_object().into_iter().flatten().collect();
         items.sort_by(|a, b| a.0.cmp(b.0));
         let mut follows: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut channels = false;
@@ -606,13 +640,15 @@ impl DocOps {
             if c.op.kind == Kind::Material {
                 continue;
             }
-            channels |= c.op.inputs.values().any(|i| matches!(i.from, From::Channel(_)));
+            channels |=
+                c.op.inputs
+                    .values()
+                    .any(|i| matches!(i.from, From::Channel(_)));
             follows.insert(id.clone(), reads_items(c));
-            let structural = c
-                .op
-                .steps
-                .values()
-                .any(|s| deep_canvas_effects::table::multi_dispatch(&s.op));
+            let structural =
+                c.op.steps
+                    .values()
+                    .any(|s| deep_canvas_effects::table::multi_dispatch(&s.op));
             let declared_ns = c.op.cost.unwrap_or(c.estimate);
             let mut op = Op {
                 item: id.clone(),
@@ -653,11 +689,18 @@ impl DocOps {
             // A stepped operator (#252) steps with the document's one fixed-step clock, and binds
             // storage only.
             if let Some(rate) = c.op.stepped {
-                let st = out.stepping.get_or_insert_with(|| Stepping { rate, carried: Vec::new(), at: None, restored: None });
+                let st = out.stepping.get_or_insert_with(|| Stepping {
+                    rate,
+                    carried: Vec::new(),
+                    at: None,
+                    restored: None,
+                });
                 if st.rate != rate {
                     op.failed = Some(format!("{id} steps {rate} times a second, and the document's stepped operators step {} times", st.rate));
                 } else if !c.textures.is_empty() || !c.op.textures.is_empty() {
-                    op.failed = Some(format!("{id} is stepped, and a stepped operator reads and writes storage only"));
+                    op.failed = Some(format!(
+                        "{id} is stepped, and a stepped operator reads and writes storage only"
+                    ));
                 }
             }
             if op.kind == Kind::Compute {
@@ -672,7 +715,9 @@ impl DocOps {
                             mapped_at_creation: false,
                         })
                     };
-                    if let (Some(carry), Some(st)) = (s.carry, out.stepping.as_mut().filter(|_| op.stepped)) {
+                    if let (Some(carry), Some(st)) =
+                        (s.carry, out.stepping.as_mut().filter(|_| op.stepped))
+                    {
                         st.carried.push(Carried {
                             item: id.clone(),
                             output: name.clone(),
@@ -713,16 +758,19 @@ impl DocOps {
                     });
                     out.textures.insert(
                         (id.clone(), name.clone()),
-                        OutTex { tex, out: t.clone(), chain: None, made: false },
+                        OutTex {
+                            tex,
+                            out: t.clone(),
+                            chain: None,
+                            made: false,
+                        },
                     );
                 }
             }
             out.ops.push(op);
         }
         if channels {
-            out.program = doc
-                .as_object()
-                .and_then(|m| Program::compile(m).ok());
+            out.program = doc.as_object().and_then(|m| Program::compile(m).ok());
         }
         out.early = feeders(doc);
         // Compute first, each after what it reads; then passes by their order key, then ID.
@@ -744,7 +792,12 @@ impl DocOps {
                 .unwrap_or(0);
             placed.push(computes.remove(ready));
         }
-        let rank = |o: &Op| placed.iter().position(|p| *p == o.item).unwrap_or(usize::MAX);
+        let rank = |o: &Op| {
+            placed
+                .iter()
+                .position(|p| *p == o.item)
+                .unwrap_or(usize::MAX)
+        };
         out.ops.sort_by(|a, b| {
             (a.kind != Kind::Compute, rank(a), &a.order, &a.item).cmp(&(
                 b.kind != Kind::Compute,
@@ -759,7 +812,9 @@ impl DocOps {
         out.precise(&builds);
         // Each operator's pipeline, from the pool; the device checks each one new to it.
         for op in &mut out.ops {
-            let Some(built) = op_build(op, &builds) else { continue };
+            let Some(built) = op_build(op, &builds) else {
+                continue;
+            };
             let mut built = built;
             if fail.contains(&op.item) {
                 // The hook: the device gets a module it rejects, after the check passed.
@@ -802,20 +857,27 @@ impl DocOps {
         let ops = std::mem::take(&mut self.ops);
         let mut segment: Vec<Op> = Vec::new();
         let flush = |segment: &mut Vec<Op>, out: &mut Vec<Op>| {
-            let chain: Vec<(String, Value)> = segment.iter().map(|o| (o.item.clone(), builds[&o.item].0.clone())).collect();
+            let chain: Vec<(String, Value)> = segment
+                .iter()
+                .map(|o| (o.item.clone(), builds[&o.item].0.clone()))
+                .collect();
             let runs = deep_canvas_effects::fusion::runs(&chain, &fusing.apart);
             let mut taken: Vec<Option<Op>> = segment.drain(..).map(Some).collect();
             for run in runs {
                 let fused = (run.len() > 1)
                     .then(|| {
-                        let members: Vec<(String, Value)> = run.iter().map(|&k| chain[k].clone()).collect();
+                        let members: Vec<(String, Value)> =
+                            run.iter().map(|&k| chain[k].clone()).collect();
                         let g = deep_canvas_effects::fusion::fuse(&members)?;
                         compile_planted(&g, &BTreeMap::new(), options, planted).ok()
                     })
                     .flatten();
                 match fused {
                     Some(c) => {
-                        let parts: Vec<Op> = run.iter().map(|&k| taken[k].take().expect("once")).collect();
+                        let parts: Vec<Op> = run
+                            .iter()
+                            .map(|&k| taken[k].take().expect("once"))
+                            .collect();
                         let total: f64 = parts.iter().map(|o| o.declared_ns).sum();
                         let mut first = parts.into_iter();
                         let mut op = first.next().expect("a run of two or more");
@@ -827,7 +889,16 @@ impl DocOps {
                         op.member_ns = members.iter().map(|m| m.1).collect();
                         op.members = members
                             .iter()
-                            .map(|(i, ns)| (i.clone(), if total > 0.0 { ns / total } else { 1.0 / names.len() as f64 }))
+                            .map(|(i, ns)| {
+                                (
+                                    i.clone(),
+                                    if total > 0.0 {
+                                        ns / total
+                                    } else {
+                                        1.0 / names.len() as f64
+                                    },
+                                )
+                            })
                             .collect();
                         op.declared_ns = total;
                         op.class = c.checked.class;
@@ -841,7 +912,9 @@ impl DocOps {
         let mut out = Vec::with_capacity(ops.len());
         for op in ops {
             let joins = eligible(&op)
-                && segment.last().is_none_or(|l: &Op| builds[&l.item].0["chain"] == builds[&op.item].0["chain"]);
+                && segment
+                    .last()
+                    .is_none_or(|l: &Op| builds[&l.item].0["chain"] == builds[&op.item].0["chain"]);
             if !joins {
                 flush(&mut segment, &mut out);
             }
@@ -859,11 +932,18 @@ impl DocOps {
     /// target no other operator reads by name and whose next pass only loads the frame's color.
     fn precise(&mut self, builds: &BTreeMap<String, (Value, Compiled)>) {
         let compiled = |o: &Op| op_build(o, builds);
-        let named: BTreeSet<String> = builds.values().flat_map(|(_, c)| reads_items(&c.checked)).collect();
-        let passes: Vec<usize> = (0..self.ops.len()).filter(|&k| self.ops[k].kind == Kind::Pass).collect();
+        let named: BTreeSet<String> = builds
+            .values()
+            .flat_map(|(_, c)| reads_items(&c.checked))
+            .collect();
+        let passes: Vec<usize> = (0..self.ops.len())
+            .filter(|&k| self.ops[k].kind == Kind::Pass)
+            .collect();
         for w in passes.windows(2) {
             let (k, j) = (w[0], w[1]);
-            let (Some(a), Some(b)) = (compiled(&self.ops[k]), compiled(&self.ops[j])) else { continue };
+            let (Some(a), Some(b)) = (compiled(&self.ops[k]), compiled(&self.ops[j])) else {
+                continue;
+            };
             let loads = b.checked.textures.iter().all(|n| {
                 let core_color = matches!(&b.checked.op.inputs[n].from, From::Target { op, output } if op == "core" && output == "color");
                 !core_color || crate::runner::only_loaded(&b.checked, n)
@@ -906,7 +986,10 @@ impl DocOps {
                 let Some(step) = &i.count else { continue };
                 let buffer = |port: &str| {
                     let want = graph::Arg::Ref(step.clone(), Some(port.to_string()));
-                    let (name, _) = o.storage.iter().find(|(_, s)| s.from.as_ref() == Some(&want))?;
+                    let (name, _) = o
+                        .storage
+                        .iter()
+                        .find(|(_, s)| s.from.as_ref() == Some(&want))?;
                     self.storage.get(&(op.item.clone(), name.clone())).cloned()
                 };
                 if let (Some(rows), Some(count)) = (buffer("out"), buffer("count")) {
@@ -935,7 +1018,12 @@ impl DocOps {
             .clone()
     }
 
-    fn texture(device: &Device, label: &str, size: [u32; 2], format: wgpu::TextureFormat) -> wgpu::Texture {
+    fn texture(
+        device: &Device,
+        label: &str,
+        size: [u32; 2],
+        format: wgpu::TextureFormat,
+    ) -> wgpu::Texture {
         device.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
@@ -1021,7 +1109,8 @@ impl DocOps {
         to: &wgpu::TextureView,
         size: [u32; 2],
     ) {
-        self.blit_rec(device, from, to.clone(), size).record(encoder);
+        self.blit_rec(device, from, to.clone(), size)
+            .record(encoder);
     }
 
     /// A compute operator's storage output (or the core's storage input `name` under "core").
@@ -1056,7 +1145,9 @@ impl DocOps {
         for op in &self.ops {
             let Some(r) = &op.runner else { continue };
             for input in r.compiled.checked.op.inputs.values() {
-                let From::Channel(path) = &input.from else { continue };
+                let From::Channel(path) = &input.from else {
+                    continue;
+                };
                 let parts: Vec<&str> = path.split('/').collect();
                 if let ["items", owner, field @ ..] = parts.as_slice() {
                     let field: Vec<String> = field.iter().map(|f| f.to_string()).collect();
@@ -1111,7 +1202,12 @@ impl DocOps {
     }
 
     /// The multi-dispatch plan of a compute operator, made once its buffers are known.
-    fn plan_of(&mut self, device: &Device, item: &str, c: &Checked) -> Option<(Option<Arc<Pre>>, Arc<Plan>)> {
+    fn plan_of(
+        &mut self,
+        device: &Device,
+        item: &str,
+        c: &Checked,
+    ) -> Option<(Option<Arc<Pre>>, Arc<Plan>)> {
         if let Some(p) = self.plans.get(item) {
             return Some(p.clone());
         }
@@ -1119,11 +1215,15 @@ impl DocOps {
         let d = &device.device;
         let (id, s) = c.op.steps.iter().next()?;
         let input = |port: &str| -> Option<wgpu::Buffer> {
-            let Some(graph::Arg::Ref(name, None)) = s.args.get(port) else { return None };
+            let Some(graph::Arg::Ref(name, None)) = s.args.get(port) else {
+                return None;
+            };
             match &c.op.inputs.get(name)?.from {
-                From::Storage { op, output, previous: false } => {
-                    self.storage.get(&(op.clone(), output.clone())).cloned()
-                }
+                From::Storage {
+                    op,
+                    output,
+                    previous: false,
+                } => self.storage.get(&(op.clone(), output.clone())).cloned(),
                 _ => None,
             }
         };
@@ -1137,7 +1237,9 @@ impl DocOps {
             d.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("structural scratch"),
                 size: u64::from(n.max(1)) * 4,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
         };
@@ -1150,7 +1252,15 @@ impl DocOps {
                 let src = input("in")?;
                 let n = (src.size() / 4) as u32;
                 let dst = output(None).unwrap_or_else(|| scratch(n));
-                (None, k.0.scan(d, &src, &dst, n.min(c.op.storage.values().next().map_or(n, |o| o.count))))
+                (
+                    None,
+                    k.0.scan(
+                        d,
+                        &src,
+                        &dst,
+                        n.min(c.op.storage.values().next().map_or(n, |o| o.count)),
+                    ),
+                )
             }
             "compact@1" => {
                 let (src, flag) = (input("in")?, input("flag")?);
@@ -1174,7 +1284,10 @@ impl DocOps {
                 if self.hooks.ties_decreasing {
                     let (rk, rv) = (scratch(n), scratch(n));
                     let pre = Pre::reverse(d, &[(&keys, &rk), (&vals, &rv)], n);
-                    (Some(Arc::new(pre)), k.0.sort_by_key(d, &rk, &rv, &ko, &vo, n))
+                    (
+                        Some(Arc::new(pre)),
+                        k.0.sort_by_key(d, &rk, &rv, &ko, &vo, n),
+                    )
                 } else {
                     (None, k.0.sort_by_key(d, &keys, &vals, &ko, &vo, n))
                 }
@@ -1189,10 +1302,16 @@ impl DocOps {
     /// step, or with `previous`, a carried output as the previous step left it (#252).
     fn storage_in(&self, from: &From) -> Option<wgpu::Buffer> {
         match from {
-            From::Storage { op, output, previous: false } => {
-                self.storage.get(&(op.clone(), output.clone())).cloned()
-            }
-            From::Storage { op, output, previous: true } => self
+            From::Storage {
+                op,
+                output,
+                previous: false,
+            } => self.storage.get(&(op.clone(), output.clone())).cloned(),
+            From::Storage {
+                op,
+                output,
+                previous: true,
+            } => self
                 .stepping
                 .as_ref()?
                 .carried
@@ -1260,13 +1379,21 @@ impl DocOps {
         let behind = st.at.is_some_and(|a| target < a);
         let nearest = st.carried.first().and_then(|first| {
             first.ring.iter().rev().map(|(s, _)| *s).find(|s| {
-                *s <= target && st.carried.iter().all(|c| c.ring.iter().any(|(x, _)| x == s))
+                *s <= target
+                    && st
+                        .carried
+                        .iter()
+                        .all(|c| c.ring.iter().any(|(x, _)| x == s))
             })
         });
         match nearest {
             Some(s) if behind || st.at.is_none_or(|a| s > a) => {
                 for c in &st.carried {
-                    let (_, b) = c.ring.iter().find(|(x, _)| *x == s).expect("held by every output");
+                    let (_, b) = c
+                        .ring
+                        .iter()
+                        .find(|(x, _)| *x == s)
+                        .expect("held by every output");
                     parts.push(Part::StepCopy(b.clone(), current(c)));
                 }
                 st.at = Some(s);
@@ -1281,7 +1408,9 @@ impl DocOps {
             _ => {}
         }
         let order: Vec<usize> = (0..self.ops.len())
-            .filter(|&k| self.ops[k].stepped && self.ops[k].failed.is_none() && self.ops[k].runner.is_some())
+            .filter(|&k| {
+                self.ops[k].stepped && self.ops[k].failed.is_none() && self.ops[k].runner.is_some()
+            })
             .collect();
         let first = st.at.map_or(0, |a| a + 1);
         self.stepping = Some(st);
@@ -1305,7 +1434,10 @@ impl DocOps {
                     let key = (op.item.clone(), n.clone());
                     parts.push(Part::StepClear(self.storage[&key].clone()));
                     if out.clear != 0 {
-                        let words: Vec<u8> = std::iter::repeat_n(out.clear.to_le_bytes(), out.count.max(1) as usize).flatten().collect();
+                        let words: Vec<u8> =
+                            std::iter::repeat_n(out.clear.to_le_bytes(), out.count.max(1) as usize)
+                                .flatten()
+                                .collect();
                         let from = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some("operator clear"),
                             contents: &words,
@@ -1331,15 +1463,19 @@ impl DocOps {
                 else {
                     continue;
                 };
-                let outs: Vec<wgpu::Buffer> = c
-                    .op
-                    .storage
-                    .keys()
-                    .map(|n| self.storage[&(op.item.clone(), n.clone())].clone())
-                    .collect();
+                let outs: Vec<wgpu::Buffer> =
+                    c.op.storage
+                        .keys()
+                        .map(|n| self.storage[&(op.item.clone(), n.clone())].clone())
+                        .collect();
                 let all: Vec<&wgpu::Buffer> = ins.iter().chain(&outs).collect();
                 let (g0, g1, keep) = runner.bind_with(d, &f, [1, 1], &values, &[], &all, &[]);
-                parts.push(Part::Dispatch(runner.clone(), (g0, g1), keep, c.op.elements));
+                parts.push(Part::Dispatch(
+                    runner.clone(),
+                    (g0, g1),
+                    keep,
+                    c.op.elements,
+                ));
             }
             let every_one = self.hooks.keeps_every_checkpoint;
             let mut taken = Vec::new();
@@ -1444,10 +1580,22 @@ impl DocOps {
                     // A fused pass reads each member's params under its member's prefix.
                     for (j, (m, _)) in op_members.iter().enumerate() {
                         let p = deep_canvas_effects::fusion::prefix(j);
-                        own_params.extend(self.params.get(m).into_iter().flatten().map(|(k, v)| (format!("{p}{k}"), v.clone())));
+                        own_params.extend(
+                            self.params
+                                .get(m)
+                                .into_iter()
+                                .flatten()
+                                .map(|(k, v)| (format!("{p}{k}"), v.clone())),
+                        );
                     }
                 } else {
-                    own_params.extend(self.params.get(&item).into_iter().flatten().map(|(k, v)| (k.clone(), v.clone())));
+                    own_params.extend(
+                        self.params
+                            .get(&item)
+                            .into_iter()
+                            .flatten()
+                            .map(|(k, v)| (k.clone(), v.clone())),
+                    );
                 }
                 let values = interp::inputs(c, &own_params, roles);
                 let storage: Option<Vec<wgpu::Buffer>> = c
@@ -1458,25 +1606,28 @@ impl DocOps {
                 let mut parts = Vec::new();
                 match (kind, storage) {
                     (_, None) => drew = Drew::Fallback,
-                    (Kind::Compute, Some(_)) if structural => match self.plan_of(device, &item, c) {
-                        Some((pre, plan)) => {
-                            parts.push(Part::Clears(plan.clone()));
-                            if let Some(pre) = pre {
-                                parts.push(Part::Pre(pre));
+                    (Kind::Compute, Some(_)) if structural => {
+                        match self.plan_of(device, &item, c) {
+                            Some((pre, plan)) => {
+                                parts.push(Part::Clears(plan.clone()));
+                                if let Some(pre) = pre {
+                                    parts.push(Part::Pre(pre));
+                                }
+                                if !self.hooks.compact_by_atomic
+                                    || !c.op.steps.values().any(|s| s.op == "compact@1")
+                                {
+                                    parts.push(Part::Plan(plan));
+                                }
                             }
-                            if !self.hooks.compact_by_atomic || !c.op.steps.values().any(|s| s.op == "compact@1") {
-                                parts.push(Part::Plan(plan));
-                            }
+                            None => drew = Drew::Fallback,
                         }
-                        None => drew = Drew::Fallback,
-                    },
+                    }
                     (Kind::Compute, Some(storage)) => {
-                        let outs: Vec<wgpu::Buffer> = c
-                            .op
-                            .storage
-                            .keys()
-                            .map(|n| self.storage[&(item.clone(), n.clone())].clone())
-                            .collect();
+                        let outs: Vec<wgpu::Buffer> =
+                            c.op.storage
+                                .keys()
+                                .map(|n| self.storage[&(item.clone(), n.clone())].clone())
+                                .collect();
                         let kern = self.kernels(device);
                         // Every output starts the frame at its declared clear value, 0 (under the
                         // test hook, first filled with the pool's marker).
@@ -1486,13 +1637,16 @@ impl DocOps {
                         for (n, s) in c.op.storage.iter().filter(|(_, s)| s.clear != 0) {
                             let key = (item.clone(), n.clone());
                             let words = vec![s.clear; s.count.max(1) as usize];
-                            let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+                            let bytes: Vec<u8> =
+                                words.iter().flat_map(|w| w.to_le_bytes()).collect();
                             let from = self.clears.entry(key.clone()).or_insert_with(|| {
-                                device.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("operator clear"),
-                                    contents: &bytes,
-                                    usage: wgpu::BufferUsages::COPY_SRC,
-                                })
+                                device.device.create_buffer_init(
+                                    &wgpu::util::BufferInitDescriptor {
+                                        label: Some("operator clear"),
+                                        contents: &bytes,
+                                        usage: wgpu::BufferUsages::COPY_SRC,
+                                    },
+                                )
                             });
                             parts.push(Part::CopyBuffer(from.clone(), self.storage[&key].clone()));
                         }
@@ -1503,20 +1657,35 @@ impl DocOps {
                             let key = (item.clone(), n.clone());
                             let t = self.textures.get_mut(&key).expect("made");
                             if let Some(m) = marker {
-                                parts.push(Part::Fill(Arc::new(kern.2.fill(&device.device, &t.tex, &t.out.format, m))));
+                                parts.push(Part::Fill(Arc::new(kern.2.fill(
+                                    &device.device,
+                                    &t.tex,
+                                    &t.out.format,
+                                    m,
+                                ))));
                             }
                             if clear {
-                                parts.push(Part::Fill(Arc::new(kern.2.fill(&device.device, &t.tex, &t.out.format, [0.0; 4]))));
+                                parts.push(Part::Fill(Arc::new(kern.2.fill(
+                                    &device.device,
+                                    &t.tex,
+                                    &t.out.format,
+                                    [0.0; 4],
+                                ))));
                             }
                             views.push(t.tex.create_view(&wgpu::TextureViewDescriptor {
                                 base_mip_level: 0,
                                 mip_level_count: Some(1),
                                 ..Default::default()
                             }));
-                            if t.out.mips && !self.hooks.level0_only && !(self.hooks.old_key && t.made) {
+                            if t.out.mips
+                                && !self.hooks.level0_only
+                                && !(self.hooks.old_key && t.made)
+                            {
                                 let chain = t
                                     .chain
-                                    .get_or_insert_with(|| Arc::new(kern.1.chain(&device.device, &t.tex)))
+                                    .get_or_insert_with(|| {
+                                        Arc::new(kern.1.chain(&device.device, &t.tex))
+                                    })
                                     .clone();
                                 t.made = true;
                                 chains.push(chain);
@@ -1526,12 +1695,28 @@ impl DocOps {
                         let tex_views: Vec<wgpu::TextureView> = c
                             .textures
                             .iter()
-                            .map(|n| self.view_of(&c.op.inputs[n].from, color, ids, depth, &BTreeMap::new(), &passes))
+                            .map(|n| {
+                                self.view_of(
+                                    &c.op.inputs[n].from,
+                                    color,
+                                    ids,
+                                    depth,
+                                    &BTreeMap::new(),
+                                    &passes,
+                                )
+                            })
                             .collect();
                         let trefs: Vec<&wgpu::TextureView> = tex_views.iter().collect();
                         let vrefs: Vec<&wgpu::TextureView> = views.iter().collect();
-                        let (g0, g1, keep) =
-                            runner.bind_with(&device.device, &f, [1, 1], &values, &trefs, &all, &vrefs);
+                        let (g0, g1, keep) = runner.bind_with(
+                            &device.device,
+                            &f,
+                            [1, 1],
+                            &values,
+                            &trefs,
+                            &all,
+                            &vrefs,
+                        );
                         // An indirect dispatch: the GPU writes its arguments from its count.
                         let count = c
                             .storage_inputs
@@ -1542,20 +1727,38 @@ impl DocOps {
                         match count {
                             Some(count) => {
                                 let d = &device.device;
-                                let (plan, buffer) = self.counted.entry(item.clone()).or_insert_with(|| {
-                                    let buffer = d.create_buffer(&wgpu::BufferDescriptor {
-                                        label: Some("operator indirect dispatch"),
-                                        size: 12,
-                                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT,
-                                        mapped_at_creation: false,
+                                let (plan, buffer) =
+                                    self.counted.entry(item.clone()).or_insert_with(|| {
+                                        let buffer = d.create_buffer(&wgpu::BufferDescriptor {
+                                            label: Some("operator indirect dispatch"),
+                                            size: 12,
+                                            usage: wgpu::BufferUsages::STORAGE
+                                                | wgpu::BufferUsages::INDIRECT,
+                                            mapped_at_creation: false,
+                                        });
+                                        let plan = kern.0.dispatch_args(
+                                            d,
+                                            count,
+                                            &buffer,
+                                            c.op.workgroup,
+                                            c.op.elements,
+                                        );
+                                        (Arc::new(plan), buffer)
                                     });
-                                    let plan = kern.0.dispatch_args(d, count, &buffer, c.op.workgroup, c.op.elements);
-                                    (Arc::new(plan), buffer)
-                                });
                                 parts.push(Part::Plan(plan.clone()));
-                                parts.push(Part::DispatchIndirect(runner.clone(), (g0, g1), keep, buffer.clone()));
+                                parts.push(Part::DispatchIndirect(
+                                    runner.clone(),
+                                    (g0, g1),
+                                    keep,
+                                    buffer.clone(),
+                                ));
                             }
-                            None => parts.push(Part::Dispatch(runner.clone(), (g0, g1), keep, c.op.elements)),
+                            None => parts.push(Part::Dispatch(
+                                runner.clone(),
+                                (g0, g1),
+                                keep,
+                                c.op.elements,
+                            )),
                         }
                         parts.extend(chains.into_iter().map(Part::Mips));
                     }
@@ -1569,10 +1772,26 @@ impl DocOps {
                         // Each iterate step's runs over its two ping-pong targets (#483): run k
                         // reads the last run's output as `prev`, run 0 the target's clear value.
                         let mut iterated: BTreeMap<String, wgpu::TextureView> = BTreeMap::new();
-                        let iters: Vec<(String, u32, String, f64, wgpu::TextureFormat, Arc<Runner>)> = self.ops[k]
+                        let iters: Vec<(
+                            String,
+                            u32,
+                            String,
+                            f64,
+                            wgpu::TextureFormat,
+                            Arc<Runner>,
+                        )> = self.ops[k]
                             .iterates
                             .iter()
-                            .map(|it| (it.step.clone(), it.count, it.index.clone(), it.scale, it.format, it.runner.clone()))
+                            .map(|it| {
+                                (
+                                    it.step.clone(),
+                                    it.count,
+                                    it.index.clone(),
+                                    it.scale,
+                                    it.format,
+                                    it.runner.clone(),
+                                )
+                            })
                             .collect();
                         for (step, count, index, scale, format, body) in iters {
                             let isize = [
@@ -1580,7 +1799,14 @@ impl DocOps {
                                 ((f64::from(size[1]) * scale).round() as u32).max(1),
                             ];
                             let t: Vec<wgpu::TextureView> = (0..2)
-                                .map(|j| self.target_of(device, format!("{item}:{step}:{j}"), isize, format))
+                                .map(|j| {
+                                    self.target_of(
+                                        device,
+                                        format!("{item}:{step}:{j}"),
+                                        isize,
+                                        format,
+                                    )
+                                })
                                 .collect();
                             for v in &t {
                                 if let Some(m) = marker {
@@ -1607,13 +1833,27 @@ impl DocOps {
                                         if n == "prev" {
                                             t[prev].clone()
                                         } else {
-                                            self.view_of(&bc.op.inputs[n].from, &src, ids, depth, &iterated, &passes)
+                                            self.view_of(
+                                                &bc.op.inputs[n].from,
+                                                &src,
+                                                ids,
+                                                depth,
+                                                &iterated,
+                                                &passes,
+                                            )
                                         }
                                     })
                                     .collect();
                                 let refs: Vec<&wgpu::TextureView> = views.iter().collect();
-                                let (g0, g1, keep) = body.bind(&device.device, &f, isize, &bv, &refs, &[]);
-                                parts.push(Part::Draw(body.clone(), (g0, g1), keep, t[into].clone(), None));
+                                let (g0, g1, keep) =
+                                    body.bind(&device.device, &f, isize, &bv, &refs, &[]);
+                                parts.push(Part::Draw(
+                                    body.clone(),
+                                    (g0, g1),
+                                    keep,
+                                    t[into].clone(),
+                                    None,
+                                ));
                                 last = into;
                             }
                             iterated.insert(format!("{}.{step}", c.op.id), t[last].clone());
@@ -1621,7 +1861,16 @@ impl DocOps {
                         let views: Vec<wgpu::TextureView> = c
                             .textures
                             .iter()
-                            .map(|n| self.view_of(&c.op.inputs[n].from, &src, ids, depth, &iterated, &passes))
+                            .map(|n| {
+                                self.view_of(
+                                    &c.op.inputs[n].from,
+                                    &src,
+                                    ids,
+                                    depth,
+                                    &iterated,
+                                    &passes,
+                                )
+                            })
                             .collect();
                         let refs: Vec<&wgpu::TextureView> = views.iter().collect();
                         // Each pass writes a target of its own, never the one it reads.
@@ -1638,7 +1887,13 @@ impl DocOps {
                             let w = at(r[0] + r[2], size[0], own[0]).min(own[0]) - x;
                             [x, y, w, at(r[1] + r[3], size[1], own[1]).min(own[1]) - y]
                         });
-                        parts.push(Part::Draw(runner.clone(), (g0, g1), keep, into.clone(), within));
+                        parts.push(Part::Draw(
+                            runner.clone(),
+                            (g0, g1),
+                            keep,
+                            into.clone(),
+                            within,
+                        ));
                         let blit = (own != size).then(|| {
                             let full = self.target(device, format!("{item}:{k}:full"), size);
                             self.blit_rec(device, &into, full, size)
@@ -1694,7 +1949,13 @@ enum Part {
     CopyBuffer(wgpu::Buffer, wgpu::Buffer),
     Dispatch(Arc<Runner>, Groups, [wgpu::Buffer; 2], u32),
     DispatchIndirect(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::Buffer),
-    Draw(Arc<Runner>, Groups, [wgpu::Buffer; 2], wgpu::TextureView, Option<[u32; 4]>),
+    Draw(
+        Arc<Runner>,
+        Groups,
+        [wgpu::Buffer; 2],
+        wgpu::TextureView,
+        Option<[u32; 4]>,
+    ),
     Blit(Blit),
     Pre(Arc<Pre>),
     Plan(Arc<Plan>),
@@ -1767,7 +2028,11 @@ impl Rec {
                     let writes = match pair(used) {
                         Some((s, at)) => {
                             used += 2;
-                            Some(wgpu::ComputePassTimestampWrites { query_set: s, beginning_of_pass_write_index: Some(at), end_of_pass_write_index: Some(at + 1) })
+                            Some(wgpu::ComputePassTimestampWrites {
+                                query_set: s,
+                                beginning_of_pass_write_index: Some(at),
+                                end_of_pass_write_index: Some(at + 1),
+                            })
                         }
                         None => times.compute(i),
                     };
@@ -1779,7 +2044,11 @@ impl Rec {
                     let writes = match pair(used) {
                         Some((s, at)) => {
                             used += 2;
-                            Some(wgpu::ComputePassTimestampWrites { query_set: s, beginning_of_pass_write_index: Some(at), end_of_pass_write_index: Some(at + 1) })
+                            Some(wgpu::ComputePassTimestampWrites {
+                                query_set: s,
+                                beginning_of_pass_write_index: Some(at),
+                                end_of_pass_write_index: Some(at + 1),
+                            })
                         }
                         None => times.compute(i),
                     };
@@ -1791,7 +2060,11 @@ impl Rec {
                     let writes = match pair(used) {
                         Some((s, at)) => {
                             used += 2;
-                            Some(wgpu::RenderPassTimestampWrites { query_set: s, beginning_of_pass_write_index: Some(at), end_of_pass_write_index: Some(at + 1) })
+                            Some(wgpu::RenderPassTimestampWrites {
+                                query_set: s,
+                                beginning_of_pass_write_index: Some(at),
+                                end_of_pass_write_index: Some(at + 1),
+                            })
                         }
                         None => times.render(i),
                     };
@@ -1849,7 +2122,8 @@ impl Rec {
 
 /// The item's seed: the hash of the document's seed and its ID (Operator input: `seed`).
 pub fn item_seed(doc_seed: u64, id: &str) -> u32 {
-    let mut h = interp::hash1(doc_seed as u32) ^ interp::hash1((doc_seed >> 32) as u32 ^ 0x9e37_79b9);
+    let mut h =
+        interp::hash1(doc_seed as u32) ^ interp::hash1((doc_seed >> 32) as u32 ^ 0x9e37_79b9);
     for b in id.bytes() {
         h = interp::hash1(h ^ u32::from(b));
     }

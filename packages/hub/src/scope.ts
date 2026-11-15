@@ -4,7 +4,7 @@
 // and recorded as claim.sized. What's over the usual size or outside the plan is sent back once with the numbers;
 // still there at a later stop, it's one taste call for you; never the same question twice. A plan marked large is
 // sized when its definition locks, before any code, and one past the usual size comes to you once.
-import { execFile } from 'node:child_process';
+import { exec as run } from './children.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Asks } from '@deepbuild/asks';
@@ -79,7 +79,8 @@ export class SizeScope {
       const list = await readFile(this.o.accepted, 'utf8').then((t) => (JSON.parse(t) as { accepted?: Accepted[] }).accepted ?? []).catch(() => []);
       return list.filter((a) => a.repo === cwd);
     }
-    const log = await new Promise<string>((resolve) => execFile('git', ['-C', cwd, 'log', '--first-parent', '--no-merges', '-n', '200', '--format=%H %P %ct %s', at], { env: gitEnv(), timeout: 10_000 }, (e, out) => resolve(e ? '' : out)));
+    const { error, stdout } = await run('git', ['-C', cwd, 'log', '--first-parent', '--no-merges', '-n', '200', '--format=%H %P %ct %s', at], { env: gitEnv(), timeout: 10_000 });
+    const log = error ? '' : stdout;
     return log.split('\n').flatMap((line) => {
       const [commit, base, at, ...subject] = line.split(' ');
       const type = CONVENTIONAL.exec(subject.join(' '))?.[1];

@@ -1,0 +1,170 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/focused-wiles-3c4e5f/tests/acceptance/534
+
+ ❯ ac06-fixture-state.test.ts (2 tests | 2 failed) 419ms
+   ❯ #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played (2)
+     × #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps 96ms
+     × #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame 16ms
+ ❯ ac01-dungeon-reopen.test.ts (4 tests | 1 failed) 1417ms
+   ❯ #534.facb3458 the dungeon saved at step 1,800, quit and reopened plays on as a run that never quit (4)
+     × #534.facb3458 on the reference Mac, the reopened run's frames for the next 600 steps equal the never-quit run's bit for bit 5ms
+ ❯ ac07-adapter-fingerprint.test.ts (1 test | 1 failed) 433ms
+   ❯ #534.023b4bfb a save holding same-machine carried state binds the adapter that wrote it (1)
+     × #534.023b4bfb opened on an adapter with another fingerprint the save is refused, naming both fingerprints, and it opens on the adapter that wrote it 78ms
+ ❯ ac04-budgets.test.ts (5 tests | 5 failed) 5ms
+   ❯ #534.e281f3dd the budgets on the reference Mac (5)
+     × #534.e281f3dd rewriting a 1 MB program takes under 200 ms, once at check 3ms
+     × #534.e281f3dd a flock step takes under 0.5 ms of CPU with the metering 0ms
+     × #534.e281f3dd a checkpoint of a 4 MiB memory takes under 2 ms 0ms
+     × #534.e281f3dd a save of a 4 MiB memory reads back whole in under 50 ms, off the UI thread 0ms
+     × #534.e281f3dd a piece without logic gains no work per frame 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-dungeon-reopen.test.ts > #534.facb3458 the dungeon saved at step 1,800, quit and reopened plays on as a run that never quit > #534.facb3458 on the reference Mac, the reopened run's frames for the next 600 steps equal the never-quit run's bit for bit
+Error: BLOCKED: criterion 1's frames, bit for bit is pinned to the reference Mac; this host is linux/arm64
+ ❯ blocked helpers.ts:37:56
+     35|
+     36| /** A host or tool this machine lacks: the test fails with this messag…
+     37| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     38| /** The reference Mac's legs (frames bit for bit, the budgets): BLOCKE…
+     39| export function onReferenceMacOnly(leg: string): void {
+ ❯ onReferenceMacOnly helpers.ts:40:38
+ ❯ ac01-dungeon-reopen.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd rewriting a 1 MB program takes under 200 ms, once at check
+Error: BLOCKED: criterion 4's rewrite budget is pinned to the reference Mac; this host is linux/arm64
+ ❯ blocked helpers.ts:37:56
+     35|
+     36| /** A host or tool this machine lacks: the test fails with this messag…
+     37| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     38| /** The reference Mac's legs (frames bit for bit, the budgets): BLOCKE…
+     39| export function onReferenceMacOnly(leg: string): void {
+ ❯ onReferenceMacOnly helpers.ts:40:38
+ ❯ ac04-budgets.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a flock step takes under 0.5 ms of CPU with the metering
+Error: BLOCKED: criterion 4's flock step budget is pinned to the reference Mac; this host is linux/arm64
+ ❯ blocked helpers.ts:37:56
+     35|
+     36| /** A host or tool this machine lacks: the test fails with this messag…
+     37| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     38| /** The reference Mac's legs (frames bit for bit, the budgets): BLOCKE…
+     39| export function onReferenceMacOnly(leg: string): void {
+ ❯ onReferenceMacOnly helpers.ts:40:38
+ ❯ ac04-budgets.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a checkpoint of a 4 MiB memory takes under 2 ms
+Error: BLOCKED: criterion 4's checkpoint budget is pinned to the reference Mac; this host is linux/arm64
+ ❯ blocked helpers.ts:37:56
+     35|
+     36| /** A host or tool this machine lacks: the test fails with this messag…
+     37| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     38| /** The reference Mac's legs (frames bit for bit, the budgets): BLOCKE…
+     39| export function onReferenceMacOnly(leg: string): void {
+ ❯ onReferenceMacOnly helpers.ts:40:38
+ ❯ ac04-budgets.test.ts:78:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a save of a 4 MiB memory reads back whole in under 50 ms, off the UI thread
+Error: BLOCKED: criterion 4's save budget is pinned to the reference Mac; this host is linux/arm64
+ ❯ blocked helpers.ts:37:56
+     35|
+     36| /** A host or tool this machine lacks: the test fails with this messag…
+     37| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     38| /** The reference Mac's legs (frames bit for bit, the budgets): BLOCKE…
+     39| export function onReferenceMacOnly(leg: string): void {
+ ❯ onReferenceMacOnly helpers.ts:40:38
+ ❯ ac04-budgets.test.ts:88:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  ac04-budgets.test.ts > #534.e281f3dd the budgets on the reference Mac > #534.e281f3dd a piece without logic gains no work per frame
+Error: BLOCKED: criterion 4's no-logic frame budget is pinned to the reference Mac; this host is linux/arm64
+ ❯ blocked helpers.ts:37:56
+     35|
+     36| /** A host or tool this machine lacks: the test fails with this messag…
+     37| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     38| /** The reference Mac's legs (frames bit for bit, the budgets): BLOCKE…
+     39| export function onReferenceMacOnly(leg: string): void {
+ ❯ onReferenceMacOnly helpers.ts:40:38
+ ❯ ac04-budgets.test.ts:99:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  ac06-fixture-state.test.ts > #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played > #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps
+AssertionError: the never-quit run baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"fixture","refusals":[{"rule":"field","what":"pages isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"pages"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:387:77
+
+ ❯ neverQuit ac06-fixture-state.test.ts:54:42
+ ❯ ac06-fixture-state.test.ts:66:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  ac06-fixture-state.test.ts > #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played > #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame
+AssertionError: deep-logic --planted save_drops_linear_previous on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:178:138
+    176| export function replies(s: Started, calls: JsonValue[], what: string):…
+    177|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    178|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    179|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    180|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ run helpers.ts:205:10
+ ❯ saveAndOpen ac06-fixture-state.test.ts:58:20
+ ❯ ac06-fixture-state.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  ac07-adapter-fingerprint.test.ts > #534.023b4bfb a save holding same-machine carried state binds the adapter that wrote it > #534.023b4bfb opened on an adapter with another fingerprint the save is refused, naming both fingerprints, and it opens on the adapter that wrote it
+AssertionError: the bake on adapter A that saves baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"kind","what":"only logic@1 items are stepped here"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:387:77
+
+ ❯ ac07-adapter-fingerprint.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  4 failed | 4 passed (8)
+      Tests  9 failed | 12 passed (21)
+   Start at  03:29:30
+   Duration  8.66s (tests 98%, import 1%)
+
+    Isolate  8 workers spawned · ~64ms startup each (spawn + environment, per file)
+             at least ~450ms faster with isolate: false — reuses workers across files instead of one per file
+

@@ -1,0 +1,79 @@
+#538 acceptance suite at the base, 53c0e72a3 (Merge pull request #2356, origin/main), before any implementation. Run on
+2026-11-12 on an arm64 Mac (Mac17,10, not a reference Mac; 18 cores; one-minute load about 150 to 200 throughout), with
+deep-show built by the files (`cargo build --locked --bin deep-show`, the default set; ac7 with `--features
+test-leave-out-logic`), deep-gpu for ac8 (`cargo build --locked --bin deep-gpu`), CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0, toolchain 1.99.1 from rustup, and #544's assembler built into target/acceptance-538-wat. Each
+file was run once:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    npx vitest run tests/acceptance/538/<file> --testTimeout=600000
+
+Every test fails at an assertion in this folder that names the missing behavior: no crash, no timeout, no missing
+fixture, no build failure. 15 tests, 15 failed; none passed. `npx tsc --noEmit -p tests/acceptance/538` exits 0. No file
+was rerun.
+
+Before the run, the harness was checked against the base's real components with a probe (not committed): #407's
+localized copy (`copy: key`) drawn by `eval` in `view: {locale: "fr"}` hashes as another document's caption showing the
+same French string, and differs from the en frame; a literal `text` holding "12" is refused (`number_unsourced`),
+so the references show their strings as localized copy; a mark set of text rows draws with `encode` x, y and text, each
+row's 200 × 40 band inked and distinct; a keyed flip's two children both draw in `eval`'s frame (the flip isn't applied
+there); a frame-based `cells@1` without `play` is refused (`unknown_asset` at params/play/asset) and, without
+`requires.modules.cells`, `out_of_range`; `frames` of the still document run 23 operators on frame 0 and 0 after, the
+bare one's 5 and 0; `registry` lists the full set's modules.
+
+ac1-logic-grid.test.ts (2 failed of 2)
+- the grid: ac1-logic-grid.test.ts:98 (gridRun :83, `presented` helpers.ts:308): "the 40 × 12 grid fed by rules.cells is
+  presented": the base refuses it with `unknown_field` at items/board/params/grid ("cells@1.0 does not define `grid`")
+  and `unknown_asset` at items/board/params/play/asset and items/key/params/play/asset.
+- grid_wraps_index: ac1-logic-grid.test.ts:116 (gridRun :82, `runShow` helpers.ts:268): "deep-show run answers the
+  scenario ok (it takes the planted grid_wraps_index); got {"ok":false,"code":"bad_input"}".
+
+ac2-plural-copy.test.ts (2 failed of 2)
+- the six strings: ac2-plural-copy.test.ts:69 (copyRun :55, `presented`): the seven references (localized copy) are
+  presented and draw seven different pictures; the copy document is refused, `bad_doc` at items/caption/params/text
+  ("text.shape can't evaluate this").
+- plural_en_rule_for_fr: ac2-plural-copy.test.ts:74 (copyRun :51, `runShow`): `bad_input`.
+
+ac3-missing-key.test.ts (2 failed of 2)
+- the missing key and the orders: ac3-missing-key.test.ts:56 (keyedRun :39, `presented`): the two references are
+  presented; the copy document with its keys stored 4, 17, 9 is refused, `bad_doc` at items/caption/params/text.
+- copy_keeps_first_position: ac3-missing-key.test.ts:66 (keyedRun :36, `runShow`): `bad_input`.
+
+ac4-fit-check.test.ts (1 failed of 1)
+- ac4-fit-check.test.ts:38: the offer whose de key 23 doesn't fit is refused, but its one error is `bad_doc` at
+  items/offer/params/text, naming no key, locale or width: "expected 0 to be greater than 0".
+
+ac5-labels-locale.test.ts (2 failed of 2)
+- the labels: ac5-labels-locale.test.ts:58 (`presented`): the en and fr references are presented; the labels are
+  refused, `bad_column` at items/labels/params/columns/text/len.
+- labels_keep_first_locale: ac5-labels-locale.test.ts:77 (labelsRun, `runShow`): `bad_input`.
+
+ac6-flip.test.ts (2 failed of 2)
+- the flip: ac6-flip.test.ts:64 (`none`): the dialogue is presented and played, but "step 20 (story.line 37): the frame
+  isn't child 37 alone" and so on for every step from 20: the base draws all 40 children over each other.
+- flip_holds_last_child: ac6-flip.test.ts:73 (flipRun, `runShow`): `bad_input`.
+
+ac7-without-logic.test.ts (2 failed of 2; the build without logic)
+- the readers: ac7-without-logic.test.ts:50 (`none`): `registry` lists data, scene3d, cells, text and marks2d and not
+  logic, and the labels are refused with `module_missing` naming logic and labels, their check BLOCKED (#535's, at the
+  base); but the cell grid's errors are `unknown_asset` and `unknown_field` (check FAIL), the keyed copy's `bad_doc`
+  (check FAIL), and the dialogue, whose flip reads a logic array, is presented with no issue and its check answers PASS.
+- test-data-reads-logic-array: ac7-without-logic.test.ts:54: "deep-show declares the cargo feature
+  test-data-reads-logic-array (README: Plants): expected false to be true". No cargo build was attempted for it.
+
+ac8-budgets.test.ts (1 failed of 1)
+- ac8-budgets.test.ts:152 (measure :74, `presented`): the counters hold at the base (frames 1 to 5 of the still document
+  run 0 operators, as the bare one's do), `heap` and the 9,216-row `layer` are presented, and `goods` is refused (`bad_doc`
+  at items/ware/params/text). Nothing after it is reached: no `compares`, `remaps[].ms`, `upload_ms` or
+  `timing.copy_fit_ms`, and no `canvas-game-state` task. The timings aren't reached; on this Mac they would read
+  INCONCLUSIVE (Mac17,10 is not a reference Mac, and the load is above the cores).
+
+ac9-taste.test.ts (1 failed of 1)
+- ac9-taste.test.ts:42 (`presented`): the 40 × 12 grid is refused (`unknown_field` grid, `unknown_asset`), so no picture
+  is taken; nothing was written to docs/evidence/538/. No TASTE.json exists, and none was written.
+
+Not shown at the base, since nothing there reads a logic grid, keyed copy or a flip by array: that each planted twin,
+once it exists, fails its criterion's check naming what the criterion names (cell (12, 7); locale fr and count 0; key
+17; row 0 (labels#0); step 60; the data module and a logic array). Those failures come from the same judges that judge
+the honest program: ac1 `gridFailures`, ac2 `copyFailures`, ac3 `orderFailures`, ac5 `rowFailures`, ac6 `playFailures`,
+ac7's refusal reading.

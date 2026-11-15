@@ -871,7 +871,7 @@ export class Core {
       adopt: async (bytes) => { await this.control.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
-      row: (job, running) => this.state.jobShown(job, running),
+      row: (job, running) => this.state.jobShown(job, running), reserve: (run, usd, step) => this.ledger.reserveCovering(this.connection('core'), run, usd, step), charge: (run, usd) => this.ledger.charge(this.connection('core'), run, usd), approve: (ask, budget) => this.ledger.approveOn(this.connection('core'), ask, budget),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,

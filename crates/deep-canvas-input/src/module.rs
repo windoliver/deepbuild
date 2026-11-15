@@ -13,7 +13,11 @@ pub const INTERFACE: &str = "input@1";
 fn manifest() -> Manifest {
     Manifest {
         name: NAME.into(),
-        version: Semver { major: 1, minor: 0, patch: 0 },
+        version: Semver {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        },
         core: Range::parse("*").expect("a range"),
         depends_on: Default::default(),
         feature: NAME.into(),
@@ -25,7 +29,10 @@ fn manifest() -> Manifest {
 
 /// The input module.
 pub fn module() -> Module {
-    Module { manifest: manifest(), register }
+    Module {
+        manifest: manifest(),
+        register,
+    }
 }
 
 /// The input module with a planted program, whose `control@1` entry the kit refuses at the
@@ -33,11 +40,24 @@ pub fn module() -> Module {
 /// stamping its entry as yours.
 pub fn planted(name: &str) -> Option<Module> {
     let register: fn(&mut Registrar) = match name {
-        "drag_along_recompute" => |r| register_with(r, |kind| Planted { recompute: kind == "drag_along", ..Planted::default() }),
-        "tool_stamps_you" => |r| register_with(r, |_| Planted { tool_stamps_you: true, ..Planted::default() }),
+        "drag_along_recompute" => |r| {
+            register_with(r, |kind| Planted {
+                recompute: kind == "drag_along",
+                ..Planted::default()
+            })
+        },
+        "tool_stamps_you" => |r| {
+            register_with(r, |_| Planted {
+                tool_stamps_you: true,
+                ..Planted::default()
+            })
+        },
         _ => return None,
     };
-    Some(Module { manifest: manifest(), register })
+    Some(Module {
+        manifest: manifest(),
+        register,
+    })
 }
 
 fn register(r: &mut Registrar) {
@@ -57,13 +77,48 @@ fn register_with(r: &mut Registrar, planted: fn(&str) -> Planted) {
 /// frame), `no_keyboard` or `agent_input`. No shipped build holds it.
 pub fn with_test_kind(planted: &str) -> Module {
     let register: fn(&mut Registrar) = match planted {
-        "recompute" => |r| register_dial(r, Planted { recompute: true, ..Planted::default() }),
-        "reads_modifiers" => |r| register_dial(r, Planted { reads_modifiers: true, ..Planted::default() }),
-        "no_keyboard" => |r| register_dial(r, Planted { no_keyboard: true, ..Planted::default() }),
-        "agent_input" => |r| register_dial(r, Planted { agent_input: true, ..Planted::default() }),
+        "recompute" => |r| {
+            register_dial(
+                r,
+                Planted {
+                    recompute: true,
+                    ..Planted::default()
+                },
+            )
+        },
+        "reads_modifiers" => |r| {
+            register_dial(
+                r,
+                Planted {
+                    reads_modifiers: true,
+                    ..Planted::default()
+                },
+            )
+        },
+        "no_keyboard" => |r| {
+            register_dial(
+                r,
+                Planted {
+                    no_keyboard: true,
+                    ..Planted::default()
+                },
+            )
+        },
+        "agent_input" => |r| {
+            register_dial(
+                r,
+                Planted {
+                    agent_input: true,
+                    ..Planted::default()
+                },
+            )
+        },
         _ => |r| register_dial(r, Planted::default()),
     };
-    Module { manifest: manifest(), register }
+    Module {
+        manifest: manifest(),
+        register,
+    }
 }
 
 fn register_dial(r: &mut Registrar, planted: Planted) {

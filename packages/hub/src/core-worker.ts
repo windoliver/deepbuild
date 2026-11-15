@@ -1,5 +1,6 @@
 // The core's worker thread: the core answers each request the event loop forwards, in order, and streams
 // appended events back for subscribers.
+import './children.js';
 import { parentPort, workerData } from 'node:worker_threads';
 import type { Core, CallContext } from './core.js';
 import { createCore } from './hub-runtime.js';
@@ -10,7 +11,7 @@ import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMe
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
-  | { op: 'mcp-hello'; parent: { pid: number; start: string } | undefined; paseo?: string }
+  | { op: 'mcp-hello'; fd?: number | undefined; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
@@ -48,7 +49,7 @@ export type CoreMessage =
 export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): Promise<unknown> {
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
-    case 'mcp-hello': return core.mcpHello(request.parent, request.paseo);
+    case 'mcp-hello': return core.mcpHello(request.fd, request.parent, request.paseo);
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);

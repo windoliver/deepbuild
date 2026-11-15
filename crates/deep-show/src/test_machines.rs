@@ -139,7 +139,7 @@ fn with_swatches(lowered: &Value, input: &Value) -> Value {
 fn register(r: &mut Registrar) {
     let box_param = Param {
         name: "box",
-        ty: ParamType::Json,
+        ty: ParamType::Json("[x, y, w, h]"),
         unit: "",
         default: Value::Null,
         min: None,
@@ -241,7 +241,10 @@ pub fn module() -> Module {
             feature: "test-machines".into(),
             license: "Apache-2.0".into(),
             implements: "test.machines@1".into(),
-            implementation: deep_canvas::registry::Implementation::reference("test.machines", deep_canvas::registry::Semver::parse("1.0.0").expect("a version")),
+            implementation: deep_canvas::registry::Implementation::reference(
+                "test.machines",
+                deep_canvas::registry::Semver::parse("1.0.0").expect("a version"),
+            ),
         },
         register,
     }

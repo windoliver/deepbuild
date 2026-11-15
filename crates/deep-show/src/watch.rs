@@ -940,7 +940,8 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 // SAFETY: null or the window's live NSWindow, on the main thread.
                 let shown = unsafe { idle::window_state(st.ns_window) };
                 reply["window"] = json!({"state": shown, "shown_ms": 0});
-                reply["request_frames"] = json!(callbacks.iter().filter(|t| **t >= opened_at).count());
+                reply["request_frames"] =
+                    json!(callbacks.iter().filter(|t| **t >= opened_at).count());
                 reply["process"] = idle::spent(opened_at, opened_usage, now, idle::usage());
                 drop(callbacks);
                 drop(st);
@@ -968,7 +969,12 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         if !idle {
                             idle_since = None;
                         }
-                        let last = st.callbacks.lock().unwrap_or_else(|e| e.into_inner()).last().copied();
+                        let last = st
+                            .callbacks
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .last()
+                            .copied();
                         let quiet = last.is_none_or(|t| now - t > LINK_QUIET);
                         (idle && (quiet || now - since_idle >= LINK_GRACE)).then_some(now)
                     };

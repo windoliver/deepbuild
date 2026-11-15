@@ -1,0 +1,5 @@
+{
+ "base": "e63447beafd51cc8bdd757865e0a7f2a7935b508",
+ "made_by": "DEEP_2324_RECORD=1 npx vitest run --root tests/acceptance/2324 record.spec.ts, at the merge base, with rust-toolchain.toml's cargo first on PATH",
+ "full": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8"
+}

@@ -219,34 +219,19 @@ pub fn view(scene: &Scene, m: &Mirror, size: [u32; 2]) -> Scene {
     s.readouts.clear();
     s.motion = None;
     s.velocity = None;
+    // #506: a view inset's window draws nothing in a mirror, which views one level deep.
+    let windows: BTreeSet<&str> = scene.views.iter().map(|v| v.id.as_str()).collect();
+    s.views.clear();
     for layer in &mut s.layers {
         layer.labels.clear();
-        layer.solids.retain(|p| !m.parts.contains(&p.id));
+        layer
+            .solids
+            .retain(|p| !m.parts.contains(&p.id) && !windows.contains(p.id.as_str()));
     }
     // Nothing behind the plane: the cutaway hides where n·p < offset, beside any planes the
     // scene's own cutaway has when it hides past any of them.
     let clip = (n.map(|v| -v), -offset);
-    let cutaway = match scene.cutaway.clone() {
-        Some(mut cut)
-            if !cut.intersect
-                && cut.applies_to.is_none()
-                && cut.planes.len() < crate::cut::MAX_PLANES =>
-        {
-            cut.planes.push(clip);
-            cut
-        }
-        _ => crate::cut::Cutaway {
-            id: format!("{}#mirror", m.material),
-            planes: vec![clip],
-            intersect: false,
-            applies_to: None,
-            cap: None,
-            cap_lit: false,
-            shadows_whole: true,
-            document: true,
-        },
-    };
-    s.set_cutaway(Some(cutaway));
+    crate::views::clip(&mut s, clip, format!("{}#mirror", m.material));
     s.mirror = None;
     s.read_reflection = false;
     // A flare is the lens's, not the reflection's.

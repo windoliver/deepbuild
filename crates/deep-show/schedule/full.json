@@ -2,11 +2,11 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "9ee47c18c9c5ddb86e16e4382ebb19c99ee171bc9a99541907ed977c675db91b",
+  "set_digest": "61b8c2e7d377a485bd9cf2310a054ec67d4591228de9a85b6ce6f54c0686cc56",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
-      "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
+      "digest": "6c932b2a8efa56170d153ff1eebd957b04800110bf99d2da4385d651a2cc2bd5",
       "reference": "building",
       "kit": [
         "fixtures",
@@ -35,7 +35,7 @@
       }
     },
     "cells@1": {
-      "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
+      "digest": "2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049",
       "reference": "cells",
       "kit": [
         "fixtures",
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
+      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -93,7 +93,7 @@
       }
     },
     "effects@1": {
-      "digest": "d45a9a5ad3664b3c5a5849ae6bf54992cadea2d518fac39a4a5cc16c936dce78",
+      "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -121,8 +121,37 @@
         "state": "canonical"
       }
     },
+    "export@1": {
+      "digest": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+      "reference": "export",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "export",
+      "implementation": {
+        "name": "export",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "graph@1": {
-      "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
+      "digest": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
       "reference": "graph",
       "kit": [
         "fixtures",
@@ -180,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "8905fd3b732dfa94de4bea62a96a48dc5e2bfd887765fd226b5aad6bc6978281",
+      "digest": "caf3cb5a58ac2a30fe42d186b886d336cb219d63d8d5bee4fff01ecb98477554",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -203,13 +232,23 @@
       "implementation": {
         "name": "logic",
         "version": "1.0.0",
-        "pins": {},
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.5",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
         "equivalence": "bit",
         "state": "canonical"
       }
     },
     "look@1": {
-      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "digest": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
       "reference": "look",
       "kit": [
         "fixtures",
@@ -238,7 +277,7 @@
       }
     },
     "loop@1": {
-      "digest": "517ccd9ae52d9fbdeefdf713bfcaf8567e551b8688fde54d89c9fdf3ca7b135e",
+      "digest": "9fc00a319de12e9ec0058e38ed76d6a18251e71677be2e61548b1536daf5ed84",
       "reference": "loop",
       "kit": [
         "fixtures",
@@ -267,7 +306,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
+      "digest": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -296,7 +335,7 @@
       }
     },
     "media@1": {
-      "digest": "916933ab6dffe36479ed4ede9ccdc228140199778ef1710f452134d8459abf34",
+      "digest": "16ba0318533d04e814906d17e911f9c632fb8b1089227252dad47ec6b392c1a2",
       "reference": "media",
       "kit": [
         "fixtures",
@@ -325,7 +364,7 @@
       }
     },
     "motion@1": {
-      "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
+      "digest": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -347,6 +386,35 @@
       "module": "motion",
       "implementation": {
         "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "net@1": {
+      "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+      "reference": "net",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "net",
+      "implementation": {
+        "name": "net",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -496,7 +564,7 @@
       }
     },
     "sandbox@1": {
-      "digest": "d1233de9867cda6436ef3387c2b172be6fc73120a3d17b58406e7dcaeee6452a",
+      "digest": "bd698eefad2d6419fdbbc919a75ae9369d1266261a54f3572d1f6356ed5c2d3f",
       "reference": "sandbox",
       "kit": [
         "fixtures",
@@ -522,7 +590,7 @@
         "version": "1.0.0",
         "pins": {
           "wasmtime": {
-            "version": "=49.0.2",
+            "version": "=49.0.5",
             "features": [
               "addr2line",
               "cranelift",
@@ -536,7 +604,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "0abe3ca95c1b76308bfdf1f2cd73178bdd2590b6396db3bbd581eef2fc04928a",
+      "digest": "7f54bcff64a6dcd286b8f8105b80fe7a82577c72a20f6374a84671e452e6e75d",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -594,7 +662,7 @@
       }
     },
     "text@1": {
-      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
+      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -623,7 +691,7 @@
       }
     },
     "vector@1": {
-      "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
+      "digest": "0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -720,6 +788,21 @@
         "per": "item"
       }
     ],
+    "simulate": [
+      {
+        "operator": "logic.step",
+        "module": "logic",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "logic.state"
+        ],
+        "per": "document",
+        "step": 11760000
+      }
+    ],
     "items": [
       {
         "operator": "cells.grid",
@@ -729,7 +812,8 @@
           "self",
           "look",
           "t",
-          "reading"
+          "reading",
+          "refs"
         ],
         "writes": [
           "cells.grid"
@@ -813,6 +897,19 @@
         "per": "item"
       },
       {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.arrangelive",
         "module": "motion",
         "version": "1.0.0",
@@ -870,42 +967,6 @@
         "per": "item"
       },
       {
-        "operator": "data.decimate",
-        "module": "data",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "data.decimated"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "data.scale",
-        "module": "data",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "data.scale"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "graph.layout",
-        "module": "graph",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "graph.layout"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "motion.clock",
         "module": "motion",
         "version": "1.0.0",
@@ -919,6 +980,20 @@
         "per": "document"
       },
       {
+        "operator": "motion.flip",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.flip"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.placed",
         "module": "motion",
         "version": "1.0.0",
@@ -927,18 +1002,6 @@
         ],
         "writes": [
           "motion.placed"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "record.salience",
-        "module": "record",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "record.level"
         ],
         "per": "item"
       },
@@ -1064,6 +1127,70 @@
         "per": "item"
       },
       {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.scale",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.scale"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "graph.layout",
+        "module": "graph",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "graph.layout"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "record.salience",
+        "module": "record",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "record.level"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "sheet.place",
         "module": "sheet",
         "version": "1.0.0",
@@ -1076,6 +1203,22 @@
         "per": "item"
       },
       {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
@@ -1083,7 +1226,8 @@
           "core.fields",
           "refs",
           "reading",
-          "view(locale)"
+          "view(locale)",
+          "text.copy"
         ],
         "writes": [
           "text.counter"
@@ -1098,7 +1242,8 @@
           "core.fields",
           "text.counter",
           "view(locale)",
-          "table:text.fonts"
+          "table:text.fonts",
+          "look"
         ],
         "writes": [
           "text.run"
@@ -1236,7 +1381,10 @@
   "contributions": {
     "core.fields": [
       "data.columns",
-      "motion.fields"
+      "marks2d.warp",
+      "motion.fields",
+      "motion.flip",
+      "text.columns"
     ],
     "core.glyphs": [
       "vector.glyphs"

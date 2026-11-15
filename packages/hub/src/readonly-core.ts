@@ -68,7 +68,7 @@ export class ReadOnlyCore {
     if (method === 'hub.health' || method === 'health') return this.health();
     return Promise.reject(Error(this.why.reason));
   }
-  mcpHello(): Promise<string | null> { return Promise.resolve(null); }
+  mcpHello(): Promise<{ session: null }> { return Promise.resolve({ session: null }); }
   extensionHook(): Promise<null> { return Promise.resolve(null); }
   hookReply(): Promise<Obj> { return Promise.resolve({}); }
   /** No record to keep the rest in: the parts joined as they came (#1296). */

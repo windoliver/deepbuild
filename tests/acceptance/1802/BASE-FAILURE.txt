@@ -1,0 +1,121 @@
+Base commit: 50cf3043c ("docs(#1802): a preview ends: preview_since and decide_by on every preview entry, with its cap
+and its one extension"), which is origin/main 1c4d1f0e2 plus that docs-only commit.
+Date: 2026-11-12  darwin-arm64, Node 24.22.0
+
+Run: the vitest run was NOT RUN, and the suite is NOT type-checked. What stands in for it is a dry run of the base's
+contract step on the fixtures (below), and the base's code as read.
+
+What was not run, and why:
+
+- `npm ci`, `npm run build --workspaces`, the typecheck (`tsc -p tests/acceptance/1802/tsconfig.json`) and the vitest
+  run of the eight files that need no cargo build. The worktree was fresh (no node_modules, no dist, no target), and
+  every heavy step goes through the repo's throttle. `node scripts/throttle.mjs build --wait 90 -- npm ci` ended with
+  "INCONCLUSIVE no grant: no build grant came within 90 min". A second wait was stopped after 15 minutes with the
+  queue as it was. Another session's timed grant (throttle class `timed`, held since 18:18 UTC by a `measure-pair.mjs`
+  run that showed 0% CPU for over three hours) blocked every build on the Mac; the build and test requests of other
+  sessions queued behind it were timing out too. The step was not run unthrottled.
+- So no file was type-checked. Each TypeScript file and the planted step pass `node --check` (syntax only, Node's own
+  type stripping). The first thing to run on a machine with a grant:
+
+    npm ci && npm run build --workspaces
+    node node_modules/typescript/bin/tsc -p tests/acceptance/1802/tsconfig.json
+    NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1802 --testTimeout=600000 --no-file-parallelism \
+      ac1-decide-by-cap.test.ts ac2-decide-by-release.test.ts ac3-promoted-then-changed.test.ts ac5-extension-ask.test.ts \
+      ac7-release-notes.test.ts ac8-restored-method.test.ts ac9-two-quoted-lines.test.ts ac10-removed-again.test.ts
+
+- `ac4-removed-entry-migration.test.ts` and `ac6-deep-kinds-fields.test.ts` build `deep-show`; no cargo binary is
+  built at the base, by this job's instructions.
+- Never run at all: the asks world of `ac5-…` (`openRecord`, `openAsks`, the import of the hub's public entry), and
+  every `deep-show` call.
+
+The dry run of the base's contract step (light, so not throttled):
+
+The base's scripts/contract-diff.mjs, copied unchanged into a temporary folder, beside a stand-in for the unbuilt
+packages/contracts/dist (a d1Digest that is some stable hash of the shape, and a registry that validates nothing; the
+step uses the digest only to tell two shapes apart, and the fixture trees hold no corpus member). A script wrote the
+fixture trees the helpers write and ran the step on each, and plants/reports-only.mjs over it. The folder was deleted.
+This is the step's own logic on the fixtures, not the test files: no assertion ran. Its output, each line as printed:
+
+  ac1  deep.capped (R1, decide_by R4), check R1                exit 0  PASS contracts: 1 entries of R1 against no earlier release
+  ac1  + deep.undated (no decide_by), check R1                 exit 0  PASS contracts: 2 entries of R1 against no earlier release
+       record R1, record R2 (deep.trial, decide_by R3)         exit 0  PASS contracts: recorded R1: 1 entries / recorded R2: 1 entries
+  ac2  check R3, deep.trial still a preview                    exit 0  PASS contracts: 1 entries of R3 against R1, R2
+  ac2  deep.trial removed, check R3                            exit 0  PASS contracts: 0 entries of R3 against R1, R2
+  ac3  deep.trial promoted, check R3                           exit 0  PASS contracts: 1 entries of R3 against R1, R2
+  ac3  promoted and threshold retyped, check R3                exit 0  PASS contracts: 1 entries of R3 against R1, R2
+  ac5  decide_by patched R3 to R4, check R2                    exit 0  PASS contracts: 1 entries of R2 against R1
+  ac7  notes R3                                                exit 0  Release notes for R3: contract changes that break an earlier release /   none
+  ac8  deep.gone removed, no break file, check R2              exit 1  FAIL contracts: deep.gone: removed, a break of R1_R2 with no break file contracts/breaks/R1_R2/<issue>.txt (arrived in R1)
+                                                                       diff: R1_R2 api:deep.gone / removed
+  ac8  the same tree, plants/reports-only.mjs                  exit 0  WARN contracts: deep.gone: removed, a break of R1_R2 with no break file ... (the diff line under it)
+  ac8  with contracts/breaks/R1_R2/1802.txt, check R2          exit 0  ACCEPTED contracts: deep.gone: R1_R2, reviewed in contracts/breaks/R1_R2/1802.txt
+                                                                       PASS contracts: 1 entries of R2 against R1, 1 reviewed break
+  ac8  deep.gone restored, the file kept, check R2             exit 0  PASS contracts: 2 entries of R2 against R1
+  ac10 the file deleted, check R2                              exit 0  PASS contracts: 2 entries of R2 against R1
+  ac10 deep.gone removed again, check R2                       exit 1  FAIL contracts: deep.gone: removed, a break of R1_R2 with no break file ... (arrived in R1)
+  ac9  deep.first and deep.second removed, both quoted, R2     exit 0  ACCEPTED ... deep.first ... / ACCEPTED ... deep.second ... / PASS ..., 2 reviewed breaks
+  ac9  deep.second restored, check R2                          exit 0  ACCEPTED contracts: deep.first: R1_R2, reviewed in contracts/breaks/R1_R2/1802.txt
+                                                                       PASS contracts: 2 entries of R2 against R1, 1 reviewed break
+
+So the fixtures stand at the base as the tests need them to (a fixture tree records and checks; the removal's diff
+line is the one the break files quote; the reviewed removal passes naming its file; the unreviewed one fails with
+"no break file"), and every run a criterion needs to fail passes at the base.
+
+Why each test fails at the base, read from the base's code:
+
+- scripts/contract-diff.mjs reads `since`, `stability`, `tracking`, `deprecated_since`, `replaced_by` and
+  `stops_serving` of an entry (entriesOf) and nothing else, so `preview_since` and `decide_by` are never read:
+  historyProblems has no rule for either, for the candidate being an entry's `decide_by`, or for a `decide_by` that
+  moved. contracts/extensions.json is read by nothing.
+- breaksAgainst skips an entry when it was a preview in the earlier release or is one now ("A preview entry is
+  outside the break diff, whatever it was or became"), so a promoted entry is never diffed against the release that
+  recorded it as a preview.
+- diffAll asks, for each break, whether a break file of the pair quotes its lines. No code asks whether a quoted line
+  is still in the diff, so a break file left behind by a restored method changes nothing.
+- notes prints the accepted breaks only.
+- packages/hub/src/index.ts exports no `extendPreview`.
+- crates/deep-show/src/kinds.rs gives a preview entry `stability` and `tracking` only.
+- crates/deep-show/Cargo.toml has no `test-preview-removed` or `test-preview-removed-bare` feature.
+
+Expected failure per test (each at an assertion under tests/acceptance/1802/):
+
+ac1-decide-by-cap.test.ts
+  x #1802.1c4f47ee ... no decide_by ...          at "deep.undated, a preview since R1 that records no decide_by": the step
+                                                 exits 0 with a PASS line
+  x #1802.1c4f47ee ... 4 releases after ...      at "deep.late, a preview since R1 whose decide_by is R5": exit 0, PASS
+ac2-decide-by-release.test.ts
+  x #1802.cca13350 ... until it is stable ...    at "the preflight in R3, deep.trial's decide_by": R3 passes with
+                                                 deep.trial still a preview
+  x #1802.cca13350 ... only warns ...            at "the shipped preflight, held to the same check first": the same
+ac3-promoted-then-changed.test.ts
+  x #1802.0d11e259 ...                           at "deep.trial promoted in R3 and then reshaped in R3": exit 0, PASS
+ac4-removed-entry-migration.test.ts              (not run: builds deep-show)
+  x #1802.b8a0e044 ... 20 sampled times          at "the binary builds: deep-show with features
+                                                 full,test-preview-removed": cargo refuses a feature the crate lacks
+  x #1802.b8a0e044 ... planted removal ...       the same
+ac5-extension-ask.test.ts
+  x #1802.9ef4dcb1 ... one ask ...               at "the hub's public entry exports extendPreview": undefined
+  x #1802.9ef4dcb1 ... 3 releases later ...      the same
+  x #1802.9ef4dcb1 ... an agent's patch ...      at "deep.trial's decide_by patched from R3 to R4": exit 0, PASS
+ac6-deep-kinds-fields.test.ts                    (not run: builds deep-show)
+  x #1802.c5460f6b ... lists ...                 at "deep_kinds' listing in full,test-preview": test.preview.blob@1, and
+                                                 any other preview entry, listed with no preview_since and no decide_by
+  x #1802.c5460f6b ... leaves either out ...     at "the listing as deep_kinds gives it, held to the same check first"
+ac7-release-notes.test.ts
+  x #1802.9400be12 ... name every entry ...      at "the notes generated for R3": no item names deep.rise, deep.fall or
+                                                 deep.wait (the notes hold "none")
+  x #1802.9400be12 ... drops one ...             at "the generated notes, held to the same check first": the same
+ac8-restored-method.test.ts
+  x #1802.18e8cff0 ... the file and the line     at "the step on R2 with deep.gone restored": exit 0, PASS
+  x #1802.18e8cff0 ... only prints the line      at "the shipped step, held to the same check first": the same
+ac9-two-quoted-lines.test.ts
+  x #1802.3f79e4e6 ...                           at "the break file with deep.second restored": exit 0, PASS
+ac10-removed-again.test.ts
+  x #1802.b515e798 ... a break with no file      at "with deep.gone restored, the break file that quotes its removal is
+                                                 stale": exit 0, PASS
+  x #1802.b515e798 ... planted tree ...          the same
+
+What the fixtures lean on at the base that nothing here confirmed: the real d1 digest of the fixture params;
+`openRecord` and `openAsks` opened bare, without the supervisor #139's world opens; the hub's public entry imported
+in a vitest process; `corpus_record` with 20 times and the kit's migration part in `full,test-preview`; a module
+kind's recorded value keeping its `params.box`; the time literals `0.125s` to `2.375s` parsing to whole flicks.

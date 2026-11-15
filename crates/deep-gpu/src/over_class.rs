@@ -34,7 +34,13 @@ pub fn share(
         })
     };
     let (mut seen, mut changed) = (0usize, 0usize);
-    for ((a, b), &id) in before.chunks_exact(4).zip(after.chunks_exact(4)).zip(ids) {
+    for ((a, b), &id) in before
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(after.as_chunks::<4>().0)
+        .zip(ids)
+    {
         if !subject(id) {
             continue;
         }

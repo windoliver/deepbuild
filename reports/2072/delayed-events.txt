@@ -1,0 +1,89 @@
+
+ RUN  v5.0.5 <worktree>
+
+stdout | tests/2072-diagnose.test.ts > observes which events arrive beside a refused action
+{
+  "before": 25,
+  "after": 28,
+  "newEvents": [
+    {
+      "v": 2,
+      "id": "01M795AGSSHWXWQ83X416J52C8",
+      "kind": "session.state",
+      "writer": "core",
+      "actor": "you",
+      "scope": "you",
+      "ts": 1794530165561,
+      "log_pos": 26,
+      "data": {
+        "state": "working",
+        "cause": "working"
+      },
+      "evidence": [],
+      "subject": "session:37f3af64068c4bcfa6be2692549a31c9",
+      "session": "37f3af64-068c-4bcf-a6be-2692549a31c9",
+      "project": "work2fec671b",
+      "agent": "claude-code",
+      "verified": true
+    },
+    {
+      "v": 3,
+      "id": "01M795AGSSQPQSYN96N52BZ1EJ",
+      "kind": "row.set",
+      "writer": "core",
+      "actor": "you",
+      "scope": "you",
+      "ts": 1794530165561,
+      "log_pos": 27,
+      "data": {
+        "listed": true,
+        "order": "0|1|work|3|0001794530165312|session:37f3af64-068c-4bcf-a6be-2692549a31c9",
+        "id": "session:37f3af64-068c-4bcf-a6be-2692549a31c9",
+        "address": "session/37f3af64-068c-4bcf-a6be-2692549a31c9",
+        "title": "watch NVDA for me",
+        "project": "work",
+        "session": "37f3af64-068c-4bcf-a6be-2692549a31c9",
+        "agent": "claude-code",
+        "entry": "running",
+        "word": "working",
+        "why": "at work",
+        "waits_on": "agent",
+        "since": 1794530165312,
+        "actions": [],
+        "unread": true,
+        "doing": {
+          "words": "Running ls",
+          "at": 1794530161690,
+          "ago": false
+        }
+      },
+      "evidence": [],
+      "project": "work2fec671b",
+      "verified": true
+    },
+    {
+      "v": 1,
+      "id": "01M795AGSSRZVV5QBPZ6RAQQ3E",
+      "kind": "row.set",
+      "writer": "core",
+      "actor": "you",
+      "scope": "you",
+      "ts": 1794530165561,
+      "log_pos": 28,
+      "data": {
+        "id": "ask:01M795AGJ0VNW00YFD2VWR8T7P",
+        "listed": false
+      },
+      "evidence": [],
+      "project": "work2fec671b",
+      "verified": true
+    }
+  ]
+}
+
+ ✓ tests/2072-diagnose.test.ts > observes which events arrive beside a refused action 4468ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:36:01
+   Duration  6.72s (tests 97%, transform 2%, import 1%)

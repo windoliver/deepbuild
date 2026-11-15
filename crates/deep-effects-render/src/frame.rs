@@ -19,9 +19,9 @@ use serde_json::Value;
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
 use crate::reference::{target, upload, Camera};
+use crate::runner::{Runner, LINEAR};
 use deep_canvas_effects::graph::Tex;
 use deep_canvas_effects::interp::Image;
-use crate::runner::{Runner, LINEAR};
 
 /// One particles@1 item: its compute operator's params, its seed and how its dots draw.
 #[derive(Clone, Debug, Default)]
@@ -43,11 +43,17 @@ pub struct Sparks {
     pub draw: u32,
     /// A puff shaded at half resolution.
     pub half: bool,
-    /// #449: an item the closed-form kernel writes (closed.wgsl), its frame's uniform words, its
-    /// bake's table words, and the surface it follows as evaluated this frame; none for the
-    /// shipped graph.
-    pub closed: Option<(Vec<u32>, Arc<Vec<u32>>, Vec<f32>)>,
+    /// #449: an item the closed-form kernel writes (closed.wgsl), its frame's uniform words, one
+    /// block a dispatch (a ribbon's rows back along its length, #450), its bake's table words,
+    /// and the surface it follows as evaluated this frame; none for the shipped graph.
+    pub closed: Option<Closed>,
+    /// #450: a ribbon's segments, width in px, taper and fade; its columns hold count rows a
+    /// segment end.
+    pub ribbon: Option<(u32, f64, f64, f64)>,
 }
+
+/// A closed-form item's frame uniform words, bake table words and surface (#449).
+type Closed = (Vec<Vec<u32>>, Arc<Vec<u32>>, Vec<f32>);
 
 /// What the look, the document and the session turn on this frame, and each effect's values.
 #[derive(Clone, Debug, Default)]
@@ -68,6 +74,8 @@ pub struct Settings {
     pub roles: BTreeMap<String, [f64; 3]>,
     /// The frame's time, s.
     pub t: f64,
+    /// #462: the look's strokes on surfaces this frame, as the CPU laid them.
+    pub strokes: Option<Arc<Vec<crate::strokes::Dab>>>,
 }
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
@@ -109,6 +117,8 @@ pub struct Effects {
     /// How many of the targets the frame being planned has asked for: the rest are released.
     used: usize,
     sparks: Option<SparkDraw>,
+    /// #462's strokes draw, built the first frame that lays a stroke.
+    strokes: Option<crate::strokes::Draw>,
     /// #449's closed-form kernel, built the first frame an item needs it, and each item's bake
     /// tables on the device, uploaded once per bake.
     closed: Option<Arc<crate::closed::Closed>>,
@@ -130,6 +140,8 @@ pub struct Effects {
     pub op_canonical: bool,
     /// What each operator drew last frame.
     pub op_rows: Vec<crate::docops::Row>,
+    /// Each depth-video point set's last dispatch, by item (#503).
+    pub(crate) clouds: BTreeMap<String, crate::cloud::Held>,
 }
 
 struct SparkDraw {
@@ -179,6 +191,7 @@ impl Effects {
             targets: Vec::new(),
             used: 0,
             sparks: None,
+            strokes: None,
             closed: None,
             closed_tables: BTreeMap::new(),
             half: None,
@@ -189,6 +202,7 @@ impl Effects {
             op_resolution: BTreeMap::new(),
             op_canonical: false,
             op_rows: Vec::new(),
+            clouds: BTreeMap::new(),
         }
     }
 
@@ -208,7 +222,7 @@ impl Effects {
         self.dirt.as_ref().expect("made above").1.clone()
     }
 
-    fn runner(&mut self, device: &Device, id: &str) -> Arc<Runner> {
+    pub(crate) fn runner(&mut self, device: &Device, id: &str) -> Arc<Runner> {
         let karis = !self.planted.without_karis;
         let options = Options {
             off_by_two: self.planted.off_by_two,
@@ -406,11 +420,12 @@ impl Effects {
             }
             self.half.as_ref().expect("made above").1.clone()
         });
-        if let Some(draw) = self.sparks.as_mut().filter(|dr| dr.capacity < s.count) {
-            draw.instances = instance_buffer(d, s.count);
-            draw.capacity = s.count;
+        let rows = s.count * s.ribbon.map_or(1, |r| r.0 + 1);
+        if let Some(draw) = self.sparks.as_mut().filter(|dr| dr.capacity < rows) {
+            draw.instances = instance_buffer(d, rows);
+            draw.capacity = rows;
         }
-        let kernel = s.closed.as_ref().map(|(uniform, words, now)| {
+        let kernel = s.closed.as_ref().map(|(uniforms, words, now)| {
             let closed = self
                 .closed
                 .get_or_insert_with(|| Arc::new(crate::closed::Closed::new(device)))
@@ -429,7 +444,10 @@ impl Effects {
                 }
             };
             let instances = &self.sparks.as_ref().expect("made above").instances;
-            let bound = closed.bind(device, uniform, &tables, now, instances, s.count);
+            let bound: Vec<_> = uniforms
+                .iter()
+                .map(|u| closed.bind(device, u, &tables, now, instances, s.count))
+                .collect();
             (closed, bound)
         });
         let draw = self.sparks.as_ref().expect("made above");
@@ -475,6 +493,17 @@ impl Effects {
                 n_stops,
                 f32::from(u8::from(s.half && self.planted.block_copy)),
             ])
+            .chain(match s.ribbon {
+                Some((n, w, taper, fade)) => [
+                    s.count as f32,
+                    n as f32,
+                    w as f32,
+                    taper as f32,
+                    fade as f32,
+                ],
+                None => [0.0; 5],
+            })
+            .chain([0.0; 3])
             .chain(stops.iter().map(|st| st.0 as f32))
             .chain(
                 stops
@@ -541,10 +570,12 @@ impl Effects {
         });
         let pipeline = draw.pipeline.clone();
         let profiler = self.profiler.clone();
-        let count = s.count;
+        // A ribbon draws a quad a segment of each particle (#450).
+        let count = s.count * s.ribbon.map_or(1, |r| r.0);
         Box::new(move |encoder| {
             let _keep = &ub;
-            if let Some((closed, bound)) = &kernel {
+            for bound in kernel.iter().flat_map(|(_, b)| b) {
+                let closed = &kernel.as_ref().expect("a bound kernel").0;
                 match &profiler {
                     Some(p) => {
                         let p = p.lock().unwrap_or_else(|e| e.into_inner());
@@ -726,6 +757,21 @@ impl Post for Effects {
                 ),
             ));
             cur = out;
+        }
+        if let Some(dabs) = s.strokes.as_ref().filter(|d| !d.is_empty()) {
+            let draw = self
+                .strokes
+                .get_or_insert_with(|| crate::strokes::Draw::new(device));
+            let job = draw.job(
+                device,
+                frame.clip,
+                dabs,
+                cur.clone(),
+                frame.depth.clone(),
+                size,
+                self.profiler.clone(),
+            );
+            jobs.push((crate::strokes::STROKES.into(), job));
         }
         for sp in &s.sparks {
             let job = self.sparks_job(device, &camera, sp, cur.clone(), frame.depth.clone(), size);
@@ -931,7 +977,13 @@ impl Post for Shared {
             (Some(ops), _) => ops
                 .ops
                 .iter()
-                .map(|o| (o.mark.to_string(), o.declared_ns, ops.early.contains(&o.item)))
+                .map(|o| {
+                    (
+                        o.mark.to_string(),
+                        o.declared_ns,
+                        ops.early.contains(&o.item),
+                    )
+                })
                 .collect(),
             (None, Some((doc, ..))) => {
                 let early = crate::docops::feeders(doc);
@@ -956,8 +1008,16 @@ impl Post for Shared {
                 vec!["linear", "depth", "shadow"],
                 0.15,
             ),
-            pass(SPARKS, "effects", 2, vec!["linear", "depth"], 0.05),
-            pass(OUTLINE, "effects", 3, vec!["linear", "ids"], 0.06),
+            // #462: a look's strokes on surfaces, before the particles (an estimate).
+            pass(
+                crate::strokes::STROKES,
+                "effects",
+                2,
+                vec!["linear", "depth"],
+                0.05,
+            ),
+            pass(SPARKS, "effects", 3, vec!["linear", "depth"], 0.05),
+            pass(OUTLINE, "effects", 4, vec!["linear", "ids"], 0.06),
             pass(GLOW, "bloom", 0, vec!["linear"], 0.25),
         ];
         for (k, (name, ns, early)) in marks.into_iter().enumerate() {
@@ -970,7 +1030,7 @@ impl Post for Shared {
             out.push(Pass {
                 name,
                 place,
-                order: 4 + k as u32,
+                order: 5 + k as u32,
                 reads,
                 writes: if early { Vec::new() } else { vec!["linear"] },
                 resolution: Resolution::Full,

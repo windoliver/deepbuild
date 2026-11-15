@@ -1,5 +1,5 @@
 //! Spike #245: the steering fixture's step blocks in both forms (canvas primitives: Logic: step
-//! blocks), on sandbox@1's rewritten program in wasmtime =49.0.2 with deep-sandbox-wasmtime's
+//! blocks), on sandbox@1's rewritten program in wasmtime =49.0.5 with deep-sandbox-wasmtime's
 //! engine settings.
 //!
 //! - `one_instance`: one instance runs `step(k)`, then each block in turn; after block b its slices
@@ -819,7 +819,7 @@ fn main() {
         "rate_hz": RATE_HZ,
         "warmup_steps": WARMUP,
         "os_page_bytes": unsafe { libc::sysconf(libc::_SC_PAGESIZE) },
-        "wasmtime": "49.0.2",
+        "wasmtime": "49.0.5",
         "rewritten_sha256": hash(&bytes),
         "same_bits": one.hashes == cow.hashes,
         "forms": {"one_instance": summary(&one, 1), "copy_on_write": summary(&cow, THREADS)},

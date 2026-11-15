@@ -1,0 +1,107 @@
+# The new tests on the merge base's build (9b77cd2cd), before the fix. Paths are redacted.
+# node node_modules/vitest/vitest.mjs run --no-file-parallelism packages/hub/test/confirm-order.test.ts packages/hub/test/hosts.test.ts packages/hub/test/library-command.test.ts
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ packages/hub/test/hosts.test.ts (3 tests | 1 failed) 8025ms
+   × a host refused when your SSH config names none says so, and offers no name to give 1584ms
+ ❯ packages/hub/test/confirm-order.test.ts (1 test | 1 failed) 3130ms
+   × a library or a pack the hub does not hold is refused, naming it, before the OS is asked to confirm you, and a library left on is still turned off 2982ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/confirm-order.test.ts > a library or a pack the hub does not hold is refused, naming it, before the OS is asked to confirm you, and a library left on is still turned off
+AssertionError: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep library on ext.none.library: exit 2, stdout \"\", stderr \"no loaded package registers the library ext.none.library.\\n\", the OS was asked to confirm \"turn ext.none.library on\"",
++   "deep library rule ext.none.library CC0-1.0: exit 2, stdout \"\", stderr \"no loaded package registers the library ext.none.library.\\n\", the OS was asked to confirm \"let ext.none.library fetch under CC0-1.0 with no ask\"",
++   "deep library off ext.none.library: exit 0, stdout \"Turned ext.none.library off.\\n\", stderr \"\", the OS was asked to confirm \"turn ext.none.library off\"",
++   "deep pack rule none/pack CC0-1.0: exit 3, stdout \"\", stderr \"no installed pack none/pack\\n\", the OS was asked to confirm \"allow none/pack to fetch assets under CC0-1.0\"",
++ ]
+
+ ❯ packages/hub/test/confirm-order.test.ts:32:21
+
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/confirm-order.test.ts:19:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/hosts.test.ts > a host refused when your SSH config names none says so, and offers no name to give
+AssertionError: expected 'nas isn\'t a host your SSH config (~/…' to contain 'It names no host.'
+
+- Expected
++ Received
+
+- It names no host.
++ nas isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. Name one of: none.
++
+
+ ❯ packages/hub/test/hosts.test.ts:57:28
+     55|     expect(unnamed.code, unnamed.stdout).toBe(1);
+     56|     expect(unnamed.stderr).toContain("nas isn't a host your SSH config…
+     57|     expect(unnamed.stderr).toContain('It names no host.');
+       |                            ^
+     58|     expect(unnamed.stderr).not.toContain('Name one of');
+     59|   });
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/hosts.test.ts:53:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 4 passed (6)
+   Start at  14:09:43
+   Duration  28.84s (tests 98%, transform 1%)
+
+exit 1
+
+# A build of the change in which the OS's refusal no longer stops a library change (trusted-actions.js: if (false && why)):
+# node node_modules/vitest/vitest.mjs run packages/hub/test/library-command.test.ts
+   × deep library on puts an installed library in the search, rule fetches its license with no ask, and off takes it out, naming the command that turns it on 14935ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected +0 to be 3 // Object.is equality
+      Tests  1 failed | 1 passed (2)
+exit 1
+
+# A build of the change in which off refuses every library nothing registers, one left on included (libraries.js):
+# node node_modules/vitest/vitest.mjs run packages/hub/test/confirm-order.test.ts
+   × a library or a pack the hub does not hold is refused, naming it, before the OS is asked to confirm you, and a library left on is still turned off 3571ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: no loaded package registers the library ext.gone.library.
+-   "asked": "turn ext.gone.library off
+-   "code": 0,
+-   "stdout": "Turned ext.gone.library off.
++   "asked": "",
++   "code": 2,
++   "stdout": "",
+      Tests  1 failed (1)
+exit 1
+
+# The same commands on a build of the change, in a throwaway home with the OS's confirmation stood in as confirmed:
+$ deep library on nosuch
+exit 2
+stderr: no loaded package registers the library nosuch.
+$ deep library rule nosuch MIT
+exit 2
+stderr: no loaded package registers the library nosuch.
+$ deep library off nosuch
+exit 2
+stderr: no loaded package registers the library nosuch.
+$ deep pack rule a/b MIT
+exit 2
+stderr: No pack a/b is installed; deep install <pack folder> installs one.
+$ deep host facts nas
+exit 1
+stderr: nas isn't a host your SSH config (~/.ssh/config) names, so DeepBuild won't contact it. It names no host.
+$ deep job rule tool@1.0.0 1
+exit 0
+stdout: tool@1.0.0 runs at up to $1 a run with no ask.
+$ deep person revoke someone
+exit 0
+stdout: Revoked 0 of someone's credentials and invites.

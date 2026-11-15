@@ -72,6 +72,20 @@
         "per": "document"
       },
       {
+        "operator": "motion.flip",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.flip"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.placed",
         "module": "motion",
         "version": "1.0.0",
@@ -87,7 +101,8 @@
   },
   "contributions": {
     "core.fields": [
-      "motion.fields"
+      "motion.fields",
+      "motion.flip"
     ],
     "core.transform": [
       "motion.at",

@@ -1,0 +1,248 @@
+Issue #2065 acceptance tests on unmodified base 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+
+Selection: node scripts/affected.mjs tests/acceptance/2065/restart.test.ts
+Environment and exact command: README.md. No production or existing test changes.
+
+The outer bash harness timed out after 600 seconds (including runner/lint startup).
+The affected.mjs-started Vitest child completed afterwards: 7 tests, 7 behavioral failures.
+Its complete vitest.jsonl ends with {"type":"end"}; no setup failure, skip or unhandled error.
+The parent's aggregate summary is unavailable: INCONCLUSIVE runner completion, not a test pass.
+No WIDE selection was printed. Explicit --list selected only this new test file.
+
+Frozen SHA-256:
+bac3e3cb3fc79bccc356d8f19e44a0935bfc1f89f2bbb004322719fb4d9d267e  restart.test.ts
+4d6917fad8a2ac29f37ef166967f7b923dc640053558ee5cf2d8163fff714d2a  hook-peer.mjs
+
+--- Complete Vitest output from that affected.mjs invocation ---
+
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2065/restart.test.ts` runs unleased
+
+ RUN  v5.0.5 /private/tmp/db2065-base.ZvvpxW
+
+xxxxxxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC1 #2065.d984fab2 stalled claim's ask answered split after a hub restart records one issue.drafted listing the open items
+AssertionError: AC1 #2065.d984fab2 ask:01M7CPXKXRJRFE6AKR6DDSZ1DP split after restart must record one issue.drafted for task:item206501; recorded 0: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2065/restart.test.ts:119:135
+    117|   const events = await settle(hub, (all) => drafts(all, ask).length > …
+    118|   const found = drafts(events, ask);
+    119|   expect(found.length, `${AC1} ask:${ask.id} split after restart must …
+       |                                                                                                                                       ^
+    120|   expect(found[0]!.data.task_ref, `${AC1} ask:${ask.id} drafts its sta…
+    121|   expect(found[0]!.data.items.map((i: { id: string; text: string }) =>…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart
+AssertionError: AC2 #2065.5b02fc15 task task:item206502, ask:01M7CQ1YZQ5XPHW0PP1GB2TBCG: accept after restart must let Closes run; DeepBuild blocked this: the pull request can't say Closes #206502 while a requirement of task:item206502 is unproven. Say Part of #206502 instead, and list what's left: R1 ("A dropped connection is retried"); R2 ("Each rejected token is logged").: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2065/restart.test.ts:139:132
+    137|   const second = await closes(s, n);
+    138|   // Read both before asserting: the base must be observed refusing bo…
+    139|   expect.soft(decision(first), `${AC2} task ${ref}, ask:${ask.id}: acc…
+       |                                                                                                                                    ^
+    140|   expect.soft(decision(second), `${AC2} task ${ref}: Closes must still…
+    141| }, 240_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart
+AssertionError: AC2 #2065.5b02fc15 task task:item206502: Closes must still run after the second restart; DeepBuild blocked this: the pull request can't say Closes #206502 while a requirement of task:item206502 is unproven. Say Part of #206502 instead, and list what's left: R1 ("A dropped connection is retried"); R2 ("Each rejected token is logged").: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2065/restart.test.ts:140:125
+    138|   // Read both before asserting: the base must be observed refusing bo…
+    139|   expect.soft(decision(first), `${AC2} task ${ref}, ask:${ask.id}: acc…
+    140|   expect.soft(decision(second), `${AC2} task ${ref}: Closes must still…
+       |                                                                                                                             ^
+    141| }, 240_000);
+    142|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC3 #2065.e0ad4590 stays off survives restart: Closes runs with no second reject_expired ask, in a second worktree too
+AssertionError: AC3 #2065.e0ad4590 switch reject_expired, original worktree: stays off must survive restart; DeepBuild blocked this: the pull request can't say Closes #206503 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206503 instead.: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2065/restart.test.ts:195:146
+    193|   const asks = switchAsks(await allEvents(hub));
+    194|   for (const [i, r] of attempts.entries()) expect.soft(decision(r),
+    195|     `${AC3} switch ${SWITCH}, ${i ? 'second worktree of the same repo'…
+       |                                                                                                                                                  ^
+    196|   expect.soft(asks.map((a) => a.id), `${AC3} switch ${SWITCH}: no seco…
+    197| }, 240_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC3 #2065.e0ad4590 stays off survives restart: Closes runs with no second reject_expired ask, in a second worktree too
+AssertionError: AC3 #2065.e0ad4590 switch reject_expired, second worktree of the same repo: stays off must survive restart; DeepBuild blocked this: the pull request can't say Closes #206504 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206504 instead.: expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ tests/acceptance/2065/restart.test.ts:195:146
+    193|   const asks = switchAsks(await allEvents(hub));
+    194|   for (const [i, r] of attempts.entries()) expect.soft(decision(r),
+    195|     `${AC3} switch ${SWITCH}, ${i ? 'second worktree of the same repo'…
+       |                                                                                                                                                  ^
+    196|   expect.soft(asks.map((a) => a.id), `${AC3} switch ${SWITCH}: no seco…
+    197| }, 240_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC3 #2065.e0ad4590 stays off survives restart: Closes runs with no second reject_expired ask, in a second worktree too
+AssertionError: AC3 #2065.e0ad4590 switch reject_expired: no second ask after restart, including the second worktree; got ask:01M7CQ5FYK7NM76D4JQ6QA5GBG, ask:01M7CQ5RGEAW1A39XZNX9NTXCK, ask:01M7CQ5VVD29DCZ6APG8R1R4QF: expected [ '01M7CQ5FYK7NM76D4JQ6QA5GBG', …(2) ] to deeply equal [ '01M7CQ5FYK7NM76D4JQ6QA5GBG' ]
+
+- Expected
++ Received
+
+  [
+    "01M7CQ5FYK7NM76D4JQ6QA5GBG",
++   "01M7CQ5RGEAW1A39XZNX9NTXCK",
++   "01M7CQ5VVD29DCZ6APG8R1R4QF",
+  ]
+
+ ❯ tests/acceptance/2065/restart.test.ts:196:175
+    194|   for (const [i, r] of attempts.entries()) expect.soft(decision(r),
+    195|     `${AC3} switch ${SWITCH}, ${i ? 'second worktree of the same repo'…
+    196|   expect.soft(asks.map((a) => a.id), `${AC3} switch ${SWITCH}: no seco…
+       |                                                                                                                                                                               ^
+    197| }, 240_000);
+    198|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC4 #2065.4d4ad2b8 task sent back twice without new evidence, then restart: next claim.sent_back is round 3, not round 1
+AssertionError: AC4 #2065.4d4ad2b8 task task:item2065040: third send-back after restart must be recorded as round 3, never restart at round 1: expected [ 1, 2, 1 ] to deeply equal [ 1, 2, 3 ]
+
+- Expected
++ Received
+
+  [
+    1,
+    2,
+-   3,
++   1,
+  ]
+
+ ❯ tests/acceptance/2065/restart.test.ts:225:147
+    223|   const r = await s.stop(`Still open:\n- A dropped connection is retri…
+    224|   expect(sentBack(r), `${AC4} setup: ${ref} next stop is sent back; ${…
+    225|   expect(rounds(await allEvents(hub)), `${AC4} task ${ref}: third send…
+       |                                                                                                                                                   ^
+    226| }, 240_000);
+    227|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC5 #2065.ae196407 planted price, one paid check locks, restart, approve budget ask: one spend.approved with asked cap $4.00
+AssertionError: AC5 #2065.ae196407 ask:01M7CQ8AQPGQVY8P6CPCSTKQCC: approve after restart must record one spend.approved with asked cap $4.00; recorded 0: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2065/restart.test.ts:247:157
+    245|   const after = await settle(hub, (all) => all.some((e) => e.kind === …
+    246|   const approvals = after.filter((e) => e.kind === 'spend.approved' &&…
+    247|   expect(approvals.length, `${AC5} ask:${ask.id}: approve after restar…
+       |                                                                                                                                                             ^
+    248|   expect(approvals[0]!.data, `${AC5} ask:${ask.id} approves this issue…
+    249| }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by answer: refused Closes must not say "you're asked in your inbox"
+AssertionError: AC6 #2065.f0caaac6 ask:01M7CQ9ZDXDV9E7W17Y0B1418X closed by answer, no ask open: refusal must not say "you're asked in your inbox"; DeepBuild blocked this: the pull request can't say Closes #206506 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206506 instead.: expected 'DeepBuild blocked this: the pull requ…' not to contain 'you\'re asked in your inbox'
+
+Expected: "you're asked in your inbox"
+Received: "DeepBuild blocked this: the pull request can't say Closes #206506 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206506 instead."
+
+ ❯ tests/acceptance/2065/restart.test.ts:263:139
+    261|   expect(decision(r), `${AC6} not yet still refuses Closes`).toBe('den…
+    262|   const text = replyText(r);
+    263|   expect.soft(text, `${AC6} ask:${ask.id} closed by ${how}, no ask ope…
+       |                                                                                                                                           ^
+    264|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal keeps the PR at …
+    265|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal must explain it …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by answer: refused Closes must not say "you're asked in your inbox"
+AssertionError: AC6 #2065.f0caaac6 switch reject_expired: refusal must explain it waits until the switch is on; DeepBuild blocked this: the pull request can't say Closes #206506 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206506 instead.: expected 'DeepBuild blocked this: the pull requ…' to match /until[^.\n]*(?:\bon\b|enabled|switch…/i
+
+- Expected:
+/until[^.\n]*(?:\bon\b|enabled|switched on)/i
+
++ Received:
+"DeepBuild blocked this: the pull request can't say Closes #206506 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206506 instead."
+
+ ❯ tests/acceptance/2065/restart.test.ts:265:111
+    263|   expect.soft(text, `${AC6} ask:${ask.id} closed by ${how}, no ask ope…
+    264|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal keeps the PR at …
+    265|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal must explain it …
+       |                                                                                                               ^
+    266|   expect.soft(await openInbox(hub), `${AC6} not yet by ${how} must not…
+    267| }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by deadline: refused Closes must not say "you're asked in your inbox"
+AssertionError: AC6 #2065.f0caaac6 ask:01M7CQAMAQZNJ8ENERF2NA2RW9 closed by deadline, no ask open: refusal must not say "you're asked in your inbox"; DeepBuild blocked this: the pull request can't say Closes #206507 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206507 instead.: expected 'DeepBuild blocked this: the pull requ…' not to contain 'you\'re asked in your inbox'
+
+Expected: "you're asked in your inbox"
+Received: "DeepBuild blocked this: the pull request can't say Closes #206507 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206507 instead."
+
+ ❯ tests/acceptance/2065/restart.test.ts:263:139
+    261|   expect(decision(r), `${AC6} not yet still refuses Closes`).toBe('den…
+    262|   const text = replyText(r);
+    263|   expect.soft(text, `${AC6} ask:${ask.id} closed by ${how}, no ask ope…
+       |                                                                                                                                           ^
+    264|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal keeps the PR at …
+    265|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal must explain it …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  tests/acceptance/2065/restart.test.ts > AC6 #2065.f0caaac6 switch ask closed on not yet by deadline: refused Closes must not say "you're asked in your inbox"
+AssertionError: AC6 #2065.f0caaac6 switch reject_expired: refusal must explain it waits until the switch is on; DeepBuild blocked this: the pull request can't say Closes #206507 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206507 instead.: expected 'DeepBuild blocked this: the pull requ…' to match /until[^.\n]*(?:\bon\b|enabled|switch…/i
+
+- Expected:
+/until[^.\n]*(?:\bon\b|enabled|switched on)/i
+
++ Received:
+"DeepBuild blocked this: the pull request can't say Closes #206507 while the change ships behind reject_expired (off in config/deployed.json), until you decide it stays off; you're asked in your inbox. Say Part of #206507 instead."
+
+ ❯ tests/acceptance/2065/restart.test.ts:265:111
+    263|   expect.soft(text, `${AC6} ask:${ask.id} closed by ${how}, no ask ope…
+    264|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal keeps the PR at …
+    265|   expect.soft(text, `${AC6} switch ${SWITCH}: refusal must explain it …
+       |                                                                                                               ^
+    266|   expect.soft(await openInbox(hub), `${AC6} not yet by ${how} must not…
+    267| }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed (7)
+   Start at  01:39:32
+   Duration  538.23s (tests 100%)
+

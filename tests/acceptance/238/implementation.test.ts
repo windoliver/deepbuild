@@ -6,7 +6,7 @@
 // implementation sandbox.alt in its place (README: Test builds); `--planted digest_covers_pins` is the twin.
 import { describe, expect, it } from 'vitest';
 import {
-  DIGEST, PATCH_49, SCHEDULE, arr, caseKey, deepShow, kitOf, obj, prebuild, refusalLine, runShow, scenario, show, started, startup, str, useTemp,
+  DIGEST, PATCH, SCHEDULE, arr, caseKey, deepShow, kitOf, obj, prebuild, refusalLine, runShow, scenario, show, started, startup, str, useTemp,
   type JsonObject, type Kit, type ShowFeature,
 } from './helpers.ts';
 
@@ -27,7 +27,7 @@ function sandboxPart(reply: JsonObject, what: string): Kit {
 const sandboxIface = (sched: JsonObject, what: string): JsonObject => obj(obj(sched['interfaces'], `${what}: interfaces`)['sandbox@1'], `${what}: interfaces["sandbox@1"]`);
 
 describe(`${ID} a test sandbox implementation pinning another wasmtime patch seals in the shipped one's place with sandbox@1's digest unchanged`, () => {
-  it(`${ID} sandbox.alt, pinning another wasmtime 49.0 patch, passes sandbox@1's kit bit for bit and seals in sandbox's place with sandbox@1's digest unchanged`, () => {
+  it(`${ID} sandbox.alt, pinning another wasmtime patch, passes sandbox@1's kit bit for bit and seals in sandbox's place with sandbox@1's digest unchanged`, () => {
     const [shippedSched, shippedKit] = runShow(deepShow(SHIPPED), scenario(temp(), [SCHEDULE, KIT_CALL]));
     const [altSched, altKit] = runShow(deepShow(ALT), scenario(temp(), [SCHEDULE, KIT_CALL]));
     const shipped = sandboxIface(shippedSched!, 'the shipped build');
@@ -38,9 +38,9 @@ describe(`${ID} a test sandbox implementation pinning another wasmtime patch sea
     expect([alt['module'], ai['equivalence'], ai['state']], 'sandbox.alt is the sandbox module\'s implementation, bit and canonical').toEqual(['sandbox', 'bit', 'canonical']);
     const sv = str(obj(obj(si['pins'], 'shipped pins')['wasmtime'], 'shipped pins.wasmtime')['version'], 'shipped wasmtime pin');
     const av = str(obj(obj(ai['pins'], 'alt pins')['wasmtime'], 'alt pins.wasmtime')['version'], 'sandbox.alt wasmtime pin');
-    expect(sv, 'the shipped implementation pins wasmtime =49.0.2').toBe('=49.0.2');
-    expect(av, 'sandbox.alt pins a wasmtime 49.0 patch').toMatch(PATCH_49);
-    expect(av.replace(/^=/, ''), 'sandbox.alt pins another patch than 49.0.2').not.toBe('49.0.2');
+    expect(sv, 'the shipped implementation pins wasmtime =49.0.5').toBe('=49.0.5');
+    expect(av, 'sandbox.alt pins an exact wasmtime patch release').toMatch(PATCH);
+    expect(av.replace(/^=/, ''), 'sandbox.alt pins another patch than 49.0.5').not.toBe('49.0.5');
     expect(str(shipped['digest'], 'shipped digest'), 'sandbox@1\'s digest').toMatch(DIGEST);
     expect(alt['digest'], 'sandbox@1\'s digest is unchanged by the other implementation and its pins').toBe(shipped['digest']);
 

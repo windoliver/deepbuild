@@ -10,7 +10,8 @@
           "self",
           "look",
           "t",
-          "reading"
+          "reading",
+          "refs"
         ],
         "writes": [
           "cells.grid"

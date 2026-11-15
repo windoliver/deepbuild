@@ -5,6 +5,7 @@ import { shipped } from '@deepbuild/adapters';
 import { cwdOf, openArchive } from '@deepbuild/archive';
 import { runCommandCheck } from '@deepbuild/checks-command';
 import { itemOutcomes } from '@deepbuild/checks-review';
+import { removalPlan, runEval } from '@deepbuild/config-eval';
 import { answers, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
 import { gateTokens, openGitHub, repoOf, revoke, sessionToken } from '@deepbuild/github';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
@@ -16,6 +17,7 @@ import { Kinds } from './kinds.js';
 import { pageClaims, type IndexFill } from './search.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf } from './wiki-build.js';
 import type { CoreOptions } from './wire.js';
+import { Intake } from './intake.js';
 import { Workspaces } from './workspaces.js';
 
 /** Synchronous construction; started() still waits for the original ordered asynchronous initialization. */
@@ -44,6 +46,10 @@ export function createCore(
     },
     decisions: { resolver: resolverDecisions, evidence, judge },
     knowledge: {
+      removal: async (reader, read, change) => {
+        const input = await removalPlan(reader, read, change);
+        return { plan: input.plan, evaluate: ({ folder, ...context }) => runEval({ ...input, ...context, root: folder }) };
+      },
       archive: ({ plant, ...o }) => openArchive({
         ...o, adapters: shipped(), transcripts: MEMORY_TRANSCRIPTS,
         projectOf: (cwd, agent) => projectOf(cwd, agent, plant),
@@ -57,7 +63,7 @@ export function createCore(
       },
     },
     forge: { open: openGitHub, gateTokens, repoOf, revoke, sessionToken },
-    workspaces: { create: (o) => new Workspaces(o), renamedSince },
+    workspaces: { create: (o) => new Workspaces(o), renamedSince, intake: (o) => new Intake(o) },
   };
   return new Core(options, emit, providers, asking, acking, scrubbing);
 }

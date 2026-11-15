@@ -245,9 +245,18 @@ pub fn nv12(bgra: &[u8], w: u32, h: u32) -> Vec<u8> {
 /// colour premultiplied first when `premultiplied`) and of its alpha: a plane's level, which
 /// export.fidelity holds a decoded plane to when SSIM speaks for a frame PSNR doesn't.
 pub fn plane_sums(bgra: &[u8], premultiplied: bool) -> [u64; 2] {
-    let by = |c: u8, a: u8| if premultiplied { ((u32::from(c) * u32::from(a) + 127) / 255) as u8 } else { c };
+    let by = |c: u8, a: u8| {
+        if premultiplied {
+            ((u32::from(c) * u32::from(a) + 127) / 255) as u8
+        } else {
+            c
+        }
+    };
     bgra.as_chunks::<4>().0.iter().fold([0, 0], |[y, a], p| {
-        [y + u64::from(luma(by(p[2], p[3]), by(p[1], p[3]), by(p[0], p[3]))), a + u64::from(p[3])]
+        [
+            y + u64::from(luma(by(p[2], p[3]), by(p[1], p[3]), by(p[0], p[3]))),
+            a + u64::from(p[3]),
+        ]
     })
 }
 

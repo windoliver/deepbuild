@@ -402,7 +402,12 @@ impl Hub<'_> {
                     break;
                 }
             };
-            let mono: Vec<f32> = buf.chunks_exact(2).map(|c| (c[0] + c[1]) / 2.0).collect();
+            let mono: Vec<f32> = buf
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| (c[0] + c[1]) / 2.0)
+                .collect();
             let p = band_powers(&mono, rate, &edges);
             let (low, mid, air) = (
                 p[0],

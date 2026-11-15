@@ -71,15 +71,13 @@ export interface AnswerDeliveryPort {
   promised(meta: HookMeta): Promise<void>;
   promiseCarried(session: string, via: 'next_prompt' | 'stop_hold', prompt?: string): Promise<string | undefined>;
   promiseDueFor(session: string): boolean;
-  restorePromises(): Promise<void>;
+  restore(): Promise<void>;
   appNotes(drafts: Draft[], session: string): void;
   noteText(notes: Note[]): string;
-  note(params: Obj): Obj;
+  note(params: Obj): Promise<Obj>;
   routesOf(session: string, cwd?: string): Routes;
   track(meta: HookMeta): void;
   cap(): number;
-  waitingFor(session: string, scope?: string): Promise<Answer[]>;
-  outcome(ask: string, via: string, outcome: 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting'): Promise<void>;
   deliver(rows: Answer[], via: 'next_prompt' | 'stop_hold', hook?: { session: string; id: string }): Promise<string | undefined>;
   heardBy(ask: string): Promise<void>;
   answered(delivery: Delivery): void;
@@ -87,6 +85,7 @@ export interface AnswerDeliveryPort {
   continues(): Promise<void>;
   continueBlock(session: string, because: string, task: string | null, stop: string | undefined): Promise<string>;
   resent(meta: HookMeta): Promise<string | undefined>;
+  prAfter(meta: HookMeta, command: unknown): Promise<void>;
   unwoken(session: string, ask: string, prompt?: string): Promise<void>;
   replaced(session: string): Promise<void>;
   woken(session: string, token: string): Promise<boolean | undefined>;
@@ -117,7 +116,7 @@ export interface StopJudgingPort {
   unresolvedTargets: Map<string, { req: string; reason: string }[]>;
   kindChecks: Map<string, Map<string, { spec: CheckSpec; of: ReviewOf }>>;
   verdictWrites: Map<string, Promise<void>>;
-  closesGate(session: string, command: string): Promise<string | undefined>;
+  closesGate(session: string, command: string, cwd: string): Promise<string | undefined>;
   priceOf(check: string, of?: 'prices' | 'costs'): number | null;
   priceLocked(d: { session: string; agent: string; task_ref: string; requirements: { id: string; check: string | null; paid?: PaidKind }[] }): Promise<void>;
   delivery(d: Delivery): void;
@@ -176,7 +175,7 @@ export interface SessionMemoryPort {
   lessons(): Promise<Lesson[]>;
   ruleStateOf(session: string): void;
   startRules(meta: HookMeta): Promise<Piece[] | undefined>;
-  promptRules(meta: HookMeta, prompt: string): Promise<Piece[] | undefined>;
+  promptRules(meta: HookMeta, prompt: string, from: string | undefined): Promise<Piece[] | undefined>;
   ruleHook(meta: HookMeta): Promise<void>;
   syncRules(): Promise<Obj>;
   removeRule(lesson: Lesson): Promise<Obj>;
@@ -238,7 +237,7 @@ export interface SessionStatePort {
   startOf(pid: number, fresh?: boolean): Promise<string | undefined>;
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
-  mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null>;
+  mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }>;
   sessionRows(seen?: string): Promise<Record<string, unknown>[]>;
   rowsSeen(role: string, detail: boolean): Promise<Obj>;
   renameSession(params: Obj): Promise<Obj>;
@@ -282,6 +281,9 @@ export interface HubControlPort {
   attach(session: string, args: Obj): Promise<Obj>;
   retain(): Promise<void>;
   forgeRepos(): Promise<string[]>;
+  /** Your answer to a brief's card (#1342): true when it was one. */
+  briefAnswered(delivery: Delivery): boolean;
+  briefsDue(): Promise<void>;
 }
 
 /** The session-flag capabilities consumed by another hub domain (#2019). */

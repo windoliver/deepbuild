@@ -1,0 +1,79 @@
+
+ RUN  v5.0.5 <base-checkout>/tests/acceptance/1848
+
+ ❯ stopped.test.ts (2 tests | 2 failed) 5454ms
+   ❯ AC1 #1848.9bf497c4 with the hub stopped, an MCP call's path argument meets no-deepbuild-spec-write and no-control-token-read (2)
+     × AC1 #1848.9bf497c4 mcp__files__write_file whose path is <repo>/.deepbuild/done.yaml is denied with the hub stopped, naming no-deepbuild-spec-write, the argument and the path, and pointing to deep_propose 892ms
+     × AC1 #1848.9bf497c4 mcp__files__read_file whose path is ~/.deepbuild/control.token is denied with the hub stopped, naming no-control-token-read, the argument and the path 4303ms
+ ❯ sentence.test.ts (2 tests | 1 failed) 506ms
+   ❯ AC3 #1848.477a77d7 a path argument counts; a sentence in content doesn't (2)
+     × AC3 #1848.477a77d7 (wrong program) a reader that counts every string as a path (plant-every-string-a-path) denies the sentence's call by no-deepbuild-spec-write, naming the argument content, and fails this test 156ms
+ ❯ approved.test.ts (1 test | 1 failed) 4227ms
+   ❯ AC2 #1848.9ca3511a with the hub up and the tool approved once, the spec write is still denied (1)
+     × AC2 #1848.9ca3511a with the hub up and the files server's write_file approved once through your yes, mcp__files__write_file whose path is <repo>/.deepbuild/done.yaml is still denied, naming no-deepbuild-spec-write 3991ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  approved.test.ts > AC2 #1848.9ca3511a with the hub up and the tool approved once, the spec write is still denied > AC2 #1848.9ca3511a with the hub up and the files server's write_file approved once through your yes, mcp__files__write_file whose path is <repo>/.deepbuild/done.yaml is still denied, naming no-deepbuild-spec-write
+Error: AC2 #1848.9ca3511a [no-deepbuild-spec-write] with the hub up and write_file approved once, mcp__files__write_file {"path":"/private/tmp/dh1848-hlJkUS/repo/.deepbuild/done.yaml","content":"done: []\n"} must still be denied naming no-deepbuild-spec-write: deep-hook allowed it (exit 0 after 4 ms, stdout "", stderr "")
+ ❯ must helpers.ts:62:18
+     60| export class Inconclusive extends Error {}
+     61| export function must(ok: unknown, message: string, ran?: Ran): asserts…
+     62|   if (!ok) throw new Failed(message, ran);
+       |                  ^
+     63| }
+     64| export async function verdict(ctx: TestContext, judge: () => Promise<v…
+ ❯ approved.test.ts:46:9
+ ❯ verdict helpers.ts:66:5
+ ❯ approved.test.ts:21:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  sentence.test.ts > AC3 #1848.477a77d7 a path argument counts; a sentence in content doesn't > AC3 #1848.477a77d7 (wrong program) a reader that counts every string as a path (plant-every-string-a-path) denies the sentence's call by no-deepbuild-spec-write, naming the argument content, and fails this test
+Error: BLOCKED: the deep-hook build with the plant plant-every-string-a-path did not build: cargo build --locked -q -p deep-hook --features plant-every-string-a-path --target-dir <base-checkout>/target/plant-every-string-a-path exited 101: error: the package 'deep-hook' does not contain this feature: plant-every-string-a-path
+
+ ❯ helpers.ts:180:31
+    178|     }
+    179|     built = run('cargo', args, { timeoutMs: 900_000 }).then((r) => {
+    180|       if (r.code !== 0) throw Error(`BLOCKED: the deep-hook build ${fe…
+       |                               ^
+    181|       if (!existsSync(binary)) throw Error(`BLOCKED: no binary at ${bi…
+    182|       // The first exec of a new binary is slow on macOS (it is checke…
+ ❯ sentence.test.ts:45:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  stopped.test.ts > AC1 #1848.9bf497c4 with the hub stopped, an MCP call's path argument meets no-deepbuild-spec-write and no-control-token-read > AC1 #1848.9bf497c4 mcp__files__write_file whose path is <repo>/.deepbuild/done.yaml is denied with the hub stopped, naming no-deepbuild-spec-write, the argument and the path, and pointing to deep_propose
+Error: AC1 #1848.9bf497c4 [no-deepbuild-spec-write] with the hub stopped, mcp__files__write_file {"path":"/private/tmp/dh1848-BsbYby/repo/.deepbuild/done.yaml","content":"done: []\n"} must be denied naming no-deepbuild-spec-write: deep-hook allowed it (exit 0 after 20 ms, stdout "", stderr "")
+ ❯ must helpers.ts:62:18
+     60| export class Inconclusive extends Error {}
+     61| export function must(ok: unknown, message: string, ran?: Ran): asserts…
+     62|   if (!ok) throw new Failed(message, ran);
+       |                  ^
+     63| }
+     64| export async function verdict(ctx: TestContext, judge: () => Promise<v…
+ ❯ judgeDenied stopped.test.ts:33:3
+ ❯ stopped.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  stopped.test.ts > AC1 #1848.9bf497c4 with the hub stopped, an MCP call's path argument meets no-deepbuild-spec-write and no-control-token-read > AC1 #1848.9bf497c4 mcp__files__read_file whose path is ~/.deepbuild/control.token is denied with the hub stopped, naming no-control-token-read, the argument and the path
+Error: AC1 #1848.9bf497c4 [no-control-token-read] with the hub stopped, mcp__files__read_file {"path":"~/.deepbuild/control.token"} must be denied naming no-control-token-read: deep-hook allowed it (exit 0 after 11 ms, stdout "", stderr "")
+ ❯ must helpers.ts:62:18
+     60| export class Inconclusive extends Error {}
+     61| export function must(ok: unknown, message: string, ran?: Ran): asserts…
+     62|   if (!ok) throw new Failed(message, ran);
+       |                  ^
+     63| }
+     64| export async function verdict(ctx: TestContext, judge: () => Promise<v…
+ ❯ judgeDenied stopped.test.ts:33:3
+ ❯ stopped.test.ts:57:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed | 1 passed (5)
+   Start at  15:47:26
+   Duration  10.43s (tests 99%)
+

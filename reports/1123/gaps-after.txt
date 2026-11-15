@@ -1,0 +1,12 @@
+✔ path-skipped lanes cannot add binary build prerequisites to the selected lane (3213.273ms)
+✔ Vitest excludes apply before binary demand is collected (9050.072708ms)
+✔ run-private directories disappear after the creating lane receives SIGTERM (894.349417ms)
+✔ run-private directories disappear after the creating lane receives SIGKILL (1689.512084ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14996.845625

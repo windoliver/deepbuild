@@ -21,8 +21,42 @@ fn register_preview(r: &mut Registrar) {
         &[],
         "rect@1",
     )
-    .preview("#412")
+    .preview("#412", "R2", "R5")
     .described("A blob drawn as its box, a preview until #412 lands.");
+}
+
+/// What an item of the removed `test.preview.blob@1` opens as: `rect@1` at its box, in the
+/// look's ink, as the blob drew.
+fn blob_as_rect(params: &Value) -> Value {
+    json!({"box": params.get("box").cloned().unwrap_or(Value::Null),
+           "paint": {"fill": {"role": "ink"}}})
+}
+
+fn register_preview_removed(r: &mut Registrar) {
+    r.removed(
+        "test.preview.blob@1",
+        Some(("rect@1", blob_as_rect as fn(&Value) -> Value)),
+    );
+}
+
+fn register_preview_removed_bare(r: &mut Registrar) {
+    r.removed("test.preview.blob@1", None);
+}
+
+fn preview_1_1(register: fn(&mut Registrar)) -> Module {
+    let mut manifest = manifest("test.preview", &[]);
+    manifest.version.minor = 1;
+    Module { manifest, register }
+}
+
+/// `test.preview` 1.1.0 (#1802): it removed `test.preview.blob@1`, whose items open as `rect@1`.
+pub fn preview_removed() -> Module {
+    preview_1_1(register_preview_removed)
+}
+
+/// `test.preview` 1.1.0 planted (#1802): it removed `test.preview.blob@1` with no migration.
+pub fn preview_removed_bare() -> Module {
+    preview_1_1(register_preview_removed_bare)
 }
 
 /// `test.preview` 1.0.0: `test.preview.blob@1 {box}`, drawn as a rect, a preview tracked by #412.
@@ -210,7 +244,8 @@ fn register_cue<const SPAN_MS: u32>(r: &mut Registrar) {
         pop_in(f64::from(SPAN_MS) / 1000.0),
         "R6",
     );
-    r.kind(kind("test", "cue.list", vec![json_param("cues")]), &[], "")
+    let cues = json_param("cues", "[{id, kind, targets: [item ID], span?: s}]");
+    r.kind(kind("test", "cue.list", vec![cues]), &[], "")
         .described("A cue list: plays its cues in order from 0 s, each a cue kind on its targets.");
     r.contribution(
         "test.cue.scale",
@@ -280,10 +315,10 @@ fn ring_1() -> Version {
         major: 1,
         minor: 0,
         params: vec![
-            json_param("center"),
+            json_param("center", "vec2"),
             with_default(number("r"), json!(10)),
             width("thick"),
-            with_default(json_param("dash"), json!([])),
+            with_default(json_param("dash", "[u]"), json!([])),
             segments(32),
         ],
     }
@@ -308,7 +343,7 @@ fn register_ring_b(r: &mut Registrar) {
         major: 2,
         minor: 0,
         params: vec![
-            json_param("center"),
+            json_param("center", "vec2"),
             with_default(number("r"), json!(10)),
             width("stroke_width"),
             segments(64),

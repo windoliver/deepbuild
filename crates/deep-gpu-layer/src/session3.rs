@@ -60,6 +60,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         drops_clouds: p == Some(Planted::DropsClouds),
         cascade_cache_keeps_stale: p == Some(Planted::CascadeCacheKeepsStale),
         prefilter_over_frames: p == Some(Planted::PrefilterOverFrames),
+        video_background_prefiltered: p == Some(Planted::VideoBackgroundPrefiltered),
         add_writes_depth: p == Some(Planted::AddWritesDepth),
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
@@ -413,6 +414,18 @@ pub fn cull_on_cpu(app: &mut App) {
         if let Some(s) = state.scene3d.as_ref() {
             if let Some(r) = lock(&s.shared).renderer.as_mut() {
                 r.cull_on_cpu();
+            }
+        }
+    })
+}
+
+/// #506's planted cores: the next draws keep the backdrop copy and the mirror's picture the draw
+/// before them left.
+pub fn keep_first(app: &mut App, backdrop: bool, mirror: bool) {
+    app.worker.call(move |state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.keep_first(backdrop, mirror);
             }
         }
     })

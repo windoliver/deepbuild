@@ -85,7 +85,9 @@ pub fn analysis_height(w: f64, h: f64) -> usize {
 /// A frame's gray levels as an export carries them: BT.709 luma in limited range, read back in
 /// full range.
 pub fn gray(rgba: &[u8]) -> Vec<u8> {
-    rgba.chunks_exact(4)
+    rgba.as_chunks::<4>()
+        .0
+        .iter()
         .map(|p| {
             let y = 0.2126 * f64::from(p[0]) + 0.7152 * f64::from(p[1]) + 0.0722 * f64::from(p[2]);
             let coded = (16.0 + 219.0 * y / 255.0).round().clamp(16.0, 235.0);
@@ -309,7 +311,8 @@ pub fn blank(frame: &[u8], w: usize, rows: usize) -> bool {
                 - (at(x - 1, y - 1) + 2.0 * at(x - 1, y) + at(x - 1, y + 1));
             let gy = (at(x - 1, y + 1) + 2.0 * at(x, y + 1) + at(x + 1, y + 1))
                 - (at(x - 1, y - 1) + 2.0 * at(x, y - 1) + at(x + 1, y - 1));
-            if gx.hypot(gy) > BLANK_GRADIENT {
+            // Squared: the gradients are sums of 8-bit pixels, so both sides are exact.
+            if gx * gx + gy * gy > BLANK_GRADIENT * BLANK_GRADIENT {
                 edged += 1;
             }
         }
@@ -398,7 +401,7 @@ fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
 }
 
 fn len(a: [f64; 3]) -> f64 {
-    dot(a, a).sqrt()
+    crate::ops::sqrt(dot(a, a))
 }
 
 /// The angle between two directions, degrees; 0 where either is zero.
@@ -407,13 +410,13 @@ pub fn turn(a: [f64; 3], b: [f64; 3]) -> f64 {
     if la == 0.0 || lb == 0.0 {
         return 0.0;
     }
-    (dot(a, b) / (la * lb)).clamp(-1.0, 1.0).acos().to_degrees()
+    crate::ops::acos((dot(a, b) / (la * lb)).clamp(-1.0, 1.0)).to_degrees()
 }
 
 /// The azimuth of `p` about `about` on the ground plane, degrees.
 fn azimuth(p: [f64; 3], about: [f64; 3]) -> f64 {
     let d = sub(p, about);
-    d[0].atan2(d[2]).to_degrees()
+    crate::ops::atan2(d[0], d[2]).to_degrees()
 }
 
 /// The move a shot makes from `a` (its first frame) to `b` (its last), about its kept items'
@@ -452,7 +455,7 @@ pub fn classify(a: &Cam, b: &Cam, about: Option<[f64; 3]>) -> Move {
     }
     let aim = if a.flat || b.flat {
         let shift = len(sub(b.target, a.target));
-        shift.atan2(a.width.max(1e-9)).to_degrees()
+        crate::ops::atan2(shift, a.width.max(1e-9)).to_degrees()
     } else {
         turn(sub(a.target, a.position), sub(b.target, b.position))
     };
@@ -644,9 +647,7 @@ mod tests {
             .map(|k| {
                 let mut f = vec![0u8; 128];
                 for row in f.chunks_mut(32) {
-                    for x in (2 * k % 28)..(2 * k % 28 + 4) {
-                        row[x] = 255;
-                    }
+                    row[2 * k % 28..2 * k % 28 + 4].fill(255);
                 }
                 f
             })
@@ -693,7 +694,8 @@ mod tests {
             classify(&a, &at([0.0, 0.0, 10.0], [1.5, 0.0, 0.0]), None),
             Move::Pan
         );
-        let swept = at([10.0 * 0.3f64.sin(), 0.0, 10.0 * 0.3f64.cos()], [0.0; 3]);
+        let (s, c) = (crate::ops::sin(0.3), crate::ops::cos(0.3));
+        let swept = at([10.0 * s, 0.0, 10.0 * c], [0.0; 3]);
         assert_eq!(classify(&a, &swept, Some([0.0; 3])), Move::Orbit);
     }
 

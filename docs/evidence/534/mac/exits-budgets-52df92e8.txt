@@ -1,0 +1,8 @@
+free KB 32107840 00:52:46 load { 9.01 6.60 9.56 } thermal 0
+head 52df92e86faf6eb6a4e29fdfaacb7ab39b31c9ee PR head now 52df92e86faf6eb6a4e29fdfaacb7ab39b31c9ee macOS 27.2.1 00:52:50 load { 9.89 6.82 9.62 } thermal 0
+setup exit=0 00:53:38 load { 25.72 11.28 11.11 } thermal 0
+prebuild exit=0 00:54:20 load { 54.83 21.08 14.72 } thermal 0
+quiet gate (1-min load < 6, AC, low-power off, thermal 0, 3 checks 30 s apart) passed after 2707 s 01:39:27 load { 2.92 13.14 15.76 } thermal 0
+noop check exit=0 compiling lines 0 01:39:28 load { 2.69 12.92 15.67 } thermal 0
+ac04 exit=0 01:39:34 load { 2.71 12.75 15.59 } thermal 0
+secret scan hits=0 01:39:34 load { 2.71 12.75 15.59 } thermal 0

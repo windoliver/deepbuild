@@ -52,7 +52,13 @@ const MEDIAN: usize = 8;
 const QUIET: f64 = 1e-10;
 
 /// The onsets of the channels' mean, in sample order; see [`Method`] for what `threshold` means.
-pub fn onsets(samples: &[f32], channels: usize, rate: i64, method: Method, threshold: f64) -> Vec<Onset> {
+pub fn onsets(
+    samples: &[f32],
+    channels: usize,
+    rate: i64,
+    method: Method,
+    threshold: f64,
+) -> Vec<Onset> {
     let x = mono(samples, channels);
     let (short, long) = ((rate / 1000).max(1) as usize, (rate / 20).max(1) as usize);
     let found = match method {
@@ -64,9 +70,17 @@ pub fn onsets(samples: &[f32], channels: usize, rate: i64, method: Method, thres
         .iter()
         .enumerate()
         .map(|(o, &(j, strength))| {
-            let end = found.get(o + 1).map_or(x.len(), |next| next.0).min(j + reach).min(x.len());
+            let end = found
+                .get(o + 1)
+                .map_or(x.len(), |next| next.0)
+                .min(j + reach)
+                .min(x.len());
             let peak = (j..end).fold(j, |m, k| if x[k].abs() > x[m].abs() { k } else { m });
-            Onset { sample: j as i64, peak: peak as i64, strength }
+            Onset {
+                sample: j as i64,
+                peak: peak as i64,
+                strength,
+            }
         })
         .collect()
 }
@@ -86,7 +100,11 @@ fn transient(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize
             armed = true;
         } else if armed {
             armed = false;
-            push(&mut out, attack(x, i, i + short, floor(&x[from..i], short)), 10.0 * ops::log10(rise));
+            push(
+                &mut out,
+                attack(x, i, i + short, floor(&x[from..i], short)),
+                10.0 * ops::log10(rise),
+            );
         }
     }
     out
@@ -96,9 +114,15 @@ fn transient(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize
 /// Σ|X_f(k)|: frame f is the [`FRAME`] samples ending at sample [`HOP`]·f under a periodic Hann
 /// window, samples before the start read as 0, for f from 0 to ⌊len ÷ HOP⌋.
 pub(crate) fn spectral_flux(x: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let hann: Vec<f64> = (0..FRAME).map(|i| 0.5 - 0.5 * ops::cos(ops::TAU * i as f64 / FRAME as f64)).collect();
+    let hann: Vec<f64> = (0..FRAME)
+        .map(|i| 0.5 - 0.5 * ops::cos(ops::TAU * i as f64 / FRAME as f64))
+        .collect();
     let frames = x.len() / HOP + 1;
-    let (mut flux, mut total, mut prev) = (vec![0.0; frames], vec![0.0; frames], vec![0.0; FRAME / 2 + 1]);
+    let (mut flux, mut total, mut prev) = (
+        vec![0.0; frames],
+        vec![0.0; frames],
+        vec![0.0; FRAME / 2 + 1],
+    );
     for f in 0..frames {
         let (mut re, mut im) = (vec![0.0; FRAME], vec![0.0; FRAME]);
         for (i, v) in re.iter_mut().enumerate() {
@@ -125,9 +149,22 @@ fn flux(x: &[f64], short: usize, long: usize, threshold: f64) -> Vec<(usize, f64
         let mut near = flux[f.saturating_sub(MEDIAN)..(f + MEDIAN + 1).min(frames)].to_vec();
         near.sort_by(f64::total_cmp);
         let next = flux.get(f + 1).copied().unwrap_or(0.0);
-        if flux[f] >= flux[f - 1] && flux[f] > next && flux[f] > threshold * near[near.len() / 2] && flux[f] > 0.01 * total[f] {
+        if flux[f] >= flux[f - 1]
+            && flux[f] > next
+            && flux[f] > threshold * near[near.len() / 2]
+            && flux[f] > 0.01 * total[f]
+        {
             let start = (f * HOP).saturating_sub(FRAME).min(x.len());
-            push(&mut out, attack(x, start, f * HOP, floor(&x[start.saturating_sub(long)..start], short)), flux[f]);
+            push(
+                &mut out,
+                attack(
+                    x,
+                    start,
+                    f * HOP,
+                    floor(&x[start.saturating_sub(long)..start], short),
+                ),
+                flux[f],
+            );
         }
     }
     out
@@ -142,14 +179,19 @@ fn push(out: &mut Vec<(usize, f64)>, j: usize, strength: f64) {
 
 /// The median of the `block`-sample peaks of |x| (0 for no samples).
 fn floor(x: &[f64], block: usize) -> f64 {
-    let mut peaks: Vec<f64> = x.chunks(block).map(|b| b.iter().fold(0.0, |m: f64, v| m.max(v.abs()))).collect();
+    let mut peaks: Vec<f64> = x
+        .chunks(block)
+        .map(|b| b.iter().fold(0.0, |m: f64, v| m.max(v.abs())))
+        .collect();
     peaks.sort_by(f64::total_cmp);
     peaks.get(peaks.len() / 2).copied().unwrap_or(0.0)
 }
 
 /// The first sample in [from, to) whose |x| is above twice `floor`, else `from`.
 fn attack(x: &[f64], from: usize, to: usize, floor: f64) -> usize {
-    (from..to.min(x.len())).find(|&k| x[k].abs() > 2.0 * floor).unwrap_or(from)
+    (from..to.min(x.len()))
+        .find(|&k| x[k].abs() > 2.0 * floor)
+        .unwrap_or(from)
 }
 
 #[cfg(test)]
@@ -161,7 +203,9 @@ mod tests {
     /// A 2 ms decaying 3 kHz burst starting at `at`, its first sample 0.8.
     fn click(x: &mut [f32], at: usize) {
         for k in 0..96 {
-            x[at + k] += (0.8 * ops::exp(-(k as f64) / 24.0) * ops::cos(ops::TAU * 3000.0 * k as f64 / RATE as f64)) as f32;
+            x[at + k] +=
+                (0.8 * ops::exp(-(k as f64) / 24.0)
+                    * ops::cos(ops::TAU * 3000.0 * k as f64 / RATE as f64)) as f32;
         }
     }
 
@@ -179,11 +223,16 @@ mod tests {
     }
 
     fn tone(n: usize, hz: f64, amp: f64) -> Vec<f32> {
-        (0..n).map(|i| (amp * ops::sin(ops::TAU * hz * i as f64 / RATE as f64)) as f32).collect()
+        (0..n)
+            .map(|i| (amp * ops::sin(ops::TAU * hz * i as f64 / RATE as f64)) as f32)
+            .collect()
     }
 
     fn samples(x: &[f32], method: Method) -> Vec<i64> {
-        onsets(x, 1, RATE, method, method.default_threshold()).iter().map(|o| o.sample).collect()
+        onsets(x, 1, RATE, method, method.default_threshold())
+            .iter()
+            .map(|o| o.sample)
+            .collect()
     }
 
     const BOTH: [(Method, i64); 2] = [(Method::Transient, 0), (Method::SpectralFlux, 256)];
@@ -197,7 +246,11 @@ mod tests {
             let got = onsets(&x, 1, RATE, method, method.default_threshold());
             assert_eq!(got.len(), 2, "{method:?}: {got:?}");
             for (o, want) in got.iter().zip([20_000, 33_333]) {
-                assert!((o.sample - want).abs() <= within, "{method:?}: onset {} for a click at {want}", o.sample);
+                assert!(
+                    (o.sample - want).abs() <= within,
+                    "{method:?}: onset {} for a click at {want}",
+                    o.sample
+                );
                 assert_eq!(o.peak, want, "{method:?}: peak of the click at {want}");
             }
         }
@@ -206,14 +259,24 @@ mod tests {
 
     #[test]
     fn a_click_over_a_minus_40_dbfs_bed_reads_within_a_few_samples() {
-        for (bed, name) in [(noise(48_000), "noise"), (tone(48_000, 1000.0, 0.01), "tone")] {
+        for (bed, name) in [
+            (noise(48_000), "noise"),
+            (tone(48_000, 1000.0, 0.01), "tone"),
+        ] {
             let mut x = bed;
             click(&mut x, 30_001);
             for (method, _) in BOTH {
                 // The bed's own start at sample 0 is an onset too; the click must be the only one after it.
-                let late: Vec<i64> = samples(&x, method).into_iter().filter(|&s| s > 4_800).collect();
+                let late: Vec<i64> = samples(&x, method)
+                    .into_iter()
+                    .filter(|&s| s > 4_800)
+                    .collect();
                 assert_eq!(late.len(), 1, "{method:?} over {name}: {late:?}");
-                assert!((late[0] - 30_001).abs() <= 4, "{method:?} over {name}: onset {} for a click at 30001", late[0]);
+                assert!(
+                    (late[0] - 30_001).abs() <= 4,
+                    "{method:?} over {name}: onset {} for a click at 30001",
+                    late[0]
+                );
             }
         }
     }
@@ -229,7 +292,10 @@ mod tests {
             let got = samples(&x, method);
             assert_eq!(got.len(), at.len(), "{method:?}: {got:?}");
             for (g, a) in got.iter().zip(at) {
-                assert!((g - a).abs() <= within, "{method:?}: onset {g} for a click at {a}");
+                assert!(
+                    (g - a).abs() <= within,
+                    "{method:?}: onset {g} for a click at {a}"
+                );
             }
         }
     }
@@ -241,7 +307,11 @@ mod tests {
         for (method, _) in BOTH {
             let got = samples(&x, method);
             assert_eq!(got.len(), 1, "{method:?}: {got:?}");
-            assert!((got[0] - 12_001).abs() <= 1, "{method:?}: the sine starts at 12000, read {}", got[0]);
+            assert!(
+                (got[0] - 12_001).abs() <= 1,
+                "{method:?}: the sine starts at 12000, read {}",
+                got[0]
+            );
         }
     }
 }

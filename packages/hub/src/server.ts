@@ -16,7 +16,7 @@ import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type
 import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
-import { isPrCreate, isPrEdit } from './forge.js';
+import { prCommands } from './pr-commands.js';
 import { adapterOf, registry } from './hookmap.js';
 import type { Part } from './context-fit.js';
 import { takeLock, type Lock } from './lock.js';
@@ -32,6 +32,8 @@ import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
+import { writeSynced } from './vfs.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -90,12 +92,12 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The blind acceptance job (#1328).
   ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
   // Landing in turn (#1331): from your own terminal only.
-  ['land.judge', ['cli']], ['land.round', ['cli']], ['work.once', ['cli']],
+  ['land.judge', ['cli']], ['land.round', ['cli']], ['work.once', ['cli']], ['work.approve', ['cli']], ['work.show', ['cli']], ['work.pause', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
   // `deep workspace` (#67), and the views of the projects you're in.
-  ['work.fix', ['cli']], ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['project.views', ['app', 'cli']],
+  ['work.fix', ['cli']], ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['workspace.task', ['cli']], ['project.views', ['app', 'cli']],
   // The app API's views/shown and views/hidden (#262): the views the app shows, repeated every 5 s while shown.
   ['views.shown', ['app']], ['views.hidden', ['app']],
   // What macOS says of the app's notifications (#994), when the app connects and when it changes.
@@ -141,7 +143,6 @@ const DENYING_MODES = new Set(['dontAsk', 'plan']);
 const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 /**
  * The connection as one call of a deprecated method sees it: its reply line carries the notice beside its result.
  * Every other property reads and writes through to the connection itself.
@@ -211,8 +212,8 @@ function withWaits(ruled: string, event: string, wait: WaitReply): string {
   if (wait.message) out.systemMessage = [out.systemMessage, wait.message].filter(Boolean).join('\n');
   return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
 }
-/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
-const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
+/** A file's identity, size and times, so a change is read once, one to its mode alone included; 'none' while it is missing. */
+const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 /** A subscribe's scope (#1575): none, as the app subscribes; one session; or the list's rows. Anything else is refused, never read as none. */
@@ -232,8 +233,11 @@ interface CoreLink {
   started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
-/** `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded). */
-interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; close(): Promise<void> }
+/**
+ * `scrub` adds values every hook line read from now on is scrubbed of (#332: credentials env-local loaded); `count` is
+ * the parser workers the pool holds, for hub.health (#2043).
+ */
+interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; scrub(values: string[]): void; count(): number; close(): Promise<void> }
 
 /** A frame from the core: its event's JSON text, or, `caught` set, the head its subscriber's replay reached (#1575). */
 type OnFrame = (sub: string, event: string, caught?: boolean) => void;
@@ -297,25 +301,41 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
 function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
   // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
   const held = [...given];
-  const pending = new Map<number, (parsed: Parsed) => void>();
+  // Each line a parser holds, until that parser answers it or ends.
+  const pending = new Map<number, { resolve: (parsed: Parsed) => void; worker: Worker }>();
   let n = 0;
-  const make = () => {
+  let closing = false;
+  const make = (): Worker => {
     const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
     worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      pending.get(id)?.(parsed);
+      pending.get(id)?.resolve(parsed);
       pending.delete(id);
+    });
+    if (plant === 'parser-pool-messages-only') return worker;
+    // A parser that throws on a line ends, and takes neither the hub nor a line with it (#2043): each line it held is
+    // refused, and another parser takes its place.
+    worker.on('error', (error) => process.stderr.write(`deep hub: a parser failed: ${error.stack ?? error.message}\n`));
+    worker.on('exit', () => {
+      for (const [id, line] of pending) {
+        if (line.worker !== worker || plant === 'parser-pool-leaves-line-waiting') continue;
+        pending.delete(id);
+        line.resolve({ kind: 'refused', id: null, error: refusal('unavailable', '', 'The hub failed while it read this line, so nothing of it was recorded.') });
+      }
+      if (closing) return;
+      if (worker === small) small = make();
+      else if (worker === big) big = make();
     });
     return worker;
   };
   // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
-  const small = make();
+  let small = make();
   let big: Worker | undefined;
   return {
     parse(chunks, first) {
       const size = chunks.reduce((sum, c) => sum + c.length, 0);
       const worker = size > BIG ? (big ??= make()) : small;
       return new Promise((resolve) => {
-        pending.set(++n, resolve);
+        pending.set(++n, { resolve, worker });
         worker.postMessage({ n, chunks, first });
       });
     },
@@ -323,7 +343,11 @@ function parserPool(given: readonly string[], plant: Plant | undefined, dir: str
       held.push(...values);
       for (const worker of [small, big]) worker?.postMessage({ scrub: values });
     },
-    close: async () => { await Promise.all([small, big].map((w) => w?.terminate())); },
+    count: () => (big ? 2 : 1),
+    close: async () => {
+      closing = true;
+      await Promise.all([small, big].map((w) => w?.terminate()));
+    },
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
@@ -340,6 +364,7 @@ async function parserInline(held: string[], plant: Plant, dir: string): Promise<
       return scoped ? { ...parsed, scoped } : parsed;
     },
     scrub(values) { held.push(...values); },
+    count: () => 0,
     close: async () => undefined,
   };
 }
@@ -508,6 +533,8 @@ class Hub {
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
+    // Read once before any hook, so a rules.json spoiled later can be written again as it was.
+    this.rules();
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
     this.server.on('error', (error: NodeJS.ErrnoException) => {
@@ -532,6 +559,8 @@ class Hub {
     this.hooks = new Set((await this.core.started).hooks);
     // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
     const checking = setInterval(() => {
+      // An entry installed since the last hook is in the copy a later rewrite of rules.json is made from (#2204).
+      this.rules(false);
       if (this.lost || this.lock.held() || this.plant === 'lock-never-rechecked') return;
       this.lost = true;
       clearInterval(checking);
@@ -651,6 +680,8 @@ class Hub {
       }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
+    // A rules.json removed since the last hook is back before the hello: the deep-hook that connects reads it then (#1856).
+    this.rules();
     sock.write(this.helloLine);
   }
 
@@ -799,6 +830,8 @@ class Hub {
     conn.done = true;
     // With its lock lost the hub acknowledges nothing: closed with no ack, deep-hook fails open and spools the hook.
     if (this.lost) return void conn.sock.end();
+    // A rules.json this hub can't read is written again before the hook is answered (#2204).
+    this.rules();
     // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); a
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
@@ -858,6 +891,10 @@ class Hub {
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
+    if (this.rulesRewritten && meta.session) {
+      this.core.post({ op: 'line', session: meta.session, agent: meta.agent, text: this.rulesRewritten });
+      this.rulesRewritten = undefined;
+    }
     if (prompted) void this.permissionReply(conn, meta, hold!);
     else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
     else if (before) void this.extensionReply(conn, meta, before.data, hold!, ruled);
@@ -896,7 +933,7 @@ class Hub {
     const resend = this.resend.has(meta.session) && (data.kind === 'shell' || data.kind === 'mcp');
     // A `gh pr create`, or a `gh pr edit` of its body (#87), is checked for its body's Closes against the issue's task
     // (#322), whatever else it needs.
-    const pr = data.kind === 'shell' && typeof data.command === 'string' && (isPrCreate(data.command) || isPrEdit(data.command));
+    const pr = data.kind === 'shell' && typeof data.command === 'string' && prCommands(data.command).length > 0;
     const card = this.cardOf(meta);
     if (!authority.length && !mcp && !decided.length && stage === undefined && !screen && !resend && !pr && !named.length && !card) return undefined;
     const label = mcp ? `${mcp.server} ${mcp.tool}` : screen ? meta.call!.tool : typeof data.command === 'string' ? data.command : String(data.kind);
@@ -1164,19 +1201,40 @@ class Hub {
     return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
   }
 
-  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined> };
-  /** The entries of rules.json, read again only when the file changes. */
-  private rules(): Record<string, Guard | undefined> {
+  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined>, text: undefined as string | undefined };
+  /** Why rules.json was written again, until a hook's session can record it. */
+  private rulesRewritten: string | undefined;
+  /**
+   * The entries of rules.json, read again only when the file changes. One that can't be read, cut short or written
+   * over by a command's child no guard saw (#2204), or removed by one (#1856), is written again as this hub last read
+   * it: deep-hook matches against that file alone, and denies every call while it can't read it. A file this hub
+   * never read stays as it is, and so does none.
+   * Without `rewrite`, a readable file is only kept: the copy stays whole between hooks.
+   */
+  private rules(rewrite = true): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    // No rules.json: no entries.
     const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
-      let entries: Record<string, Guard | undefined> = {};
+      let entries: Record<string, Guard | undefined> | undefined;
+      let text: string | undefined;
+      let why = key === 'none' ? 'was removed' : 'has no entries object';
       try {
-        const parsed = JSON.parse(readFileSync(file, 'utf8')) as { entries?: unknown };
-        if (typeof parsed.entries === 'object' && parsed.entries !== null) entries = parsed.entries as Record<string, Guard | undefined>;
-      } catch { /* unreadable: deep-hook names it; the hub decides nothing from it */ }
-      this.rulesSeen = { key, entries };
+        text = readFileSync(file, 'utf8');
+        const parsed = JSON.parse(text) as { entries?: unknown } | null;
+        if (isObj(parsed?.entries)) entries = parsed.entries as Record<string, Guard | undefined>;
+      } catch (error) {
+        if (key !== 'none') why = error instanceof SyntaxError ? "isn't JSON" : `can't be read (${(error as NodeJS.ErrnoException).code ?? 'error'})`;
+      }
+      const kept = this.rulesSeen.text;
+      if (entries) this.rulesSeen = { key, entries, text };
+      else if (kept !== undefined) {
+        if (!rewrite) return this.rulesSeen.entries;
+        try {
+          writeSynced(file, Buffer.from(kept));
+          this.rulesRewritten = `${file} ${why}, so deep-hook could match no call against its guards; the hub wrote it again as it last read it.`;
+        } catch { /* it can't be written either: deep-hook goes on naming it, and the next change to it is tried again */ }
+        this.rulesSeen.key = fileKey(file);
+      } else this.rulesSeen = { key, entries: {}, text: undefined }; // No rules.json this hub ever read: no entries.
     }
     return this.rulesSeen.entries;
   }
@@ -1296,14 +1354,14 @@ class Hub {
     if (value.hello === 'mcp') {
       const parent = value.parent;
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
-      // A DeepBuild MCP server paseo's plugin added binds by the token it was opened with (#55).
+      // One paseo's plugin added binds by its token (#55); any other by the socket's peer process, as the OS reports it (#2070).
       const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
-      const session = proved || paseo ? ((await this.core.request({ op: 'mcp-hello', parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => null)) as string | null) : null;
+      const hello = (await this.core.request({ op: 'mcp-hello', fd: (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd, parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined)) as { session: string | null; parent?: { pid: number; start: string } } | undefined;
       conn.role = 'mcp';
-      conn.session = session;
-      conn.parent = proved;
+      conn.session = hello?.session ?? null;
+      conn.parent = hello?.parent;
       if (typeof value.cwd === 'string') conn.cwd = value.cwd;
-      conn.name = session ? `mcp:${session}` : 'mcp';
+      conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
     conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });
@@ -1357,7 +1415,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;

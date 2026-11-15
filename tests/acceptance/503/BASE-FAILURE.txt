@@ -1,0 +1,43 @@
+#503: how each test is expected to fail at the base 014344430 ("design(#503): ..."). A note, not a run.
+
+The suite was not run at the base and neither deep-show nor deep-gpu was built: the job was told not to build (the
+machine is heavily loaded), and the surfaces the tests read plainly don't exist there. What follows is read from the
+base's code (crates/deep-show/src/{main,bake,media,frames,time,spatial,hub}.rs, crates/deep-codecs/src/{lib,wav}.rs,
+crates/deep-gpu-layer/src/{main,view3d,opframe}.rs, crates/deep-canvas-scene3d/src/{sky,scene}.rs), not from output.
+The suite type-checks (`tsc -p tests/acceptance/503/tsconfig.json`: clean). What was run, outside the product, with the
+local FFmpeg 9.0.2 and the suite's own helpers in a scratch vitest file: the depth, 1080p and equirectangular videos
+(recipes hold: full range, frame k at 512k/15360; the depth frames 10 and 45 differ at every pixel; frames 74 and 76
+differ from 75 in the centre region at 760 and 200 pixels; the coded panorama's Y′ equals the frames written), every
+AC4 fixture (each lossless file decodes back to the integers written; each lossy file decodes to sound, and a one-sample
+shift of it is beyond −90 dBFS; HE-AAC needs aac_at's numeric profile 4, which the suite passes), and the empty-band
+arithmetic (bands 1 and 2 at window 2048, filled at 8192 and 4096).
+
+Expected at the base, per test (each fails at its first missing surface):
+
+- AC1 spectrum.test.ts (5): the suite's own arithmetic passes; then `media_bake` with kind `spectrum` answers
+  `{"code": "unknown_bake_kind", "kind": "spectrum"}`, so "bake 1 …: bake (…) is an object, got undefined" fails tests
+  1 and 3 (the Mac bake runs before the Linux one). Test 2: the document's `bakes` key is no envelope key, so `deep
+  show` refuses it and "the bar chart: the document is presented" fails. Tests 4 and 5: the scenario's `planted`
+  names an unknown program, which the base answers `{"ok": false, "code": "bad_input"}`: "deep-show run answers the
+  scenario ok" fails.
+- AC2 points.test.ts (3): the base's mark.point@1 is one point at its origin and runs no operator, so `view3d`'s
+  `read: ["depth.points"]` is refused bad_input ("read names an operator output, and the document runs no operator"):
+  "… was answered, not refused" fails tests 1 and 2. Test 3: `deep-gpu run --planted point_video_keeps_frame_before_seek`
+  is an unknown plant: "exited 0" fails.
+- AC2 points-check.test.ts (2): test 1, the 1080p showpiece at step 1 is presented (the base reads no `from` and
+  counts no points): "is refused at check" fails. Test 2: `spatial`'s bounds of the one point are [0, 0, 0] to
+  [0, 0, 0]: "the set's bounds are x ±2.887 …" fails.
+- AC3 background.test.ts (3): the base's sky refuses `background: {video}` with code `unsupported` at …/background, so
+  `view3d` is refused: "with the video, played to 2.5 s … was answered, not refused" fails test 1. Test 2 is expected to
+  PASS at the base: the base already refuses `background_blur` above 0 with a video, naming the field (sky.rs); it
+  holds the refusal, and doesn't tell #503's change from the base. Test 3: unknown plant, "exited 0" fails.
+- AC4 formats.test.ts (3): test 1, WAV decodes at the base (#498's reader, sample ÷ 2^(depth − 1)), but AIFF and CAF
+  are no known format and ALAC and FLAC have no decoder: each refused, so "every lossless format at the reference
+  decode's PCM hash" fails naming them. Test 2: MP3, Ogg and WebM aren't known containers (refused); AAC-LC and HE-AAC
+  in MP4 decode through AudioToolbox at the base and may or may not meet the bound; the test fails on the others. Test
+  3: the AC-3 decode answers `{"error": "no decoder for ac-3"}`, not `unsupported_codec`: "the decode is refused
+  unsupported_codec" fails.
+- AC5 taste.test.ts (1): INCONCLUSIVE: docs/evidence/503/ holds none of the three pictures.
+
+Expected at the base: 17 tests, 16 failed, each for its reason above (the missing surface, not a test mistake), and
+AC3's refusal test passing for the reason above.

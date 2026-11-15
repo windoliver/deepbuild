@@ -31,11 +31,22 @@ pub fn modules() -> Vec<Module> {
     // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
     #[cfg(feature = "test-weight")]
     out.push(deep_canvas_test_modules::weight::module());
+    // Issue #223's test canvas module: an item that builds a streams@1 table.
+    #[cfg(feature = "test-swirl")]
+    out.push(deep_canvas_test_modules::swirl::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
+    // Issue #522's test canvas module: an item that fires a world's launch input.
+    #[cfg(any(feature = "test-launch-module", feature = "test-launch-module-first"))]
+    out.push(deep_canvas_test_modules::launch::module());
     // Issue #412's test canvas modules.
     #[cfg(feature = "test-preview")]
     out.push(deep_canvas_test_modules::kinds::preview());
+    // Issue #1802's: the same module once it removed its preview kind, with a migration and without.
+    #[cfg(feature = "test-preview-removed")]
+    out.push(deep_canvas_test_modules::kinds::preview_removed());
+    #[cfg(feature = "test-preview-removed-bare")]
+    out.push(deep_canvas_test_modules::kinds::preview_removed_bare());
     #[cfg(feature = "test-cue")]
     out.push(deep_canvas_test_modules::kinds::cue());
     #[cfg(feature = "test-cue-span")]

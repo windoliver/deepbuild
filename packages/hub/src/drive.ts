@@ -9,9 +9,9 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import type { LeaseKind, LeaseTable } from '@deepbuild/leases';
 import { refuse, ulid, type Plant } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** The replica's lease kind: at most two replicas run on a machine at once (Replica, Cost). */
 export const REPLICA_LEASE: LeaseKind = { name: 'replica', match: 'pool(2)', cap: 2, cooldown: 0, cost: 0 };

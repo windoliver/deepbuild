@@ -14,9 +14,9 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { refuse } from './wire.js';
 import { callAsYou } from './client.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** deep_show answers within 2 s (Admission and latch): a presentation that waits for an app gives up then. */
 const PRESENT_MS = 2000;
@@ -38,10 +38,18 @@ function canvasCore(): string {
 /**
  * `deep kinds --dump <dir> | --diff <a> <b>` (#412): the canvas core's sealed listing written as canonical JSON named by
  * its module-set digest, or two dumps diffed; the canvas core prints one JSON line and exits 0, or 2 on bad input.
+ * Exit 3 when the core can't start; with none built, one line says what to build (#2176).
  */
-export function kindsCommand(args: readonly string[]): Promise<number> {
+export async function kindsCommand(args: readonly string[]): Promise<number> {
+  let core: string;
+  try {
+    core = canvasCore();
+  } catch (error) {
+    process.stderr.write(`deep kinds: ${(error as Error).message}\n`);
+    return 3;
+  }
   return new Promise((done) => {
-    const child = spawn(canvasCore(), ['kinds', ...args], { stdio: ['ignore', 'inherit', 'inherit'] });
+    const child = spawn(core, ['kinds', ...args], { stdio: ['ignore', 'inherit', 'inherit'] });
     child.on('error', () => done(3));
     child.on('exit', (code) => done(code ?? 3));
   });
@@ -268,6 +276,9 @@ export function waitForApp(appConnected: () => boolean): Promise<boolean> {
   });
 }
 
+/** A diagnostic mode's fields on a deep_show call, as the canvas core takes them (#411, #427). */
+const MODE_FIELDS = ['mode', 'cursor', 'item', 'reference', 'select', 'span', 'depth'] as const;
+
 /**
  * A deep_show call's fields as the canvas core takes them (#393's): the document and a patch parsed from their JSON
  * text, and the fields left null dropped, so the core's defaults hold. With no document or patch, a render-back of
@@ -281,13 +292,14 @@ export function showCall(args: Obj): Obj {
     try { return JSON.parse(v) as unknown; } catch { throw refuse('type', `/params/arguments/${key}`, `Give ${key} as one JSON object's text.`, v.slice(0, 200)); }
   };
   const out: Obj = { doc: args.doc };
-  for (const key of ['removes', 't', 'size', 'include', 'check', 'claim'] as const) if (args[key] !== null && args[key] !== undefined) out[key] = args[key];
+  for (const key of ['removes', 't', 'size', 'include', 'check', 'claim', ...MODE_FIELDS] as const) if (args[key] !== null && args[key] !== undefined) out[key] = args[key];
   const document = parse('document');
   const patch = parse('patch');
   if (document !== null && document !== undefined) out.document = document;
   else if (patch !== null && patch !== undefined) out.patch = patch;
-  else {
-    const probe = Object.fromEntries((['camera', 'probes'] as const).filter((k) => args[k] !== null && args[k] !== undefined).map((k) => [k, args[k]]));
+  // A diagnostic mode with no document draws the current revision (#411, #427): the canvas core's deep_show call.
+  else if (typeof out.mode !== 'string') {
+    const probe = Object.fromEntries((['camera', 'probes', 'sheet'] as const).filter((k) => args[k] !== null && args[k] !== undefined).map((k) => [k, args[k]]));
     return { call: 'render_back', doc: args.doc, t: flicksOf(String(args.t ?? '0s')), rev: args.rev ?? null, ...(out.size ? { size: out.size } : {}), ...probe };
   }
   return out;

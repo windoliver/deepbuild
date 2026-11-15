@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, relative } from 'node:path';
 import type { ChecksProvider, CommandRun } from './checks-port.js';
-import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import type { CheckResult } from '@deepbuild/conformance';
 import type { ExtensionHost } from '@deepbuild/extension-host';
@@ -53,7 +53,6 @@ export const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 /** How long a run stopped at its deadline gets to end on SIGTERM before SIGKILL. */
 const RUN_KILL_GRACE_MS = 10_000;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sql = (text: string): string => text.replace(/'/g, "''");
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
 const isUnder = (path: string, dir: string) => {

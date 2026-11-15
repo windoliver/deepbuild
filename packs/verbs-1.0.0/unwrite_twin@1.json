@@ -1,0 +1,20 @@
+{
+  "id": "verbs.unwrite_twin",
+  "version": "1.0",
+  "title": "Unwrite, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of unwrite: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {},
+  "steps": {
+    "unwrite": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "params/reveal/progress": 0
+        },
+        "ease": "linear"
+      }
+    }
+  }
+}

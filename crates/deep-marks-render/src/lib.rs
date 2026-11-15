@@ -222,7 +222,10 @@ fn live_request(input: &Map<String, Value>, look: Look) -> Option<Live> {
             .collect::<Option<Vec<_>>>()?,
     };
     let mut shots: [Vec<Shot>; 4] = Default::default();
-    for c in input.get("captures").map_or(Some(&[][..]), |c| c.as_array().map(Vec::as_slice))? {
+    for c in input
+        .get("captures")
+        .map_or(Some(&[][..]), |c| c.as_array().map(Vec::as_slice))?
+    {
         let named = c.get("phase")?.as_str()?;
         let phase = PHASES.iter().position(|p| *p == named)?;
         let shot = match (c.get("dir"), c.get("frame"), c.get("out")) {
@@ -245,7 +248,9 @@ fn live_request(input: &Map<String, Value>, look: Look) -> Option<Live> {
         rect: [x, y, w, h],
         store: store(input.get("store"))?,
         moves,
-        settle_ms: input.get("settle_ms").map_or(Some(10_000.0), Value::as_f64)?,
+        settle_ms: input
+            .get("settle_ms")
+            .map_or(Some(10_000.0), Value::as_f64)?,
         redraws: u32::try_from(input.get("redraws").map_or(Some(0), Value::as_u64)?).ok()?,
         budget: match input.get("images") {
             None => None,
@@ -460,7 +465,7 @@ fn check(
                 expansions.push(json!({"instance": id, "derived": {name: derived}}))
             }
             Err(r) => issues.push(deep_canvas::document::Issue::error(
-                r.code, id, r.path, r.actual, &r.message,
+                r.code, id, r.path, *r.actual, &r.message,
             )),
         }
     }
@@ -785,6 +790,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::Bool(b)) => *b,
             Some(_) => return None,
         };
+        // #223: a line's warps are counted from here, so its first frame reports what the check,
+        // which draws the document first, mapped for it.
+        deep_canvas_marks::warp::take_mapped();
+        deep_canvas_marks::warp::time_with(timing.then_some(raster::clock_ms as fn() -> f64));
         let (checked, vectors) = check(
             &doc,
             look.as_ref().map(|(l, _)| l),

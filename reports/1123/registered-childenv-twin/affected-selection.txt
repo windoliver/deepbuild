@@ -1,0 +1,1 @@
+parallel node: tests/acceptance/1123/benchmark-unblock/blank.test.mjs tests/acceptance/1123/binaries.test.mjs tests/acceptance/1123/capture-redraft/origin.test.mjs tests/acceptance/1123/environment.test.mjs

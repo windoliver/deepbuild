@@ -68,13 +68,21 @@ fn apply_op(doc: &mut Value, op: &Value) {
 pub fn applied(doc: &Value, picked: &BTreeMap<String, String>) -> Value {
     let mut out = doc.clone();
     for (set, spec) in doc["variants"].as_object().into_iter().flatten() {
-        let name = picked.get(set).map(String::as_str).or_else(|| spec["default"].as_str());
+        let name = picked
+            .get(set)
+            .map(String::as_str)
+            .or_else(|| spec["default"].as_str());
         let option = spec["options"]
             .as_array()
             .into_iter()
             .flatten()
             .find(|o| name.is_some() && o["name"].as_str() == name);
-        for op in option.map(|o| &o["patch"]).and_then(Value::as_array).into_iter().flatten() {
+        for op in option
+            .map(|o| &o["patch"])
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             apply_op(&mut out, op);
         }
     }
@@ -88,7 +96,11 @@ pub fn option_names(doc: &Value, control: &Value) -> Vec<String> {
         list.and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .filter_map(|o| o.as_str().or_else(|| o["name"].as_str()).or_else(|| o["id"].as_str()))
+            .filter_map(|o| {
+                o.as_str()
+                    .or_else(|| o["name"].as_str())
+                    .or_else(|| o["id"].as_str())
+            })
             .map(String::from)
             .collect()
     };
@@ -96,7 +108,10 @@ pub fn option_names(doc: &Value, control: &Value) -> Vec<String> {
         return names(doc["variants"][set].get("options"));
     }
     match control["kind"].as_str() {
-        Some("stages") => control["stages"].as_object().map(|s| s.keys().cloned().collect()).unwrap_or_default(),
+        Some("stages") => control["stages"]
+            .as_object()
+            .map(|s| s.keys().cloned().collect())
+            .unwrap_or_default(),
         _ => names(control.get("options")),
     }
 }
@@ -107,24 +122,48 @@ pub(crate) fn check(doc: &Value, issues: &mut Vec<Issue>) {
     let sets = member(doc, "variants").and_then(Value::as_object);
     for (set, spec) in sets.into_iter().flatten() {
         let mut bad = |code, field: &str, actual: Value, what: &str| {
-            let path = if field.is_empty() { format!("variants/{set}") } else { format!("variants/{set}/{field}") };
+            let path = if field.is_empty() {
+                format!("variants/{set}")
+            } else {
+                format!("variants/{set}/{field}")
+            };
             issues.push(Issue::error(code, set, path, actual, what));
         };
         let Some(options) = spec["options"].as_array() else {
-            bad("out_of_range", "options", spec["options"].clone(), "not a list of options");
+            bad(
+                "out_of_range",
+                "options",
+                spec["options"].clone(),
+                "not a list of options",
+            );
             continue;
         };
         let mut seen = BTreeSet::new();
         for (i, o) in options.iter().enumerate() {
             let Some(name) = o["name"].as_str() else {
-                bad("out_of_range", &format!("options/{i}/name"), o["name"].clone(), "not a name");
+                bad(
+                    "out_of_range",
+                    &format!("options/{i}/name"),
+                    o["name"].clone(),
+                    "not a name",
+                );
                 continue;
             };
             if !seen.insert(name) {
-                bad("out_of_range", &format!("options/{i}/name"), json!(name), "names an option twice");
+                bad(
+                    "out_of_range",
+                    &format!("options/{i}/name"),
+                    json!(name),
+                    "names an option twice",
+                );
             }
             let Some(patch) = o["patch"].as_array() else {
-                bad("out_of_range", &format!("options/{i}/patch"), o["patch"].clone(), "not a list of ops");
+                bad(
+                    "out_of_range",
+                    &format!("options/{i}/patch"),
+                    o["patch"].clone(),
+                    "not a list of ops",
+                );
                 continue;
             };
             for (k, op) in patch.iter().enumerate() {
@@ -136,30 +175,65 @@ pub(crate) fn check(doc: &Value, issues: &mut Vec<Issue>) {
                 };
                 if !ok {
                     let path = format!("options/{i}/patch/{k}");
-                    bad("out_of_range", &path, op.clone(), "not a set, create or delete op");
+                    bad(
+                        "out_of_range",
+                        &path,
+                        op.clone(),
+                        "not a set, create or delete op",
+                    );
                 }
             }
         }
         if let Some(d) = spec.get("default").filter(|d| !d.is_null()) {
             if !d.as_str().is_some_and(|d| seen.contains(d)) {
-                bad("ref_unresolved", "default", d.clone(), "names no option of the set");
+                bad(
+                    "ref_unresolved",
+                    "default",
+                    d.clone(),
+                    "names no option of the set",
+                );
             }
         }
     }
     let items = member(doc, "items").and_then(Value::as_object);
     let collections = member(doc, "collections").and_then(Value::as_object);
-    for (id, c) in member(doc, "controls").and_then(Value::as_object).into_iter().flatten() {
+    for (id, c) in member(doc, "controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let mut bad = |code, field: &str, actual: Value, what: &str| {
-            issues.push(Issue::error(code, id, format!("controls/{id}/{field}"), actual, what));
+            issues.push(Issue::error(
+                code,
+                id,
+                format!("controls/{id}/{field}"),
+                actual,
+                what,
+            ));
         };
         if let Some(set) = c.get("variant") {
             if c["kind"].as_str() != Some("choice") {
-                bad("out_of_range", "variant", set.clone(), "only a choice picks a variant");
-            } else if !set.as_str().is_some_and(|s| sets.is_some_and(|m| m.contains_key(s))) {
-                bad("ref_unresolved", "variant", set.clone(), "names no variant set of the document");
+                bad(
+                    "out_of_range",
+                    "variant",
+                    set.clone(),
+                    "only a choice picks a variant",
+                );
+            } else if !set
+                .as_str()
+                .is_some_and(|s| sets.is_some_and(|m| m.contains_key(s)))
+            {
+                bad(
+                    "ref_unresolved",
+                    "variant",
+                    set.clone(),
+                    "names no variant set of the document",
+                );
             }
         }
-        let Some(targets) = c.get("targets") else {
+        // #540: a list of targets names what an entry hits (Control: point), which the input
+        // module checks; only a map of options to items is checked here.
+        let Some(targets) = c.get("targets").filter(|t| !t.is_array()) else {
             continue;
         };
         let Some(targets) = targets.as_object() else {
@@ -170,13 +244,24 @@ pub(crate) fn check(doc: &Value, issues: &mut Vec<Issue>) {
         let picks = matches!(c["kind"].as_str(), Some("choice" | "stages"));
         for (option, item) in targets {
             if picks && !options.contains(option) {
-                bad("ref_unresolved", &format!("targets/{option}"), json!(option), "names no option or stage of the control");
+                bad(
+                    "ref_unresolved",
+                    &format!("targets/{option}"),
+                    json!(option),
+                    "names no option or stage of the control",
+                );
             }
-            let known = item
-                .as_str()
-                .is_some_and(|i| items.is_some_and(|m| m.contains_key(i)) || collections.is_some_and(|m| m.contains_key(i)));
+            let known = item.as_str().is_some_and(|i| {
+                items.is_some_and(|m| m.contains_key(i))
+                    || collections.is_some_and(|m| m.contains_key(i))
+            });
             if !known {
-                bad("ref_unresolved", &format!("targets/{option}"), item.clone(), "names no item or collection of the document");
+                bad(
+                    "ref_unresolved",
+                    &format!("targets/{option}"),
+                    item.clone(),
+                    "names no item or collection of the document",
+                );
             }
         }
     }
@@ -200,9 +285,15 @@ mod tests {
     #[test]
     fn a_pick_applies_its_option_and_no_pick_its_default() {
         let d = doc();
-        assert_eq!(applied(&d, &BTreeMap::new())["items"]["case"]["params"]["color"], "r");
+        assert_eq!(
+            applied(&d, &BTreeMap::new())["items"]["case"]["params"]["color"],
+            "r"
+        );
         let picked = BTreeMap::from([("color".to_string(), "blue".to_string())]);
-        assert_eq!(applied(&d, &picked)["items"]["case"]["params"]["color"], "b");
+        assert_eq!(
+            applied(&d, &picked)["items"]["case"]["params"]["color"],
+            "b"
+        );
     }
 
     #[test]
@@ -213,12 +304,28 @@ mod tests {
         d["controls"]["other"] = json!({"kind": "slider", "variant": "nope"});
         let mut issues = Vec::new();
         check(&d, &mut issues);
-        let paths: Vec<String> = issues.iter().map(|i| format!("{} {}", i.code, i.path)).collect();
-        assert!(paths.contains(&"ref_unresolved variants/color/default".to_string()), "{paths:?}");
-        assert!(paths.contains(&"ref_unresolved controls/pick/targets/green".to_string()), "{paths:?}");
-        assert!(paths.contains(&"out_of_range controls/other/variant".to_string()), "{paths:?}");
+        let paths: Vec<String> = issues
+            .iter()
+            .map(|i| format!("{} {}", i.code, i.path))
+            .collect();
+        assert!(
+            paths.contains(&"ref_unresolved variants/color/default".to_string()),
+            "{paths:?}"
+        );
+        assert!(
+            paths.contains(&"ref_unresolved controls/pick/targets/green".to_string()),
+            "{paths:?}"
+        );
+        assert!(
+            paths.contains(&"out_of_range controls/other/variant".to_string()),
+            "{paths:?}"
+        );
         let mut clean = Vec::new();
         check(&doc(), &mut clean);
-        assert!(clean.is_empty(), "{:?}", clean.iter().map(|i| &i.path).collect::<Vec<_>>());
+        assert!(
+            clean.is_empty(),
+            "{:?}",
+            clean.iter().map(|i| &i.path).collect::<Vec<_>>()
+        );
     }
 }

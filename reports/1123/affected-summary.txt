@@ -1,0 +1,4 @@
+BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+FAIL affected: 152 new, 11 already failing on main, 2 inconclusive or blocked, 0 listed skips, 17 passed, in 669 s at load 97; logs in <scratch>
+INCONCLUSIVE: full affected run stopped at roughly 5 minutes as host load exceeded 300. Only verified descendant PIDs of own run 70197 were stopped. Partial failures retained; no full-run pass, no repeated full run. Timed and slow blocks remain unrun. Earlier focused affected finished (17 tests passed; repository lints failed).

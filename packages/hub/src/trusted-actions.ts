@@ -20,6 +20,7 @@ import { inviteText, People } from './people.js';
 import { identityAt } from './identity.js';
 
 import { Channels } from './channels.js';
+import { enterSlackToken } from './reach.js';
 
 import { checkKey, Devices } from './trusted.js';
 
@@ -33,7 +34,7 @@ import { readPack } from './packs.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
 import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
-import { AUTHORITY, type Obj, isObj } from "./hub-shared.js";
+import { AUTHORITY, type Obj, isObj, writing } from "./hub-shared.js";
 import type { HumanControlPort } from './human-control-port.js';
 export interface TrustedActionsOptions {
  settings: CoreOptions;
@@ -72,20 +73,23 @@ export class TrustedActions {
    * Whether an answer may count: a paired device's valid signature for this method, this hub and these params (#1579),
    * from any role; otherwise, from the CLI alone, the OS confirming you with a prompt that names what you answer. The
    * control token and the peer check alone never make one count, and a deep command run inside an agent's process
-   * tree acts as that agent's session.
+   * tree acts as that agent's session, signed or not (#1606): a command an agent starts runs as you, so a signature it
+   * carries proves nothing about who answered.
    */
   async trusted(method: string, params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
+    const agent = await this.options.state().agentAbove(context.peer);
+    if (agent && this.options.settings.plant !== 'answer-inside-session') {
+      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask${params.signature !== undefined ? ', whatever it signs' : ''}. Answer it from your own terminal or on the question card.`, handle));
+    }
     if (params.signature !== undefined) {
-      const why = this.options.services.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.options.services.now() }, { skipsTime: this.options.settings.plant === 'signature-skips-time' });
+      // A write with a request ID spends the signature's once-only ID as it ends: a crash before it commits spends none (#1577).
+      const write = writing.getStore();
+      const why = this.options.services.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.options.services.now() }, { skipsTime: this.options.settings.plant === 'signature-skips-time', ...(write?.receipt && !write.done ? { spentAfter: write.after } : {}) });
       if (!why) return;
       const signed = (params.signature as { signed?: Obj }).signed;
       throw new Refused(refusal('credential', why.field === 'signature' ? '/params/signature/sig' : `/params/signature/signed/${why.field}`, `${handle} stays open: the signature's ${why.field} doesn't hold (${why.reason}). Sign it again with a device you paired, for ${method} on this hub, over exactly the params it sends.`, signed?.[why.field] ?? why.field));
     }
     if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
-    const agent = await this.options.state().agentAbove(context.peer);
-    if (agent && this.options.settings.plant !== 'answer-inside-session') {
-      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
-    }
     const plant = this.options.settings.plant;
     if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
     const why = await this.options.services.confirmer.you(what, { handle, revision, process: context.peer });
@@ -102,6 +106,15 @@ export class TrustedActions {
   async enterSecret(params: Obj, context: CallContext): Promise<Obj> {
     const { extension, name, value } = params;
     if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
+    // A channel's token or the Slack connector's (#1606): `deep secret add channels <channel>` or `deep secret add slack token`.
+    if (extension === 'channels' || extension === 'slack') {
+      const what = extension === 'slack' ? "the Slack connector's token" : `the token of the channel ${name}`;
+      const channels = this.options.services.channels;
+      if (extension === 'channels' && !channels) throw new Refused(refusal('unavailable', '', 'The hub has no channels yet; try again once it is ready.', name, true));
+      await this.trusted('secret.enter', params, context, `add ${what}`, `secret:${extension}/${name}`, name);
+      await (extension === 'slack' ? enterSlackToken(this.options.services.root.dir, value) : channels!.enterToken(name, value)).catch((e: Error) => { throw new Refused(refusal('unavailable', '/params/name', `${what} wasn't saved: ${e.message}.`, name)); });
+      return { saved: true, test: 'untested' };
+    }
     if (!this.options.services.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
     await this.trusted('secret.enter', params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
     const { saved, test } = await this.options.services.extensions.enterSecret(this.options.events.connection('cli'), extension, name, value);
@@ -375,9 +388,11 @@ export class TrustedActions {
   async packRule(params: Obj, context: CallContext): Promise<Obj> {
     const { pack, licenses } = params;
     if (typeof pack !== 'string' || !Array.isArray(licenses) || !licenses.every((l) => typeof l === 'string' && l)) throw refuse('type', '/params', 'Name pack as owner/name and list its allowed license IDs.', params);
+    const libraries = this.options.services.libraries;
+    if (!libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
+    if (!libraries.packs.named(pack)) throw refuse('not_found', '/params/pack', `No pack ${pack} is installed; deep install <pack folder> installs one.`, pack);
     await this.asYou(context, 'pack.rule', `allow ${pack} to fetch assets under ${licenses.join(', ') || 'no license'}`, `pack:${pack}`, JSON.stringify(licenses));
-    if (!this.options.services.libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
-    return this.options.services.libraries.packRule(pack, licenses as string[]);
+    return libraries.packRule(pack, licenses as string[]);
   }
 
   /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
@@ -403,12 +418,15 @@ export class TrustedActions {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A library is turned on or off, and its rule set, from your own terminal, once the OS confirms you.', method));
     const agent = await this.options.state().agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent changes a library. Run it from your own terminal.`, method));
+    const libraries = this.options.services.libraries;
+    if (!libraries) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', method, true));
+    const unchangeable = libraries.unchangeable(library, method === 'library.off');
+    if (unchangeable) throw new Refused(refusal('not_found', '/params/library', `${unchangeable}.`, library));
     const what = method === 'library.rule' ? `let ${library} fetch under ${(licenses as string[]).join(', ') || 'no license'} with no ask` : `turn ${library} ${method === 'library.on' ? 'on' : 'off'}`;
     const why = await this.options.services.confirmer.you(what, { handle: `library:${library}`, revision: what });
     if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, method, true));
-    if (!this.options.services.libraries) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', method, true));
     try {
-      return method === 'library.rule' ? { ...this.options.services.libraries.rule(library, licenses as string[]) } : { ...this.options.services.libraries.turn(library, method === 'library.on') };
+      return method === 'library.rule' ? { ...libraries.rule(library, licenses as string[]) } : { ...libraries.turn(library, method === 'library.on') };
     } catch (e) {
       if (e instanceof LibraryRefused) throw new Refused(refusal('not_found', '/params/library', `${e.message}.`, library));
       throw e;

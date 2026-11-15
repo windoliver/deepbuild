@@ -78,6 +78,8 @@ struct Stub {
 
 struct Args {
     look: Look3,
+    /// #462: the looks the fixtures' shots and regions name.
+    looks: BTreeMap<String, crate::regions::Named>,
     writer: String,
     store: PathBuf,
     scene: PathBuf,
@@ -154,6 +156,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         ));
     };
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let looks = crate::regions::looks_of(call, None)?;
     let separate = match call.get("separate_items") {
         None => None,
         Some(s) => match (s["doc"].as_str(), s["instanced"].as_str()) {
@@ -197,6 +200,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
     };
     Ok(Args {
         look,
+        looks,
         writer: writer.to_string(),
         store: PathBuf::from(store),
         scene: PathBuf::from(scene),
@@ -300,6 +304,7 @@ fn checked(
         labels,
         Some((&raw, plants)),
         planted,
+        None,
     )
     .map_err(|issues| json!({"code": "refused", "issues": issues}))?;
     Ok((raw, a))
@@ -308,10 +313,12 @@ fn checked(
 /// The revision's view, opened at check with its warm-up compiled, as the app's window opens it:
 /// its slots, and the internal scale and history window its class's memory fits, with the
 /// upscale's pipelines when that scale is below 1.
+#[allow(clippy::too_many_arguments)]
 fn opened(
     device: &Device,
     kit: &mut Kit,
     look: &Look3,
+    looks: &BTreeMap<String, crate::regions::Named>,
     a: Admitted,
     labels: &mut Labels,
     plants: &Plants,
@@ -343,6 +350,17 @@ fn opened(
         kit.upscale = Some(Arc::new(compile_upscale(device)));
     }
     view.warm(device, look, &warm.scenes);
+    // #462: the looks its shots and regions name, each rendered whole and mixed into the frame.
+    let independent = planted == Some(Planted::RegionSidesClipIndependently);
+    view.set_regions(
+        device,
+        &doc,
+        look,
+        looks,
+        labels,
+        crate::session3::msaa_planted(planted),
+        independent,
+    )?;
     let (options, check) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, check, &[]);
     view.want_targets(&doc, plants.builds_unread_targets);
@@ -404,10 +422,10 @@ fn draw(
         0,
     )
     .map_err(|r| refused(r.code, r.path))?;
-    timer.resolve(&mut encoder);
     let cpu = began.elapsed().as_secs_f64() * 1e3;
     device.queue.submit([encoder.finish()]);
     memory::drain(device);
+    timer.resolve_after(device);
     Ok((cpu, timer.read(device)))
 }
 
@@ -469,7 +487,16 @@ fn play(
     let estimate_bytes = a.fit.bytes();
     let window = a.fit.history;
     let mut kit = Kit::new(device);
-    let mut view = opened(device, &mut kit, &args.look, a, labels, plants, planted)?;
+    let mut view = opened(
+        device,
+        &mut kit,
+        &args.look,
+        &args.looks,
+        a,
+        labels,
+        plants,
+        planted,
+    )?;
     let mut timer = Timer::new(device);
     let rate = display.map_or(60.0, |d| d.rate);
     // Frame history beside every other pass (#173), its grid a frame of the play.
@@ -534,6 +561,7 @@ fn play(
                         labels,
                         None,
                         planted,
+                        None,
                     )
                     .map_err(|issues| json!({"code": "refused", "issues": issues}))?;
                     view.set_frames(a.into_frames());
@@ -1041,6 +1069,10 @@ pub fn opens(app: &mut App, call: &Value) -> Value {
         Ok(l) => l,
         Err(e) => return bad(&format!("look: {e}")),
     };
+    let looks = match crate::regions::looks_of(call, None) {
+        Ok(l) => l,
+        Err(e) => return e,
+    };
     let delay = match test_only(call, "stub_pipeline_delay_ms") {
         Ok(d) => d.and_then(Value::as_u64),
         Err(e) => return e,
@@ -1070,7 +1102,16 @@ pub fn opens(app: &mut App, call: &Value) -> Value {
                     planted,
                 )?;
                 let mut kit = Kit::new(&device);
-                let mut view = opened(&device, &mut kit, &look, a, &mut labels, &plants, planted)?;
+                let mut view = opened(
+                    &device,
+                    &mut kit,
+                    &look,
+                    &looks,
+                    a,
+                    &mut labels,
+                    &plants,
+                    planted,
+                )?;
                 // The planted meter starts its clock once the check's warm-up is done.
                 if planted == Some(Planted::WaitClockAfterWarmup) {
                     start = (Instant::now(), device.device.counts().read());
@@ -1249,6 +1290,10 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
         Ok(l) => l,
         Err(e) => return bad(&format!("look: {e}")),
     };
+    let looks = match crate::regions::looks_of(call, None) {
+        Ok(l) => l,
+        Err(e) => return e,
+    };
     let fps = call["fps"].as_f64().filter(|f| *f > 0.0).unwrap_or(60.0);
     let mut patches = BTreeMap::new();
     for p in call["patches"].as_array().into_iter().flatten() {
@@ -1283,7 +1328,16 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
         };
         let mut stamped = a.doc.clone();
         let mut kit = Kit::new(&device);
-        let mut view = match opened(&device, &mut kit, &look, a, &mut labels, &plants, planted) {
+        let mut view = match opened(
+            &device,
+            &mut kit,
+            &look,
+            &looks,
+            a,
+            &mut labels,
+            &plants,
+            planted,
+        ) {
             Ok(v) => v,
             Err(e) => return e,
         };
@@ -1310,6 +1364,7 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
                     &mut labels,
                     Some((&payload, &plants)),
                     planted,
+                    None,
                 ) {
                     Ok(a) => a,
                     Err(issues) => return json!({"code": "refused", "issues": issues}),

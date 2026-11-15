@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -8,9 +9,9 @@ import { readFacts } from '@deepbuild/adapters';
 
 import { AskRefused } from '@deepbuild/asks';
 
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, isRecord as isObj, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
-import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { type Connection, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 
 import { readJson } from './claude-settings.js';
 import { statKey } from './agent-files.js';
@@ -20,7 +21,7 @@ import { ownHome } from './keychain.js';
 import { adapterOf } from './hookmap.js';
 import { type Piece } from './context-fit.js';
 
-import { isPrCreate } from './forge.js';
+import { prCommands } from './pr-commands.js';
 
 import { type Plant } from './plant.js';
 
@@ -65,9 +66,9 @@ export const rulePieces = (head: string, rules: readonly (readonly [string, stri
   [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
 
 /** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
-export const ghToken = (): Promise<string | undefined> => {
+export const ghToken = (signal?: AbortSignal): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
-  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
+  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000, ...(signal ? { signal } : {}) }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
 
 export const SECRETS_TTL = 10_000;
@@ -173,7 +174,7 @@ export const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 
-export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+export { isObj };
 
 /** A verdict as the hub records and returns it: the gate's, or its opposite in #1334's planted misjudging build. */
 export const misjudged = <V extends { outcome: string }>(v: V, plant: Plant | undefined): V => (plant === 'judges-claims-wrongly' ? { ...v, outcome: v.outcome === 'PASS' ? 'FAIL' : 'PASS' } : v);
@@ -238,7 +239,7 @@ export function callOf(d: Obj, { effects, tools }: ReturnType<typeof effectEntri
   const kind = String(d.kind);
   const command = typeof d.command === 'string' ? d.command : undefined;
   const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
-  const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
+  const pr = kind === 'shell' && command !== undefined && prCommands(command).some((pr) => pr.verb === 'create');
   // An MCP tool sends when its facts give it such an effect, or when it counts as send or destructive, by its facts or your rules.json.
   const counts = kind === 'mcp' ? tools.get(`mcp__${String(d.server)}__${String(d.tool)}`) ?? d.counts : undefined;
   const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && ((typeof d.effect === 'string' && EFFECTS.has(d.effect)) || counts === 'send' || counts === 'destructive'));
@@ -310,6 +311,28 @@ export function readsLogged(record: RecordStore, file: string): RecordStore {
         return bound(...args);
       };
     },
+  });
+}
+
+/**
+ * The write an append runs inside (#1577): its receipt, until an event carrying it out takes it, the last position it
+ * reached, and what it does as it ends (spending its signature's once-only ID).
+ */
+export interface Write { receipt?: Receipt; effects: readonly string[]; carried: boolean; done: boolean; last: number; after: (() => void)[] }
+export const writing = new AsyncLocalStorage<Write>();
+
+/** The record whose appends inside a write carry its receipt, on the first event that carries the write out. */
+export function receipting(record: RecordStore): RecordStore {
+  return withAppend(record, async (connection, input, given) => {
+    const w = writing.getStore();
+    const live = w && !w.done ? w : undefined;
+    const receipt = given ?? (live?.receipt && !live.carried && live.effects.includes(input.kind) ? live.receipt : undefined);
+    const appended = await record.append(connection, input, receipt);
+    if (live) {
+      if (receipt && !given && !appended.existing) live.carried = true;
+      live.last = Math.max(live.last, appended.log_pos);
+    }
+    return appended;
   });
 }
 
