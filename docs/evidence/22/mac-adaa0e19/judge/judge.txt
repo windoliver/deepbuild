@@ -1,0 +1,7 @@
+== conditions at start: NOT NOMINAL at the start (load 17.44, thermal 0); no load wait, the user's standing choice at the Mac; Now drawing from 'AC Power'; lowpowermode 0; thermalState 0;  1:09  up 1 day, 18:11, 2 users, load averages: 17.44 7.60 10.56
+== command: DEEP_PROOF_ISSUES=<issues folder> node scripts/spine-22-mac-adaa0e19.mjs judge --issue 22 (copy: #22 pinned to adaa0e19d08810370d6ba5bca9fa3563b41d1d2f, reopen() returns at once; issue bodies read from files)
+== stdout:
+{"issue":22,"commit":"adaa0e19d08810370d6ba5bca9fa3563b41d1d2f","verdict":"PASS","criteria":[{"id":"#22.48b6696b","outcome":"PASS"},{"id":"#22.1f14a778","outcome":"PASS"},{"id":"#22.f57a814c","outcome":"PASS"},{"id":"#22.3d85284a","outcome":"PASS"}],"reopen":null}
+== stderr (first 200 lines):
+== exit=0 wall 377 s
+== conditions at end: Now drawing from 'AC Power'; thermalState 0;  1:16  up 1 day, 18:18, 2 users, load averages: 3.82 9.66 11.20

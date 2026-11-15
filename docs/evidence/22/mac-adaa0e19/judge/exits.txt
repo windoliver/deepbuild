@@ -1,0 +1,19 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 01:08:35 load { 4.57 3.81 9.57 } thermal 0 free KB 61983824
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 01:08:45 load { 5.49 4.01 9.60 } thermal 0 free KB 61457528
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261; session's copy same 01:08:45 load { 7.29 4.41 9.71 } thermal 0 free KB 61457528
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720; session's copy same 01:08:45 load { 7.29 4.41 9.71 } thermal 0 free KB 61457776
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733; session's copy same 01:08:45 load { 7.29 4.41 9.71 } thermal 0 free KB 61457756
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711; session's copy same 01:08:45 load { 7.29 4.41 9.71 } thermal 0 free KB 61457756
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305; session's copy same 01:08:45 load { 7.29 4.41 9.71 } thermal 0 free KB 61457756
+copy checks before any build: sha256 7e5323b292e9424b3c48802144fce8da1b427a6cfb894e4d56fdbeeaabffdfac diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 01:08:45 load { 7.29 4.41 9.71 } thermal 0 free KB 61457756
+readIssue pre-check (before any build) exit=0, lines 5, 'blocked' count 0 01:08:46 load { 7.29 4.41 9.71 } thermal 0 free KB 61457732
+setup exit=0 01:09:40 load { 17.44 7.60 10.56 } thermal 0 free KB 60309552
+readIssue pre-check (after the build) exit=0, lines 5, 'blocked' count 0 01:09:41 load { 17.44 7.60 10.56 } thermal 0 free KB 60309572
+status before the judge [] 01:09:42 load { 17.44 7.60 10.56 } thermal 0 free KB 60232236
+judge gate: NOT NOMINAL at the start (load 17.44, thermal 0); no load wait, the user's standing choice at the Mac 01:09:42 load { 17.44 7.60 10.56 } thermal 0 free KB 60232084
+gh probe before the judge: exit=0 exit=0  01:09:44 load { 17.44 7.60 10.56 } thermal 0 free KB 60229820
+judge exit=0 wall 377 s (NOT NOMINAL at the start (load 17.44, thermal 0); no load wait, the user's standing choice at the Mac) 01:16:01 load { 3.82 9.66 11.20 } thermal 0 free KB 58657684
+gh probe after the judge: exit=0 exit=0  01:16:02 load { 3.82 9.66 11.20 } thermal 0 free KB 58657848
+status after [] 01:16:03 load { 3.82 9.66 11.20 } thermal 0 free KB 58657812
+login-name hits after redaction: 0 01:16:03 load { 3.82 9.66 11.20 } thermal 0 free KB 58657784
+secret scan hits=0 01:16:03 load { 3.82 9.66 11.20 } thermal 0 free KB 58657780

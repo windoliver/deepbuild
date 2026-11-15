@@ -394,3 +394,16 @@ fell under 20 GB (`exits.txt`), after its first A/B round.
 - **The judge** (`judge.txt`), from a copy that pins #22 to adaa0e19 and doesn't reopen issues: #318, #320 and #321
   PASS; #319 (`#22.1f14a778`) INCONCLUSIVE. The Mac was on battery power at the judge's start and end, and #319's budgets
   refuse to time off mains power (`tests/acceptance/319/helpers.ts:188`), so the part can't pass there by its own rule.
+
+### The judge on mains power, at adaa0e19 (`mac-adaa0e19/judge/`)
+
+Run on its own after the owner plugged the Mac in. `judge.txt`: #22 PASS at adaa0e19, all four parts PASS
+(`#22.48b6696b`, `#22.1f14a778`, `#22.f57a814c`, `#22.3d85284a`), no reopen, exit 0, 377 s. On AC power at start and
+end, thermal state 0. Load was 17.4 at the start and 3.8 at the end, with no load wait by the owner's standing choice,
+so the run is NOT NOMINAL; #319's budgets passed under that load. Same judge copy as before (pins #22 to adaa0e19,
+doesn't reopen; sha256 7e5323b2…), issue bodies from files matching GitHub's.
+
+### The review of the final diff
+
+The merge of main changed nothing in this PR's own diff: `git diff 2252dfd6 adaa0e19` and `git diff` of 6915a4fb
+against its merge base give the same lines (outside `docs/evidence`), so the third review, at 6915a4fb, covers it.
