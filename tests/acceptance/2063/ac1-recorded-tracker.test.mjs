@@ -11,7 +11,9 @@ import { RECORD, RECORDED_LIST, listEntries, naming, runLane } from './helpers.m
 // defines it: the planned checks, the kind rule, the fixture and the lease key.
 const TODAY = [['plan.overlay', 1260], ['move.feel', 274], ['process.conserve', 980], ['archive.scene', 2036], ['stack.slot', 335]];
 
-test('#2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it', (t) => {
+// Retired with the owner's approval on #2063 (PR #2572): its recorded list holds brief.uncited, which the owner ruled an
+// event kind; ac1-recorded-tracker-exact.test.mjs is criterion 1's test.
+test.skip('#2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it', (t) => {
   const issues = JSON.parse(readFileSync(RECORD, 'utf8'));
   const list = readFileSync(RECORDED_LIST, 'utf8');
 
