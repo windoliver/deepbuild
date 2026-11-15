@@ -20,5 +20,5 @@ A canvas module crate under `scripts/canvas-lint.mjs`. It reaches the core throu
 
 ## Deviations
 
-- `lib.interface@1` isn't here yet; no criterion of #238 or #190 reaches it, and #209 and #171 bring its callers.
+- The interface `lib.interface@1` isn't here yet; no criterion of #238 or #190 reaches it, and #209 and #171 bring its callers.
 - The linker takes only the relocations a called library needs (function, type and global indices, and its own data's addresses); a library that takes a function's address, declares a table or a start function, or reads another object's data is refused, naming it.
