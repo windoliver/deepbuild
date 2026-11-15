@@ -1,0 +1,56 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/mods-start.test.ts packages/hub/test/overridden.test.ts packages/hub/test/start-ps.test.ts tests/acceptance/2329/compaction-ps.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+····x···
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2329/compaction-ps.test.ts > #2329.ac1 ten compactions from the process their session holds start no ps
+AssertionError: ps invocations over ten compactions in the held process: expected [ '-o lstart= -p 70270', …(19) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++   "-o args= -p 70270",
++   "-o args= -p 70270",
++   "-o lstart= -p 70270",
++ ]
+
+ ❯ tests/acceptance/2329/compaction-ps.test.ts:28:84
+     26|     await sleep(SETTLE);
+     27|     expect(w.starts(id), 'each compaction is checked against the sessi…
+     28|     expect(w.psCalls(), 'ps invocations over ten compactions in the he…
+       |                                                                                    ^
+     29|   });
+     30| }, 90_000);
+ ❯ withWorld tests/acceptance/2329/helpers.ts:71:5
+ ❯ tests/acceptance/2329/compaction-ps.test.ts:11:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 7 passed (8)
+   Start at  11:33:54
+   Duration  17.98s (tests 98%, transform 1%)
+

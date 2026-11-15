@@ -1,0 +1,38 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/codex-hub.test.ts packages/hub/test/gone-watch.test.ts packages/hub/test/login-plan.test.ts packages/hub/test/mods-start.test.ts packages/hub/test/overridden.test.ts packages/hub/test/pi-takeover.test.ts packages/hub/test/process-read-reuse.test.ts packages/hub/test/start-ps.test.ts packages/hub/test/threads.test.ts tests/acceptance/2329/compaction-ps.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+deep hub: archive: The database connection is not open
+··············stderr | packages/hub/test/process-read-reuse.test.ts
+vitest-setup: stopping 4 process(es) this file left running:
+  29506 (node)
+  29508 (node)
+  29547 (node)
+  29549 (node)
+
+··stderr | tests/acceptance/2329/compaction-ps.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  30430 (node)
+
+······x······················
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/codex-hub.test.ts > a Codex thread resumed in a new process > is its own again from its SessionStart, and not before
+Error: ENOTEMPTY, Directory not empty: '/private/tmp/dh39-r30vPx'
+ ❯ cleanup tests/acceptance/39/helpers.ts:65:35
+     63|   for (const pid of owned) try { process.kill(pid, 'SIGKILL'); } catch…
+     64|   owned.clear();
+     65|   for (const d of made.splice(0)) rmSync(d, { recursive: true, force: …
+       |                                   ^
+     66| }
+     67|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 9 passed (10)
+      Tests  1 failed | 44 passed (45)
+   Start at  12:03:01
+   Duration  185.05s (tests 100%)
+
