@@ -1054,9 +1054,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
     let id = ulid(now / 1_000_000);
-    // The planted wrong program for #2204's AC4: rules.json is read on every event, not only a PreToolUse.
     let rules = rules();
-    // Guards that can't be read may hold a call: with the hub away it is denied, never let through unguarded.
+    // Guards that can't be read may hold a call: it is denied, never let through unguarded. The hub decides only from
+    // the entries deep-hook matched, so the denial is deep-hook's own, with the hub away and with it answering (#2204).
+    let unread = rules.as_ref().err().cloned();
     match &rules {
         Err(why) => {
             let _ = DENIAL.set(format!(
@@ -1237,6 +1238,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
                 remote::send_later(&home(), &joined.hub);
             }
             decide();
+            if let Some(why) = unread {
+                eprintln!("DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook matched this call against no guard. Retry it; if this comes again, fix that file.");
+                return ExitCode::from(2);
+            }
             print!("{stdout}");
             eprint!("{stderr}");
             return ExitCode::from(exit);
