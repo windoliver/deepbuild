@@ -987,9 +987,10 @@ impl<'a> Hub<'a> {
                             blocked.push(in_doc(json!({"code": "not_drawn", "kind": kind})));
                             Default::default()
                         }
+                        // #1164: a report reads the revision as played, its input track inlined.
                         (None, _) => check
                             .report
-                            .map(|run| run(&checked.lowered, &input))
+                            .map(|run| run(&crate::played::with_track(&checked.lowered, &self.track_json(doc)), &input))
                             .unwrap_or_default(),
                     };
                     for (id, r, actual) in out.raised {

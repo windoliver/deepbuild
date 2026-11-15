@@ -201,17 +201,26 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
     let mut w = world.restore(from, None)?;
     let mut r = Record::default();
     r.regions = regions.then(Default::default);
-    let mut until = to + 1;
-    w.run(until, &mut r, &mut |_, _| {});
     let ids: Vec<String> = w.piece.items.iter().map(|i| i.id.clone()).collect();
     let after = |r: &Record| {
         ids.iter()
             .filter_map(|id| r.deep(id).into_iter().find(|(k, _)| *k > to))
             .next()
     };
-    while after(&r).is_none() && until < steps {
+    // #1164: each step from `to` through the first checkpoint after it, as `logic`'s rows.
+    let piece = w.piece.clone();
+    let mut ran = Vec::new();
+    let mut until = from;
+    while until <= to || (after(&r).is_none() && until < steps) {
         until += 1;
         w.run(until, &mut r, &mut |_, _| {});
+        let k = until - 1;
+        if k >= to {
+            let hash: Map<String, Value> = r.rows().get(&k).map(|(items, _)| {
+                ids.iter().filter_map(|id| Some((id.clone(), items.get(id)?.get("hash")?.clone()))).collect()
+            }).unwrap_or_default();
+            ran.push(json!({"step": k, "hash": hash, "arrays": arrays_of(&w, &piece)}));
+        }
     }
     let mut hashes = Map::new();
     for id in &ids {
@@ -235,7 +244,7 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
         json!({"step": k, "deep_hash": deep})
     });
     let read = r.regions.as_ref().and_then(|m| m.get(&to).cloned());
-    Ok(json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint}))
+    Ok(json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint, "steps": ran}))
 }
 
 /// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
@@ -280,21 +289,7 @@ fn step_rows(
                 .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
                 .collect()
         };
-        let mut arrays = Map::new();
-        for (n, item) in piece.items.iter().enumerate() {
-            let region = world.write_region(n);
-            for w in &item.writes {
-                let Some(e) = item.write(&w.name) else {
-                    continue;
-                };
-                let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
-                let values = bytes
-                    .chunks_exact(w.ty.size() as usize)
-                    .map(|b| w.ty.value(b))
-                    .collect();
-                arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
-            }
-        }
+        let arrays = arrays_of(world, piece);
         let mut step = json!({"step": k, "t": k * len, "hash": field("hash"), "arrays": arrays});
         if full {
             for f in ["fuel", "service_ns", "mirror_ns"] {
@@ -311,6 +306,26 @@ fn step_rows(
         }
     }
     (steps, None)
+}
+
+/// Each item's arrays as its write region holds them now, by `<item>.<name>`.
+fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
+    let mut arrays = Map::new();
+    for (n, item) in piece.items.iter().enumerate() {
+        let region = world.write_region(n);
+        for w in &item.writes {
+            let Some(e) = item.write(&w.name) else {
+                continue;
+            };
+            let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
+            let values = bytes
+                .chunks_exact(w.ty.size() as usize)
+                .map(|b| w.ty.value(b))
+                .collect();
+            arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+        }
+    }
+    arrays
 }
 
 /// Whether a logic item of `form` reads control `c`.
@@ -753,7 +768,8 @@ impl Hub<'_> {
             services_after_checkpoint: self.planted(crate::hub::Planted::Physics(
                 crate::physics::Planted::ResultsAfterCheckpoint,
             )),
-            ..Default::default()
+            // #1164's restore and check twins, named by the scenario.
+            ..self.scenario.logic_planted.unwrap_or_default()
         };
         let mut rec = Record::default();
         rec.regions = l.regions.then(Default::default);

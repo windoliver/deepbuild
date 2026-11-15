@@ -703,6 +703,8 @@ pub enum Call {
     },
     ByWriter(String),
     Revisions(String),
+    /// #1164: a document's input track with its hash and fork; `load` replaces it first.
+    Track { doc: String, load: Option<Vec<Value>> },
     /// The sealed set as the build holds it (#305).
     Registry,
     /// #420: an item's built mesh, or its count from its params.
@@ -1071,6 +1073,8 @@ pub struct Scenario {
     pub module_planted: Option<String>,
     /// A first-party pack's planted twin by name, applied as the store reads the pack (#433).
     pub pack_planted: Option<String>,
+    /// #1164: the logic module's restore and check twins, one name or a list applied together.
+    pub logic_planted: Option<deep_logic::Planted>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -2005,6 +2009,7 @@ impl<'a> Hub<'a> {
                 source,
                 columns,
             } => self.batch(doc, source, columns),
+            Call::Track { doc, load } => self.track_call(doc, load.as_deref()),
             Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),
             Call::Revisions(doc) => {
                 let rows: Vec<Value> = self

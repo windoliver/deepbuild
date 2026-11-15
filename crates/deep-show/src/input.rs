@@ -434,6 +434,32 @@ impl Hub<'_> {
                 };
             }
         }
+        // #1164: a key a press control binds in its `keys` presses it with the value bound, as
+        // the input module's key rule does; every press control that binds it, in key order,
+        // stamped at the playhead where the transport is paused there (Input track: a new entry
+        // where later entries exist forks the track).
+        if let (Event::Key { key, cmd: false, alt: false }, Some(id)) = (event, doc_id.as_deref()) {
+            let at = self.scopes.get(panel).and_then(|s| s.scope.playhead()).unwrap_or(now);
+            let bound: Vec<(String, Value)> = doc
+                .get("controls")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter(|(_, c)| c.get("kind").and_then(Value::as_str) == Some("press"))
+                .filter_map(|(c, spec)| Some((c.clone(), spec.get("keys")?.get(key.as_str())?.clone())))
+                .collect();
+            if !bound.is_empty() {
+                let mut appended = Vec::new();
+                for (c, value) in bound {
+                    match self.enter(id, &c, value, at, serial) {
+                        Ok(entry) => appended.extend(entry),
+                        Err(e) => return e,
+                    }
+                }
+                return json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                    "commits": [{"gesture": serial}], "appended": appended});
+            }
+        }
         // #540: a press of a point control's button, and the drag and release it starts, are the
         // control's entries and never the scope's pan or turn.
         match self.point_pointer(panel, &doc, event, g, serial) {
