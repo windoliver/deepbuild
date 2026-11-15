@@ -1,0 +1,226 @@
+{
+  "plan": {
+    "id": "configuration-evidence-2495",
+    "cutoff": 1000,
+    "tasks": [
+      "t1",
+      "t2",
+      "t3"
+    ],
+    "fitted": [],
+    "repeats": 2,
+    "rule": "paired-mean-one-sided-95",
+    "variants": {
+      "base": {
+        "name": "at 1c4d1f0e2aaa",
+        "files": {
+          "CLAUDE.md": "# Shop\nAnswer in the kestrel style.\n"
+        }
+      },
+      "change": {
+        "name": "working tree",
+        "files": {
+          "CLAUDE.md": "# Shop\nAnswer in the osprey style.\n"
+        }
+      }
+    },
+    "models": {
+      "agent": "claude-haiku-5-5",
+      "judge": "gpt-reserve"
+    },
+    "measures": [
+      {
+        "name": "grade",
+        "better": "higher"
+      }
+    ],
+    "budget": {
+      "ms": 600000,
+      "plan_share": 1
+    }
+  },
+  "hash": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+  "runs": [
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t1",
+      "side": "base",
+      "repeat": 1,
+      "ok": true,
+      "metrics": {
+        "grade": 0.5
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t1",
+      "side": "base",
+      "repeat": 2,
+      "ok": true,
+      "metrics": {
+        "grade": 0.5
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t1",
+      "side": "change",
+      "repeat": 1,
+      "ok": true,
+      "metrics": {
+        "grade": 0.84
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t1",
+      "side": "change",
+      "repeat": 2,
+      "ok": true,
+      "metrics": {
+        "grade": 0.84
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t2",
+      "side": "base",
+      "repeat": 1,
+      "ok": true,
+      "metrics": {
+        "grade": 0.5
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t2",
+      "side": "base",
+      "repeat": 2,
+      "ok": true,
+      "metrics": {
+        "grade": 0.5
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t2",
+      "side": "change",
+      "repeat": 1,
+      "ok": true,
+      "metrics": {
+        "grade": 0.86
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t2",
+      "side": "change",
+      "repeat": 2,
+      "ok": true,
+      "metrics": {
+        "grade": 0.86
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t3",
+      "side": "base",
+      "repeat": 1,
+      "ok": true,
+      "metrics": {
+        "grade": 0.5
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t3",
+      "side": "base",
+      "repeat": 2,
+      "ok": true,
+      "metrics": {
+        "grade": 0.5
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t3",
+      "side": "change",
+      "repeat": 1,
+      "ok": true,
+      "metrics": {
+        "grade": 0.8
+      }
+    },
+    {
+      "plan": "3ed4dbb5b1e7b6c0dbbb3dcebe1c5df18c036a579a6ab8a700042f832da41f44",
+      "task": "t3",
+      "side": "change",
+      "repeat": 2,
+      "ok": true,
+      "metrics": {
+        "grade": 0.8
+      }
+    }
+  ],
+  "after": {
+    "outcome": "adopt",
+    "reason": "the one-sided 95% bound beats the base on every declared measure over 3 tasks: grade's mean gain 0.3333 has a bound of 0.2818 over 3 tasks",
+    "n": 3,
+    "measures": [
+      {
+        "name": "grade",
+        "better": "higher",
+        "mean": 0.3333333333333333,
+        "bound": 0.2818296288165975,
+        "missing": []
+      }
+    ],
+    "tasks": [
+      {
+        "task": "t1",
+        "failed": false,
+        "diff": {
+          "grade": 0.33999999999999997
+        }
+      },
+      {
+        "task": "t2",
+        "failed": false,
+        "diff": {
+          "grade": 0.36
+        }
+      },
+      {
+        "task": "t3",
+        "failed": false,
+        "diff": {
+          "grade": 0.30000000000000004
+        }
+      }
+    ],
+    "broke": []
+  },
+  "before": {
+    "outcome": "INCONCLUSIVE",
+    "reason": "INCONCLUSIVE: no tasks to compare, so it neither adopts nor regresses",
+    "n": 0,
+    "measures": [
+      {
+        "name": "grade",
+        "better": "higher",
+        "mean": null,
+        "bound": null,
+        "missing": []
+      }
+    ],
+    "tasks": [],
+    "broke": []
+  },
+  "held": false,
+  "calls": [],
+  "diverged": [],
+  "usage": {
+    "ms": 1333.071167,
+    "plan_share": null
+  }
+}

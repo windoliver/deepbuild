@@ -1,0 +1,23 @@
+{
+  "side": "base",
+  "status": 0,
+  "outcome": "adopt",
+  "beforeHasReport": false,
+  "reportSHA256": "2e781bd6fabb3f2cad0417903f61597ffdff9c25e9a6e62ebc72c5e5b0d950a8",
+  "printedHandle": null,
+  "storeHasReport": false,
+  "storedBytesEqualFile": false,
+  "runs": 12,
+  "reportKeys": [
+    "after",
+    "before",
+    "calls",
+    "diverged",
+    "hash",
+    "held",
+    "plan",
+    "runs",
+    "usage"
+  ],
+  "stored": null
+}
