@@ -596,6 +596,7 @@ struct RegionU {
 
 /// A frame's mix as the composite pass reads it: the looks it mixes, by key, in the order their
 /// renders bind (the first side's own first), and each side's and region's share of the pass.
+#[derive(Clone)]
 pub struct Mix {
     pub keys: Vec<Key>,
     frame: FrameU,
@@ -728,9 +729,14 @@ pub struct Composite {
     target: Option<(wgpu::BindGroupLayout, wgpu::RenderPipeline)>,
     view_z: Option<(wgpu::BindGroupLayout, wgpu::RenderPipeline)>,
     blank: Option<wgpu::TextureView>,
+    /// #463: the bounds pass's layout and pipeline, built the first frame a region needs it.
+    bounds: Option<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
 }
 
 const SOURCE: &str = include_str!("regions.wgsl");
+/// #463: the bounds pass, appended to the composite's own shader so it reads coverage as the
+/// composite does.
+const BOUNDS_SOURCE: &str = include_str!("regions_bounds.wgsl");
 pub const PASS: &str = "look.regions";
 
 fn pipeline(device: &Wgpu, raw: bool) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
@@ -826,6 +832,25 @@ impl Composite {
         depth: Depth<'_>,
         target: &wgpu::TextureView,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        self.record_within(
+            device, encoder, mix, renders, depth, target, timestamps, None,
+        );
+    }
+
+    /// [`Composite::record`] inside `within` (px `[x, y, w, h]`) alone, over what `target`
+    /// already holds outside it (#463).
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_within(
+        &mut self,
+        device: &Wgpu,
+        encoder: &mut wgpu::CommandEncoder,
+        mix: &Mix,
+        renders: &[&wgpu::TextureView],
+        depth: Depth<'_>,
+        target: &wgpu::TextureView,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+        within: Option<[u32; 4]>,
     ) {
         let mut frame = mix.frame;
         let (view, at) = match depth {
@@ -930,7 +955,10 @@ impl Composite {
                 resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    load: match within {
+                        Some(_) => wgpu::LoadOp::Load,
+                        None => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    },
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -939,6 +967,9 @@ impl Composite {
         });
         pass.set_pipeline(&pipeline);
         pass.set_bind_group(0, &bind, &[]);
+        if let Some([x, y, w, h]) = within {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         pass.draw(0..3, 0..1);
     }
 }
@@ -965,8 +996,214 @@ pub fn scratch(device: &Wgpu, size: [u32; 2], label: &'static str) -> wgpu::Text
     })
 }
 
+/// View depths read back (f32 a pixel, `size`) as the texture the composite reads: nothing drew
+/// where the depth is infinite, 0, which the pass reads as open ground.
+fn view_z_texture(device: &Wgpu, queue: &Queue, z: &[u8], size: [u32; 2]) -> wgpu::TextureView {
+    let extent = wgpu::Extent3d {
+        width: size[0],
+        height: size[1],
+        depth_or_array_layers: 1,
+    };
+    let t = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("look.regions view depth"),
+        size: extent,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let finite: Vec<u8> = z
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|b| {
+            let v = f32::from_le_bytes(*b);
+            (if v.is_finite() { v } else { 0.0 }).to_le_bytes()
+        })
+        .collect();
+    queue.write_texture(
+        t.as_image_copy(),
+        &finite,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * size[0]),
+            rows_per_image: None,
+        },
+        extent,
+    );
+    t.create_view(&Default::default())
+}
+
+/// #463: each look's bounds in a 3D frame, by its index in `mix.keys`: the px rectangle
+/// `[x0, y0, x1, y1]` (inclusive) where a region gives it a share of the frame, as the composite
+/// reads coverage from the frame's view depths `view_z`; `None` where none does. A look's side
+/// covers its side whole, which this leaves to the caller.
+pub fn bounds_read_back(
+    device: &Wgpu,
+    queue: &Queue,
+    composite: &mut Composite,
+    mix: &Mix,
+    view_z: &[u8],
+    size: [u32; 2],
+) -> Result<Vec<Option<[u32; 4]>>, String> {
+    let (layout, pipeline) = composite
+        .bounds
+        .get_or_insert_with(|| bounds_pipeline(device))
+        .clone();
+    let depth = view_z_texture(device, queue, view_z, size);
+    let mut frame = mix.frame;
+    frame.size[2] = 1.0;
+    frame.size[3] = 1.0;
+    let init = |label, contents: &[u8], usage| {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(label),
+            contents,
+            usage,
+        })
+    };
+    let uniform = init(
+        "look.regions bounds frame",
+        bytemuck::bytes_of(&frame),
+        wgpu::BufferUsages::UNIFORM,
+    );
+    let none = [<RegionU as bytemuck::Zeroable>::zeroed()];
+    let regions = init(
+        "look.regions bounds regions",
+        bytemuck::cast_slice(if mix.regions.is_empty() {
+            &none
+        } else {
+            &mix.regions
+        }),
+        wgpu::BufferUsages::STORAGE,
+    );
+    let start: Vec<u32> = (0..MOST_LOOKS)
+        .flat_map(|_| [u32::MAX, u32::MAX, 0, 0])
+        .collect();
+    let found = init(
+        "look.regions bounds",
+        bytemuck::cast_slice(&start),
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+    );
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("look.regions bounds"),
+        layout: &layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: regions.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(&depth),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: found.as_entire_binding(),
+            },
+        ],
+    });
+    let bytes = (start.len() * 4) as u64;
+    let read = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("look.regions bounds read back"),
+        size: bytes,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("look.regions bounds"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &bind, &[]);
+        pass.dispatch_workgroups(size[0].div_ceil(8), size[1].div_ceil(8), 1);
+    }
+    encoder.copy_buffer_to_buffer(&found, 0, &read, 0, bytes);
+    queue.submit([encoder.finish()]);
+    let words: Vec<u32> =
+        crate::print2d::map_rows(device, &read, bytes as usize, bytes as usize, 1)?
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| u32::from_le_bytes(*b))
+            .collect();
+    Ok(mix
+        .keys
+        .iter()
+        .enumerate()
+        .map(|(j, _)| {
+            let b = &words[4 * j..4 * j + 4];
+            (b[0] <= b[2] && b[1] <= b[3]).then(|| [b[0], b[1], b[2], b[3]])
+        })
+        .collect())
+}
+
+fn bounds_pipeline(device: &Wgpu) -> (wgpu::BindGroupLayout, wgpu::ComputePipeline) {
+    let cs = wgpu::ShaderStages::COMPUTE;
+    let buffer = |binding, ty| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: cs,
+        ty: wgpu::BindingType::Buffer {
+            ty,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("look.regions bounds"),
+        entries: &[
+            buffer(0, wgpu::BufferBindingType::Uniform),
+            buffer(1, wgpu::BufferBindingType::Storage { read_only: true }),
+            wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: cs,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            buffer(7, wgpu::BufferBindingType::Storage { read_only: false }),
+        ],
+    });
+    let depth =
+        "texture_2d<f32>;\nfn view_z(at: vec2<i32>) -> f32 { return textureLoad(depth, at, 0).r; }";
+    let source = format!("{}\n{BOUNDS_SOURCE}", SOURCE.replace("DEPTH;", depth));
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("look.regions bounds"),
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("look.regions bounds"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("look.regions bounds"),
+        layout: Some(&pipeline_layout),
+        module: &module,
+        entry_point: Some("cs_bounds"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    (layout, pipeline)
+}
+
 /// `view3d`'s composite: its looks' read-back renders (BGRA rows, `size`, one per key of `mix`)
-/// mixed on the device through the view depths `view_z` read back with the first, read back.
+/// mixed on the device through the frame's view depths `view_z`, read back. With `profiler`
+/// (#463) the composite pass is timed, and its GPU ms return beside the frame. With `within`
+/// (px `[x, y, w, h]`, #463), outside which every look but the first has no share, the frame is
+/// the first look's render there and the composite runs inside it alone.
+#[allow(clippy::too_many_arguments)]
 pub fn mix_read_back(
     device: &Wgpu,
     queue: &Queue,
@@ -975,7 +1212,9 @@ pub fn mix_read_back(
     renders: &[&[u8]],
     view_z: Option<&[u8]>,
     size: [u32; 2],
-) -> Result<Vec<u8>, String> {
+    profiler: Option<deep_scene3d_render::Profiler>,
+    within: Option<[u32; 4]>,
+) -> Result<(Vec<u8>, Option<f64>), String> {
     let extent = wgpu::Extent3d {
         width: size[0],
         height: size[1],
@@ -1005,45 +1244,47 @@ pub fn mix_read_back(
         .iter()
         .map(|t| t.create_view(&Default::default()))
         .collect();
-    let depth = view_z.map(|z| {
-        let t = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("look.regions view depth"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        // Nothing drew where the depth is infinite: 0, which the pass reads as open ground.
-        let finite: Vec<u8> = z
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .flat_map(|b| {
-                let v = f32::from_le_bytes(*b);
-                (if v.is_finite() { v } else { 0.0 }).to_le_bytes()
-            })
-            .collect();
-        upload(&t, &finite);
-        t.create_view(&Default::default())
-    });
+    let depth = view_z.map(|z| view_z_texture(device, queue, z, size));
     let out = scratch(device, size, "look.regions mix");
     let out_view = out.create_view(&Default::default());
     let mut encoder = device.create_command_encoder(&Default::default());
     let refs: Vec<&wgpu::TextureView> = views.iter().collect();
-    composite.record(
-        device,
-        &mut encoder,
-        mix,
-        &refs,
-        depth
-            .as_ref()
-            .map_or(Depth::None, |d| Depth::ViewZ(d, size)),
-        &out_view,
-        None,
-    );
+    let depth = depth
+        .as_ref()
+        .map_or(Depth::None, |d| Depth::ViewZ(d, size));
+    if within.is_some() {
+        encoder.copy_texture_to_texture(textures[0].as_image_copy(), out.as_image_copy(), extent);
+    }
+    let mut timer = profiler
+        .as_ref()
+        .map(|p| p.lock().unwrap_or_else(|e| e.into_inner()));
+    match timer.as_mut() {
+        Some(t) => {
+            let q = t.begin_pass_query(COMPOSITE_PASS, &mut encoder);
+            let ts = q.render_pass_timestamp_writes();
+            composite.record_within(
+                device,
+                &mut encoder,
+                mix,
+                &refs,
+                depth,
+                &out_view,
+                ts,
+                within,
+            );
+            t.end_query(&mut encoder, q);
+        }
+        None => composite.record_within(
+            device,
+            &mut encoder,
+            mix,
+            &refs,
+            depth,
+            &out_view,
+            None,
+            within,
+        ),
+    }
     let row = (size[0] * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("look.regions read back"),
@@ -1064,14 +1305,35 @@ pub fn mix_read_back(
         extent,
     );
     queue.submit([encoder.finish()]);
-    crate::print2d::map_rows(
+    let bytes = crate::print2d::map_rows(
         device,
         &buffer,
         row as usize,
         (size[0] * 4) as usize,
         size[1] as usize,
-    )
+    )?;
+    let mut ms = None;
+    if let Some(t) = timer.as_mut() {
+        let mut enc = device.create_command_encoder(&Default::default());
+        t.resolve_queries(&mut enc);
+        queue.submit([enc.finish()]);
+        let _ = t.end_frame();
+        let _ = device.poll(wgpu::PollType::wait_indefinitely());
+        while let Some(results) = t.process_finished_frame(queue.get_timestamp_period()) {
+            if let Some(span) = results
+                .iter()
+                .filter(|r| r.label == COMPOSITE_PASS)
+                .find_map(|r| r.time.clone())
+            {
+                ms = Some((span.end - span.start) * 1e3);
+            }
+        }
+    }
+    Ok((bytes, ms))
 }
+
+/// The composite's pass as a frame's timings name it (#463).
+pub const COMPOSITE_PASS: &str = PASS;
 
 #[cfg(test)]
 mod tests {

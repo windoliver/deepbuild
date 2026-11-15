@@ -961,6 +961,24 @@ fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     Ok((json!(labels), json!(pages)))
 }
 
+/// How far past the pixels a region's look covers its render still draws, px: what its finish
+/// and effects read around a pixel (#463).
+const CROP_MARGIN: u32 = 48;
+
+/// #463: a look's covered px rectangle (`[x0, y0, x1, y1]`, inclusive) grown by [`CROP_MARGIN`],
+/// as the share of a `size` frame its render draws inside (Scene::crop).
+fn crop_share(b: [u32; 4], size: [u32; 2]) -> [f64; 4] {
+    let lo = |v: u32| f64::from(v.saturating_sub(CROP_MARGIN));
+    let hi = |v: u32| f64::from(v + 1 + CROP_MARGIN);
+    let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+    [
+        (lo(b[0]) / w).min(1.0),
+        (lo(b[1]) / h).min(1.0),
+        (hi(b[2]) / w).min(1.0),
+        (hi(b[3]) / h).min(1.0),
+    ]
+}
+
 /// #462's planted `status_in_look`: the status map of the look a render draws in, where it has
 /// one of its own; `None` for the shipped program, which draws the document's.
 fn in_look_status(
@@ -1977,114 +1995,17 @@ fn run_view(
                     let _ = ui.latch();
                 }
             }
-            // #462: each other look the frame's sides draw, rendered whole before the frame's
-            // own draw, the first reading back the depth the regions' coverage reads.
+            // #462: each other look the frame's sides draw, rendered after the frame's own (#463).
             let mut others: Vec<(crate::regions::Key, Vec<u8>)> = Vec::new();
-            let mut region_depth: Option<Vec<u8>> = None;
             // #463: what the other sides' renders spent on the GPU, by look, counted in the frame.
             let mut others_ms: BTreeMap<String, f64> = BTreeMap::new();
+            // Their passes, each by look, for the frame's report.
+            let mut others_passes: BTreeMap<String, f64> = BTreeMap::new();
             let keep: Vec<[f64; 4]> = opened
                 .stage
                 .as_ref()
                 .and_then(|st| lock(st).layer.as_ref().map(|l| l.covers.clone()))
                 .unwrap_or_default();
-            if let (Some(sides), false) = (&sides, noop) {
-                let base_key = sides[0].look.map(str::to_string);
-                let seen = crate::regions::Seen::Camera(scene.camera.clone());
-                for key in crate::regions::keys_in_view(sides, &seen, &scene.volumes)? {
-                    if key == base_key {
-                        continue;
-                    }
-                    let (look_k, json_k) = match &key {
-                        Some(l) => (named[l].look.clone(), named[l].json.clone()),
-                        None => (doc_look.clone(), doc_look_json.clone()),
-                    };
-                    let mut sc =
-                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)
-                            .map_err(|r| refused(r.code, r.path))?;
-                    sc.camera = scene.camera.clone();
-                    sc.texels.clone_from(&scene.texels);
-                    if args.window.is_some() {
-                        sc.ground = scene.ground;
-                    }
-                    sc.set_cutaway(scene.cutaway.clone());
-                    if let Some(status) = status.as_ref().filter(|_| bound) {
-                        status::strokes(&mut sc, status, &bindings, &args.states)?;
-                    }
-                    let mut settings = effects::settings(
-                        &sc,
-                        &json_k,
-                        &look_k,
-                        &args.selection,
-                        fx_t,
-                        doc_seed,
-                        effects::Seeding::Item,
-                    );
-                    if dirt.is_some() {
-                        settings.dirt = dirt.clone();
-                    }
-                    let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
-                    let drawn_k =
-                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.planted)?;
-                    let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
-                    let mut kept_layer = None;
-                    if let (Some(own), Some(stage), Some(status)) = (
-                        in_look_status(app.planted, &json_k)?,
-                        &opened.stage,
-                        &status,
-                    ) {
-                        let _ = status;
-                        let (layer, _, _) = status::layer(
-                            &sc,
-                            &doc_look,
-                            doc_look.role("ink").unwrap_or([0, 0, 0]),
-                            &own,
-                            &bindings,
-                            &args.states,
-                            &mut text,
-                        )?;
-                        kept_layer = Some(lock(stage).layer.replace(layer));
-                    }
-                    let d = session3::draw(
-                        app,
-                        &opened,
-                        Arc::new(sc),
-                        look_k,
-                        n,
-                        0,
-                        region_depth.is_none(),
-                        false,
-                    );
-                    let _ = ui.latch();
-                    lock(&fx).settings = kept_fx;
-                    *lock(&opened.drawn) = kept_drawn;
-                    if let (Some(kept), Some(stage)) = (kept_layer, &opened.stage) {
-                        lock(stage).layer = kept;
-                    }
-                    let d = d?;
-                    if region_depth.is_none() {
-                        region_depth = d.view_depth.clone();
-                    }
-                    let mut timing = d.timing;
-                    if let Some(mut bytes) = d.bytes {
-                        let profiler = opened.profiler.clone();
-                        finish(
-                            app,
-                            &key,
-                            &mut bytes,
-                            size,
-                            timing.as_mut(),
-                            profiler,
-                            &keep,
-                        )?;
-                        others.push((key.clone(), bytes));
-                    }
-                    if let Some((ms, _)) = timing {
-                        let name = key.as_deref().unwrap_or("document");
-                        others_ms.insert(format!("{name}/look"), ms);
-                    }
-                }
-            }
             // A frame's CPU: its evaluation, up to handing the scene to the render side.
             let cpu_ms = frame_started.elapsed().as_secs_f64() * 1e3;
             // #506's planted cores: a view overlay drawn after the main view in the same frame,
@@ -2195,9 +2116,170 @@ fn run_view(
                     &keep,
                 )?;
             }
+            // #463: each other look the frame's sides draw, after the frame's own: a region's look
+            // inside the bounds where its regions cover pixels of the frame's own depth (grown by
+            // what its finish and effects read around a pixel), not at all where they cover none,
+            // and a side's own look whole.
+            let mut region_mix = None;
+            let mut region_depth = None;
+            // Where any look but the frame's own has a share, px, when no side's own look but
+            // the first mixes in: the composite runs inside it alone.
+            let mut region_within: Option<[u32; 4]> = None;
+            if let (Some(sides), false) = (&sides, noop) {
+                let base_key = sides[0].look.map(str::to_string);
+                let seen = crate::regions::Seen::Camera(scene.camera.clone());
+                let keys: Vec<crate::regions::Key> =
+                    crate::regions::keys_in_view(sides, &seen, &scene.volumes)?
+                        .into_iter()
+                        .filter(|k| *k != base_key)
+                        .collect();
+                let mut found = Vec::new();
+                if let (Some(tl), false) = (&timeline, keys.is_empty()) {
+                    let depth = session3::view_depth(app)?
+                        .filter(|d| d.len() == 4 * size[0] as usize * size[1] as usize);
+                    let mix = crate::regions::mix(
+                        tl,
+                        sides,
+                        &seen,
+                        &scene.volumes,
+                        t,
+                        app.planted == Some(Planted::RegionSidesClipIndependently),
+                    )?;
+                    if let Some(z) = depth.clone() {
+                        let m = mix.clone();
+                        found = app
+                            .worker
+                            .call(move |state| {
+                                let d = state.gpu.device();
+                                crate::regions::bounds_read_back(
+                                    &d.device,
+                                    &d.queue,
+                                    state.regions.get_or_insert_with(Default::default),
+                                    &m,
+                                    &z,
+                                    size,
+                                )
+                            })
+                            .map_err(|e| refused("render_failed", e))?;
+                    }
+                    region_mix = Some(mix);
+                    region_depth = depth;
+                }
+                if sides.len() == 1 {
+                    let mut union: Option<[u32; 4]> = None;
+                    for b in found.iter().flatten() {
+                        union = Some(union.map_or(*b, |u| {
+                            [
+                                u[0].min(b[0]),
+                                u[1].min(b[1]),
+                                u[2].max(b[2]),
+                                u[3].max(b[3]),
+                            ]
+                        }));
+                    }
+                    region_within = union.map(|u| [u[0], u[1], u[2] + 1 - u[0], u[3] + 1 - u[1]]);
+                }
+                for key in keys {
+                    let whole = sides.iter().any(|s| s.look.map(str::to_string) == key);
+                    let at = region_mix
+                        .as_ref()
+                        .and_then(|m: &crate::regions::Mix| m.keys.iter().position(|k| *k == key))
+                        .and_then(|j| found.get(j).copied());
+                    let crop = match (whole, at) {
+                        (false, Some(None)) => continue,
+                        (false, Some(Some(b))) => Some(crop_share(b, size)),
+                        _ => None,
+                    };
+                    let (look_k, json_k) = match &key {
+                        Some(l) => (named[l].look.clone(), named[l].json.clone()),
+                        None => (doc_look.clone(), doc_look_json.clone()),
+                    };
+                    let mut sc =
+                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)
+                            .map_err(|r| refused(r.code, r.path))?;
+                    sc.camera = scene.camera.clone();
+                    sc.texels.clone_from(&scene.texels);
+                    if args.window.is_some() {
+                        sc.ground = scene.ground;
+                    }
+                    sc.set_cutaway(scene.cutaway.clone());
+                    sc.crop = crop;
+                    if let Some(status) = status.as_ref().filter(|_| bound) {
+                        status::strokes(&mut sc, status, &bindings, &args.states)?;
+                    }
+                    let mut settings = effects::settings(
+                        &sc,
+                        &json_k,
+                        &look_k,
+                        &args.selection,
+                        fx_t,
+                        doc_seed,
+                        effects::Seeding::Item,
+                    );
+                    if dirt.is_some() {
+                        settings.dirt = dirt.clone();
+                    }
+                    // A glow's or ambient occlusion's blur reads past any margin: such a look draws
+                    // whole.
+                    if settings.bloom.is_some() || look_k.ao.is_some() {
+                        sc.crop = None;
+                    }
+                    let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
+                    let drawn_k =
+                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.planted)?;
+                    let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
+                    let mut kept_layer = None;
+                    if let (Some(own), Some(stage), Some(status)) = (
+                        in_look_status(app.planted, &json_k)?,
+                        &opened.stage,
+                        &status,
+                    ) {
+                        let _ = status;
+                        let (layer, _, _) = status::layer(
+                            &sc,
+                            &doc_look,
+                            doc_look.role("ink").unwrap_or([0, 0, 0]),
+                            &own,
+                            &bindings,
+                            &args.states,
+                            &mut text,
+                        )?;
+                        kept_layer = Some(lock(stage).layer.replace(layer));
+                    }
+                    let d = session3::draw(app, &opened, Arc::new(sc), look_k, n, 0, false, false);
+                    let _ = ui.latch();
+                    lock(&fx).settings = kept_fx;
+                    *lock(&opened.drawn) = kept_drawn;
+                    if let (Some(kept), Some(stage)) = (kept_layer, &opened.stage) {
+                        lock(stage).layer = kept;
+                    }
+                    let d = d?;
+                    let mut timing = d.timing;
+                    if let Some(mut bytes) = d.bytes {
+                        let profiler = opened.profiler.clone();
+                        finish(
+                            app,
+                            &key,
+                            &mut bytes,
+                            size,
+                            timing.as_mut(),
+                            profiler,
+                            &keep,
+                        )?;
+                        others.push((key.clone(), bytes));
+                    }
+                    if let Some((ms, passes)) = timing {
+                        let name = key.as_deref().unwrap_or("document");
+                        others_ms.insert(format!("{name}/look"), ms);
+                        others_passes
+                            .extend(passes.into_iter().map(|(p, v)| (format!("{name}/{p}"), v)));
+                    }
+                }
+            }
             if let Some((gpu_ms, passes)) = drawn.timing.as_mut() {
                 *gpu_ms += others_ms.values().sum::<f64>();
                 passes.extend(others_ms);
+                passes.extend(others_passes);
             }
             // #462: the frame mixed from its looks' renders by their coverage, on the device.
             let operator = timeline
@@ -2235,22 +2317,10 @@ fn run_view(
                     passes.insert(label.clone(), ms);
                 }
                 op_declared = Some((label, tr.declared_ms(size)));
-            } else if let (Some(tl), Some(sides), Some(bytes)) =
-                (&timeline, &sides, drawn.bytes.as_mut())
-            {
-                if !others.is_empty() {
-                    let seen = crate::regions::Seen::Camera(scene.camera.clone());
-                    let mix = crate::regions::mix(
-                        tl,
-                        sides,
-                        &seen,
-                        &scene.volumes,
-                        t,
-                        app.planted == Some(Planted::RegionSidesClipIndependently),
-                    )?;
-                    let depth = region_depth
-                        .take()
-                        .filter(|d| d.len() == 4 * size[0] as usize * size[1] as usize);
+            } else if let (Some(sides), Some(bytes)) = (&sides, drawn.bytes.as_mut()) {
+                if let (false, Some(mix)) = (others.is_empty(), region_mix.take()) {
+                    // #463: the frame's own depth, read before the other sides drew.
+                    let depth = region_depth.take();
                     let base_key = sides[0].look.map(str::to_string);
                     let renders: Vec<Vec<u8>> = mix
                         .keys
@@ -2260,7 +2330,8 @@ fn run_view(
                             _ => bytes.clone(),
                         })
                         .collect();
-                    let mixed = app
+                    let profiler = opened.profiler.clone();
+                    let (mixed, ms) = app
                         .worker
                         .call(move |state| {
                             let d = state.gpu.device();
@@ -2273,10 +2344,17 @@ fn run_view(
                                 &refs,
                                 depth.as_deref(),
                                 size,
+                                profiler,
+                                region_within,
                             )
                         })
                         .map_err(|e| refused("render_failed", e))?;
                     *bytes = mixed;
+                    // #463: the composite's GPU time counts in the frame's.
+                    if let (Some(ms), Some((gpu_ms, passes))) = (ms, drawn.timing.as_mut()) {
+                        *gpu_ms += ms;
+                        passes.insert(crate::regions::COMPOSITE_PASS.into(), ms);
+                    }
                 }
             }
             if keeping {
