@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
-import { join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inputs as configInputs } from './config-eval.mjs';
 import { inputs as verdictInputs } from './verdict-proofs.mjs';
@@ -784,7 +784,8 @@ export const checks = [
     // files (#315), and #666's checkpoint through it: they build it and time it to 50 ms.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
-    ['cargo', 'test', '--workspace', '--locked'],
+    // A listed failure must not prevent later targets from reporting unlisted failures.
+    ['cargo', 'test', '--workspace', '--locked', '--no-fail-fast'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.
     [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
@@ -1046,6 +1047,31 @@ export function reportResults(cwd, text, label = '') {
   return { failures, passed, ...(skips.length && { skips }), ...(noGrant && { noGrant }), ...(cut && { cut }) };
 }
 
+/** The workspace's crates from cargo metadata: folders, path dependencies, the names they run by, and test targets. */
+export function crates(cwd) {
+  const result = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+  if (result.status !== 0) throw Error(`cargo metadata failed: ${result.error?.message ?? result.stderr.trim().split('\n').at(-1)}`);
+  // cargo names paths as the disk resolves them, as /private/var for /var.
+  const repo = (path) => relative(realpathSync(cwd), path).split(sep).join('/');
+  return JSON.parse(result.stdout).packages.map((pkg) => {
+    const dir = repo(dirname(pkg.manifest_path));
+    const kind = (target) => ['bin', 'test', 'bench', 'example'].find((k) => target.kind.includes(k));
+    return {
+      name: pkg.name, dir,
+      // The folders of its targets outside it, as the [[test]] files in tests/acceptance.
+      away: [...new Set(pkg.targets.map((target) => dirname(repo(target.src_path))).filter((folder) => folder !== dir && !folder.startsWith(`${dir}/`)))],
+      deps: pkg.dependencies.filter((dep) => dep.path).map((dep) => dep.name),
+      names: [...new Set([pkg.name, ...pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)])],
+      // Each target by the build file and source path cargo test's Running line names, with the argument that reruns it.
+      targets: pkg.targets.map((target) => ({
+        key: `${target.name.replaceAll('-', '_')} ${relative(dirname(pkg.manifest_path), target.src_path).split(sep).join('/')}`,
+        rerun: `-p ${pkg.name} ${kind(target) ? `--${kind(target)} ${target.name}` : '--lib'}`,
+        doc: target.kind.includes('lib') ? target.name.replaceAll('-', '_') : null,
+      })),
+    };
+  });
+}
+
 /** The results in cargo test's output, each test by the target that reruns it, and a target that failed in no test. */
 export function cargoResults(output, status, workspace) {
   const targets = new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
@@ -1117,10 +1143,10 @@ export function reporting([command, ...args], report) {
 
 /** What a test command's run says of each test; null when it left nothing readable, and for any other command. */
 export function testsOf([command, ...args], cwd, { report, output, status }) {
-  if (command === 'cargo' && args[0] === 'test') return cargoResults(output, status, []);
+  if (command === 'cargo' && args[0] === 'test') return cargoResults(output, status, crates(cwd));
   if (!existsSync(report)) return null;
   try {
-    const results = reportResults(cwd, readFileSync(report, 'utf8'));
+    const results = reportResults(cwd, readFileSync(report, 'utf8'), args.some((arg) => arg.endsWith('vitest.mjs')) ? 'vitest' : '');
     if (results.cut) return null;
     // vitest's -t leaves every other test skipped with no note: a filter's choice, not a skip.
     return args.includes('-t') ? { ...results, skips: results.skips?.filter(({ note }) => note) } : results;
@@ -1129,28 +1155,31 @@ export function testsOf([command, ...args], cwd, { report, output, status }) {
   }
 }
 
-function skipsList(cwd) {
+function knownFailures(cwd) {
   try {
-    return JSON.parse(readFileSync(join(cwd, 'scripts/known-failures.json'), 'utf8')).skips;
+    return JSON.parse(readFileSync(join(cwd, 'scripts/known-failures.json'), 'utf8'));
   } catch {
-    return [];
+    return {};
   }
 }
 
 /**
- * One command's run in a lane: each test's state for the record, the tests that proved nothing, the listed skips, the
- * state they found, and whether they explain a non-zero exit: a run that failed only by tests naming their own state,
- * or that the throttle never started, stands on those. A runner killed outright doesn't.
+ * One command's run in a lane: each test's state, unproven tests and listed skips/failures. Only exact FAIL IDs can
+ * be listed; BLOCKED, INVALID and INCONCLUSIVE remain unproven. A run that failed only by listed tests or tests
+ * naming their own state stands on those. A runner killed outright doesn't.
  */
 export function readRun(results, status, cwd, timed) {
   const { failures = [], passed = [], skips = [], noGrant } = results ?? {};
-  const { covered, open } = readSkips(skips, skipsList(cwd), timed);
+  const baseline = knownFailures(cwd);
+  const { covered, open } = readSkips(skips, baseline.skips, timed);
+  const known = failures.filter(({ id, state }) => state === 'FAIL' && Object.hasOwn(baseline.failures ?? {}, id));
+  const listedFailures = new Map(known.map(({ id }) => [id, baseline.failures[id]]));
   const stated = failures.filter(({ state }) => state !== 'FAIL'), unsure = [...stated, ...open];
-  const row = ({ id, state, message }) => ({ id, state, note: message });
+  const row = ({ id, state, message }) => state === 'FAIL' && listedFailures.has(id) ? { id, state: 'LISTED', note: listedFailures.get(id) } : { id, state, note: message };
   return {
     tests: [...passed.map((id) => ({ id, state: 'PASS' })), ...failures.map(row), ...open.map((skip) => ({ ...row(skip), skipped: true })), ...covered.map(({ id, note }) => ({ id, state: 'LISTED', note, skipped: true }))],
-    unsure, covered,
-    explained: Boolean(noGrant) || (stated.length > 0 && stated.length === failures.length && status < 128),
+    unsure, covered: [...covered, ...known.map(({ id, message }) => ({ id, note: message, reason: listedFailures.get(id) }))],
+    explained: status !== null && status < 128 && (Boolean(noGrant) || (failures.length > 0 && stated.length + known.length === failures.length)),
     found: noGrant ? { state: 'INCONCLUSIVE', error: noGrant } : unsure.length ? { state: worst(unsure.map(({ state }) => state)), error: `${unsure.length} ${unsure.length === 1 ? 'test' : 'tests'} proved nothing` } : undefined,
   };
 }
@@ -1240,7 +1269,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
       const started = performance.now();
       console.log(`RUN ${lane.name}`);
       let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-      const tree = exactTree(cwd), tests = [], unproven = [], listedSkips = [];
+      const tree = exactTree(cwd), tests = [], unproven = [], listedTests = [];
       for (const [command, ...args] of lane.commands) {
         let directory, descriptor, result, results, output = '';
         try {
@@ -1278,15 +1307,15 @@ export function runLanes(lanes, { cwd = root } = {}) {
         const run = readRun(results, result.status, cwd, timed);
         tests.push(...run.tests);
         unproven.push(...run.unsure);
-        listedSkips.push(...run.covered);
+        listedTests.push(...run.covered);
         let found = run.found;
         if (result.status !== 0 && !run.explained) {
           const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
           // A test run's first error is its first failing test, as its runner's report names it: an output line can't
           // stand in, since a coloured assertion misses the pattern and a line the lease prints matches the fallback (#12).
-          const failed = results?.failures?.find(({ state }) => state === 'FAIL');
+          const failed = run.tests.find(({ state }) => state === 'FAIL');
           const error = result.error?.message
-            ?? (failed && `${failed.id}${failed.message ? `: ${failed.message}` : ''}`)
+            ?? (failed && `${failed.id}${failed.note ? `: ${failed.note}` : ''}`)
             ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
             ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
             ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
@@ -1298,7 +1327,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
         if (stands(found, failure)) failure = found;
       }
       const elapsed = ((performance.now() - started) / 1000).toFixed(2);
-      for (const { id, note, reason } of listedSkips) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
+      for (const { id, note, reason } of listedTests) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
       const platform = failure?.state === 'INCONCLUSIVE' && unproven.some(({ message }) => isPlatform(message)) ? ' (platform)' : '';
       const lines = unproven.map(({ id, state, message }) => `  ${state} ${id}${message ? `: ${message}` : ''}\n`).join('');
       if (failure) failures.push(`${failure.state} ${lane.name}${platform}: ${failure.error}\n${lines}  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);

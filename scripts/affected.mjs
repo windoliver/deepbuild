@@ -18,19 +18,19 @@
 // the selection without running it. --wide also runs the suites that see the change only through another package's
 // process (select, below). --record, run on main, writes what failed into known-failures.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, cargoResults, changedPaths, checks, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
+import { alone, byHand, cargoResults, changedPaths, checks, crates, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { childEnv } from './proof-runs.mjs';
 import { binaryNames, buildBinaries, watchBinaries } from './proof-binaries.mjs';
 import { claimShards, roomy } from './shards.mjs';
 import { acquire, release } from './throttle.mjs';
 
-export { cargoResults, reportResults };
+export { cargoResults, crates, reportResults };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const BASELINE = 'scripts/known-failures.json';
@@ -44,31 +44,6 @@ const PATHS = /(?<![\w.@-])(?:\.{1,2}\/[\w@.\/-]*|\/?(?:packages|crates|scripts|
 const PACKAGE = /@deepbuild\/[\w-]+(?:\/[\w.-]+)*/g;
 const within = (folder, path) => path === folder || path.startsWith(`${folder}/`);
 const folders = (path) => path.split('/').slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join('/'));
-
-/** The workspace's crates from cargo metadata: folders, path dependencies, the names they run by, and test targets. */
-export function crates(cwd) {
-  const result = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
-  if (result.status !== 0) throw Error(`cargo metadata failed: ${result.stderr.trim().split('\n').at(-1)}`);
-  // cargo names paths as the disk resolves them, as /private/var for /var.
-  const repo = (path) => relative(realpathSync(cwd), path).split(sep).join('/');
-  return JSON.parse(result.stdout).packages.map((pkg) => {
-    const dir = repo(dirname(pkg.manifest_path));
-    const kind = (target) => ['bin', 'test', 'bench', 'example'].find((k) => target.kind.includes(k));
-    return {
-      name: pkg.name, dir,
-      // The folders of its targets outside it, as the [[test]] files in tests/acceptance.
-      away: [...new Set(pkg.targets.map((target) => dirname(repo(target.src_path))).filter((folder) => !within(dir, folder)))],
-      deps: pkg.dependencies.filter((dep) => dep.path).map((dep) => dep.name),
-      names: [...new Set([pkg.name, ...pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)])],
-      // Each target by the build file and source path cargo test's Running line names, with the argument that reruns it.
-      targets: pkg.targets.map((target) => ({
-        key: `${target.name.replaceAll('-', '_')} ${relative(dirname(pkg.manifest_path), target.src_path).split(sep).join('/')}`,
-        rerun: `-p ${pkg.name} ${kind(target) ? `--${kind(target)} ${target.name}` : '--lib'}`,
-        doc: target.kind.includes('lib') ? target.name.replaceAll('-', '_') : null,
-      })),
-    };
-  });
-}
 
 /**
  * What each file and crate imports and what it runs or reads, as edges to files, to folders (ending in /) and to
