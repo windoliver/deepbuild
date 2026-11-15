@@ -256,6 +256,9 @@ pub fn knows(kind: &str) -> bool {
         || kind == deep_canvas_scene3d::scene::OVERLAY
         // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
         || kind == "overlay.text@1"
+        // #506: an inset, and a view of the document from another camera in a rect of the frame.
+        || kind == deep_canvas_scene3d::inset::KIND
+        || kind == deep_canvas_scene3d::views::KIND
         // The vector module's kind (#1162): an item the view draws, hears and points at.
         || kind == "vector@1"
         // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
@@ -846,6 +849,10 @@ impl Hub<'_> {
                         writers.push(w.clone());
                     }
                 }
+            }
+            // Planted (#1941): every stale patch a conflict, on all it touches.
+            if ids.is_empty() && self.scenario.planted == Some(Planted::StaleFixNeverRebases) {
+                ids = touches.clone();
             }
             if !ids.is_empty() {
                 let by_path = self.scenario.planted == Some(Planted::RebaseByPath)
@@ -1541,6 +1548,7 @@ impl Hub<'_> {
         if three && visible && show.include.iter().any(|i| matches!(i, Include::Pixels)) {
             let shown = self.shared[&show.doc].doc.clone();
             self.pending3d = Some(self.draw3d(&shown, show.t, show.size));
+            self.pending_light = self.light3d(&shown, show.t);
         }
         self.present(show, visible, drawn.as_ref(), reply)
     }

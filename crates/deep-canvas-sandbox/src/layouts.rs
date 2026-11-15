@@ -1,7 +1,8 @@
 //! The first-party data layouts (canvas primitives: Logic: data layouts; #415): `nav.graph@1`,
-//! `nav.graph@2`, `table.layout@1`, `fn.table@1` and `pages@1`, entries of the core's
-//! `data.layout@1` that this module fills. Each has its documented bytes, a validator under the
-//! one subset (as WebAssembly text; the engine assembles it), malformed twins it must refuse,
+//! `nav.graph@2`, `table.layout@1`, `fn.table@1`, `pages@1` and `streams@1` (#223, whose bytes
+//! the core reads), entries of the core's `data.layout@1` that this module fills. Each has its
+//! documented bytes, a validator under the one subset (as WebAssembly text; the engine assembles
+//! it), malformed twins it must refuse,
 //! fixtures it must admit, and a reading of an offset as the field it lies in, so a refusal names
 //! the field. A validator treats its asset as untrusted: every field that sizes or indexes another
 //! is checked against the bytes and counts it points into before anything is read through it.
@@ -9,6 +10,7 @@
 //! What each validator returned on its twins and fixtures is `layouts/judged.json`, the
 //! reference's answers, which the seal's kit reads and the engine's tests rerun.
 
+use deep_canvas::streams::{self, MAX_POINTS, MAX_STREAMS, MAX_TEXT, MAX_VARS};
 use serde_json::{json, Value};
 
 /// A pack layout's cap (Pack: `layouts`); `pages@1` has its own, past it.
@@ -128,6 +130,17 @@ pub fn first_party() -> Vec<Layout> {
             twins: || vec![catalog(true)],
             fixtures: || vec![catalog(false)],
             field: table_field,
+        },
+        Layout {
+            name: streams::LAYOUT,
+            // The core's maxima allow 32 + 2 × 4,096 + 16 × 76 + 4,096 × (4 + 65,536 × 16) bytes,
+            // past a validator's 32-bit memory; a stream table is capped as a pack layout is.
+            max_bytes: PACK_MAX_BYTES,
+            doc: streams::DOC,
+            program: |_| streams_validator(),
+            twins: streams_twins,
+            fixtures: || vec![streams::encode(&streams_fixture())],
+            field: streams_field,
         },
     ]
 }
@@ -895,4 +908,235 @@ pub fn catalog(bad_ref: bool) -> Vec<u8> {
         u32s(&mut w, v);
     }
     w
+}
+
+// ---- streams@1
+
+/// The validator of the core's `streams@1`: it refuses at the offset `deep_canvas::streams::decode`
+/// gives, a text's start for text that isn't UTF-8.
+fn streams_validator() -> String {
+    let mut b = String::new();
+    b += &fixed(
+        0,
+        4,
+        "i32.load",
+        "(i32.eq (local.get $v) (i32.const 0x4d525453))",
+    );
+    b += &fixed(4, 4, "i32.load", "(i32.eq (local.get $v) (i32.const 1))");
+    b += &fixed(
+        8,
+        8,
+        "i32.load",
+        "(i32.and (call $ok64 (i32.const 8)) (f64.gt (f64.load (i32.const 8)) (f64.const 0)))",
+    );
+    for (at, lo, hi, local) in [
+        (16, 1, MAX_TEXT, "$nx"),
+        (20, 1, MAX_TEXT, "$ny"),
+        (24, 0, MAX_VARS, "$nv"),
+        (28, 0, MAX_STREAMS, "$ns"),
+    ] {
+        b += &fixed(
+            at,
+            4,
+            "i32.load",
+            &format!("(i32.and (i32.ge_u (local.get $v) (i32.const {lo})) (i32.le_u (local.get $v) (i32.const {hi})))"),
+        );
+        b += &format!("    (local.set {local} (local.get $v))\n");
+    }
+    let text = |n: &str| {
+        format!(
+            "    {}\n    (if (i32.eqz (call $utf8 {P} {n})) (then {}))\n    (local.set $p (i32.add {P} {n}))\n",
+            need(P, n),
+            bad(P)
+        )
+    };
+    b += "    (local.set $p (i32.const 32))\n";
+    b += &text("(local.get $nx)");
+    b += &text("(local.get $ny)");
+    b += &format!(
+        "    (block $vars_done (loop $vars
+      (br_if $vars_done (i32.ge_u (local.get $i) (local.get $nv)))
+      {need4}
+      (local.set $c (i32.load {P}))
+      (if (i32.or (i32.eqz (local.get $c)) (i32.gt_u (local.get $c) (i32.const 64))) (then {badp}))
+      (local.set $p {p4})
+{name}      {need8}
+      (if (i32.eqz (call $ok64 {P})) (then {badp}))
+      (local.set $p {p8})
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (br $vars)))
+    (local.set $i (i32.const 0))
+    (block $streams_done (loop $streams
+      (br_if $streams_done (i32.ge_u (local.get $i) (local.get $ns)))
+      {need4}
+      (local.set $c (i32.load {P}))
+      (if (i32.gt_u (local.get $c) (i32.const {MAX_POINTS})) (then {badp}))
+      (local.set $p {p4})
+      (local.set $k (i32.mul (local.get $c) (i32.const 2)))
+      (block $points_done (loop $points
+        (br_if $points_done (i32.eqz (local.get $k)))
+        {need8}
+        (if (i32.eqz (call $ok64 {P})) (then {badp}))
+        (local.set $p {p8})
+        (local.set $k (i32.sub (local.get $k) (i32.const 1)))
+        (br $points)))
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (br $streams)))
+    (if (i32.ne {P} (local.get $len)) (then {badp}))
+",
+        need4 = need(P, "(i32.const 4)"),
+        need8 = need(P, "(i32.const 8)"),
+        badp = bad(P),
+        p4 = at_p(4),
+        p8 = at_p(8),
+        name = text("(local.get $c)"),
+    );
+    let text = module(
+        "(local $v i32) (local $nx i32) (local $ny i32) (local $nv i32) (local $ns i32) (local $p i32) (local $i i32) (local $c i32) (local $k i32)",
+        &b,
+    );
+    // Whether the `n` bytes at `p` are UTF-8 as Rust reads it: no overlong form, surrogate or code
+    // point past U+10FFFF, and no sequence cut off at the end.
+    text.replacen(
+        "  (func (export \"validate\")",
+        "  (func $utf8 (param $p i32) (param $n i32) (result i32) (local $end i32) (local $b i32) (local $c i32) (local $lo i32) (local $hi i32)
+    (local.set $end (i32.add (local.get $p) (local.get $n)))
+    (block $done (loop $walk
+      (br_if $done (i32.ge_u (local.get $p) (local.get $end)))
+      (local.set $b (i32.load8_u (local.get $p)))
+      (local.set $p (i32.add (local.get $p) (i32.const 1)))
+      (br_if $walk (i32.lt_u (local.get $b) (i32.const 0x80)))
+      (if (i32.or (i32.lt_u (local.get $b) (i32.const 0xc2)) (i32.gt_u (local.get $b) (i32.const 0xf4))) (then (return (i32.const 0))))
+      (local.set $c (select (i32.const 1) (select (i32.const 2) (i32.const 3) (i32.lt_u (local.get $b) (i32.const 0xf0))) (i32.lt_u (local.get $b) (i32.const 0xe0))))
+      (local.set $lo (select (i32.const 0xa0) (select (i32.const 0x90) (i32.const 0x80) (i32.eq (local.get $b) (i32.const 0xf0))) (i32.eq (local.get $b) (i32.const 0xe0))))
+      (local.set $hi (select (i32.const 0x9f) (select (i32.const 0x8f) (i32.const 0xbf) (i32.eq (local.get $b) (i32.const 0xf4))) (i32.eq (local.get $b) (i32.const 0xed))))
+      (if (i32.gt_u (i32.add (local.get $p) (local.get $c)) (local.get $end)) (then (return (i32.const 0))))
+      (block $cont_done (loop $cont
+        (br_if $cont_done (i32.eqz (local.get $c)))
+        (local.set $b (i32.load8_u (local.get $p)))
+        (if (i32.or (i32.lt_u (local.get $b) (local.get $lo)) (i32.gt_u (local.get $b) (local.get $hi))) (then (return (i32.const 0))))
+        (local.set $lo (i32.const 0x80))
+        (local.set $hi (i32.const 0xbf))
+        (local.set $p (i32.add (local.get $p) (i32.const 1)))
+        (local.set $c (i32.sub (local.get $c) (i32.const 1)))
+        (br $cont)))
+      (br $walk)))
+    (i32.const 1))
+  (func (export \"validate\")",
+        1,
+    )
+}
+
+fn streams_field(b: &[u8], off: u64) -> String {
+    let header = [
+        (4, "magic"),
+        (8, "version"),
+        (16, "step"),
+        (20, "fn_x_len"),
+        (24, "fn_y_len"),
+        (28, "var_count"),
+        (32, "stream_count"),
+    ];
+    if let Some((_, name)) = header.iter().find(|(end, _)| off < *end) {
+        return format!("header.{name}");
+    }
+    let n = |at: u64, cap: u32| u64::from(u32_at(b, at).unwrap_or(0).min(cap));
+    let mut p = 32;
+    for (name, len) in [("fn_x", n(16, MAX_TEXT)), ("fn_y", n(20, MAX_TEXT))] {
+        if off < p + len {
+            return name.into();
+        }
+        p += len;
+    }
+    for i in 0..n(24, MAX_VARS) {
+        let len = n(p, 64);
+        for (part, size) in [("name_len", 4), ("name", len), ("value", 8)] {
+            if off < p + size {
+                return format!("var[{i}].{part}");
+            }
+            p += size;
+        }
+    }
+    for i in 0..n(28, MAX_STREAMS) {
+        if off < p + 4 {
+            return format!("stream[{i}].count");
+        }
+        let c = n(p, MAX_POINTS);
+        p += 4;
+        if off < p + 16 * c {
+            return format!("stream[{i}].point[{}]", (off - p) / 16);
+        }
+        p += 16 * c;
+    }
+    "trailing".into()
+}
+
+/// The fixture table: the field (−y, x) as `k` = 1 scales it, two streams of three Euler steps.
+fn streams_fixture() -> streams::Table {
+    let h = 0.05;
+    let stream = |mut p: [f64; 2]| {
+        let mut s = Vec::new();
+        for _ in 0..3 {
+            s.push(p);
+            p = [p[0] - h * p[1], p[1] + h * p[0]];
+        }
+        s
+    };
+    streams::Table {
+        fn_x: "-k * y".into(),
+        fn_y: "k * x".into(),
+        vars: vec![("k".into(), 1.0)],
+        step: h,
+        streams: vec![stream([1.0, 0.0]), stream([0.5, 0.0])],
+    }
+}
+
+/// The fixture with each malformed field streams@1's validator must refuse: a NaN step, an
+/// infinite var value, a stream count past the bytes, a trailing byte, and an overlong lead byte
+/// inside the y formula (refused at the formula's start).
+fn streams_twins() -> Vec<Vec<u8>> {
+    let t = streams_fixture();
+    let good = streams::encode(&t);
+    let set = |at: usize, v: &[u8]| {
+        let mut b = good.clone();
+        b[at..at + v.len()].copy_from_slice(v);
+        b
+    };
+    let fn_y = 32 + t.fn_x.len();
+    let var = fn_y + t.fn_y.len() + 4 + t.vars[0].0.len();
+    let mut trailing = good.clone();
+    trailing.push(0);
+    vec![
+        set(8, &f64::NAN.to_le_bytes()),
+        set(var, &f64::INFINITY.to_le_bytes()),
+        set(28, &3u32.to_le_bytes()),
+        trailing,
+        set(fn_y + 2, &[0xc0]),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// streams@1's validator refuses where the core's decoder does: the answers `judged.json`
+    /// records for it (which the engine's test reruns) are `streams::decode`'s on every twin and
+    /// fixture, so the two can't drift.
+    #[test]
+    fn streams_validator_answers_as_the_core_decoder_does() {
+        let judged: Value = serde_json::from_str(JUDGED).unwrap();
+        let j = &judged[streams::LAYOUT];
+        let fixtures = vec![streams::encode(&streams_fixture())];
+        for (kind, assets) in [("twins", streams_twins()), ("fixtures", fixtures)] {
+            let recorded = j[kind].as_array().unwrap();
+            assert_eq!(recorded.len(), assets.len(), "{kind}");
+            for (a, r) in assets.iter().zip(recorded) {
+                assert_eq!(r["asset"], crate::rewrite::hash(a), "{kind} in order");
+                let decoded = streams::decode(a);
+                let want =
+                    json!({"asset": r["asset"], "valid": decoded.is_ok(), "offset": decoded.err()});
+                assert_eq!(*r, want, "{kind}");
+            }
+        }
+    }
 }
