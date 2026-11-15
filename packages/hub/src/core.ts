@@ -2593,10 +2593,13 @@ export class Core {
       return;
     }
     // A stop that came while the core was starting cleared the timers before the start armed its own and opened the
-    // work runs (#2573): those go now, and the archive's pass at start ends before the record closes.
+    // work runs (#2573): those go now, and the archive's pass under way ends before the record closes. Up to 5 s: a
+    // pass can take minutes, and the hub gives its whole stop 20 s. One that runs longer reads a closed record, as before.
     for (const timer of this.timers) clearInterval(timer);
     this.work?.close();
-    await this.archiving();
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([this.archiving(), new Promise<void>((done) => { bound = setTimeout(done, 5000); })]);
+    clearTimeout(bound);
     await this.replaying;
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
