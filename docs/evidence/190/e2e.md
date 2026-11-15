@@ -295,7 +295,8 @@ already there. By 34f30ffd5 (2026-11-13) main had also added a `type` to each re
 the runner source in `web-replies.jsonl`'s first line from 488 to 566 lines, and the six bake `keys` in
 `replies.jsonl` (lines 2 and 7) and `app-bakes-replies.jsonl` (lines 1 to 4) are no longer what the head produces;
 so a rebuild at that head differs from `e2e-raw` in more than timings, though in nothing a screenshot shows (round
-50 below). The images' "this head" and "code at 9a02471b6" mean 9a02471b6.
+50 below). The images' "this head" and "code at 9a02471b6" mean 9a02471b6. By 56cd03250 (2026-11-14) each bake reply
+also carries `saves: []` and `frames: []` (main's #534), again in nothing a screenshot shows (round 51 below).
 
 **The fixes**, in `crates/deep-logic/src/fixtures.rs`, with tests in `crates/deep-logic/tests/fixture_once.rs`. Each
 test feeds request lines through `Logic::handle`: `fixture-once.jsonl`'s are the acceptance suite's own; the exports tests'
@@ -745,3 +746,23 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
     the Mac: load 51.3 and thermal state 1 at its start, load 41.9 at its end. Its budgets held under that load. As
     a timing taken under load it is a weaker reading than the run at e44890825 (load 3.96, thermal state 0, both
     tests passing), which is of the head before the merge of main 2c1c8cacc. Criterion 10.
+- **Round 51** (2026-11-14, a separate agent, at 56cd03250, in a clone of that head) found no P1 and no P2:
+  SCREENSHOTS STILL MATCH HEAD.
+  - The four merges of main since 34f30ffd5 (2755be633, 4303f78ca, 0aff36be1, edac8c5e9): compared as line sets per
+    side, nothing of this change or of main is dropped or doubled in `crates/deep-logic`, `crates/deep-canvas-sandbox`
+    or `scripts/lanes.mjs`. `cargo test --locked -p deep-logic -p deep-canvas-sandbox`: 25 passed, 0 failed.
+  - The evidence: `gen.test.ts` rerun (1 passed), the head's `deep-logic` run over the requests, and the five reply
+    files compared field by field: every program, rewritten and linked hash, size, library hash, pack, fixture ID,
+    verdict, `ran` flag, deep hash, route, move count, item hash, trap and refusal is equal; the differences are
+    timings, the bake `keys`, `saves: []` and `frames: []`, the web plan's `type` fields and the runner source.
+  - The browser page rerun with `server.mjs` and `shoot.mjs` (Playwright headless Chromium 156): on the committed
+    `e2e-raw`, screenshots 00 to 06 come out byte for byte the committed ones; on the data regenerated at this head,
+    01 to 06 are byte for byte the same and 00 differs only in its header line, "code at 56cd03250". The browser's
+    replies equal `browser-replies-chromium-156.json` both times. All 11 images were read against the values.
+  - Not done: 07a to 07d (the app's browser pane, Chromium 152) were read, not retaken; the acceptance suite,
+    `affected.mjs`, the oracle lane, clippy and fmt were not part of this round.
+  - Its two low findings: this file's list of what a rebuild differs in stopped at 34f30ffd5 (fixed above); and a
+    gap read from code, not run: `open_save`'s reply (`saves.rs`, main's #534) and the live view's frame reply
+    (`live.rs`) report traps without the `library` field that `bake` adds (`libraries_in`), so a trap inside a
+    linked library reached through those two replies would not name its library. Neither reply had traps at
+    34f30ffd5; criterion 5 and ac05 read the trap from `bake`. Open: not fixed in this change.
