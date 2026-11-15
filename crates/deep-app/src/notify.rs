@@ -242,6 +242,9 @@ impl Notifier {
     pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
         self.read
             .extend(view.unseen.iter().flat_map(openings).map(|(key, _)| key));
+        // And nothing the hub's list already holds.
+        self.read
+            .extend(view.table().list().iter().filter_map(|row| listing(row)));
         self.delivered = delivered;
         // A run that had ended already was told, or could have been seen.
         self.told
@@ -256,6 +259,22 @@ impl Notifier {
             {
                 self.waiting
                     .push((handle, now + self.after.as_millis() as u64));
+            }
+        }
+        // The hub's list takes an ask in a moment after the core shows it (#1463), and only a listed ask is in sight:
+        // being listed opens it too, so one that came due in between still notifies; leaving the list lets its next
+        // listing, when its Later ends, open it again.
+        if event["kind"] == "row.set" {
+            if let Some(key) = listing(&event["data"]) {
+                let handle = key["row ".len()..].to_owned();
+                if event["data"]["listed"] != true {
+                    self.read.remove(&key);
+                } else if self.read.insert(key)
+                    && !self.waiting.iter().any(|(waiting, _)| *waiting == handle)
+                {
+                    self.waiting
+                        .push((handle, now + self.after.as_millis() as u64));
+                }
             }
         }
         if event["kind"] == "notice.sent" {
@@ -426,7 +445,17 @@ impl Notifier {
 
 /// Whether the notifier reads the event: it opens an ask, gives it a new deadline or sends a notice.
 pub fn reads(event: &Value) -> bool {
-    !openings(event).is_empty() || event["kind"] == "notice.sent"
+    !openings(event).is_empty()
+        || event["kind"] == "notice.sent"
+        || (event["kind"] == "row.set" && listing(&event["data"]).is_some())
+}
+
+/// The key a list row of an ask is read under, `row ask:<id>`; `None` for a session's or a job's row.
+fn listing(row: &Value) -> Option<String> {
+    row["id"]
+        .as_str()
+        .filter(|id| id.starts_with("ask:"))
+        .map(|id| format!("row {id}"))
 }
 
 /// Each ask the event puts in front of you, keyed by the event and the ask: the core showing it, at its batch or at

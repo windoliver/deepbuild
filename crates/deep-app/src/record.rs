@@ -283,6 +283,18 @@ impl View {
                     row["status"] = json!("shown");
                 }
             }
+        } else if kind == "row.set" && event["data"]["listed"] == true {
+            // The hub lists an ask only once it is in sight (#1463): what this app took it for by its own reading,
+            // folded by its count, or held, ends there. One put off with Later is listed too, and stays so.
+            for row in self.inbox.iter_mut().filter(|row| {
+                row["ask"] == event["data"]["id"]
+                    && ["queued", "held", "folded"]
+                        .iter()
+                        .any(|status| row["status"] == *status)
+            }) {
+                row["seen"] = json!(true);
+                row["status"] = json!("shown");
+            }
         } else if kind == "ask.later" && event["writer"] == "core" {
             // Only the core's Later hides an ask, as in the core: an app's or the CLI's own event changes nothing.
             for row in self
