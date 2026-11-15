@@ -354,6 +354,18 @@ fn flowing_texture(x: vec2<f32>, pixel: f32, ph: Phases) -> f32 {
     return foam_texture(x - ph.o0, pixel) * ph.w0 + foam_texture(x - ph.o1, pixel) * (1.0 - ph.w0);
 }
 
+// #968: fast water's foam texture, stretched along the flow v into streaks a few metres long and a
+// few decimetres across, carried by the flow's two phases.
+fn streaks(x: vec2<f32>, pixel: f32, ph: Phases, v: vec2<f32>) -> f32 {
+    let along = v / max(length(v), 1e-6);
+    let across = vec2<f32>(-along.y, along.x);
+    let a = x - ph.o0;
+    let b = x - ph.o1;
+    let ta = foam_texture(vec2<f32>(dot(a, along) * 0.3, dot(a, across) * 2.0), pixel * 2.0);
+    let tb = foam_texture(vec2<f32>(dot(b, along) * 0.3, dot(b, across) * 2.0), pixel * 2.0);
+    return ta * ph.w0 + tb * (1.0 - ph.w0);
+}
+
 // How opaque foam is over a pixel, given how strongly something makes it (0..1): the texture
 // past a threshold that falls as the cause grows, so weak foam is a few flecks and strong foam
 // closes into patches with holes.
@@ -659,8 +671,9 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
         // frayed and its body mottled by foam's texture riding the flow. The fray moves the edge
         // by at most 0.04 m/s and the ramp spans 0.06 either side, so water 0.1 m/s slower than
         // foam's speed stays clear and water 0.1 m/s faster is covered.
-        let tex = flowing_texture(rest, pixel, ph);
-        let speed = length(flow_at(rest)) + 0.08 * (tex - 0.5);
+        let v = flow_at(rest);
+        let tex = streaks(rest, pixel, ph, v);
+        let speed = length(v) + 0.08 * (tex - 0.5);
         let fast = smoothstep(params.flow[1].x - 0.06, params.flow[1].x + 0.06, speed);
         if fast > 0.0 {
             foam = max(foam, fast * (0.7 + 0.3 * tex));
