@@ -1,0 +1,234 @@
+{
+  "id": "explain.infographic",
+  "version": "1.0",
+  "title": "Infographic",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A big-number infographic: each cue's word is the number, set large, and its sub-line the caption that says what it counts.",
+  "inputs": {
+    "cues": {
+      "type": "records",
+      "default": [],
+      "about": "the cue list: a cues@1 list whose cues also carry text, sub and data"
+    },
+    "stage": {
+      "type": "choice",
+      "options": [
+        "2d",
+        "3d"
+      ],
+      "default": "2d",
+      "about": "the stage the cues play on: 2d, or 3d through a perspective camera"
+    },
+    "look": {
+      "type": "choice",
+      "options": [
+        "clean",
+        "chalk",
+        "dark_math",
+        "notebook_pencil"
+      ],
+      "default": "clean",
+      "about": "the shipped look the film is drawn in; its type sets the words' face"
+    },
+    "palette": {
+      "type": "choice",
+      "options": [
+        "accent",
+        "ink",
+        "math",
+        "muted"
+      ],
+      "default": "accent",
+      "about": "the role the main words take"
+    }
+  },
+  "let": {
+    "face": "look == dark_math ? math : body",
+    "cue_marks": "\\cues"
+  },
+  "steps": {
+    "cam": {
+      "op": "item",
+      "kind": "camera@1",
+      "let": {
+        "eye": [
+          320.0,
+          180.0,
+          879.3
+        ]
+      },
+      "params": {
+        "projection": "stage == 3d ? perspective : orthographic",
+        "target": [
+          320.0,
+          180.0,
+          0
+        ],
+        "position": "stage == 3d ? eye : null",
+        "fov": 40,
+        "view_width": "stage == 3d ? null : 640"
+      }
+    },
+    "shot": {
+      "op": "shot",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "i == 0 || (has(c, data) ? (has(c.data, section) ? 1 : 0) : 0) == 1",
+      "let": {
+        "page": "sum(k, 1, i, has(cues[k], data) ? (has(cues[k].data, section) ? 1 : 0) : 0)",
+        "eye": [
+          "320.0 + 640 * page",
+          180.0,
+          879.3
+        ]
+      },
+      "params": {
+        "start": "i == 0 ? 0 : at(cue_marks, c.id)",
+        "camera": "id(instance, cam)",
+        "move": "stage == 3d ? push : hold",
+        "target": [
+          "320.0 + 640 * page",
+          180.0,
+          0
+        ],
+        "position": "stage == 3d ? eye : null",
+        "view_width": "stage == 3d ? null : 640"
+      }
+    },
+    "turn": {
+      "op": "transition",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "i > 0 && (has(c, data) ? (has(c.data, section) ? 1 : 0) : 0) == 1",
+      "params": {
+        "to": "id(instance, shot, i)",
+        "kind": "push",
+        "span": "0.5s",
+        "align": "reveal",
+        "progress": "in_out_cubic"
+      }
+    },
+    "band": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2560,
+          8
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          330,
+          0
+        ]
+      }
+    },
+    "word": {
+      "op": "mark",
+      "kind": "text@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "has(c, text)",
+      "let": {
+        "page": "sum(k, 1, i, has(cues[k], data) ? (has(cues[k].data, section) ? 1 : 0) : 0)",
+        "row": "sum(k, 0, i - 1, has(cues[k], text) ? (sum(m, 1, k, has(cues[m], data) ? (has(cues[m].data, section) ? 1 : 0) : 0) == page ? 1 : 0) : 0)",
+        "size": "has(c, data) ? (has(c.data, size) ? c.data.size : 96) : 96"
+      },
+      "params": {
+        "text": "c.text",
+        "font": "face",
+        "size": "size",
+        "box": {
+          "w": 560,
+          "h": "size * 1.3"
+        },
+        "align": "center",
+        "paint": {
+          "fill": {
+            "role": "palette"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "640 * page + 40",
+          "70",
+          0
+        ],
+        "pivot": [
+          280.0,
+          "size * 0.65",
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    "sub": {
+      "op": "mark",
+      "kind": "text@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "has(c, sub)",
+      "let": {
+        "page": "sum(k, 1, i, has(cues[k], data) ? (has(cues[k].data, section) ? 1 : 0) : 0)",
+        "row": "sum(k, 0, i - 1, has(cues[k], text) ? (sum(m, 1, k, has(cues[m], data) ? (has(cues[m].data, section) ? 1 : 0) : 0) == page ? 1 : 0) : 0)",
+        "size": "has(c, data) ? (has(c.data, sub_size) ? c.data.sub_size : 28) : 28"
+      },
+      "params": {
+        "text": "c.sub",
+        "font": "body",
+        "size": "size",
+        "box": {
+          "w": 560,
+          "h": "size * 1.4"
+        },
+        "align": "center",
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "640 * page + 40",
+          "206",
+          0
+        ]
+      }
+    },
+    "cues": {
+      "op": "item",
+      "kind": "cues@1",
+      "params": {
+        "cues": "cues",
+        "words": {
+          "text": "word",
+          "sub": "sub"
+        }
+      }
+    }
+  }
+}

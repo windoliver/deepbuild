@@ -179,7 +179,8 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{40}$",
-          "description": "The workspace commit its PASS covered, now main's head, once it finished; else null."
+          "description": "The workspace commit its PASS covered, now main's head, once it finished; else null.",
+          "maxLength": 8192
         },
         "kept": {
           "type": [
@@ -187,7 +188,8 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{40}$",
-          "description": "Main's head before it finished: the last version, kept a step back. Null until it finished."
+          "description": "Main's head before it finished: the last version, kept a step back. Null until it finished.",
+          "maxLength": 8192
         }
       },
       "required": [

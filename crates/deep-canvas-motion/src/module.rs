@@ -505,11 +505,15 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
 pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
 
 /// #504's wrong programs a scenario names, each compiled into the program.
-pub const PLANTED: [&str; 3] = [
+pub const PLANTED: [&str; 4] = [
     "slider_entries_ignored",
     "stage_sets_nothing",
     "stage_shot_cuts",
+    DIP_CROSS_FADES,
 ];
+
+/// #466's planted dip: its two sides cross-fade under its color at half weight.
+pub const DIP_CROSS_FADES: &str = "dip_cross_fades_under_ink";
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
@@ -526,6 +530,7 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
         Some("slider_entries_ignored") => crate::program::Planted::SliderEntriesIgnored,
         Some("stage_sets_nothing") => crate::program::Planted::StageSetIgnored,
         Some("stage_shot_cuts") => crate::program::Planted::StageShotCuts,
+        Some(DIP_CROSS_FADES) => crate::program::Planted::DipCrossFadesUnderInk,
         _ => Default::default(),
     };
     let options = crate::program::Options {

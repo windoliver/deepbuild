@@ -1,0 +1,59 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "kinetic_type: a twin breaking main_word_size",
+  "description": "kinetic_type: a twin breaking main_word_size: explain@1's kinetic_type.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "12s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.kinetic_type@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "cue_opening",
+            "kind": "fade_in",
+            "text": "MAKE",
+            "span": "0.5s"
+          },
+          {
+            "id": "cue_small",
+            "kind": "fade_in",
+            "text": "TINY",
+            "span": "0.5s",
+            "sub": "a sub-line half its size",
+            "data": {
+              "size": 80,
+              "sub_size": 40
+            }
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  }
+}

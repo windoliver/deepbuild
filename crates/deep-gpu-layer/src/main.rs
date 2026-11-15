@@ -38,6 +38,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod insets;
 mod indexed;
 mod interp_suite;
 mod levels;
@@ -54,6 +55,7 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
+mod op_transition;
 mod regions;
 mod scene;
 mod seam;
@@ -93,6 +95,8 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #466: an operator transition aligned on its progress's half, not its output's coverage.
+    MosaicRevealByProgress,
     /// #432's wrong warm-ups (tests/acceptance/432/README.md: Planted programs): only the
     /// feature sets in use at t = 0; only each variant set's default option's fused chain; only
     /// the pipelines that draw into the view.
@@ -332,6 +336,15 @@ pub enum Planted {
     /// the live rung; a frame-health drop climbed again without a view change.
     BandHysteresis,
     LightCutHysteresis,
+    /// #506's wrong programs (tests/acceptance/506/README.md: Planted programs): an eye inset
+    /// drawn from the eye through a frustum centred on the window, its picture laid on the face's
+    /// corners; a view overlay that reads the main view's backdrop, mirror or light cut from the
+    /// same frame; an inset's premultiplied render sampled as straight alpha.
+    EyeInsetCentredFrustum,
+    OneBackdropPerFrame,
+    OneMirrorPerFrame,
+    OneLightCutPerFrame,
+    InsetPremultipliedAsStraight,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -577,6 +590,7 @@ impl Planted {
             "stops_at_request" => Planted::StopsAtRequest,
             "strokes_from_previous_frame" => Planted::StrokesFromPreviousFrame,
             "region_sides_clip_independently" => Planted::RegionSidesClipIndependently,
+            "mosaic_reveal_by_progress" => Planted::MosaicRevealByProgress,
             "status_in_look" => Planted::StatusInLook,
             "motifs_write_document" => Planted::MotifsWriteDocument,
             "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
@@ -635,6 +649,11 @@ impl Planted {
             "premixed_metallic" => Planted::PremixedMetallic,
             "band_hysteresis" => Planted::BandHysteresis,
             "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "eye_inset_centred_frustum" => Planted::EyeInsetCentredFrustum,
+            "one_backdrop_per_frame" => Planted::OneBackdropPerFrame,
+            "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
+            "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
+            "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,

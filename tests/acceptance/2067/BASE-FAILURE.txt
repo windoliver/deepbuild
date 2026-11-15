@@ -1,0 +1,106 @@
+Issue #2067: unchanged-base qualification, 2026-11-14
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Node v24.22.0; Rust 1.99.1 installed. Used existing base-built artifacts.
+Final test-file and input SHA-256 hashes: README.md.
+
+FINAL CHECKS (run separately through the normal throttle/lease wrapper)
+1. node scripts/affected.mjs tests/acceptance/2067/release.test.ts
+   Vitest: 7 failed (7), all at intended behavior assertions, no setup errors.
+   affected: FAIL; 186 new, 11 already failing on main, 0 inconclusive or
+   blocked, 0 listed skips, 0 passed; 428 s, load 329.
+2. node scripts/affected.mjs tests/acceptance/2067/twins.test.ts
+   Vitest: 1 passed, 1 failed (2).
+   affected: FAIL; 173 new, 11 already failing on main, 0 inconclusive or
+   blocked, 0 listed skips, 1 passed; 242 s, load 241.
+Neither final run emitted WIDE or INCONCLUSIVE lines. No neighboring test
+suite, full preflight, real model, network fetch or GitHub write was run.
+The lease wrapper reported no hub token and ran unleased as designed;
+normal shared throttle grants were used, with no bypass or process kills.
+
+ACTUAL PUBLIC-FLOW RESULTS
+scenario          expected claim   actual claim  preflight runs  Closes
+trunk             FAIL             PASS          0               allowed
+develop           FAIL             PASS          0               allowed
+remote-main       FAIL             PASS          0               allowed
+remote-master     FAIL             PASS          0               allowed
+missing mainline  BLOCKED          PASS          0               allowed
+unreadable main   BLOCKED          PASS          0               allowed
+undefined check   BLOCKED          PASS          0               refused
+local-main twin   PASS             PASS          1 passed        allowed
+conflict twin     FAIL             INVALID       0               refused
+Every fixture's no-fetch assertion held. Bug scenarios' receipts contained
+review: passed but no preflight. Ordinary checks had genuinely passed first.
+Undefined-check Closes already refused on this base, naming preflight still
+to run; its claim nonetheless PASSed without preflight, the intended AC3 bug.
+
+Representative assertion failures:
+- preflight must FAIL on the merge, not disappear:
+  expected 'PASS' to be 'FAIL'
+- the claim must record a release run of preflight: expected 0 to be 1
+- preflight must be BLOCKED, not silently absent:
+  expected 'PASS' to be 'BLOCKED'
+- preflight stands on the claim as missing, not silently dropped:
+  expected undefined to be 'missing'
+These are actual comparisons after a correlated claim verdict and receipt,
+not missing-verdict TypeErrors or authorization/setup failures.
+
+AC1 TRUNK BASE RECORD
+claim: 01M7DSKWSW731GYDZ5M8VJAWK0
+PR head: 269cc58634b92dfb5790c17b90488b54d7f5ecc3
+last-fetched trunk: b265e91035b1ddfa1b02caf258d5936e04c17548
+verdict: PASS; reasons include ordinary drafted/unit/review PASS only.
+receipt checks: [{"check":"review","outcome":"passed"}]
+releaseRuns: []; Closes allowed: true; refusal reason: empty.
+This proves the issue's base claim verdict AND absence of release runs.
+
+AC4 PASSING TWIN (final fixture bytes)
+first PR claim: 01M7DSZY4AXY02NCSXHD0008TB
+PR head: 31eff1eb0ca42bbd203e4646b5c3956df5bd5113
+local main: 80b5659a657ec83a5e26568985bae39171faa631
+merged run commit: 3a225c5ca851ca230e47c48df72607bfb8ed86fe
+Two distinct claims PASS, both on the same branch head, each naming
+preflight PASS. Exactly one preflight run across the entire isolated hub;
+its actual Git tree matches merge-tree and its two parents match the heads.
+Second claim reuses that exact run/merge; branch HEAD is unchanged.
+Observed summary: {"verdict":"PASS","releaseRuns":1,
+"merged":"3a225c5ca851ca230e47c48df72607bfb8ed86fe"}
+
+GENUINE SCOPE BLOCKER: CONFLICT
+claim: 01M7DT0CC9ES7BPHWQS7PFS3C9
+PR head: 1e4a7eb33f2a9ddda9bf72e7f5a15210cb3b7f10
+main: 40065275f9b8feb99a6d00e3eed17e6e1be7b8e0
+Actual verdict INVALID, reason:
+  preflight: can't fail: exit status masked by `exit 1`
+No preflight run or failed receipt check. Closes was refused naming the
+conflict and preflight. The base's release path synthesizes a shell command
+ending in exit 1 for a real conflict; the validity gate rejects that command.
+The issue requires FAIL naming the conflict. The test preserves FAIL and
+failed receipt expectations; it is NOT changed to accept INVALID.
+Earlier qualified runs also observed intermittent Closes allows on conflicts;
+the final run refused correctly, so no universal refusal proof is claimed.
+
+QUALIFICATION HISTORY / LIMITS
+Initial resumed twins: local-main reached PASS plus one run, but the Closes
+probe hit separate authority; conflict reached INVALID. A fixture correction
+answering authority through CLI exposed an answer-delivery/turn interaction
+and no PR verdict; that timeout is not proof. Binding PR authority in the
+original typed issue request removed the extra turn; the local-main twin
+then passed. One release run reached five intended failures but trunk and
+remote-main timed out on ordinary prerequisites. Extended that bounded setup
+wait from 90 to 240 s and made it stop on any terminal verdict, not only PASS.
+The final release run reached all seven intended failures; reran affected
+twins after that shared-fixture change, with the final results above.
+No retries without a meaningful fixture correction; no assertions weakened.
+
+The affected runner's other failures are unchanged-base repository lints:
+dependencies, cards, vendor patch inventory, canvas lint, size ceilings,
+code mappings, slots, known-failure age, record-reader and an existing
+secret-scan home-path finding outside #2067. They were not modified.
+Original reporter SHA-256 (provenance only, raw machine paths not copied):
+release: f7fe1f32f82355466d1b5e45553adfbd8bbb361ab2e354bd9e37f6e831f15d47
+twins:   68a100000f0702ff016937e43079243686652a37c4e8fb7d13629e4c9c063e62
+Tracked diff is empty; only tests/acceptance/2067 is uncommitted. No commits.
+
+STATUS: draft/base qualification complete. Final acceptance remains BLOCKED
+from delivery as PASS: seven intended bug failures and the genuine conflict
+scope failure remain on this base. No implementation was read or tested.

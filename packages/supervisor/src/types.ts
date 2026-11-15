@@ -121,7 +121,9 @@ export type Plant = 'kept-in-service-cgroup' | 'sandbox-left-to-caller' | 'stops
   | 'standin-value-in-env' | 'standin-every-host' | 'run-ca-in-login-keychain' | 'sandbox-any-loopback'
   // The denial stream's: a macOS whose sandbox reports carry another subsystem than the stream's filter names, and
   // one where another process than the kernel writes them too.
-  | 'reports-other-subsystem' | 'reports-other-process';
+  | 'reports-other-subsystem' | 'reports-other-process'
+  // #2399's: a filter's refusals never recorded, one kept per operation whatever the target, and a set kept without the run.
+  | 'egress-refusals-unrecorded' | 'egress-refusal-once-per-operation' | 'egress-refusals-seen-without-run';
 export interface SupervisorOptions {
   /** Ownership records, leases, denials and cleanup outcomes go here, written as `core`. */
   record: RecordStore;

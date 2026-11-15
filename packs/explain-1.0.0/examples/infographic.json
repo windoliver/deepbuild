@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "What the survey found",
+  "description": "What the survey found: explain@1's infographic.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "6s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.infographic@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "n1",
+            "kind": "explain.slam",
+            "text": "Most",
+            "span": "0.5s",
+            "sub": "people use it daily",
+            "data": {
+              "size": 110,
+              "sub_size": 30
+            }
+          },
+          {
+            "id": "n2",
+            "kind": "fade_out",
+            "targets": [
+              "n1"
+            ],
+            "span": "0.25s",
+            "gap": "1s"
+          },
+          {
+            "id": "n3",
+            "kind": "explain.slam",
+            "text": "Half",
+            "span": "0.5s",
+            "sub": "came back a week later",
+            "data": {
+              "size": 110,
+              "sub_size": 30,
+              "section": true
+            }
+          },
+          {
+            "id": "n4",
+            "kind": "explain.slam",
+            "text": "Fast",
+            "span": "0.5s",
+            "sub": "to the first answer",
+            "data": {
+              "size": 110,
+              "sub_size": 30,
+              "section": true
+            }
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}

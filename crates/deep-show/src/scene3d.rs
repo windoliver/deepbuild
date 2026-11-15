@@ -5,15 +5,37 @@
 
 use std::sync::Arc;
 
+use deep_canvas::registry::{LightQuery, LightSums, Reduce};
 use deep_canvas_marks::scene::Palette;
 use deep_canvas_scene3d::contributed::Fills;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate_any, Labels, Scene};
 use deep_gpu::device::{Backend, Device, Gpu};
+use deep_scene3d_render::exposure::{Kept, Reducer};
 use deep_scene3d_render::{draw_offscreen, Planted, Renderer};
 use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
+
+/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
+/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
+pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
+    let mut look = Look3::from_roles(palette.clone());
+    let camera = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .and_then(|id| doc.get("items")?.get(id));
+    if let Some(ev) = camera.and_then(|c| c.pointer("/params/exposure")?.as_f64()) {
+        look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
+    }
+    look
+}
+
+/// The rows of a frame of `size` render.exposure's reduction reads: all of them, or, under
+/// #2513's planted reduction, those in whole 32-row groups.
+fn read_rows([w, h]: [u32; 2], short: bool) -> [u32; 2] {
+    [w, if short { h / 32 * 32 } else { h }]
+}
 
 /// #1401: what a frame's object-ID pass and depth target hold, at their own size: each pixel's
 /// pick (u32, 0 where nothing drew), the item each pick stands for, and, for the planted depth
@@ -32,6 +54,8 @@ pub struct Gpu3 {
     labels: Labels,
     /// The print pass, built on first use and kept: an export prints every frame (#157).
     printer: Option<deep_scene3d_render::print::Printer>,
+    /// render.exposure's reduction, built on first use and kept (#2513).
+    reducer: Option<Arc<Reducer>>,
     /// The build's outline sources and module fills (#226), and the planted module program.
     outlines: Vec<deep_canvas::registry::SealedOutline>,
     fills: Vec<deep_canvas::contributed::Sealed>,
@@ -62,52 +86,25 @@ impl Gpu3 {
             renderer,
             labels: Labels::new(),
             printer: None,
+            reducer: None,
             outlines: sealed.outlines.clone(),
             fills: sealed.fills.clone(),
             planted,
         })
     }
 
-    /// `doc` at `t`, drawn at `size` px over the look's ground: straight RGBA, rows top-down,
-    /// with the scene it drew.
-    pub fn draw(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        palette: &Palette,
-        size: [u16; 2],
-    ) -> Result<(Vec<u8>, Scene), Unfit> {
-        let mut doc = doc.clone();
-        if let Some(d) = doc.as_object_mut() {
-            d.insert("size".into(), json!(size));
-        }
-        // #524: each skin's item at this frame's time.
-        deep_canvas_physics::skin::write(&mut doc, t);
-        let look = Look3::from_roles(palette.clone());
-        let fills = Fills {
-            outlines: &self.outlines,
-            module: &self.fills,
-            planted: self.planted.as_deref(),
-            memo: None,
-        };
-        let scene =
-            evaluate_any(&doc, t, &look, &mut self.labels, None, fills).map_err(|r| Unfit {
-                code: r.code,
-                path: r.path,
-            })?;
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, &scene, &look, None)
-            .ok_or(Unfit {
-                code: "unsupported_platform",
-                path: String::new(),
-            })?;
+    /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
+    pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
+        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
-        Ok((bytes, scene))
+        Some(bytes)
     }
 
     /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the
-    /// evaluated scene a diagnostic mode reads and draws, and the look it draws in.
+    /// evaluated scene a draw reads, and the look it draws in; its maps' texels are the host's
+    /// (#1729, `Hub::evaluate3d`).
     pub fn evaluate(
         &mut self,
         doc: &Value,
@@ -121,7 +118,7 @@ impl Gpu3 {
             d.insert("size".into(), json!(size));
         }
         deep_canvas_physics::skin::write(&mut doc, t);
-        let look = Look3::from_roles(palette.clone());
+        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
@@ -146,24 +143,61 @@ impl Gpu3 {
         look: &Look3,
         depth: bool,
     ) -> Option<(Vec<u8>, Targets)> {
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
-        for p in bytes.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
+        let bytes = self.draw(scene, look)?;
+        Some((bytes, self.targets(scene.size, depth)?))
+    }
+
+    /// Each pick of the last frame drawn with the item it stands for, read on the CPU.
+    pub fn picks(&self) -> std::collections::BTreeMap<u32, String> {
+        self.renderer
+            .picks()
+            .iter()
+            .map(|(id, p)| (*p, id.clone()))
+            .collect()
+    }
+
+    /// The targets the last frame drawn at `size` left: its object-ID pass at the renderer's own
+    /// size and each pick's item; the view depth only when `depth` asks.
+    pub fn targets(&self, size: [u32; 2], depth: bool) -> Option<Targets> {
         let r = &self.renderer;
-        let size = r.internal_size(scene.size);
-        let (_, ids) = r.read_targets(&self.device)?;
-        let targets = Targets {
-            size,
-            ids,
-            picks: r.picks().iter().map(|(id, p)| (*p, id.clone())).collect(),
+        Some(Targets {
+            size: r.internal_size(size),
+            ids: r.read_ids(&self.device)?,
+            picks: self.picks(),
             view_depth: if depth {
                 Some(r.read_view_depth(&self.device)?)
             } else {
                 None
             },
-        };
-        Some((bytes, targets))
+        })
+    }
+
+    fn reducer(&mut self) -> Arc<Reducer> {
+        let device = &self.device;
+        self.reducer
+            .get_or_insert_with(|| Arc::new(Reducer::new(device)))
+            .clone()
+    }
+
+    /// #2513: render.exposure's `q` reduced on this GPU over the last frame drawn, its pre-tone
+    /// image and object-ID pass; under #2513's planted reduction, without the frame's last rows.
+    pub fn light(&mut self, q: &LightQuery, short: bool) -> Option<LightSums> {
+        let reducer = self.reducer();
+        let (pre_tone, ids, size) = self.renderer.light_source()?;
+        reducer.reduce(&self.device, pre_tone, ids, read_rows(size, short), q)
+    }
+
+    /// #2513: the last frame drawn, kept on this GPU for render.exposure to reduce after later
+    /// frames draw: a frame's reduction in place of its linear image.
+    pub fn kept_light(&mut self, short: bool) -> Option<Reduce> {
+        let reducer = self.reducer();
+        let (pre_tone, ids, size) = self.renderer.light_source()?;
+        let kept = Kept::copy(&self.device, pre_tone, ids, size);
+        let device = self.device.clone();
+        let rows = read_rows(size, short);
+        Some(Reduce(Arc::new(move |q| {
+            kept.reduce(&device, &reducer, rows, q)
+        })))
     }
 
     /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows
