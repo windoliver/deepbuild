@@ -778,3 +778,23 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
     (`open-save-live-suites-c34e1bff4.txt`): 57 pass and 17 fail on each side, the same 17 (budget and Mac-only
     files among them), so the fix adds no failure there.
   - The Mac runs at 4b10b58f1 are of the head before this fix.
+- **`affected.mjs` at the head against the merge base** (2026-11-14; `affected-base-vs-head-4b10b58f1.txt`): the same
+  selection, the 107 paths of 2c1c8cacc..4b10b58f1, run at 2c1c8cacc and then at 4b10b58f1 in one scratch clone
+  (npm ci and a workspace build on each side) under one isolated HOME. Base: `FAIL affected: 486 new, 48 already
+  failing on main, 93 inconclusive or blocked, 0 listed skips, 920 passed, in 2691 s at load 8`. Head: `FAIL
+  affected: 505 new, 48 already failing on main, 90 inconclusive or blocked, 0 listed skips, 946 passed, in 1958 s
+  at load 32`. No WIDE line on either side; 33 timed and 9 slow files not run on both. 270 distinct failure lines
+  are on both sides. The 23 only at the head:
+  - This change's own, fixed in e7cddf318: `cards` read the sandbox card's deviation bullet, which opened with
+    `lib.interface@1` in backticks, as a file the crate lacks; `deps` named `tests/acceptance/190/wat`'s `wat` and
+    `wasmparser` as unlisted (now listed in `scripts/repo-rules.json`, as #531's and #532's are). After it
+    `node scripts/repo-rules.mjs` prints `PASS cards` and no deps line for #190.
+  - This change's own, not fixed: `size` names deep-logic's `lib.rs` (1648 lines) and `piece.rs` (2003); the base
+    fails the same rule at 1614 and 1931.
+  - Not this change's: 10 color-literal lines and #882's two lint tests (the guard run directly prints the same 10
+    lines at both commits); ac07 (the clone had no local `main`; it passes in the suite runs above); #824's two
+    memory readings (4 of 4 pass at both commits on a rerun); #1348, #689 and #879's lines (on both sides, with
+    other text); `drift`'s map-projections line (not reproduced run directly at either commit; the design and the
+    script are the same on both).
+  - The earlier single run at 4b10b58f1 (`affected-linux-4b10b58f1.txt`) was in this worktree, whose `node_modules`
+    was of 2026-11-09 and lacked `@deepbuild/briefs`; this comparison replaces it as the reading.
