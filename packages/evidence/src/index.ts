@@ -193,10 +193,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   if (!options.readOnly && lines.length > 2 * (index.size + approved.size) + 1000) {
     const kept = [...index.values(), ...[...approved].map(([pair, reasons]): Approval => ({ approved: pair, reasons: [...reasons] }))];
     // It replaces a journal whose lines a FULL commit may have synced, so it lasts before it does (#1410).
-    const temp = join(root, `.tmp-${randomUUID()}`);
-    await writeFile(temp, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''));
-    await syncOne(temp);
-    await rename(temp, journal);
+    await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''), true);
     await syncOne(root);
   }
   // The journal stays open while lines come, and closes once they stop for a second: opening it for each line cost
@@ -224,10 +221,12 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     void tail.then(() => { if (queues.get(sha) === tail) queues.delete(sha); });
     return run;
   };
-  async function writeAtomic(path: string, data: Uint8Array | string) {
+  /** Replaces the file at the path whole; `lasting` syncs the new one first, for a file that may have been synced. */
+  async function writeAtomic(path: string, data: Uint8Array | string, lasting = false) {
     if (!folders.has(dirname(path))) { await mkdir(dirname(path), { recursive: true }); folders.add(dirname(path)); }
     const temp = join(dirname(path), `.tmp-${randomUUID()}`);
     await writeFile(temp, data);
+    if (lasting) await syncOne(temp);
     await rename(temp, path);
   }
   /** Syncs what is at the path now, and says which file that was; nothing when it is gone. */
@@ -260,16 +259,17 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const existed = index.has(sha) && await onDisk(sha);
     await options.hooks?.afterExistsCheck?.(sha);
     return serial(sha, async () => {
-      if (file || !existed || !(await onDisk(sha))) {
+      // A file already there, whoever wrote it, may be one a FULL commit synced: what replaces it lasts first (#1410).
+      const there = await onDisk(sha);
+      if (file || !existed || !there) {
         if (file) {
           const path = fileOf(sha);
           await mkdir(dirname(path), { recursive: true });
-          // Over a file a FULL commit may have synced, the copy lasts before it takes the name (#1410).
-          if (existed) await syncOne(file.file);
+          if (there) await syncOne(file.file);
           await rename(file.file, path);
         } else {
           const data = bytes as Uint8Array;
-          await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(data)) : writeAtomic(fileOf(sha), data));
+          await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(data), there) : writeAtomic(fileOf(sha), data, there));
         }
       }
       const earlier = index.get(sha);

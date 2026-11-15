@@ -1,4 +1,5 @@
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -75,5 +76,19 @@ it('a file put again by path over one already stored is synced before it replace
   if (again.status !== 'stored') throw Error(again.reason);
   expect(again.evidence.sha256).toBe(sha);
   // The copy that replaced the file was synced under its own name, before the rename made it the file.
-  expect(synced.filter((path) => path !== file && !path.endsWith('records.jsonl')), 'a sync of the copy before it replaced the synced file').not.toEqual([]);
+  expect(synced.filter((path) => basename(path).startsWith('.tmp-')), 'a sync of the copy before it replaced the synced file').not.toEqual([]);
+  expect(synced).not.toContain(file);
+});
+
+it("bytes put over a file on disk the store's journal doesn't hold, as deep-show writes them, are synced before they replace it (#1410)", async () => {
+  const { root, store } = await stored('another log');
+  const bytes = Buffer.from('a snapshot deep-show wrote');
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  mkdirSync(join(root, sha.slice(0, 2)), { recursive: true });
+  writeFileSync(join(root, sha.slice(0, 2), sha.slice(2)), bytes);
+  await store.sync([sha]);
+  synced.length = 0;
+  const put = await store.connect({ role: 'deepbuild', via: 'capture' }).put({ bytes, kind: 'log', source: 'test', redaction: 'complete', license: { name: 'CC0-1.0', allows: [] } });
+  if (put.status !== 'stored') throw Error(put.reason);
+  expect(synced.filter((path) => basename(path).startsWith('.tmp-')), 'a sync of the new copy before it replaced the synced file').not.toEqual([]);
 });
