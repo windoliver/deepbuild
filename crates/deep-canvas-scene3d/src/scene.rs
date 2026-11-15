@@ -3873,6 +3873,21 @@ pub(crate) fn evaluate_compiled(
                     let d = crate::dof::parse(id, params)?;
                     dof.get_or_insert(d);
                 }
+                // #508: the film kinds travel as another module's items, as particles@1 does; the
+                // effects module ranges and draws them.
+                "effect@1"
+                    if matches!(
+                        params.get("kind").and_then(Value::as_str),
+                        Some("wave_field" | "plume" | "arc" | "airflow")
+                    ) =>
+                {
+                    others.push(Other {
+                        id: id.clone(),
+                        kind: kind.to_string(),
+                        params: params.clone(),
+                        pos: origin(&world(&items, id)),
+                    });
+                }
                 "effect@1" => {
                     let f = crate::flare::parse(id, params, look)?;
                     flare.get_or_insert_with(|| Arc::new(f));

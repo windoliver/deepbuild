@@ -47,6 +47,17 @@ struct Graph {
     measured: bool,
 }
 
+/// A graph's declared cost: its stages' ns per px or per element, added.
+fn declared(stages: &[Value]) -> f64 {
+    stages
+        .iter()
+        .map(|g| {
+            let c = &g["cost"];
+            c["ns_per_px"].as_f64().or(c["ns_per_element"].as_f64()).unwrap_or(0.0)
+        })
+        .sum()
+}
+
 /// Whether any step of `steps`, in any body, is a seeded noise step, whose octave weight the
 /// estimates take from the op table.
 fn uses_noise(steps: &BTreeMap<String, Step>) -> bool {
@@ -209,7 +220,7 @@ fn fixtures() -> Vec<Graph> {
             name: "fixture.math@1".into(),
             origin: "fixture",
             measured: false,
-            stages: vec![fixture_pass(
+                stages: vec![fixture_pass(
                 "fixture.math@1",
                 "Calibration fixture: eight rounds of sin, cos, sqrt, a divide and an add.",
                 json!({}),
@@ -220,7 +231,7 @@ fn fixtures() -> Vec<Graph> {
             name: "fixture.taps@1".into(),
             origin: "fixture",
             measured: false,
-            stages: vec![fixture_pass(
+                stages: vec![fixture_pass(
                 "fixture.taps@1",
                 "Calibration fixture: sixteen bilinear taps of the scene color, averaged.",
                 tex,
@@ -231,7 +242,7 @@ fn fixtures() -> Vec<Graph> {
             name: "fixture.hash@1".into(),
             origin: "fixture",
             measured: false,
-            stages: vec![fixture_pass(
+                stages: vec![fixture_pass(
                 "fixture.hash@1",
                 "Calibration fixture: two integer hashes of each pixel, then a rand.",
                 json!({}),
@@ -267,7 +278,7 @@ fn fixtures() -> Vec<Graph> {
             name: "fixture.fbm_elements@1".into(),
             origin: "fixture",
             measured: false,
-            stages: vec![compute],
+                stages: vec![compute],
         },
     ]
 }
@@ -524,11 +535,17 @@ pub fn calibrate(app: &mut App) -> Value {
     let (emit, check) = operator_plants(app.planted);
     let mut graphs: Vec<Graph> = shipped::library(karis)
         .into_iter()
-        .map(|s| Graph {
-            name: s.name.into(),
-            origin: "shipped",
-            stages: s.stages,
-            measured: false,
+        .map(|s| {
+            // #508: the film effects' passes are costed by a frame's measurement.
+            let measured = shipped::EFFECT_MEASURED_NS_PER_PX
+                .iter()
+                .any(|(n, _)| *n == s.name);
+            Graph {
+                name: s.name.into(),
+                origin: "shipped",
+                stages: s.stages,
+                measured,
+            }
         })
         .collect();
     graphs.extend(fixtures());
@@ -595,6 +612,7 @@ pub fn calibrate(app: &mut App) -> Value {
                 }
             }
             let measured = runs.iter().copied().fold(0.0, f64::max);
+            let declared_ns = declared(&g.stages);
             if !g.measured && (estimate - measured).abs() > BOUND * measured {
                 outside.push(json!({"name": g.name, "steps": names, "estimate_ns": estimate, "measured_ns": measured}));
             }
@@ -602,6 +620,7 @@ pub fn calibrate(app: &mut App) -> Value {
                 "name": g.name, "origin": g.origin, "uses_noise": noise, "own_pass": true, "warmup": true,
                 "p95_ns": runs, "estimate_ns": estimate, "stages": g.stages.len(),
                 "costed_by": if g.measured { "measurement" } else { "estimate" }, "measured_ns": measured,
+                "declared_ns": declared_ns,
             }));
         }
         let pass = outside.is_empty();

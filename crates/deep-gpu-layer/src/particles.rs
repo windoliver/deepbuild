@@ -111,6 +111,12 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if doc.get("size").is_none() {
         doc["size"] = json!([320, 240]);
     }
+    // #508: a plume's and an airflow's particles, as the view draws them.
+    let broken = deep_canvas_effects::effect::issues(&doc);
+    if !broken.is_empty() {
+        return Ok(json!({"outcome": "refused", "issues": broken}));
+    }
+    deep_canvas_effects::effect::lower(&mut doc);
     crate::physics::bake(&mut doc)?;
     let (plants, flags, every) = plants(app.planted);
     // The rules that read the document alone refuse it before anything evaluates.
@@ -529,6 +535,150 @@ pub(crate) fn frame(
     settings.sparks = kept;
     DRAWN.lock().unwrap_or_else(|e| e.into_inner()).push(t);
     Ok((!asked.is_empty()).then_some(Value::Object(report)))
+}
+
+/// #508: the rect (px, x0 y0 x1 y1) holding a projected world box grown by `pad` px, clamped to
+/// the frame; the whole frame when a corner is behind the eye; `None` when it's empty.
+fn rect_of(cam: &deep_canvas_scene3d::scene::Camera, corners: &[[f64; 3]], pad: f64) -> Option<[f64; 4]> {
+    let [w, h] = cam.size;
+    let projected: Option<Vec<[f64; 3]>> = corners.iter().map(|c| cam.project(*c)).collect();
+    let r = match projected {
+        Some(c) => {
+            let (xs, ys) = (c.iter().map(|p| p[0]), c.iter().map(|p| p[1]));
+            [
+                xs.clone().fold(f64::INFINITY, f64::min) - pad,
+                ys.clone().fold(f64::INFINITY, f64::min) - pad,
+                xs.fold(f64::NEG_INFINITY, f64::max) + pad,
+                ys.fold(f64::NEG_INFINITY, f64::max) + pad,
+            ]
+        }
+        None => [0.0, 0.0, w, h],
+    };
+    let r = [
+        r[0].floor().clamp(0.0, w),
+        r[1].floor().clamp(0.0, h),
+        r[2].ceil().clamp(0.0, w),
+        r[3].ceil().clamp(0.0, h),
+    ];
+    (r[2] > r[0] && r[3] > r[1]).then_some(r)
+}
+
+/// A box's eight corners.
+fn corners_of([lo, hi]: [[f64; 3]; 2]) -> Vec<[f64; 3]> {
+    (0..8usize)
+        .map(|c| [0, 1, 2].map(|k| if c >> k & 1 == 1 { hi[k] } else { lo[k] }))
+        .collect()
+}
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+fn unit(a: [f64; 3]) -> [f64; 3] {
+    let l = deep_canvas::ops::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).max(1e-12);
+    a.map(|x| x / l)
+}
+
+fn union(a: Option<[f64; 4]>, b: [f64; 4]) -> [f64; 4] {
+    a.map_or(b, |a| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])
+}
+
+/// #508: each film effect's screen footprint this frame (Surfaces this job invents, 5), by item:
+/// the rect (px) holding everything it draws or displaces. A plume's or an airflow's is its
+/// particles' closed-form bounds at `t` projected and grown by their sprites' size; a wave
+/// field's its disc of `radius` on its plane; an arc's its ends' box grown by its jitter and its
+/// glow's reach. Each plume with a haze adds the haze over its footprint to `settings`, with its
+/// cell (its `scale` in px at the bounds' centre) and its flow (the plume's speed along its axis
+/// on screen, px/s). An effect that draws nothing in view this frame has no footprint.
+pub(crate) fn effects(
+    settings: &mut Settings,
+    doc: &Value,
+    scene: &Scene,
+    t: f64,
+    planted: Option<Planted>,
+    seeding: crate::effects::Seeding,
+) -> Result<Map<String, Value>, Value> {
+    use deep_canvas_effects::effect;
+    let (plants, _, _) = plants(planted);
+    let cam = &scene.camera;
+    let doc_seed = doc["seed"].as_u64().unwrap_or(0);
+    let mut out = Map::new();
+    for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
+        let Some(kind) = o.params["kind"].as_str().filter(|k| effect::KINDS.contains(k)) else {
+            continue;
+        };
+        let p = &o.params;
+        let n = |f: &str| effect::num(p, kind, f);
+        let mut rect = None;
+        let mut centre = None;
+        match kind {
+            "plume" | "airflow" => {
+                for sp in settings.sparks.iter().filter(|s| s.effect.as_deref() == Some(&o.id)) {
+                    let pad = 0.5 * sp.size[0].max(sp.size[1]).max(1.0) * sp.size_px + 2.0;
+                    let held = baked(doc, scene, &sp.item, sp.seed, plants, &mut Vec::new())
+                        .map_err(|r| refusal(&r))?;
+                    let Some(bx) = bounds::bounds(&held.0, t) else {
+                        continue;
+                    };
+                    centre = Some([0, 1, 2].map(|k| 0.5 * (bx[0][k] + bx[1][k])));
+                    if let Some(r) = rect_of(cam, &corners_of(bx), pad) {
+                        rect = Some(union(rect, r));
+                    }
+                }
+            }
+            "wave_field" | "arc" => {
+                let Some(e) = settings.emits.iter().find(|e| e.item == o.id) else {
+                    continue;
+                };
+                let v3 = |k: &str| -> [f64; 3] {
+                    let v = &e.params[k];
+                    [0, 1, 2].map(|i| v[i].as_f64().unwrap_or(0.0))
+                };
+                if kind == "wave_field" {
+                    let (c, a, r) = (v3("wave.point"), v3("wave.normal"), n("radius"));
+                    // Two directions across the axis.
+                    let other = if a[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
+                    let u = unit(cross(a, other));
+                    let w = cross(a, u);
+                    let disc: Vec<[f64; 3]> = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
+                        .iter()
+                        .map(|(i, j)| [0, 1, 2].map(|k| c[k] + r * (i * u[k] + j * w[k])))
+                        .collect();
+                    rect = rect_of(cam, &disc, 2.0);
+                } else {
+                    let reach = n("jitter") + 4.0 * n("width") + 2.0;
+                    rect = rect_of(cam, &[v3("arc.from"), v3("arc.to")], reach);
+                }
+            }
+            _ => {}
+        }
+        let Some(rect) = rect else {
+            continue;
+        };
+        if let (true, Some(centre)) = (kind == "plume" && n("haze/strength") > 0.0, centre) {
+            let at = cam.project(centre);
+            let px_per_m = at.map_or(1.0, |q| cam.px_per_m(q[2]));
+            let a = effect::axis(&p["axis"]);
+            let speed = n("reach") / effect::PLUME_LIFE;
+            let ahead = cam.project([0, 1, 2].map(|k| centre[k] + a[k] * speed));
+            let flow = match (at, ahead) {
+                (Some(q), Some(r)) => [r[0] - q[0], r[1] - q[1]],
+                _ => [0.0, 0.0],
+            };
+            settings.hazes.push(deep_effects_render::frame::Haze {
+                item: o.id.clone(),
+                params: std::collections::BTreeMap::from([
+                    ("haze.strength".to_string(), json!(n("haze/strength"))),
+                    ("haze.cell".to_string(), json!((n("haze/scale") * px_per_m).max(1.0))),
+                    ("haze.flow".to_string(), json!(flow)),
+                    ("haze.rect".to_string(), json!(rect)),
+                ]),
+                seed: crate::effects::effect_seed(doc_seed, o, seeding),
+            });
+        }
+        out.insert(o.id.clone(), json!({"box": rect}));
+    }
+    Ok(out)
 }
 
 /// #450: the document with each `draw: mesh` particles item's live particles at `t` (s) as the

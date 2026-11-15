@@ -36,6 +36,9 @@ pub struct Sparks {
     /// Its size in px and its opacity at birth and at death (#420: channels over life).
     pub size: [f64; 2],
     pub fade: [f64; 2],
+    /// #508: its opacity over life as up to 12 keys, each its place in life and its value, drawn
+    /// piecewise linear; empty draws `fade`.
+    pub fade_keys: Vec<(f64, f64)>,
     /// Its color over life: up to four stops, each its place in life and a linear color, mixed
     /// in OKLab.
     pub stops: Vec<(f64, [f64; 3])>,
@@ -50,6 +53,10 @@ pub struct Sparks {
     /// #450: a ribbon's segments, width in px, taper and fade; its columns hold count rows a
     /// segment end.
     pub ribbon: Option<(u32, f64, f64, f64)>,
+    /// #508: the effect item a preset's particles draw for (a plume's or an airflow's), timed as
+    /// its pass, and its declared cost, ns per px at its resolution; none for an item of its own.
+    pub effect: Option<String>,
+    pub cost_ns: Option<f64>,
 }
 
 /// A closed-form item's frame uniform words, bake table words and surface (#449).
@@ -76,6 +83,31 @@ pub struct Settings {
     pub t: f64,
     /// #462: the look's strokes on surfaces this frame, as the CPU laid them.
     pub strokes: Option<Arc<Vec<crate::strokes::Dab>>>,
+    /// #508: the film effects' emission passes and the plumes' hazes, and whether the frame
+    /// reads back the color its checks read.
+    pub emits: Vec<Emit>,
+    pub hazes: Vec<Haze>,
+    pub checks: bool,
+}
+
+/// #508: a wave field's or an arc's emission pass: its item, its kind, its operator and its
+/// params, its seed, and its resolution's scale of the view.
+#[derive(Clone, Debug)]
+pub struct Emit {
+    pub item: String,
+    pub kind: &'static str,
+    pub op: &'static str,
+    pub params: BTreeMap<String, Value>,
+    pub seed: u32,
+    pub scale: f64,
+}
+
+/// #508: a plume's haze: its item, its `haze.*` params and its seed.
+#[derive(Clone, Debug)]
+pub struct Haze {
+    pub item: String,
+    pub params: BTreeMap<String, Value>,
+    pub seed: u32,
 }
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
@@ -92,6 +124,9 @@ pub struct Planted {
     /// #1173: a half-resolution puff shaded once per 2 × 2 px block, that value copied to all
     /// four, as the base drew it.
     pub block_copy: bool,
+    /// #508: a plume's haze run before the check readbacks are taken (and the document's
+    /// operators), so they hold its displaced color.
+    pub haze_feeds_check_readback: bool,
 }
 
 /// A pass of the frame, for the view's reply: its name, the targets it reads and writes, and the
@@ -104,7 +139,9 @@ pub struct PassInfo {
     pub operator: Option<&'static str>,
 }
 
-pub use deep_canvas_effects::module::{GLOW, GRID, OUTLINE, SHADOW, SPARKS};
+pub use deep_canvas_effects::module::{
+    ARC, CHECKS, GLOW, GRID, HAZE, OUTLINE, SHADOW, SPARKS, WAVE_FIELD,
+};
 
 pub struct Effects {
     pub settings: Settings,
@@ -142,6 +179,9 @@ pub struct Effects {
     pub op_rows: Vec<crate::docops::Row>,
     /// Each depth-video point set's last dispatch, by item (#503).
     pub(crate) clouds: BTreeMap<String, crate::cloud::Held>,
+    /// #508: the color a check reads back this frame, copied where the document's operators
+    /// read the chain (before any display-only pass), when the settings ask for it.
+    checks: Option<([u32; 2], wgpu::Texture, wgpu::TextureView)>,
 }
 
 struct SparkDraw {
@@ -151,6 +191,9 @@ struct SparkDraw {
     /// adding that to the linear target, with its sampler (#1173).
     half: wgpu::RenderPipeline,
     upsample: wgpu::RenderPipeline,
+    /// #508: the same add from a full-size and a quarter-size target.
+    upsample_full: wgpu::RenderPipeline,
+    upsample_quarter: wgpu::RenderPipeline,
     sampler: wgpu::Sampler,
     instances: wgpu::Buffer,
     /// The particles its instance buffer holds: a showpiece's count grows it (#420).
@@ -175,6 +218,30 @@ pub fn stage(id: &str, karis: bool, options: Options) -> Compiled {
         .find(|o| o["id"] == id)
         .expect("a shipped stage");
     compile_with(&json, &BTreeMap::new(), options).expect("every shipped operator passes its check")
+}
+
+/// #508: a film effect's emission pass's name in the frame.
+pub fn emit_label(kind: &str) -> &'static str {
+    if kind == "arc" {
+        ARC
+    } else {
+        WAVE_FIELD
+    }
+}
+
+/// #508: an effect item's pass label in the frame's timings, `effect/<item ID>`, made once per
+/// item and kept, as the profiler's labels are static.
+pub fn effect_label(item: &str) -> &'static str {
+    static HELD: std::sync::Mutex<std::collections::BTreeSet<&'static str>> =
+        std::sync::Mutex::new(std::collections::BTreeSet::new());
+    let name = format!("effect/{item}");
+    let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(l) = held.get(name.as_str()) {
+        return l;
+    }
+    let l: &'static str = Box::leak(name.into_boxed_str());
+    held.insert(l);
+    l
 }
 
 fn make(device: &Device, size: [u32; 2]) -> wgpu::TextureView {
@@ -203,6 +270,7 @@ impl Effects {
             op_canonical: false,
             op_rows: Vec::new(),
             clouds: BTreeMap::new(),
+            checks: None,
         }
     }
 
@@ -274,13 +342,45 @@ impl Effects {
         if !s.sparks.is_empty() {
             out.push(chain(SPARKS, "particles.sparks@1", vec!["linear", "depth"]));
         }
+        for e in &s.emits {
+            out.push(chain(emit_label(e.kind), e.op, vec!["linear", "depth"]));
+        }
         if !s.selection.is_empty() {
             out.push(chain(OUTLINE, "outline.select@1", vec!["linear", "ids"]));
         }
         if s.bloom.is_some() {
             out.push(chain(GLOW, "glow@1", vec!["linear"]));
         }
+        if !s.hazes.is_empty() {
+            out.push(chain(HAZE, "plume.haze@1", vec!["linear"]));
+        }
         out
+    }
+
+    /// #508: what this frame's film effects price their passes at, ms: each declared cost per px
+    /// at its resolution of a view of `size`; the presets' at their particles' pass.
+    pub fn declared_ms(&self, size: [u32; 2]) -> Vec<(&'static str, f64)> {
+        let px = |k: f64| (f64::from(size[0]) * k).ceil() * (f64::from(size[1]) * k).ceil();
+        let ns = |op: &str| {
+            shipped::EFFECT_MEASURED_NS_PER_PX
+                .iter()
+                .find(|(n, _)| *n == op)
+                .map_or(0.0, |(_, c)| *c)
+        };
+        let mut out: BTreeMap<&'static str, f64> = BTreeMap::new();
+        for e in &self.settings.emits {
+            *out.entry(effect_label(&e.item)).or_default() += ns(e.op) * px(e.scale) / 1e6;
+        }
+        for h in &self.settings.hazes {
+            *out.entry(effect_label(&h.item)).or_default() += ns("plume.haze@1") * px(1.0) / 1e6;
+        }
+        for sp in &self.settings.sparks {
+            if let (Some(c), Some(e)) = (sp.cost_ns, &sp.effect) {
+                let k = if sp.half { 0.5 } else { 1.0 };
+                *out.entry(effect_label(e)).or_default() += c * px(k) / 1e6;
+            }
+        }
+        out.into_iter().collect()
     }
 
     /// One pass operator's run: its bind groups now, its encode later.
@@ -388,6 +488,8 @@ impl Effects {
             layout,
             half: additive_into("vs", "half_fs", None),
             upsample: additive_into("upsample_vs", "upsample_fs", None),
+            upsample_full: additive_into("upsample_vs", "upsample_full_fs", None),
+            upsample_quarter: additive_into("upsample_vs", "upsample_quarter_fs", None),
             sampler: d.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some(SPARKS),
                 mag_filter: wgpu::FilterMode::Linear,
@@ -453,6 +555,8 @@ impl Effects {
         let draw = self.sparks.as_ref().expect("made above");
         let mut c = *camera;
         c.seed = s.seed;
+        // #508: a preset's particles time as its effect's pass.
+        let label = s.effect.as_deref().map_or(SPARKS, effect_label);
         // One dispatch per operator's worth of particles, each from its offset (a showpiece's
         // count runs past one); none when the closed-form kernel writes them.
         let chunk = shipped::MAX_PARTICLES;
@@ -469,7 +573,14 @@ impl Effects {
             let bound = compute.bind(d, &c.frame(), [1, 1], &values, &[], &[&draw.instances]);
             dispatches.push((bound, (s.count - k * chunk).min(chunk)));
         }
-        let mut uni: Vec<u8> = Vec::with_capacity(192);
+        let mut uni: Vec<u8> = Vec::with_capacity(256);
+        // #508: more than two opacity keys draw piecewise linear (particles.wgsl); two or fewer,
+        // its birth and death values as before.
+        let keys: Vec<(f64, f64)> = if s.fade_keys.len() > 2 {
+            s.fade_keys.iter().take(12).copied().collect()
+        } else {
+            Vec::new()
+        };
         let mut stops = s.stops.clone();
         stops.truncate(4);
         let n_stops = stops.len().max(1) as f32;
@@ -503,13 +614,15 @@ impl Effects {
                 ],
                 None => [0.0; 5],
             })
-            .chain([0.0; 3])
+            .chain([keys.len() as f32, 0.0, 0.0])
             .chain(stops.iter().map(|st| st.0 as f32))
             .chain(
                 stops
                     .iter()
                     .flat_map(|st| [st.1[0] as f32, st.1[1] as f32, st.1[2] as f32, 0.0]),
-            );
+            )
+            .chain((0..12).map(|k| keys.get(k).map_or(1.0, |x| x.0) as f32))
+            .chain((0..12).map(|k| keys.get(k).map_or(0.0, |x| x.1) as f32));
         for v in floats {
             uni.extend_from_slice(&v.to_le_bytes());
         }
@@ -579,7 +692,7 @@ impl Effects {
                 match &profiler {
                     Some(p) => {
                         let p = p.lock().unwrap_or_else(|e| e.into_inner());
-                        let q = p.begin_pass_query(SPARKS, encoder);
+                        let q = p.begin_pass_query(label, encoder);
                         closed.dispatch(encoder, bound, q.compute_pass_timestamp_writes());
                         p.end_query(encoder, q);
                     }
@@ -591,7 +704,7 @@ impl Effects {
                 match &profiler {
                     Some(p) => {
                         let p = p.lock().unwrap_or_else(|e| e.into_inner());
-                        let q = p.begin_pass_query(SPARKS, encoder);
+                        let q = p.begin_pass_query(label, encoder);
                         compute.dispatch(encoder, *n, &groups, q.compute_pass_timestamp_writes());
                         p.end_query(encoder, q);
                     }
@@ -599,7 +712,7 @@ impl Effects {
                 }
             }
             if let Some((small, drawn, up, (half, upsample))) = &halved {
-                timed(&profiler, SPARKS, encoder, |e, ts| {
+                timed(&profiler, label, encoder, |e, ts| {
                     let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some(SPARKS),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -637,7 +750,7 @@ impl Effects {
                 });
                 return;
             }
-            timed(&profiler, SPARKS, encoder, |e, ts| {
+            timed(&profiler, label, encoder, |e, ts| {
                 let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(SPARKS),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -666,6 +779,145 @@ impl Effects {
 }
 
 impl Effects {
+    /// #508: a wave field's or an arc's emission pass into a target at its resolution, which the
+    /// filtered upsample adds into `target`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_job(
+        &mut self,
+        device: &Device,
+        camera: &Camera,
+        e: &Emit,
+        small: (usize, [u32; 2]),
+        target: wgpu::TextureView,
+        depth: wgpu::TextureView,
+    ) -> Job {
+        let label = effect_label(&e.item);
+        let out = self.target(device, small.0, small.1);
+        let mut c = *camera;
+        c.seed = e.seed;
+        let tex = BTreeMap::from([("depth", depth)]);
+        let run = self.pass_job(device, label, e.op, &c, &e.params, &tex, out.clone(), small.1);
+        self.spark_draw(device);
+        let draw = self.sparks.as_ref().expect("made above");
+        let pipeline = match e.scale {
+            k if k >= 1.0 => draw.upsample_full.clone(),
+            k if k <= 0.25 => draw.upsample_quarter.clone(),
+            _ => draw.upsample.clone(),
+        };
+        let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&out),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&draw.sampler),
+                },
+            ],
+        });
+        let profiler = self.profiler.clone();
+        Box::new(move |encoder| {
+            run(encoder);
+            timed(&profiler, label, encoder, |e, ts| {
+                let mut pass = e.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(label),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &target,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    timestamp_writes: ts,
+                    ..Default::default()
+                });
+                pass.set_pipeline(&pipeline);
+                pass.set_bind_group(0, &bind, &[]);
+                pass.draw(0..3, 0..1);
+            });
+        })
+    }
+
+    /// #508: each plume's haze, a chain pass reading `cur` into a target of its own.
+    fn haze_jobs(
+        &mut self,
+        device: &Device,
+        camera: &Camera,
+        cur: &mut wgpu::TextureView,
+        next: &mut usize,
+        size: [u32; 2],
+        jobs: &mut Vec<(String, Job)>,
+    ) {
+        for h in self.settings.hazes.clone() {
+            let out = self.target(device, *next, size);
+            *next += 1;
+            let mut c = *camera;
+            c.seed = h.seed;
+            let tex = BTreeMap::from([("color", cur.clone())]);
+            let label = effect_label(&h.item);
+            let job = self.pass_job(device, label, "plume.haze@1", &c, &h.params, &tex, out.clone(), size);
+            jobs.push((HAZE.into(), job));
+            *cur = out;
+        }
+    }
+
+    /// #508: a copy of `cur` into the checks' readback target, exact at each pixel (the full-size
+    /// upsample's add over a cleared target samples each texel at its centre).
+    fn checks_job(&mut self, device: &Device, cur: &wgpu::TextureView, size: [u32; 2]) -> Job {
+        if self.checks.as_ref().is_none_or(|c| c.0 != size) {
+            let tex = target(device, "effects checks", size);
+            let view = tex.create_view(&Default::default());
+            self.checks = Some((size, tex, view));
+        }
+        let into = self.checks.as_ref().expect("made above").2.clone();
+        self.spark_draw(device);
+        let draw = self.sparks.as_ref().expect("made above");
+        let pipeline = draw.upsample_full.clone();
+        let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("effects checks"),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(cur),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&draw.sampler),
+                },
+            ],
+        });
+        Box::new(move |encoder| {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("effects checks"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &into,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.draw(0..3, 0..1);
+        })
+    }
+
+    /// #508: the last frame's check color readback, rgba16float rows top-down, 8 bytes a pixel.
+    pub fn read_checks(&self, device: &Device) -> Option<Vec<u8>> {
+        let (_, tex, _) = self.checks.as_ref()?;
+        Some(crate::reference::read(device, tex, wgpu::TextureAspect::All, 8))
+    }
+
     /// Builds the document's operators on the device, the first frame that needs them.
     fn build_docops(&mut self, device: &Device) {
         if let Some((doc, options, planted)) = self.op_doc.take() {
@@ -777,6 +1029,15 @@ impl Post for Effects {
             let job = self.sparks_job(device, &camera, sp, cur.clone(), frame.depth.clone(), size);
             jobs.push((SPARKS.into(), job));
         }
+        for e in &s.emits {
+            let small = size.map(|n| ((f64::from(n) * e.scale).ceil() as u32).max(1));
+            let job = self.emit_job(device, &camera, e, (next, small), cur.clone(), frame.depth.clone());
+            next += 1;
+            jobs.push((emit_label(e.kind).into(), job));
+        }
+        if self.planted.haze_feeds_check_readback {
+            self.haze_jobs(device, &camera, &mut cur, &mut next, size, &mut jobs);
+        }
         if !s.selection.is_empty() {
             let out = self.target(device, next, size);
             next += 1;
@@ -810,6 +1071,10 @@ impl Post for Effects {
                 ),
             ));
             cur = out;
+        }
+        // #508: the color the checks read back, where the document's operators read the chain.
+        if s.checks {
+            jobs.push((CHECKS.into(), self.checks_job(device, &cur, size)));
         }
         self.build_docops(device);
         if let Some(ops) = self.docops.as_mut() {
@@ -915,6 +1180,12 @@ impl Post for Effects {
                     }
                 }),
             ));
+            // Past the chain's levels and the planted glow's two targets.
+            next = first + runs.len() + 3;
+        }
+        // #508: a plume's haze, the last pass of the chain: display only, after every readback.
+        if !self.planted.haze_feeds_check_readback {
+            self.haze_jobs(device, &camera, &mut cur, &mut next, size, &mut jobs);
         }
         // A target no pass of this frame asked for is released: a pass switched off no longer
         // holds its full-size targets for the view's life. Each job keeps its own views.
@@ -999,6 +1270,17 @@ impl Post for Shared {
             (None, None) => Vec::new(),
         };
         drop(fx);
+        let ns = |label: &str| {
+            let op = match label {
+                WAVE_FIELD => "wave_field@1",
+                ARC => "arc@1",
+                _ => "plume.haze@1",
+            };
+            shipped::EFFECT_MEASURED_NS_PER_PX
+                .iter()
+                .find(|(n, _)| *n == op)
+                .map_or(0.0, |(_, c)| *c as f32)
+        };
         let mut out = vec![
             pass(GRID, "effects", 0, vec!["linear", "depth"], 0.12),
             pass(
@@ -1017,8 +1299,17 @@ impl Post for Shared {
                 0.05,
             ),
             pass(SPARKS, "effects", 3, vec!["linear", "depth"], 0.05),
+            // #508: the film effects' emission, after the particles, and a plume's haze after the
+            // bloom and before the flare, display only.
+            pass(WAVE_FIELD, "effects", 3, vec!["linear", "depth"], ns(WAVE_FIELD)),
+            pass(ARC, "effects", 3, vec!["linear", "depth"], ns(ARC)),
             pass(OUTLINE, "effects", 4, vec!["linear", "ids"], 0.06),
+            Pass {
+                writes: Vec::new(),
+                ..pass(CHECKS, "effects", 4, vec!["linear"], 0.01)
+            },
             pass(GLOW, "bloom", 0, vec!["linear"], 0.25),
+            pass(HAZE, "bloom", 1, vec!["linear"], ns(HAZE)),
         ];
         for (k, (name, ns, early)) in marks.into_iter().enumerate() {
             // What feeds an instances output runs before the frame's draws (#484).
@@ -1056,3 +1347,4 @@ impl Post for Shared {
             .jobs(device, frame)
     }
 }
+

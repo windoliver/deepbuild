@@ -1193,12 +1193,26 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
         // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
-        // (Effect: dof).
+        // (Effect: dof). #508: the film kinds, which the effects module ranges and draws; each
+        // kind's params sit under its name.
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof | wave_field | plume | arc | airflow", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("anchor", "ID", "", Value::Null, S, json!("it"), json!("it")),
+                p("axis", "vec3", "", json!([0, 1, 0]), S, json!([0, 1, 0]), json!([1, 0, 0])),
+                p("seed", "item | u64", "", json!("item"), S, json!("item"), json!(7))
+                    .takes("item | u64"),
+                p("resolution", "full | half | quarter", "", json!("half"), S, json!("half"), json!("full")),
+                p("wave_field", "{amplitude, wavelength: m, speed: m/s, radius: m, role}", "", Value::Null, S, json!({"amplitude": 1}), json!({"amplitude": 2}))
+                    .takes("{amplitude?: f32, wavelength?: m, speed?: m/s, radius?: m, role?: role}"),
+                p("plume", "{radius: m, reach: m, heat, shock_cells, turbulence: m, seed, haze: {strength: px, scale: m}}", "", Value::Null, S, json!({"reach": 2}), json!({"reach": 3}))
+                    .takes("{radius?: m, reach?: m, heat?: f32, shock_cells?: u8, turbulence?: m, seed?: u32, haze?: {strength?: px, scale?: m}}"),
+                p("arc", "{to: ID, intensity, width: px, jitter: px, rate: Hz, waves, role}", "", Value::Null, S, json!({"intensity": 4}), json!({"intensity": 2}))
+                    .takes("{to?: ID, intensity?: f32, width?: px, jitter?: px, rate?: Hz, waves?: f32, role?: role}"),
+                p("airflow", "{paths: [ID], around: {axis, copies, span: [deg, deg]}, count, speed: m/s, length: m, fade: {in: s, out: s}}", "", Value::Null, S, json!({"count": 64}), json!({"count": 128}))
+                    .takes("{paths?: [ID] ≤ 8, around?: {axis?: vec3, copies?: u8, span?: [deg, deg]}, count?: u32, speed?: m/s, length?: m, fade?: {in?: s, out?: s}}"),
                 p(
                     "dof",
                     "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",

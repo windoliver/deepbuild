@@ -248,6 +248,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .ok_or_else(|| bad("size is [w, h]"))?;
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
+        // #508: an input track applied to the document's controls on the frame clock, as a played
+        // form carries it inline (the motion module reads `track`).
+        if let Some(track) = call.get("track").filter(|t| !t.is_null()) {
+            d.insert("track".into(), track.clone());
+        }
     }
     // #443: each vector item's SVG from the store, inlined as deep_show's hub inlines it
     // (`params.outline.svg`), which vector's outline source reads.
@@ -301,10 +306,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 | "reflection"
                 | "foam"
                 | "coc"
+                | "checks"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam and coc",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, coc and checks",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -1012,6 +1018,13 @@ fn run_view(
         Some(_) => Vec::new(),
     };
     let mut drawn_k = 0usize;
+    // #508: a film effect's params out of range refuse the call, naming the field; a plume's and
+    // an airflow's particles are written beside them, drawn as any particles item.
+    let broken = deep_canvas_effects::effect::issues(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
+    deep_canvas_effects::effect::lower(&mut args.doc);
     crate::physics::bake(&mut args.doc)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
@@ -1121,6 +1134,7 @@ fn run_view(
         "reflection",
         "foam",
         "coc",
+        "checks",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1267,6 +1281,7 @@ fn run_view(
                 }
             }
             if patched {
+                deep_canvas_effects::effect::lower(&mut args.doc);
                 holds = deep_canvas_scene3d::samples::holds(&args.doc);
             }
             // The patched document's bindings are the ones drawn (a slice op can't add or
@@ -1489,6 +1504,11 @@ fn run_view(
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
                 Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
+                // #508's wrong program: the film effects' clock is the wall clock.
+                Some(Planted::EffectReadsWallClock) => {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+                    now.map_or(0.0, |d| (d.as_millis() % 3_600_000) as f64 / 1e3)
+                }
                 _ => n as f64 / args.fps as f64,
             };
             let settings = effects::settings(
@@ -1519,6 +1539,10 @@ fn run_view(
             last_camera = Some(scene.camera.clone());
             let particles =
                 crate::particles::frame(&mut settings, &args.doc, &scene, fx_t, call, app.planted)?;
+            // #508: each film effect's footprint this frame, and each plume's haze over its own.
+            let footprints =
+                crate::particles::effects(&mut settings, &args.doc, &scene, fx_t, app.planted, seeding)?;
+            settings.checks = args.capture.wants(n) && args.targets.contains("checks") && !noop;
             if dirt.is_some() {
                 settings.dirt = dirt.clone();
             }
@@ -2326,6 +2350,9 @@ fn run_view(
                 frame.insert("projected".into(), p);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            if call["footprints"] == true {
+                frame.insert("footprints".into(), Value::Object(footprints));
+            }
             frame.extend(trails.map(|p| ("trails".to_string(), p)));
             if call["strokes"] == true {
                 let rows: Vec<Value> = stroke_rows
@@ -2457,6 +2484,27 @@ fn run_view(
                         Ok(Value::Object(m))
                     })?;
                     frame.insert("read".into(), read);
+                }
+                // #508: what a check reads back from the frame, each as raw rows named by their
+                // SHA-256: the color where the document's operators read the chain (before any
+                // display-only pass), the object IDs and the view-axis depth.
+                if args.targets.contains("checks") && !noop {
+                    let fx2 = fx.clone();
+                    let color = app
+                        .worker
+                        .call(move |state| lock(&fx2).read_checks(&state.gpu.device()));
+                    let mut checks = Map::new();
+                    let parts = [
+                        ("color", color.as_deref()),
+                        ("ids", drawn.targets.as_ref().map(|(_, ids)| ids.as_slice())),
+                        ("depth", drawn.view_depth.as_deref()),
+                    ];
+                    for (name, bytes) in parts {
+                        if let Some(b) = bytes {
+                            checks.insert(name.into(), json!(write_named(out, b, "bin")?));
+                        }
+                    }
+                    frame.insert("checks".into(), Value::Object(checks));
                 }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
@@ -2629,10 +2677,17 @@ fn run_view(
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+                // #508: the film effects' passes at the size the effects drew.
+                let fx_size = match args.surface.scale < 1.0 {
+                    true => surface::scaled(size, args.surface.scale),
+                    false => size,
+                };
+                let effects_declared = lock(&fx).declared_ms(fx_size);
                 let declared: serde_json::Map<String, Value> = drawn
                     .declared
                     .iter()
                     .map(|(k, v)| (k.to_string(), json!(v)))
+                    .chain(effects_declared.iter().map(|(k, v)| (k.to_string(), json!(v))))
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
