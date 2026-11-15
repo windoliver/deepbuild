@@ -1,87 +1,69 @@
-# #2068 — requirement/proof record
+# #2068 — closure evidence
 
-## Latest result
+All three issue criteria are proven on the final source. The original blind acceptance files are unchanged (`acceptance.sha256`). [Machine-checked criterion/result mapping](closure/criterion-results.json) and the raw Vitest JSON accompany the output. This is not a claim that the separate static-tag trace or release preflight ran.
 
-All four original, independently drafted #2068 acceptance cases passed unchanged in a serial run. The same files fail on the merge base at the required wait/fallback assertions; the instant-source guard passes there. The author-role scenarios reused from #322 pass. **The final parallel affected run leaves AC1 INCONCLUSIVE again** (the forge request began after B arrived), and inherited cleanup/repository-wide findings remain red. The PR therefore stays **Part of #2068**, not a closure claim. No test or known-failure entry was weakened to get these results.
-
-Before/after comparison base tested: `5c92a77023e251385c6b9c7727d103ec5ed61a0e`. The PR was then rebased onto `a12be6c8c426e4ea9d87292cef42f12c564527f3` to resolve main's row-import change. On the rebased head the workspace build, all four serial acceptance cases, and all ten added regressions passed (`rebased-*.txt`). The new merge base itself and a full affected run on that final rebase are unrun, so the closure claim stays open. Initial drafting base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`. The timing test prints the initial baseline as metadata on both sides; `final-timings.json` names the actual comparison base. `acceptance.sha256` pins the original delivered tests; `source.sha256` pins the tested source and added regressions.
+**Comparison base:** `2baafea73726387c4fabe5057599be0831774f0a`. The branch was rebased before the run; it then added the five-line shutdown correction below. Both sides built their own workspace packages and `deep-hook`. [Final source hashes](closure/source.sha256) pin the tested files. No product behavior depends on a test flag.
 
 ## Requirement → change → proof
 
-| Requirement | Change | Proof |
+| Criterion | Change | Check result |
 |---|---|---|
-| AC1 `#2068.3406ba1b`: B arrives 100 ms after A and records before the forge's first 5 s answer; base fails naming the wait | Work-item preparation runs before the shared hook chain. A reply waits for its own intake, not another session's source. | `merge-base-failure.txt`: B waited **25,003 ms after arrival**, first answer about 5,062 ms after A; failed its named wait assertion. `acceptance-pass.txt`: B records before the first answer. Earlier fixed reading: about **13 ms after B's arrival**. Exact final intervals: `final-timings.json`. |
-| AC2 `#2068.b095ccdc`: never-answering source ends within the read deadline, records A and a task from your words, and shows the unread-issue row | One 1,000 ms abort signal covers token acquisition, requests, response bodies and all pages. Expiration discards partial readings. A distinct deterministic `session.reading` supplies the row warning. | Base waits about **20,015 ms**, misses its advertised prompt hold, and has no unread-issue row. Fixed never-answering and endless-pagination cases pass, checking actual committed prompt/task visibility and `rows.read`. Credential-child and stalled-body regressions fail on base and pass on the fix (`deadline-before.txt`, `deadline-after.txt`). |
-| AC3 `#2068.865fe586`: instant source retains criteria and authors' provider-derived roles | Keep the existing `readIssue` criteria/membership logic; consume preparation only after person/app origin placement, for the final prompt's link. | Instant HTTP twin passes on base and fix for owner and page-2 collaborator. Unchanged #322 normal scenarios pass for outside comments/owner attribution, automated collaborators, and complete/incomplete membership pages (`roles-result.txt`). Negative-control cleanup failures are disclosed below, not reported as PASS. |
+| AC1 `#2068.3406ba1b`: A names an issue, B arrives 100 ms later, 5 s per forge request; B records before the first answer, base fails naming its wait | Prepare issue data before the shared hook chain; a reply waits only for its own intake. Preserve same-session order without blocking another session. | [Base](closure/base-acceptance.txt): B waited **25,004 ms after arrival**, after the whole read; assertion failed naming the wait. [Final head](closure/final-acceptance.txt): B waited **6.8 ms**, first forge answer at **5,032 ms after A**; unchanged test passed. |
+| AC2 `#2068.b095ccdc`: a never-answering forge yields recorded A and a task from your words by the read deadline, with an unread-issue session row | One 1,000 ms abort signal covers credential acquisition, requests, response bodies and all pages. Discard partial readings, create the words task, and record/show the issue warning. | Base A appears at **20,016 ms**, with no fallback by its hold and no warning; assertions fail. Head A appears at **1,022 ms**, its task is linked, and `rows.read` carries the warning, within the existing **2,001 ms** advertised hold. Endless-pagination case also passes. |
+| AC3 `#2068.865fe586`: immediate source retains criteria and every author's provider-derived role | Retain existing `readIssue` criteria/membership logic; bind prepared data to the requested URL and authenticated person/app origin. | Instant HTTP owner/page-2 collaborator twin passes on both sides. All **six unchanged #322 role/negative-control cases pass on both sides**: outside comments/owner, forged role text, every-author-collaborator, automated collaborators and complete/incomplete membership pages. |
 
-The exact read duration is an implementation choice, not an issue-specified number. The blind acceptance draft checks the public prompt hold as the outer bound; one second leaves room in its existing two-second hold for intake and recording. This belongs at the existing core hook/ask scheduling boundary: an extension cannot release a chain that the core itself is awaiting. No new dependency, product setting, flag, event schema or verdict is introduced.
+The acceptance entry ran **10 tests, 10 passed, 0 failed, 0 skipped** on the final head. The same entry on base ran **10 tests: 3 expected failures at the wait/fallback assertions, 7 guards passed, 0 skipped**. No failure on setup/imports is counted as proof.
 
-## Regression protection and review corrections
+The one-second duration is an implementation choice inside the existing two-second prompt hold, not a number invented as an issue requirement. The independent acceptance draft uses that public outer hold. The measured record visibility is actual committed SQLite visibility, not ACK time or an event's backdated timestamp. These are causal scenario readings, not a statistical speedup or reference-Mac p95 claim.
 
-`packages/hub/test/prompt-items.test.ts` uses real hub/socket/record components and the existing external forge fixture. Each new behavior correction was made after its unchanged test failed:
+## Gaps closed since the draft PR
 
-- Same-session tools cannot overtake their issue prompt; other sessions remain independent. `same-session-before.txt` / `same-session-after.txt`.
-- An in-flight live prompt's spooled copy does not start another forge read. `replay-before.txt`.
-- A spool that already contains the live prompt cannot form a replay/live mutual wait. `replay-cycle-before.txt`.
-- A genuinely fresh hook after spool replay still processes queued words. `live-after-replay-before.txt`.
-- An authenticated app note carried by the prompt retains its prepared criteria. `app-before.txt` / `app-after.txt`.
-- A prompt whose transcript is written only after its reply still gets that reply; its late origin placement retains the issue definition.
-- An HTTP issue link retains its criteria when GitHub returns a canonical HTTPS URL. `canonical-before.txt` / `canonical-after.txt`.
-- Startup replay cannot await a live duplicate that itself waits for startup to finish. `start-replay-before.txt` / `regressions-pass.txt`.
+- **Fresh comparison after rebase:** both sides above use the same current merge base, dependency environment and unchanged checks.
+- **Parallel timing interference:** the acceptance file's own serial config and the affected run's documented `VITEST_MAX_WORKERS=1` schedule one file at a time. No scenario timer, timeout, expected value or test body changed. Earlier INCONCLUSIVE runs remain in this folder as history.
+- **#322 cleanup:** prior leftovers were real Claude auth/plugin-probe outputs. The hermetic PATH excludes personal executable directories, `claude` and `gh` on both sides; no real credentials or agent runs are needed for these fixtures. All six reused role tests now pass; no cleanup code was changed.
+- **Words-task shutdown:** one prompt-flush cleanup failure remained even with that environment. Its leftover was a workspace's `.git/objects`: asynchronous task initialization outlived the clean hub stop. A deterministic real-component regression gated only external `git`, failed at the assertion that `workspace.created` precedes `hub.stopped`, then passed unchanged after shutdown began draining `AskTasks.locking`. See [before](closure/workspace-stop-before.txt) and [after](closure/workspace-stop-after.txt). The unchanged prompt-flush tests pass too. The fix is four lines in `ask-tasks.ts` and one shutdown await in `core.ts`; core remains at main's 2,638-line ceiling.
+- **Regression protection:** final selected run covers same-session order, no duplicate read on replay, live/spool/startup deadlocks, fresh hooks after replay, authenticated app-note criteria, canonical HTTP/HTTPS URLs, late transcript replies, credential-child/body cancellation, queued prompts and clean workspace shutdown. Earlier corrections each retained their failing output and passed unchanged tests.
 
-`regressions-pass.txt` records the final seven prompt regressions, startup replay case and four existing replay cases passing (12 tests). `adjacent-result.txt` records seven adjacent queue/source/deadline cases passing on the prior meaningful-change snapshot; the earlier cleanup failure remains disclosed. `github-deadline.test.ts` proves cancellation at the external credential executable and unfinished-body boundaries. Its fake `gh` is the only executable on the child's PATH, returns no real credential and never reads login state; no authentication implementation or clock is mocked. Both tests fail at assertions on the merge base and pass on the fix.
+These changes belong at the existing hook/ask scheduling boundary: an extension cannot release a chain the core is awaiting. No new dependency, product option, flag, configuration key, schema, CI workflow or repository hook setting was added.
 
-An independent read-only review prompted these corrections. For issue-bearing prompts, shutdown now waits for intake rather than a parked job's final settlement, so shutdown can reach runner cancellation. That path has code review/typecheck, not a dedicated end-to-end parked-job test. Two review findings predate this fix and remain separate: network-stop-only parked job hooks already blocked shutdown on the base, and prompts first discovered from the transcript queue or undelivered app-note queue after `enrich` already lacked a forge read on the base. This change prevents a pending ordinary prompt from being overtaken, and handles app-note wakes, but does not add source reads for those separate intake-created prompts.
+## Affected verification: all selected tests pass; inherited lint is not PASS
 
-## Checks and commands
-
-```sh
-# Builds, on each side, with installed dependencies and the installed Rust toolchain on PATH
-npm run build --workspaces
-cargo build --locked -q -p deep-hook
-
-# Original immutable acceptance file, same on base and fix
-node node_modules/vitest/vitest.mjs run \
-  --config tests/acceptance/2068/vitest.config.ts \
-  tests/acceptance/2068/forge-wait.test.ts --reporter=verbose
-
-# Reused role coverage
-node node_modules/vitest/vitest.mjs run \
-  --config tests/acceptance/2068/vitest.config.ts \
-  tests/acceptance/322/github.test.ts --reporter=verbose
-
-# Added regression protection
-node node_modules/vitest/vitest.mjs run \
-  packages/hub/test/prompt-items.test.ts packages/hub/test/prompt-start-replay.test.ts packages/hub/test/replay.test.ts \
-  --maxWorkers=1 --no-file-parallelism --reporter=verbose
-node node_modules/vitest/vitest.mjs run packages/hub/test/github-deadline.test.ts \
-  --maxWorkers=1 --no-file-parallelism --reporter=verbose
-```
-
-Builds/tests used the repository's machine throttle. The rebased workspace initially lacked the new `@deepbuild/briefs` workspace link; restoring that install link and rebuilding the affected CLI resolved the setup error. Hub and acceptance typechecks, diff whitespace, and immutable acceptance hashes passed. The code changed no dependency manifests. `core.ts` stays at main's 2,638-line ceiling.
-
-### Affected result — NOT PASS
-
-The source-change `affected --list` reaches over 1,000 files plus a crate. No WIDE line was emitted. Rather than run a whole-core/graphics sweep on this heavily loaded machine, verification explicitly named the sufficient acceptance/regression files:
+Run on **both base and head**, with the same hermetic PATH, `VITEST_MAX_WORKERS=1`, `DEEP_SHARDS=1` and the unmodified runner:
 
 ```sh
 node scripts/affected.mjs \
   tests/acceptance/2068/forge-wait.test.ts tests/acceptance/322/github.test.ts \
-  packages/hub/test/prompt-items.test.ts packages/hub/test/prompt-start-replay.test.ts packages/hub/test/github-deadline.test.ts \
-  packages/hub/test/github-source.test.ts packages/hub/test/prompt-flush.test.ts \
-  packages/hub/test/queued.test.ts packages/hub/test/replay.test.ts
+  packages/hub/test/prompt-items.test.ts packages/hub/test/prompt-start-replay.test.ts \
+  packages/hub/test/github-deadline.test.ts packages/hub/test/github-source.test.ts \
+  packages/hub/test/prompt-flush.test.ts packages/hub/test/queued.test.ts \
+  packages/hub/test/replay.test.ts packages/hub/test/prompt-workspace-stop.test.ts
 ```
 
-`affected-result.txt`: **154 new/unlisted findings, 44 known on main, 1 inconclusive, 27 passed** on the final source snapshot. No WIDE line. Its INCONCLUSIVE line is AC1: `no forge read in flight at B arrival; not proof of the wait`. All final added regressions pass; AC2, pagination and AC3 pass. Two failures were prompt-flush/#322 negative-control cleanup (`ENOTEMPTY`), not role assertions. Cleanup failures also occur on the unmodified merge base (`base-roles-result.txt`); these are inherited/flaky, not excused as passes. The normal owner/outside/bot/paged-membership scenarios pass. Prompt-flush has both passing serial evidence and cleanup failures; its history is not retry-green proof.
+**Final head: 31 tests passed, zero failed/skipped/unrun tests, no WIDE or INCONCLUSIVE line.** It includes #322's coverage test selected by the runner in addition to the named files. Base's required fix tests fail; guards pass. JSONL reports are in `closure/head-vitest*.jsonl` and `closure/base-vitest*.jsonl`.
 
-The other unlisted findings concern unchanged repository files: stale dependency/size/vendor tables, an existing fixture home path, code mappings, record-reader/closure lints and expired known-failure entries. **Full source-selected affected, timed/slow/by-hand lanes, full preflight, native UI rendering, mutation and static proof-trace lanes were not run.** The original blind tests use numbered AC names rather than static hash tags; the table above supplies the exact criterion mapping but is not a static trace PASS.
+The raw affected command still exits FAIL on **151 unlisted + 44 known lint findings**, not on these tests. The pinned base has all of them too. [Comparison](closure/affected-comparison.json): **195 inherited lint findings, zero introduced lint findings, zero head test failures, zero WIDE/unrun findings**. They concern unrelated dependency/vendor/size/mapping/closure tables and expired known-failure entries. Nothing was whitelisted, deleted, weakened or recorded as PASS. One canvas-closures log interleaves its lease prefix with the same base drift diagnostic because two jobs share its filename; both raw logs and the normalization are disclosed.
 
-Measurements occurred on an arm64 Mac with Node v24.22.2, with load above its 18 cores. They establish the planted causal ordering, not a reference-Mac latency budget or a statistical speedup. Prior overloaded/inconclusive runs are preserved, not discarded.
+The complete source-selection listing reaches over 1,000 files and a crate through the shared core; verification ran the explicitly mapped sufficient files above, **not that whole sweep**. Full source-selected affected, timed/slow/by-hand neighboring lanes, full preflight, native app rendering, mutation and repository static-tag trace are **unrun**. The original blind tests use numbered AC names rather than literal hash tags. `closure/criterion-results.json` independently checks report identities and named base assertion failures against all three issue texts; it is not a static trace-lane PASS. Issue closure is supported by these actual acceptance results, not by the agent's statement or a green repository-wide verdict.
 
-## Blind drafting and retained history
+## Reproduce
 
-The first acceptance job used only the issue, design and a base archive. `tests/acceptance/2068/` remains byte-for-byte unchanged. A one-time blind redraft was requested while the original AC1 was inconclusive; it was written in a separate base archive, without seeing the implementation or dispute. It requires a separately approved numeric oracle and leaves static-tag metadata open, so it was **not adopted**, not run and not used to replace any test. The original check subsequently proved the required base/fix relation unchanged. The unused redraft remains outside the PR; no criterion was dropped.
+Use Node 24.22.2 and Rust 1.99.1. Set PATH to those toolchain directories plus system utilities only, not personal agent binaries; remove inherited forge tokens/agent billing variables. The exact redacted environment is [recorded](closure/hermetic-env.json).
 
-The old `base-failure.txt`, `first-fix-failure.txt`, `row-fix-result.txt`, `timed-unrun.txt`, `affected-unrun.txt`, `timings.json` and setup/size logs document the initial attempt. They are historical, not current passing evidence. The original dirty worktree was never edited by this task; all changes are on the issue worktree.
+```sh
+npm run build --workspaces
+cargo build --locked -q -p deep-hook -j 2
+node node_modules/vitest/vitest.mjs run \
+  --config tests/acceptance/2068/vitest.config.ts --reporter=verbose
+node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+node node_modules/typescript/bin/tsc -p tests/acceptance/2068/tsconfig.json
+```
 
-Handwritten acceptance + regression + implementation exceeds the ~400-line guideline: the independent real-process fixture, three issue criteria, and essential ordering/replay/cancellation regressions belong to one bug fix. Existing #322 author-role coverage is reused rather than duplicated. Generated command output accounts for most of the PR's remaining lines. No CI is added, no hook settings are written, no failed checks are edited or suppressed, and only owned child PIDs are stopped.
+Commands ran through the repository's machine throttle. Build-slot waiting is excluded from scenario timing. Mac arm64 load was above 18 cores; no reference-machine budget is claimed. The final whole acceptance run was repeated only after the meaningful shutdown correction; every prior failed/inconclusive result remains recorded. Hub and acceptance typechecks and `git diff --check` passed.
+
+## Provenance, scope and history
+
+The first blind job saw only issue/design/base `1c4d1f0e2aaad8c6a6573848823566d04ff73d17`; its files remain byte-for-byte unchanged. A one-time blind redraft was requested during the earlier timing dispute but was not adopted: it demanded a numeric oracle not specified by the issue and left tag metadata open. The original tests subsequently proved the required relation without modification. No criterion was dropped.
+
+Files outside `closure/` retain the earlier attempt and rebased runs. Their red/inconclusive results are historical, never silently replaced with PASS. `closure/` is the current evidence. Separate pre-existing behavior remains outside this issue: issue links first discovered only in intake-created transcript/app-note drafts lack source reads on the base too; network-stop-only parked jobs can wait for cancellation. Neither changes this issue's required ordinary-prompt scenarios or is claimed fixed.
+
+Handwritten implementation plus independent acceptance and regression fixtures exceeds the ~400-line guideline because the real-process harness and ordering/replay/cancellation proof belong to this one fix. Existing author-role coverage is reused. Most PR lines are retained command output. The original dirty worktree was not edited; only owned child processes were stopped. No issue is closed by hand: the PR may now say `Closes #2068` for merge.

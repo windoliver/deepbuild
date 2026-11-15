@@ -2591,6 +2591,7 @@ export class Core {
     await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
+    await this.tasks.settled();
     await this.state.flushStates();
     // The pass the stop kept from starting, so the rows a stopped hub's database holds are the list as it stood.
     await this.state.recordStates().catch(() => undefined);

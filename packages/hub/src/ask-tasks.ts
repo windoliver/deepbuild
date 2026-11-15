@@ -284,6 +284,10 @@ export class AskTasks {
 
   /** Each session's definitions still being locked. */
   private readonly locking = new Map<string, Promise<void>>();
+  /** Shutdown drains task initialization too: no workspace git child may outlive the record it writes. */
+  async settled(): Promise<void> {
+    while (this.locking.size) await Promise.all(this.locking.values());
+  }
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */
   async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: WorkItem }): Promise<void> {
     // A work item's task is opened once, whichever prompt names it again.
