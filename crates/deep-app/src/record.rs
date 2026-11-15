@@ -997,6 +997,22 @@ mod tests {
     }
 
     #[test]
+    fn a_sessions_sixth_open_ask_folds_in_a_record_with_no_exception() {
+        // A fixture's record (#338) holds the asks and no exception of the core's: once a session holds five open
+        // asks its further ones are folded, as the core folds them.
+        let mut view = View::default();
+        for id in ["a1", "a2", "a3", "a4", "a5", "a6"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        }
+        assert_eq!(row(&view, "ask:a5").0, "queued");
+        assert_eq!(row(&view, "ask:a6").0, "folded");
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:a1", "ask:a2", "ask:a3", "ask:a4", "ask:a5", "ask:a6"]
+        );
+    }
+
+    #[test]
     fn asks_an_answered_exception_held_get_their_own_rows() {
         // "Answer them together" closes the exception: an ask it held that the core had shown is in sight again, and
         // one it hadn't waits for its batch. Left to their defaults, they stay inside it.
