@@ -1,0 +1,13 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 14:10:51 load { 30.96 51.86 48.98 } thermal 1 free KB 49623636
+beside: #1887 run (another vitest suite in another checkout) may be running now; the user chose to run 22t now 14:10:52 load { 30.96 51.86 48.98 } thermal 1 free KB 49638060
+fresh clone at 5388f2c932b3488bcc58fc0b8a72f75c34150901 14:10:55 load { 29.36 51.18 48.76 } thermal 1 free KB 49106544
+setup (npm ci, workspace build, deep-hook) exit=0 14:12:14 load { 19.32 42.73 45.74 } thermal 1 free KB 47928920
+run 1: temp binary folder cleared (exists now: no) 14:12:14 load { 19.32 42.73 45.74 } thermal 1 free KB 48371156
+run 1: exit=0;  Tests 1 passed (1); BLOCKED lines 0; end front app [Claude] pointer [575,301] 14:23:04 load { 146.83 125.43 91.60 } thermal 1 free KB 41759972
+run 2: temp binary folder cleared (exists now: no) 14:23:04 load { 146.83 125.43 91.60 } thermal 1 free KB 42080624
+run 2: exit=1;  Tests 1 failed (1); BLOCKED lines 2; end front app [Claude] pointer [575,352] 14:23:34 load { 100.66 116.17 89.41 } thermal 1 free KB 41736392
+run 3: temp binary folder cleared (exists now: no) 14:23:34 load { 100.66 116.17 89.41 } thermal 1 free KB 42060756
+run 3: exit=1;  Tests 1 failed (1); BLOCKED lines 2; end front app [Windows App] pointer [593,175] 14:24:02 load { 73.86 108.67 87.48 } thermal 1 free KB 41699224
+git status --porcelain lines: 0 14:24:02 load { 73.86 108.67 87.48 } thermal 1 free KB 41699780
+login-name hits after redaction: 0 14:24:03 load { 73.86 108.67 87.48 } thermal 1 free KB 41699752
+secret scan hits=0 14:24:03 load { 73.86 108.67 87.48 } thermal 1 free KB 41699732

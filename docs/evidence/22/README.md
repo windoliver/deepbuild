@@ -441,3 +441,9 @@ On AC power throughout (`exits.txt`).
   BLOCKED, "deep-app has no window to read", with Windows App in front: the failure b51d52cd had in 22p's rerun.
 - **The judge** (`judge.txt`), from a copy pinned to 5388f2c9 that doesn't reopen issues: #22 PASS, all four parts
   (`#22.48b6696b`, `#22.1f14a778`, `#22.f57a814c`, `#22.3d85284a`). NOT NOMINAL: load 7.6 and thermal state 1 at the start.
+- **1459/panel, run three more times** (`panel-reruns/`, temp binary folder cleared before each): run 1 passes (648 s,
+  load 146); runs 2 and 3 end BLOCKED, "deep-app has no window to read", within 30 s, at load 74 to 117 with Claude or
+  Windows App in front. The BLOCKED comes from the window probe (`tests/acceptance/1459/helpers.ts`, `lines()`: the
+  window list is empty), before the panel's content is read; b51d52cd ended BLOCKED the same way in 22p's rerun, and the
+  head passed it in both rounds there. So at 5388f2c9 it passed once and was BLOCKED three times: unproven on this busy
+  Mac, not failed. It is #1459's criterion, not #22's.
