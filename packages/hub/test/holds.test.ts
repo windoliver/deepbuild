@@ -195,7 +195,7 @@ describe('a held push (#1156)', () => {
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Merge it?', rule: 'r' } });
     await stop('a84d9054868905e4c');
     const held = await merge();
-    expect(held, "the merge waits on an ask though a subagent stopped in the proceed's turn").toContain('ask:');
+    expect(held ?? 'let through', "the merge waits on an ask though a subagent stopped in the proceed's turn").toContain('ask:');
     const raised = (await record.raw("SELECT question FROM asks WHERE kind = 'authority'")) as { question: string }[];
     expect(raised.map((a) => a.question), 'one ask, naming the proceed').toEqual([expect.stringContaining('the turn a "proceed" started for "Merge it?"')]);
     // The session's own stop does end the proceed's turn.

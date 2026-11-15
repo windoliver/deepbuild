@@ -9,6 +9,8 @@ deep-hook binary), on the branch and on the merge base. Run by hand on the Spark
   `DEEP_HUB_PLANT=proceed-ends-at-child-stop`, the merge runs and the check fails naming `gh pr merge 12`.
 - `suite-base.txt`: the merge base `c740dede7` with the same tests. The merge runs with no ask
   (deep-hook exits 0, nothing held), and the plant isn't there yet.
+  It ran in the blind job's own worktree, at its commit `87b20a7c0`, which is `dd47977da` before the cherry-pick
+  onto this branch (the same tree under `tests/acceptance/1836`).
 - `unit-before-fix.txt`: `packages/hub/test/holds.test.ts`'s new test before the fix: the gate returns nothing
   for the merge, so no ask holds it.
 
