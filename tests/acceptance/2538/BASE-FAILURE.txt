@@ -1,0 +1,432 @@
+# #2538 acceptance tests: the run on the base
+
+Base: aac4d9769 (#2146's branch, "conformance: every state word and doctor code maps to a verdict, and
+doctor.item@1's digest is its schema's (#2146)"; no fix applied), built with `npm run build --workspaces`.
+$ npx vitest run tests/acceptance/2538 --maxWorkers=2 --reporter=verbose
+Run 2026-11-14, node v24.22.0, linux; verbatim but for the checkout's path, which reads <repo>, and temp folders,
+which read <tmp>. Exit code: 1.
+
+14 failed | 1 passed (15).
+- AC1 (codes.test.ts, 4 tests) FAILS on the issue's defect: the schema file's enum lacks the three codes, and judge
+  reads each as listed false, verdict INVALID.
+- AC2 (lint.test.ts, 5 tests) FAILS only because the three codes aren't listed: the lint itself passes at the base
+  (the first test fails at its last assertion, the enum's), no planted entry exists for an unlisted code, and the
+  digest test stops at the enum before it compares the digest.
+- AC3 (doctor.test.ts, 1 test) FAILS on the issue's defect: `hub.polkit: polkit_action_missing` (this machine's
+  polkit doesn't know dev.deepbuild.confirm).
+- AC4 (build.test.ts, 5 tests): the hub's own source type-checks clean (PASSES, and must after the fix); the twin
+  type-checks clean too (exit 0, no output), so the four twin tests FAIL: the base's builders take any string.
+
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: with the three codes in the schema file, the lint prints PASS for code mappings and for every kit, and nothing but a machine's unreadable ports fails it 53ms
+   → expected [ 'healthy', 'binary_missing', …(28) ] to deeply equal ArrayContaining{…}
+ × tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: the kit's planted entry for doctor polkit_action_missing carries a fix text of its own, not the fallback 4ms
+   → expected [] to deeply equal [ 'polkit_action_missing' ]
+ × tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: the kit's planted entry for doctor hooks_modified carries a fix text of its own, not the fallback 1ms
+   → expected [] to deeply equal [ 'hooks_modified' ]
+ × tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: the kit's planted entry for doctor mod_overrides_guard carries a fix text of its own, not the fallback 1ms
+   → expected [] to deeply equal [ 'mod_overrides_guard' ]
+ × tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: doctor.item@1's entry in packages/contracts/digests.json is the digest of the schema that lists the three codes 2ms
+   → expected [ 'healthy', 'binary_missing', …(28) ] to deeply equal ArrayContaining{…}
+ × tests/acceptance/2538/doctor.test.ts > #2538.8e3e2618 AC3: on Linux, every item `HOME=<empty fixture dir> node packages/cli/dist/main.js doctor --json` prints carries a code `doctor.item@1` lists (Linux only: skipped, not passed, on any other platform) > #2538.8e3e2618 AC3: every line doctor --json prints under an empty HOME is an item whose code the schema file lists, hub.polkit's among them 794ms
+   → expected [ 'hub.polkit: polkit_action_missing' ] to deeply equal []
+ × tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: packages/contracts/schemas/doctor.item@1.json lists the three codes in its code enum, and still lists the reader's fallback `unknown` and `healthy` 6ms
+   → expected [ 'healthy', 'binary_missing', …(28) ] to deeply equal ArrayContaining{…}
+ × tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: judge('doctor', 'polkit_action_missing') reads it as listed, verdict FAIL 4ms
+   → expected { family: 'doctor', …(3) } to deeply equal { family: 'doctor', …(3) }
+ × tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: judge('doctor', 'hooks_modified') reads it as listed, verdict FAIL 1ms
+   → expected { family: 'doctor', …(3) } to deeply equal { family: 'doctor', …(3) }
+ × tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: judge('doctor', 'mod_overrides_guard') reads it as listed, verdict FAIL 1ms
+   → expected { family: 'doctor', …(3) } to deeply equal { family: 'doctor', …(3) }
+ ✓ tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: the hub's own source type-checks clean, and no planted code is one the schema lists 3ms
+ × tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: the twin's type-check exits non-zero 6ms
+   → (nothing): expected +0 not to be +0 // Object.is equality
+ × tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: an add(...) call in doctor.ts given 'made_up_code_2538' is a type error in doctor.ts that names the code 1ms
+   → no error in packages/hub/src/doctor.ts names "made_up_code_2538"; tsc printed:
+(nothing): expected 0 to be greater than 0
+ × tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: an item(...) call in canvas-doctor.ts given 'made_up_item_code_2538' is a type error in canvas-doctor.ts that names the code 0ms
+   → no error in packages/hub/src/canvas-doctor.ts names "made_up_item_code_2538"; tsc printed:
+(nothing): expected 0 to be greater than 0
+ × tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: relationItems' object literal in setup.… given 'made_up_relation_code_2538' is a type error in setup.ts that names the code 1ms
+   → no error in packages/hub/src/setup.ts names "made_up_relation_code_2538"; tsc printed:
+(nothing): expected 0 to be greater than 0
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: the twin's type-check exits non-zero
+AssertionError: (nothing): expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/2538/build.test.ts:48:42
+     46|   it('#2538.aaf41340 AC4: the twin\'s type-check exits non-zero', () =…
+     47|     expect(twin.signal, shown(twin)).toBeNull();
+     48|     expect(twin.status, shown(twin)).not.toBe(0);
+       |                                          ^
+     49|     expect(twin.status, shown(twin)).not.toBeNull();
+     50|     // Nothing but the three planted files fails: an error anywhere el…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: an add(...) call in doctor.ts given 'made_up_code_2538' is a type error in doctor.ts that names the code
+AssertionError: no error in packages/hub/src/doctor.ts names "made_up_code_2538"; tsc printed:
+(nothing): expected 0 to be greater than 0
+ ❯ tests/acceptance/2538/build.test.ts:57:112
+     55|   it.each(PLANTS)('#2538.aaf41340 AC4: $builder given \'$made\' is a t…
+     56|     const named = errorLines(twin).filter((line) => line.includes(`hub…
+     57|     expect(named.length, `no error in packages/hub/src/${file} names "…
+       |                                                                                                                ^
+     58|   });
+     59| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: an item(...) call in canvas-doctor.ts given 'made_up_item_code_2538' is a type error in canvas-doctor.ts that names the code
+AssertionError: no error in packages/hub/src/canvas-doctor.ts names "made_up_item_code_2538"; tsc printed:
+(nothing): expected 0 to be greater than 0
+ ❯ tests/acceptance/2538/build.test.ts:57:112
+     55|   it.each(PLANTS)('#2538.aaf41340 AC4: $builder given \'$made\' is a t…
+     56|     const named = errorLines(twin).filter((line) => line.includes(`hub…
+     57|     expect(named.length, `no error in packages/hub/src/${file} names "…
+       |                                                                                                                ^
+     58|   });
+     59| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  tests/acceptance/2538/build.test.ts > #2538.aaf41340 AC4: the hub's build (`tsc -p packages/hub/tsconfig.json`) fails when a doctor item builder in `packages/hub/src` is given a code `doctor.item@1` doesn't list, and its error names that code > #2538.aaf41340 AC4: relationItems' object literal in setup.… given 'made_up_relation_code_2538' is a type error in setup.ts that names the code
+AssertionError: no error in packages/hub/src/setup.ts names "made_up_relation_code_2538"; tsc printed:
+(nothing): expected 0 to be greater than 0
+ ❯ tests/acceptance/2538/build.test.ts:57:112
+     55|   it.each(PLANTS)('#2538.aaf41340 AC4: $builder given \'$made\' is a t…
+     56|     const named = errorLines(twin).filter((line) => line.includes(`hub…
+     57|     expect(named.length, `no error in packages/hub/src/${file} names "…
+       |                                                                                                                ^
+     58|   });
+     59| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: packages/contracts/schemas/doctor.item@1.json lists the three codes in its code enum, and still lists the reader's fallback `unknown` and `healthy`
+AssertionError: expected [ 'healthy', 'binary_missing', …(28) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "polkit_action_missing",
+-   "hooks_modified",
+-   "mod_overrides_guard",
++ [
++   "healthy",
++   "binary_missing",
++   "version_uncovered",
++   "hooks_missing",
++   "hooks_disabled",
++   "hooks_untrusted",
++   "mcp_unregistered",
++   "statusline_missing",
++   "signed_out",
++   "nested_session",
++   "timing_relation_broken",
++   "telemetry_unreadable",
++   "not_checked",
++   "hub_unreachable",
++   "disk_low",
++   "ports_taken",
++   "billing_api_key",
++   "binary_differs",
++   "token_expiring",
++   "prompt_failed",
++   "deprecated_used",
++   "gpu_unsupported",
++   "render_failed",
++   "job_failing",
++   "hook_program_missing",
++   "notifications_off",
++   "service_unpromoted",
++   "statusline_shadowed",
++   "pack_refused",
++   "unknown",
+  ]
+
+ ❯ tests/acceptance/2538/codes.test.ts:11:20
+      9|   it('#2538.d5c537a3 AC1: packages/contracts/schemas/doctor.item@1.jso…
+     10|     const listed = listedCodes();
+     11|     expect(listed).toEqual(expect.arrayContaining([...CODES]));
+       |                    ^
+     12|     expect(listed).toEqual(expect.arrayContaining(['healthy', 'unknown…
+     13|     expect(new Set(listed).size).toBe(listed.length);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: judge('doctor', 'polkit_action_missing') reads it as listed, verdict FAIL
+AssertionError: expected { family: 'doctor', …(3) } to deeply equal { family: 'doctor', …(3) }
+
+- Expected
++ Received
+
+  {
+    "code": "polkit_action_missing",
+    "family": "doctor",
+-   "listed": true,
+-   "verdict": "FAIL",
++   "listed": false,
++   "verdict": "INVALID",
+  }
+
+ ❯ tests/acceptance/2538/codes.test.ts:18:98
+     16|   it.each(CODES)('#2538.d5c537a3 AC1: judge(\'doctor\', \'%s\') reads …
+     17|     const read = judge('doctor', code);
+     18|     expect({ family: read.family, code: read.code, listed: read.listed…
+       |                                                                                                  ^
+     19|   });
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: judge('doctor', 'hooks_modified') reads it as listed, verdict FAIL
+AssertionError: expected { family: 'doctor', …(3) } to deeply equal { family: 'doctor', …(3) }
+
+- Expected
++ Received
+
+  {
+    "code": "hooks_modified",
+    "family": "doctor",
+-   "listed": true,
+-   "verdict": "FAIL",
++   "listed": false,
++   "verdict": "INVALID",
+  }
+
+ ❯ tests/acceptance/2538/codes.test.ts:18:98
+     16|   it.each(CODES)('#2538.d5c537a3 AC1: judge(\'doctor\', \'%s\') reads …
+     17|     const read = judge('doctor', code);
+     18|     expect({ family: read.family, code: read.code, listed: read.listed…
+       |                                                                                                  ^
+     19|   });
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  tests/acceptance/2538/codes.test.ts > #2538.d5c537a3 AC1: `doctor.item@1`'s `code` enum lists `polkit_action_missing`, `hooks_modified` and `mod_overrides_guard`, and `judge('doctor', code)` reads each as listed with verdict FAIL > #2538.d5c537a3 AC1: judge('doctor', 'mod_overrides_guard') reads it as listed, verdict FAIL
+AssertionError: expected { family: 'doctor', …(3) } to deeply equal { family: 'doctor', …(3) }
+
+- Expected
++ Received
+
+  {
+    "code": "mod_overrides_guard",
+    "family": "doctor",
+-   "listed": true,
+-   "verdict": "FAIL",
++   "listed": false,
++   "verdict": "INVALID",
+  }
+
+ ❯ tests/acceptance/2538/codes.test.ts:18:98
+     16|   it.each(CODES)('#2538.d5c537a3 AC1: judge(\'doctor\', \'%s\') reads …
+     17|     const read = judge('doctor', code);
+     18|     expect({ family: read.family, code: read.code, listed: read.listed…
+       |                                                                                                  ^
+     19|   });
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  tests/acceptance/2538/doctor.test.ts > #2538.8e3e2618 AC3: on Linux, every item `HOME=<empty fixture dir> node packages/cli/dist/main.js doctor --json` prints carries a code `doctor.item@1` lists (Linux only: skipped, not passed, on any other platform) > #2538.8e3e2618 AC3: every line doctor --json prints under an empty HOME is an item whose code the schema file lists, hub.polkit's among them
+AssertionError: expected [ 'hub.polkit: polkit_action_missing' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "hub.polkit: polkit_action_missing",
++ ]
+
+ ❯ tests/acceptance/2538/doctor.test.ts:30:91
+     28|       expect(items.map((i) => i.item)).toContain('hub.polkit');
+     29|       const listed = new Set(listedCodes());
+     30|       expect(items.filter((i) => !listed.has(i.code)).map((i) => `${i.…
+       |                                                                                           ^
+     31|     } finally {
+     32|       rmSync(home, { recursive: true, force: true });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: with the three codes in the schema file, the lint prints PASS for code mappings and for every kit, and nothing but a machine's unreadable ports fails it
+AssertionError: expected [ 'healthy', 'binary_missing', …(28) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "polkit_action_missing",
+-   "hooks_modified",
+-   "mod_overrides_guard",
++ [
++   "healthy",
++   "binary_missing",
++   "version_uncovered",
++   "hooks_missing",
++   "hooks_disabled",
++   "hooks_untrusted",
++   "mcp_unregistered",
++   "statusline_missing",
++   "signed_out",
++   "nested_session",
++   "timing_relation_broken",
++   "telemetry_unreadable",
++   "not_checked",
++   "hub_unreachable",
++   "disk_low",
++   "ports_taken",
++   "billing_api_key",
++   "binary_differs",
++   "token_expiring",
++   "prompt_failed",
++   "deprecated_used",
++   "gpu_unsupported",
++   "render_failed",
++   "job_failing",
++   "hook_program_missing",
++   "notifications_off",
++   "service_unpromoted",
++   "statusline_shadowed",
++   "pack_refused",
++   "unknown",
+  ]
+
+ ❯ tests/acceptance/2538/lint.test.ts:36:27
+     34|     expect(lint.status, lint.stderr).toBe(failing.length ? 1 : 0);
+     35|     // "With the three codes listed": a lint that passes over a schema…
+     36|     expect(listedCodes()).toEqual(expect.arrayContaining([...CODES]));
+       |                           ^
+     37|   });
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: the kit's planted entry for doctor polkit_action_missing carries a fix text of its own, not the fallback
+AssertionError: expected [] to deeply equal [ 'polkit_action_missing' ]
+
+- Expected
++ Received
+
+- [
+-   "polkit_action_missing",
+- ]
++ []
+
+ ❯ tests/acceptance/2538/lint.test.ts:41:40
+     39|   it.each(CODES)('#2538.982ff19a AC2: the kit\'s planted entry for doc…
+     40|     const planted = kits().flatMap((kit) => kit.planted).filter((p) =>…
+     41|     expect(planted.map((p) => p.code)).toEqual([code]);
+       |                                        ^
+     42|     const { fix, entry } = planted[0]!;
+     43|     expect(fix.trim().length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: the kit's planted entry for doctor hooks_modified carries a fix text of its own, not the fallback
+AssertionError: expected [] to deeply equal [ 'hooks_modified' ]
+
+- Expected
++ Received
+
+- [
+-   "hooks_modified",
+- ]
++ []
+
+ ❯ tests/acceptance/2538/lint.test.ts:41:40
+     39|   it.each(CODES)('#2538.982ff19a AC2: the kit\'s planted entry for doc…
+     40|     const planted = kits().flatMap((kit) => kit.planted).filter((p) =>…
+     41|     expect(planted.map((p) => p.code)).toEqual([code]);
+       |                                        ^
+     42|     const { fix, entry } = planted[0]!;
+     43|     expect(fix.trim().length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: the kit's planted entry for doctor mod_overrides_guard carries a fix text of its own, not the fallback
+AssertionError: expected [] to deeply equal [ 'mod_overrides_guard' ]
+
+- Expected
++ Received
+
+- [
+-   "mod_overrides_guard",
+- ]
++ []
+
+ ❯ tests/acceptance/2538/lint.test.ts:41:40
+     39|   it.each(CODES)('#2538.982ff19a AC2: the kit\'s planted entry for doc…
+     40|     const planted = kits().flatMap((kit) => kit.planted).filter((p) =>…
+     41|     expect(planted.map((p) => p.code)).toEqual([code]);
+       |                                        ^
+     42|     const { fix, entry } = planted[0]!;
+     43|     expect(fix.trim().length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  tests/acceptance/2538/lint.test.ts > #2538.982ff19a AC2: `node scripts/conformance-lint.mjs` still passes its code mappings and kit checks with the three codes listed (each has a mapping and a planted fix text), and `doctor.item@1`'s entry in `packages/contracts/digests.json` is its schema's digest > #2538.982ff19a AC2: doctor.item@1's entry in packages/contracts/digests.json is the digest of the schema that lists the three codes
+AssertionError: expected [ 'healthy', 'binary_missing', …(28) ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "polkit_action_missing",
+-   "hooks_modified",
+-   "mod_overrides_guard",
++ [
++   "healthy",
++   "binary_missing",
++   "version_uncovered",
++   "hooks_missing",
++   "hooks_disabled",
++   "hooks_untrusted",
++   "mcp_unregistered",
++   "statusline_missing",
++   "signed_out",
++   "nested_session",
++   "timing_relation_broken",
++   "telemetry_unreadable",
++   "not_checked",
++   "hub_unreachable",
++   "disk_low",
++   "ports_taken",
++   "billing_api_key",
++   "binary_differs",
++   "token_expiring",
++   "prompt_failed",
++   "deprecated_used",
++   "gpu_unsupported",
++   "render_failed",
++   "job_failing",
++   "hook_program_missing",
++   "notifications_off",
++   "service_unpromoted",
++   "statusline_shadowed",
++   "pack_refused",
++   "unknown",
+  ]
+
+ ❯ tests/acceptance/2538/lint.test.ts:56:19
+     54|     // The published schema is the file on disk, and it lists the thre…
+     55|     expect(codes).toEqual(listedCodes());
+     56|     expect(codes).toEqual(expect.arrayContaining([...CODES]));
+       |                   ^
+     57|     expect(frozen['doctor.item@1']).toMatch(/^d1:[0-9a-f]{64}$/);
+     58|     expect(frozen['doctor.item@1']).toBe(d1Digest(published!.schema));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  14 failed | 1 passed (15)
+   Start at  15:52:39
+   Duration  21.37s (tests 99%)
+
