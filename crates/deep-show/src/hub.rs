@@ -735,6 +735,8 @@ pub enum Call {
     Path {
         doc: String,
         item: String,
+        /// #223: the frame it is drawn at; an item under a warp draws at its frame.
+        t: Option<EvalTime>,
     },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
@@ -1421,8 +1423,9 @@ impl<'a> Hub<'a> {
             shapings: HashMap::new(),
         };
         deep_text::cache::record();
-        // The store's packs, each checked once here and never on a document's open.
-        for (id, dir) in &scenario.packs {
+        // The store's packs, each checked once here and never on a document's open: a pack the
+        // others require first, so its kit finds what it builds on (#142).
+        for (id, dir) in required_first(&scenario.packs) {
             hub.install_pack(id, dir, None);
         }
         hub
@@ -1927,7 +1930,15 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
-            Call::Path { doc, item } => match self.current(doc) {
+            Call::Path { doc, item, t } => match self.current(doc) {
+                // #142: a derived item answers as the frame draws it, as a warped one does.
+                Some(row)
+                    if crate::warps::under_warp(&row.doc, item)
+                        || row.doc.pointer(&format!("/items/{item}")).is_none() =>
+                {
+                    let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                    self.warped_path(doc, item, &t)
+                }
                 Some(row) => crate::function::path_reply(&row.doc, item),
                 None => json!({"outcome": "refused", "code": "no_revision"}),
             },
@@ -3040,4 +3051,44 @@ fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map
         }
     }
     inputs
+}
+
+/// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
+/// the order offered otherwise (#142).
+fn required_first(packs: &[(String, PathBuf)]) -> Vec<&(String, PathBuf)> {
+    let read = |dir: &PathBuf| -> (String, Vec<String>) {
+        let manifest: Value = std::fs::read(dir.join("pack.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or(Value::Null);
+        let name = manifest["name"].as_str().unwrap_or("").to_string();
+        let needs = manifest["requires"]["packs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|t| t.rsplit_once('@'))
+            .map(|(n, _)| n.rsplit_once('/').map_or(n, |(_, n)| n).to_string())
+            .collect();
+        (name, needs)
+    };
+    let read: Vec<(String, Vec<String>)> = packs.iter().map(|(_, dir)| read(dir)).collect();
+    let mut out: Vec<usize> = Vec::new();
+    fn visit(i: usize, read: &[(String, Vec<String>)], out: &mut Vec<usize>, depth: usize) {
+        if out.contains(&i) || depth > read.len() {
+            return;
+        }
+        for need in &read[i].1 {
+            if let Some(j) = read.iter().position(|(n, _)| n == need) {
+                visit(j, read, out, depth + 1);
+            }
+        }
+        if !out.contains(&i) {
+            out.push(i);
+        }
+    }
+    for i in 0..packs.len() {
+        visit(i, &read, &mut out, 0);
+    }
+    out.into_iter().map(|i| &packs[i]).collect()
 }

@@ -1,0 +1,55 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "whiteboard: a twin breaking one_entrance",
+  "description": "whiteboard: a twin breaking one_entrance: explain@1's whiteboard.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "12s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.whiteboard@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "cue_opening",
+            "kind": "fade_in",
+            "text": "MAKE",
+            "span": "0.5s"
+          },
+          {
+            "id": "cue_crowd",
+            "kind": "fade_in",
+            "text": "LOUD",
+            "span": "0.5s",
+            "when": "with"
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  }
+}

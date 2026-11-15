@@ -1606,6 +1606,26 @@
       ]
     },
     {
+      "id": "canvas-code-film",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "code-film"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "tokens_2000_lines_ms": 5,
+        "diff_400_lines_ms": 20,
+        "seek_10_min_ms": 5,
+        "still_code_steps": 0
+      },
+      "initialReason": "Issue #1968 first measurement (#1968.161c44a9): the merge base has no text_diff and reports no code timings. A release deep-show presents five documents by the agent's session and reads frames: a 2,000-line code item's tokens mapped to runs in the look as a change maps them (frames timings, tokens ms, the median of five frames); two 400-line versions under a text_diff read and aligned as the check aligns them, edits spread from the first line to the last (aligns ms, the median of five frames); a board whose cell grid plays a ten-minute terminal recording, sought to five times out of order after a frame at 0 s (the slowest frame's scheduler time); and a film with a dot moving every frame with a still code item and without it, the nodes frames 2 to 6 run with it beyond those without it. One warm-up and five runs, each a fresh process; canvas.mjs judge holds the three times to their targets on a reference Mac and the count on any machine. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1968.161c44a9"
+      ]
+    },
+    {
       "id": "logic-between-steps",
       "command": [
         "node",
