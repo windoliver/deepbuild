@@ -207,6 +207,10 @@ pub enum Planted {
     ExpandsInHashOrder,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
+    /// #1959: the loader takes one saved major for the whole document.
+    MigrationOneMajor,
+    /// #1959: the migrator at load reads a param set to 0 as left out.
+    MigrationZeroAsLeftOut,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -1343,6 +1347,8 @@ impl<'a> Hub<'a> {
             rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
             kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
+            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
