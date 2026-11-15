@@ -51,6 +51,8 @@ export function build(out) {
       } else throw Error(`BLOCKED: unsupported runtime dependency ${spec}`);
     }
   }
+  mkdirSync(join(out, 'contracts'), { recursive: true });
+  copyFileSync(join(repo, 'contracts/setup-steps.json'), join(out, 'contracts/setup-steps.json'));
   pkg('cli'); pkg('hub');
   emit('packages/cli/src/main.ts', 'packages/cli/dist/main.js');
   emit('packages/hub/src/hub-command.ts', 'packages/hub/dist/hub-command.js');

@@ -1,6 +1,6 @@
 // Compile only the real CLI's exercised module graph, never workspace links or stale dist output.
 // The sole substituted component is the hub server, explicitly required by #2330's Proof.
-import { mkdirSync, readFileSync, existsSync, writeFileSync, symlinkSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, existsSync, writeFileSync, symlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -50,6 +50,8 @@ export function build(into) {
       else throw Error(`BLOCKED: unhandled dependency ${specifier}; do not resolve workspace source through node_modules`);
     }
   }
+  mkdirSync(join(into, 'contracts'), { recursive: true });
+  copyFileSync(join(repo, 'contracts/setup-steps.json'), join(into, 'contracts/setup-steps.json'));
   mkdirSync(join(into, 'packages/cli'), { recursive: true });
   writeFileSync(join(into, 'package.json'), '{"type":"module"}\n');
   writeFileSync(join(into, 'packages/cli/package.json'), readFileSync(join(repo, 'packages/cli/package.json')));

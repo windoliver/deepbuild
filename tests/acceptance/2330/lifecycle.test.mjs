@@ -13,7 +13,10 @@ const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 let dir, cli;
 const preload = fileURLToPath(new URL('./hub.mjs', import.meta.url));
 const trace = (root) => {
-  try { return readFileSync(join(root, 'trace.jsonl'), 'utf8').trim().split('\n').map(JSON.parse); }
+  try {
+    const text = readFileSync(join(root, 'trace.jsonl'), 'utf8');
+    return text.slice(0, text.lastIndexOf('\n') + 1).split('\n').filter(Boolean).map(JSON.parse);
+  }
   catch (e) { if (e.code === 'ENOENT') return []; throw e; }
 };
 const event = (root, name) => trace(root).find((e) => e.event === name);
@@ -58,7 +61,7 @@ function command(root, verb, args = []) {
   const started = now();
   const child = spawn(process.execPath, [cli, 'hub', verb, '--root', root, ...args], {
     cwd: root, env: { HOME: join(root, 'home'), TMPDIR: root, PATH: '/usr/bin:/bin',
-      NODE_OPTIONS: `--import=${JSON.stringify(preload)}`, LC_ALL: 'C', TZ: 'UTC' },
+      NODE_OPTIONS: `--import=${JSON.stringify(preload)}`, ACC2330_OWNER: String(process.pid), LC_ALL: 'C', TZ: 'UTC' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   children.add(child);
@@ -74,7 +77,7 @@ function command(root, verb, args = []) {
       child.once('close', async () => done({ code, signal, stdout, stderr, started, ended, quiet: await quiet }));
     });
   });
-  const watchdog = setTimeout(() => child.kill('SIGKILL'), 17_000);
+  const watchdog = verb === 'run' ? undefined : setTimeout(() => child.kill('SIGKILL'), 17_000);
   child.done.finally(() => clearTimeout(watchdog));
   return child;
 }

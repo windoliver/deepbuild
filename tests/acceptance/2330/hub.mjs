@@ -15,7 +15,10 @@ export async function runHub({ root }) {
   note('start', { pid: process.pid, started });
   process.on('exit', () => note('exit'));
   process.on('SIGTERM', () => process.exit(0));
-  setTimeout(() => process.exit(91), 25_000).unref(); // orphan safety; never a test success
+  // A peer lives until its test stops it, not until another command's deadline.
+  setInterval(() => {
+    try { process.kill(Number(process.env.ACC2330_OWNER), 0); } catch { process.exit(91); }
+  }, 1000).unref();
   if (mode === 'never') { await new Promise(() => { setInterval(() => {}, 1000); }); }
   writeFileSync(join(root, 'control.token'), 'acceptance-2330-only\n', { mode: 0o600 });
   let first = true, stopping = false;
