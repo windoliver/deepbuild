@@ -146,7 +146,16 @@ fn prepare(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let p = vec2<i32>(id.xy);
-    let z = view_depth(textureLoad(depth, p, 0));
+    // The nearest depth about the pixel: an antialiased edge, whose colour is partly the nearer
+    // surface's, keeps that surface's circle, so a sharp object's edge never bleeds into the
+    // blur behind it.
+    var z = 1e30;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let q = clamp(p + vec2<i32>(i, j), vec2<i32>(0), vec2<i32>(size) - 1);
+            z = min(z, view_depth(textureLoad(depth, q, 0)));
+        }
+    }
     let c = coc_at(z, vec2<f32>(id.xy) + 0.5);
     textureStore(coc_out, p, vec4<f32>(c, z, 0.0, 0.0));
     let color = textureLoad(linear, p, 0);
@@ -243,6 +252,27 @@ fn hash(p: vec2<u32>) -> u32 {
     return h ^ (h >> 15u);
 }
 
+// One sample `o` px from pixel `p` (at view depth `z0`, its circle's radius `r0`) standing for
+// `share` px of the frame: its light times its weight, and the weight, where its circle reaches the
+// pixel: each pixel it stands for spreads over its circle's area. Far never spreads over a sharper
+// near pixel: past the pixel, a sample's circle is limited to the pixel's own.
+fn tap(p: vec2<i32>, o: vec2<f32>, z0: f32, r0: f32, share: f32) -> vec4<f32> {
+    let size = vec2<i32>(params.size.xy);
+    let q = clamp(p + vec2<i32>(round(o)), vec2<i32>(0), size - 1);
+    let s = textureLoad(coc_in, q, 0).xy;
+    var rq = abs(s.x) / 2.0;
+    if s.y > z0 {
+        rq = min(rq, r0);
+    }
+    // The sample's shape toward the pixel, from the sample's centre.
+    let cover = clamp(shape_radius(rq, atan2(-o.y, -o.x)) - length(o) + 0.5, 0.0, 1.0);
+    if cover <= 0.0 {
+        return vec4<f32>(0.0);
+    }
+    let w = share * cover / max(PI * rq * rq, 1.0);
+    return vec4<f32>(textureLoad(base_in, q, 0).rgb * w, w);
+}
+
 @compute @workgroup_size(8, 8)
 fn gather(@builtin(global_invocation_id) id: vec3<u32>) {
     let size = vec2<i32>(params.size.xy);
@@ -279,27 +309,29 @@ fn gather(@builtin(global_invocation_id) id: vec3<u32>) {
     let w0 = 1.0 / max(PI * r0 * r0, 1.0);
     var sum = centre.rgb * w0;
     var weight = w0;
+    // The eight neighbours first, so a circle of a pixel or two spreads alike at every pixel;
+    // then the spiral, rotated by the pixel's hash.
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            if i != 0 || j != 0 {
+                let t = tap(p, vec2<f32>(f32(i), f32(j)), z0, r0, 1.0);
+                sum += t.rgb;
+                weight += t.a;
+            }
+        }
+    }
     let n = u32(params.coc.w);
     let turn = f32(hash(id.xy)) * (2.0 * PI / 4294967296.0);
+    // The spiral covers the ring from the neighbours out to `reach`, each tap an equal share of it.
+    let inner = 1.5;
+    let ring = max(reach * reach - inner * inner, 0.0);
+    let share = PI * ring / f32(n);
     for (var k = 0u; k < n; k++) {
-        let r = reach * sqrt((f32(k) + 0.5) / f32(n));
+        let r = sqrt(inner * inner + ring * (f32(k) + 0.5) / f32(n));
         let a = f32(k) * GOLDEN + turn;
-        let o = vec2<f32>(cos(a), sin(a)) * r;
-        let q = clamp(p + vec2<i32>(round(o)), vec2<i32>(0), size - 1);
-        let s = textureLoad(coc_in, q, 0).xy;
-        var rq = abs(s.x) / 2.0;
-        // Far never spreads over a sharper near pixel: past the pixel, a sample's circle is
-        // limited to the pixel's own.
-        if s.y > z0 {
-            rq = min(rq, r0);
-        }
-        // The sample's shape toward the pixel, from the sample's centre.
-        let cover = clamp(shape_radius(rq, atan2(-o.y, -o.x)) - r + 0.5, 0.0, 1.0);
-        if cover > 0.0 {
-            let w = cover / max(PI * rq * rq, 1.0);
-            sum += textureLoad(base_in, q, 0).rgb * w;
-            weight += w;
-        }
+        let t = tap(p, vec2<f32>(cos(a), sin(a)) * r, z0, r0, share);
+        sum += t.rgb;
+        weight += t.a;
     }
     textureStore(resolved, p, vec4<f32>(sum / weight + spread, centre.a));
 }
