@@ -438,7 +438,8 @@
         "contribution",
         "catalog",
         "migration",
-        "bit"
+        "bit",
+        "behavior"
       ],
       "behavior": "none",
       "module": "physics",
