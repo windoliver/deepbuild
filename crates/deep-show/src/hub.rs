@@ -734,6 +734,12 @@ pub enum Call {
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
+    /// #225: a vector field's streams, arrows and flow windows at its frame.
+    VectorField {
+        doc: String,
+        item: String,
+        t: Option<EvalTime>,
+    },
     Path {
         doc: String,
         item: String,
@@ -1932,6 +1938,10 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
+            Call::VectorField { doc, item, t } => {
+                let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                self.vector_field(doc, item, &t)
+            }
             Call::Path { doc, item, t } => match self.current(doc) {
                 // #142: a derived item answers as the frame draws it, as a warped one does.
                 Some(row)
