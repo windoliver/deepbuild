@@ -108,3 +108,30 @@ test('spread, constant keys, renaming, aliases, interfaces, class fields and cas
     'FAIL ask source: packages/hub/src/y.ts:2: alias.no has no row in packages/asks/sources.json (raised at packages/hub/src/x.ts:7)',
   ]);
 });
+
+test('mutations, compound and destructuring assignments, constant keys, constructors and default imports reach the source or fail', () => {
+  const { code, fails } = run([
+    'declare const x: boolean;',
+    'const req = { source: \'a.yes\' }; req.source = \'mut.no\'; void asks.raise({}, req.source, {});',
+    'let s = \'a.yes\'; if (x) s += \'.no\'; void asks.raise({}, s, {});',
+    'let t = \'a.yes\'; [t] = [\'arr.no\']; void asks.raise({}, t, {});',
+    'const K = \'source\' as const; const rr: About = { source: \'a.yes\' }; rr[K] = \'key.no\'; void asks.raise({}, rr.source, {});',
+    'const source = \'p.yes\'; const sh = { source }; void asks.raise({}, sh.source, {});',
+    'class C { constructor(readonly src: string) {} go() { return asks.raise({}, this.src, {}); } }',
+    'void new C(\'ctor.no\'); class D extends C { constructor() { super(\'super.no\'); } } void D;',
+    'export default function notify(source: string) { return asks.raise({}, source, {}); }',
+    'void notify(\'a.yes\');',
+  ], {
+    'packages/hub/src/y.ts': 'import n from \'./x.ts\';\nvoid n(\'default.no\');\n',
+  });
+  assert.equal(code, 1);
+  assert.deepEqual(fails, [
+    'FAIL ask source: packages/hub/src/x.ts:11: ctor.no has no row in packages/asks/sources.json (raised at packages/hub/src/x.ts:10)',
+    'FAIL ask source: packages/hub/src/x.ts:11: super.no has no row in packages/asks/sources.json (raised at packages/hub/src/x.ts:10)',
+    'FAIL ask source: packages/hub/src/x.ts:5: mut.no has no row in packages/asks/sources.json',
+    'FAIL ask source: packages/hub/src/x.ts:6: can\'t read the source s after s += \'.no\'',
+    'FAIL ask source: packages/hub/src/x.ts:7: can\'t read the source t, set by a destructuring assignment',
+    'FAIL ask source: packages/hub/src/x.ts:8: key.no has no row in packages/asks/sources.json',
+    'FAIL ask source: packages/hub/src/y.ts:2: default.no has no row in packages/asks/sources.json (raised at packages/hub/src/x.ts:12)',
+  ]);
+});

@@ -3,10 +3,11 @@
 // leaves nobody asked. A raise is any call of a member named `raise` that takes a `source` (also through `.call`,
 // `.apply` or a key of that literal type). The TypeScript checker reads its `source` argument: a value of a literal,
 // union or template-literal type is taken at its word; a variable, parameter or property is followed to everything
-// that sets it: its initializer and assignments, each call of its function under any name, each object literal of its
-// type and each class field that implements it. A template part it can't read stands for any text, so a template passes
-// when some row fits it, and one with no words of its own is unread. A source it can't read, a raise it can't type, a
-// spread before the source, and a raise or a source's function passed on as a value or renamed all FAIL. One sorted
+// that sets it: its initializer and assignments, each call or `new` of its function under any name it's imported as, each
+// object literal of its type and each class field that implements it. A template part it can't read stands for any text,
+// so a template passes when some row fits it, and one with no words of its own is unread. A source it can't read, a raise
+// it can't type, a spread before the source, a compound or destructuring assignment to it, and a raise or a source's
+// function passed on as a value or renamed all FAIL. One sorted
 // `FAIL ask source: <path>:<line>: ...` line per finding, or one `PASS ask source: ...` line; exit 1 on a finding.
 // `--root <dir>` checks another checkout.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -104,18 +105,24 @@ const names = new Map();
 const fields = new Map();
 const renamed = new Map();
 const index = (node) => {
-  if (ts.isCallExpression(node)) {
-    const name = nameOf(node.expression);
+  if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+    // A super(...) call is a call of the class it extends.
+    const base = node.expression.kind === ts.SyntaxKind.SuperKeyword ? ts.findAncestor(node, ts.isClassLike)?.heritageClauses?.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword)?.types[0]?.expression : undefined;
+    const name = nameOf(base ?? node.expression);
     if (name) push(calls, name, node);
   } else if ((ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) && ts.isObjectLiteralExpression(node.parent) && ts.isIdentifier(node.name)) {
     push(props, node.name.text, node);
-  } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+  } else if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
     const name = nameOf(node.left);
     if (name) push(assigns, name, node);
   } else if (ts.isPropertyDeclaration(node) && ts.isIdentifier(node.name)) {
     push(fields, node.name.text, node);
   } else if ((ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) && node.propertyName) {
     push(renamed, node.propertyName.text, node.name.text);
+  } else if (ts.isImportClause(node) && node.name) {
+    push(renamed, 'default', node.name.text);
+  } else if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression)) {
+    push(renamed, node.expression.text, 'default');
   }
   if (ts.isIdentifier(node)) push(names, node.text, node);
   ts.forEachChild(node, index);
@@ -134,16 +141,24 @@ function resolve(expr, seen) {
   if (ts.isBinaryExpression(expr) && (expr.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken || expr.operatorToken.kind === ts.SyntaxKind.BarBarToken)) return [...resolve(expr.left, seen), ...resolve(expr.right, seen)];
   if (ts.isTemplateExpression(expr)) return template(expr, seen);
   const symbol = ts.isIdentifier(expr) || ts.isPropertyAccessExpression(expr) ? symbolOf(expr) : undefined;
-  const found = (symbol?.declarations ?? []).flatMap((d) => {
+  const found = symbol ? fromSymbol(symbol, seen) : [];
+  return found.length ? found : unread(expr);
+}
+/** What sets a variable, parameter or property: its declarations, then everything assigned to it. */
+function fromSymbol(symbol, seen) {
+  return (symbol.declarations ?? []).flatMap((d) => {
     if (ts.isVariableDeclaration(d)) return [...(d.initializer ? resolve(d.initializer, seen) : []), ...assigned(symbol, seen)];
     if (ts.isParameter(d)) return fromCallers(d, seen);
     if (ts.isPropertySignature(d) || ts.isPropertyDeclaration(d)) {
       return [...(ts.isPropertyDeclaration(d) && d.initializer ? resolve(d.initializer, seen) : []), ...fromObjects(symbol, d, seen), ...assigned(symbol, seen)];
     }
-    if (ts.isPropertyAssignment(d)) return resolve(d.initializer, seen);
+    if (ts.isPropertyAssignment(d)) return [...resolve(d.initializer, seen), ...assigned(symbol, seen)];
+    if (ts.isShorthandPropertyAssignment(d)) {
+      const value = checker.getShorthandAssignmentValueSymbol(d);
+      return [...(value ? fromSymbol(value, seen) : []), ...assigned(symbol, seen)];
+    }
     return [];
   });
-  return found.length ? found : unread(expr);
 }
 /** A template's values; a part it can't read stands for any text, and a template with no words of its own is unread. */
 function template(expr, seen) {
@@ -159,13 +174,25 @@ function template(expr, seen) {
   return out;
 }
 /** What each assignment to a variable or property sets it to. */
-const assigned = (symbol, seen) => (assigns.get(symbol.name) ?? []).filter((a) => symbolOf(ts.isElementAccessExpression(a.left) ? a.left.argumentExpression : a.left) === symbol).flatMap((a) => resolve(a.right, seen));
+const targetOf = (left) => ts.isElementAccessExpression(left) ? checker.getTypeAtLocation(left.expression).getProperty(nameOf(left) ?? '') : symbolOf(left);
+/** Whether an identifier is set by a destructuring assignment, `[x] = ...` or `({ x } = ...)`. */
+const destructured = (id) => {
+  let n = id;
+  while (ts.isArrayLiteralExpression(n.parent) || ts.isObjectLiteralExpression(n.parent) || ts.isSpreadElement(n.parent) || ts.isShorthandPropertyAssignment(n.parent) || (ts.isPropertyAssignment(n.parent) && n.parent.initializer === n)) n = n.parent;
+  return n !== id && ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && n.parent.left === n;
+};
+/** What each assignment to a variable or property sets it to; a compound or destructuring one is unread. */
+const assigned = (symbol, seen) => [
+  ...(assigns.get(symbol.name) ?? []).filter((a) => targetOf(a.left) === symbol)
+    .flatMap((a) => a.operatorToken.kind === ts.SyntaxKind.EqualsToken ? resolve(a.right, seen) : unread(a, `can't read the source ${a.left.getText()} after ${a.getText()}`)),
+  ...(names.get(symbol.name) ?? []).filter((id) => destructured(id) && symbolOf(id) === symbol).flatMap((id) => unread(id, `can't read the source ${id.text}, set by a destructuring assignment`)),
+];
 /** Whether an identifier is called, declared, or only named in a type, rather than passed on as a value. */
 const notValue = (id, fn) => {
   const p = id.parent;
   if ((ts.isCallExpression(p) && p.expression === id) || (ts.isPropertyAccessExpression(p) && p.name === id && ts.isCallExpression(p.parent) && p.parent.expression === p)) return true;
   if (fn.name === id || (p.name === id && (ts.isVariableDeclaration(p) || ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p) || ts.isMethodDeclaration(p)))) return true;
-  for (let n = id; n; n = n.parent) if (ts.isTypeNode(n) || ts.isExportSpecifier(n) || ts.isImportSpecifier(n)) return true;
+  for (let n = id; n; n = n.parent) if (ts.isTypeNode(n) || ts.isExportSpecifier(n) || ts.isImportSpecifier(n) || ts.isImportClause(n) || ts.isExportAssignment(n)) return true;
   return false;
 };
 /** A parameter's values: its default, and what each call of its function passes in its place. */
@@ -180,7 +207,8 @@ function fromCallers(param, seen) {
   // A function declared on its own is followed to its own calls, under any name it's imported or exported as, and to
   // the calls of a member it implements; one an object literal holds, to the calls of the member it fills, by name.
   const own = ts.isPropertyAssignment(holder) ? undefined : holder.name && symbolOf(holder.name);
-  const aliases = [name, ...(own ? renamed.get(name) ?? [] : [])];
+  const exported = own ? [...(renamed.get(name) ?? []), ...(ts.getCombinedModifierFlags(holder) & ts.ModifierFlags.Default ? ['default'] : [])] : [];
+  const aliases = [name, ...exported, ...(exported.includes('default') ? renamed.get('default') ?? [] : [])];
   for (const call of aliases.flatMap((n) => calls.get(n) ?? [])) {
     const signature = checker.getResolvedSignature(call);
     const declared = signature?.declaration;
@@ -188,7 +216,8 @@ function fromCallers(param, seen) {
     if (own ? declared !== fn && !(declared && !declared.body && member) : !member) continue;
     out.push(...argument(call, call.arguments, i, seen));
   }
-  if (own) {
+  // A class taken as a value is left to its type: its constructor's sources are read only from `new` and super calls.
+  if (own && !ts.isConstructorDeclaration(fn)) {
     const passed = aliases.flatMap((n) => names.get(n) ?? []).find((id) => symbolOf(id) === own && !notValue(id, holder));
     if (passed) out.push(...unread(passed, `can't read the sources ${name} is given: it's passed on as a value here`));
   }
