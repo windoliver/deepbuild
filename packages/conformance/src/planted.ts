@@ -66,7 +66,7 @@ const DOCTOR_FIXES: Record<string, string> = {
   pack_refused: 'Fix the pack folder the item names so it passes the pack check, or reinstall DeepBuild; then restart the hub.',
   polkit_action_missing: 'Install the polkit action with the sudo install command the item gives, so a confirmation of yours can count.',
   hooks_modified: "Put the hook entry back as DeepBuild's codex-hooks.json has it, then approve it once in /hooks if Codex asks.",
-  mod_overrides_guard: 'Remove or disable the mod the item names in that Claude Code home, so a call DeepBuild denied stays denied.',
+  mod_overrides_guard: "Disable the plugin the item names (claude plugin disable <plugin>) if you want DeepBuild's denials to hold and only your prompts to reach the agent.",
   unknown: "Update deep: this doctor code was added after the reader's minor.",
 };
 const EXIT_FIXES: Record<string, string> = {
