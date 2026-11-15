@@ -21,7 +21,7 @@ test at tests/acceptance/2574/shards-linux.test.mjs:43:1
   + ]
   - []
   
-      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2574/shards-linux.test.mjs:67:10)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2574/shards-linux.test.mjs:67:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
