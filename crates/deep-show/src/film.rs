@@ -35,7 +35,14 @@ pub(crate) fn plan_of<'a>(program: &'a Program, doc: &Value) -> Option<(&'a Plan
         .as_deref()
         .filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some))?;
     let cam = plan.camera(doc.get("camera")?.as_str()?)?;
-    plan.cameras[cam].flat.then_some((plan, cam))
+    let camera = &plan.cameras[cam];
+    // #142: a perspective camera looking straight at the page, its eye on the target's normal,
+    // sees the page's plane as a flat view at its width through the target, so a 2D film's
+    // frames draw through it as through a flat one (a film recipe's 3D stage).
+    let straight = camera.own.is_some_and(|p| {
+        p.perspective() && p.position[0] == p.target[0] && p.position[1] == p.target[1]
+    });
+    (camera.flat || straight).then_some((plan, cam))
 }
 
 /// One side a frame draws: its camera and the look it is finished in.
@@ -202,7 +209,8 @@ fn iris_mix(
 /// A flat pose as the affine from the document's units to its pixels: the target at the frame's
 /// centre, the view width across it, turned by the roll.
 pub(crate) fn view(pose: &Pose, size: [f64; 2]) -> Affine {
-    let k = size[0] / pose.view_width;
+    // A straight-on perspective pose's width through its target (#142); a flat one's own.
+    let k = size[0] / pose.width();
     Affine::translate((size[0] / 2.0, size[1] / 2.0))
         * Affine::rotate(pose.roll.to_radians())
         * Affine::scale(k)

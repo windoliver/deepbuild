@@ -782,6 +782,8 @@ pub struct Registrar {
     pub elements: Vec<(String, Elements)>,
     /// Its kinds expanded at check, by kind (`family.name`; #222).
     pub expands: Vec<(String, crate::document::expands::Expand)>,
+    /// Its reading of a cue list's times, for a pack kind's rule over it (#142).
+    pub cue_rows: Vec<crate::document::expands::CueRows>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
