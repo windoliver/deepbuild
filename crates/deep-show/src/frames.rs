@@ -1251,19 +1251,21 @@ fn morphed_vectors(
     Some(frame)
 }
 
+/// A frame as its text diffs draw it, with each unit's shaped run by its mark's item.
+type Diffed = (
+    deep_canvas_marks::scene::Frame,
+    Vec<(String, Arc<deep_canvas_marks::modules::Run>)>,
+);
+
 /// #1968: each text diff between two code items as a frame draws it: before its window only its
 /// from item, after it only its to item, and inside it each item's text giving way to its units,
 /// moved and faded as the diff has them at its progress, while the rest each item draws (its
-/// gutter, numbers and highlights) cross-fades from the old item's to the new one's. With the
-/// frame, each unit's shaped run, by its mark's item.
+/// gutter, numbers and highlights) cross-fades from the old item's to the new one's.
 fn diffed_code(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &DocSession,
     frame: &deep_canvas_marks::scene::Frame,
-) -> Option<(
-    deep_canvas_marks::scene::Frame,
-    Vec<(String, Arc<deep_canvas_marks::modules::Run>)>,
-)> {
+) -> Option<Diffed> {
     use deep_canvas_marks::diff::{self, Side};
     use deep_canvas_marks::scene::{Drawn, Scope};
     let program = crate::film::program_of(sched, session)?;
