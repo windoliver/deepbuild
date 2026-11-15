@@ -2145,9 +2145,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_logic::module::module()
         };
-        // A build without physics refuses the logic items that need it (#533).
+        // A build without physics refuses the logic items that need it (#533); one with it binds
+        // physics.cast@1 for the items that ask it between steps (#213).
         out.push(match physics::module() {
-            Some(_) => logic,
+            Some(_) => {
+                deep_logic::module::bind_services(physics::cast::bound);
+                logic
+            }
             None => deep_logic::module::without_physics(logic),
         });
     }
@@ -2621,7 +2625,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
                 name: "kind@1".into(),
                 entries: entries.into_iter().map(Value::from).collect(),
                 rules: vec!["sheet_cap".into()],
-                passes: Vec::new(),
+                ..Default::default()
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
@@ -3335,6 +3339,9 @@ fn main() {
                 line["registry"] = json!(r.name);
                 line["entries"] = json!(r.entries);
                 line["rules"] = json!(r.rules);
+                for (k, v) in &r.report {
+                    line[k.as_str()] = v.clone();
+                }
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }

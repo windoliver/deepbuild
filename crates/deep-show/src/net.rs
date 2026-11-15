@@ -55,7 +55,7 @@ pub fn module() -> Module {
     Module {
         manifest: Manifest {
             name: "net".into(),
-            version: one.clone(),
+            version: one,
             core: Range::parse("*").expect("a range"),
             depends_on: Default::default(),
             feature: "net".into(),
