@@ -1,0 +1,126 @@
+Issue #2067: bounded count correction and unchanged-base proof, 2026-11-14
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Node v24.22.0; existing same-base dependencies/builds only; no rebuild.
+
+AUTHORIZATION AND BOUNDARY
+Inputs: ../issue.json, this original base, AGENTS.md, relevant technical design,
+the previously finalized tests/acceptance/2067, and the supplied clarification.
+The person was asked to approve counting release runs ON THE EXPECTED MERGED
+COMMIT in the four AC1 variants, preserving the design-required base comparison,
+all other assertions and AC4's exact count. Their supplied response was:
+  "clsoe the gaps that we can close the issue"
+This authorizes only that correction. No implementation, implementing transcript,
+diff, output/report, other worktree or blind redraft was read. No production code,
+runner, settings, baseline, decision, other issue test or blind redraft was edited.
+No commits, network services, real model or GitHub calls were made.
+
+PRECISE CHANGE / REQUIREMENT -> PROOF
+Only release.test.ts changed among executable tests. The old AC1 assertion counted
+all preflight runs in the hub, required one, and inspected the first. It now:
+- independently computes the expected tree with Git merge-tree from fixture heads;
+- identifies each candidate by exactly two Git parents, the PR head and the
+  last-fetched mainline head, and by that expected tree;
+- counts all matching runs, still requiring exactly one, and checks every match's
+  failed outcome plus the retained explicit merged-tree and parent assertions.
+No run ordering, lower bound, guessed commit metadata or implementation-specific
+SHA is used. A base-only/head-only/wrong-tree/wrong-parent run cannot satisfy the
+count, and duplicate runs matching the merge cannot hide behind a first match.
+The original fixture still logs all releaseRuns, base comparisons included; a
+separate merge-evidence line logs expected tree/parents and matching commits.
+No base-comparison behavior was removed, disabled, or changed.
+
+All four AC1 modes, FAIL naming preflight, Closes refusal naming preflight,
+AC2/AC3 missing-check/cause/owner assertions, unreadable-mainline scope, no fetch,
+actual merged tree/parents, and both twins remain. fixture.ts and twins.test.ts
+have their original hashes. AC4 still requires exactly one run across the entire
+hub and reuse of that same run/merge on a second claim. It was not reinterpreted.
+README distinguishes the old and corrected contracts. BASE-FAILURE.txt is kept
+byte-for-byte as historical proof; this file records the new proof separately.
+
+ONE AFFECTED RUN
+Command (from the original base checkout):
+  node scripts/affected.mjs tests/acceptance/2067/release.test.ts
+Exit status: 1. No retries.
+Selection: parallel vitest: tests/acceptance/2067/release.test.ts
+Vitest 5.0.5: 1 file failed; 7 tests failed (7); duration 93.31 s.
+All seven reached intended behavior assertions after a correlated claim verdict
+and public receipt; no setup errors, missing-verdict errors or timeouts.
+The four AC1 cases each also failed the corrected count assertion at line 20:
+  the claim must record one release run of preflight on the expected merged
+  commit: expected +0 to be 1
+Their first assertion remains:
+  preflight must FAIL on the merge, not disappear: expected 'PASS' to be 'FAIL'
+The retained refusal assertions also failed (allowed true, empty refusal reason).
+
+scenario          expected claim  actual claim  all/merged preflight  Closes
+trunk             FAIL            PASS          0 / 0                 allowed
+develop           FAIL            PASS          0 / 0                 allowed
+remote-main       FAIL            PASS          0 / 0                 allowed
+remote-master     FAIL            PASS          0 / 0                 allowed
+missing mainline  BLOCKED         PASS          0 / n/a               allowed
+unreadable main   BLOCKED         PASS          0 / n/a               allowed
+undefined check   BLOCKED         PASS          0 / n/a               refused
+All seven receipts contained review: passed, not preflight. Ordinary prerequisites
+passed. The no-fetch assertions held in every fixture. Undefined-check refusal
+already named preflight on base; its claim still incorrectly PASSed without it.
+For all four AC1 modes, Git independently computed expected merge tree:
+  d64e57c878f8c6ca86b160a7d965ac514b6bf7dd
+The full per-fixture parents, claim IDs, reasons, checks, all releaseRuns (empty
+on this base), merge subsets and guard replies are in count-correction/vitest.txt.
+
+AFFECTED STATUS / UNRUN CHECKS
+FAIL affected: 179 new, 11 already failing on main, 0 inconclusive or blocked,
+0 listed skips, 0 passed, in 104 s at load 221.
+WIDE lines: none. INCONCLUSIVE lines: none.
+179 new = 7 acceptance test failures + 172 repo lint findings. The 11 known
+failures are lints. Other findings concern dependencies, cards, vendor inventory,
+canvas lints, size ceilings, code mappings, slots/closure drift, record reader,
+known-failure age and an existing home-path finding outside #2067. They remain
+unchanged and are listed in the scrubbed affected output, not silently waived.
+The normal lease wrapper reported no hub token and ran unleased; no throttle or
+lease configuration was changed, no bypass used and no processes killed.
+
+Unrun: twins.test.ts, neighboring suites, full preflight, implementation checks.
+The unchanged local-main twin's prior base PASS and the unchanged conflict twin's
+prior INVALID-versus-FAIL failure carry from BASE-FAILURE.txt; neither was rerun
+because neither its test nor its shared fixture changed. The conflict remains
+an open historical scope failure, not a PASS. No implementation PASS is claimed.
+The base run necessarily cannot exercise a matching merged release run, because
+that omission is the bug it proves; passing corrected behavior remains unrun.
+
+EVIDENCE AND HASHES (SHA-256)
+Original, unchanged BASE-FAILURE.txt:
+  5194ce5ac61ab7d0e339fd2a968a8d22f35ae6f08130f9b6bc9b5f4af23ecb7f
+Original release.test.ts contract:
+  0cb0aec81f060cbd8331a717ec3078980b5f0e4fcfadca80bc4c0b277cfe1302
+Corrected release.test.ts:
+  f7d9078b71e06fea739820a7786480b7c315f7e43d36f4e091858daeafcf1ef0
+Unchanged fixture.ts:
+  58ca4e528654f4b0977f4f30e4a058c4e54df89ef2a882d572a7b0d5710b13e6
+Unchanged twins.test.ts:
+  084f1260f15ee6ad05b8fe7dd26af88982fec3418d1efc4a4eb96b9f7430c26c
+Original README.md before this correction:
+  754d358ca098e43306046222c0a374247f48c527f389ca9bac15cdfe9b2144ce
+
+Raw run-output hashes (provenance only; raw machine paths are not copied):
+  affected stdout/stderr:
+    49ebb1b3eb4dac3d6e8c32da9066957ce0266d7cb65278d3666f15c46d99bad8
+  Vitest stdout/stderr:
+    defa1b1fc1ba62c1107b00475eb35aa0904f1c02c1d05d145df2e1c1ee2b4039
+  Vitest structured reporter:
+    a4af768418fec178e2825b204ca1941c32f9bdd384901cc1aaf84b88082ae394
+Scrubbed copies in count-correction/ preserve the complete outputs; only the
+checkout path (<BASE>), user home (<HOME>), run-log folder (<AFFECTED_LOGS>) and
+any terminal ANSI control sequences are normalized. No result or run is removed.
+  affected.txt:
+    a96759838f36dba09cb57be3f8d0058e8ff5dc2c40ff7d44eba4d33367b46928
+  vitest.txt:
+    a3d4afeb45351520398698b86c5d7790669bcb47d7f9f1a27102443f4f69253c
+  reporter.jsonl:
+    c0a31944908963ee080ee45c269359090d9c06a32590e58ac6436754110bca02
+Final-file/input/build hashes: README.md and count-correction/SHA256SUMS.
+
+STATUS: bounded correction and expected base-failure proof complete. No deviation
+from the approved correction. Final acceptance remains BLOCKED from delivery as
+PASS on this base; the seven intended failures and historical conflict remain.
+The implementing agent must copy the finalized files unchanged.

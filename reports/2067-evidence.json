@@ -1,0 +1,1170 @@
+{
+  "issue": 2067,
+  "base": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+  "integrationMain": "a12be6c8c426e4ea9d87292cef42f12c564527f3",
+  "note": "Actual test-reporter records; no model verdict. Aggregate lint failures are disclosed, not waived. Final runs carry unchanged checks after only affected code/setup corrections.",
+  "finalSourceAndTestHashes": [
+    {
+      "sha256": "a6cd2b416bc7490d2bfc8bdf85f6a67279403c5fa556d43caa71154eb011939e",
+      "path": "packages/hub/src/release.ts"
+    },
+    {
+      "sha256": "aec70c51440222aef9b631825a9d9e910bf0dd2e9f7f75757374c098bc94fe7a",
+      "path": "packages/hub/src/stop-judging.ts"
+    },
+    {
+      "sha256": "dceb9059ceabcb6c2b8ea3281852cfadabf77a6640dc9d04b0c45f6fd938eb10",
+      "path": "packages/hub/src/gate-runner.ts"
+    },
+    {
+      "sha256": "f7d9078b71e06fea739820a7786480b7c315f7e43d36f4e091858daeafcf1ef0",
+      "path": "tests/acceptance/2067/release.test.ts"
+    },
+    {
+      "sha256": "58ca4e528654f4b0977f4f30e4a058c4e54df89ef2a882d572a7b0d5710b13e6",
+      "path": "tests/acceptance/2067/fixture.ts"
+    },
+    {
+      "sha256": "084f1260f15ee6ad05b8fe7dd26af88982fec3418d1efc4a4eb96b9f7430c26c",
+      "path": "tests/acceptance/2067/twins.test.ts"
+    },
+    {
+      "sha256": "cc41e4b38be7552dc87d32f4f92790054dd2ceedd1ae310c8fd5bba3ca3b5f80",
+      "path": "tests/acceptance/2067-scope/fixture.ts"
+    },
+    {
+      "sha256": "a0aeee5afff04976ba2b8ba99c1c578d6056f2ac5d56104cb798fb6b86a842b3",
+      "path": "tests/acceptance/2067-scope/inherited-cross-session.test.ts"
+    },
+    {
+      "sha256": "2f65c2ecfd8c7779c53d3a1b9500c8e267aceed12e48662f0c597dd98bf2c78f",
+      "path": "tests/acceptance/2067-scope/inherited-reuse.test.ts"
+    },
+    {
+      "sha256": "0910bda8564bde58271421c81484082073dd8dd19612170a872ac74b2c02bbea",
+      "path": "tests/acceptance/2067-scope/promisor.test.ts"
+    },
+    {
+      "sha256": "28bbb1b2153937e19c77e3ddcd99f8575868eaf8914f7279e16bbe666937bd2f",
+      "path": "tests/acceptance/2067-scope/review-name.test.ts"
+    },
+    {
+      "sha256": "ccf840f8bba826b8747108a4d13f59913526b192f2f8a0d5f97767f37a40ce73",
+      "path": "tests/acceptance/2067-redraft-ac1/trunk.test.ts"
+    }
+  ],
+  "builds": [
+    {
+      "name": "approved-build",
+      "exit": 0
+    },
+    {
+      "name": "closing-integration-build",
+      "exit": 0
+    },
+    {
+      "name": "scope-fix-build",
+      "exit": 0
+    },
+    {
+      "name": "inherited-fix-build",
+      "exit": 0
+    },
+    {
+      "name": "final-main-build",
+      "exit": 0
+    }
+  ],
+  "runs": [
+    {
+      "name": "final-criteria",
+      "command": "node scripts/affected.mjs tests/acceptance/2067/release.test.ts",
+      "aggregate": "FAIL affected: 154 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 7 passed, in 114 s at load 222",
+      "notices": [],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "scope: unreadable mainline is BLOCKED, not absent or a merge conflict"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes"
+        }
+      ]
+    },
+    {
+      "name": "inherited-fix-affected",
+      "command": "node scripts/affected.mjs tests/acceptance/2067-scope/inherited-cross-session.test.ts tests/acceptance/2067-scope/inherited-reuse.test.ts tests/acceptance/2067/twins.test.ts packages/hub/test/gate-runner.test.ts packages/hub/test/gate-queue.test.ts",
+      "aggregate": "FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 11 passed, in 67 s at load 170",
+      "notices": [],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts each queued check once, however many turns end while a checkout is made"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again outdates nothing"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › a run no newer claim changed the inputs of ends with no run.stale"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts the newest claim's check when an older claim of the same stop reaches the gate after it (#580)"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "a fix check on a base with nothing to start › runs on the base with its command's stand-in, and records the stand-in's hash"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun, not the run under load"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run under load doesn't decide it"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-scope/inherited-reuse.test.ts",
+          "name": "#2067 scope / AC4: the same inherited release failure stays BLOCKED on a second claim"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/twins.test.ts",
+          "name": "#2067.51b5aef6 local-main twin: one preflight per head, merged tree and reused result on another claim"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-scope/inherited-cross-session.test.ts",
+          "name": "#2067 scope / AC4: another session on the same head keeps the inherited release failure BLOCKED"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/twins.test.ts",
+          "name": "scope twin: a genuine merge conflict still FAILs preflight and holds Closes"
+        }
+      ]
+    },
+    {
+      "name": "final-scope-regressions",
+      "command": "DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/2067-scope/promisor.test.ts tests/acceptance/2067-scope/review-name.test.ts tests/acceptance/2067-redraft-ac1/trunk.test.ts tests/acceptance/82/pr.test.ts",
+      "aggregate": "FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 5 passed, in 112 s at load 148",
+      "notices": [],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-scope/review-name.test.ts",
+          "name": "#2067 scope: undefined release review is not satisfied by the automatic PR reviewer"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-scope/promisor.test.ts",
+          "name": "#2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-redraft-ac1/trunk.test.ts",
+          "name": "AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/82/pr.test.ts",
+          "name": "AC5 #82.fbbdd208 the stop that opens the PR you asked for is never sent back › AC5 #82.fbbdd208 item 51: R2 failing, the stop after gh pr create isn't sent back, its chat line carries https://github.com/acme/shop/pull/12, and the PR body lists R2 under \"Part of\""
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/82/pr.test.ts",
+          "name": "AC6 #82.7f8929f5 after the PR you asked for opens with requirements unmet, the session keeps working on them without you typing › AC6 #82.7f8929f5 item 51: the session is kept going on R2 in the same PR with nothing typed; item 52, whose ask says the PR ends the work, is let stop"
+        }
+      ]
+    },
+    {
+      "name": "approved-hook-regressions",
+      "command": "DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/82/pr.test.ts tests/acceptance/2078/reuse.test.ts",
+      "aggregate": "FAIL affected: 153 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 6 passed, in 228 s at load 205",
+      "notices": [],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2078/reuse.test.ts",
+          "name": "AC1 #2078.f33c092f after a claim whose checks passed, a tracked file is changed by a process no hook saw and the session stops again with only reads in its turn: the new claim's snapshot holds the changed file and its checks run on it › AC1 #2078.f33c092f src/cart.ts rewritten by a process no hook saw, then a Read and a stop: the second claim's snapshot holds the rewritten src/cart.ts, its check runs on that snapshot and fails there, and the claim is FAIL, never the first claim's PASS"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2078/reuse.test.ts",
+          "name": "AC2 #2078.f4160036 the twin: with nothing changed, the second claim takes the first one's snapshot, writes nothing to the object store and starts no run › AC2 #2078.f4160036 nothing changed, then a Read and a stop: the second claim covers the first claim's snapshot, no object is written to the store and no run starts"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2078/reuse.test.ts",
+          "name": "Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's › Scope #2078 HEAD: the worktree committed as it stands by a process no hook saw, then a Read and a stop: the tree is the first snapshot's and HEAD is not, so the second claim covers the new HEAD, not the first claim's snapshot"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2078/reuse.test.ts",
+          "name": "Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's › Scope #2078 budget: an untracked file no snapshot takes inside its budget is left by a process no hook saw, then a Read and a stop: the tree can't be read inside the budget, so the second claim is INCONCLUSIVE naming \"snapshot over budget\", none of its checks runs, and it never carries the first claim's PASS"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/82/pr.test.ts",
+          "name": "AC5 #82.fbbdd208 the stop that opens the PR you asked for is never sent back › AC5 #82.fbbdd208 item 51: R2 failing, the stop after gh pr create isn't sent back, its chat line carries https://github.com/acme/shop/pull/12, and the PR body lists R2 under \"Part of\""
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/82/pr.test.ts",
+          "name": "AC6 #82.7f8929f5 after the PR you asked for opens with requirements unmet, the session keeps working on them without you typing › AC6 #82.7f8929f5 item 51: the session is kept going on R2 in the same PR with nothing typed; item 52, whose ask says the PR ends the work, is let stop"
+        }
+      ]
+    },
+    {
+      "name": "approved-after-affected",
+      "command": "node scripts/affected.mjs tests/acceptance/2067/release.test.ts tests/acceptance/2067/twins.test.ts tests/acceptance/2067-redraft-ac1/trunk.test.ts packages/hub/test/gate-runner.test.ts packages/hub/test/gate-queue.test.ts packages/hub/test/gate-recovery.test.ts packages/hub/test/gate-answer-origin.test.ts packages/hub/test/switch-asks.test.ts packages/gate/test/snapshot-reuse.test.ts tests/acceptance/82/pr.test.ts tests/acceptance/2078/reuse.test.ts tests/acceptance/1906/exit/children-at-exit.test.ts tests/acceptance/1906/exit/sync-children-at-exit.test.ts",
+      "aggregate": "FAIL affected: 155 new, 45 already failing on main, 3 inconclusive or blocked, 0 listed skips, 32 passed, in 374 s at load 241",
+      "notices": [
+        "BLOCKED tests/acceptance/82/pr.test.ts › AC5 #82.fbbdd208 the stop that opens the PR you asked for is never sent back › AC5 #82.fbbdd208 item 51: R2 failing, the stop after gh pr create isn't sent back, its chat line carries https://github.com/acme/shop/pull/12, and the PR body lists R2 under \"Part of\": BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <SHARD>/target; run cargo build -p deep-hook first",
+        "BLOCKED tests/acceptance/82/pr.test.ts › AC6 #82.7f8929f5 after the PR you asked for opens with requirements unmet, the session keeps working on them without you typing › AC6 #82.7f8929f5 item 51: the session is kept going on R2 in the same PR with nothing typed; item 52, whose ask says the PR ends the work, is let stop: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <SHARD>/target; run cargo build -p deep-hook first",
+        "INCONCLUSIVE tests/acceptance/2078/reuse.test.ts › Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's › Scope #2078 HEAD: the worktree committed as it stands by a process no hook saw, then a Read and a stop: the tree is the first snapshot's and HEAD is not, so the second claim covers the new HEAD, not the first claim's snapshot: INCONCLUSIVE deep-hook couldn't hand PreToolUse to the hub within its budget (deep-hook: spooled 01M7DXC3ZMMW44J3QMX5NW50NQ, but its sync didn't finish within the hook's 50 ms), 1-minute load 370.5 on 18 cores"
+      ],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts each queued check once, however many turns end while a checkout is made"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts the newest claim's check when an older claim of the same stop reaches the gate after it (#580)"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "a fix check on a base with nothing to start › runs on the base with its command's stand-in, and records the stand-in's hash"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again outdates nothing"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › a run no newer claim changed the inputs of ends with no run.stale"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts is in children.ts's table at exit › the first fork: the two `git` children open-items.ts starts at a claim are each in the table at exit"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-recovery.test.ts",
+          "name": "an approved budget cut before its spend event does not prevent startup after its end"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-answer-origin.test.ts",
+          "name": "typing accept without choosing an option does not settle a stalled task after restart"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts is in children.ts's table at exit › the second fork: the `git log` scope.ts starts to read the accepted changes is in the table at exit"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-answer-origin.test.ts",
+          "name": "typing split without choosing an option does not settle a stalled task after restart"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/sync-children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts synchronously is in children.ts's table at exit › execFileSync in the hub: each `git rev-parse` box.ts starts is in the table as it ends"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun, not the run under load"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/sync-children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts synchronously is in children.ts's table at exit › execFileSync through another package: each `git` packages/gate's headTrust starts is in the table as it ends"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/sync-children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts synchronously is in children.ts's table at exit › spawnSync in the hub: the launcher service.ts starts is in the table as it ends, whatever its status"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/switch-asks.test.ts",
+          "name": "two first Closes checks in linked worktrees raise only one switch ask"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts is in children.ts's table at exit › a child started through another package: each `git` packages/gate runs to measure an accepted change is in the table at exit"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run under load doesn't decide it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/gate/test/snapshot-reuse.test.ts",
+          "name": "an unchanged tree and HEAD reuse the snapshot without rewriting its objects or retention ref"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/twins.test.ts",
+          "name": "#2067.51b5aef6 local-main twin: one preflight per head, merged tree and reused result on another claim"
+        },
+        {
+          "type": "fail",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a trunk: preflight fails on the recorded mainline merge and Closes is refused",
+          "error": {
+            "name": "AssertionError",
+            "message": "Closes must remain refused after a non-PASS release claim: expected true to be false // Object.is equality",
+            "stack": "AssertionError: Closes must remain refused after a non-PASS release claim: expected true to be false // Object.is equality\n    at held (tests/acceptance/2067/fixture.ts:136:99)\n    at tests/acceptance/2067/release.test.ts:27:5\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file://node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"
+          }
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-redraft-ac1/trunk.test.ts",
+          "name": "AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/twins.test.ts",
+          "name": "scope twin: a genuine merge conflict still FAILs preflight and holds Closes"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a develop: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a remote-main: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.97392e0a remote-master: preflight fails on the recorded mainline merge and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.47a66ecb no mainline: preflight is BLOCKED with cause and owner, and Closes is refused"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "scope: unreadable mainline is BLOCKED, not absent or a merge conflict"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/sync-children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts synchronously is in children.ts's table at exit › for 1000 seeded runs of the core's synchronous calls, every child started is in the table as it ends (generator: calls, seed 1906)"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/release.test.ts",
+          "name": "#2067.fa764398 undefined preflight stays on the claim as BLOCKED and holds Closes"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/1906/exit/children-at-exit.test.ts",
+          "name": "#1906 AC3 every child the core thread starts is in children.ts's table at exit › for 1000 seeded runs of the core's calls, every child started is in the table at its exit (generator: calls, seed 1906)"
+        },
+        {
+          "type": "pass",
+          "file": "<SHARD>/tests/acceptance/2078/reuse.test.ts",
+          "name": "AC1 #2078.f33c092f after a claim whose checks passed, a tracked file is changed by a process no hook saw and the session stops again with only reads in its turn: the new claim's snapshot holds the changed file and its checks run on it › AC1 #2078.f33c092f src/cart.ts rewritten by a process no hook saw, then a Read and a stop: the second claim's snapshot holds the rewritten src/cart.ts, its check runs on that snapshot and fails there, and the claim is FAIL, never the first claim's PASS"
+        },
+        {
+          "type": "pass",
+          "file": "<SHARD>/tests/acceptance/2078/reuse.test.ts",
+          "name": "AC2 #2078.f4160036 the twin: with nothing changed, the second claim takes the first one's snapshot, writes nothing to the object store and starts no run › AC2 #2078.f4160036 nothing changed, then a Read and a stop: the second claim covers the first claim's snapshot, no object is written to the store and no run starts"
+        },
+        {
+          "type": "skip",
+          "file": "<SHARD>/tests/acceptance/2078/reuse.test.ts",
+          "name": "Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's › Scope #2078 HEAD: the worktree committed as it stands by a process no hook saw, then a Read and a stop: the tree is the first snapshot's and HEAD is not, so the second claim covers the new HEAD, not the first claim's snapshot",
+          "note": "INCONCLUSIVE deep-hook couldn't hand PreToolUse to the hub within its budget (deep-hook: spooled 01M7DXC3ZMMW44J3QMX5NW50NQ, but its sync didn't finish within the hook's 50 ms), 1-minute load 370.5 on 18 cores"
+        },
+        {
+          "type": "pass",
+          "file": "<SHARD>/tests/acceptance/2078/reuse.test.ts",
+          "name": "Scope #2078 a claim reuses the last snapshot only when the worktree's tree and HEAD, read at the claim inside the snapshot's budget, equal that snapshot's › Scope #2078 budget: an untracked file no snapshot takes inside its budget is left by a process no hook saw, then a Read and a stop: the tree can't be read inside the budget, so the second claim is INCONCLUSIVE naming \"snapshot over budget\", none of its checks runs, and it never carries the first claim's PASS"
+        },
+        {
+          "type": "fail",
+          "file": "<SHARD>/tests/acceptance/82/pr.test.ts",
+          "name": "AC5 #82.fbbdd208 the stop that opens the PR you asked for is never sent back › AC5 #82.fbbdd208 item 51: R2 failing, the stop after gh pr create isn't sent back, its chat line carries https://github.com/acme/shop/pull/12, and the PR body lists R2 under \"Part of\"",
+          "error": {
+            "name": "Error",
+            "message": "BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <SHARD>/target; run cargo build -p deep-hook first\n    at deepHook (file://<SHARD>/packages/hub/dist/paths.js:227:15)\n    at Object.guard (file://<SHARD>/packages/hub/dist/core.js:377:75)\n    at Products.secure (file://<SHARD>/packages/hub/dist/products.js:203:36)\n    at Products.open (file://<SHARD>/packages/hub/dist/products.js:191:24)\n    at Core.openExecution (file://<SHARD>/packages/hub/dist/core.js:824:29)\n    at async Core.init (file://<SHARD>/packages/hub/dist/core.js:570:9)\n",
+            "stack": "Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <SHARD>/target; run cargo build -p deep-hook first\n    at deepHook (file://<SHARD>/packages/hub/dist/paths.js:227:15)\n    at Object.guard (file://<SHARD>/packages/hub/dist/core.js:377:75)\n    at Products.secure (file://<SHARD>/packages/hub/dist/products.js:203:36)\n    at Products.open (file://<SHARD>/packages/hub/dist/products.js:191:24)\n    at Core.openExecution (file://<SHARD>/packages/hub/dist/core.js:824:29)\n    at async Core.init (file://<SHARD>/packages/hub/dist/core.js:570:9)\n\n    at startHub (<SHARD>/tests/acceptance/82/helpers.ts:345:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at <SHARD>/tests/acceptance/82/pr.test.ts:54:9\n    at <SHARD>/tests/acceptance/82/pr.test.ts:62:5\n    at verdict (<SHARD>/tests/acceptance/82/helpers.ts:75:5)\n    at async file://<SHARD>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"
+          }
+        },
+        {
+          "type": "fail",
+          "file": "<SHARD>/tests/acceptance/82/pr.test.ts",
+          "name": "AC6 #82.7f8929f5 after the PR you asked for opens with requirements unmet, the session keeps working on them without you typing › AC6 #82.7f8929f5 item 51: the session is kept going on R2 in the same PR with nothing typed; item 52, whose ask says the PR ends the work, is let stop",
+          "error": {
+            "name": "Error",
+            "message": "BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <SHARD>/target; run cargo build -p deep-hook first\n    at deepHook (file://<SHARD>/packages/hub/dist/paths.js:227:15)\n    at Object.guard (file://<SHARD>/packages/hub/dist/core.js:377:75)\n    at Products.secure (file://<SHARD>/packages/hub/dist/products.js:203:36)\n    at Products.open (file://<SHARD>/packages/hub/dist/products.js:191:24)\n    at Core.openExecution (file://<SHARD>/packages/hub/dist/core.js:824:29)\n    at async Core.init (file://<SHARD>/packages/hub/dist/core.js:570:9)\n",
+            "stack": "Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <SHARD>/target; run cargo build -p deep-hook first\n    at deepHook (file://<SHARD>/packages/hub/dist/paths.js:227:15)\n    at Object.guard (file://<SHARD>/packages/hub/dist/core.js:377:75)\n    at Products.secure (file://<SHARD>/packages/hub/dist/products.js:203:36)\n    at Products.open (file://<SHARD>/packages/hub/dist/products.js:191:24)\n    at Core.openExecution (file://<SHARD>/packages/hub/dist/core.js:824:29)\n    at async Core.init (file://<SHARD>/packages/hub/dist/core.js:570:9)\n\n    at startHub (<SHARD>/tests/acceptance/82/helpers.ts:345:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at <SHARD>/tests/acceptance/82/pr.test.ts:54:9\n    at <SHARD>/tests/acceptance/82/pr.test.ts:62:5\n    at verdict (<SHARD>/tests/acceptance/82/helpers.ts:75:5)\n    at async file://<SHARD>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "closing-regressions",
+      "command": "DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/2067/twins.test.ts tests/acceptance/2067-redraft-ac1/trunk.test.ts tests/acceptance/82/pr.test.ts packages/hub/test/gate-runner.test.ts packages/hub/test/gate-queue.test.ts packages/hub/test/pr-commands.test.ts packages/hub/test/pr-context.test.ts packages/hub/test/pr-after-lookup-error.test.ts packages/hub/test/pr-fill-overrides.test.ts packages/hub/test/pr-wrappers.test.ts",
+      "aggregate": "FAIL affected: 82 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 23 passed, in 1038 s at load 176",
+      "notices": [],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-wrappers.test.ts",
+          "name": "recognizes a PR in shell groups and conditional/loop bodies"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-wrappers.test.ts",
+          "name": "reads literal wrappers without executing them"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "literal bodies survive shell quoting; separators in them never invent another PR"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "every PR in a list is read, not the surrounding text or a body word that looks like a flag"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "heredocs stay data, including when another command follows their terminator"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "unreadable input fails closed rather than treating substitutions, pipes or uncertain directories as an empty body"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "reads a file afresh but refuses when an earlier command could change it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts each queued check once, however many turns end while a checkout is made"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-context.test.ts",
+          "name": "matches the qualified issue to the PR working directory after cd"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts the newest claim's check when an older claim of the same stop reaches the gate after it (#580)"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "a fix check on a base with nothing to start › runs on the base with its command's stand-in, and records the stand-in's hash"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again outdates nothing"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-fill-overrides.test.ts",
+          "name": "still judges the filled closing subject with an explicit body or body file unless the title is also replaced"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "fill uses only gh-selected text: a single message, multiple subjects, explicit overrides and the selected base"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › a run no newer claim changed the inputs of ends with no run.stale"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-after-lookup-error.test.ts",
+          "name": "keeps the completed joined call when lookup of the current branch throws"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun, not the run under load"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run under load doesn't decide it"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/twins.test.ts",
+          "name": "#2067.51b5aef6 local-main twin: one preflight per head, merged tree and reused result on another claim"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067-redraft-ac1/trunk.test.ts",
+          "name": "AC1 #2067.97392e0a trunk PR fails on preflight at the merge and Closes is refused naming preflight"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/2067/twins.test.ts",
+          "name": "scope twin: a genuine merge conflict still FAILs preflight and holds Closes"
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/82/pr.test.ts",
+          "name": "AC5 #82.fbbdd208 the stop that opens the PR you asked for is never sent back › AC5 #82.fbbdd208 item 51: R2 failing, the stop after gh pr create isn't sent back, its chat line carries https://github.com/acme/shop/pull/12, and the PR body lists R2 under \"Part of\""
+        },
+        {
+          "type": "pass",
+          "file": "tests/acceptance/82/pr.test.ts",
+          "name": "AC6 #82.7f8929f5 after the PR you asked for opens with requirements unmet, the session keeps working on them without you typing › AC6 #82.7f8929f5 item 51: the session is kept going on R2 in the same PR with nothing typed; item 52, whose ask says the PR ends the work, is let stop"
+        }
+      ]
+    },
+    {
+      "name": "final-main-affected",
+      "command": "node scripts/affected.mjs packages/hub/test/gate-runner.test.ts packages/hub/test/gate-queue.test.ts packages/hub/test/pr-commands.test.ts",
+      "aggregate": "FAIL affected: 154 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 13 passed, in 27 s at load 162",
+      "notices": [],
+      "tests": [
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts each queued check once, however many turns end while a checkout is made"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "the slow lane › starts the newest claim's check when an older claim of the same stop reaches the gate after it (#580)"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-queue.test.ts",
+          "name": "a fix check on a base with nothing to start › runs on the base with its command's stand-in, and records the stand-in's hash"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "literal bodies survive shell quoting; separators in them never invent another PR"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "every PR in a list is read, not the surrounding text or a body word that looks like a flag"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "heredocs stay data, including when another command follows their terminator"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "unreadable input fails closed rather than treating substitutions, pipes or uncertain directories as an empty body"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "reads a file afresh but refuses when an earlier command could change it"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again outdates nothing"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/pr-commands.test.ts",
+          "name": "fill uses only gh-selected text: a single message, multiple subjects, explicit overrides and the selected base"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a slow run outdated by a newer claim › a run no newer claim changed the inputs of ends with no run.stale"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun, not the run under load"
+        },
+        {
+          "type": "pass",
+          "file": "packages/hub/test/gate-runner.test.ts",
+          "name": "a check pinned to a commit of its own (#325) › a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run under load doesn't decide it"
+        }
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "kind": "2067 evidence",
+      "mode": "trunk",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0MRA82SK1KXKJC099D5XT",
+      "head": "c1e6ff8020f0ee1ed0c2daef7acde231dd4fbca7",
+      "main": "f31340903e0fd630ef5d081f50249b4565b38c38",
+      "verdict": "FAIL",
+      "reasons": [
+        "preflight: failed on every real run: a strict code base never allows legacy tokens",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0ME0NK9PKFQ3PGM6KR9DN from claim:01M7E0MDHMW3H2R8HEN14JX59A in session:317589cfc5a444bb927682736cacd268",
+        "unit carried run:01M7E0MDZDX6QRW24CPT5B2RQY from claim:01M7E0MDHMW3H2R8HEN14JX59A in session:317589cfc5a444bb927682736cacd268",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0MQKRHWEAZH9N28C32F8G from claim:01M7E0MDHMW3H2R8HEN14JX59A in session:317589cfc5a444bb927682736cacd268"
+      ],
+      "checks": [
+        {
+          "check": "review",
+          "outcome": "passed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "failed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "ec1d501a3058a2c4a51cb90402ae8798b2b7e3cd",
+          "outcome": "failed"
+        },
+        {
+          "commit": "564c7e8d753ffe82ac17fd3de4074aad1d5a15c8",
+          "outcome": "passed"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067 until the repo's release check passes on its commit merged with main (ec1d501a3058): preflight failed there. Say Part of #2067 instead; the PR's claim runs it there in the slow lane."
+      }
+    },
+    {
+      "kind": "2067 merge evidence",
+      "mode": "trunk",
+      "expectedTree": "d64e57c878f8c6ca86b160a7d965ac514b6bf7dd",
+      "parents": [
+        "c1e6ff8020f0ee1ed0c2daef7acde231dd4fbca7",
+        "f31340903e0fd630ef5d081f50249b4565b38c38"
+      ],
+      "mergedRuns": [
+        "ec1d501a3058a2c4a51cb90402ae8798b2b7e3cd"
+      ]
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "develop",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0N7EC192PSFC2545KQCTE",
+      "head": "d0973f7a0000ec8d3c524474065073740748a6a1",
+      "main": "ae981402760b13f2b64f88b4beffc0a4c20ae68c",
+      "verdict": "FAIL",
+      "reasons": [
+        "preflight: failed on every real run: a strict code base never allows legacy tokens",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0MX98YXT4RPMC88JTKV5R from claim:01M7E0MWM84C5TXYDPG2DTK2C1 in session:55789e12f79949368422ed24b8a68de0",
+        "unit carried run:01M7E0MX7R70MFSMSYEJF92RK7 from claim:01M7E0MWM84C5TXYDPG2DTK2C1 in session:55789e12f79949368422ed24b8a68de0",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0N6D5JPB19ENZYE6CV9GR from claim:01M7E0MWM84C5TXYDPG2DTK2C1 in session:55789e12f79949368422ed24b8a68de0"
+      ],
+      "checks": [
+        {
+          "check": "review",
+          "outcome": "passed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "failed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "fd291b1517678fbac958d1a11b91762d69c96dab",
+          "outcome": "failed"
+        },
+        {
+          "commit": "eac493d526ce8d6f24a6a41534c082d4baffd2c0",
+          "outcome": "passed"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067 until the repo's release check passes on its commit merged with main (fd291b151767): preflight failed there. Say Part of #2067 instead; the PR's claim runs it there in the slow lane."
+      }
+    },
+    {
+      "kind": "2067 merge evidence",
+      "mode": "develop",
+      "expectedTree": "d64e57c878f8c6ca86b160a7d965ac514b6bf7dd",
+      "parents": [
+        "d0973f7a0000ec8d3c524474065073740748a6a1",
+        "ae981402760b13f2b64f88b4beffc0a4c20ae68c"
+      ],
+      "mergedRuns": [
+        "fd291b1517678fbac958d1a11b91762d69c96dab"
+      ]
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "remote-main",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0NQV99YA00P4ASB5Q6XQH",
+      "head": "2b590c029e02535d87187f5d85748baf33712cb2",
+      "main": "6304c3c06d1a42eb2e2dc7cf5dfb7a5a5d045ca6",
+      "verdict": "FAIL",
+      "reasons": [
+        "preflight: failed on every real run: a strict code base never allows legacy tokens",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0NCQRFPTS10KZAZMNPX47 from claim:01M7E0NC7FY5DPDQ7V7ATQ6X6V in session:473c10f9b7d14218bf33c24d403cb0eb",
+        "unit carried run:01M7E0NCP81D33XNYM7NZSSH27 from claim:01M7E0NC7FY5DPDQ7V7ATQ6X6V in session:473c10f9b7d14218bf33c24d403cb0eb",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0NPJV57BG2ZDSJP7W3SE2 from claim:01M7E0NC7FY5DPDQ7V7ATQ6X6V in session:473c10f9b7d14218bf33c24d403cb0eb"
+      ],
+      "checks": [
+        {
+          "check": "review",
+          "outcome": "passed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "failed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "d1f0b4d0834dd8ee1709497aaf7615915bf849a9",
+          "outcome": "failed"
+        },
+        {
+          "commit": "4e04a8149acd06d95d1ec4b814c8b74cdc74258f",
+          "outcome": "passed"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067 until the repo's release check passes on its commit merged with main (d1f0b4d0834d): preflight failed there. Say Part of #2067 instead; the PR's claim runs it there in the slow lane."
+      }
+    },
+    {
+      "kind": "2067 merge evidence",
+      "mode": "remote-main",
+      "expectedTree": "d64e57c878f8c6ca86b160a7d965ac514b6bf7dd",
+      "parents": [
+        "2b590c029e02535d87187f5d85748baf33712cb2",
+        "6304c3c06d1a42eb2e2dc7cf5dfb7a5a5d045ca6"
+      ],
+      "mergedRuns": [
+        "d1f0b4d0834dd8ee1709497aaf7615915bf849a9"
+      ]
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "remote-master",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0P7M1028CERA2M3S6K2K8",
+      "head": "9b8d286b6295deefec57f36636100345b675e6f1",
+      "main": "5a921b91712c1b82aee4cddcd7435aaf270e6dc3",
+      "verdict": "FAIL",
+      "reasons": [
+        "preflight: failed on every real run: a strict code base never allows legacy tokens",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0NXCB079FWP7J6MS4CBQG from claim:01M7E0NWV1WK8XZ6FWNS74ZXQQ in session:e46588f9b5e743f69b0846a0e5312f9b",
+        "unit carried run:01M7E0NX9VM6E4976218Y02M8X from claim:01M7E0NWV1WK8XZ6FWNS74ZXQQ in session:e46588f9b5e743f69b0846a0e5312f9b",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0P6WR48JWDVRT0HB1G6KG from claim:01M7E0NWV1WK8XZ6FWNS74ZXQQ in session:e46588f9b5e743f69b0846a0e5312f9b"
+      ],
+      "checks": [
+        {
+          "check": "review",
+          "outcome": "passed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "failed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "0e43f18b39be8ce7be1336497fff4522738de6b9",
+          "outcome": "failed"
+        },
+        {
+          "commit": "918c138efa687082a53ac912700191c4f6ce0a56",
+          "outcome": "passed"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067 until the repo's release check passes on its commit merged with main (0e43f18b39be): preflight failed there. Say Part of #2067 instead; the PR's claim runs it there in the slow lane."
+      }
+    },
+    {
+      "kind": "2067 merge evidence",
+      "mode": "remote-master",
+      "expectedTree": "d64e57c878f8c6ca86b160a7d965ac514b6bf7dd",
+      "parents": [
+        "9b8d286b6295deefec57f36636100345b675e6f1",
+        "5a921b91712c1b82aee4cddcd7435aaf270e6dc3"
+      ],
+      "mergedRuns": [
+        "0e43f18b39be8ce7be1336497fff4522738de6b9"
+      ]
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "missing",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0PR9HRKV3PENNAC2CXG8Z",
+      "head": "013f1a3ea46de2033faceb5e0b2ab5a92dc20404",
+      "main": "af72bf30a7dda0bfd2de430dbe435a6bf624399f",
+      "verdict": "BLOCKED",
+      "reasons": [
+        "preflight: missing no main line found: no local main or master, or last-fetched origin HEAD, main or master, owner you",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0PDYCZHTCHY0CZQX2P8WK from claim:01M7E0PD7N3QSCZ40HC9TT1XMF in session:5e41250ab047413b8ae31ae3fb2ca675",
+        "unit carried run:01M7E0PDWJHF8ECZVBWR0F2CBX from claim:01M7E0PD7N3QSCZ40HC9TT1XMF in session:5e41250ab047413b8ae31ae3fb2ca675",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0PQH0WJ1X02H1NT4V60ST from claim:01M7E0PD7N3QSCZ40HC9TT1XMF in session:5e41250ab047413b8ae31ae3fb2ca675"
+      ],
+      "checks": [
+        {
+          "check": "preflight",
+          "outcome": "missing"
+        },
+        {
+          "check": "review",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "013f1a3ea46de2033faceb5e0b2ab5a92dc20404",
+          "outcome": "missing"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067: its release checks (preflight) are BLOCKED, owner you: no main line found: no local main or master, or last-fetched origin HEAD, main or master. Say Part of #2067 instead."
+      }
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "unreadable",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0Q651984EGD3FMJZ7C4HY",
+      "head": "845826dc8f1300b3c8ca56a712ead1f7fb53dcdd",
+      "main": "8b5b8da83a2fb4c7493dd5375d36bcc06c0fa8a3",
+      "verdict": "BLOCKED",
+      "reasons": [
+        "preflight: missing the main line couldn't be read (refs/heads/main), owner you",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0PVQG1SEW9HT3EK59YWBB from claim:01M7E0PV5KTGFEYYTZAP6P8Z8A in session:07643da64a0d4b938020de3d0b7110ad",
+        "unit carried run:01M7E0PVNEC76TW9KEK31GWS6D from claim:01M7E0PV5KTGFEYYTZAP6P8Z8A in session:07643da64a0d4b938020de3d0b7110ad",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0Q5ACDCSS0JF2Y4HHKA2H from claim:01M7E0PV5KTGFEYYTZAP6P8Z8A in session:07643da64a0d4b938020de3d0b7110ad"
+      ],
+      "checks": [
+        {
+          "check": "preflight",
+          "outcome": "missing"
+        },
+        {
+          "check": "review",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "845826dc8f1300b3c8ca56a712ead1f7fb53dcdd",
+          "outcome": "missing"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067: its release checks (preflight) are BLOCKED, owner you: the main line couldn't be read (refs/heads/main). Say Part of #2067 instead."
+      }
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "local-main",
+      "undefinedCheck": true,
+      "conflict": false,
+      "claim": "01M7E0QJFWTE6BE30WNEEWS150",
+      "head": "0bbb51ceab7f1ce89ffd839f05c50947cdbf6658",
+      "main": "fea68c51786f311d994d74de01dd044a29c2a184",
+      "verdict": "BLOCKED",
+      "reasons": [
+        "preflight: missing release check preflight isn't defined in checks, owner you",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0Q8R38AGXTR653VXZ0GZJ from claim:01M7E0Q8AFXTA4BBFRHH65S1MA in session:b7916f811c90452ab66c06970218c43b",
+        "unit carried run:01M7E0Q8PMYMX2P0SBF1H3EN89 from claim:01M7E0Q8AFXTA4BBFRHH65S1MA in session:b7916f811c90452ab66c06970218c43b",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0QJ004Z8RCXT8WQAP7H9Y from claim:01M7E0Q8AFXTA4BBFRHH65S1MA in session:b7916f811c90452ab66c06970218c43b"
+      ],
+      "checks": [
+        {
+          "check": "preflight",
+          "outcome": "missing"
+        },
+        {
+          "check": "review",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "534debdbe8adb43edf727669fdb7b441ba812d5a",
+          "outcome": "missing"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067: its release checks (preflight) are BLOCKED, owner you: release check preflight isn't defined in checks. Say Part of #2067 instead."
+      }
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "local-main",
+      "undefinedCheck": false,
+      "conflict": false,
+      "claim": "01M7E0BR8VED7PE7ZBS0SFZH5J",
+      "head": "50501df19c349fbe21279aad5799ad2f23417d00",
+      "main": "9176ea3b0c835469d7ffe1aa3418655ff58acd2f",
+      "verdict": "PASS",
+      "reasons": [
+        ".deepbuild/checks/expired-token.sh: PASS on 1 clean run",
+        "unit: PASS on 1 clean run",
+        "review: PASS on 1 clean run",
+        "preflight: PASS on 1 clean run",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0BDWT7R4XJGT1QY3S1SS4 from claim:01M7E0BDDP5ETYC39M5QN4W8KK in session:e17249512f7e4952a227980f59aa1508",
+        "unit carried run:01M7E0BDVKDKY3N13Z9PP84DBT from claim:01M7E0BDDP5ETYC39M5QN4W8KK in session:e17249512f7e4952a227980f59aa1508",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0BQJCXBBBFAD5ZHFKV2EP from claim:01M7E0BDDP5ETYC39M5QN4W8KK in session:e17249512f7e4952a227980f59aa1508"
+      ],
+      "checks": [
+        {
+          "check": "review",
+          "outcome": "passed"
+        },
+        {
+          "check": "preflight",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "c96804561f7a6b2997f7d993d1de55c4fb4941a6",
+          "outcome": "passed"
+        }
+      ],
+      "closesAfter": {
+        "allowed": true,
+        "reason": ""
+      }
+    },
+    {
+      "kind": "2067 twin",
+      "verdict": "PASS",
+      "releaseRuns": 1,
+      "merged": "c96804561f7a6b2997f7d993d1de55c4fb4941a6"
+    },
+    {
+      "kind": "2067 scope inherited second",
+      "verdict": "BLOCKED",
+      "reasons": [
+        "preflight: inherited: also fails on the merge base: release is ready",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0BDTGY6SR06BD5TMKZ3FD from claim:01M7E0BD9DV05MJ18NYW95478W in session:10cf7b05cf8246098dcb6f107aa04f88",
+        "unit carried run:01M7E0BDRXVME4VYRYAQS7ESAX from claim:01M7E0BD9DV05MJ18NYW95478W in session:10cf7b05cf8246098dcb6f107aa04f88",
+        "review carried run:01M7E0BRPX6HPSK1XQE62972N6 from claim:01M7E0BR8FZR726CNKE2QE7D4V in session:10cf7b05cf8246098dcb6f107aa04f88",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0BQHJ0JMK3Q91RDFZQ2DJ from claim:01M7E0BD9DV05MJ18NYW95478W in session:10cf7b05cf8246098dcb6f107aa04f88",
+        "preflight carried its base run run:01M7E0BSMXWK2H99DXBS6MW2Z0 from claim:01M7E0BR8FZR726CNKE2QE7D4V in session:10cf7b05cf8246098dcb6f107aa04f88"
+      ],
+      "releaseRuns": 2
+    },
+    {
+      "kind": "2067 cross-session second",
+      "outcome": "BLOCKED",
+      "reasons": [
+        "preflight: inherited: also fails on the merge base: release is ready",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0BDTH9F0KWHK2QT9WSVG2 from claim:01M7E0BD9VKE9TSG331D15X3EP in session:b1dea71f0e72488280365185f96e3ce9",
+        "review carried run:01M7E0BSC3B8XQAFDM02166GNX from claim:01M7E0BRYBXN45Q377TH2EV8BB in session:b1dea71f0e72488280365185f96e3ce9",
+        "unit carried run:01M7E0BDRYSARWYB37FC1XD2E4 from claim:01M7E0BD9VKE9TSG331D15X3EP in session:b1dea71f0e72488280365185f96e3ce9",
+        "preflight carried its base run run:01M7E0BTCWHC77Z281JQJRDKGG from claim:01M7E0BRYBXN45Q377TH2EV8BB in session:b1dea71f0e72488280365185f96e3ce9",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0BQ6ZK8SQ58TP65YQE3Q3 from claim:01M7E0BD9VKE9TSG331D15X3EP in session:b1dea71f0e72488280365185f96e3ce9"
+      ],
+      "releaseRuns": [
+        {
+          "run": "run:01M7E0BSQ18MHN9DFNFS9D3CTZ",
+          "commit": "10f0c72094cc770e91557a32f4d2e83eb3111b6e",
+          "outcome": "failed"
+        },
+        {
+          "run": "run:01M7E0BTCWHC77Z281JQJRDKGG",
+          "commit": "480e75807d102f8ae2129add2f61997c6f54c2b8",
+          "outcome": "failed"
+        }
+      ]
+    },
+    {
+      "kind": "2067 evidence",
+      "mode": "local-main",
+      "undefinedCheck": false,
+      "conflict": true,
+      "claim": "01M7E0C68AMR7C1HSWR83B8DEA",
+      "head": "a9a837053b442a00a15b0454b8f9a4ae66d7de24",
+      "main": "60bde1e12d8e8c2c92b818be8a28865bd1c1bb19",
+      "verdict": "FAIL",
+      "reasons": [
+        "preflight: failed on every real run: preflight: a9a837053b44 doesn't merge with main 60bde1e12d8e without conflicts",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0BWEVXY4G8Y6773166QSQ from claim:01M7E0BVY4YM6RB2CRZ35CPCM7 in session:f07bd4fcb4c94644beb314740d9ffc52",
+        "unit carried run:01M7E0BWDGZ25Q8Q712N3XYE4D from claim:01M7E0BVY4YM6RB2CRZ35CPCM7 in session:f07bd4fcb4c94644beb314740d9ffc52",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0C5Q9FTG2GGW4DX118KWB from claim:01M7E0BVY4YM6RB2CRZ35CPCM7 in session:f07bd4fcb4c94644beb314740d9ffc52"
+      ],
+      "checks": [
+        {
+          "check": "preflight",
+          "outcome": "failed"
+        },
+        {
+          "check": "review",
+          "outcome": "passed"
+        }
+      ],
+      "releaseRuns": [
+        {
+          "commit": "a9a837053b442a00a15b0454b8f9a4ae66d7de24",
+          "outcome": "failed"
+        }
+      ],
+      "closesAfter": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067: a9a837053b44 doesn't merge with main 60bde1e12d8e without conflicts, so its release checks (preflight) can't pass on its merge with main. Say Part of #2067 instead."
+      }
+    },
+    {
+      "kind": "2067 scope review",
+      "verdict": "BLOCKED",
+      "reasons": [
+        "review: missing release check review isn't defined in checks, owner you",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0QYA3ZB10YNMMQGPR6TSW from claim:01M7E0QXSN0A5DJ28TG6WD4CEP in session:bfbc6f36f0034a2798a1ff52e2ed33b2",
+        "unit carried run:01M7E0QY7PF8EWQEKFZPBEJ09A from claim:01M7E0QXSN0A5DJ28TG6WD4CEP in session:bfbc6f36f0034a2798a1ff52e2ed33b2",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0R7X3JSYGNFEEHWX92WR2 from claim:01M7E0QXSN0A5DJ28TG6WD4CEP in session:bfbc6f36f0034a2798a1ff52e2ed33b2"
+      ],
+      "checks": [
+        {
+          "check": "review",
+          "outcome": "missing"
+        },
+        {
+          "check": "PR review",
+          "outcome": "passed"
+        }
+      ],
+      "closes": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067: its release checks (review) are BLOCKED, owner you: release check review isn't defined in checks. Say Part of #2067 instead."
+      }
+    },
+    {
+      "kind": "2067 scope promisor",
+      "localMainResolved": true,
+      "control": [
+        "merge-tree",
+        "fetch"
+      ],
+      "observed": [
+        "merge-tree",
+        "merge-tree"
+      ],
+      "verdict": "BLOCKED",
+      "reasons": [
+        "preflight: missing the main line couldn't be read to make the merge, owner you",
+        ".deepbuild/checks/expired-token.sh carried run:01M7E0QYERZ3JAGZ44GKZNTKVW from claim:01M7E0QXWGX4HG72MR9RWCEC82 in session:7179a7030bb9411da1aef7a93964f778",
+        "unit carried run:01M7E0QYD6XKMVNWFMF4NHCH87 from claim:01M7E0QXWGX4HG72MR9RWCEC82 in session:7179a7030bb9411da1aef7a93964f778",
+        ".deepbuild/checks/expired-token.sh carried its base run run:01M7E0R7WJY0SV0F3FFSQPKXV7 from claim:01M7E0QXWGX4HG72MR9RWCEC82 in session:7179a7030bb9411da1aef7a93964f778"
+      ],
+      "checks": [
+        {
+          "check": "preflight",
+          "outcome": "missing"
+        },
+        {
+          "check": "review",
+          "outcome": "passed"
+        }
+      ],
+      "closes": {
+        "allowed": false,
+        "reason": "DeepBuild blocked this: the pull request can't say Closes #2067: its release checks (preflight) are BLOCKED, owner you: the main line couldn't be read to make the merge. Say Part of #2067 instead."
+      }
+    }
+  ]
+}

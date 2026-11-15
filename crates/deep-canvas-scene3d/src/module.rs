@@ -340,6 +340,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
         }
+        if spec.kind == "mesh.sequence@1" {
+            r.kind(crate::spec::entry(&spec, "mesh", "sequence"), &[], "");
+        }
         // The local and area lights and the material (#421).
         for (kind, family, name) in [
             ("light.point@1", "light", "point"),

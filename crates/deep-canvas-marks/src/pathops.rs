@@ -1158,7 +1158,7 @@ fn run(op: &Op, piece: Piece) -> Vec<Piece> {
 
 /// The window `start..end` of the path's length, moved by `offset` degrees of a turn round it,
 /// on the whole path or on each sub-path.
-fn trim(subs: &[Sub], start: f64, end: f64, offset: f64, each: bool) -> Vec<Sub> {
+pub(crate) fn trim(subs: &[Sub], start: f64, end: f64, offset: f64, each: bool) -> Vec<Sub> {
     if start >= end {
         return Vec::new();
     }

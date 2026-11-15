@@ -847,6 +847,10 @@ impl Hub<'_> {
                     }
                 }
             }
+            // Planted (#1941): every stale patch a conflict, on all it touches.
+            if ids.is_empty() && self.scenario.planted == Some(Planted::StaleFixNeverRebases) {
+                ids = touches.clone();
+            }
             if !ids.is_empty() {
                 let by_path = self.scenario.planted == Some(Planted::RebaseByPath)
                     && written_paths(&patch).is_some_and(|written| {
@@ -1541,6 +1545,7 @@ impl Hub<'_> {
         if three && visible && show.include.iter().any(|i| matches!(i, Include::Pixels)) {
             let shown = self.shared[&show.doc].doc.clone();
             self.pending3d = Some(self.draw3d(&shown, show.t, show.size));
+            self.pending_light = self.light3d(&shown, show.t);
         }
         self.present(show, visible, drawn.as_ref(), reply)
     }

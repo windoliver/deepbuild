@@ -66,9 +66,9 @@ export const rulePieces = (head: string, rules: readonly (readonly [string, stri
   [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
 
 /** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
-export const ghToken = (): Promise<string | undefined> => {
+export const ghToken = (signal?: AbortSignal): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
-  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
+  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000, ...(signal ? { signal } : {}) }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
 
 export const SECRETS_TTL = 10_000;
