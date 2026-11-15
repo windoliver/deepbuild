@@ -124,12 +124,18 @@ describe('deep install', () => {
         await hub.restart(undefined, async () => {
           rmSync(checked, { force: true });
           const safe = spawn(process.execPath, [CLI, 'hub', 'run', '--safe'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'inherit'] });
+          // Each wait is bounded, so the finally always stops the hub this test started, by its handle.
+          const within = (ms: number, why: string, wait: (done: () => void, fail: (e: Error) => void) => void) => {
+            let timer: NodeJS.Timeout | undefined;
+            return new Promise<void>((resolve, reject) => { timer = setTimeout(() => reject(Error(why)), ms); wait(resolve, reject); }).finally(() => clearTimeout(timer));
+          };
+          const gone = () => safe.exitCode !== null || safe.signalCode !== null;
           try {
-            await new Promise((resolve, reject) => { safe.stdout.once('data', resolve); safe.once('exit', () => reject(Error('the --safe hub exited before it was ready'))); });
+            await within(30_000, "the --safe hub wasn't ready within 30 s", (done, fail) => { safe.stdout.once('data', done); safe.once('exit', () => fail(Error('the --safe hub exited before it was ready'))); });
             seen = [existsSync(checked), leaseHolders(root)];
           } finally {
             safe.kill('SIGTERM');
-            if (safe.exitCode === null && safe.signalCode === null) await new Promise((resolve) => safe.once('exit', resolve));
+            if (!gone()) await within(60_000, "the --safe hub didn't stop within 60 s of SIGTERM", (done) => safe.once('exit', done)).catch((e: unknown) => { safe.kill('SIGKILL'); throw e; });
           }
         });
         expect(seen, 'the --safe start ran no conformance and loaded nothing').toEqual([false, ['ext:acme/leaser']]);
