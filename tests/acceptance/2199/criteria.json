@@ -1,0 +1,22 @@
+[
+  {
+    "n": 1,
+    "id": "#2199.bff55edb",
+    "text": "**The IDs are shown.** Given an open taste ask with the options thin and thick, when `deep inbox` runs, then its output holds both IDs with the ask. Today it holds neither."
+  },
+  {
+    "n": 2,
+    "id": "#2199.3ebf26b3",
+    "text": "**What is shown answers.** Given that output, when `deep inbox answer` runs with the ask's handle and an ID it printed, then the ask is answered with that option."
+  },
+  {
+    "n": 3,
+    "id": "#2199.e1f74e0f",
+    "text": "**A label that differs from its ID doesn't stand in for it.** Given an option whose label is \"Plain files\" and whose ID is files, when `deep inbox` runs, then files is shown. A planted line that prints only labels fails, naming the ask."
+  },
+  {
+    "n": 4,
+    "id": "#2199.4b672bc1",
+    "text": "**#1463's line order holds:** the question before the handle, the handle last on its line."
+  }
+]

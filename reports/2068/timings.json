@@ -1,0 +1,222 @@
+{
+  "base-acceptance-ready": [
+    {
+      "mode": "five-seconds",
+      "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+      "date": "2026-11-14T09:30:29.778Z",
+      "node": "v24.22.2",
+      "platform": "darwin",
+      "arch": "arm64",
+      "configured_b_after_a_ms": 100,
+      "b_sent_ms": 102.63208299999951,
+      "a_record": {
+        "absent_ms": 26553.552458,
+        "present_ms": 26566.960082999998,
+        "log_pos": 13
+      },
+      "b_record": {
+        "absent_ms": 26701.555708,
+        "present_ms": 26716.289124999996,
+        "log_pos": 17
+      },
+      "b_minus_first_forge_answer_ms": 20511.678041999996,
+      "forge": [
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 1192.0102500000003,
+          "answered_ms": 6204.611083000001,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7/comments",
+          "page": 1,
+          "requested_ms": 6307.996375,
+          "answered_ms": 11313.202416,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets",
+          "page": 1,
+          "requested_ms": 11408.765124999998,
+          "answered_ms": 16410.535,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/collaborators",
+          "page": 1,
+          "requested_ms": 16425.542791,
+          "answered_ms": 21428.063666,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/collaborators",
+          "page": 2,
+          "requested_ms": 21440.221166,
+          "answered_ms": 26474.939333000002,
+          "disconnected": false
+        }
+      ],
+      "forge_requests": 5,
+      "omitted_requests": 0
+    },
+    {
+      "mode": "never",
+      "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+      "date": "2026-11-14T09:31:02.377Z",
+      "node": "v24.22.2",
+      "platform": "darwin",
+      "arch": "arm64",
+      "configured_b_after_a_ms": 100,
+      "b_sent_ms": 104.16345799999544,
+      "a_record": {
+        "absent_ms": 20352.847207999992,
+        "present_ms": 20366.666249999995,
+        "log_pos": 14
+      },
+      "b_record": null,
+      "b_minus_first_forge_answer_ms": null,
+      "forge": [
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 627.7282080000004,
+          "answered_ms": null,
+          "disconnected": null
+        }
+      ],
+      "acknowledged_hold_ms": 2095,
+      "prompt_at_deadline": false,
+      "task_at_deadline": false,
+      "b_at_deadline": false,
+      "forge_requests": 1,
+      "omitted_requests": 0
+    },
+    {
+      "mode": "pages-forever",
+      "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+      "date": "2026-11-14T09:31:12.240Z",
+      "node": "v24.22.2",
+      "platform": "darwin",
+      "arch": "arm64",
+      "configured_b_after_a_ms": 100,
+      "b_sent_ms": 113.64287499999045,
+      "a_record": null,
+      "b_record": null,
+      "b_minus_first_forge_answer_ms": null,
+      "forge": [
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 360.145875000002,
+          "answered_ms": 361.5926669999899,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7/comments",
+          "page": 1,
+          "requested_ms": 463.93299999999,
+          "answered_ms": 465.3666249999951,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7/comments",
+          "page": 2,
+          "requested_ms": 484.50320799999463,
+          "answered_ms": 491.5395419999986,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7/comments",
+          "page": 3,
+          "requested_ms": 723.8441669999884,
+          "answered_ms": 724.1399999999994,
+          "disconnected": false
+        },
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7/comments",
+          "page": 4,
+          "requested_ms": 733.1079170000012,
+          "answered_ms": 734.5529580000002,
+          "disconnected": false
+        }
+      ],
+      "acknowledged_hold_ms": 2003,
+      "prompt_at_deadline": false,
+      "task_at_deadline": false,
+      "b_at_deadline": false,
+      "forge_requests": 102,
+      "omitted_requests": 97
+    }
+  ],
+  "fix-acceptance": [
+    {
+      "mode": "five-seconds",
+      "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+      "date": "2026-11-14T09:39:45.535Z",
+      "node": "v24.22.2",
+      "platform": "darwin",
+      "arch": "arm64",
+      "configured_b_after_a_ms": 100,
+      "b_sent_ms": 106.75908400000117,
+      "a_record": {
+        "absent_ms": 1081.2285840000004,
+        "present_ms": 1092.690125000001,
+        "log_pos": 16
+      },
+      "b_record": {
+        "absent_ms": 513.6668750000008,
+        "present_ms": 529.5464170000014,
+        "log_pos": 13
+      },
+      "b_minus_first_forge_answer_ms": -4978.333917,
+      "forge": [
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 498.7826670000013,
+          "answered_ms": 5507.880334000001,
+          "disconnected": true
+        }
+      ],
+      "forge_requests": 1,
+      "omitted_requests": 0
+    },
+    {
+      "mode": "never",
+      "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+      "date": "2026-11-14T09:40:01.860Z",
+      "node": "v24.22.2",
+      "platform": "darwin",
+      "arch": "arm64",
+      "configured_b_after_a_ms": 100,
+      "b_sent_ms": 113.75966699999844,
+      "a_record": {
+        "absent_ms": 1034.481832999998,
+        "present_ms": 1044.5697919999948,
+        "log_pos": 16
+      },
+      "b_record": {
+        "absent_ms": 802.5284580000007,
+        "present_ms": 813.3317499999976,
+        "log_pos": 13
+      },
+      "b_minus_first_forge_answer_ms": null,
+      "forge": [
+        {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 785.6180830000012,
+          "answered_ms": null,
+          "disconnected": null
+        }
+      ],
+      "acknowledged_hold_ms": 2016,
+      "prompt_at_deadline": true,
+      "task_at_deadline": true,
+      "b_at_deadline": true,
+      "forge_requests": 1,
+      "omitted_requests": 0
+    }
+  ]
+}

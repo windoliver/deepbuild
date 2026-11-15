@@ -1,0 +1,212 @@
+{
+  "document": "flock (logic@1, writes cx: the 100 boids' centre x, in u) + marks@1 set \"dot\": one free row, x = flock.cx, y = 1.5 u, a red square with a black border, sampled smoothly; page 12 × 3 u at 64 px/u (768 × 192 px); requires names no module",
+  "expect": "the square's centre at x = cx × 64 px, y = 96 px; it moves right as t grows; the full and no-physics frames at the same t are the same picture; each is asserted by screens.test.ts, with cx checked against mirror_cx",
+  "mirror_cx": {
+    "0.5s": 4.534900279964878,
+    "2s": 4.9177689346043465,
+    "3.5s": 5.514714630759618
+  },
+  "frames": [
+    {
+      "build": "full",
+      "modules": [
+        "building",
+        "cells",
+        "data",
+        "effects",
+        "export",
+        "graph",
+        "input",
+        "logic",
+        "look",
+        "loop",
+        "marks2d",
+        "media",
+        "motion",
+        "net",
+        "physics",
+        "record",
+        "sandbox",
+        "scene3d",
+        "sheet",
+        "text",
+        "vector"
+      ],
+      "t_s": 0.5,
+      "file": "full-t0.5s.png",
+      "sha256": "971a7ad96db4a55c46cc81705844f043a5089d85e39a3a90a48a0ace3b53afab",
+      "cx": 4.534900279964878,
+      "square_centre_px": [
+        290,
+        96
+      ]
+    },
+    {
+      "build": "full",
+      "modules": [
+        "building",
+        "cells",
+        "data",
+        "effects",
+        "export",
+        "graph",
+        "input",
+        "logic",
+        "look",
+        "loop",
+        "marks2d",
+        "media",
+        "motion",
+        "net",
+        "physics",
+        "record",
+        "sandbox",
+        "scene3d",
+        "sheet",
+        "text",
+        "vector"
+      ],
+      "t_s": 2,
+      "file": "full-t2s.png",
+      "sha256": "67f237efb71350578cc543202b2db17bddc2ce37d7709cd30dbc3cda13b82457",
+      "cx": 4.9177689346043465,
+      "square_centre_px": [
+        315,
+        96
+      ]
+    },
+    {
+      "build": "full",
+      "modules": [
+        "building",
+        "cells",
+        "data",
+        "effects",
+        "export",
+        "graph",
+        "input",
+        "logic",
+        "look",
+        "loop",
+        "marks2d",
+        "media",
+        "motion",
+        "net",
+        "physics",
+        "record",
+        "sandbox",
+        "scene3d",
+        "sheet",
+        "text",
+        "vector"
+      ],
+      "t_s": 3.5,
+      "file": "full-t3.5s.png",
+      "sha256": "1971fdc73baca4c191553563134852befc81b5eb85b3437c82ac3ade99b510b1",
+      "cx": 5.514714630759618,
+      "square_centre_px": [
+        353,
+        96
+      ]
+    },
+    {
+      "build": "no-physics",
+      "modules": [
+        "building",
+        "cells",
+        "data",
+        "effects",
+        "export",
+        "graph",
+        "input",
+        "logic",
+        "look",
+        "loop",
+        "marks2d",
+        "media",
+        "motion",
+        "net",
+        "record",
+        "sandbox",
+        "scene3d",
+        "sheet",
+        "text",
+        "vector"
+      ],
+      "t_s": 0.5,
+      "file": "no-physics-t0.5s.png",
+      "sha256": "971a7ad96db4a55c46cc81705844f043a5089d85e39a3a90a48a0ace3b53afab",
+      "cx": 4.534900279964878,
+      "square_centre_px": [
+        290,
+        96
+      ]
+    },
+    {
+      "build": "no-physics",
+      "modules": [
+        "building",
+        "cells",
+        "data",
+        "effects",
+        "export",
+        "graph",
+        "input",
+        "logic",
+        "look",
+        "loop",
+        "marks2d",
+        "media",
+        "motion",
+        "net",
+        "record",
+        "sandbox",
+        "scene3d",
+        "sheet",
+        "text",
+        "vector"
+      ],
+      "t_s": 2,
+      "file": "no-physics-t2s.png",
+      "sha256": "67f237efb71350578cc543202b2db17bddc2ce37d7709cd30dbc3cda13b82457",
+      "cx": 4.9177689346043465,
+      "square_centre_px": [
+        315,
+        96
+      ]
+    },
+    {
+      "build": "no-physics",
+      "modules": [
+        "building",
+        "cells",
+        "data",
+        "effects",
+        "export",
+        "graph",
+        "input",
+        "logic",
+        "look",
+        "loop",
+        "marks2d",
+        "media",
+        "motion",
+        "net",
+        "record",
+        "sandbox",
+        "scene3d",
+        "sheet",
+        "text",
+        "vector"
+      ],
+      "t_s": 3.5,
+      "file": "no-physics-t3.5s.png",
+      "sha256": "1971fdc73baca4c191553563134852befc81b5eb85b3437c82ac3ade99b510b1",
+      "cx": 5.514714630759618,
+      "square_centre_px": [
+        353,
+        96
+      ]
+    }
+  ]
+}

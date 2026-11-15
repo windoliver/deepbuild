@@ -1,0 +1,1 @@
+{"ok":false,"code":"seal_refused","reason":"interface_digest","modules":["logic"],"operators":[],"arrays":[],"what":"`logic`'s shapes don't hash to `logic@1`'s digest: version differs from the reference `logic`","interface":"logic@1","implementations":["logic"]}

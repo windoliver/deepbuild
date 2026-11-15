@@ -1,0 +1,68 @@
+FAIL size: crates/deep-app/src/views.rs: 3924 lines, over its ceiling of 3606
+  Fix: Split or shrink the file to 3606 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-effects/src/check.rs: 2200 lines, over its ceiling of 2093
+  Fix: Split or shrink the file to 2093 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-effects/src/emit.rs: 1666 lines, over its ceiling of 1636
+  Fix: Split or shrink the file to 1636 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-effects/src/graph.rs: 1749 lines, over its ceiling of 1624
+  Fix: Split or shrink the file to 1624 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-effects/src/interp.rs: 1560 lines, over its ceiling of 1559
+  Fix: Split or shrink the file to 1559 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/animator.rs: 1821 lines, over its ceiling of 1797
+  Fix: Split or shrink the file to 1797 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/data.rs: 2566 lines, over its ceiling of 2562
+  Fix: Split or shrink the file to 2562 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/modules.rs: 2058 lines, over its ceiling of 2053
+  Fix: Split or shrink the file to 2053 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-marks/src/scene.rs: 6390 lines, over its ceiling of 6202
+  Fix: Split or shrink the file to 6202 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-motion/src/doc.rs: 3312 lines, over its ceiling of 3048
+  Fix: Split or shrink the file to 3048 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-motion/src/program.rs: 3444 lines, over its ceiling of 3130
+  Fix: Split or shrink the file to 3130 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-motion/src/shots.rs: 1824 lines, over its ceiling of 1675
+  Fix: Split or shrink the file to 1675 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-physics/src/doc.rs: 1590 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-canvas-scene3d/src/distribute.rs: 1613 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-canvas-scene3d/src/scene.rs: 4501 lines, over its ceiling of 3610
+  Fix: Split or shrink the file to 3610 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-scene3d/src/spec.rs: 2307 lines, over its ceiling of 2299
+  Fix: Split or shrink the file to 2299 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-scene3d/src/stack.rs: 1669 lines, over its ceiling of 1612
+  Fix: Split or shrink the file to 1612 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas-vector/src/svg.rs: 2557 lines, over its ceiling of 2537
+  Fix: Split or shrink the file to 2537 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/document/check.rs: 2812 lines, over its ceiling of 2583
+  Fix: Split or shrink the file to 2583 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/document/mod.rs: 1616 lines, over its ceiling of 1583
+  Fix: Split or shrink the file to 1583 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/document/packs.rs: 4007 lines, over its ceiling of 3829
+  Fix: Split or shrink the file to 3829 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/schedule/mod.rs: 3575 lines, over its ceiling of 3548
+  Fix: Split or shrink the file to 3548 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-canvas/src/scope.rs: 1674 lines, over its ceiling of 1527
+  Fix: Split or shrink the file to 1527 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-gpu-layer/src/view3d.rs: 2344 lines, over its ceiling of 2208
+  Fix: Split or shrink the file to 2208 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-marks-render/src/raster.rs: 1900 lines, over its ceiling of 1875
+  Fix: Split or shrink the file to 1875 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-replica/src/drive/mod.rs: 2344 lines, over its ceiling of 2299
+  Fix: Split or shrink the file to 2299 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-scene3d-render/src/lib.rs: 9563 lines, over its ceiling of 9169
+  Fix: Split or shrink the file to 9169 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-scene3d-render/src/scene3d.wgsl: 3361 lines, over its ceiling of 3163
+  Fix: Split or shrink the file to 3163 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-show/src/frames.rs: 1601 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-show/src/hub.rs: 2827 lines, over its ceiling of 2692
+  Fix: Split or shrink the file to 2692 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-show/src/kinds.rs: 1543 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.
+FAIL size: crates/deep-show/src/main.rs: 3179 lines, over its ceiling of 3104
+  Fix: Split or shrink the file to 3104 lines or fewer: a ceiling never rises.
+FAIL size: crates/deep-show/src/shared.rs: 2253 lines, over its ceiling of 2169
+  Fix: Split or shrink the file to 2169 lines or fewer: a ceiling never rises.
+FAIL size: packages/hub/src/server.ts: 1541 lines, over 1500 with no ceiling
+  Fix: Split the file to 1500 lines or fewer: a file new over 1500 lines gets no ceiling.

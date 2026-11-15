@@ -1,0 +1,20 @@
+# The #533 acceptance suite's own fixture assembler (from #531's, cut down): WebAssembly text to bytes
+# (the `wat` crate), each module validated by `wasmparser` before it is written. Test tooling only,
+# outside the workspace (the empty [workspace] table) with its own lockfile; it shares no code with the
+# logic or sandbox module under test.
+[package]
+name = "acceptance-533-wat"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-533-wat"
+path = "src/main.rs"
+
+[dependencies]
+wat = "=1.263.0"
+wasmparser = "=0.263.0"
+
+[workspace]

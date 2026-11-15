@@ -75,34 +75,64 @@ pub struct Entry {
     pub value: Given,
     pub writer: String,
     pub player: u32,
+    /// A reading's as-of time, in microseconds: then `control` is the reading, `reading:<source>`
+    /// (Logic: readings).
+    pub as_of: Option<i64>,
+    /// Its place in the order entries reached the track, which no read follows but a planted one.
+    pub arrived: u64,
 }
 
 impl Entry {
     pub fn parse(v: &Value) -> Option<Entry> {
+        let reading = v.get("reading").and_then(Value::as_str);
         Some(Entry {
             t: v.get("t")?.as_i64()?,
             seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
-            control: v.get("control")?.as_str()?.to_string(),
-            value: Given::parse(v.get("value")?)?,
+            control: reading
+                .or(v.get("control").and_then(Value::as_str))?
+                .to_string(),
+            // A reading's value is a number.
+            value: match reading {
+                Some(_) => v.get("value")?.as_f64()?.into(),
+                None => Given::parse(v.get("value")?)?,
+            },
             writer: v
                 .get("writer")
                 .map_or(Some("you"), Value::as_str)?
                 .to_string(),
             player: v.get("player").map_or(Some(1), Value::as_u64)? as u32,
+            as_of: match reading {
+                Some(_) => Some(v.get("as_of")?.as_i64()?),
+                None => None,
+            },
+            arrived: 0,
         })
     }
     pub fn to_json(&self) -> Value {
-        json!({"t": self.t, "seq": self.seq, "control": self.control, "value": self.value.to_json(), "writer": self.writer, "player": self.player})
+        let value = self.value.to_json();
+        match self.as_of {
+            None => {
+                json!({"t": self.t, "seq": self.seq, "control": self.control, "value": value, "writer": self.writer, "player": self.player})
+            }
+            Some(as_of) => {
+                json!({"t": self.t, "seq": self.seq, "reading": self.control, "value": value, "as_of": as_of, "writer": self.writer, "player": self.player})
+            }
+        }
     }
 }
 
-/// The input track by control, each in the track's order: by time, player and seq.
+/// The input track by control or reading, each in the track's order: by time, player and seq.
 pub type Track = BTreeMap<String, Vec<Entry>>;
 
+/// The track of `entries`, each arriving in the order given.
 pub fn track_of(entries: &[Entry]) -> Track {
     let mut out: Track = BTreeMap::new();
-    for e in entries {
-        out.entry(e.control.clone()).or_default().push(e.clone());
+    for (n, e) in entries.iter().enumerate() {
+        let e = Entry {
+            arrived: n as u64,
+            ..e.clone()
+        };
+        out.entry(e.control.clone()).or_default().push(e);
     }
     for list in out.values_mut() {
         list.sort_by_key(|e| (e.t, e.player, e.seq));

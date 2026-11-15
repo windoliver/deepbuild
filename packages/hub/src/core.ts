@@ -34,7 +34,8 @@ import { recordedHome, saveTrust } from './codex-settings.js';
 import { listRows } from './rows.js';
 import { addGuards, blocksCall } from './guards.js';
 import { captureRejected, repoFolders, syncRejected } from './memory.js';
-import { AskTasks, type WorkItem } from './ask-tasks.js';
+import { AskTasks } from './ask-tasks.js';
+import { PromptItems } from './prompt-items.js';
 import { SizeScope } from './scope.js';
 
 import { Holds } from './holds.js';
@@ -67,7 +68,7 @@ import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js'
 import { Devices } from './trusted.js';
 import type { ForgeProvider, ForgeObserver, AppKey } from './forge-port.js';
 
-import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
+import { ISSUE_LINK, ISSUE_UNREAD, liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
 import { isStatusQuestion, newestClaim, statusAnswer } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackThreads } from './reach.js';
@@ -96,7 +97,7 @@ import { Libraries } from './libraries.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { disk, testVfs, writeAtomic, type Durable } from './vfs.js';
-import { CHROME, EXTENSION_HOOK_MS, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
+import { CHROME, EXTENSION_HOOK_MS, derivedId, refuse, signature, ulid, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Scope, SCREEN_TOOLS } from './wire.js';
 import type { CallContext, Session, Live, Cursor, Counter, Routes } from './session-types.js';
 import { CODEX_BINARY, CLAUDE_BINARY, HOUR, ARCHIVED_THREADS_MS, DRIFT_MS, DAY, sql, letters, ghToken, GITHUB_PASS_MS, HOOK_CHECK_MS, CALL_GRACE, SLEPT, said, TURN_ENTRIES, PROMPT_PLACE_MS, CORES, machineLoad, FOREIGN, HOLDS_NO_PROMPT, signInCommands, type Obj, isObj, watching, waitingOn, READS, AUTOMATIC_QUEUED, effectEntries, callOf, MODS_MS, sendKey, OWN_TURN, holdsTurns, childPrompt, readsLogged, streamed, crashing, receipting, TYPED_RULE } from "./hub-shared.js";
 
@@ -253,8 +254,8 @@ export class Core {
   /** Setup's wiki build (#356). */
   private wikiBuild!: WikiBuild;
   private ready!: Promise<void>;
-  /** The work items prompts name, read off the hook's parse, for the append that opens their tasks. */
-  private readonly items = new WeakMap<Draft, WorkItem>();
+  /** Work items read before intake queues, consumed only after the prompt's origin is checked. */
+  private readonly promptItems = new PromptItems((text) => this.tasks.itemOf(text));
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
@@ -300,8 +301,6 @@ export class Core {
   private retake = false;
   private github: ForgeObserver | undefined;
   private claudeSettings!: ClaudeSettings;
-  /** Hooks waiting on a network stop's try, which the hub finishes before it stops. */
-  private readonly tried = new Set<Promise<unknown>>();
   /**
    * Claude Code prompts set aside until their transcript entry is written, by session (#567): Claude Code writes a
    * prompt's entry only once its hooks have returned, and the origin joins the prompt to that entry.
@@ -373,7 +372,7 @@ export class Core {
       dir: this.root.spool, held: options.held, plant: options.plant, durable: this.durable, stopping: () => this.stopping,
       raw: this.raw, appendCore: (kind, data) => this.appendCore(kind, data),
       tryNetwork: (drafts, meta, tries) => this.tryNetwork(drafts, meta, tries),
-      replay: (drafts, meta) => this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled),
+      replay: (drafts, meta) => this.replayed(drafts, meta, true),
       sync: () => this.record.sync(),
     });
     this.holds = new Holds({
@@ -419,7 +418,7 @@ export class Core {
     this.tasks = new AskTasks({
       spaces: this.spaces, renamedSince: this.providers.workspaces.renamedSince,
       raw: this.raw, asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
-      github: options.github, forge: options.forge, token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      github: options.github, forge: options.forge, token: async (signal) => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(signal),
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
       reading: (session, agent, text) => this.appendReading(session, agent, text),
       // The window reading of the account the session's agent runs on, in the hub's own home (#322).
@@ -779,7 +778,8 @@ export class Core {
       kept: join(this.root.dir, 'kept'),
       ...(this.options.plant === 'kept-in-service-cgroup' ? { plant: 'kept-in-service-cgroup' as const } : {}),
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
-      ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback' ? { plant: this.options.plant } : {}),
+      ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback'
+        || this.options.plant === 'egress-refusals-unrecorded' || this.options.plant === 'egress-refusal-once-per-operation' || this.options.plant === 'egress-refusals-seen-without-run' ? { plant: this.options.plant } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
       ...(this.options.crash ? { crash: this.options.crash } : {}),
       // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;
@@ -1187,28 +1187,30 @@ export class Core {
     return trying.then((reached) => { meta.network = { host, reached }; });
   }
 
-  /**
-   * One hook's events, checked and handed to the record in the order hooks arrived; the next hook waits only
-   * for that, not for the commit. Resolves once each append settled.
-   */
-  /** A hook another machine spooled for this hub while its link was down (#1338): recorded once, as a spool's line is. */
-  async replayed(drafts: Draft[], meta: HookMeta): Promise<void> {
-    this.delivery.track(meta);
-    await (await this.queue(() => this.handleHook(drafts, meta, 'hook', true))).settled;
+  async replayed(drafts: Draft[], meta: HookMeta, starting = false): Promise<void> {
+    if (!starting) this.delivery.track(meta);
+    if (this.opened) await this.promptItems.settling.get(meta.id);
+    const known = await this.record.raw('SELECT 1 FROM events WHERE id = ? LIMIT 1', [meta.id]);
+    const item = known.length ? undefined : this.promptItems.read(drafts, meta);
+    const intake = Promise.all([starting ? undefined : this.promptItems.ordering.get(meta.session), item]).then(() => this.queue(() => this.handleHook(drafts, meta, 'hook', true), starting));
+    return this.promptItems.keep(intake.then(({ settled }) => settled), meta, intake);
   }
+  /** Network reads precede the chain; once queued, hooks are checked and appended in order, without waiting on commits. */
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
+    const pending = this.promptItems.settling.get(meta.id); if (pending) return pending;
     this.delivery.track(meta);
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
-    const replayed = this.replaying ?? Promise.resolve();
-    // A network stop's try runs before it queues, so it holds no other hook of any session (#85).
+    const replayed = this.replaying ?? (!this.opened ? this.ready : undefined);
+    // Network work runs before it queues, so it holds no other hook of any session (#85, #2068).
     const tried = this.tryNetwork(drafts, meta);
-    const handled = replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
-    if (!tried) return handled;
-    // It was acknowledged, so nothing else keeps it: the hub stops only once it's in the record.
-    const kept = handled.catch(() => undefined).finally(() => this.tried.delete(kept));
-    this.tried.add(kept);
-    return handled;
+    const item = this.promptItems.read(drafts, meta), prior = this.promptItems.ordering.get(meta.session);
+    const intake = Promise.all([prior, replayed, tried, item]).then(async () => {
+      const duplicate = replayed && (await this.record.raw('SELECT 1 FROM events WHERE id = ? LIMIT 1', [meta.id])).length > 0;
+      return this.queue(() => this.handleHook(drafts, meta, writer, Boolean(duplicate)));
+    });
+    const handled = intake.then(({ settled }) => settled);
+    return tried || item || prior ? this.promptItems.keep(handled, meta, item || prior ? intake : undefined, Boolean(replayed)) : handled;
   }
   /** Whether a hook is a Claude Code prompt whose transcript entry isn't written yet, so its origin can't be read (#567). */
   private async entryLater(meta: HookMeta): Promise<boolean> {
@@ -1508,7 +1510,7 @@ export class Core {
 
   private promptDraft(draft: Draft, meta: HookMeta, verified: boolean, data: Obj, count: Counter, live: Live, typed: { text: string; task: string | undefined }[], opens: Promise<void>[]): void {
         // A prompt you typed that asks for a change opens a task: the issue it names, or the message that asked for it.
-        const item = this.items.get(draft);
+        const item = this.promptItems.item(draft);
         let tasks = this.tasks.tasksOf({ session: meta.session, msg: Number(data.msg), text: String(data.text), from: String(data.from), queued: draft.queued === true, first: data.msg === 0 });
         if (item && tasks.length) tasks = [`task:${letters(item.source_id)}`];
         // Kept on the draft too: the turn it opens reads its task there (#83).
@@ -1602,7 +1604,8 @@ export class Core {
       // The tasks a prompt opens are appended after it, as the core.
       return [this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
-      }), ...opens];
+      }), ...opens, ...(draft.kind === 'user.ask' && verified && (data.from === 'person' || data.from === 'app') && ISSUE_LINK.test(String(data.text)) && this.promptItems.items.has(draft) && !this.promptItems.items.get(draft)
+        ? [this.appendReading(meta.session, meta.agent, `${ISSUE_UNREAD} ${ISSUE_LINK.exec(String(data.text))![0]}. The task uses your words.`, derivedId(draft.ts, `${draft.id}:issue-unread`))] : [])];
     });
     return { appends, claimed, live, typed };
   }
@@ -1791,10 +1794,6 @@ export class Core {
         live.from = from;
         // The app's own resume prompt (#82): the stop it leads to gets one automatic continue while asks are open.
         if (from === 'continuation' && live.agent === 'claude-code') { live.resumed = true; this.judging.nudgeable.add(meta.session); this.askingSoon(); }
-        if (from === 'person' && !foreign) {
-          const item = await this.tasks.itemOf(String(data.text));
-          if (item) this.items.set(draft, item);
-        }
         // A subagent's report or a command's end notice ends its wait: the call the notice names, or else the oldest
         // that isn't a monitor's watch; a monitor's event, naming a watch the session armed, ends none (#997). A
         // scheduled prompt fires its one-shot crons.
@@ -2244,6 +2243,7 @@ export class Core {
     // Only a hook whose reply is being built can be abandoned; once it is built, its ID is kept no longer (#41's soak).
     this.replying.add(meta.id);
     try {
+      await this.promptItems.replying.get(meta.id);
       return await this.buildReply(meta, until);
     } finally {
       this.replying.delete(meta.id);
@@ -2589,9 +2589,10 @@ export class Core {
       return;
     }
     await this.replaying;
-    await Promise.all(this.tried);
+    await Promise.all(this.promptItems.pending);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
+    await this.tasks.settled();
     await this.state.flushStates();
     // The pass the stop kept from starting, so the rows a stopped hub's database holds are the list as it stood.
     await this.state.recordStates().catch(() => undefined);
