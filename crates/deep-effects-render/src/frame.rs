@@ -19,7 +19,7 @@ use serde_json::Value;
 use crate::compile::{compile_with, Compiled};
 use crate::glow;
 use crate::reference::{target, upload, Camera};
-use crate::runner::{Runner, LINEAR};
+use crate::runner::{Bound, Runner, LINEAR};
 use deep_canvas_effects::graph::Tex;
 use deep_canvas_effects::interp::Image;
 
@@ -116,6 +116,10 @@ pub struct Effects {
     targets: Vec<([u32; 2], wgpu::TextureView)>,
     /// How many of the targets the frame being planned has asked for: the rest are released.
     used: usize,
+    /// What each pass operator's run bound last frame, in the frame's order, with its stage's ID.
+    bound: Vec<Option<(String, Bound)>>,
+    /// How many of them the frame being planned has bound: the rest are released.
+    passes: usize,
     sparks: Option<SparkDraw>,
     /// #462's strokes draw, built the first frame that lays a stroke.
     strokes: Option<crate::strokes::Draw>,
@@ -190,6 +194,8 @@ impl Effects {
             runners: BTreeMap::new(),
             targets: Vec::new(),
             used: 0,
+            bound: Vec::new(),
+            passes: 0,
             sparks: None,
             strokes: None,
             closed: None,
@@ -311,13 +317,24 @@ impl Effects {
             .collect();
         let refs: Vec<&wgpu::TextureView> = views.iter().collect();
         let values = interp::inputs(&runner.compiled.checked, params, &self.settings.roles);
-        let (g0, g1, buffers) =
-            runner.bind(&device.device, &camera.frame(), size, &values, &refs, &[]);
+        // The run at this place in the frame binds what it bound last frame, while its stage is
+        // the same.
+        let place = self.passes;
+        self.passes += 1;
+        if self.bound.len() <= place {
+            self.bound.resize_with(place + 1, || None);
+        }
+        let (stage, held) = match self.bound[place].take() {
+            Some((stage, bound)) if stage == id => (stage, Some(bound)),
+            _ => (id.to_string(), None),
+        };
+        let bound = runner.rebind(device, held, &camera.frame(), size, &values, &refs);
+        let groups = bound.groups.clone();
+        self.bound[place] = Some((stage, bound));
         let profiler = self.profiler.clone();
         Box::new(move |encoder| {
-            let _keep = buffers;
             timed(&profiler, label, encoder, |e, ts| {
-                runner.encode(e, &out, &(g0, g1), ts)
+                runner.encode(e, &out, &groups, ts)
             });
         })
     }
@@ -710,6 +727,7 @@ impl Post for Effects {
         let mut cur = frame.linear.clone();
         let mut next = 1usize;
         self.used = 0;
+        self.passes = 0;
         if let Some(grid) = &s.grid {
             let out = self.target(device, next, size);
             next += 1;
@@ -917,8 +935,10 @@ impl Post for Effects {
             ));
         }
         // A target no pass of this frame asked for is released: a pass switched off no longer
-        // holds its full-size targets for the view's life. Each job keeps its own views.
+        // holds its full-size targets for the view's life. Each job keeps its own views. What a
+        // run that didn't happen had bound goes with it.
         self.targets.truncate(self.used);
+        self.bound.truncate(self.passes);
         (jobs, Some(cur))
     }
 }

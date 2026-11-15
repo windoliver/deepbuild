@@ -45,7 +45,7 @@ use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::gpu;
-use deep_canvas_scene3d::label::{half_fraction, AtlasPage, PAGE, PAGES};
+use deep_canvas_scene3d::label::{half_fraction, PAGE, PAGES};
 use deep_canvas_scene3d::light::{self, AlphaMode, LightKind, SHADED};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
@@ -1516,6 +1516,47 @@ struct AtlasTexture {
     generations: Vec<Option<u32>>,
 }
 
+impl AtlasTexture {
+    fn new(
+        d: &deep_gpu::counted::Wgpu,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+    ) -> AtlasTexture {
+        let texture = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("scene3d glyph atlas"),
+            size: wgpu::Extent3d {
+                width: PAGE,
+                height: PAGE,
+                depth_or_array_layers: PAGES as u32,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+        let bind = bind_group(
+            d,
+            "scene3d glyph atlas",
+            layout,
+            [
+                wgpu::BindingResource::TextureView(&view),
+                wgpu::BindingResource::Sampler(sampler),
+            ],
+        );
+        AtlasTexture {
+            texture,
+            bind,
+            generations: vec![None; PAGES],
+        }
+    }
+}
+
 struct Targets {
     size: [u32; 2],
     linear: wgpu::Texture,
@@ -1669,6 +1710,8 @@ struct Uniforms {
     internal: Written,
     tone: Written,
     shadow: Written,
+    adjusts: Written,
+    lobes: Written,
 }
 
 pub struct Renderer {
@@ -1866,7 +1909,9 @@ pub struct Renderer {
     /// The swaying meshes' rest vertices, weights and params (#2016).
     sways: sway::Sways,
     batches: BTreeMap<String, Batch>,
-    atlas: AtlasTexture,
+    /// The glyph atlas, held while a frame draws a label, and the layout and sampler it binds by.
+    atlas: Option<AtlasTexture>,
+    mask: (wgpu::BindGroupLayout, wgpu::Sampler),
     picks: BTreeMap<String, u32>,
     next_generation: u64,
     targets: Option<Targets>,
@@ -3163,40 +3208,6 @@ impl Renderer {
                 None,
             )
         });
-        let atlas = {
-            let texture = d.create_texture(&wgpu::TextureDescriptor {
-                label: Some("scene3d glyph atlas"),
-                size: wgpu::Extent3d {
-                    width: PAGE,
-                    height: PAGE,
-                    depth_or_array_layers: PAGES as u32,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            let view = texture.create_view(&wgpu::TextureViewDescriptor {
-                dimension: Some(wgpu::TextureViewDimension::D2Array),
-                ..Default::default()
-            });
-            let bind = bind_group(
-                d,
-                "scene3d glyph atlas",
-                &mask_layout,
-                [
-                    wgpu::BindingResource::TextureView(&view),
-                    wgpu::BindingResource::Sampler(&sampler),
-                ],
-            );
-            AtlasTexture {
-                texture,
-                bind,
-                generations: vec![None; PAGES],
-            }
-        };
         Renderer {
             planted,
             planted_transforms: None,
@@ -3343,7 +3354,8 @@ impl Renderer {
             velocity_frame: None,
             emission_frame: None,
             batches: BTreeMap::new(),
-            atlas,
+            atlas: None,
+            mask: (mask_layout, sampler),
             picks: BTreeMap::new(),
             next_generation: 0,
             targets: None,
@@ -3623,6 +3635,11 @@ impl Renderer {
             c.keys = [None; 4];
         }
         let Some(sun) = scene.sun.as_ref().filter(|_| scene.cascaded()) else {
+            // A frame with no cascaded sun lets go of the layers the last one drew.
+            if c.texture.take().is_some() {
+                c.keys = [None; 4];
+                self.rebind_lights(device);
+            }
             return;
         };
         if !scene.camera.perspective {
@@ -3833,6 +3850,9 @@ impl Renderer {
         if fresh {
             let device_size = (self.locals.size, self.locals.layers);
             self.locals.ensure(device, device_size, &self.frame_layout);
+            self.rebind_lights(device);
+        } else if wanted.is_empty() && self.locals.rest() {
+            // A frame with no shadowed local light lets go of their maps.
             self.rebind_lights(device);
         }
         for slot in self.locals.stale.clone() {
@@ -4424,21 +4444,30 @@ impl Renderer {
         0
     }
 
-    /// Uploads each atlas page whose generation the GPU doesn't hold.
-    fn upload_pages(&mut self, device: &Device, pages: &[AtlasPage]) {
-        for (i, page) in pages.iter().enumerate().take(PAGES) {
-            if self.atlas.generations[i] == Some(page.generation) {
+    /// Uploads each atlas page whose generation the GPU doesn't hold. The atlas is made by the
+    /// first frame that draws a label, and a frame that draws none lets go of it.
+    fn upload_pages(&mut self, device: &Device, scene: &Scene) {
+        if scene.layers.iter().all(|l| l.labels.is_empty()) {
+            self.atlas = None;
+            return;
+        }
+        let (layout, sampler) = &self.mask;
+        let atlas = self
+            .atlas
+            .get_or_insert_with(|| AtlasTexture::new(&device.device, layout, sampler));
+        for (i, page) in scene.pages.iter().enumerate().take(PAGES) {
+            if atlas.generations[i] == Some(page.generation) {
                 continue;
             }
             write_texture(
                 &device.queue,
-                &self.atlas.texture,
+                &atlas.texture,
                 i as u32,
                 &page.bytes,
                 PAGE,
                 [PAGE, PAGE],
             );
-            self.atlas.generations[i] = Some(page.generation);
+            atlas.generations[i] = Some(page.generation);
         }
     }
 
@@ -4588,18 +4617,18 @@ impl Renderer {
         }
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
-                device.queue.write_buffer(
+                device.queue.write_changed(
                     &self.adjust_buffer,
-                    0,
+                    &self.written.adjusts,
                     bytemuck::cast_slice(&self.adjusts),
                 )
             });
         }
         if !self.lobe_table.is_empty() {
             deep_gpu::alloc::outside(|| {
-                device.queue.write_buffer(
+                device.queue.write_changed(
                     &self.lobe_buffer,
-                    0,
+                    &self.written.lobes,
                     bytemuck::cast_slice(&self.lobe_table),
                 )
             });
@@ -4640,9 +4669,8 @@ impl Renderer {
                 true
             }
             None => {
-                if let Some(m) = self.mirrorer.as_mut() {
-                    m.rest();
-                }
+                // A frame with no mirror lets go of the mirrored view's renderer and its targets.
+                self.mirrorer = None;
                 false
             }
         };
@@ -5555,7 +5583,7 @@ impl Renderer {
         }
         let k = f64::from(internal[0]) / f64::from(scene.size[0].max(1));
         self.prepare_subsurface(device, scene, internal, k);
-        self.upload_pages(device, &scene.pages);
+        self.upload_pages(device, scene);
         let cam = &scene.camera;
         let depth = if self.planted.forward_z {
             Depth::Forward { far: FORWARD_FAR }
@@ -6783,14 +6811,15 @@ impl Renderer {
             }
         }
         clouds::draw(&mut enc, self.families.point.as_ref(), &batch.clouds);
-        if let (Some(buffer), Some(pipeline), true) = (
+        if let (Some(buffer), Some(pipeline), Some(atlas), true) = (
             &batch.labels.buffer,
             &self.families.text,
+            &self.atlas,
             batch.labels.len() > 0,
         ) {
             enc.set_pipeline(pipeline);
             enc.set_vertex_buffer(0, buffer.slice(..));
-            enc.set_bind_group(1, &self.atlas.bind, &[]);
+            enc.set_bind_group(1, &atlas.bind, &[]);
             enc.draw(0..6, 0..batch.labels.len());
         }
         enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) })
@@ -7261,7 +7290,11 @@ impl Renderer {
     ) -> Vec<(String, Job)> {
         let shadow = match post.as_deref() {
             Some(p) if p.shadows() => self.shadow_job(device),
-            _ => None,
+            _ => {
+                // A frame no post module reads the key light's map in lets go of it.
+                self.shadow.view = None;
+                None
+            }
         };
         let cascades = self.cascade_jobs();
         let Some(t) = self.targets.as_ref() else {
@@ -7946,7 +7979,7 @@ impl Renderer {
             pipeline: self.outlines.labels.clone(),
             output: t.output_bind.clone(),
             frame: binds[0].clone(),
-            atlas: Some(self.atlas.bind.clone()),
+            atlas: Some(self.atlas.as_ref()?.bind.clone()),
             sets,
             statuses: Vec::new(),
         })

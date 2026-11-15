@@ -28,6 +28,8 @@ struct Params {
 /// One swaying solid's buffers: its params, and the gust the pass last used.
 struct Mover {
     params: wgpu::Buffer,
+    /// The params its buffer holds.
+    moved: Option<Params>,
     reading: wgpu::Buffer,
     bind: wgpu::BindGroup,
     vertices: u32,
@@ -120,6 +122,7 @@ impl Sways {
             shape,
             Mover {
                 params,
+                moved: None,
                 reading,
                 bind,
                 vertices,
@@ -136,8 +139,9 @@ impl Sways {
         Some(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
-    /// Writes every swaying solid's vertices at this frame's t, in one submission.
-    pub fn move_all(&self, device: &Device, scene: &Scene) {
+    /// Writes every swaying solid's vertices at this frame's t, in one submission. A solid whose
+    /// params hold uploads none again.
+    pub fn move_all(&mut self, device: &Device, scene: &Scene) {
         let Some((pipeline, _)) = &self.pipeline else {
             return;
         };
@@ -146,7 +150,7 @@ impl Sways {
             let (Some(at), Some(sway), Some(mover)) = (
                 s.sway,
                 s.mesh.as_ref().and_then(|m| m.sway.as_ref()),
-                self.movers.get(&s.shape),
+                self.movers.get_mut(&s.shape),
             ) else {
                 continue;
             };
@@ -168,12 +172,16 @@ impl Sways {
                 time: [at.t as f32, 0.0, 0.0, 0.0],
                 counts: [mover.vertices, at.seed as u32, (at.seed >> 32) as u32, 0],
             };
-            deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(&mover.params, 0, bytemuck::bytes_of(&p))
-            });
-            moving.push(mover);
+            let held = mover.moved.as_ref();
+            if !held.is_some_and(|m| bytemuck::bytes_of(m) == bytemuck::bytes_of(&p)) {
+                mover.moved = Some(p);
+                deep_gpu::alloc::outside(|| {
+                    device
+                        .queue
+                        .write_buffer(&mover.params, 0, bytemuck::bytes_of(&p))
+                });
+            }
+            moving.push((mover.bind.clone(), mover.vertices));
         }
         if moving.is_empty() {
             return;
@@ -191,9 +199,9 @@ impl Sways {
                     timestamp_writes: None,
                 });
                 pass.set_pipeline(pipeline);
-                for mover in moving {
-                    pass.set_bind_group(0, &mover.bind, &[]);
-                    pass.dispatch_workgroups(mover.vertices.div_ceil(WORKGROUP).max(1), 1, 1);
+                for (bind, vertices) in moving {
+                    pass.set_bind_group(0, &bind, &[]);
+                    pass.dispatch_workgroups(vertices.div_ceil(WORKGROUP).max(1), 1, 1);
                 }
             }
             device.queue.submit([encoder.finish()]);

@@ -185,11 +185,6 @@ impl Mirrorer {
         self.bind = None;
     }
 
-    /// A frame with no mirror: the overlay lets go of the targets it bound.
-    pub fn rest(&mut self) {
-        self.bind = None;
-    }
-
     /// The mirrored picture, linear, at half the frame's size (#166's water reads it).
     pub fn picture(&self) -> Option<wgpu::TextureView> {
         self.view.linear().map(|(_, v)| v.clone())
