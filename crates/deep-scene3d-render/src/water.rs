@@ -24,6 +24,8 @@ pub const MAX_PARTS: usize = 8;
 pub const REFLECTION: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 /// #268: the `foam` target's format: the water's foam share, f32.
 pub const FOAM: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
+/// #968: the `normal` target's format: the water's shaded normal, world space, f32 RGBA.
+pub const NORMAL: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 
 /// The water's wrong program, reachable only through `deep-gpu --planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -32,6 +34,8 @@ pub struct Planted {
     pub foam_keeps_state: bool,
     /// #268: waves that ignore the shore's field, at full amplitude by the shore.
     pub calm_ignores_shore: bool,
+    /// #968: a flow in one phase, its offset jumping back at every wrap.
+    pub flow_single_phase: bool,
 }
 
 #[repr(C)]
@@ -57,6 +61,10 @@ struct Params {
     // cells along x and z and the planted calm.
     shore: [[f32; 4]; 3],
     shore_dims: [u32; 4],
+    // #968: the flow's grid: its origin, 1 ÷ cell and the cycle; foam's speed (negative with
+    // none); its cells along x and z, whether the water flows, and the planted single phase.
+    flow: [[f32; 4]; 2],
+    flow_dims: [u32; 4],
 }
 
 /// The light the water's foam and its fill read.
@@ -96,14 +104,16 @@ pub struct Targets {
     pub depth_ms: wgpu::TextureView,
     pub reflection: Option<wgpu::TextureView>,
     pub foam: Option<wgpu::TextureView>,
+    pub normal: Option<wgpu::TextureView>,
     pub resolve: Resolve,
 }
 
 pub struct Waterer {
     layout: wgpu::BindGroupLayout,
     ids: wgpu::RenderPipeline,
-    /// The shading pass by which of the `reflection` (1) and `foam` (2) targets it writes.
-    shade: [wgpu::RenderPipeline; 4],
+    /// The shading pass by which of the `reflection` (1), `foam` (2) and `normal` (4) targets it
+    /// writes.
+    shade: [wgpu::RenderPipeline; 8],
     /// The pass copying the depth target into the bed's depth, and its layout.
     bed_copy: wgpu::RenderPipeline,
     bed_layout: wgpu::BindGroupLayout,
@@ -119,6 +129,9 @@ pub struct Waterer {
     /// #268: the shore's field uploaded, by its key, and a 1 × 1 stand-in with none.
     field: Option<(String, wgpu::TextureView)>,
     no_field: wgpu::TextureView,
+    /// #968: the flow's grid uploaded, by its key, and a 1 × 1 stand-in with none.
+    flow: Option<(String, wgpu::TextureView)>,
+    no_flow: wgpu::TextureView,
     /// The rest meshes uploaded, by their shape's hash.
     meshes: BTreeMap<u64, (wgpu::Buffer, wgpu::Buffer, u32)>,
     /// The planted foam's running values.
@@ -164,7 +177,7 @@ fn screen_rect(clip: &[f64; 16], [lo, hi]: [[f64; 3]; 2], size: [u32; 2]) -> [u3
 struct Part {
     uniform: wgpu::Buffer,
     written: Written,
-    bind: Option<([wgpu::TextureView; 6], wgpu::BindGroup)>,
+    bind: Option<([wgpu::TextureView; 7], wgpu::BindGroup)>,
 }
 
 #[derive(Clone)]
@@ -179,6 +192,8 @@ struct Bed {
 
 /// #268: the shore's field, a cell a texel: two 16-bit values packed (shore.rs's `Field`).
 const FIELD: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
+/// #968: the flow's grid, a cell a texel: its velocity in m/s along x and z.
+const FLOW: wgpu::TextureFormat = wgpu::TextureFormat::Rg32Float;
 
 /// The bed's depth: f32 a pixel, as the depth target held it.
 const BED_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
@@ -268,6 +283,7 @@ impl Waterer {
                 entry(7, frag, tex(wgpu::TextureSampleType::Uint)),
                 entry(8, frag, tex(wgpu::TextureSampleType::Depth)),
                 entry(9, both, tex(wgpu::TextureSampleType::Uint)),
+                entry(10, frag, tex(unfiltered)),
             ],
         });
         // Group 2, the shading pass's alone: the mesh pass writes these targets.
@@ -342,7 +358,7 @@ impl Waterer {
             bind_group_layouts: &[Some(&layout), None, Some(&samples_layout)],
             immediate_size: 0,
         });
-        let shade = |reflection: bool, foam: bool| {
+        let shade = |k: usize| {
             let target = |format| wgpu::ColorTargetState {
                 format,
                 blend: None,
@@ -350,10 +366,14 @@ impl Waterer {
             };
             let targets = [
                 Some(target(LINEAR)),
-                reflection.then(|| target(REFLECTION)),
-                foam.then(|| target(FOAM)),
+                (k & 1 != 0).then(|| target(REFLECTION)),
+                (k & 2 != 0).then(|| target(FOAM)),
+                (k & 4 != 0).then(|| target(NORMAL)),
             ];
-            let used = if foam { 3 } else { 1 + usize::from(reflection) };
+            let used = targets
+                .iter()
+                .rposition(Option::is_some)
+                .map_or(1, |i| i + 1);
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(WATER_PASS),
                 layout: Some(&shade_layout),
@@ -376,12 +396,7 @@ impl Waterer {
                 cache: None,
             })
         };
-        let shade = [
-            shade(false, false),
-            shade(true, false),
-            shade(false, true),
-            shade(true, true),
-        ];
+        let shade = std::array::from_fn(shade);
         let bed_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(WATER_PASS),
             entries: &[entry(0, frag, tex(wgpu::TextureSampleType::Depth))],
@@ -435,6 +450,14 @@ impl Waterer {
             wgpu::TextureUsages::TEXTURE_BINDING,
         )
         .create_view(&Default::default());
+        let no_flow = crate::texture2d(
+            d,
+            WATER_PASS,
+            [1, 1],
+            FLOW,
+            wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
         let kept = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some(WATER_PASS),
             size: 1024 * 4,
@@ -460,6 +483,8 @@ impl Waterer {
             stub,
             field: None,
             no_field,
+            flow: None,
+            no_flow,
             meshes: BTreeMap::new(),
             kept,
             path,
@@ -635,6 +660,54 @@ impl Waterer {
                 0,
             ]
         });
+        // #968: the flow's grid, uploaded once per key.
+        let flow = water
+            .flow
+            .as_ref()
+            .and_then(|f| Some((f, f.grid.as_ref()?)));
+        if let Some((_, g)) = flow {
+            if self.flow.as_ref().is_none_or(|(k, _)| *k != g.key) {
+                let texture = d.create_texture_with_data(
+                    &device.queue,
+                    &wgpu::TextureDescriptor {
+                        label: Some("scene3d.water flow"),
+                        size: crate::extent(g.dims),
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: FLOW,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: &[],
+                    },
+                    wgpu::util::TextureDataOrder::LayerMajor,
+                    bytemuck::cast_slice(&g.cells),
+                );
+                self.flow = Some((g.key.clone(), texture.create_view(&Default::default())));
+            }
+        }
+        let flow_view = match (flow, &self.flow) {
+            (Some(_), Some((_, v))) => v.clone(),
+            _ => self.no_flow.clone(),
+        };
+        let flow_params = [
+            flow.map_or([0f32; 4], |(f, g)| {
+                [
+                    g.origin[0] as f32,
+                    g.origin[1] as f32,
+                    (1.0 / g.cell) as f32,
+                    f.cycle as f32,
+                ]
+            }),
+            [water.foam_speed.map_or(-1.0, |s| s as f32), 0.0, 0.0, 0.0],
+        ];
+        let flow_dims = flow.map_or([0u32; 4], |(_, g)| {
+            [
+                g.dims[0],
+                g.dims[1],
+                1,
+                u32::from(frame.planted.flow_single_phase),
+            ]
+        });
         self.draws.clear();
         // The parts' world box at rest, grown by the waves' summed amplitude: no vertex moves
         // further.
@@ -748,6 +821,8 @@ impl Waterer {
                 parts,
                 shore: shore_params,
                 shore_dims,
+                flow: flow_params,
+                flow_dims,
             };
             if self.parts.len() == self.draws.len() {
                 self.parts.push(Part {
@@ -777,12 +852,13 @@ impl Waterer {
                 ids,
                 depth,
                 &field_view,
+                &flow_view,
             ];
             // A frame whose targets hold binds as the last one did.
             let bind = match &part.bind {
                 Some((held, bind)) if held.iter().eq(views) => bind.clone(),
                 _ => {
-                    let mut entries: Vec<wgpu::BindGroupEntry<'_>> = [1, 2, 3, 7, 8, 9]
+                    let mut entries: Vec<wgpu::BindGroupEntry<'_>> = [1, 2, 3, 7, 8, 9, 10]
                         .into_iter()
                         .zip(views)
                         .map(|(binding, view)| wgpu::BindGroupEntry {
@@ -840,8 +916,9 @@ impl Waterer {
         let draws = self.draws.clone();
         let (ids_pipeline, bed_copy, profiler) =
             (self.ids.clone(), self.bed_copy.clone(), profiler.clone());
-        let shade = self.shade
-            [usize::from(t.reflection.is_some()) | (2 * usize::from(t.foam.is_some()))]
+        let shade = self.shade[usize::from(t.reflection.is_some())
+            | (2 * usize::from(t.foam.is_some()))
+            | (4 * usize::from(t.normal.is_some()))]
         .clone();
         let samples = self.samples.as_ref()?.1.clone();
         let extent = crate::extent([w, h]);
@@ -854,6 +931,7 @@ impl Waterer {
                 depth_ms,
                 reflection,
                 foam,
+                normal,
                 resolve,
             } = t;
             // The bed under the rectangle the water can cover: its color copied, its depth drawn.
@@ -924,12 +1002,18 @@ impl Waterer {
                     ops: load(),
                 })
             };
-            let mut colors = vec![attach(&linear.1), reflection.as_ref().and_then(attach)];
-            if let Some(f) = &foam {
-                colors.push(attach(f));
-            } else if reflection.is_none() {
-                colors.pop();
-            }
+            let mut colors = vec![
+                attach(&linear.1),
+                reflection.as_ref().and_then(attach),
+                foam.as_ref().and_then(attach),
+                normal.as_ref().and_then(attach),
+            ];
+            colors.truncate(
+                colors
+                    .iter()
+                    .rposition(Option::is_some)
+                    .map_or(1, |i| i + 1),
+            );
             crate::timed(&profiler, WATER_PASS, encoder, |encoder, timestamps| {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(WATER_PASS),

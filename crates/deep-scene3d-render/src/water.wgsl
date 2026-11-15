@@ -49,6 +49,11 @@ struct Params {
     shore: array<vec4<f32>, 3>,
     // Its cells along x and z, and the planted calm that ignores it.
     shore_dims: vec4<u32>,
+    // #968: the flow's grid. [0]: its origin (x, z), 1 ÷ cell and the cycle in s; [1]: x: foam's
+    // speed in m/s, negative with none.
+    flow: array<vec4<f32>, 2>,
+    // Its cells along x and z, 1 when the water flows, and the planted single phase.
+    flow_dims: vec4<u32>,
 };
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -65,6 +70,8 @@ struct Params {
 // #268: the shore's field, a cell a texel: the outline's distance in the low 16 bits over its
 // reach, the footprint's signed distance in the high 16, offset by half.
 @group(0) @binding(9) var field: texture_2d<u32>;
+// #968: the flow's grid, a cell a texel: its velocity in m/s along x and z.
+@group(0) @binding(10) var flow_grid: texture_2d<f32>;
 // Each sample's ID and depth, for the pixels on a water edge (water.rs reads them as plain
 // textures at one sample).
 @group(2) @binding(0) var ids_ms: texture_multisampled_2d<u32>;
@@ -107,6 +114,49 @@ fn shore_at(x: vec2<f32>) -> Shore {
         f.y,
     );
     return Shore(v.x, v.y);
+}
+
+// #968: the flow's velocity in m/s at a point on the water at rest, bilinear over the cells'
+// centres.
+fn flow_cell(i: vec2<i32>) -> vec2<f32> {
+    let n = vec2<i32>(params.flow_dims.xy) - 1;
+    return textureLoad(flow_grid, clamp(i, vec2<i32>(0), n), 0).rg;
+}
+
+fn flow_at(x: vec2<f32>) -> vec2<f32> {
+    let g = (x - params.flow[0].xy) * params.flow[0].z - 0.5;
+    let i = vec2<i32>(floor(g));
+    let f = g - floor(g);
+    return mix(
+        mix(flow_cell(i), flow_cell(i + vec2<i32>(1, 0)), f.x),
+        mix(flow_cell(i + vec2<i32>(0, 1)), flow_cell(i + vec2<i32>(1, 1)), f.x),
+        f.y,
+    );
+}
+
+// The flow's two phases at t, half a cycle apart: how far each has carried the noise (velocity ×
+// ((t + phase) mod cycle)) and the first's triangle weight, 0 where it wraps; the second's is the
+// rest. Still water carries nothing.
+struct Phases {
+    o0: vec2<f32>,
+    o1: vec2<f32>,
+    w0: f32,
+};
+
+fn phases(x: vec2<f32>, t: f32) -> Phases {
+    if params.flow_dims.z == 0u {
+        return Phases(vec2<f32>(0.0), vec2<f32>(0.0), 1.0);
+    }
+    let v = flow_at(x);
+    let c = params.flow[0].w;
+    let a = t - c * floor(t / c);
+    let h = t + 0.5 * c;
+    let b = h - c * floor(h / c);
+    if params.flow_dims.w == 1u {
+        // The planted single phase: one offset that jumps back at every wrap.
+        return Phases(v * a, v * a, 1.0);
+    }
+    return Phases(v * a, v * b, 1.0 - abs(2.0 * a / c - 1.0));
 }
 
 // Each wave's amplitude's share at a distance d from the shore: mix(near, 1, smoothstep(0, far,
@@ -296,6 +346,14 @@ fn foam_texture(x: vec2<f32>, pixel: f32) -> f32 {
     return clamp((n - 0.5) * 2.5 + 0.5, 0.0, 1.0);
 }
 
+// #968: foam's texture carried by the flow's two phases, blended by their weights.
+fn flowing_texture(x: vec2<f32>, pixel: f32, ph: Phases) -> f32 {
+    if params.flow_dims.z == 0u {
+        return foam_texture(x, pixel);
+    }
+    return foam_texture(x - ph.o0, pixel) * ph.w0 + foam_texture(x - ph.o1, pixel) * (1.0 - ph.w0);
+}
+
 // How opaque foam is over a pixel, given how strongly something makes it (0..1): the texture
 // past a threshold that falls as the cause grows, so weak foam is a few flecks and strong foam
 // closes into patches with holes.
@@ -390,12 +448,15 @@ struct Shaded {
     // #268: the foam's share mixed in, the steep waves', the wake's and the shore's together
     // (view3d's `foam` target).
     @location(2) foam: f32,
+    // #968: the shaded normal, world space (view3d's `normal` target).
+    @location(3) normal: vec4<f32>,
 };
 
 struct Lit {
     color: vec3<f32>,
     mirrored: vec3<f32>,
     foam: f32,
+    normal: vec3<f32>,
 };
 
 // The rest point under a point x on the surface: the horizontal map inverted by one fixed-point
@@ -456,6 +517,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
     let looks = select(1, SAMPLES, edge);
     var sum = vec3<f32>(0.0);
     var foamed = 0.0;
+    var normals = vec3<f32>(0.0);
     var mirrored = vec3<f32>(0.0);
     var looked = false;
     for (var s = 0; s < looks; s++) {
@@ -466,6 +528,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
         let lit = shade(at.xy, select(centre, z[s], edge), size);
         sum += lit.color;
         foamed += lit.foam;
+        normals += lit.normal;
         // The `reflection` target keeps the lookup of the sample the resolve chose.
         if !looked {
             mirrored = lit.mirrored;
@@ -475,7 +538,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
     let color = sum / f32(looks);
     // The `reflection` target holds a lookup only where the resolved ID is the water's.
     let reflection = select(vec4<f32>(0.0), vec4<f32>(mirrored, 1.0), resolved);
-    return Shaded(vec4<f32>(color, 1.0), reflection, foamed / f32(looks));
+    return Shaded(vec4<f32>(color, 1.0), reflection, foamed / f32(looks), vec4<f32>(normalize(normals), 0.0));
 }
 
 // The water at the point on the pixel's centre ray at depth z: the bed tinted through it, the
@@ -497,8 +560,16 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     var n = normalize(cross(w.tz, w.tx));
     // Ripples, rain and the wake bend the normal by their slopes.
     var slope = vec2<f32>(0.0);
+    // #968: on flowing water the ripples ride the flow's two phases instead of the wind.
+    let ph = phases(rest, t);
     if params.counts.z > 0.0 {
-        slope += noise_grad((rest - params.drift.xy * t) / params.counts.y) * params.counts.z * 0.5;
+        if params.flow_dims.z == 1u {
+            let g0 = noise_grad((rest - ph.o0) / params.counts.y);
+            let g1 = noise_grad((rest - ph.o1) / params.counts.y);
+            slope += (g0 * ph.w0 + g1 * (1.0 - ph.w0)) * params.counts.z * 0.5;
+        } else {
+            slope += noise_grad((rest - params.drift.xy * t) / params.counts.y) * params.counts.z * 0.5;
+        }
     }
     // How much water one pixel spans across the view here, and along it as the view grazes the
     // surface.
@@ -562,7 +633,19 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     // The span foam's texture is filtered by, its stretch along the view capped.
     let pixel = span / max(v.y, 0.3);
     if cause > 0.0 {
-        foam = foam_cover(cause, foam_texture(rest, pixel));
+        foam = foam_cover(cause, flowing_texture(rest, pixel, ph));
+    }
+    if params.flow_dims.z == 1u && params.flow[1].x >= 0.0 {
+        // #968: foam covers the water where the flow runs faster than foam's speed, its edge
+        // frayed and its body mottled by foam's texture riding the flow. The fray moves the edge
+        // by at most 0.04 m/s and the ramp spans 0.06 either side, so water 0.1 m/s slower than
+        // foam's speed stays clear and water 0.1 m/s faster is covered.
+        let tex = flowing_texture(rest, pixel, ph);
+        let speed = length(flow_at(rest)) + 0.08 * (tex - 0.5);
+        let fast = smoothstep(params.flow[1].x - 0.06, params.flow[1].x + 0.06, speed);
+        if fast > 0.0 {
+            foam = max(foam, fast * (0.7 + 0.3 * tex));
+        }
     }
     if wk.foam > 0.0 {
         // The wake's foam streaks along its path: its texture stretched that way.
@@ -598,7 +681,7 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
         let cover = 1.0 - smoothstep(-max(span, 1e-4), 0.0, shore.c);
         color *= 1.0 - params.shore[1].w * cover;
     }
-    return Lit(color, mirrored, foam);
+    return Lit(color, mirrored, foam, n);
 }
 
 // The bed's depth copied out of the depth target inside the water's rectangle, before the water

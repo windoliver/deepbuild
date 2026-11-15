@@ -275,6 +275,7 @@ pub fn seen(scene: &Scene, v: &View) -> Scene {
     s.flare = None;
     s.read_reflection = false;
     s.read_foam = false;
+    s.read_normal = false;
     if let Some(e) = &v.eye {
         clip(&mut s, e.plane, format!("{}#window", v.id));
     }
