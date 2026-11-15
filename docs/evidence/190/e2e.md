@@ -805,3 +805,13 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   - ac04 and ac05 are BLOCKED, not run (`mac/ac04-eabed12b6.txt`, `mac/ac05-eabed12b6.txt`): Docker Desktop was
     open, and `docker info` answered 500 for 22 minutes (`mac/docker-info-eabed12b6.txt`). Their last passes are at
     4b10b58f1, before the fix.
+- **Mac run at b88135a36** (2026-11-14, the owner's go at the Mac; macOS 27.2.1, on AC; local main 2252dfd6, merge
+  base 2c1c8cacc; Docker 29.2.1; host name redacted; `mac/exits-b88135a36.txt`), the head with the trap replies' fix
+  and the two lint fixes. All four files pass:
+  - ac04 2 of 2 (`mac/ac04-b88135a36.txt`) and ac05 1 of 1 (`mac/ac05-b88135a36.txt`), with the linux/amd64
+    container. The first image inspect timed out at 40 s, so the run pulled `rust:1.99.1-slim-bookworm` on the
+    owner's word (exit 0 in 3 s, the same image ID as before; `mac/docker-pull-b88135a36.txt`). Criteria 4 and 5.
+  - ac07 1 of 1 (`mac/ac07-b88135a36.txt`). Criterion 7.
+  - ac10 2 of 2 (`mac/ac10-b88135a36.txt`, `mac/ac10-gate-b88135a36.txt`), no load wait by the owner's choice: load
+    49.7 at its start and 39.7 at its end, thermal state 1. Its quiet-Mac pass stays the one at e44890825.
+    Criterion 10.
