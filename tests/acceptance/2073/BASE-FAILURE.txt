@@ -1,0 +1,77 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 (origin/main), with nothing changed but this folder.
+November 12, 2026, 17:15 PST. Node 24.22.0, macOS, 18 cores, on a Mac shared with other sessions (1-minute load 12.6
+at the start, 12.9 at the end). One run, from the checkout's root, after `npm ci` and `npm run build --workspaces`:
+
+  node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/2073 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+Summary: Tests 2 failed | 1 passed (3), in 5.22 s (6 s by the clock, the throttle's grant included); exit 1.
+
+What each test did on the base, each at its criterion's own assertion:
+
+- #2073.c18985be (criterion 1): FAIL, as the criterion says. In the repo no trust record covers, deep_run of the
+  marker check wasn't refused: it returned its run with outcome passed, a run.started was appended for the claim, and
+  the marker file outside the repo was written, holding "ran". The base is the hub that starts the run.
+- #2073.77f14713 (criterion 2): FAIL, as the criterion says, naming state.txt. In the trusted repo, with state.txt
+  edited after the claim, holds-committed failed and holds-edited passed: the outcomes of the live worktree's edit, not
+  of the claim's commit. The base is the hub that runs in the live worktree.
+- #2073.7513ec0a (criterion 3): PASS. In the trusted repo, deep_run of holds-committed returned passed with its run's
+  evidence handles, the ones its run.finished names. Regression protection.
+
+No test ended BLOCKED or INCONCLUSIVE, and none failed anywhere but its expect. Each test's folder under /tmp/dh2073-*
+was gone after the run and no process it started was left.
+
+Type check, clean (exit 0, no output):
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2073/tsconfig.json
+
+The fixture's checks on the hermetic runner, checked once on this base with a scratch script that is not kept: the
+command check kind (`runCommandCheck` of packages/checks-command, on a supervisor of its own, HOME a temporary
+folder) ran `node checks/holds.mjs committed` and `node checks/holds.mjs edited` in a folder holding the fixture's
+files. Where state.txt held the word: outcome passed, exit 0, one test counted. Where it held the other word: outcome
+failed, "the command exited 1". Neither was uncounted, and both read sets were checks/holds.mjs and state.txt. So the
+two checks give the same outcomes run as the base's deep_run runs them and run as a claim's checks run.
+
+==== The run (the checkout written <repo>, each test's own folder <tmp>; the reporter's second copy of each message, its "→" line, left out)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2073
+
+ × run.test.ts > #2073.c18985be in a fixture repo no trust record covers, deep_run of the check that writes a marker file outside the repo is refused naming trust and the project, no run.started is appended and the marker isn't written 1206ms
+ × run.test.ts > #2073.77f14713 in a trusted fixture repo, a tracked file edited after the claim doesn't change deep_run's outcome for that claim: the runs read state.txt as the claim's commit holds it 1671ms
+ ✓ run.test.ts > #2073.7513ec0a in the same trusted repo, deep_run of a passing check still returns passed with its evidence handles, as #26 has it 2018ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  run.test.ts > #2073.c18985be in a fixture repo no trust record covers, deep_run of the check that writes a marker file outside the repo is refused naming trust and the project, no run.started is appended and the marker isn't written
+AssertionError: #2073.c18985be no trust record covers <tmp>/shopfront (no decision of the core's, and neither Claude Code's workspace trust nor Codex's trusted projects), so deep_run of its spec's marker check for claim:01M797JH2G1NJR3FBC7SKAZN6P must be refused before anything starts, naming the project and that its spec checks run only once you trust it: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_run wasn't refused: it returned {\"run\":\"run:01M797JH2TDT4EM49CVKBC6598\",\"claim\":\"claim:01M797JH2G1NJR3FBC7SKAZN6P\",\"outcome\":\"passed\",\"evidence\":[\"ev:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"ev:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"]}",
++   "a run.started was appended: run:01M797JH2TDT4EM49CVKBC6598 of the check marker for claim:01M797JH2G1NJR3FBC7SKAZN6P",
++   "the marker file <tmp>/marker, outside the repo, was written: it holds \"ran\"",
++ ]
+
+ ❯ run.test.ts:36:334
+
+ FAIL  run.test.ts > #2073.77f14713 in a trusted fixture repo, a tracked file edited after the claim doesn't change deep_run's outcome for that claim: the runs read state.txt as the claim's commit holds it
+AssertionError: #2073.77f14713 state.txt was edited in the worktree after claim:01M797JJ768Q6S4W9S2MA6HYBG was made at b2a2a25, where it holds "committed"; deep_run for that claim must read state.txt as that commit holds it, so holds-committed passes and holds-edited fails. The outcomes are those of the live worktree's edit of state.txt ("edited"): the runs read state.txt in the live worktree: expected { 'holds-committed': 'failed', …(1) } to deeply equal { 'holds-committed': 'passed', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "holds-committed": "passed",
+-   "holds-edited": "failed",
++   "holds-committed": "failed",
++   "holds-edited": "passed",
+  }
+
+ ❯ run.test.ts:58:292
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  17:15:24
+   Duration  5.22s (tests 95%, transform 4%, import 1%)

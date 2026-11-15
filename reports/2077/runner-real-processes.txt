@@ -1,0 +1,26 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/runner/test/eval-job.test.ts packages/runner/test/eval-process.test.ts packages/runner/test/eval-safety-2077.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+··stderr | packages/runner/test/eval-job.test.ts
+vitest-setup: stopping 4 process(es) this file left running:
+  82591 (node)
+  82595 (node)
+  82639 (node)
+  82644 (node)
+
+stderr | packages/runner/test/eval-process.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  82635 (node)
+
+··········stderr | packages/runner/test/eval-safety-2077.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  23091 (node)
+  23092 (node)
+
+
+
+ Test Files  3 passed (3)
+      Tests  12 passed (12)
+   Start at  15:37:10
+   Duration  121.10s (tests 99%, transform 1%)

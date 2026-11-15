@@ -1,0 +1,28 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/config-eval/test/hub-launcher.test.ts packages/config-eval/test/judge.test.ts packages/config-eval/test/launcher.test.ts packages/config-eval/test/removal-plan.test.ts packages/config-eval/test/removal-symlink.test.ts packages/hub/test/removal-cancel.test.ts packages/hub/test/removal-crash.test.ts packages/hub/test/removal-drift.test.ts packages/hub/test/removal-fenced.test.ts packages/hub/test/removal-provenance.test.ts packages/hub/test/removal-safety.test.ts packages/runner/test/eval-fail-closed-2077.test.ts packages/runner/test/eval-isolation-2077.test.ts packages/runner/test/eval-job.test.ts packages/runner/test/eval-process.test.ts packages/runner/test/eval-safety-2077.test.ts tests/acceptance/112/eval.test.ts tests/acceptance/2077/removal.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+···stdout | tests/acceptance/2077/removal.test.ts > AC1 #2077.c76c4641 AC2 #2077.d2415960: installed removal starts exactly one frozen eval, returns its handle, then adopt
+lesson lesson-4ab943923705: {"code":0,"answer":"Configuration eval run:01M7EBB9AFQP6XVBZGMR1E3798 for lesson-4ab943923705 is waiting; the rule is unchanged until it adopts.\n\n","jobs":[{"job":"run:01M7EBB9AFQP6XVBZGMR1E3798","state":"waiting"}]}
+
+···············stderr | packages/hub/test/removal-fenced.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  62136 (node)
+
+·········stderr | packages/hub/test/removal-cancel.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  78394 (node)
+  78395 (node)
+
+············stdout | tests/acceptance/2077/removal.test.ts > AC1 #2077.c76c4641 AC2 #2077.d2415960: installed removal starts exactly one frozen eval, returns its handle, then regresses
+lesson lesson-282f9ae217eb: {"code":0,"answer":"Configuration eval run:01M7EBDJ9WN8YXQ7XH2F7CQF08 for lesson-282f9ae217eb is waiting; the rule is unchanged until it adopts.\n\n","jobs":[{"job":"run:01M7EBDJ9WN8YXQ7XH2F7CQF08","state":"waiting"}]}
+
+·········stdout | tests/acceptance/2077/removal.test.ts > AC1 #2077.c76c4641 AC3 #2077.c43a0799: installed removal starts exactly one frozen eval, returns its handle, then INCONCLUSIVE
+lesson lesson-f7970eb2099d: {"code":0,"answer":"Configuration eval run:01M7EBF6N4BPD2KSSV1P6CM79Y for lesson-f7970eb2099d is waiting; the rule is unchanged until it adopts.\n\n","jobs":[{"job":"run:01M7EBF6N4BPD2KSSV1P6CM79Y","state":"waiting"}]}
+
+··
+
+ Test Files  18 passed (18)
+      Tests  50 passed (50)
+   Start at  16:57:29
+   Duration  174.30s (tests 99%, transform 1%)

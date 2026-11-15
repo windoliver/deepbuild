@@ -18,7 +18,7 @@ use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::hub::{Call, Eval, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
+use crate::hub::{Call, Eval, EvalTime, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// An operator's error as a revision's issue.
@@ -237,8 +237,62 @@ impl<'a> Hub<'a> {
             .ok()
     }
 
-    /// One frame of a document's session (`eval`).
+    /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
+    /// through its groups' warps at their values then, each sub-path flattened to its points.
+    pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let planted = crate::warps::planted(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let (Some(form), Some(items)) = (
+            session.document().and_then(Value::as_object).cloned(),
+            crate::warps::items_at(&self.sched, session),
+        ) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        match crate::warps::drawn(&form, &items, item, planted) {
+            Ok(Some(subpaths)) => {
+                json!({"item": item, "t": t, "subpaths": subpaths, "notices": []})
+            }
+            Ok(None) => json!({"outcome": "refused", "code": "ref_unresolved", "item": item}),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
+    /// One frame of a document's session (`eval`). #542: a golden pins each view setting to its
+    /// declared default (Scope and input classes), so the frame leaves the session's view-class
+    /// values out, and the live session gets them back after.
     pub fn eval(&mut self, e: &Eval) -> Value {
+        let held = self.take_view(&e.doc);
+        if held.is_some() {
+            self.replay(&e.doc, self.now);
+        }
+        let reply = self.eval_frame(e);
+        if let Some(view) = held {
+            if let Some(s) = self.session_state.get_mut(&e.doc) {
+                s["view"] = view;
+            }
+            self.replay(&e.doc, self.now);
+        }
+        reply
+    }
+
+    /// The document's view-class session values, taken out; none when it holds none.
+    fn take_view(&mut self, doc: &str) -> Option<Value> {
+        let view = self.session_state.get_mut(doc)?.get_mut("view")?;
+        view.as_object()
+            .is_some_and(|m| !m.is_empty())
+            .then(|| view.take())
+    }
+
+    fn eval_frame(&mut self, e: &Eval) -> Value {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
         }
@@ -359,6 +413,16 @@ impl<'a> Hub<'a> {
                         .as_ref()
                         .and_then(|v| v.as_typed::<f64>())
                         .map(|x| json!(*x));
+                    // #533: a logic item's array `<logic ID>.<name>` of count 1, as the logic
+                    // module's last step at or before the frame left it.
+                    let logic = || {
+                        let state = evaluated.array(&self.sched, deep_logic::module::STATE)?;
+                        let state = state.as_typed::<deep_logic::module::State>()?;
+                        match state.arrays.get(name)?.as_slice() {
+                            [one] => Some(one.clone()),
+                            _ => None,
+                        }
+                    };
                     // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
                     let doc = evaluated.document();
                     let bands = || {
@@ -367,7 +431,10 @@ impl<'a> Hub<'a> {
                         })
                         .map(|m| json!(m.values))
                     };
-                    (name.clone(), n.or(x).or_else(bands).unwrap_or(Value::Null))
+                    (
+                        name.clone(),
+                        n.or(x).or_else(logic).or_else(bands).unwrap_or(Value::Null),
+                    )
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
@@ -402,6 +469,8 @@ impl<'a> Hub<'a> {
         };
         // #507: the timeline position the frame at this clock time shows.
         reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
+        // #1968: each text diff's tokens at t, for the film block.
+        let diffs = e.film.then(|| diff_report(&self.sched, evaluated));
         let drawing = if e.pixels || e.film || e.texts {
             drawing_of(&self.sched, evaluated).map(|p| match &document {
                 // #466: the look's boil on the frame's lines.
@@ -430,10 +499,12 @@ impl<'a> Hub<'a> {
                 })
                 .map(|d| d.glyphs())
                 .unwrap_or_default();
-            reply["film"] = match (&program, &document) {
+            let mut film = match (&program, &document) {
                 (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
                 _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
             };
+            film["diffs"] = Value::Object(diffs.unwrap_or_default());
+            reply["film"] = film;
             // #466: every list the document's reveals compile.
             if let Some(d) = &document {
                 reply["film"]["occurrences"] = Value::Object(self.reveal_lists(d));
@@ -650,16 +721,16 @@ impl<'a> Hub<'a> {
         drawing: &Painted,
         size: Option<[u16; 2]>,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
-        let drawn = self
-            .renderer
-            .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|()| Unfit {
-            code: "gpu_unavailable",
-            path: "snapshots".into(),
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        // #506: with its insets' pictures, its overlay frames at their anchors and its view
+        // overlays (over3d.rs).
+        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
+            "unsupported_platform" => Unfit {
+                code: "gpu_unavailable",
+                path: "snapshots".into(),
+            },
+            _ => u,
         })?;
-        let over = self.renderer.raster(&drawn, size, None);
-        snapshot::over(&mut rgba, &over);
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
@@ -739,6 +810,10 @@ impl<'a> Hub<'a> {
             if let (Some(before), Some(doc)) = (&before, self.sessions[&f.doc].document()) {
                 let after = crate::timings::mappings(&self.sched, &self.sessions[&f.doc]);
                 crate::timings::add(&mut frame, (doc, before, &after, t), &mut seen);
+                let (tokens, aligns) =
+                    crate::timings::code(&self.sched, &self.sessions[&f.doc], doc);
+                frame["tokens"] = tokens;
+                frame["aligns"] = aligns;
             }
             revised_now = false;
             let mut capture = 0;
@@ -1286,6 +1361,188 @@ fn morphed_vectors(
     Some(frame)
 }
 
+/// A frame as its text diffs draw it, with each unit's shaped run by its mark's item.
+type Diffed = (
+    deep_canvas_marks::scene::Frame,
+    Vec<(String, Arc<deep_canvas_marks::modules::Run>)>,
+);
+
+/// #1968: each text diff between two code items as a frame draws it: before its window only its
+/// from item, after it only its to item, and inside it each item's text giving way to its units,
+/// moved and faded as the diff has them at its progress, while the rest each item draws (its
+/// gutter, numbers and highlights) cross-fades from the old item's to the new one's.
+fn diffed_code(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+    frame: &deep_canvas_marks::scene::Frame,
+) -> Option<Diffed> {
+    use deep_canvas_marks::diff::{self, Side};
+    use deep_canvas_marks::scene::{Drawn, Scope};
+    let program = crate::film::program_of(sched, session)?;
+    let diffs: Vec<_> = program
+        .betweens
+        .iter()
+        .filter_map(|b| Some((b, b.diff.as_ref()?)))
+        .collect();
+    if diffs.is_empty() {
+        return None;
+    }
+    let t = session.t();
+    let base = |m: &Drawn| -> String {
+        let item = m.mark.item();
+        item.split('#').next().unwrap_or(item).to_string()
+    };
+    let mut frame = frame.clone();
+    let mut runs = Vec::new();
+    for (b, d) in diffs {
+        let p = b.progress(t);
+        let (a, z) = (
+            text_mark(&frame, &b.from).cloned(),
+            text_mark(&frame, &b.to).cloned(),
+        );
+        let units = match (&a, &z) {
+            (Some(a), Some(z)) if t > b.start && t < b.end => {
+                match (Side::of(a, &d.old), Side::of(z, &d.new)) {
+                    (Some(old), Some(new)) => Some(diff::marks(
+                        &old,
+                        &new,
+                        &diff::moved(&old, &new, &d.matching, p),
+                    )),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        for m in units.iter().flatten() {
+            if let Some(run) = diff::run_of(&m.mark) {
+                runs.push((m.mark.item().to_string(), Arc::new(run)));
+            }
+        }
+        // Each item's marks at their opacity in the frame: none, all, or faded.
+        let (from, to) = match (t <= b.start, t >= b.end) {
+            (true, _) => (1.0, 0.0),
+            (_, true) => (0.0, 1.0),
+            _ => (1.0 - p, p),
+        };
+        let mut units = units.map(|u| u.into_iter());
+        for layer in &mut frame.layers {
+            if !layer
+                .marks
+                .iter()
+                .any(|m| [&b.from, &b.to].contains(&&base(m)))
+            {
+                continue;
+            }
+            let mut marks: Vec<Arc<Drawn>> = Vec::with_capacity(layer.marks.len());
+            for m in layer.marks.iter() {
+                let owner = base(m);
+                let alpha = if owner == b.from {
+                    from
+                } else if owner == b.to {
+                    to
+                } else {
+                    marks.push(m.clone());
+                    continue;
+                };
+                // Inside the window, the two texts draw as their units, where the old one stood.
+                if let Some(units) = units.as_mut().filter(|_| m.mark.item() == owner) {
+                    if owner == b.from {
+                        marks.extend(units.by_ref());
+                    }
+                    continue;
+                }
+                if alpha <= 0.0 {
+                    continue;
+                }
+                if alpha >= 1.0 {
+                    marks.push(m.clone());
+                    continue;
+                }
+                let mut scopes = m.scopes.clone();
+                scopes.push(Scope::Opacity {
+                    item: format!("{}#diff", m.mark.item()),
+                    alpha,
+                    blend: None,
+                    effect: None,
+                });
+                marks.push(Arc::new(Drawn {
+                    mark: m.mark.clone(),
+                    clip: m.clip,
+                    scopes,
+                }));
+            }
+            layer.marks = marks.into_iter().collect();
+            // Before the window too the layer holds other marks than its items drew.
+            for (k, x) in layer
+                .key
+                .0
+                .iter_mut()
+                .zip((1.0 + p).to_bits().to_le_bytes())
+            {
+                *k ^= x;
+            }
+        }
+    }
+    Some((frame, runs))
+}
+
+/// The text mark the item `id` draws in `frame`.
+fn text_mark<'a>(
+    frame: &'a deep_canvas_marks::scene::Frame,
+    id: &str,
+) -> Option<&'a Arc<deep_canvas_marks::scene::Drawn>> {
+    frame.layers.iter().flat_map(|l| l.marks.iter()).find(
+        |m| matches!(&m.mark, deep_canvas_marks::scene::Mark::Text { item, .. } if item == id),
+    )
+}
+
+/// #1968: the film block's `diffs`, each text diff at the session's time: its progress, and each
+/// token of either code item once (`<item>#tok:k`), a kept one naming both, with its box in the
+/// document and its opacity in the diff.
+pub(crate) fn diff_report(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+) -> Map<String, Value> {
+    use deep_canvas_marks::diff::{self, Side};
+    let mut out = Map::new();
+    let Some(program) = crate::film::program_of(sched, session) else {
+        return out;
+    };
+    let drawing = session
+        .value(sched, "marks2d.frame", None)
+        .and_then(|v| v.as_typed::<Drawing>());
+    let t = session.t();
+    for (b, d) in program
+        .betweens
+        .iter()
+        .filter_map(|b| Some((b, b.diff.as_ref()?)))
+    {
+        let p = b.progress(t);
+        let pieces = drawing
+            .as_deref()
+            .and_then(|drawing| {
+                let a = Side::of(text_mark(&drawing.frame, &b.from)?, &d.old)?;
+                let z = Side::of(text_mark(&drawing.frame, &b.to)?, &d.new)?;
+                Some(diff::pieces(
+                    &a,
+                    &z,
+                    &d.matching,
+                    &diff::moved(&a, &z, &d.matching, p),
+                ))
+            })
+            .unwrap_or_default();
+        let name = |item: &str, k: Option<usize>| k.map(|k| format!("{item}#tok:{k}"));
+        let tokens: Vec<Value> = pieces
+            .iter()
+            .map(|q| {
+                json!({"from": name(&b.from, q.from), "to": name(&b.to, q.to), "box": q.bbox, "opacity": q.opacity})
+            })
+            .collect();
+        out.insert(b.id.clone(), json!({"progress": p, "tokens": tokens}));
+    }
+    out
+}
+
 /// Each vector at t, drawn as its lowering draws it (#1162; Vector and formula `vector@1`): the whole
 /// outline marks2d draws for it gives way to each of its paths, so a glyph's counters stay open
 /// (#220), and while it writes on, to each path as the lowering writes it at the item's evaluated
@@ -1483,6 +1740,18 @@ pub(crate) fn drawing_of(
             *d = Arc::new(Drawing {
                 frame,
                 runs: d.runs.clone(),
+                animated: d.animated.clone(),
+                built: d.built,
+                damage: Vec::new(),
+                basis: None,
+            });
+        }
+        if let Some((frame, units)) = diffed_code(sched, session, &d.frame) {
+            let mut runs = d.runs.clone();
+            runs.extend(units);
+            *d = Arc::new(Drawing {
+                frame,
+                runs,
                 animated: d.animated.clone(),
                 built: d.built,
                 damage: Vec::new(),

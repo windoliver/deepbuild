@@ -1,0 +1,7 @@
+{
+  "PATH": "/opt/homebrew/opt/node@24/bin:<home>/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  "RUSTUP_HOME": "<home>/.rustup",
+  "CARGO_HOME": "<home>/.cargo",
+  "CARGO_BUILD_JOBS": "2",
+  "excludes": "personal tool directories, forge tokens, agent billing variables"
+}

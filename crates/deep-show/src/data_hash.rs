@@ -44,6 +44,27 @@ pub(crate) fn of(sched: &deep_canvas::schedule::Scheduler<'_>, s: &DocSession) -
         unwritten_defaults(&mut fields);
         out.insert(id.clone(), json!({"at": at, "fields": fields}));
     }
+    // #223: an item under a group's warp evaluates to the outline its warps leave at the frame,
+    // which moves with t though no field of its own does.
+    let doc = s.document()?;
+    let warped: Vec<&String> = items
+        .keys()
+        .filter(|id| crate::warps::under_warp(doc, id))
+        .collect();
+    if let (false, Some(form), Some(drawn_items)) = (
+        warped.is_empty(),
+        doc.as_object(),
+        crate::warps::items_at(sched, s),
+    ) {
+        for id in warped {
+            let drawn = crate::warps::drawn(form, &drawn_items, id, Default::default())
+                .ok()
+                .flatten();
+            if let (Some(d), Some(entry)) = (drawn, out.get_mut(id.as_str())) {
+                entry["drawn"] = json!(d);
+            }
+        }
+    }
     Some(sha256_hex(&canonical(&Value::Object(out))))
 }
 

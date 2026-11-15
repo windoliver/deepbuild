@@ -54,6 +54,7 @@
       "properties": {
         "id": {
           "type": "string",
+          "maxLength": 8192,
           "pattern": "^(session|ask):[0-9A-Za-z._-]+$",
           "description": "The row's ID, the id its node carries in the app's tree (#1459): ask:<ULID> for an ask, session:<ID> for a session."
         },
@@ -63,11 +64,12 @@
         },
         "order": {
           "type": "string",
-          "maxLength": 512,
+          "maxLength": 8192,
           "description": "Where the row sits in the list: every reader sorts the rows by this key's bytes, so the list has one order."
         },
         "address": {
           "type": "string",
+          "maxLength": 8192,
           "pattern": "^(session|ask)/[0-9A-Za-z._-]+$",
           "description": "The row's page: ask/<ULID> or session/<ID>."
         },
@@ -78,17 +80,17 @@
         },
         "project": {
           "type": ["string", "null"],
-          "maxLength": 1024,
+          "maxLength": 8192,
           "description": "The repo the row's session works in, by its folder's name; null when the record names none."
         },
         "session": {
           "type": "string",
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "The session the row is, or the session that raised the ask."
         },
         "agent": {
           "type": ["string", "null"],
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "The session's agent."
         },
         "entry": {
@@ -118,7 +120,7 @@
         },
         "waits_on": {
           "type": ["string", "null"],
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "Who the row waits on: you or the agent, and a person once the hub names people; null when nothing waits."
         },
         "since": {
@@ -135,7 +137,7 @@
             "properties": {
               "answer": {
                 "type": "string",
-                "maxLength": 256,
+                "maxLength": 8192,
                 "description": "The option an answer gives, as deep inbox answer takes it."
               },
               "label": {

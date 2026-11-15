@@ -1,0 +1,195 @@
+The one run of the whole suite at the base, 72fe11a11 (origin/main), 2026-11-14, on the Linux dev machine at load
+average 52: npx vitest run --root tests/acceptance/2204. 7 tests: AC1, AC2 and AC5 fail, AC3 (2) and AC4 (2) pass.
+The checkout's path is replaced by <repo>.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2204
+
+ ❯ rules-unreadable.test.ts (7 tests | 3 failed) 43842ms
+   ❯ #2204.64b12833 hub running, rules.json cut to its first 40 bytes (1)
+     × #2204.64b12833 a PreToolUse for `pkill -f node` is denied, naming rules.json and that it isn't JSON 5244ms
+   ❯ #2204.722aff94 hub running, a readable rules.json gains one entry whose match is effect:not-a-class (1)
+     × #2204.722aff94 a PreToolUse for `pkill -f node` is denied, naming rules.json and the entry 3187ms
+   ❯ #2204.17dfce30 hub running, first-party entries installed, the file is cut short (1)
+     × #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs 24432ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.64b12833 hub running, rules.json cut to its first 40 bytes > #2204.64b12833 a PreToolUse for `pkill -f node` is denied, naming rules.json and that it isn't JSON
+AssertionError: the PreToolUse for `pkill -f node` with the hub running and rules.json cut to 40 bytes must be denied: exit 0 after 18 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ rules-unreadable.test.ts:55:139
+     53|     const { h, hub } = await running();
+     54|     const r = await withHubAnswering(h, hub, cutShort);
+     55|     expect(decision(r), `the PreToolUse for \`${CALL}\` with the hub r…
+       |                                                                                                                                           ^
+     56|     expect(words(r), `the denial of \`${CALL}\` must name rules.json: …
+     57|     expect(words(r), `the denial of \`${CALL}\` must say rules.json is…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.722aff94 hub running, a readable rules.json gains one entry whose match is effect:not-a-class > #2204.722aff94 a PreToolUse for `pkill -f node` is denied, naming rules.json and the entry
+AssertionError: the PreToolUse for `pkill -f node` with the hub running and the entry newer-than-this-hook (effect:not-a-class) in rules.json must be denied: exit 0 after 10 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ rules-unreadable.test.ts:65:166
+     63|     const { h, hub } = await running();
+     64|     const r = await withHubAnswering(h, hub, gainUnknownEntry);
+     65|     expect(decision(r), `the PreToolUse for \`${CALL}\` with the hub r…
+       |                                                                                                                                                                      ^
+     66|     expect(words(r), `the denial of \`${CALL}\` must name rules.json: …
+     67|     expect(words(r), `the denial of \`${CALL}\` must name the entry ${…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.17dfce30 hub running, first-party entries installed, the file is cut short > #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs
+AssertionError: the first call (`pkill -f node`) after rules.json is cut short must be denied: exit 0 after 8 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ rules-unreadable.test.ts:113:128
+    111|     const { h, hub, before, first } = at;
+    112|
+    113|     expect.soft(decision(first), `the first call (\`${CALL}\`) after r…
+       |                                                                                                                                ^
+    114|     expect.soft(words(first), `the first call's denial must name rules…
+    115|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.17dfce30 hub running, first-party entries installed, the file is cut short > #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs
+AssertionError: the first call's denial must name rules.json: exit 0 after 8 ms, stdout "", stderr "": expected '\n' to contain 'rules.json'
+
+- Expected
++ Received
+
+- rules.json
++
++
+
+ ❯ rules-unreadable.test.ts:114:96
+    112|
+    113|     expect.soft(decision(first), `the first call (\`${CALL}\`) after r…
+    114|     expect.soft(words(first), `the first call's denial must name rules…
+       |                                                                                                ^
+    115|
+    116|     // The hub writes the file before it answers; a hook that denied o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.17dfce30 hub running, first-party entries installed, the file is cut short > #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs
+AssertionError: rules.json must again hold every installed entry, each as it was installed (the entries missing or changed): expected 'rules.json is still not JSON with an …' to deeply equal []
+
+- Expected:
+[]
+
++ Received:
+"rules.json is still not JSON with an entries object: the hub left the file as it is"
+
+ ❯ rules-unreadable.test.ts:120:331
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.17dfce30 hub running, first-party entries installed, the file is cut short > #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs
+AssertionError: the next `pkill -f node` must be denied: exit 0 after 8 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ rules-unreadable.test.ts:123:88
+    121|
+    122|     const next = await hook(h, 'PreToolUse', CALL);
+    123|     expect.soft(decision(next), `the next \`${CALL}\` must be denied: …
+       |                                                                                        ^
+    124|     expect.soft(words(next), `the next \`${CALL}\` must be denied nami…
+    125|     const ls = await hook(h, 'PreToolUse', 'ls');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.17dfce30 hub running, first-party entries installed, the file is cut short > #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs
+AssertionError: the next `pkill -f node` must be denied naming no-kill-by-name: exit 0 after 8 ms, stdout "", stderr "": expected '\n' to contain 'no-kill-by-name'
+
+- Expected
++ Received
+
+- no-kill-by-name
++
++
+
+ ❯ rules-unreadable.test.ts:124:108
+    122|     const next = await hook(h, 'PreToolUse', CALL);
+    123|     expect.soft(decision(next), `the next \`${CALL}\` must be denied: …
+    124|     expect.soft(words(next), `the next \`${CALL}\` must be denied nami…
+       |                                                                                                            ^
+    125|     const ls = await hook(h, 'PreToolUse', 'ls');
+    126|     expect.soft(decision(ls), `\`ls\` must run once the file is back: …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.17dfce30 hub running, first-party entries installed, the file is cut short > #2204.17dfce30 the first call is denied naming rules.json, the hub writes every installed entry back and records it once, then `pkill -f node` is denied by no-kill-by-name and `ls` runs
+AssertionError: the record must hold one event naming rules.json after the cut; the kinds recorded since: ["tool.before","row.set","tool.before","tool.before","row.set"]: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ rules-unreadable.test.ts:134:204
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 4 passed (7)
+   Start at  15:25:50
+   Duration  44.15s (tests 100%)
+
+exit 1
+
+---- AC4 on its planted wrong program (twins/rules-read-on-every-event laid over the base, built in a scratch copy;
+npx vitest run --root <scratch copy>/tests/acceptance/2204 -t 7f8edc15). The scratch copy's path is replaced by <twin>.
+
+
+ RUN  v5.0.5 <twin>/tests/acceptance/2204
+
+ ❯ rules-unreadable.test.ts (7 tests | 1 failed | 5 skipped) 12936ms
+   ❯ #2204.7f8edc15 a PostToolUse never waits on rules.json, and a readable file lets ls run (2)
+     × #2204.7f8edc15 with the hub down: a PostToolUse with the cut file exits 0, and with a readable file `ls` runs 6855ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rules-unreadable.test.ts > #2204.7f8edc15 a PostToolUse never waits on rules.json, and a readable file lets ls run > #2204.7f8edc15 with the hub down: a PostToolUse with the cut file exits 0, and with a readable file `ls` runs
+AssertionError: the PostToolUse event with rules.json cut to 40 bytes and the hub down must exit 0, not be denied: exit 2 after 18 ms, stdout "", stderr "DeepBuild blocked this: ~/.deepbuild/rules.json isn't JSON, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry.\n": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ rules-unreadable.test.ts:92:138
+     90|       cutShort(h);
+     91|       const post = await hook(h, 'PostToolUse', 'ls');
+     92|       expect(post.code, `the PostToolUse event with rules.json cut to …
+       |                                                                                                                                          ^
+     93|     }, T);
+     94|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 5 skipped (7)
+   Start at  15:28:14
+   Duration  13.23s (tests 99%, transform 1%)
+
+exit 1

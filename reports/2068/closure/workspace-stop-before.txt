@@ -1,0 +1,28 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ × packages/hub/test/prompt-workspace-stop.test.ts > settles a words task workspace before recording the clean hub stop 2529ms
+   → a clean stop must settle workspace creation, not orphan its git child: expected undefined to be defined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/prompt-workspace-stop.test.ts > settles a words task workspace before recording the clean hub stop
+AssertionError: a clean stop must settle workspace creation, not orphan its git child: expected undefined to be defined
+ ❯ packages/hub/test/prompt-workspace-stop.test.ts:47:98
+     45|       const workspace = events.find((e) => e.kind === 'workspace.creat…
+     46|       const stopped = events.filter((e) => e.kind === 'hub.stopped').a…
+     47|       expect(workspace, 'a clean stop must settle workspace creation, …
+       |                                                                                                  ^
+     48|       expect(workspace!.log_pos, 'workspace creation commits before th…
+     49|       const folder = (JSON.parse(workspace!.data) as { folder: string …
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/prompt-workspace-stop.test.ts:11:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:57:13
+   Duration  2.84s (tests 97%, transform 2%)
+
