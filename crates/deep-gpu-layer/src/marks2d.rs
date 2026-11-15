@@ -996,6 +996,13 @@ impl RenderModule for Module2 {
         let (options, planted) = (self.options, self.planted);
         let (error, encoded) = (self.error.clone(), self.encoded.clone());
         let size = target.size;
+        // #468: what the frame's draws encode, a composited group's included, from Vello GPU's
+        // count before them to its count once the job has drawn.
+        let before = vello.lock().unwrap_or_else(|e| e.into_inner()).fills();
+        let fills = {
+            let vello = vello.clone();
+            move || vello.lock().unwrap_or_else(|e| e.into_inner()).fills() - before
+        };
         let Some(mix) = frame.mix.clone() else {
             let draw = self.painter.draw(
                 device,
@@ -1010,7 +1017,7 @@ impl RenderModule for Module2 {
             let job: Job = Box::new(move |encoder| {
                 let drawn = draw(encoder);
                 if let Some(at) = &encoded {
-                    *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                    *at.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), fills()));
                 }
                 *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
             });
@@ -1075,7 +1082,7 @@ impl RenderModule for Module2 {
                 None,
             );
             if let Some(at) = &encoded {
-                *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                *at.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), fills()));
             }
             *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
         });

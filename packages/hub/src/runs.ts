@@ -121,6 +121,10 @@ function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] }
   const stand_ins = run.stand_ins && list('stand_ins', run.stand_ins, 1024, false);
   const deadline = run.deadline !== undefined && Number.isFinite(run.deadline) && run.deadline >= 0 ? run.deadline : null;
   if (run.deadline !== undefined && deadline === null) withheld.push('deadline');
+  // A check of another kind (#1537) and one your spec runs outside the sandbox (#33) aren't kept: rebuilt from the
+  // record, either would run as a plain command inside it.
+  if (run.spec) withheld.push('spec');
+  if (run.outside) withheld.push('outside');
   return {
     spec: {
       argv: argv.length ? argv : ['-'], cwd: cwd || '/', env, grant: grant as JsonValue, deadline_ms: deadline,
@@ -508,9 +512,12 @@ export class Runs {
         await this.launch(run, true);
         continue;
       }
-      // A kept run is never run again: it runs on, or it ended between the hubs.
-      if (run.keep) {
-        if (await this.o.supervisor().lives(run.run)) this.adopt(run);
+      // A kept run is never run again: it runs on, or it ended between the hubs. One rebuilt from the record doesn't say
+      // it was kept (run.started@3 has no keep), so any run the supervisor still holds alive is one: the others were
+      // reaped when it opened.
+      const lives = await this.o.supervisor().lives(run.run);
+      if (run.keep || lives) {
+        if (lives) this.adopt(run);
         else await this.keptEnded(run);
         continue;
       }

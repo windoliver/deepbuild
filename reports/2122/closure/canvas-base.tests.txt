@@ -1,0 +1,83 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/canvas-hub-failure.test.ts` runs unleased
+
+ RUN  v5.0.5 <base-checkout>
+
+deep hub: the core stopped: Error: spawn <test-home>/missing-canvas ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/canvas-hub-failure.test.ts > keeps the real hub and its core worker serving after the canvas cannot start
+AssertionError: a failed spawn is a structured unavailable refusal, not a dead connection: expected { Object (transportError) } to match object { error: { code: 'unavailable' } }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "error": {
+-     "code": "unavailable",
+-   },
++   "transportError": "the hub closed the connection before it answered",
+  }
+
+ ❯ packages/hub/test/canvas-hub-failure.test.ts:18:104
+     16|       const token = readFileSync(join(root, 'control.token'), 'utf8').…
+     17|       const failed = await call(socket, token, 'canvas.revisions', { d…
+     18|       expect.soft(failed, 'a failed spawn is a structured unavailable …
+       |                                                                                                        ^
+     19|       const health = await call(socket, token, 'hub.health', {}).catch…
+     20|       expect.soft(health, 'the core worker must still answer hub.healt…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/canvas-hub-failure.test.ts:13:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/hub/test/canvas-hub-failure.test.ts > keeps the real hub and its core worker serving after the canvas cannot start
+AssertionError: the core worker must still answer hub.health: expected { Object (transportError) } to have property "result"
+ ❯ packages/hub/test/canvas-hub-failure.test.ts:20:75
+     18|       expect.soft(failed, 'a failed spawn is a structured unavailable …
+     19|       const health = await call(socket, token, 'hub.health', {}).catch…
+     20|       expect.soft(health, 'the core worker must still answer hub.healt…
+       |                                                                           ^
+     21|       rmSync(failure);
+     22|       const restored = await call(socket, token, 'canvas.revisions', {…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/canvas-hub-failure.test.ts:13:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  packages/hub/test/canvas-hub-failure.test.ts > keeps the real hub and its core worker serving after the canvas cannot start
+AssertionError: the next canvas process can serve a new world after failure: expected { Object (transportError) } to match object { result: { revisions: [] } }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "result": {
+-     "revisions": [],
+-   },
++   "transportError": "can't reach the hub at <test-home>/.deepbuild/hub.sock: connect ENOENT <test-home>/.deepbuild/hub.sock",
+  }
+
+ ❯ packages/hub/test/canvas-hub-failure.test.ts:23:92
+     21|       rmSync(failure);
+     22|       const restored = await call(socket, token, 'canvas.revisions', {…
+     23|       expect.soft(restored, 'the next canvas process can serve a new w…
+       |                                                                                            ^
+     24|     }, { NODE_OPTIONS: `--import=${fileURLToPath(new URL('./canvas-212…
+     25|   } finally { rmSync(dir, { recursive: true, force: true }); }
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/canvas-hub-failure.test.ts:13:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:42:39
+   Duration  671ms (tests 88%, transform 9%, import 2%, setup 1%)

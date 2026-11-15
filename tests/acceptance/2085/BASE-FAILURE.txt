@@ -1,0 +1,121 @@
+# #2085 acceptance suite at the base, 81a5a9b2f63f09c4e9c6777b4ce174541ab6a300 (this worktree, clean, with
+# tests/acceptance/2085 added), one run:
+#   NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run tests/acceptance/2085 --no-file-parallelism --testTimeout=600000
+# with cargo of rust-toolchain.toml's channel (1.99.1) first on PATH and deep-show `full` already built (a cold build
+# took 3.5 minutes here). The checkout's path is written <checkout> below.
+#
+# Result: 4 tests, 3 fail and 1 passes. Nothing is BLOCKED or skipped.
+#
+# Fail, each for the expected reason:
+#   AC1 (#2085.a93c4567): deep_show refuses 16 of the 44 fixtures the full build's fixtures call lists: #429's twelve
+#       planted documents, effects/same-machine-check with not_exact at checks/total_ok/probe among them (the issue's
+#       reason); and, since the issue's run, cells/grid (unknown_asset at items/term/params/play/asset, first in the
+#       listing), scene3d/rest-no-support (no_support) and vector/formula and vector/paint (asset_missing). The
+#       effects module's own fixture shadowed-box is listed and presented.
+#   AC3 (#2085.688e488c): fixtures the full build lists aren't presented, and none of #387's and #855's seven cases
+#       is listed in scripts/known-failures.json.
+#   AC2's plant (#2085.353d4030, second test): deep-show answers bad_input to the scenario plant trusts_write_index,
+#       which the base doesn't have (README: The plant).
+# Pass, as it must on the base:
+#   AC2's first test (#2085.353d4030): the kit over the effects module finds each of #429's twelve planted documents,
+#       its exact-codes case passing on exactly its code, and the catalog proves each of the twelve codes by it.
+
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2085/fixtures.test.ts (2 tests | 2 failed) 3234ms
+   ❯ #2085.a93c4567 every fixture the full build's fixtures call lists is presented by deep_show in that build, as #387's and #855's suites take them (1)
+     × #2085.a93c4567 the fixtures call of full lists fixtures, the effects module's own shadowed-box among them, and deep_show presents every one it lists 1949ms
+   ❯ #2085.688e488c until #387's and #855's seven cases pass, scripts/known-failures.json lists them with #2085 (1)
+     × #2085.688e488c while a fixture the full build lists isn't presented, each of the seven cases is listed naming #2085; once every one is, nothing of tests/acceptance/387/perturb.test.ts or tests/acceptance/855/hash.test.ts is listed 1ms
+ ❯ tests/acceptance/2085/kit.test.ts (2 tests | 1 failed) 2279ms
+   ❯ #2085.353d4030 the effects kit still runs each of #429's planted documents and fails a check that stops raising its code (2)
+     × #2085.353d4030 under a check that trusts a compute write's index (planted trusts_write_index), scattered-write stops raising operator_kind_rule and the kit fails its exact-codes case, naming it and the missing code; the other eleven still pass 86ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2085/fixtures.test.ts > #2085.a93c4567 every fixture the full build's fixtures call lists is presented by deep_show in that build, as #387's and #855's suites take them > #2085.a93c4567 the fixtures call of full lists fixtures, the effects module's own shadowed-box among them, and deep_show presents every one it lists
+AssertionError: every fixture the fixtures call lists is presented by deep_show in the build that lists it (#387 README, Fixtures); 16 of 44 aren't, each with its outcome and the codes it raised: expected [ …(16) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "cells/grid: refused: unknown_asset (error at items/term/params/play/asset)",
++   "effects/same-machine-check: refused: not_exact (error at checks/total_ok/probe)",
++   "effects/composed-in-core-view: refused: operator_budget_class (error at items/tint)",
++   "effects/live-only-material: refused: live_only_canonical (error at items/glow/params/fallback)",
++   "effects/scattered-write: refused: operator_kind_rule (error at items/scatter/params/steps/w)",
++   "effects/tint-operator-status-color: refused: operator_status_color (error at items/tint/params/steps/r)",
++   "effects/tint-cost-understated: refused: cost_understated (error at items/tint/params/cost)",
++   "effects/tint-operator-cycle: refused: operator_cycle (error at items/tint/params/steps/a)",
++   "effects/tint-operator-limit: refused: operator_limit (error at items/tint/params/steps/w)",
++   "effects/tint-operator-source: refused: operator_source (error at items/tint/params/steps/out)",
++   "effects/tint-operator-type: refused: operator_type (error at items/tint/params/steps/out)",
++   "effects/tint-operator-unbounded: refused: operator_unbounded (error at items/tint/params/steps/sum)",
++   "effects/tint-operator-unknown-op: refused: operator_unknown_op (error at items/tint/params/steps/out)",
++   "scene3d/rest-no-support: refused: no_support (error at constraints/rest)",
++   "vector/formula: refused: asset_missing (error at items/eq/params/src)",
++   "vector/paint: refused: asset_missing (error at items/mark/params/src)",
++ ]
+
+ ❯ tests/acceptance/2085/fixtures.test.ts:49:236
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2085/fixtures.test.ts > #2085.688e488c until #387's and #855's seven cases pass, scripts/known-failures.json lists them with #2085 > #2085.688e488c while a fixture the full build lists isn't presented, each of the seven cases is listed naming #2085; once every one is, nothing of tests/acceptance/387/perturb.test.ts or tests/acceptance/855/hash.test.ts is listed
+AssertionError: 16 fixtures the full build lists aren't presented: cells/grid: refused: unknown_asset (error at items/term/params/play/asset); effects/same-machine-check: refused: not_exact (error at checks/total_ok/probe); effects/composed-in-core-view: refused: operator_budget_class (error at items/tint); effects/live-only-material: refused: live_only_canonical (error at items/glow/params/fallback); effects/scattered-write: refused: operator_kind_rule (error at items/scatter/params/steps/w); effects/tint-operator-status-color: refused: operator_status_color (error at items/tint/params/steps/r); effects/tint-cost-understated: refused: cost_understated (error at items/tint/params/cost); effects/tint-operator-cycle: refused: operator_cycle (error at items/tint/params/steps/a); effects/tint-operator-limit: refused: operator_limit (error at items/tint/params/steps/w); effects/tint-operator-source: refused: operator_source (error at items/tint/params/steps/out); effects/tint-operator-type: refused: operator_type (error at items/tint/params/steps/out); effects/tint-operator-unbounded: refused: operator_unbounded (error at items/tint/params/steps/sum); effects/tint-operator-unknown-op: refused: operator_unknown_op (error at items/tint/params/steps/out); scene3d/rest-no-support: refused: no_support (error at constraints/rest); vector/formula: refused: asset_missing (error at items/eq/params/src); vector/paint: refused: asset_missing (error at items/mark/params/src); so #387's and #855's seven cases fail, and each is listed in scripts/known-failures.json: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b every fixture of the full build is presented and evaluated, and every operator the registry lists has a node in some fixture",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b each fixture session lists its perturbation targets: the six view inputs, the seed, its look tokens with accent among them, and every array its nodes write",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b a change to any one array, table, view input, look token, seed or asset outside an operator's read set leaves its key and result byte-identical, for every node of every fixture",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b equal keys always give byte-identical results over fuzzed sequences of edits, views and times on the fixtures (fast-check seed 3870001, 40 sequences of up to 25 clean evaluations)",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b in a test build every access every shipped operator makes on every fixture is one of its declared reads (or a contribution to one)",
++   "tests/acceptance/855/hash.test.ts › #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey › #855.6df0cf9c equal documents get equal keys and result digests on two machines: the debug build here, and the release build in another time zone, locale, home and thread count, on the documents spelled otherwise",
++   "tests/acceptance/855/hash.test.ts › #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey › #855.6df0cf9c equal documents get equal keys and result digests on a machine of another architecture: the x86_64 build under Rosetta (INCONCLUSIVE where this Mac can't build or run it)",
++ ]
+
+ ❯ tests/acceptance/2085/fixtures.test.ts:65:124
+     63|       const unlisted = SEVEN.filter((id) => !(id in known));
+     64|       const why = fixtures.length === 0 ? 'the full build lists no fix…
+     65|       expect(unlisted, `${why}; so #387's and #855's seven cases fail,…
+       |                                                                                                                            ^
+     66|       const without = SEVEN.filter((id) => !/#2085\b/.test(known[id]!)…
+     67|       expect(without, 'each of the seven names this issue, #2085').toE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2085/kit.test.ts > #2085.353d4030 the effects kit still runs each of #429's planted documents and fails a check that stops raising its code > #2085.353d4030 under a check that trusts a compute write's index (planted trusts_write_index), scattered-write stops raising operator_kind_rule and the kit fails its exact-codes case, naming it and the missing code; the other eleven still pass
+AssertionError: deep-show run accepts the kit under the plant trusts_write_index (README: The plant): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run tests/acceptance/2085/helpers.ts:105:96
+    103|   expect(s.lines.length, `${SHOW_NAME} run (${what}): one output line …
+    104|   const out = obj(s.lines[0], `${SHOW_NAME} run (${what}): the answer`…
+    105|   expect(out['ok'], `${SHOW_NAME} run accepts ${what}: ${JSON.stringif…
+       |                                                                                                ^
+    106|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    107|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ kit tests/acceptance/2085/kit.test.ts:19:19
+ ❯ tests/acceptance/2085/kit.test.ts:47:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 1 passed (4)
+   Start at  20:28:47
+   Duration  5.68s (tests 99%)
+

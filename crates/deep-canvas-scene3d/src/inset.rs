@@ -600,6 +600,7 @@ fn centred(main: &Camera, at: &Affine3, size: [f64; 2], texels: [u32; 2]) -> Cam
     let mut c = Camera {
         size: texels.map(f64::from),
         eye: main.eye,
+        target: centre,
         right,
         up,
         forward,

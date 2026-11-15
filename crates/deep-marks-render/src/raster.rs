@@ -210,14 +210,15 @@ impl Config {
 /// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
 /// GPU's scene with its own.
 pub(crate) trait Glyphs: Canvas {
-    /// A glyph at `size`, slanted `skew` degrees (#1964: a faux italic).
-    fn glyph(
+    /// `glyphs` of one face at `size`, slanted `skew` degrees (#1964: a faux italic), filled in
+    /// the current paint as one glyph run.
+    fn fill_run(
         &mut self,
         resources: &mut Resources,
         font: &FontData,
         size_skew: (f32, f32),
         coords: &[i16],
-        glyph: vello_cpu::Glyph,
+        glyphs: &[vello_cpu::Glyph],
     );
 
     /// #496: a glyph's outline stroked `width` px wide in the current paint.
@@ -239,13 +240,13 @@ pub(crate) trait Glyphs: Canvas {
 }
 
 impl Glyphs for RenderContext {
-    fn glyph(
+    fn fill_run(
         &mut self,
         resources: &mut Resources,
         font: &FontData,
         (size, skew): (f32, f32),
         coords: &[i16],
-        glyph: vello_cpu::Glyph,
+        glyphs: &[vello_cpu::Glyph],
     ) {
         let run = self.glyph_run(resources, font);
         let _ = run
@@ -253,7 +254,7 @@ impl Glyphs for RenderContext {
             .hint(false)
             .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
-            .fill_glyphs(std::iter::once(glyph));
+            .fill_glyphs(glyphs.iter().copied());
     }
 
     fn glyph_stroke(
@@ -419,7 +420,9 @@ impl<C: Glyphs> Painter<'_, C> {
         self.glyphs(&shaped, origin, (None, color), (&[], None));
     }
 
-    /// A shaped run's glyphs at `origin`, each in its run's role or the text's.
+    /// A shaped run's glyphs at `origin`, each in its run's role or the text's: one glyph run for
+    /// each stretch of them in one face, size, slant and paint (#468: a drop's copy of the run is
+    /// one more glyph run).
     fn glyphs(
         &mut self,
         shaped: &deep_text::Shaped,
@@ -427,19 +430,33 @@ impl<C: Glyphs> Painter<'_, C> {
         (role, color): (Option<&str>, Rgb),
         (runs, lang): (&[scene::TextRun], Option<&str>),
     ) -> Vec<Value> {
-        let mut out = Vec::with_capacity(shaped.glyphs.len());
-        for g in &shaped.glyphs {
-            let (role, color) = scene::run_paint(runs, g.grapheme, role, color);
-            let opacity = scene::run_opacity(runs, g.grapheme);
+        let paint = |g: &deep_text::Glyph| {
+            let (_, color) = scene::run_paint(runs, g.grapheme, role, color);
+            (color, scene::run_opacity(runs, g.grapheme))
+        };
+        for stretch in shaped.glyphs.chunk_by(|a, b| {
+            (&a.font, a.size, a.skew, &a.coords, paint(a))
+                == (&b.font, b.size, b.skew, &b.coords, paint(b))
+        }) {
+            let g = &stretch[0];
+            let (color, opacity) = paint(g);
             self.ctx.set_paint(solid_at(color, opacity));
-            let glyph = vello_cpu::Glyph {
-                id: g.id,
-                x: g.x + origin[0] as f32,
-                y: g.y + origin[1] as f32,
-            };
+            let placed: Vec<vello_cpu::Glyph> = stretch
+                .iter()
+                .map(|g| vello_cpu::Glyph {
+                    id: g.id,
+                    x: g.x + origin[0] as f32,
+                    y: g.y + origin[1] as f32,
+                })
+                .collect();
             let size = (g.size, g.skew);
             self.ctx
-                .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
+                .fill_run(&mut self.resources, &g.font, size, &g.coords, &placed);
+        }
+        let mut out = Vec::with_capacity(shaped.glyphs.len());
+        for g in &shaped.glyphs {
+            let (role, _) = scene::run_paint(runs, g.grapheme, role, color);
+            let opacity = scene::run_opacity(runs, g.grapheme);
             let mut row = glyph_row(g, role, lang);
             // #496: the glyph's advance, outline and place, upright and unclipped here.
             let e = origin[0] + f64::from(g.x);
@@ -526,7 +543,7 @@ impl<C: Glyphs> Painter<'_, C> {
             match p.paint.write {
                 None => self
                     .ctx
-                    .glyph(&mut self.resources, &g.font, size, &g.coords, glyph),
+                    .fill_run(&mut self.resources, &g.font, size, &g.coords, &[glyph]),
                 // #1969: a glyph a write is drawing: its fill as far as it has come in, under its
                 // outline drawn from its start, in its own stroke, else a hairline in its fill's
                 // paint that fades as the fill comes in (Text `text@1`: write mode). The outline's
@@ -535,7 +552,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     if filled > 0.0 {
                         self.ctx.push_layer(None, None, Some(filled as f32), None);
                         self.ctx
-                            .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
+                            .fill_run(&mut self.resources, &g.font, size, &g.coords, &[glyph]);
                         self.ctx.pop_layer();
                     }
                     let own = p.paint.stroke.as_ref().filter(|(_, w)| *w > 0.0);

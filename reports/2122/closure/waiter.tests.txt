@@ -1,0 +1,19 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/1015/waiter.test.ts` runs unleased
+
+ RUN  v5.0.5 <home>/deepbuild-shards/2
+
+stdout | tests/acceptance/1015/waiter.test.ts > AC4 #1015.b67ee1cc a killed waiter leaves nothing behind, and a lease ends only with its whole process group > AC4 #1015.b67ee1cc a waiting `deep lease` killed with SIGTERM leaves no lease and no place in the queue within 2 s: the slot freed next goes to the waiter behind it
+AC4 killed waiter: leases of killed 2 s after SIGTERM: none; next started 2262 ms after the kill; every lease of killed: none
+
+·stdout | tests/acceptance/1015/waiter.test.ts > AC4 #1015.b67ee1cc a killed waiter leaves nothing behind, and a lease ends only with its whole process group > AC4 #1015.b67ee1cc a command whose process group keeps running after its parent exits keeps its slot until the whole group has ended
+AC4 group as built: parent 35776, child 35793, group 35776; slot held after the parent's exit: +0 ms held, +520 ms held, +1036 ms held, +1550 ms held, +2070 ms held, +2584 ms held, +3101 ms held, +3615 ms held, +4138 ms held, +4658 ms held, +5178 ms held, +5694 ms held; released after the group ended: true
+
+·stdout | tests/acceptance/1015/waiter.test.ts > AC4 #1015.b67ee1cc a killed waiter leaves nothing behind, and a lease ends only with its whole process group > AC4 #1015.b67ee1cc (wrong program) a release on the parent's exit (DEEP_HUB_PLANT=releases-on-parent-exit) frees the slot early and fails this test, naming the group
+AC4 group releases-on-parent-exit: parent 36623, child 36632, group 36623; slot held after the parent's exit: +0 ms free, +518 ms free, +1037 ms free, +1552 ms free, +2066 ms free, +2581 ms free, +3112 ms free, +3619 ms free, +4139 ms free, +4659 ms free, +5178 ms free, +5691 ms free; released after the group ended: true
+
+·
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  22:38:26
+   Duration  42.81s (tests 100%)

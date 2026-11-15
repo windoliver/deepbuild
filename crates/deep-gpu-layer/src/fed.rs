@@ -13,7 +13,9 @@ use std::rc::Rc;
 use deep_canvas_scene3d::scene::{placed_at, Assets, Refused, Scene};
 use deep_canvas_scene3d::{points, slots};
 use deep_logic::piece::{check_in, History};
+use deep_logic::services::Service;
 use deep_logic::world::{track_of, Record, World};
+use deep_physics_rapier::cast::{self, Caster};
 use deep_scene3d_render::Counts;
 use serde_json::{json, Map, Value};
 
@@ -71,8 +73,24 @@ pub(crate) fn bake(
         "items": items,
     });
     let read = |sha: &str| std::fs::read(assets.get(sha)?).ok();
-    let piece = check_in(&piece, &Default::default(), &mut History::new(), &read)
-        .map_err(|r| json!({"code": "logic_refused", "refusal": r.0}))?;
+    // #213: physics.cast@1 answers the logic items' requests on the document's worlds.
+    let caster = std::cell::RefCell::new(Caster::new(doc, &[], false));
+    let cast = Service {
+        name: cast::NAME.into(),
+        request: cast::REQUEST as u32,
+        result: cast::RESULT as u32,
+        max_per_step: cast::MAX_PER_STEP,
+        fuel_per_request: cast::FUEL_PER_REQUEST,
+        answer: Rc::new(move |t, r| caster.borrow_mut().answer(t, r)),
+    };
+    let piece = check_in(
+        &piece,
+        &Default::default(),
+        &mut History::new(),
+        &read,
+        &[cast],
+    )
+    .map_err(|r| json!({"code": "logic_refused", "refusal": r.0}))?;
     let steps = (piece.items.iter())
         .map(|i| until.max(0) / i.step.max(1) + 1)
         .max()
@@ -167,6 +185,7 @@ impl Baked {
 /// readings.
 pub(crate) fn values(
     doc: &Value,
+    scene: &Scene,
     t: i64,
     paths: &[String],
     (assets, planted): (Assets<'_>, Option<Planted>),
@@ -176,18 +195,51 @@ pub(crate) fn values(
     for path in paths {
         let rest = path.strip_prefix("items/").unwrap_or_default();
         let (id, field) = rest.split_once('/').unwrap_or((rest, ""));
-        let value = match slots::reading(doc, t, (id, field), Some(assets), plant_name(planted))
-            .map_err(refusal)?
-        {
+        let value = match contributed(doc, scene, id, field) {
             Some(v) => v,
-            None => (items.iter().find(|(i, _, _)| i == id))
-                .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
-                .cloned()
-                .unwrap_or(Value::Null),
+            None => match slots::reading(doc, t, (id, field), Some(assets), plant_name(planted))
+                .map_err(refusal)?
+            {
+                Some(v) => v,
+                None => (items.iter().find(|(i, _, _)| i == id))
+                    .and_then(|(_, item, _)| item.pointer(&format!("/{field}")))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            },
         };
         out.insert(path.clone(), value);
     }
     Ok(Value::Object(out))
+}
+
+/// #468: what scene3d evaluates a path to at t, where it contributes: the camera's field of
+/// view from its lens and its exposure from the lens as an EV100 (Camera `camera@1`: lens), a
+/// dof's focus distance in m (a focus pull's included), and a line's points in the world.
+fn contributed(doc: &Value, scene: &Scene, id: &str, field: &str) -> Option<Value> {
+    let camera = doc.get("camera").and_then(Value::as_str) == Some(id);
+    match field {
+        "params/fov" if camera => scene.optics.fov(scene.camera.size).map(Value::from),
+        "params/exposure" if camera => {
+            let rate = doc
+                .get("transport")
+                .and_then(deep_canvas::document::frame_rate_of)
+                .filter(|(p, q)| *p > 0 && *q > 0)
+                .map_or(60.0, |(p, q)| f64::from(p) / f64::from(q));
+            scene.optics.ev100(rate).map(Value::from)
+        }
+        "params/dof/focus" => scene
+            .dof
+            .as_ref()
+            .filter(|d| d.id == id)
+            .map(|d| Value::from(d.focus)),
+        "params/points" => scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.lines)
+            .find(|l| l.id == id && !l.points.is_empty())
+            .map(|l| json!(l.points)),
+        _ => None,
+    }
 }
 
 /// The selection a frame at `t` presents: the call's, then the viewer's, each less the elements
@@ -210,15 +262,25 @@ pub(crate) fn framed(
     json!(call.iter().chain(viewer.iter()).collect::<Vec<_>>())
 }
 
-/// The lines of `doc` whose points read a logic array.
+/// The lines of `doc` whose points read a logic array, or (#468) name an item's anchor.
 fn logic_lines(doc: &Value) -> impl Iterator<Item = &String> {
+    let anchored = |i: &Value| {
+        (i.pointer("/params/points")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten())
+        .any(|p| p.as_str().is_some_and(|h| h.contains('#')))
+    };
     (doc["items"].as_object().into_iter().flatten())
-        .filter(|(_, i)| i["kind"] == "mark.line@1" && i.pointer("/params/points/array").is_some())
+        .filter(move |(_, i)| {
+            i["kind"] == "mark.line@1"
+                && (i.pointer("/params/points/array").is_some() || anchored(i))
+        })
         .map(|(id, _)| id)
 }
 
-/// Each line of `scene` whose points read a logic array: its segments as the frame uploaded
-/// them, in world m, a hidden one null.
+/// Each line of `scene` whose points read a logic array, or name an item's anchor: its segments
+/// as the frame uploaded them, in world m, a hidden one null.
 pub(crate) fn segments(scene: &Scene, doc: &Value) -> Map<String, Value> {
     let ids: Vec<&String> = logic_lines(doc).collect();
     (scene.layers.iter().flat_map(|l| &l.lines))

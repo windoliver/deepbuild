@@ -27,24 +27,40 @@ const OPEN_KEPT = 256;
  * unbounded ping or sleep, a listener. Matched on the command's words, so a `tail -f` inside a pipeline counts too.
  */
 const NEVER_ENDS: readonly RegExp[] = [
-  /(^|[\s;&|(])tail\s+(?:-[a-zA-Z]*[fF][a-zA-Z]*|--follow)\b/,
-  /(^|[\s;&|(])(?:journalctl|kubectl\s+logs|docker\s+logs|docker\s+compose\s+logs|docker-compose\s+logs|gcloud\s+.*logs\s+tail|heroku\s+logs|fly\s+logs|flyctl\s+logs|stern)\b[^;&|]*\s(?:-f|--follow|-t|--tail)\b/,
-  /(^|[\s;&|(])(?:watch|top|htop|btop|less|more|fswatch|inotifywait|entr|nodemon|cargo\s+watch|cargo-watch)\b/,
-  /(^|[\s;&|(])(?:tsc|jest|vitest|mocha|pytest-watch|ptw|webpack|esbuild|rollup)\b[^;&|]*\s(?:--watch|-w|--watchAll)\b/,
-  /(^|[\s;&|(])vitest(?!\s+run)\b(?![^;&|]*\s--run\b)/,
-  /(^|[\s;&|(])(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|serve|watch|storybook)\b/,
-  /(^|[\s;&|(])(?:vite|next\s+dev|nuxt\s+dev|astro\s+dev|remix\s+dev|ng\s+serve|flask\s+run|uvicorn|gunicorn|rails\s+server|rails\s+s|php\s+-S|python3?\s+-m\s+http\.server|http-server|serve|live-server|hugo\s+server|jekyll\s+serve|mkdocs\s+serve)\b/,
-  /(^|[\s;&|(])sleep\s+(?:infinity|inf)\b/,
-  /(^|[\s;&|(])ping(?![^;&|]*\s-c\s*\d)\s[^;&|]*$/,
-  /(^|[\s;&|(])(?:nc|ncat|netcat)\s+[^;&|]*-l\b/,
-  /(^|[\s;&|(])(?:yes|cat)\s*$/,
-  /(^|[\s;&|(])(?:redis-server|mongod|postgres|mysqld|ollama\s+serve|caddy\s+run)\b/,
+  /^tail\s+(?:[^;&|]*?\s)?(?:-[a-zA-Z0-9]*[fF][a-zA-Z0-9]*|--follow)\b/,
+  /^(?:journalctl|kubectl\s+logs|docker\s+logs|docker\s+compose\s+logs|docker-compose\s+logs|gcloud\s+.*logs\s+tail|heroku\s+logs|fly\s+logs|flyctl\s+logs|stern)\b[^;&|]*\s(?:-f|--follow)\b/,
+  /^heroku\s+logs\b[^;&|]*\s(?:-t|--tail)\b/,
+  /^(?:watch|top|htop|btop|less|more|fswatch|inotifywait|entr|nodemon|cargo\s+watch|cargo-watch)\b/,
+  /^(?:tsc|jest|vitest|mocha|pytest-watch|ptw|webpack|esbuild|rollup)\b[^;&|]*\s(?:--watch|-w|--watchAll)\b/,
+  /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:dev|start|serve|watch|storybook)\b/,
+  /^(?:vite|next\s+dev|nuxt\s+dev|astro\s+dev|remix\s+dev|ng\s+serve|flask\s+run|uvicorn|gunicorn|rails\s+server|rails\s+s|php\s+-S|python3?\s+-m\s+http\.server|http-server|serve|live-server|hugo\s+server|jekyll\s+serve|mkdocs\s+serve)\b/,
+  /^sleep\s+(?:infinity|inf)\b/,
+  /^ping(?![^;&|]*\s-c\s*\d)\s[^;&|]*$/,
+  /^(?:nc|ncat|netcat)\s+[^;&|]*-l\b/,
+  /^yes\s*$/,
+  /^(?:redis-server|mongod|postgres|mysqld|ollama\s+serve|caddy\s+run)\b/,
 ];
 /** Whether a shell command never ends on its own, so a deadline is what ends it. */
 export function neverEnds(command: string): boolean {
   // The words that name such a command come first; a long script's tail (a heredoc) is not read, so the test stays cheap.
   const plain = command.trim().slice(0, 2048);
-  return NEVER_ENDS.some((re) => re.test(plain));
+  // Quoted arguments are single words, not command boundaries. Only assignments and these wrappers can precede
+  // the command's name; a name inside an argument ("more tests", grep's "serve") says nothing about liveness.
+  const tokens = plain.match(/(?:[^\s;&|()'"\\]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")+|&&|\|\||[;&|()\n]/g) ?? [];
+  let words: string[] = [];
+  let piped = false;
+  const endless = () => {
+    const line = words.join(' ');
+    return (!piped && line === 'cat') || NEVER_ENDS.some((re) => re.test(line));
+  };
+  for (const token of tokens) {
+    if (/^(?:&&|\|\||[;&|()\n])$/.test(token)) {
+      if (endless()) return true;
+      words = [];
+      piped = token === '|';
+    } else if (words.length || !/^(?:[A-Za-z_]\w*=.*|sudo|npx|exec|env|time)$/.test(token)) words.push(token);
+  }
+  return endless();
 }
 
 /** The key a call's history is kept under: a shell command as typed, white space collapsed; any other call its tool. */
