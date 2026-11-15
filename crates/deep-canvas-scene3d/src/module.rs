@@ -487,6 +487,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     }));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
     r.fixture("rest-no-support", unsupported(), None)
+        .planted()
         .sidecar(json!({
             "codes": ["no_support"],
             "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},

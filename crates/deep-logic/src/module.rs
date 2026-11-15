@@ -528,6 +528,8 @@ fn planted(r: &mut Registrar, code: &str, body: &str) {
         },
     });
     r.fixture(&format!("logic-{}", &code[6..]), doc, None)
+        // Planted: the kit runs it, and the `fixtures` call leaves it out (#2085, #2362).
+        .planted()
         // The module registers its own kind (#533), so the kit's seal of this module alone knows
         // logic@1 and the fixture raises its code and no other.
         .sidecar(json!({"codes": [code], "checks": [{"kind": code}]}))

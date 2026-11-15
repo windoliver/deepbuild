@@ -586,6 +586,41 @@ pub fn sound_lock(lowered: &Value, input: &Value) -> deep_canvas::registry::Repo
     out
 }
 
+/// A score check's issues alone (#2362): what it raised, and where it would be BLOCKED a
+/// `score.check_unread` error on each score, so a reader of issues alone never takes a check
+/// that couldn't read its input for a pass, as with the loop module's `loop.unreadable`.
+pub fn issues_of(lowered: &Value, report: deep_canvas::registry::Report) -> Vec<(String, Raised)> {
+    let mut out: Vec<(String, Raised)> = report
+        .raised
+        .into_iter()
+        .map(|(id, r, _)| (id, r))
+        .collect();
+    let scores = lowered
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| item.get("kind").and_then(Value::as_str) == Some("score.music@1"));
+    for (id, _) in scores {
+        for b in &report.blocked {
+            out.push((
+                id.clone(),
+                Raised {
+                    code: "score.check_unread",
+                    severity: "error",
+                    path: format!("items/{id}"),
+                    what: format!(
+                        "the check couldn't read what it measures: {}",
+                        b["why"].as_str().unwrap_or_default()
+                    ),
+                    fix_ops: None,
+                },
+            ));
+        }
+    }
+    out
+}
+
 /// `mix.balance` (Film audit: craft@1, until #409 lands) reads the music bus's power bake from the
 /// export; no export writes per-bus power bakes yet (#509), so it is BLOCKED, never PASS.
 pub fn mix_balance(_lowered: &Value, input: &Value) -> deep_canvas::registry::Report {

@@ -605,6 +605,10 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #2085's files each build deep-show full, as #387's and #855's do.
+alone.push('tests/acceptance/2085/');
+// #2362's files build deep-show (debug and release, full) and run the kit, and its AC3 file runs two of #154's.
+alone.push('tests/acceptance/2362/');
 // #509's files each build deep-show and speak their fixtures with macOS say; most start a hub and deepbuild/speech's
 // model host on its fixed port 8720 (recording.test.ts also deepbuild/bakes' on 8719); budgets.test.ts times them.
 alone.push('tests/acceptance/509/', 'tests/acceptance/509-oracle/');

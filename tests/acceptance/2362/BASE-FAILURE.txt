@@ -1,0 +1,100 @@
+# #2362 acceptance suite at the base, a65192d39e9ea77b7e0834b51529d2bb94567f66 (main 13b84360f merged with #2085's
+# open work; this worktree, clean, with tests/acceptance/2362 added), one run:
+#   NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/2362 --no-file-parallelism --testTimeout=600000
+# with cargo of rust-toolchain.toml's channel (1.99.1) first on PATH and both builds already made (a cold release
+# build took 22.5 minutes here, then the debug build 4.5). The lease ran the command unleased (no hub here). The
+# checkout's path is written <checkout> below.
+#
+# Result: 3 tests, 2 fail and 1 passes. Nothing is BLOCKED or skipped.
+#
+# Fail, each for the expected reason:
+#   AC1 (#2362.57fbe409): the kit over core and motion, as scripts/canvas-kit.mjs calls it, answers FAIL for both and
+#       the committed ledger records FAIL for both (equal to what the kit writes, at the same digests); motion's
+#       catalog part fails each of the twelve codes #154 added as `unproved` (no planted document, fixture ""); core's
+#       time_order twin on parity/framework/code-pack-missing.board passes (`twin_passed`, the case INVALID) and the
+#       case says nothing of why.
+#   AC2 (#2362.9bb19ae2): the release build of the full set refuses to start: seal_refused, kit_failed, naming motion
+#       and text (text's schedule part fails at the base too, which the ledger records; README: What the base does).
+# Pass, as it must on the base:
+#   AC3 (#2362.c889f209): #154's rules.test.ts and 154-redraft/limits.test.ts pass unchanged (4 tests).
+#
+# The issue's own command at the base, for the record (30 minutes here beside other sessions' kit runs; it rewrote
+# crates/deep-show/kit-ledger.json with the same bytes, so nothing changed):
+#   $ sh scripts/lease node scripts/canvas-kit.mjs
+#   core: FAIL {"code":"twin_passed","module":"core","part":"time_order","case":"parity/framework/code-pack-missing.board#time_order"}
+#   motion: FAIL {"code":"failed_case","module":"motion","part":"catalog","case":"code:score.pad_too_low"} {"code":"unproved","module":"motion","part":"catalog","case":"code:score.pad_too_low","probe":"planted_fixture","issue_code":"score.pad_too_low"} {"code":"unproved","module":"motion","part":"catalog","case":"code:score.note_too_long","probe":"planted_fixture","issue_code":"score.note_too_long"}
+#   text: FAIL {"code":"failed_case","module":"text","part":"schedule","case":"schedule:text"}
+#   canvas kit: FAIL over core, building, cells, data, effects, export, graph, input, logic, look, loop, marks2d, media, motion, net, physics, record, sandbox, scene3d, sheet, text, vector (seed 138)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2362
+
+ ❯ kit.test.ts (1 test | 1 failed) 34582ms
+   ❯ #2362.57fbe409 the canvas kit passes motion and core, and kit-ledger.json records PASS for both (1)
+     × #2362.57fbe409 the kit canvas-kit.mjs runs passes core and motion and kit-ledger.json records what it finds, PASS for both at their digests; each of #154's twelve codes is proved by a planted document that raises exactly it, or has left motion's catalog; core's time_order twin fails on code-pack-missing.board, or its case says why it can't 33260ms
+ ❯ seal.test.ts (1 test | 1 failed) 1901ms
+   ❯ #2362.9bb19ae2 a release deep-show with the full set seals (1)
+     × #2362.9bb19ae2 the release build of the full set starts instead of refusing at the seal, and every fixture it lists is presented and evaluated clean at 0.5 s under hash@2, as #855's release-build case reads them 1010ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  kit.test.ts > #2362.57fbe409 the canvas kit passes motion and core, and kit-ledger.json records PASS for both > #2362.57fbe409 the kit canvas-kit.mjs runs passes core and motion and kit-ledger.json records what it finds, PASS for both at their digests; each of #154's twelve codes is proved by a planted document that raises exactly it, or has left motion's catalog; core's time_order twin fails on code-pack-missing.board, or its case says why it can't
+AssertionError: the kit passes core and motion for the reasons the issue gives, and the ledger records it: expected [ …(19) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "core: the kit's verdict is FAIL: {\"code\":\"twin_passed\",\"module\":\"core\",\"part\":\"time_order\",\"case\":\"parity/framework/code-pack-missing.board#time_order\"}",
++   "core: kit-ledger.json records FAIL, not PASS",
++   "motion: the kit's verdict is FAIL: {\"code\":\"failed_case\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.pad_too_low\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.pad_too_low\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.pad_too_low\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.note_too_long\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.note_too_long\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.far_from_sample\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.far_from_sample\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.unknown_source\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.unknown_source\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.unknown_preset\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.unknown_preset\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.unknown_instrument\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.unknown_instrument\"} {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.bad_pitch\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.bad_pitch\"}",
++   "motion: kit-ledger.json records FAIL, not PASS",
++   "score.bad_duration: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.bad_duration\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.bad_duration\"}",
++   "score.bad_loop: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.bad_loop\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.bad_loop\"}",
++   "score.bad_pitch: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.bad_pitch\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.bad_pitch\"}",
++   "score.check_unread: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.check_unread\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.check_unread\"}",
++   "score.far_from_sample: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.far_from_sample\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.far_from_sample\"}",
++   "score.note_too_long: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.note_too_long\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.note_too_long\"}",
++   "score.pad_too_low: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.pad_too_low\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.pad_too_low\"}",
++   "score.time_unresolved: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.time_unresolved\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.time_unresolved\"}",
++   "score.unknown_instrument: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.unknown_instrument\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.unknown_instrument\"}",
++   "score.unknown_preset: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.unknown_preset\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.unknown_preset\"}",
++   "score.unknown_source: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:score.unknown_source\",\"probe\":\"planted_fixture\",\"issue_code\":\"score.unknown_source\"}",
++   "sound_lock.off_palette: no planted document proves it: its catalog case is FAIL: {\"code\":\"unproved\",\"module\":\"motion\",\"part\":\"catalog\",\"case\":\"code:sound_lock.off_palette\",\"probe\":\"planted_fixture\",\"issue_code\":\"sound_lock.off_palette\"}",
++   "core: time_order's twin passes: {\"code\":\"twin_passed\",\"module\":\"core\",\"part\":\"time_order\",\"case\":\"parity/framework/code-pack-missing.board#time_order\"}",
++   "core: time_order's case parity/framework/code-pack-missing.board#time_order is INVALID: {\"code\":\"twin_passed\",\"module\":\"core\",\"part\":\"time_order\",\"case\":\"parity/framework/code-pack-missing.board#time_order\"}",
++   "core: time_order's planted twin on parity/framework/code-pack-missing.board is \"PASS\", not FAIL, and the case says nothing of why it can't fail: {\"case\":\"parity/framework/code-pack-missing.board#time_order\",\"fixture\":\"parity/framework/code-pack-missing.board\",\"twin\":{\"verdict\":\"PASS\"},\"failure\":{\"code\":\"twin_passed\",\"module\":\"core\",\"part\":\"time_order\",\"case\":\"parity/framework/code-pack-missing.board#time_order\"},\"verdict\":\"INVALID\"}",
++ ]
+
+ ❯ kit.test.ts:102:115
+    100|     }
+    101|
+    102|     expect(problems, 'the kit passes core and motion for the reasons t…
+       |                                                                                                                   ^
+    103|   }, 3_600_000);
+    104| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  seal.test.ts > #2362.9bb19ae2 a release deep-show with the full set seals > #2362.9bb19ae2 the release build of the full set starts instead of refusing at the seal, and every fixture it lists is presented and evaluated clean at 0.5 s under hash@2, as #855's release-build case reads them
+AssertionError: cargo build --locked --release --bin deep-show --no-default-features --features full starts and answers the fixtures call instead of refusing: exit 2, {"ok":false,"code":"seal_refused","reason":"kit_failed","modules":["motion","text"],"operators":[],"arrays":[],"what":"motion, text hasn't passed the canvas conformance kit at its digest","interface":"motion@1","implementations":["motion","text"]}
+ : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ seal.test.ts:34:204
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 1 passed (3)
+   Start at  12:38:43
+   Duration  46.53s (tests 100%)
+

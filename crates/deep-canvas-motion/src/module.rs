@@ -885,20 +885,18 @@ fn register_score(r: &mut Registrar) {
         "sound_lock",
         "any",
         &["sound_lock.off_palette", "score.check_unread"],
-        |l, i| {
-            let out = crate::score::sound_lock(l, i);
-            out.raised.into_iter().map(|(id, r, _)| (id, r)).collect()
-        },
+        |l, i| crate::score::issues_of(l, crate::score::sound_lock(l, i)),
     )
     .check_report(crate::score::sound_lock);
-    r.check("mix.balance", "any", &["score.check_unread"], |_, _| {
-        Vec::new()
+    r.check("mix.balance", "any", &["score.check_unread"], |l, i| {
+        crate::score::issues_of(l, crate::score::mix_balance(l, i))
     })
     .check_report(crate::score::mix_balance);
+    // `score.far_from_sample` reads a library's zones, which only `deep show`'s check of the
+    // installed packs can (deep-show's score_plan), so it isn't this catalog's (#2362).
     for (code, meaning, fix) in [
         ("score.pad_too_low", "A note on a sustained pad below MIDI 48, on an instrument not marked bass.", "Raise the note to MIDI 48 or above, or mark the instrument bass."),
         ("score.note_too_long", "A note held over 60 s.", "Shorten the note to 60 s or less, or write it as notes that follow one another."),
-        ("score.far_from_sample", "A sampled note more than 4 semitones from its zone's root.", "Use a preset with a zone nearer the note, or move the note."),
         ("score.unknown_source", "An instrument whose source isn't sampled, pluck or synth.", "Write the source as sampled {library, preset}, pluck {preset} or synth {preset}."),
         ("score.unknown_preset", "An instrument naming a preset its source doesn't have.", "Name a pluck preset (nylon, steel, harp), a synth preset (sine, triangle, saw, square, pad) or a preset of the library's samples."),
         ("score.unknown_instrument", "An event naming an instrument the score doesn't hold.", "Name one of the score's instruments."),
@@ -911,6 +909,101 @@ fn register_score(r: &mut Registrar) {
     ] {
         r.code(code, meaning, fix, false);
     }
+    // #2362: each code a planted film that raises exactly it, which the kit proves and the
+    // `fixtures` call leaves out (#2085).
+    for (code, change, checks) in planted_scores() {
+        r.fixture(
+            &code.replace(['.', '_'], "-"),
+            score_film(code, change),
+            None,
+        )
+        .planted()
+        .sidecar(json!({"codes": [code], "checks": checks}));
+    }
+}
+
+/// Each score code, how its film differs from a clean one, and the check inputs that raise it.
+fn planted_scores() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "score.pad_too_low",
+            json!({"instruments": {"lead": {"source": {"synth": {"preset": "pad"}}, "stem": "lead"}}, "events": {"a": {"at": "1:1", "inst": "lead", "pitch": 40, "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.note_too_long",
+            json!({"events": {"a": {"at": "1:1", "inst": "lead", "pitch": 60, "dur": "61s"}}}),
+            json!([]),
+        ),
+        (
+            "score.unknown_source",
+            json!({"instruments": {"lead": {"source": {"organ": {"preset": "full"}}, "stem": "lead"}}, "events": {}}),
+            json!([]),
+        ),
+        (
+            "score.unknown_preset",
+            json!({"instruments": {"lead": {"source": {"pluck": {"preset": "banjo"}}, "stem": "lead"}}}),
+            json!([]),
+        ),
+        (
+            "score.unknown_instrument",
+            json!({"events": {"a": {"at": "1:1", "inst": "drums", "pitch": 60, "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.bad_pitch",
+            json!({"events": {"a": {"at": "1:1", "inst": "lead", "pitch": "middle", "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.time_unresolved",
+            json!({"events": {"a": {"inst": "lead", "pitch": 60, "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.bad_duration",
+            json!({"events": {"a": {"at": "1:1", "inst": "lead", "pitch": 60, "dur": "0s"}}}),
+            json!([]),
+        ),
+        (
+            "score.bad_loop",
+            json!({"loop": {"from": "3:1", "to": "2:1"}}),
+            json!([]),
+        ),
+        (
+            "sound_lock.off_palette",
+            json!({}),
+            json!([{"kind": "sound_lock", "instruments": ["strings"]}]),
+        ),
+        (
+            "score.check_unread",
+            json!({}),
+            json!([{"kind": "mix.balance"}]),
+        ),
+    ]
+}
+
+/// A film with a tempo map and one score of a lead sine note, its params changed by `change`.
+fn score_film(code: &str, change: Value) -> Value {
+    let mut params = json!({
+        "instruments": {"lead": {"source": {"synth": {"preset": "sine"}}, "stem": "lead"}},
+        "events": {"a": {"at": "1:1", "inst": "lead", "pitch": 60, "dur": 1}},
+    });
+    for (k, v) in change.as_object().into_iter().flatten() {
+        params[k] = v.clone();
+    }
+    json!({
+        "format": 1, "profile": "film", "title": format!("Planted {code}"),
+        "description": format!("A score the kit proves raises {code} alone."),
+        "size": [64, 64], "camera": "cam",
+        "transport": {"span": "4s", "frame_rate": [24, 1], "sample_rate": 48000},
+        "tempo_map": {"segments": [{"at": "0s", "bpm": 120, "meter": [4, 4], "span": 16, "ramp": "none"}]},
+        "items": {
+            "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+                    "params": {"projection": "orthographic", "target": [32, 32, 0], "view_width": 64}},
+            "s": {"id": "s", "kind": "score.music@1", "name": "Score", "order": "a1", "params": params}
+        }
+    })
 }
 
 /// A library pack's `samples`: `{preset → {sustained, zones: [{lo, hi, root, takes: [asset path]}]}}`,
