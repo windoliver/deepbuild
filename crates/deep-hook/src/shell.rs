@@ -269,6 +269,8 @@ pub fn real(path: &Path) -> PathBuf {
 
 /// How many links the system follows in one path before it gives up (MAXSYMLINKS).
 const LINKS: usize = if cfg!(target_os = "macos") { 32 } else { 40 };
+/// The error it gives up with (ELOOP).
+const ELOOP: i32 = if cfg!(target_os = "macos") { 62 } else { 40 };
 
 /// `path` under `done`, a name at a time: each name resolved while the path is there, and the names past that as
 /// written.
@@ -279,8 +281,9 @@ fn walk(mut done: PathBuf, path: &Path) -> PathBuf {
     done
 }
 
-/// `done` with `part` after it, as [`walk`] reads it. `links` counts the links to files that aren't there followed
-/// for one written name: past [`LINKS`] of them, as links that name each other make it, that name stays as written.
+/// `done` with `part` after it, as [`walk`] reads it. A name the system finds to loop stays as written. `links` counts
+/// the links to files that aren't there followed for one written name: past [`LINKS`] of them, as a link that comes
+/// back to itself through a folder that isn't there makes it, that name stays as written too.
 fn step(mut done: PathBuf, part: Component, links: &mut usize) -> PathBuf {
     match part {
         Component::RootDir => done.push("/"),
@@ -294,21 +297,26 @@ fn step(mut done: PathBuf, part: Component, links: &mut usize) -> PathBuf {
             if fs::symlink_metadata(&done).is_err() {
                 return done;
             }
-            if let Ok(resolved) = fs::canonicalize(&done) {
-                done = resolved;
-            } else if let Ok(target) = fs::read_link(&done) {
-                // A link to a file that doesn't exist yet: the write makes its target.
-                *links += 1;
-                let parent = done.parent().map(Path::to_path_buf).unwrap_or_default();
-                let mut read = PathBuf::new();
-                for part in parent.join(target).components() {
-                    if *links > LINKS {
-                        return done;
+            match fs::canonicalize(&done) {
+                Ok(resolved) => done = resolved,
+                // The system followed as many links as it follows: they name each other.
+                Err(error) if error.raw_os_error() == Some(ELOOP) => {}
+                Err(_) => {
+                    if let Ok(target) = fs::read_link(&done) {
+                        // A link to a file that doesn't exist yet: the write makes its target.
+                        *links += 1;
+                        let parent = done.parent().map(Path::to_path_buf).unwrap_or_default();
+                        let mut read = PathBuf::new();
+                        for part in parent.join(target).components() {
+                            if *links > LINKS {
+                                return done;
+                            }
+                            read = step(read, part, links);
+                        }
+                        if *links <= LINKS {
+                            done = read;
+                        }
                     }
-                    read = step(read, part, links);
-                }
-                if *links <= LINKS {
-                    done = read;
                 }
             }
         }
@@ -2604,13 +2612,26 @@ mod tests {
         for (link, to) in [("x", "y"), ("y", "z"), ("z", "x")] {
             symlink(to, at.join(link)).unwrap();
         }
-        symlink("long/".repeat(800), at.join("long")).unwrap();
+        // A Mac holds a link's target to 1,024 bytes.
+        symlink("long/".repeat(200), at.join("long")).unwrap();
+        // The system never follows this one: the folder its target passes isn't there.
+        symlink("none/../back", at.join("back")).unwrap();
         // As many links as the system follows, the last to a file that isn't there yet.
         symlink("gone", at.join("link-1")).unwrap();
-        for n in 2..=LINKS {
+        let past = format!("link-{}", LINKS + 1);
+        for n in 2..=LINKS + 1 {
             symlink(format!("link-{}", n - 1), at.join(format!("link-{n}"))).unwrap();
         }
         let root = fs::canonicalize(&at).unwrap();
+        // LINKS is the system's own count: it follows that many to the missing file, and gives up on one more.
+        let system = |link: &str| fs::canonicalize(at.join(link)).unwrap_err().kind();
+        assert_eq!(
+            system(&format!("link-{LINKS}")),
+            std::io::ErrorKind::NotFound
+        );
+        assert_ne!(system(&past), std::io::ErrorKind::NotFound);
+        let looped = fs::canonicalize(at.join("self")).unwrap_err();
+        assert_eq!(looped.raw_os_error(), Some(ELOOP));
         for (written, read) in [
             ("self", "self"),
             ("self/under", "self/under"),
@@ -2623,7 +2644,11 @@ mod tests {
             ("x/../link-1", "gone"),
             ("self/../a/../link-1/..", ""),
             ("long", "long"),
+            ("back", "back"),
+            ("back/../link-1", "gone"),
             (&format!("link-{LINKS}"), "gone"),
+            // One link more than the system follows: a write through it fails, and it is no path to "gone".
+            (&past, &past),
         ] {
             assert_eq!(real(&at.join(written)), root.join(read), "{written}");
         }
