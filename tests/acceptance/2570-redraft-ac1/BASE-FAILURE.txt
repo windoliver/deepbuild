@@ -1,0 +1,189 @@
+The redraft of #2570's first criterion at the base 51e4a2b34 (origin/main, 2026-11-14), which has no implementation
+of #2570. Run at a280f89d7 (that base plus the first draft's tests/acceptance/2570/, no product file changed:
+`git diff --stat 51e4a2b34 a280f89d7` lists only that folder) in the drafting job's worktree, with only
+tests/acceptance/2570-redraft-ac1/ added. Built with `npm ci --no-audit --no-fund`,
+`npm run build --workspaces --if-present` and `cargo build --locked -q -p deep-hook`.
+Linux arm64, Node from /var/tmp/deep40/node/bin, 1-minute load 18 to 28 during the runs (other jobs' work).
+
+======================================================================================================================
+Part 1. The scene is valid at its limits, with no start involved
+======================================================================================================================
+
+$ node tests/acceptance/2570-redraft-ac1/probe-hold.mjs          (exit 0; load 20.2 at its start, 18.3 at its end)
+
+`deep hub start` is never called in this run: the dev hub is started as `deep hub run --root`, the installed one as
+the stand-in's job from a unit the probe writes. Each hub is told to stop, kept exiting by fixtures/slow-stop.mjs
+(its core's stop message kept back) for the time asked, then let go. The scene's longest hold is MAX_HELD_MS, 12 s.
+"Ended" counts from the moment the hub was held. The log is the dev hub's hub.log, or the installed job's output as
+the stand-in keeps it (job.log).
+
+kind       asked ms  held ms  let go  the old hub ended               service manager saw   log tail after the ready line
+dev               0        6  yes     own exit 0 at   1406 ms        -                     (empty: stopped before its ready line)
+installed         0       21  yes     own exit 0 at   1717 ms        exit 0, no signal     (empty: stopped before its ready line)
+dev            1000     1017  yes     own exit 0 at   1085 ms        -                     (nothing)
+installed      1000     1016  yes     own exit 0 at   1082 ms        exit 0, no signal     (nothing)
+dev            3000     3003  yes     own exit 0 at   5616 ms        -                     (nothing)
+installed      3000     3010  yes     own exit 0 at   5036 ms        exit 0, no signal     (nothing)
+dev            6000     6017  yes     own exit 0 at   6084 ms        -                     (nothing)
+installed      6000     6009  yes     own exit 0 at   6080 ms        exit 0, no signal     (nothing)
+dev            9000     9002  yes     own exit 0 at   9441 ms        -                     (nothing)
+installed      9000     9019  yes     own exit 0 at   9568 ms        exit 0, no signal     (nothing)
+dev           12000    12016  yes     own exit 0 at  13988 ms        -                     (nothing)
+installed     12000    12009  yes     own exit 0 at  14028 ms        exit 0, no signal     (nothing)
+dev           15000    15010  yes     own exit 0 at  16075 ms        -                     (nothing)
+installed     15000    15008  yes     own exit 0 at  15996 ms        exit 0, no signal     (nothing)
+dev           18000    18017  yes     own exit 0 at  20912 ms        -                     deep hub: the core took over 20 s to stop
+installed     18000    18011  yes     own exit 0 at  20797 ms        exit 0, no signal     deep hub: the core took over 20 s to stop
+dev           19500    19508  yes     own exit 0 at  20104 ms        -                     deep hub: the core took over 20 s to stop
+installed     19500    19518  yes     own exit 0 at  20313 ms        exit 0, no signal     deep hub: the core took over 20 s to stop
+dev           22000    20023  no (*)  own exit 0 at  20016 ms        -                     deep hub: the core took over 20 s to stop
+installed     22000    20028  no (*)  own exit 0 at  20012 ms        exit 0, no signal     deep hub: the core took over 20 s to stop
+dev           26000    20025  no (*)  own exit 0 at  20022 ms        -                     deep hub: the core took over 20 s to stop
+installed     26000    20016  no (*)  own exit 0 at  20014 ms        exit 0, no signal     deep hub: the core took over 20 s to stop
+
+(*) Past 20 s the hub was never let go: the base's Hub.stop gives its core 20 s, then says so and exits 0 by itself.
+    That is the longest any scene of this kind can keep a hub exiting; this scene stops at 12 s.
+
+Every run: the old hub ended by its own exit, code 0, never by a signal; the stand-in saw exit 0 and no signal, and
+started no second job; no hub answered afterwards. Up to 15 s held the hub's log has nothing after its ready line.
+At 18 s and 19.5 s in this run the core, let go, took over 2 s to stop under load, so the hub's own 20 s passed first
+and it wrote "the core took over 20 s to stop" before the same exit 0. No duration gave another exit code.
+
+The raw lines of that run:
+
+{"kind":"dev","askedMs":0,"heldMs":6,"letGo":"yes","ended":"by its own exit 0, 1406 ms after it was held","answersAfter":false,"logTail":"(empty)"}
+{"kind":"installed","askedMs":0,"heldMs":21,"letGo":"yes","ended":"by its own exit 0, 1717 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"(empty)"}
+{"kind":"dev","askedMs":1000,"heldMs":1017,"letGo":"yes","ended":"by its own exit 0, 1085 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":976348,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWASWAP004RYMQC5BS85GJ\"}\n"}
+{"kind":"installed","askedMs":1000,"heldMs":1016,"letGo":"yes","ended":"by its own exit 0, 1082 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":976388,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWASY7ANMYPMT558CSYBXC\"}\n"}
+{"kind":"dev","askedMs":3000,"heldMs":3003,"letGo":"yes","ended":"by its own exit 0, 5616 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":977616,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWAVN828G30DE545CFMQG9\"}\n"}
+{"kind":"installed","askedMs":3000,"heldMs":3010,"letGo":"yes","ended":"by its own exit 0, 5036 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":977688,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWAVP1STD3MRFDHQTAJ819\"}\n"}
+{"kind":"dev","askedMs":6000,"heldMs":6017,"letGo":"yes","ended":"by its own exit 0, 6084 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":979384,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWB1R6AJBW7J99YG5K82QQ\"}\n"}
+{"kind":"installed","askedMs":6000,"heldMs":6009,"letGo":"yes","ended":"by its own exit 0, 6080 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":979413,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWB1V499FARZH871CWE4KA\"}\n"}
+{"kind":"dev","askedMs":9000,"heldMs":9002,"letGo":"yes","ended":"by its own exit 0, 9441 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":982823,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWB9H71YSE9WWNZ878ST8R\"}\n"}
+{"kind":"installed","askedMs":9000,"heldMs":9019,"letGo":"yes","ended":"by its own exit 0, 9568 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":982860,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWB9KYXG2BMN3DDKPANYFX\"}\n"}
+{"kind":"dev","askedMs":12000,"heldMs":12016,"letGo":"yes","ended":"by its own exit 0, 13988 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":995304,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWBKJ9R69TX0V0PF6TB594\"}\n"}
+{"kind":"installed","askedMs":12000,"heldMs":12009,"letGo":"yes","ended":"by its own exit 0, 14028 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":995375,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWBKJBAY6EVD28F329X2S6\"}\n"}
+{"kind":"dev","askedMs":15000,"heldMs":15010,"letGo":"yes","ended":"by its own exit 0, 16075 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1012334,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWC2JYD4NCGKX8HEDZJTVW\"}\n"}
+{"kind":"installed","askedMs":15000,"heldMs":15008,"letGo":"yes","ended":"by its own exit 0, 15996 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1012437,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWC2MNQFN2WSF8KP006N7T\"}\n"}
+{"kind":"dev","askedMs":18000,"heldMs":18017,"letGo":"yes","ended":"by its own exit 0, 20912 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1031757,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWCJYGAPPZ3J1MPW283FN8\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"installed","askedMs":18000,"heldMs":18011,"letGo":"yes","ended":"by its own exit 0, 20797 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1031826,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWCJYJ4NTNHASTR39R4A27\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"dev","askedMs":19500,"heldMs":19508,"letGo":"yes","ended":"by its own exit 0, 20104 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1049155,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWD97E5D1R8EBY14E311BE\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"installed","askedMs":19500,"heldMs":19518,"letGo":"yes","ended":"by its own exit 0, 20313 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1049183,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWD9CHWME62F7ZNNAFYJT9\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"dev","askedMs":22000,"heldMs":20023,"letGo":"never: it ended by itself first","ended":"by its own exit 0, 20016 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1052781,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWDYR4NH776K57EA52147W\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"installed","askedMs":22000,"heldMs":20028,"letGo":"never: it ended by itself first","ended":"by its own exit 0, 20012 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1052818,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWDYTQDS4NK1SFVJY3A5XD\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"dev","askedMs":26000,"heldMs":20025,"letGo":"never: it ended by itself first","ended":"by its own exit 0, 20022 ms after it was held","answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1056421,\"socket\":\"<sandbox>/dev/hub.sock\",\"start\":\"01M7EWEJY9TY8R87XAJADKG2QZ\"}\ndeep hub: the core took over 20 s to stop\n"}
+{"kind":"installed","askedMs":26000,"heldMs":20016,"letGo":"never: it ended by itself first","ended":"by its own exit 0, 20014 ms after it was held","serviceManagerSaw":{"code":0,"signal":null},"jobsStarted":1,"answersAfter":false,"logTail":"{\"v\":1,\"ready\":true,\"pid\":1056451,\"socket\":\"<sandbox>/h/.deepbuild/hub.sock\",\"start\":\"01M7EWEK0J5KB36PNRWNEPVWST\"}\ndeep hub: the core took over 20 s to stop\n"}
+
+A start that simply waits does nothing until the old hub is gone and then starts one. That last step, at the base,
+after the scene's longest hold and after one near the hub's own limit:
+
+$ node tests/acceptance/2570-redraft-ac1/probe-hold.mjs --then-start 12000 19500          (exit 0)
+
+kind       held ms  the old hub ended           deep hub start, run once the old hub was gone
+dev          12016  own exit 0 at 12048 ms      exit 0 after 115 ms, a hub answers, a new pid
+installed    12005  own exit 0 at 12040 ms      exit 0 after 159 ms, a hub answers, a new pid (the stand-in's 2nd job)
+dev          19506  own exit 0 at 19547 ms      exit 0 after 249 ms, a hub answers, a new pid
+installed    19506  own exit 0 at 19564 ms      exit 0 after 331 ms, a hub answers, a new pid (the stand-in's 2nd job)
+
+So nothing the scene does to the old hub keeps a later start from working, at any time the scene can reach.
+
+======================================================================================================================
+Part 2. The tests at the base
+======================================================================================================================
+
+Expected at the base: the two criterion tests (#2570.0ed54a91) fail at their own first assertion, with the start's
+exit 3 and no hub answering; the two `scene:` tests, which ask for no start, pass.
+
+$ node --test --test-concurrency=1 tests/acceptance/2570-redraft-ac1/exiting.test.mjs
+(exit 1; load 19.7 at its start, 18.3 at its end)
+
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (15732.13867ms)
+ℹ the old hub was held 464 ms and let go once the start had acted beside it (a hub it started ended)
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (15824.406122ms)
+ℹ the old hub was held 75 ms and let go once the start had acted beside it (it asked the service manager)
+✔ scene: a dev hub kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (12728.153298ms)
+ℹ the old hub was held 12023 ms, with no start asked for, and ended with its own exit 0
+✔ scene: the installed hub's job kept exiting for the scene's longest hold, with no start asked for, ends by its own exit 0 (12794.94816ms)
+ℹ the old hub was held 12043 ms, with no start asked for, and ended with its own exit 0
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59104.171384
+
+✖ failing tests:
+
+test at tests/acceptance/2570-redraft-ac1/exiting.test.mjs:94:1
+✖ #2570.0ed54a91 a dev hub: deep hub start --root, asked for while the stopped hub's process is still exiting, ends with a hub answering, exit 0 (15732.13867ms)
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub (pid 1064381) was still exiting, must end with exit 0; no hub answers on unix:/tmp/d2570-42eOJc/dev/hub.sock afterwards. exit 3 after 15062 ms
+  stdout: 
+  stderr: deep hub start: no hub answered at unix:/tmp/d2570-42eOJc/dev/hub.sock within 15 s; see /tmp/d2570-42eOJc/dev/logs/hub.log
+  
+  the old hub's log: {"v":1,"ready":true,"pid":1064381,"socket":"/tmp/d2570-42eOJc/dev/hub.sock","start":"01M7EWFPBK81NP1S8RV14G6ZJW"}
+  deep hub: a hub is already running on /tmp/d2570-42eOJc/dev: it holds the lock
+  
+      at startedBesideAnExitingHub (file://~/deepbuild/.claude/worktrees/agent-ae486b6089d501326/tests/acceptance/2570-redraft-ac1/exiting.test.mjs:51:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2570-redraft-ac1/exiting.test.mjs:96:1
+✖ #2570.0ed54a91 the installed hub: deep hub start, asked for while the stopped job is still exiting under the service manager, ends with a hub answering, exit 0 (15824.406122ms)
+  AssertionError [ERR_ASSERTION]: #2570.0ed54a91 deep hub start, asked for while the stopped hub (pid 1069613) was still exiting, must end with exit 0; no hub answers on unix:/tmp/d2570-oOTfQr/h/.deepbuild/hub.sock afterwards. exit 3 after 15062 ms
+  stdout: 
+  stderr: deep hub start: no hub answered at unix:/tmp/d2570-oOTfQr/h/.deepbuild/hub.sock within 15 s; see /tmp/d2570-oOTfQr/h/.deepbuild/logs/hub.log
+  
+  the service manager: asked while the job ran (pid 1069613): did nothing
+  the old hub's log: {"v":1,"ready":true,"pid":1069613,"socket":"/tmp/d2570-oOTfQr/h/.deepbuild/hub.sock","start":"01M7EWG5SDXH9GCYXYW79CT35G"}
+  
+      at startedBesideAnExitingHub (file://~/deepbuild/.claude/worktrees/agent-ae486b6089d501326/tests/acceptance/2570-redraft-ac1/exiting.test.mjs:51:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+In both failures the start was asked for while the old hub was still exiting, and the old hub was let go on an
+event, not a timer: for the dev hub, the hub the start had spawned ended ("it holds the lock", in the log above);
+for the installed hub, the stand-in was asked while the job ran and did nothing. Both then waited 15 s and exited 3,
+as the issue says. Neither failure is about the old hub: it ended by its own exit 0 in both (the assertions about
+it come later and weren't reached).
+
+======================================================================================================================
+Part 3. The tests against stand-ins for an implementation (none exists)
+======================================================================================================================
+
+No twin file is written. For these runs only, a few lines were added to fixtures/slow-stop.mjs in the working tree
+and removed again before the commit: in the process of the `deep hub start` under test they did one thing before the
+base's own start ran. Tests selected with --test-name-pattern='#2570'.
+
+what the start did first                               dev hub test                    installed hub test
+waited until the old hub's process was gone            pass (held 6049 ms, let go      pass (held 6063 ms, let go
+                                                       after 6000 ms of nothing)       after 6000 ms of nothing)
+exited 0 at once                                       fail: "exited 0, and no hub     fail: the same
+                                                       answers"
+sent the old hub SIGKILL, waited for it to go          fail: "must be left to finish   fail: the same
+                                                       its own exit; it was gone
+                                                       before the test let it go"
+waited only when given --root                          pass                            fail: "must end with exit 0;
+                                                                                       no hub answers", exit 3
+waited only when not given --root                      fail: "must end with exit 0;    pass
+                                                       no hub answers", exit 3
+
+After every run above: no /tmp/d2570-* folder and no process of the sandboxes was left; no sandbox's
+service-calls.log existed (the launchctl and systemctl stand-ins were never called; the tests assert it).
