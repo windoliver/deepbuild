@@ -693,6 +693,10 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #1968's files build deep-show; the oracle lane builds deep-show; ac2-budgets judges the code film's budgets on the
+// reference Mac.
+alone.push('tests/acceptance/1968/', 'tests/acceptance/1968-oracle/');
+timed.push('tests/acceptance/1968/ac2-budgets.test.ts');
 // #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
 // after, so nothing else may build deep-marks-render in the checkout while it runs.
 alone.push('tests/acceptance/2497/');

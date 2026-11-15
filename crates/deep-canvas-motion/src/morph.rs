@@ -487,6 +487,18 @@ pub struct Between {
     /// `pairs`, part to part, each without its `#`, named before any other pairing.
     pub pairs: Vec<(String, String)>,
     pub unpaired: Unpaired,
+    /// #1968: a `text_diff`'s two code items as it reads them, and how their units pair up,
+    /// aligned once at check; `None` for a match morph.
+    pub diff: Option<std::sync::Arc<TextDiff>>,
+}
+
+/// #1968: a text_diff's two code items, `from` the old version and `to` the new one, and how
+/// their units pair up (Text `text@1`: code).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextDiff {
+    pub old: deep_canvas_marks::diff::Version,
+    pub new: deep_canvas_marks::diff::Version,
+    pub matching: deep_canvas_marks::diff::Matching,
 }
 
 impl Between {
@@ -511,7 +523,8 @@ fn refused(code: &'static str, path: String) -> Refused {
     }
 }
 
-/// The document's match morphs that name two items rather than two shots or placements.
+/// The document's match morphs and text diffs that name two items rather than two shots or
+/// placements. A text diff's items must both be code, and align at check.
 pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, Refused> {
     let items = doc.get("items").and_then(Value::as_object);
     let is_item = |v: Option<&Value>| {
@@ -526,7 +539,8 @@ pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, 
         .flatten()
     {
         let path = format!("transitions/{id}");
-        if tr.get("kind").and_then(Value::as_str) != Some("match_morph")
+        let kind = tr.get("kind").and_then(Value::as_str);
+        if !matches!(kind, Some("match_morph" | "text_diff"))
             || !(is_item(tr.get("from")) || is_item(tr.get("to")))
         {
             continue;
@@ -575,6 +589,25 @@ pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, 
             Some(Some("split")) => Unpaired::Split,
             Some(_) => return Err(refused("bad_doc", format!("{path}/match_morph/unpaired"))),
         };
+        let diff = match kind {
+            Some("text_diff") => {
+                use deep_canvas_marks::diff::{matching, Version};
+                let read = |f: &str, item: &str| -> Result<Version, Refused> {
+                    let params = deep_canvas_marks::scene::object_or_empty(
+                        items
+                            .and_then(|i| i.get(item))
+                            .and_then(|i| i.get("params")),
+                    );
+                    Version::read(params, &format!("items/{item}"))
+                        .map_err(|r| refused(r.code, r.path))?
+                        .ok_or_else(|| refused("bad_doc", format!("{path}/{f}")))
+                };
+                let (old, new) = (read("from", &from)?, read("to", &to)?);
+                let matching = matching(&old, &new);
+                Some(std::sync::Arc::new(TextDiff { old, new, matching }))
+            }
+            _ => None,
+        };
         out.push(Between {
             id: id.clone(),
             from,
@@ -584,6 +617,7 @@ pub fn betweens_of(doc: &Map<String, Value>, ctx: &Ctx) -> Result<Vec<Between>, 
             ease,
             pairs,
             unpaired,
+            diff,
         });
     }
     Ok(out)
