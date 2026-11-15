@@ -348,6 +348,9 @@ timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall
 // #1945's files each start a hub on this Mac's Lima VMs and make a throwaway user there, cut every SSH connection of
 // that user for a minute, and run root plans with its sudo password: one file at a time.
 alone.push('tests/acceptance/1945/');
+// #1946's files each start a hub on this Mac's Lima VMs, make a throwaway user there and set up then remove its user
+// services, a package and sudo rules: one file at a time.
+alone.push('tests/acceptance/1946/');
 // #1943's files restart user services on this Mac's Lima VMs and judge check runs against deadlines there: one file at
 // a time.
 alone.push('tests/acceptance/1943/');
