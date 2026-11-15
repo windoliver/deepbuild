@@ -241,7 +241,7 @@
   },
   "physics": {
     "version": "1.0.0",
-    "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+    "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
