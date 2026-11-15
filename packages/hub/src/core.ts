@@ -1503,7 +1503,7 @@ export class Core {
       });
     }
     if (verified && meta.session) this.watchCalls(drafts, meta, settled);
-    if (meta.session) this.products.hook(meta);
+    if (meta.session) await this.products.hook(meta);
     if (meta.event === 'SessionStart') void this.products.sessionStart(meta.session, meta.cwd, meta.id).catch(() => undefined);
     return { settled };
   }
