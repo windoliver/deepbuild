@@ -1,0 +1,28 @@
+{
+  "issue": 2516,
+  "main_commit": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+  "change_commit": "c7b6f97233c4f37828cfdcaccf7081a014defc8a",
+  "machine": {
+    "model": "Mac17,10",
+    "macos_build": "26B8119"
+  },
+  "binaries": {
+    "main": "c7a2123aebbb0fe826b0cd93e6f2b4d416588fb40da00c8d15f96f7b64df2f3e",
+    "after": "0f6fc73e340ddf71dd47aaee2cf65900f75aa184a561e2d257993e2f5b016444"
+  },
+  "images": {
+    "room-main.png": "204d54bafd9587824f7e0487e2222520996592987bcf97ca465dcf1dbca4a25f",
+    "castle-main.png": "01faceed3304adffe44d3f0fa4c21232337c661fc19d507eda10ec3e2712cd22",
+    "room-after.png": "ff92aa5206e60f0d9cbb8ae2cdcd1367e82fc4785b1f6afd5aeeecfd5c728293",
+    "castle-after.png": "706f8df0eaa0761fdfacc42847cb64ab2e6115319353fee2652306ebe81c32fb"
+  },
+  "ao": {
+    "radius": 0.5,
+    "strength": 1,
+    "samples": 8,
+    "resolution": "half",
+    "multi_bounce": true,
+    "specular": true
+  },
+  "taste": "INCONCLUSIVE: no owner decision"
+}

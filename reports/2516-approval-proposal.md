@@ -30,7 +30,7 @@ The original full-radius wall witness previously failed near the 5 cm tolerance 
 
 The repeated follow-up tried a shared symmetric-tap blur, not a plant tweak. It did not resolve the same original witness, and was removed with its failing output retained. Further tuning solely to make that known-wrong program satisfy an unsupported witness is not proposed.
 
-The castle's five warmed timestamp runs require a timed grant plus GPU lease and qualified machine state. No approval in this proposal authorizes a number from a busy/unleased run or an invented Cost line.
+The castle's five warmed timestamp runs have now completed on merged commit `c7b6f9723` under a real timed grant and GPU lease, with nominal thermal state and all loads below 18 cores. The unchanged measurement, Cost-line and held-lease checks pass; the redacted record is `docs/evidence/2516/timings-803322230a66.json`. No acceptance approval was needed to take that real measurement. This does not make either disputed AC4 check pass.
 
 ## D. Taste and goldens
 
@@ -38,4 +38,4 @@ The owner alone decides the corners at the default radius and strength, on the e
 
 No stored golden has moved. The four committed #422 castle goldens use `packs/examples/castle.look.json`, whose AO is absent/off; the additional AO-on comparison frames are not replacements for those goldens. The shipped `physical_film` and `physical_night` looks retain their defaults. Any affected approved golden discovered by a run still requires its own proposal.
 
-Until the check reconciliation is approved, the original failing qualification remains required and the issue cannot be closed. Until a real taste call and qualified timing run exist, those criteria remain INCONCLUSIVE.
+Until the check reconciliation is approved, the original failing qualification remains required and the issue cannot be closed. AC6 now has qualified timing proof. AC7 remains INCONCLUSIVE until the owner's actual taste call; the main/after images are attached in `docs/evidence/2516/` and on PR #2578, not recorded as approved.
