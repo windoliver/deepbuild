@@ -1,0 +1,23 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ packages/evidence/test/parts.test.ts (1 test | 1 failed) 9842ms
+   × parts read as their concatenation, survive reopen and retention, and a reordered manifest fails its hash 547ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/evidence/test/parts.test.ts > parts read as their concatenation, survive reopen and retention, and a reordered manifest fails its hash
+TypeError: Cannot use 'in' operator to search for 'file' in undefined
+ ❯ save packages/evidence/src/index.ts:231:18
+
+ ❯ Object.put packages/evidence/src/index.ts:285:52
+ ❯ packages/evidence/test/parts.test.ts:22:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  00:36:01
+   Duration  13.49s (tests 90%, transform 7%, setup 2%, import 1%)
+

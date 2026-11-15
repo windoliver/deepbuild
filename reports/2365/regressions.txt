@@ -1,0 +1,37 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2365-redraft-ac4/rewritten.test.ts (2 tests | 1 failed) 4970ms
+   ❯ AC4 #2365.1e24d52d a transcript whose first megabyte was rewritten after its last copy is copied again from its start, and its handles resolve through the new parts (2)
+     × AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 3, the first line that differs 1998ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac4/rewritten.test.ts > AC4 #2365.1e24d52d a transcript whose first megabyte was rewritten after its last copy is copied again from its start, and its handles resolve through the new parts > AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 3, the first line that differs
+AssertionError: expected [Function] to throw error matching /line 3 \(session:833b12bfedcd46c88647…/ but got 'session:833b12bfedcd46c886479eca44653…'
+
+- Expected:
+/line 3 \(session:833b12bfedcd46c886479eca44653869#m3\) differs/
+
++ Received:
+"session:833b12bfedcd46c886479eca44653869: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line: expected 'line 3 (session:833b12bfedcd46c886479…' to be undefined"
+
+ ❯ tests/acceptance/2365-redraft-ac4/rewritten.test.ts:38:45
+     36|       expect(r.reading?.[TOTAL - 1]?.text, 'the twin appended the gain…
+     37|       expect(r.reading?.[LINES - 1]?.text, 'past the rewrite, the twin…
+     38|       expect(() => copiedAgainFromStart(r)).toThrow(new RegExp(`line 3…
+       |                                             ^
+     39|     } finally {
+     40|       await w.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 6 passed (7)
+      Tests  1 failed | 18 passed (19)
+   Start at  00:58:24
+   Duration  15.35s (tests 86%, transform 8%, import 5%, setup 1%)
+
+    Isolate  7 workers spawned · ~180ms startup each (spawn + environment, per file)
+             at least ~1.08s faster with isolate: false — reuses workers across files instead of one per file
+

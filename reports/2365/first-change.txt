@@ -1,0 +1,90 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2365/tail.test.ts (5 tests | 4 failed) 15363ms
+   ❯ #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form (4)
+     × #2365 AC3 by passes: the pass with m6 half written copies m1…m5 only, the next copies the rest, the key is in no part, and one rotate ask 3664ms
+     × #2365 AC3 on demand: the copy of one session (archive.session) takes the same path 275ms
+     × #2365 AC3 a line written in three steps, the key still half written at two passes, waits at both: the key is in no part, then one ask 434ms
+   ❯ #2365 Scope: what follows the last complete line waits, and a tail still unchanged at the next pass is copied as it stands (1)
+     × #2365 Scope a last line with no line end: the first pass leaves it, the next (unchanged) copies it as it stands, and once the agent goes on, nothing is doubled or left out 818ms
+ ❯ tests/acceptance/2365/rewrite.test.ts (3 tests | 1 failed) 38525ms
+   ❯ #2365 AC4 a transcript whose first megabyte was rewritten after its last copy is copied again from its start (3)
+     × #2365 AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 6, the first line that differs 6858ms
+ ❯ packages/evidence/test/parts.test.ts (1 test) 15503ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/evidence/test/parts.test.ts [ packages/evidence/test/parts.test.ts ]
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/vitest-setup.ts:57:3
+     55|   // such as #29's twins' pending command, on a lease table the file h…
+     56|   let held: Proc[] = [];
+     57|   afterAll(() => {
+       |   ^
+     58|     held = tree('SIGSTOP');
+     59|     if (held.length) console.warn(`vitest-setup: stopping ${held.lengt…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365/rewrite.test.ts > #2365 AC4 a transcript whose first megabyte was rewritten after its last copy is copied again from its start > #2365 AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 6, the first line that differs
+AssertionError: the check fails on the twin, naming the first line that differs: expected [Function] to throw error including 'first differs at line 6 (message 935f…' but got '#2365 AC4 (twin): no reading of sessi…'
+
+Expected: "first differs at line 6 (message 935f60f9-f5e5-4eaa-a9eb-44b04547b2ad)"
+Received: "#2365 AC4 (twin): no reading of session:b97911e110544660a4007e9544b39c50's 3 copy event(s) joins to the transcript scrubbed. The closest, parts 4d1841fe9309, 22948ca7dab1, 9ae8f4182b3c (3 parts: the evidence of events 1…3 of 3), first differs at line 6, byte 7282: the transcript has «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"/Users/dev/src/this-69","sessionId":"b97911e1-1054-4660-a4… (277 chars)» and the parts have «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"/Users/dev/src/this-69","sessionId":"b97911e1-1054-4660-a4… (241 chars)»"
+
+ ❯ tests/acceptance/2365/rewrite.test.ts:117:148
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form > #2365 AC3 by passes: the pass with m6 half written copies m1…m5 only, the next copies the rest, the key is in no part, and one rotate ask
+Error: session:76cd362b8c5e4cd2853fe169a717766b (claude): Cannot transfer object of unsupported type.
+ ❯ packages/archive/src/index.ts:309:109
+
+ ❯ Object.pass packages/archive/src/index.ts:309:52
+ ❯ halfKeyScenario tests/acceptance/2365/tail.test.ts:51:3
+ ❯ tests/acceptance/2365/tail.test.ts:75:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form > #2365 AC3 on demand: the copy of one session (archive.session) takes the same path
+Error: Cannot transfer object of unsupported type.
+ ❯ MessagePort.<anonymous> packages/archive/src/copy.ts:23:37
+     21|         port1.once('close', () => { thread.removeListener('error', fai…
+     22|         port1.on('message', (message: { part?: Part; result?: CopyResu…
+     23|           if (message.error) reject(Error(message.error));
+       |                                     ^
+     24|           else if (message.result) resolve(message.result);
+     25|           else if (message.part) void keep(message.part).then(() => po…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form > #2365 AC3 a line written in three steps, the key still half written at two passes, waits at both: the key is in no part, then one ask
+Error: session:6a3fe8d8f5f74547b98801e7da4f1be7 (claude): Cannot transfer object of unsupported type.
+ ❯ packages/archive/src/index.ts:309:109
+
+ ❯ Object.pass packages/archive/src/index.ts:309:52
+ ❯ tests/acceptance/2365/tail.test.ts:106:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 Scope: what follows the last complete line waits, and a tail still unchanged at the next pass is copied as it stands > #2365 Scope a last line with no line end: the first pass leaves it, the next (unchanged) copies it as it stands, and once the agent goes on, nothing is doubled or left out
+Error: session:4284b16e1a16441fbd3e170bda088884 (claude): Cannot transfer object of unsupported type.
+ ❯ packages/archive/src/index.ts:309:109
+
+ ❯ Object.pass packages/archive/src/index.ts:309:52
+ ❯ tests/acceptance/2365/tail.test.ts:143:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 4 passed (9)
+   Start at  00:42:52
+   Duration  78.89s (tests 92%, transform 5%, import 3%)
+

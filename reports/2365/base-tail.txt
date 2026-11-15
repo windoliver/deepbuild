@@ -1,0 +1,79 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2365/tail.test.ts (5 tests | 4 failed) 22793ms
+   ❯ #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form (4)
+     × #2365 AC3 by passes: the pass with m6 half written copies m1…m5 only, the next copies the rest, the key is in no part, and one rotate ask 5592ms
+     × #2365 AC3 on demand: the copy of one session (archive.session) takes the same path 1573ms
+     × #2365 AC3 a line written in three steps, the key still half written at two passes, waits at both: the key is in no part, then one ask 2006ms
+   ❯ #2365 Scope: what follows the last complete line waits, and a tail still unchanged at the next pass is copied as it stands (1)
+     × #2365 Scope a last line with no line end: the first pass leaves it, the next (unchanged) copies it as it stands, and once the agent goes on, nothing is doubled or left out 1405ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts [ tests/acceptance/2365/tail.test.ts ]
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/vitest-setup.ts:57:3
+     55|   // such as #29's twins' pending command, on a lease table the file h…
+     56|   let held: Proc[] = [];
+     57|   afterAll(() => {
+       |   ^
+     58|     held = tree('SIGSTOP');
+     59|     if (held.length) console.warn(`vitest-setup: stopping ${held.lengt…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form > #2365 AC3 by passes: the pass with m6 half written copies m1…m5 only, the next copies the rest, the key is in no part, and one rotate ask
+Error: #2365 AC3 after the pass that ran with m6 half written: the key's characters 5–16 (of 40) are in part 9bc40d0d7f55f2e2f9a46c6af2661eaa9cfeac6fb45d3ce761f26b1544a836c0 (cited by transcript.archived@2 at log position 1); a key half written when a pass ran must be in no part in any form
+ ❯ expectKeyNowhere tests/acceptance/2365/helpers.ts:251:13
+
+ ❯ halfKeyScenario tests/acceptance/2365/tail.test.ts:52:3
+ ❯ tests/acceptance/2365/tail.test.ts:75:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form > #2365 AC3 on demand: the copy of one session (archive.session) takes the same path
+Error: #2365 AC3 after the pass that ran with m6 half written: the key's characters 5–16 (of 40) are in part 40af1fd3229ee3b0ac826691bf0816c50d6bbb48c7091533d9c671c0511d489f (cited by transcript.archived@2 at log position 1); a key half written when a pass ran must be in no part in any form
+ ❯ expectKeyNowhere tests/acceptance/2365/helpers.ts:251:13
+
+ ❯ halfKeyScenario tests/acceptance/2365/tail.test.ts:52:3
+ ❯ tests/acceptance/2365/tail.test.ts:85:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 AC3 a key pasted into a line half written when a pass runs is in no part in any form > #2365 AC3 a line written in three steps, the key still half written at two passes, waits at both: the key is in no part, then one ask
+Error: #2365 AC3 m6 still half written at step 1 (a tail that changed since the last pass) waits: no reading of session:1082fb6fa3154c848bd0b493b27948eb's 1 copy event(s) joins to the transcript scrubbed. The closest, parts 6685583f1124 (1 part: the evidence of events 1…1 of 1), first differs at line 6, byte 1820: the transcript ends there, where the parts go on with «{"parentUuid":"m5","isSidechain":false,"type":"user","message":{"role":"user","content":"the npm publish token is ghp_srABfgvgT»
+ ❯ expectCopy tests/acceptance/2365/helpers.ts:204:9
+    202|     : d.ended === 'expected' ? `the transcript ends there, where the p…
+    203|       : `the transcript has «${clip(d.expectedLine)}» and the parts ha…
+    204|   throw Error(`${why}: no reading of ${handle(id)}'s ${events.length} …
+       |         ^
+    205| }
+    206|
+ ❯ tests/acceptance/2365/tail.test.ts:108:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2365/tail.test.ts > #2365 Scope: what follows the last complete line waits, and a tail still unchanged at the next pass is copied as it stands > #2365 Scope a last line with no line end: the first pass leaves it, the next (unchanged) copies it as it stands, and once the agent goes on, nothing is doubled or left out
+Error: #2365 Scope the first pass copies up to the last complete line; the unterminated tail waits: no reading of session:d6390761527347e58b8493992a730df5's 1 copy event(s) joins to the transcript scrubbed. The closest, parts 1d9e515d2db8 (1 part: the evidence of events 1…1 of 1), first differs at line 6, byte 1810: the transcript ends there, where the parts go on with «{"parentUuid":"m5","isSidechain":false,"type":"user","message":{"role":"user","content":"message 6: the last thing said before the agent was killed"},"uuid":"m6… (360 chars)»
+ ❯ expectCopy tests/acceptance/2365/helpers.ts:204:9
+    202|     : d.ended === 'expected' ? `the transcript ends there, where the p…
+    203|       : `the transcript has «${clip(d.expectedLine)}» and the parts ha…
+    204|   throw Error(`${why}: no reading of ${handle(id)}'s ${events.length} …
+       |         ^
+    205| }
+    206|
+ ❯ tests/acceptance/2365/tail.test.ts:144:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  00:31:19
+   Duration  34.54s (tests 73%, transform 16%, import 10%, setup 1%)
+
