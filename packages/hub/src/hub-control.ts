@@ -12,7 +12,7 @@ import { realpathSync } from 'node:fs';
 import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
 
-import { type Asks } from '@deepbuild/asks';
+import { signInAgentOf, type Asks } from '@deepbuild/asks';
 
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import { type ExtensionHost, type ViewShown } from '@deepbuild/extension-host';
@@ -355,9 +355,13 @@ export class HubControl {
       // The sign-in task's one button (#1349): the agent's own sign-in command, started on the trusted path; it closes nothing.
       case 'signin.open': {
         if (context.role !== 'app') throw refuse('role', '/method', 'Only the app starts an agent\'s sign-in.', method);
-        const agent = params.agent;
-        if (typeof agent !== 'string' || !openSignIn(agent, this.options.services.agents.loginPath(), this.options.settings.plant)) {
-          throw refuse('not_found', '/params/agent', `No sign-in command for ${String(agent)} is on your login shell's PATH.`, agent);
+        const handle = params.ask;
+        if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw refuse('handle_syntax', '/params/ask', 'Name the sign-in task by its handle, ask:<id>.', handle);
+        const [task] = (await this.options.services.raw(`SELECT data FROM events WHERE id = ? AND kind = 'ask.created'`, [handle.slice(4)])) as { data: string }[];
+        const agent = task ? signInAgentOf(JSON.parse(task.data)) : undefined;
+        if (!agent) throw refuse('not_found', '/params/ask', `${handle} is no agent's sign-in task.`, handle);
+        if (!openSignIn(agent, this.options.services.agents.loginPath(), this.options.settings.plant)) {
+          throw refuse('not_found', '/params/ask', `No sign-in command for ${agent} is on your login shell's PATH.`, handle);
         }
         return { started: true };
       }
