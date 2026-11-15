@@ -680,6 +680,8 @@ class Hub {
       }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
+    // A rules.json removed since the last hook is back before the hello: the deep-hook that connects reads it then (#1856).
+    this.rules();
     sock.write(this.helloLine);
   }
 
@@ -1203,36 +1205,36 @@ class Hub {
   /** Why rules.json was written again, until a hook's session can record it. */
   private rulesRewritten: string | undefined;
   /**
-   * The entries of rules.json, read again only when the file changes. One that is there and can't be read, cut short
-   * or written over by a command's child no guard saw, is written again as this hub last read it (#2204): deep-hook
-   * matches against that file alone, and denies every call while it can't read it. A file this hub never read stays.
+   * The entries of rules.json, read again only when the file changes. One that can't be read, cut short or written
+   * over by a command's child no guard saw (#2204), or removed by one (#1856), is written again as this hub last read
+   * it: deep-hook matches against that file alone, and denies every call while it can't read it. A file this hub
+   * never read stays as it is, and so does none.
    * Without `rewrite`, a readable file is only kept: the copy stays whole between hooks.
    */
   private rules(rewrite = true): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    // No rules.json: no entries.
     const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
       let entries: Record<string, Guard | undefined> | undefined;
       let text: string | undefined;
-      let why = 'has no entries object';
+      let why = key === 'none' ? 'was removed' : 'has no entries object';
       try {
         text = readFileSync(file, 'utf8');
         const parsed = JSON.parse(text) as { entries?: unknown } | null;
         if (isObj(parsed?.entries)) entries = parsed.entries as Record<string, Guard | undefined>;
       } catch (error) {
-        why = error instanceof SyntaxError ? "isn't JSON" : `can't be read (${(error as NodeJS.ErrnoException).code ?? 'error'})`;
+        if (key !== 'none') why = error instanceof SyntaxError ? "isn't JSON" : `can't be read (${(error as NodeJS.ErrnoException).code ?? 'error'})`;
       }
       const kept = this.rulesSeen.text;
       if (entries) this.rulesSeen = { key, entries, text };
-      else if (key !== 'none' && kept !== undefined) {
+      else if (kept !== undefined) {
         if (!rewrite) return this.rulesSeen.entries;
         try {
           writeSynced(file, Buffer.from(kept));
           this.rulesRewritten = `${file} ${why}, so deep-hook could match no call against its guards; the hub wrote it again as it last read it.`;
         } catch { /* it can't be written either: deep-hook goes on naming it, and the next change to it is tried again */ }
         this.rulesSeen.key = fileKey(file);
-      } else this.rulesSeen = { key, entries: {}, text: undefined };
+      } else this.rulesSeen = { key, entries: {}, text: undefined }; // No rules.json this hub ever read: no entries.
     }
     return this.rulesSeen.entries;
   }

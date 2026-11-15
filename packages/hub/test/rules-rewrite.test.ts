@@ -1,6 +1,7 @@
 // A running hub writes rules.json again when it can't read it (#2204): deep-hook matches every call against that
 // file, so one cut short leaves the hub nothing matched to decide from until the file is back.
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import net from 'node:net';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
@@ -39,6 +40,8 @@ describe('a running hub whose rules.json can no longer be read', () => {
     ['with no entries object', (file) => writeFileSync(file, '{"v":1,"entries":[]}')],
     // Its bytes, size and time stay: only its mode says nobody may read it.
     ['with a mode nobody can read it by', (file) => chmodSync(file, 0o000)],
+    // Removed (#1856), as a command's child no guard sees can.
+    ['removed', (file) => rmSync(file)],
   ];
   for (const [spoiled, spoil] of spoils) {
     it(`writes the file again as it last read it, before it answers the next hook, and records it once: ${spoiled}`, async () => {
@@ -60,6 +63,27 @@ describe('a running hub whose rules.json can no longer be read', () => {
       });
     }, 60_000);
   }
+
+  it('puts a removed file back before it says hello, so the hook that connects can match its call against it (#1856)', async () => {
+    await withHub(async (root, _home, hub) => {
+      const file = join(root, 'rules.json');
+      writeFileSync(file, RULES, { mode: 0o600 });
+      await hub.restart();
+      rmSync(file);
+      const sock = net.connect(join(root, 'hub.sock'));
+      try {
+        await new Promise((resolve, reject) => { sock.once('data', resolve); sock.once('error', reject); });
+        expect(entries(file), 'the file is back once the hub has said hello').toMatchObject({ 'no-kill-by-name': GUARD });
+      } finally {
+        sock.destroy();
+      }
+      // The reading waits for a hook's session.
+      expect(await send(join(root, 'hub.sock'), request('01K74FKZVKZGATTBZAEGPRE224', 'ls'))).toContain('"ack"');
+      const found = await readings(root, 1);
+      expect(found, 'one reading says the file was removed').toHaveLength(1);
+      expect(found[0]).toContain('removed');
+    });
+  }, 60_000);
 
   it('rewrites from a file changed since the last hook: an entry installed between two hooks is kept', async () => {
     await withHub(async (root, _home, hub) => {
