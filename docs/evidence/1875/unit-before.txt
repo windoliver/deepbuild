@@ -1,5 +1,8 @@
-$ node --test --test-name-pattern="setup file a runner" tests/affected.test.mjs   # base c740dede7 scripts, this branch test
-✖ a setup file a runner config names feeds every suite, wherever the config names it; a config module it imports does not (42.933418ms)
+# The test "the files a runner config names feed every suite…" (tests/affected.test.mjs at 7bae63a8), run against three wrong programs.
+$ node --test --test-name-pattern="runner config names" tests/affected.test.mjs
+
+## 1. the base scripts, c740dede7
+✖ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (63.660376ms)
 ℹ tests 1
 ℹ suites 0
 ℹ pass 0
@@ -7,12 +10,12 @@ $ node --test --test-name-pattern="setup file a runner" tests/affected.test.mjs 
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 467.827285
+ℹ duration_ms 326.596402
 
 ✖ failing tests:
 
 test at tests/affected.test.mjs:110:1
-✖ a setup file a runner config names feeds every suite, wherever the config names it; a config module it imports does not (42.933418ms)
+✖ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (63.660376ms)
   AssertionError [ERR_ASSERTION]: tests/boot.ts
   + actual - expected
   
@@ -21,7 +24,7 @@ test at tests/affected.test.mjs:110:1
   -   'tests/boot.ts'
   - ]
   
-      at TestContext.<anonymous> (file://<scratch>/draft/tests/affected.test.mjs:120:89)
+      at TestContext.<anonymous> (file://<scratch>/draft/tests/affected.test.mjs:121:110)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -30,6 +33,78 @@ test at tests/affected.test.mjs:110:1
     code: 'ERR_ASSERTION',
     actual: [],
     expected: [ 'tests/boot.ts' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+## 2. 74fbac4a, which left the config's imported modules out
+✖ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (208.915511ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 595.994549
+
+✖ failing tests:
+
+test at tests/affected.test.mjs:110:1
+✖ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (208.915511ms)
+  AssertionError [ERR_ASSERTION]: scripts/globs.mjs
+  + actual - expected
+  
+  + []
+  - [
+  -   'scripts/globs.mjs'
+  - ]
+  
+      at TestContext.<anonymous> (file://<scratch>/draft/tests/affected.test.mjs:121:110)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'scripts/globs.mjs' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+## 3. this branch without the deleted-setup-file clause in namedByConfig
+✖ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (279.942008ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 696.498927
+
+✖ failing tests:
+
+test at tests/affected.test.mjs:110:1
+✖ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (279.942008ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'tests/gone.ts'
+  - ]
+  
+      at TestContext.<anonymous> (file://<scratch>/draft/tests/affected.test.mjs:123:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'tests/gone.ts' ],
     operator: 'deepStrictEqual',
     diff: 'simple'
   }

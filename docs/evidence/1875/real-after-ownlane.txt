@@ -1,10 +1,10 @@
-$ node scripts/affected.mjs tests/acceptance/684/lean.test.ts   # in the branch tree, 74fbac4aa, 2026-11-15T08:43:49Z, load 217.65
+$ node scripts/affected.mjs tests/acceptance/684/lean.test.ts   # branch 8cd443e7d, 2026-11-15T09:02:13Z, load 121.09
 parallel vitest: tests/acceptance/684/lanes.test.ts
 parallel node: tests/affected.test.mjs
 SKIP tests/acceptance/684/lean.test.ts (a lane of its own)
 INCONCLUSIVE vitest report: the report ends before the run did, so a test's result may be missing
 BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
 BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
-INCONCLUSIVE 1 selected file was not run, left to a person or to a lane of its own: tests/acceptance/684/lean.test.ts (a lane of its own)
-FAIL affected: 166 new, 44 already failing on main, 3 inconclusive or blocked, 0 listed skips, 10 passed, in 23 s at load 213; logs in <tmp>/deep-affected-…
+INCONCLUSIVE 1 selected file was not run, left to a person or to a lane of its own; run each by hand or in its lane: tests/acceptance/684/lean.test.ts (a lane of its own)
+FAIL affected: 167 new, 45 already failing on main, 3 inconclusive or blocked, 0 listed skips, 10 passed, in 19 s at load 142; logs in <tmp>/deep-affected-…
 exit 1
