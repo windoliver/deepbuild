@@ -1,5 +1,7 @@
 # #2122 — five hub failure/restart fixes
 
+**Current status:** the isolated PR branch merged with `main` at `291d63af` now has all five acceptance criteria and the previously missing integration proofs verified. See [closure/README.md](closure/README.md) for 31 passing tests, current-base failures, the await-ordering mutant, and the clean-base lint comparison. Repository-wide lint still fails; this is not a release-preflight PASS. The rest of this page preserves the earlier development record and its then-open gaps.
+
 Base: `1c4d1f0e2aaad8c6a6573848823566d04ff73d17` (includes #2113).
 This report records the implementation-time checks before commit. PR preparation preserves the tested base and copies only this issue's changes into a separate branch; unrelated original-worktree changes remain there.
 
@@ -42,7 +44,7 @@ node scripts/affected.mjs \
   tests/acceptance/2122/never-ends.test.ts
 ```
 
-## Overall verification is BLOCKED, not a clean preflight
+## Earlier verification was BLOCKED (superseded by the closure report)
 
 Both fixed validator runs exit **1**, despite their selected tests passing. `affected.txt` and `affected-final.txt` report **245 new lint findings, 11 known failures, six invalid/inconclusive/blocked findings**. These are outside this patch: research-note paths/manifests, dependency listings, vendor/canvas lint, size limits, contract/slot mappings, and expired known-failure entries. The `core.ts` size finding predates this change; our edit there replaces one line without adding lines. No check, threshold, baseline or unrelated file was changed to suppress them.
 
