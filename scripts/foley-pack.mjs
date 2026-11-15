@@ -29,8 +29,8 @@ const KEYS = [1, 2, 3, 4];
 const MATERIALS = {
   paper: { color: 'white', filter: ['bandpass', 3500, 0.8], modes: { hz: 900, ratios: [1, 2.31, 3.87], t60s: [0.03, 0.02, 0.015] }, body: 0.25, noise: 1 },
   wood: { color: 'pink', filter: ['lowpass', 2200, 0.7], modes: { hz: 320, ratios: [1, 2.76, 5.4], t60s: [0.14, 0.07, 0.035] }, body: 1, noise: 0.35 },
-  metal: { color: 'white', filter: ['highpass', 2500, 0.7], modes: { hz: 520, ratios: [1, 2.76, 5.4, 8.93], t60s: [0.9, 0.7, 0.5, 0.35] }, body: 1, noise: 0.25 },
-  glass: { color: 'white', filter: ['highpass', 4000, 0.7], modes: { hz: 1450, ratios: [1, 2.32, 4.25, 6.63], t60s: [0.6, 0.45, 0.3, 0.2] }, body: 1, noise: 0.2 },
+  metal: { color: 'white', filter: ['highpass', 2500, 0.7], modes: { hz: 520, ratios: [1, 2.76, 5.4, 8.93], t60s: [0.9, 0.7, 0.5, 0.35] }, body: 1, noise: 0.01 },
+  glass: { color: 'white', filter: ['highpass', 4000, 0.7], modes: { hz: 1450, ratios: [1, 2.32, 4.25, 6.63], t60s: [0.6, 0.45, 0.3, 0.2] }, body: 1, noise: 0.012 },
   plastic: { color: 'white', filter: ['bandpass', 2200, 1], modes: { hz: 640, ratios: [1, 1.83, 3.12], t60s: [0.07, 0.045, 0.03] }, body: 0.7, noise: 0.5 },
   rubber: { color: 'brown', filter: ['lowpass', 700, 0.8], modes: { hz: 170, ratios: [1, 1.59], t60s: [0.05, 0.03] }, body: 0.8, noise: 0.5 },
   ink: { color: 'pink', filter: ['bandpass', 1300, 2], modes: { hz: 720, ratios: [1, 2.08], t60s: [0.03, 0.02] }, body: 0.4, noise: 1 },
