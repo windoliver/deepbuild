@@ -1,6 +1,6 @@
 # Canvas and renderer hill-climb: GPU and memory, 2026-11-14 and 15
 
-Base: main at `c740dede7` (2026-11-14). Branch `perf/render-gpu-memory-1114`, nothing committed. Eleven source files differ from main, +625 −145, and two test files are new, 367 lines. Of the 992 added lines, 693 are tests and 299 are code.
+Base: main at `c740dede7` (2026-11-14). Branch `perf/render-gpu-memory-1114`, merged with main at `474c22635` before the PR; what ran on the merged tree is under [After merging main](#after-merging-main). Eleven source files differ from main, +625 −145, and two test files are new, 367 lines. Of the 992 added lines, 693 are tests and 299 are code.
 
 Two rounds. The first made three changes; the second closed six of its follow-ups. Each has a test that fails on main's code, and none changes a pixel.
 
@@ -97,6 +97,18 @@ Every row is on `c740dede7`. Each new test ran on main's code first: the changed
 - The timed and slow lists, the preflight, and anything on Linux.
 
 Deviations: the first build held a build grant from the throttle. Later builds and tests ran through `scripts/lease` or plain `nice 19`, four or five jobs, unleased. The measuring prints were added for a run and taken out. The mutants and the main's-code runs rewrote source files in place and put them back; the tree was compared with the saved change after each.
+
+## After merging main
+
+Main was merged once at `474c22635`, 211 commits past the base, with no conflict.
+
+| Check on the merged tree | Result |
+|---|---|
+| `cargo test -p deep-canvas-effects -p deep-effects-render -p deep-scene3d-render` | All pass: 15, 3 and 3, 31, and the two new files' 5 |
+| `cargo test -p deep-canvas-scene3d` | Does not compile: `views.rs:289`, `missing field target in initializer of scene::Camera`, a file this change leaves as main has it. Its 113 tests passed on the base |
+| `cargo clippy -p deep-effects-render -p deep-scene3d-render --all-targets --no-deps -- -D warnings` | One finding of this change's, in `print.rs`, fixed. Three left, main's: `mirror.rs:195`, `inset.rs:200` and `:402` |
+
+Not run again after the merge: the tests on main's code, the mutants, the pixel hashes against main, `affected.mjs` and the doc lints.
 
 ## Scope: what was audited
 

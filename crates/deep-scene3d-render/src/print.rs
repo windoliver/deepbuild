@@ -392,7 +392,7 @@ impl Printer {
         let (uniform, masks, bind) = match kept {
             Some(k) if k.uniform.0 == bytes && k.masks.0 == masks => {
                 let same = k.views.iter().eq(views);
-                (k.uniform, k.masks, Some(k.bind).filter(|_| same))
+                (k.uniform, k.masks, same.then_some(k.bind))
             }
             _ => {
                 let buffer = |contents, usage| {
