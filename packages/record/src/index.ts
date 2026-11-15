@@ -182,19 +182,16 @@ const REPLAY_PAGE = 5000;
 const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'claim.progress']);
 /**
- * The evidence an event's data names by hash beside its own list (#1410): what a verdict's counted runs captured, an
- * answer's image, and the bytes a lock approved (each check, each expected output it references, each held-out file).
- * Synced before a FULL commit as what its own list names is, but not cited by it, so retention treats it as before.
+ * The evidence an event's data names by hash beside its own list (#1410): a verdict's run output, an answer's image or
+ * the page it approved, a lock's approved bytes, a workspace's readings. Synced before a FULL commit as what its own
+ * list names is, but not cited by it, so retention treats it as before. A hash the store doesn't hold has nothing to sync.
  */
-function namedIn(p: { input: EventInput; data: unknown }): string[] {
-  const d = isObj(p.data) ? p.data : {};
-  const each = (list: unknown, pick: (item: Record<string, unknown>) => unknown[]): unknown[] => (Array.isArray(list) ? list.flatMap((item) => (isObj(item) ? pick(item) : [])) : []);
-  const named = p.input.kind === 'verdict.made' ? each(d.requirements, (r) => (Array.isArray(r.evidence) ? r.evidence : []))
-    : p.input.kind === 'ask.answered' ? [d.image]
-      : p.input.kind === 'definition.locked' ? each(d.requirements, (r) => [r.check_sha256, ...each(r.references, (ref) => [ref.sha256]), ...each(r.held_out, (v) => (isObj(v.files) ? Object.values(v.files) : []))])
-        : [];
-  return named.filter((sha): sha is string => typeof sha === 'string');
+function namedIn(value: unknown): string[] {
+  if (typeof value === 'string') return SHA256.test(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(namedIn);
+  return isObj(value) ? Object.values(value).flatMap(namedIn) : [];
 }
+const SHA256 = /^[0-9a-f]{64}$/;
 
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
@@ -675,7 +672,7 @@ class SqliteRecord implements RecordStore {
    * when there is nothing to wait for, so such a commit stays in this turn.
    */
   private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
-    const named = mode === 'full' && this.options.evidence ? items.flatMap((p) => [...p.evidence, ...namedIn(p)]) : [];
+    const named = mode === 'full' && this.options.evidence ? [...new Set(items.flatMap((p) => [...p.evidence, ...namedIn(p.data)]))] : [];
     return named.length ? this.syncNamed(items, named) : undefined;
   }
   private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {

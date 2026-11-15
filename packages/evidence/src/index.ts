@@ -192,7 +192,12 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   }
   if (!options.readOnly && lines.length > 2 * (index.size + approved.size) + 1000) {
     const kept = [...index.values(), ...[...approved].map(([pair, reasons]): Approval => ({ approved: pair, reasons: [...reasons] }))];
-    await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''));
+    // It replaces a journal whose lines a FULL commit may have synced, so it lasts before it does (#1410).
+    const temp = join(root, `.tmp-${randomUUID()}`);
+    await writeFile(temp, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''));
+    await syncOne(temp);
+    await rename(temp, journal);
+    await syncOne(root);
   }
   // The journal stays open while lines come, and closes once they stop for a second: opening it for each line cost
   // more than writing it (8 to 22 ms on a Mac whose scanner reads a file each time it is closed after a write).
@@ -406,10 +411,10 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
         await Promise.all([...folders, ...above].map(syncOne));
         for (const path of [...folders, ...above]) synced.set(path, '');
-        for (const [i, path] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined) synced.set(path, stamp); }
-        // A file is found by its line in the journal, written before its put returned: that lasts once the journal is synced.
+        // A file is found by its line in the journal, written before its put returned: it counts as synced once that is.
         await journaled.catch(() => undefined);
         await syncOne(journal);
+        for (const [i, path] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined) synced.set(path, stamp); }
       }
     },
 

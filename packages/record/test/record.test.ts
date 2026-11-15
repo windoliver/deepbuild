@@ -1,5 +1,5 @@
 // Regression tests for the record (#14) beyond its acceptance suite: each one failed on the program it names.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -1166,10 +1166,10 @@ describe('a FULL commit syncs the evidence its data names beside its own list (#
     return { ...(fixture as unknown as EventInput), id: ulidAt(ms), ts: ms, data };
   };
   it.each([
-    ['an answer given as a screenshot names its image', async (store: Awaited<ReturnType<typeof openEvidenceStore>>) => {
-      const image = await kept(store, 'a screenshot');
+    ['an answer given as a screenshot names its image, and the page it approved', async (store: Awaited<ReturnType<typeof openEvidenceStore>>) => {
+      const [image, page] = [await kept(store, 'a screenshot'), await kept(store, 'the brief it approved')];
       const base = (fixtures('ask.answered@6')[0] as { data: Record<string, JsonValue> }).data;
-      return { input: at('ask.answered', 6, T0 + 2, { ...base, answer: image, option: null, image }), named: [image] };
+      return { input: at('ask.answered', 6, T0 + 2, { ...base, answer: image, option: null, image, on: { kind: 'evidence', ref: page } }), named: [image, page] };
     }],
     ['a lock names the bytes it approved: each check, each expected output and each held-out file', async (store: Awaited<ReturnType<typeof openEvidenceStore>>) => {
       const [check, expected, variant] = [await kept(store, 'a check'), await kept(store, 'its expected output'), await kept(store, 'a held-out file')];
@@ -1177,6 +1177,11 @@ describe('a FULL commit syncs the evidence its data names beside its own list (#
       const [first, ...rest] = base.requirements;
       const requirements = [{ ...first!, check_sha256: check, references: [{ path: '.deepbuild/checks/seq-number.expected', sha256: expected }], held_out: [{ files: { 'test/fixtures/seq-number.json': variant } }] }, ...rest.map((r) => ({ ...r, check_sha256: null }))];
       return { input: at('definition.locked', 10, T0 + 2, { ...base, requirements }), named: [check, expected, variant] };
+    }],
+    ["a workspace's reading names the bytes it read", async (store: Awaited<ReturnType<typeof openEvidenceStore>>) => {
+      const reading = await kept(store, 'the sales table as read');
+      const base = (fixtures('state.read@1')[0] as { data: { readings: Record<string, JsonValue>[] } & Record<string, JsonValue> }).data;
+      return { input: at('state.read', 1, T0 + 2, { ...base, readings: [{ ...base.readings[0]!, digest: reading }] }), named: [reading] };
     }],
   ])('%s, and it is synced before the commit', async (_name, make) => {
     const storage = testStorage();
@@ -1194,24 +1199,32 @@ describe('a FULL commit syncs the evidence its data names beside its own list (#
 });
 
 describe('a FULL commit whose evidence fails to sync is refused, and nothing of it is in the log (#1410)', () => {
-  it.each([true, false])('commitEach %s', async (commitEach) => {
-    const store = await openEvidenceStore({ root: tempRoot(), now: () => T0 });
+  // Not root: an evidence root without read permission still takes new files, but can't itself be opened to sync.
+  it.each([
+    ['a verdict, committed alone', true, (S: string, sha: string): EventInput => ({ ...event('verdict.made', T0 + 200, undefined, { claim: `claim:${ulidAt(T0 + 1)}`, verdict: `verdict:${ulidAt(T0 + 200)}` }, 1), evidence: [sha] })],
+    ['a prompt that resumes its session, committed in a batch', false, (): EventInput => event('user.ask', T0 + 200, seqAt(T0 + 200), { msg: 2, text: 'carry on '.repeat(1200) })],
+  ])('%s', async (_name, commitEach, make) => {
+    const root = tempRoot();
+    const store = await openEvidenceStore({ root, now: () => T0 });
     const put = await store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes: Buffer.from('a log'), kind: 'log', source: 'test', redaction: 'complete', license: { name: 'record', allows: [] } });
     if (put.status !== 'stored') throw Error(put.reason);
-    const failing = { ...store, sync: async () => { throw Error('the disk refused the sync'); } };
-    const r = await openRecord({ path: join(tempRoot(), 'record.db'), now: () => T0, evidence: failing, commitEach });
+    const r = await openRecord({ path: join(tempRoot(), 'record.db'), now: () => T0, evidence: store, commitEach });
     open.push(r);
     const S = ulidAt(T0 - 1000);
     await r.append(hook(S), event('session.start', T0 - 1000, undefined));
-    const claim = event('claim.made', T0 + 1, undefined);
-    await r.append({ ...hook(S), writer: 'app' }, claim);
-    const verdict = { ...event('verdict.made', T0 + 2, undefined, { claim: `claim:${claim.id}`, verdict: `verdict:${ulidAt(T0 + 2)}` }, 1), evidence: [put.evidence.sha256] };
-    await expect(r.append(core(S), verdict)).rejects.toMatchObject({ code: 'storage' });
+    await r.append(hook(S), event('user.ask', T0, seqAt(T0), { msg: 1 }));
+    await r.append({ ...hook(S), writer: 'app' }, event('claim.made', T0 + 1, undefined));
+    await r.append(hook(S), { ...event('agent.stop', T0 + 100, seqAt(T0 + 100), { turn: 1 }), subject: `session:${S}` });
+    const refused = make(S, put.evidence.sha256);
+    chmodSync(root, 0o300);
+    try {
+      await expect(r.append(refused.kind === 'user.ask' ? hook(S) : core(S), refused)).rejects.toMatchObject({ code: 'storage' });
+    } finally { chmodSync(root, 0o700); }
     // What comes after the refused commit still commits: the queue isn't left waiting on it.
-    const after = event('tool.before', T0 + 3, seqAt(T0 + 3));
+    const after = event('tool.before', T0 + 300, seqAt(T0 + 300));
     await r.append(hook(S), after);
     const ids = (await r.read({ after: 0 })).map((e) => e.id);
-    expect(ids).not.toContain(verdict.id);
+    expect(ids).not.toContain(refused.id);
     expect(ids).toContain(after.id);
   });
 });
