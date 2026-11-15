@@ -5,7 +5,11 @@ Written first, from issue #2516 (its scope, seven acceptance criteria and proof 
 reference Mac and CPU references) and base commit **`1c4d1f0e2aaad8c6a6573848823566d04ff73d17`**, by a job that never saw
 an implementation; none exists in that snapshot. The implementing agent doesn't edit these files (AGENTS.md, Proof); a
 dispute goes to a blind redraft of this job (design: Dogfooding). The one file anyone adds here later is `TASTE.json`,
-and only to record the owner's call (The taste call).
+and only to record the owner's call (The taste call); `APPROVED.md` records the owner's approved corrections, below.
+
+**Owner-approved corrections** (2026-11-15) to AC4's CPU qualification, the full-radius plant's wall witness and the
+redraft's machine gate and typing are applied in place and mapped, requirement by edit, in [`APPROVED.md`](APPROVED.md);
+the versions before them are at commit `3cd75b8aa`.
 
 **Nothing here has been run.** The drafting job could not execute commands: no type-check, no CPU test, no GPU test,
 no base run. The implementing session runs them unchanged first, on the base, and keeps the failing output as
@@ -112,9 +116,12 @@ floor corner lands at y ≈ 338 of 540 below centre; the slab's widest neighbour
   Held to the issue's numbers to the digits stated (±0.0005; slab exact).
 - **CPU reference** (`cubeReference`): f64, 4,096 rays on a 64 × 64 stratified grid, cosine-weighted by Malley's
   method, slab-tested against the fixture's occluders out to 0.5 m; the cube's value is the mean over 11 points across
-  the middle 10 cm. It counts as an oracle only after it reproduces the wall's six closed forms and the slab's two, and
-  the cube's stated 0.68 and 0.81, each within **0.01**, and its twin (the same rays weighted evenly) reads 0.5 under the
-  slab at 0.25 m and fails.
+  the middle 10 cm. It counts as an oracle only after it reproduces the wall's six closed forms and the slab's two, each
+  within **0.01**, and its twin (the same rays weighted evenly) reads 0.5 under the slab at 0.25 m and fails. On the cube
+  (owner-approved, `APPROVED.md` A) the point and the band are qualified separately, each within **0.01**: its value at
+  the point in front of the middle of the face (`cubePointReference`) against the issue's 0.68 and 0.81 and against the
+  face's f64 closed form (the redraft's `cubeFaceClosed`), and its average over the middle 10 cm (`cubeReference`, what
+  the GPU is compared with) against that closed form averaged over the same 11 points.
 
 ## Criteria to tests
 
@@ -126,7 +133,7 @@ The suite names no criterion hash IDs (the drafting job could not compute SHA-25
 | AC1 | Wall at 5–40 cm within 0.05 of the closed form, 8/16 samples, half/full, two cameras; main's loop planted fails naming the first point and reading | `wall.test.ts` (2) | Any (camera, setting, distance) off by > 0.05, listed. Plant `ao_main_loop` must fail with its first failure naming the first failing distance and its reading |
 | AC2 | 60 cm and 1 m read 1 within 0.01; main's loop with strength raised until 10 cm passes fails at 5 cm | `wall.test.ts` (2) | Any open-floor reading off 1 by > 0.01. The strengthened `ao_main_loop` must fail naming `at 5 cm the reading is …`; if no strength makes 10 cm pass, the test fails saying so |
 | AC3 | Slab at 0.25 m within 0.05 of 0.25, at 0.375 m of 0.5625; main reads > 0.8 and fails naming the height; even-weighted loop reads 0.5 and fails | `slab.test.ts` (3) | Every setting. `ao_main_loop` > 0.8 and fails naming `the slab 0.25 m above the floor`; `ao_uniform_hemisphere` within 0.05 of 0.5 and fails |
-| AC4 | Cube at 5 and 10 cm within 0.1 of the 4,096-ray f64 reference (0.68, 0.81), facing and 90° cameras; full-radius plant passes the wall, reads > 0.99 here, fails naming the camera | `cube.test.ts` (2), `reference.test.ts` (2 + 6 camera checks) | Every setting. `ao_full_radius` must pass the wall fixture at every setting from both cameras, read > 0.99 at both points from each cube camera, and fail naming that camera |
+| AC4 | Cube at 5 and 10 cm within 0.1 of the 4,096-ray f64 reference (0.68, 0.81), facing and 90° cameras; full-radius plant passes the wall, reads > 0.99 here, fails naming the camera | `cube.test.ts` (2), `reference.test.ts` (2 + 6 camera checks) | Every setting. `ao_full_radius` must pass the wall fixture at full resolution, 8 and 16 samples, from both cameras (owner-approved, `APPROVED.md` D), read > 0.99 at both points from each cube camera, and fail naming that camera |
 | AC5 | #418's three occlusion tests pass, unedited | `unedited-418.test.ts` (2) | `git diff <base> -- tests/acceptance/418/{ao.test.ts,helpers.ts,tsconfig.json}` non-empty; the three tests not all `passed` in vitest's JSON report |
 | AC6 | Prepass, occlusion, blur timed on the castle at 1080p, 8/16 × half/full, p50 and p95 over five warmed runs from GPU timestamps; Cost line carries them; a run under another job's lease is INCONCLUSIVE | `timing.test.ts` (3) | A kept frame without all three passes in `passes_ms` (the base); `profiler` not wgpu-profiler. The lease twin: with a live process holding the lease, nothing is drawn and the outcome is INCONCLUSIVE with no number. The Cost line still says "estimate", or carries no recorded run's 24 numbers |
 | AC7 | Room and castle with ao on, main and after, from the renderer, shown; one taste call recorded, else INCONCLUSIVE | `taste.test.ts` (1) | An after-picture identical to main's (the base); no `TASTE.json` or one on other pictures → INCONCLUSIVE; `looks_wrong` → FAIL |
@@ -165,7 +172,7 @@ the plants' failures, and the timings table; the timing evidence file is what th
 - **Tolerances kept as the issue's**: 0.05 (wall, slab; "drafted until the first run"), 0.01 (open floor), 0.1 (cube;
   "drafted"). Changing a drafted one is the owner's decision by approved proposal, never an edit here.
 - **Drafted by this job, for the owner to confirm** (the issue gives no number): the CPU reference's qualification
-  tolerance **0.01** against stated numbers; the read band **±0.5 cm** across d; at least 50 pixels a bin; the camera
+  tolerance **0.01** against stated numbers (unchanged by the approval); the read band **±0.5 cm** across d; at least 50 pixels a bin; the camera
   check (1% of floor pixels, 5 mm).
 - **"Averaged along 4 m of the wall"**: |x| ≤ 2 m, centred on the camera A's line of sight. **"Under the slab's
   middle"**: |x|, |z| ≤ 0.25 m. **"The middle 10 cm of the cube's face"**: |x| ≤ 0.05 m on the floor in front of it; the
@@ -173,8 +180,9 @@ the plants' failures, and the timings table; the timing evidence file is what th
 - **"A second camera 30° around the first"**: turned about the vertical through the first's target. The slab's camera
   sits in the gap, so the floor and the underside within the radius are both in the frame.
 - **AC1's plant and the strengthened plant are read at 8 samples, half resolution, camera A**, the look's defaults; AC3's
-  plants likewise; the full-radius plant on the wall at every setting from both cameras (the criterion claims it passes
-  the wall).
+  plants likewise; the full-radius plant on the wall at full resolution, 8 and 16 samples, from both cameras (the
+  criterion claims it passes the wall; owner-approved narrowing of this wrong program's witness only, `APPROVED.md` D;
+  the shipped program is still held on the wall at every setting).
 - **"p50 and p95 over five runs"**: nearest-rank p95 and the median over the 150 kept frames (30 a setting a run) of the
   five runs pooled; each run's median is recorded too. "After warm-up": one discarded run and the first 10 frames of each
   setting. **"1080p"**: 1920 × 1080 (the castle document's own 1280 × 800 is overridden by the call's `size`).

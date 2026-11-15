@@ -5,17 +5,21 @@
 // 2. The f64 CPU reference (4,096 cosine-weighted rays on a 64 × 64 stratified grid, out to the radius, against the
 //    fixture's boxes) counts as an oracle only once it reproduces a fixture whose numbers the issue states and its own
 //    planted twin fails (design: How we know version 0 works, "A CPU reference counts as an oracle only once …"). It is
-//    held to the wall's six closed forms and the slab's two within 0.01 (README: drafted), and to the cube's stated 0.68
-//    and 0.81 within 0.01. Its twin, the same rays weighted evenly over the hemisphere, must read 0.5 under the slab at
-//    0.25 m and so fail.
+//    held to the wall's six closed forms and the slab's two within 0.01 (README: drafted). On the cube (owner-approved,
+//    APPROVED.md, A) its value at the point in front of the middle of the face is held to the issue's 0.68 and 0.81 and
+//    to the face's f64 closed form, and its average over the middle 10 cm (what the GPU is compared with) to that closed
+//    form averaged the same way, each within 0.01. Its twin, the same rays weighted evenly over the hemisphere, must read
+//    0.5 under the slab at 0.25 m and so fail.
 // 3. Each fixture's stated camera keeps in the frame every surface within the radius of every point it reads (AC1, AC3,
 //    AC4's "from a second camera", "a camera facing that face and one 90° around it"; scope: "no occluder is left outside
 //    the frame").
 import { describe, expect, it } from 'vitest';
 import {
-  CUBE_BOXES, CUBE_CAMS, CUBE_POINTS, ISSUE, RADIUS, SLAB_HEIGHTS, WALL_BOXES, WALL_CAMS, WALL_OPEN, WALL_POINTS,
-  cubeReads, cubeReference, neighbourhood, outOfFrame, rays, slabBoxes, slabCam, slabClosed, slabReads, visibility, wallClosed, wallReads,
+  CUBE_BOXES, CUBE_CAMS, CUBE_HALF_SPAN, CUBE_POINTS, ISSUE, RADIUS, SLAB_HEIGHTS, WALL_BOXES, WALL_CAMS, WALL_OPEN, WALL_POINTS,
+  cubeBandClosedForm, cubePointReference, cubeReads, cubeReference, neighbourhood, outOfFrame, rays, slabBoxes, slabCam, slabClosed, slabReads,
+  visibility, wallClosed, wallReads,
 } from './helpers.ts';
+import { cubeFaceClosed, cubeFaceReach } from './redraft-ac4/reference.ts';
 
 const QUALIFY = 0.01;
 
@@ -39,10 +43,19 @@ describe('the expected values: closed forms and the qualified CPU reference', ()
       const v = visibility([0, 0, 0], slabBoxes(h).filter((b) => b.id !== 'floor'), cosine);
       if (Math.abs(v - slabClosed(h)) > QUALIFY) misses.push(`slab at ${h} m: ${v.toFixed(4)} against ${slabClosed(h)}`);
     }
+    // APPROVED.md, A: the issue's 0.68 and 0.81 are values at the point in front of the middle of the face; the band the
+    // GPU reads is held to the redraft's f64 closed form averaged over the same points. Each is qualified on its own.
     CUBE_POINTS.forEach((d, i) => {
-      const v = cubeReference(d);
-      console.log(`#2516 cube CPU reference at ${d * 100} cm (middle 10 cm of the face, 4,096 cosine-weighted rays to ${RADIUS} m): ${v.toFixed(4)}; the issue states ${ISSUE.cube[i]}`);
-      if (Math.abs(v - ISSUE.cube[i]!) > QUALIFY) misses.push(`cube at ${d * 100} cm: ${v.toFixed(4)} against the issue's ${ISSUE.cube[i]}`);
+      const stated = ISSUE.cube[i] ?? NaN;
+      const point = cubePointReference(d);
+      const band = cubeReference(d);
+      const closedPoint = cubeFaceClosed(d);
+      const closedBand = cubeBandClosedForm(d);
+      console.log(`#2516 cube CPU reference at ${d * 100} cm (4,096 cosine-weighted rays to ${RADIUS} m): point ${point.toFixed(4)} (the issue states ${stated}, the face's closed form ${closedPoint.toFixed(4)}); middle 10 cm of the face ${band.toFixed(4)} (the closed form averaged ${closedBand.toFixed(4)}), which the GPU is compared with`);
+      if (!(cubeFaceReach(d, CUBE_HALF_SPAN) < RADIUS)) misses.push(`cube at ${d * 100} cm: a corner of the face lies beyond the radius from the band, so the face's closed form doesn't hold there`);
+      if (!(Math.abs(point - stated) <= QUALIFY)) misses.push(`cube at ${d * 100} cm (point): ${point.toFixed(4)} against the issue's ${stated}`);
+      if (!(Math.abs(point - closedPoint) <= QUALIFY)) misses.push(`cube at ${d * 100} cm (point): ${point.toFixed(4)} against the face's closed form ${closedPoint.toFixed(4)}`);
+      if (!(Math.abs(band - closedBand) <= QUALIFY)) misses.push(`cube band at ${d * 100} cm: ${band.toFixed(4)} against the closed form averaged ${closedBand.toFixed(4)}`);
     });
     expect(misses, `the CPU reference reproduces every stated fixture within ${QUALIFY}:\n  ${misses.join('\n  ')}`).toEqual([]);
   });

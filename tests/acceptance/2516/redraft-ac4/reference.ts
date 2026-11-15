@@ -37,7 +37,7 @@ export function directions(model: Model): V3[] {
 /** Whether the ray o + t d meets box b for some t in [0, tMax] (the slab method). */
 export function hits(o: V3, d: V3, b: Box, tMax: number): boolean {
   let t0 = 0; let t1 = tMax;
-  for (let k = 0; k < 3; k++) {
+  for (const k of [0, 1, 2] as const) {
     if (d[k] === 0) { if (o[k] < b.min[k] || o[k] > b.max[k]) return false; continue; }
     let a = (b.min[k] - o[k]) / d[k]; let c = (b.max[k] - o[k]) / d[k];
     if (a > c) [a, c] = [c, a];

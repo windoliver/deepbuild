@@ -16,6 +16,7 @@ import {
   type F32, type Ids, type JsonObject, type Planted as Planted418, type Rgb,
 } from '../418/helpers.ts';
 import { failsNaming, inconclusive, judgeLimit, load, median, namedFile, none, p95 } from '../1637/helpers.ts';
+import { cubeFaceClosed } from './redraft-ac4/reference.ts';
 
 export { REPO, failsNaming, inconclusive, judgeLimit, load, median, none, p95 };
 export {
@@ -48,7 +49,8 @@ const ROLES: Record<string, Rgb> = { floor: [150, 150, 150], wall: [176, 176, 17
 export const fixtureLook = (ao: JsonObject | 'none'): JsonObject => look('ao-2516', ROLES, { ao });
 
 /** The wrong programs the criteria name, reachable only through `deep-gpu run --planted <name>` (README: Planted). */
-export type Plant = 'ao_main_loop' | 'ao_uniform_hemisphere' | 'ao_full_radius';
+/** `ao_points_at_radius` is the blind redraft's name for the same full-radius wrong program (redraft-ac4/README.md). */
+export type Plant = 'ao_main_loop' | 'ao_uniform_hemisphere' | 'ao_full_radius' | 'ao_points_at_radius';
 /** One `deep-gpu run` process over `calls`, every reply answered (not refused). */
 export function draw(bin: string, out: string, calls: JsonObject[], plant?: Plant): JsonObject[] {
   const replies = run418(bin, out, calls, plant as unknown as Planted418 | undefined);
@@ -308,6 +310,18 @@ export function cubeReference(d: number, weighting: 'cosine' | 'uniform' = 'cosi
   const dirs = rays(weighting); const occ = CUBE_BOXES.filter((b) => b.id !== 'floor');
   const xs = grid(-CUBE_HALF_SPAN, CUBE_HALF_SPAN, 0.01);
   return xs.reduce((s, x) => s + visibility([x, 0, CUBE_FACE_Z + d], occ, dirs), 0) / xs.length;
+}
+/**
+ * The same reference at one point, d in front of the middle of the face: what the issue's 0.68 and 0.81 state
+ * (APPROVED.md, A). The GPU is still compared with `cubeReference`, the average over the band it reads.
+ */
+export function cubePointReference(d: number): number {
+  return visibility([0, 0, CUBE_FACE_Z + d], CUBE_BOXES.filter((b) => b.id !== 'floor'), rays('cosine'));
+}
+/** The redraft's f64 closed form of the face (redraft-ac4/reference.ts `cubeFaceClosed`) averaged over the same 11 points as `cubeReference`. */
+export function cubeBandClosedForm(d: number): number {
+  const xs = grid(-CUBE_HALF_SPAN, CUBE_HALF_SPAN, 0.01);
+  return xs.reduce((s, x) => s + cubeFaceClosed(d, x), 0) / xs.length;
 }
 /** The issue's stated numbers. */
 export const ISSUE = {

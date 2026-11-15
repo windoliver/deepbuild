@@ -11,6 +11,10 @@ the middle of a face is within 0.1 of a CPU reference in f64 of 4,096 cosine-wei
 loop that puts every one of main's points at the full radius passes the wall fixture, reads above 0.99 here and
 fails, naming the camera"
 
+**Owner-approved corrections** (2026-11-15; [`../APPROVED.md`](../APPROVED.md), B, C and D) are applied in place: the
+`hits` loop's index typing, this redraft's own reference-Mac gate (the design's three Macs), and the planted loop's wall
+witness moved to the original suite's wall fixture at full resolution. The redraft before them is at commit `3cd75b8aa`.
+
 The tests name `AC4` and no criterion ID, so the closed-issue sweep reads them by number (design: Closed issues stay
 proven).
 
@@ -38,7 +42,10 @@ npx tsc -p tests/acceptance/2516/redraft-ac4/tsconfig.json
 (`radius`, `strength`, `samples`, `resolution`, `multi_bounce`, `specular`) and the `sky@1`, `material@1` and
 `camera@1` kinds. The following are reused unchanged from the base: `tests/acceptance/418/helpers.ts` (`useGpuBin`,
 `useOut`, `look`, `solid`, `frameAt`, `readIds`, `readTarget`, `texel`, `luma`, `answered`) and
-`tests/acceptance/379/helpers.ts` (`requireReferenceMac`). I added no product code.
+`tests/acceptance/379/helpers.ts` (`machineModel`, `inconclusive`; its `requireReferenceMac`, which lists only Mac15,7
+and Mac15,12, is no longer used and is not edited). Approved (`../APPROVED.md` D): the wall witness uses the original
+suite's `../helpers.ts` (`WALL_BOXES`, `WALL_CAMS`, `fixtureDoc`, `measure`, `wallBin`, `wallClosed`, `judge`). I added
+no product code.
 
 ## Fixtures (the issue's Scope)
 
@@ -50,13 +57,12 @@ no specular share. y is up and the floor's top is at y = 0.
 - **Cube:** 0.2 m on a side on an 8 m floor, centred at x = z = 0. The face read is the one at z = +0.1. Size 960 × 720.
   The perspective cameras have fov 40, target (0, 0.05, 0.15), elevation 40° and distance 2.4 m: **"facing the face"**
   at azimuth 0° and **"90° around it"** at azimuth 90°.
-- **Wall** (used only to show the planted loop passes it): 20 m long, 4 m high, face at z = 0, on a 24 m floor. Size
-  1280 × 960. Target (0, 0.2, 0.3), elevation 50°, distance 8 m: **"facing the wall"** at azimuth 0° and **"30°
-  around it"** at azimuth 30° (AC1's second camera).
-- **The radius neighbourhood:** each fixture's locator frame draws corner markers just outside every surface within
-  0.5 m of a read point. For the cube that is the floor over x ∈ [−0.55, 0.55], z ∈ [−0.355, 0.705]. For the wall it
-  is the floor over x ∈ [−2.5, 2.5], z ∈ [0, 0.915] and the wall up to 0.5 m. Each corner must be in the ID target,
-  or the test fails, naming the marker.
+- **Wall** (used only to show the planted loop passes it): **withdrawn by the owner's approval** (`../APPROVED.md` D).
+  The witness is the original suite's wall fixture, cameras A and B and reading (`../README.md`: Fixtures and cameras),
+  at full resolution, 8 and 16 samples. This redraft's 1280 × 960 wall with its orbit cameras is in history only.
+- **The radius neighbourhood:** the cube's locator frame draws corner markers just outside every surface within
+  0.5 m of a read point: the floor over x ∈ [−0.55, 0.55], z ∈ [−0.355, 0.705]. Each corner must be in the ID target,
+  or the test fails, naming the marker. (The original wall fixture's framing is checked on the CPU in `../reference.test.ts`.)
 
 ## The reading
 
@@ -71,7 +77,7 @@ plain frame, and each band must cover at least 20 px. The reading is Σ linear l
 none over those pixels, which is the floor's radiance over the same frame with `ao: none`, as the issue defines it.
 
 - **Cube bands:** the middle 10 cm of the face (x ∈ [−0.05, 0.05]), 1 cm deep, centred 5 cm and 10 cm in front of it.
-- **Wall bands:** 4 m along the wall, 3 cm deep, at 5, 10, 15, 20, 30 and 40 cm.
+- **Wall:** read by the original suite's `measure` (its bands: |x| ≤ 2 m, ±0.5 cm about 5, 10, 15, 20, 30 and 40 cm).
 
 ## The CPU reference (`reference.ts`)
 
@@ -122,13 +128,15 @@ the test fails.
 | "a CPU reference in f64 of 4,096 cosine-weighted rays out to the radius (0.68 and 0.81)" | `reference.test.ts`, all five tests | the qualification rows above; both twins fail |
 | "the reading … 5 and 10 cm … within 0.1 of a CPU reference … from a camera facing that face and from one 90° around it" | `cube.test.ts` test 1 | all 16 readings (2 cameras × 4 settings × 2 distances) within 0.1 of the band reference |
 | "A planted loop that puts every one of main's points at the full radius … reads above 0.99 here and fails, naming the camera" | `cube.test.ts` test 2 | at least one reading > 0.99; the same check fails; the failures name the camera |
-| "… passes the wall fixture" | `cube.test.ts` test 3 | all 48 wall readings within 0.05 of AC1's closed forms |
-| Fails before | base `deep-gpu` | Test 1 should fail: the issue's model of main's loop reads 0.82–0.84 at a wall's foot where the closed form is 0.63, and the cube's occluder is smaller. Tests 2 and 3 read BLOCKED, because the base has no planted program by that name. |
+| "… passes the wall fixture" | `cube.test.ts` test 3 | (approved, `../APPROVED.md` D) all 24 readings on the original wall fixture (cameras A and B × 8 and 16 samples at full resolution × six distances) within 0.05 of AC1's closed forms |
+| Fails before | base `deep-gpu` | Test 1 should fail: the issue's model of main's loop reads 0.82–0.84 at a wall's foot where the closed form is 0.63, and the cube's occluder is smaller. Test 2 reads BLOCKED, because the base has no planted program by that name; test 3 fails on that refused name (it draws through the original suite's `measure`, which has no BLOCKED word), never passing. |
 
 ## Verdict words
 
-- **No GPU** (`deep-gpu` answers `no_device`): BLOCKED.
-- **Another machine** (not Mac15,7 or Mac15,12, or not macOS): INCONCLUSIVE, via #379's `requireReferenceMac`.
+- **No GPU** (`deep-gpu` answers `no_device`): BLOCKED (tests 1 and 2, through `gpuRun`). Test 3 gates the machine
+  first and draws through the original suite's `measure`; a `no_device` there fails with deep-gpu's reply, never passes.
+- **Another machine** (not Mac15,7, Mac15,12 or Mac17,10 by the real `sysctl -n hw.model`, or not macOS): INCONCLUSIVE,
+  via this redraft's own `requireReferenceMac` (`fixtures.ts`; owner-approved, `../APPROVED.md` C).
 - **A `unsupported_platform` reply:** INCONCLUSIVE.
 - **The planted name missing from `deep-gpu`:** BLOCKED.
 
@@ -146,8 +154,9 @@ These are stated here rather than applied silently. None of them changes an expe
 - **Qualification bound.** 0.01, a tenth of the criterion's 0.1. The issue states no bound for the reference itself.
 - **"Reads above 0.99".** Asserted as at least one twin reading above 0.99. The issue's figure comes from a CPU model,
   not a GPU run, so I did not require every reading to exceed it.
-- **"Passes the wall fixture".** Held at AC1's bound of 0.05, from AC1's two cameras, at all four settings.
-- **Marker depth and slab thickness.** Marker depths are 1 cm (cube) and 3 cm (wall). The slab's thickness is 0.1 m in
+- **"Passes the wall fixture".** Held at AC1's bound of 0.05, from AC1's two cameras; by the owner's approval
+  (`../APPROVED.md` D) on the original wall fixture at full resolution, 8 and 16 samples.
+- **Marker depth and slab thickness.** The cube's marker depth is 1 cm. The slab's thickness is 0.1 m in
   the reference only; the issue doesn't state it, and it doesn't matter for rays cut at 0.5 m.
 
 ## Proposed missing public surface

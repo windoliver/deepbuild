@@ -8,8 +8,9 @@
 //     that face and from one 90° around it. The 0.1 is drafted until the first run. A planted loop that puts every one of
 //     main's points at the full radius passes the wall fixture, reads above 0.99 here and fails, naming the camera"
 //
-// The CPU reference is `cubeReference` (helpers.ts), qualified in reference.test.ts against the issue's numbers with its
-// even-weighted twin failing; it is computed here over the same middle 10 cm. Read at every setting.
+// The CPU reference is `cubeReference` (helpers.ts), computed here over the same middle 10 cm, qualified in
+// reference.test.ts (owner-approved, APPROVED.md, A: its point value against the issue's 0.68 and 0.81, this band average
+// against the face's closed form averaged the same way) with its even-weighted twin failing. Read at every setting.
 import { describe, expect, it } from 'vitest';
 import {
   CUBE_BOXES, CUBE_CAMS, CUBE_POINTS, DEFAULT_SETTING, SETTINGS, WALL_BOXES, WALL_CAMS, WALL_POINTS, aoOn, cubeBin, cubeReference,
@@ -21,6 +22,8 @@ const gpu = useGpuBin();
 const out = useOut();
 const TOL = 0.1;
 const WALL_TOL = 0.05;
+/** The full-radius plant's wall witness: full resolution, 8 and 16 samples (APPROVED.md, D). */
+const WITNESS_SETTINGS = SETTINGS.filter((s) => s.resolution === 'full');
 const REF = new Map(CUBE_POINTS.map((d) => [`${Math.round(d * 100)} cm`, cubeReference(d)]));
 
 function cube(cam: Cam, k: number, settings: Setting[], plant?: Plant): Map<string, Map<string, number>> {
@@ -41,13 +44,16 @@ describe('AC4 an occluder smaller than the radius is held to the CPU reference',
     none(problems, 'every cube reading is within 0.1 of the CPU reference');
   }, 3_600_000);
 
-  it('AC4 a loop that puts every one of main\'s points at the full radius passes the wall fixture, reads above 0.99 on the cube and fails, naming the camera', () => {
+  it('AC4 a loop that puts every one of main\'s points at the full radius passes the wall fixture (full resolution, 8 and 16 samples, both cameras), reads above 0.99 on the cube and fails, naming the camera', () => {
     requireGpu();
-    // It passes the wall fixture, at every setting from both cameras: the wall alone can't tell it apart.
+    expect(WITNESS_SETTINGS.map(settingName), 'the witness reads both sample counts at full resolution').toEqual(['8 samples, full resolution', '16 samples, full resolution']);
+    // It passes the wall fixture (this file's original wall fixture, wall.test.ts's), at full resolution at 8 and 16
+    // samples from both of its cameras: the wall alone can't tell it apart. Owner-approved (APPROVED.md, D): this wrong
+    // program's witness is read at full resolution only; the shipped program is still held at every setting (wall.test.ts).
     const wallProblems: string[] = [];
     WALL_CAMS.forEach((cam, k) => {
       const doc = writeJson(out(), `wall-full-radius-${k}.json`, fixtureDoc(`wall-2516-full-radius-${k}`, WALL_BOXES, cam));
-      const m = measure(gpu.bin(), out(), doc, cam, SETTINGS.map((s) => ({ label: settingName(s), ao: aoOn(s) })), WALL_POINTS.map(wallBin), 'ao_full_radius');
+      const m = measure(gpu.bin(), out(), doc, cam, WITNESS_SETTINGS.map((s) => ({ label: settingName(s), ao: aoOn(s) })), WALL_POINTS.map(wallBin), 'ao_full_radius');
       for (const [s, row] of m) {
         console.log(`#2516 wall, camera ${cam.name} (--planted ao_full_radius), ${s}: ${fmt(row)}`);
         wallProblems.push(...judge(`wall, full-radius loop, camera ${cam.name}, ${s}`, WALL_POINTS.map((d) => ({ point: `${Math.round(d * 100)} cm`, reading: row.get(`${Math.round(d * 100)} cm`)!, expected: wallClosed(d), tol: WALL_TOL, against: 'the closed form' }))));

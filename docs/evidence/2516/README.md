@@ -4,7 +4,7 @@ These are unmodified PNGs from `deep-gpu run` / `view3d`, captured under the ren
 
 The room uses #418's frozen room and look helpers, at 640 × 480. The castle uses `packs/examples/castle.json`, `castle.look.json` and its composite pack, at 1280 × 800. AO is at every shipped default on both sides: radius 0.5 m, strength 1, eight samples, half resolution, multi-bounce and specular on.
 
-These images are for the issue's one owner taste call only. No numerical criterion judges a picture. **No owner decision has been recorded; AC7 remains INCONCLUSIVE.** The four files reproduce the hashes already shown in the session, now also linked on the PR. They do not replace, bless, or re-record any golden.
+These images are for the issue's one owner taste call only. No numerical criterion judges a picture. The owner approved keeping the displayed defaults with “goea d do whatever you reockemnd to close the issue”, after these exact frames and the recommendation were shown. [TASTE.json](../../../tests/acceptance/2516/TASTE.json) records the original instruction and the four hashes; it records acceptance of the recommendation, not an invented detailed visual review. The unchanged taste check still has to reproduce and match them. The four files do not replace, bless, or re-record any golden.
 
 | Scene | Main | Change |
 |---|---|---|

@@ -7,10 +7,15 @@
 //
 // Runs on the reference Mac under the GPU lease. No GPU: BLOCKED. Another machine: INCONCLUSIVE. Never PASS by either.
 // At the base the occlusion loop is main's, so the first test reads well above the reference and fails; the planted
-// loop is not in the base's `deep-gpu`, so the other two read BLOCKED there.
+// loop is not in the base's `deep-gpu`, so the second reads BLOCKED there and the third (drawn through the original
+// suite's `measure`, APPROVED.md, D) fails on the refused `--planted` name, never passing.
 import { describe, expect, it } from 'vitest';
-import { CUBE_FIXTURE, PLANTED, WALL_FIXTURE, offBy, readFixture, requireReferenceMac, useGpuBin, useOut, type Reading } from './fixtures.ts';
-import { CUBE_STATED, WALL_STATED, cubeBandReference, misses, qualification } from './reference.ts';
+import {
+  SETTINGS as WALL_SUITE_SETTINGS, WALL_BOXES, WALL_CAMS, WALL_POINTS, aoOn as wallAo, fixtureDoc, fmt, judge, measure,
+  settingName as wallSettingName, wallBin, wallClosed, writeJson,
+} from '../helpers.ts';
+import { CUBE_FIXTURE, PLANTED, offBy, readFixture, requireReferenceMac, useGpuBin, useOut, type Reading } from './fixtures.ts';
+import { CUBE_STATED, cubeBandReference, misses, qualification } from './reference.ts';
 
 const gpu = useGpuBin();
 const out = useOut();
@@ -52,12 +57,26 @@ describe('AC4 the cube: the floor in front of a face reads the CPU reference\'s 
     expect(camerasNamed(failures).length, `each failure names its camera: ${failures.join('; ')}`).toBeGreaterThan(0);
   }, 3_600_000);
 
-  it(`AC4 the same planted loop (${PLANTED}) passes the wall fixture: within 0.05 of the closed form at 5 to 40 cm, from both of its cameras, at every setting`, () => {
-    const stated = new Map(WALL_STATED);
-    const readings = readFixture(gpu.bin(), out(), WALL_FIXTURE, PLANTED);
+  // Owner-approved (../APPROVED.md, D): the witness is the original suite's wall fixture and cameras (../helpers.ts), at
+  // full resolution, 8 and 16 samples; this redraft's own wall fixture is withdrawn. The bound stays AC1's 0.05.
+  it(`AC4 the same planted loop (${PLANTED}) passes the wall fixture: the original suite's wall, within 0.05 of the closed form at 5 to 40 cm, from both of its cameras, at 8 and 16 samples at full resolution`, () => {
     requireReferenceMac();
-    expect(readings.length, 'two cameras × four settings × six distances').toBe(48);
-    const failures = offBy(readings, (cm) => stated.get(cm)!, WALL_TOL, 'the closed form');
+    const witness = WALL_SUITE_SETTINGS.filter((s) => s.resolution === 'full');
+    expect(witness.map(wallSettingName), 'the witness reads both sample counts at full resolution').toEqual(['8 samples, full resolution', '16 samples, full resolution']);
+    const failures: string[] = []; let read = 0;
+    WALL_CAMS.forEach((cam, k) => {
+      const doc = writeJson(out(), `wall-${PLANTED}-${k}.json`, fixtureDoc(`wall-2516-${PLANTED}-${k}`, WALL_BOXES, cam));
+      const m = measure(gpu.bin(), out(), doc, cam, witness.map((s) => ({ label: wallSettingName(s), ao: wallAo(s) })), WALL_POINTS.map(wallBin), PLANTED);
+      for (const [s, row] of m) {
+        console.log(`${PLANTED}  wall, camera ${cam.name}, ${s}: ${fmt(row)}`);
+        read += row.size;
+        failures.push(...judge(`camera ${cam.name} (${s})`, WALL_POINTS.map((d) => {
+          const point = `${Math.round(d * 100)} cm`;
+          return { point, reading: row.get(point) ?? NaN, expected: wallClosed(d), tol: WALL_TOL, against: 'the closed form' };
+        })));
+      }
+    });
+    expect(read, 'two cameras × two settings × six distances').toBe(24);
     expect(failures, `the planted loop passes the wall fixture, so only the cube catches it: ${failures.join('; ')}`).toEqual([]);
   }, 3_600_000);
 });

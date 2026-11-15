@@ -2,7 +2,8 @@
 // literal and generated here; `deep-gpu run` (#377's binary with #378's `view3d`) draws them; the reading is taken from
 // the linear target, located by the object-ID target of a locator frame. Nothing here stands in for ambient occlusion:
 // every pixel read is the renderer's own. Reused unchanged from the base: #418's helpers (the binary's build, the look,
-// `solid`, frames, the linear and ID targets) and #379's reference-Mac gate.
+// `solid`, frames, the linear and ID targets) and #379's `machineModel` and `inconclusive`; the reference-Mac gate is this
+// issue's own (APPROVED.md, C).
 import { spawnSync } from 'node:child_process';
 import { expect } from 'vitest';
 import {
@@ -10,8 +11,21 @@ import {
   type F32, type Ids, type JsonObject, type JsonValue, type Rgb,
 } from '../../418/helpers.ts';
 
+import { inconclusive, machineModel } from '../../379/helpers.ts';
+
 export { useGpuBin, useOut } from '../../418/helpers.ts';
-export { requireReferenceMac } from '../../379/helpers.ts';
+
+/**
+ * The design's three reference Macs (technical-design.md: The reference Macs), by `hw.model`. Owner-approved
+ * (APPROVED.md, C): this issue's own gate; #379's frozen helper, which lists only the first two, is not edited.
+ */
+export const REFERENCE_MODELS: readonly string[] = ['Mac15,7', 'Mac15,12', 'Mac17,10'];
+/** The reference Mac this is, read from the machine's real `sysctl -n hw.model` (#379's `machineModel`), or INCONCLUSIVE. */
+export function requireReferenceMac(): string {
+  const model = machineModel();
+  if (model === null || !REFERENCE_MODELS.includes(model)) inconclusive(`not a reference Mac (${REFERENCE_MODELS.join(', ')}): hw.model is ${model} on ${process.platform}`);
+  return model;
+}
 
 /** A machine with no GPU: the test fails with this word, never passes (AGENTS.md, invariant 2). */
 export const blocked = (why: string): never => { throw Error(`BLOCKED: ${why}; this is not a pass`); };
@@ -119,28 +133,8 @@ export const CUBE_FIXTURE: Fixture = {
   corners: [[-0.56, -0.36], [0.56, -0.36], [-0.56, 0.71], [0.56, 0.71]].map(([x, z], i) => floorMarker(`corner-${i + 1}`, [0.02, 0.02], [x!, z!])),
 };
 
-/**
- * The wall (README: Fixtures; for the planted loop only): 20 m long and 4 m high, its face at z = 0. Each band is 4 m
- * of the wall's length about x = 0 and 3 cm deep about d. Every surface within 0.5 m of a band point lies in
- * x ∈ [−2.5, 2.5], z ∈ [0, 0.915] on the floor or below 0.5 m on the wall; the corner markers mark that region.
- */
-export const WALL_DISTANCES = [5, 10, 15, 20, 30, 40];
-export const WALL_FIXTURE: Fixture = {
-  name: 'wall',
-  size: [1280, 960],
-  cameras: [
-    { name: 'facing the wall', target: [0, 0.2, 0.3], azimuth: 0, elevation: 50, distance: 8 },
-    { name: '30° around it', target: [0, 0.2, 0.3], azimuth: 30, elevation: 50, distance: 8 },
-  ],
-  solids: [solid('wall', 'a2', 'mark.box@1', [20, 4, 0.2], [0, 2, -0.1], 'block')],
-  floorSide: 24,
-  bands: new Map(WALL_DISTANCES.map((cm): [number, Marker] => [cm, floorMarker(`at-${cm}`, [4, 0.03], [0, cm / 100])])),
-  corners: [
-    ...[[-2.52, 0.03], [2.52, 0.03], [-2.52, 0.93], [2.52, 0.93]].map(([x, z], i) => floorMarker(`corner-${i + 1}`, [0.04, 0.03], [x!, z!])),
-    { id: 'corner-5', size: [0.04, 0.04, 0.002], pos: [-2.52, 0.52, 0.001] },
-    { id: 'corner-6', size: [0.04, 0.04, 0.002], pos: [2.52, 0.52, 0.001] },
-  ],
-};
+// The redraft's own wall fixture is withdrawn (owner-approved, APPROVED.md, D): the planted loop's wall witness is the
+// original suite's wall fixture (../helpers.ts), read in cube.test.ts. It stays in history at 3cd75b8aa.
 
 // ---------------------------------------------------------------------------------------------------
 // Drawing and reading (README: The reading)
