@@ -24,6 +24,13 @@ pub use deep_scene3d_render::status::lock;
 pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
     Planted3 {
         forward_z: p == Some(Planted::ForwardZ),
+        hdr: match p {
+            Some(Planted::ClipsAtOne) => 1,
+            Some(Planted::ClipsAtHeadroom) => 2,
+            Some(Planted::MovesToe) => 3,
+            Some(Planted::StatusOverPaperWhite) => 4,
+            _ => 0,
+        },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
@@ -279,7 +286,11 @@ fn open_with(
                 Pool::new(WORKERS),
             )?;
             let ui = view.ui();
-            state.scene3d = Some(Scene3Session { view, shared });
+            state.scene3d = Some(Scene3Session {
+                view,
+                shared,
+                hdr: None,
+            });
             Ok(Opened {
                 ui,
                 fx,

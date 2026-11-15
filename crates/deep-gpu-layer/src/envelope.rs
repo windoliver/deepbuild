@@ -95,6 +95,65 @@ struct Args {
     display: Option<f64>,
     environment: Option<Value>,
     delay_ms: Option<u64>,
+    /// #177: the scene presents through the main display's HDR surface (`screen: main`,
+    /// `hdr: auto`).
+    hdr_screen: bool,
+}
+
+/// #177: the main display's HDR surface the scene presents through, and the headroom its tone map
+/// rolls off to; made on the main thread, used on the GPU worker.
+struct Screen {
+    #[cfg(target_os = "macos")]
+    layer: deep_app::hdr_layer::ScreenLayer,
+    headroom: f32,
+}
+
+// SAFETY: the window is only touched on the main thread, where it is made and dropped; the worker
+// uses the wgpu surface alone.
+unsafe impl Send for Screen {}
+unsafe impl Sync for Screen {}
+
+impl Screen {
+    #[cfg(target_os = "macos")]
+    fn open(app: &App) -> Result<Screen, Value> {
+        let gpu = app.worker.call(|state| state.gpu.clone());
+        let instance = gpu.seam().map(|c| c.instance.clone()).ok_or_else(|| {
+            refused("unsupported_platform", "the noop backend has no display")
+        })?;
+        let layer = deep_app::hdr_layer::ScreenLayer::main(&instance)
+            .map_err(|e| refused("unsupported_platform", e))?;
+        let headroom = layer.headroom().1;
+        Ok(Screen { layer, headroom })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn open(_: &App) -> Result<Screen, Value> {
+        Err(refused("unsupported_platform", "an HDR screen is macOS's"))
+    }
+
+    /// The next frame's HDR surface at `size`, configured the first time.
+    #[cfg(target_os = "macos")]
+    fn frame(
+        &self,
+        device: &Device,
+        size: [u32; 2],
+        configured: &mut bool,
+    ) -> Option<wgpu::SurfaceTexture> {
+        if !*configured {
+            self.layer.layer.configure(&device.device, size, false);
+            *configured = true;
+        }
+        match self.layer.layer.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn frame(&self, _: &Device, _: [u32; 2], _: &mut bool) -> Option<wgpu::SurfaceTexture> {
+        None
+    }
 }
 
 fn bad(what: &str) -> Value {
@@ -216,6 +275,12 @@ fn parse(call: &Value) -> Result<Args, Value> {
         display,
         environment: test_only(call, "stub_environment")?.cloned(),
         delay_ms: test_only(call, "stub_pipeline_delay_ms")?.and_then(Value::as_u64),
+        hdr_screen: match (call.get("hdr"), call.get("screen")) {
+            (None, None) => false,
+            (Some(h), Some(s)) if s == "main" && (h == "auto" || h == "off") => h == "auto",
+            (Some(h), None) if h == "auto" || h == "off" => false,
+            _ => return Err(bad("hdr is auto or off, and screen is main")),
+        },
     })
 }
 
@@ -275,6 +340,9 @@ struct Played {
     log: Vec<Value>,
     inputs: Vec<Value>,
     input_p95s: Vec<Option<f64>>,
+    /// #177: the timed frames, and those that presented through the HDR surface.
+    timed_frames: u64,
+    hdr_frames: u64,
 }
 
 /// The check of `path` as the writer's revision, with its warm-up.
@@ -465,6 +533,7 @@ fn play(
     plants: &Plants,
     planted: Option<Planted>,
     display: Option<Display>,
+    screen: Option<&Screen>,
 ) -> Result<Played, Value> {
     let stub = match &args.stub {
         Some(s) => Some(
@@ -529,7 +598,10 @@ fn play(
         log: Vec::new(),
         inputs: Vec::new(),
         input_p95s: Vec::new(),
+        timed_frames: 0,
+        hdr_frames: 0,
     };
+    let mut configured = false;
     let mut peak: Option<u64> = Some(0);
     for run in 0..=RUNS as u64 {
         let timed = run > 0;
@@ -568,7 +640,21 @@ fn play(
                 }
             }
             let t = (k as f64 * FLICKS_PER_SECOND / rate).round() as i64;
+            // #177: the frame through the main display's HDR surface, beside every other pass.
+            let hdr = screen
+                .and_then(|s| Some((s.frame(device, view.size, &mut configured)?, s.headroom)));
+            view.hdr = hdr.as_ref().map(|(t, headroom)| deep_scene3d_render::HdrFrame {
+                into: t.texture.create_view(&Default::default()),
+                headroom: *headroom,
+            });
             let (cpu, resolved) = draw(device, &kit, &args.look, &mut view, t, labels, &mut timer)?;
+            if timed {
+                played.timed_frames += 1;
+                played.hdr_frames += u64::from(hdr.is_some());
+            }
+            if let Some((t, _)) = hdr {
+                device.queue.present(t);
+            }
             let marks = passes_of(&view, &timer);
             let lost = device.is_lost();
             let (gpu, passes, cpu_ms) = match stub {
@@ -1161,7 +1247,17 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         None
     };
     let planted = app.planted;
-    app.worker.call(move |state| {
+    let screen = if args.hdr_screen {
+        match Screen::open(app) {
+            Ok(s) => Some(std::sync::Arc::new(s)),
+            Err(e) => return e,
+        }
+    } else {
+        None
+    };
+    let on_screen = screen.clone();
+    let mut reply = app.worker.call(move |state| {
+        let screen = on_screen;
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
@@ -1175,7 +1271,7 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
             rate,
             held: matches!(planted, Some(Planted::HoldsInput | Planted::HeldInputMeterAtEncode)),
         });
-        let scene = match play(&device, &args, SCENE, &args.scene, &mut labels, &plants, planted, display) {
+        let scene = match play(&device, &args, SCENE, &args.scene, &mut labels, &plants, planted, display, screen.as_deref()) {
             Ok(p) => p,
             Err(e) => return e,
         };
@@ -1184,8 +1280,8 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         let separate = match separate {
             None => None,
             Some((doc, instanced)) => {
-                let one = play(&device, &args, SEPARATE, doc, &mut labels, &plants, planted, display);
-                let two = play(&device, &args, INSTANCED, instanced, &mut labels, &plants, planted, display);
+                let one = play(&device, &args, SEPARATE, doc, &mut labels, &plants, planted, display, None);
+                let two = play(&device, &args, INSTANCED, instanced, &mut labels, &plants, planted, display, None);
                 match (one, two) {
                     (Ok(a), Ok(b)) => Some((a, b)),
                     (Err(e), _) | (_, Err(e)) => return e,
@@ -1271,8 +1367,21 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         if args.report_inputs {
             reply["inputs"] = json!(scene.inputs);
         }
+        if screen.is_some() {
+            let on = scene.timed_frames > 0 && scene.hdr_frames == scene.timed_frames;
+            reply["hdr"] = json!({"state": if on { "on" } else { "off" }});
+        }
         reply
-    })
+    });
+    // #177: the main display's headroom, read on the main thread once the runs end with the HDR
+    // surface still on screen.
+    #[cfg(target_os = "macos")]
+    if let (Some(s), Some(h)) = (&screen, reply.get_mut("hdr")) {
+        let (potential, current) = s.layer.headroom();
+        h["potential_headroom"] = json!(potential);
+        h["headroom"] = json!(current);
+    }
+    reply
 }
 
 /// `envelope_counts`: what the device creates and uploads in each frame of a document's play on

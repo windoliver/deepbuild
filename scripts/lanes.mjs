@@ -235,6 +235,13 @@ alone.push('tests/acceptance/533/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
+alone.push('tests/acceptance/177/');
+alone.push('tests/acceptance/177-redraft-ac3/');
+// The first draft's AC3 can't pass the base's blank guard (177-redraft-ac3/DISPUTE.md): by hand until the swap is ruled.
+byHand.push('tests/acceptance/177/ac3-sdr-outputs.test.ts');
+byHand.push('tests/acceptance/177/ac4-layers.live.test.ts', 'tests/acceptance/177/ac5-envelope.live.test.ts', 'tests/acceptance/177/ac6-budgets.live.test.ts');
+timed.push('tests/acceptance/177/ac6-budgets.live.test.ts');
 // #1436's files build deep-replica and drive the GPU; its live window files (reduced motion's frames, the budgets) open the
 // app's window on this Mac's screen, and its budgets are a timed file.
 alone.push('tests/acceptance/1436/');
