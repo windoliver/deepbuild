@@ -675,8 +675,17 @@ byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/accept
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
+alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
+timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
+// #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
+// deep-show in release and deep-gpu for the frame budget. AC9 and AC10 are proved by their blind redraft, on the
+// owner's ruling; the first draft's two files can't pass on any program and are kept by hand (142/DISPUTE.md).
+alone.push('tests/acceptance/142/', 'tests/acceptance/142-redraft-ac9/', 'tests/acceptance/142-redraft-ac10/');
+byHand.push(...['ac9-timing', 'ac10-pack'].map((f) => `tests/acceptance/142/${f}.test.ts`));
+timed.push('tests/acceptance/142/ac6-budgets.test.ts');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views
 // frame by frame, draw the app's window and time the logic module's budgets on the reference Mac.
 alone.push('tests/acceptance/548/');
@@ -700,6 +709,11 @@ timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
 slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
 byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
   'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
+// #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
+// Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
+// role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
+alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
+byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -51,6 +51,8 @@ export type Plant =
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
   // #70's: a hub that starts kept runs and terminals with no user scope of their own, in its service's cgroup.
   | 'kept-in-service-cgroup'
+  // #2199's: a `deep inbox` that shows each ask's options by their labels, never the IDs `deep inbox answer` takes.
+  | 'inbox-labels-only'
   // #1359's: a CLI whose `deep backup` runs before it checks its arguments for help, as the merge base's did.
   | 'dispatches-before-help'
   // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
@@ -114,6 +116,9 @@ export type Plant =
   // #1106's: the stand-in's value in the stack's environment too, an environment that loads by value, a filter that
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
+  // #2399's: a supervisor that records no refusal of a run's egress filter, one per operation whatever the target, or
+  // keeps what it recorded without the run.
+  | 'egress-refusals-unrecorded' | 'egress-refusal-once-per-operation' | 'egress-refusals-seen-without-run'
   | 'runs-disk-bytes'
   // #148's: a sync that writes each file as it plans it, replaces from the plan you were shown, keeps a file's original
   // again before each write, renames without flushing the folder, writes entries unchecked against the agent's facts, and
@@ -297,7 +302,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
@@ -338,6 +343,7 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'egress-refusals-unrecorded', 'egress-refusal-once-per-operation', 'egress-refusals-seen-without-run',
   'waiting-first', 'ask-from-notification', 'waiting-as-working',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',

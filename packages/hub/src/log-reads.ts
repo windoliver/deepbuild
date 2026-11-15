@@ -91,11 +91,12 @@ export class LogReads {
       out = { log_pos: events.length === limit ? events[limit - 1]!.log_pos : Math.max(after, read.log_pos as number), events: `[${events.map((e) => e.json).join(',')}]` };
     }
     // History is paged in order: the next full page is built while the reader takes this one. A full page never
-    // changes once committed, since log positions only grow and a gap never fills.
+    // changes once committed, since log positions only grow and a gap never fills. A read ahead that fails, as when
+    // the core stops after the reply, builds nothing (#1841): the reader's own read of that page answers for it.
     if (!kinds && out.events !== '[]') {
       setImmediate(() => void this.page(out.log_pos, limit, undefined, seen).then((next) => {
         if (next.length === limit) this.ahead = { after: out.log_pos, limit, seen, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
-      }));
+      }).catch(() => undefined));
     }
     return out;
   }

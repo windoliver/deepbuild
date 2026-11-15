@@ -49,6 +49,7 @@ mod media;
 mod mixdown;
 mod modes;
 mod narration;
+mod over3d;
 mod net;
 mod packs;
 mod physics;
@@ -102,6 +103,7 @@ mod timings;
 mod twins;
 mod verdict;
 mod video;
+mod warps;
 mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -650,6 +652,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Path {
                 doc: doc()?,
                 item: c.get("item")?.as_str()?.to_string(),
+                t: optional(c.get("t"), |t| crate::time::eval_time(Some(t)))?,
             })
         }
         // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path. It arrives on
@@ -1298,6 +1301,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
                 || deep_canvas_marks::copy::PLANTED.contains(p)
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
+                // #223's in the marks2d module's warp.
+                || deep_canvas_marks::warp::PLANTED.contains(p)
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.

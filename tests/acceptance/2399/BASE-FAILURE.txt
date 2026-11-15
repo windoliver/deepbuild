@@ -1,0 +1,144 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/tests/acceptance/2399
+
+ ❯ standin-refusals.test.ts (3 tests | 2 failed) 7891ms
+   ❯ AC3 #2399.19cd984b #1106's third criterion runs unchanged and passes, and each of its three attempts sent a second time leaves the count of events as it was; a planted supervisor that records no refusal from the filter fails #1106's criterion, naming the placement (3)
+     × AC3 each of #1106's three attempts is refused and recorded once, and each sent a second time is refused again and leaves the count of the run's sandbox.denied events as it was 3790ms
+     × AC3 (wrong program) a supervisor that records no refusal from the filter (DEEP_HUB_PLANT=egress-refusals-unrecorded) fails #1106's third criterion, its own test file unchanged, naming each placement 1134ms
+ ❯ runs.test.ts (2 tests | 1 failed) 7161ms
+   ❯ AC4 #2399.d19e2d85 a refusal recorded for one run doesn't hide the same operation and target for a second run beside it, and the first refusal of a run started after another ended is recorded; a planted supervisor that keeps the set without the run records none for the second run and fails, naming the run (2)
+     × AC4 (wrong program) a supervisor that keeps the set without the run (DEEP_HUB_PLANT=egress-refusals-seen-without-run) fails the reading, naming the second run 733ms
+ ❯ tunnels.test.ts (2 tests | 2 failed) 4499ms
+   ❯ AC2 #2399.c1245384 100 tunnels asked for to one host no credential names leave one sandbox.denied with the operation egress-host, and a tunnel to a second such host adds one more; a planted supervisor that keeps one refusal per operation records none for the second host and fails, naming the host (2)
+     × AC2 100 tunnels asked for to one host no credential names are each refused and leave one sandbox.denied (egress-host, that host), and one tunnel to a second such host adds exactly one more, naming it 3805ms
+     × AC2 (wrong program) a supervisor that keeps one refusal per operation (DEEP_HUB_PLANT=egress-refusal-once-per-operation) fails the reading, naming the second host 691ms
+ ❯ plain-http.test.ts (1 test | 1 failed) 3546ms
+   ❯ AC1 #2399.a0cbc7fe with #1106's sample stack up, 100 identical plain HTTP requests sent to the run's filter port are each answered 403 and leave exactly one sandbox.denied for the run, with the operation egress-plain-http and that target; on the merge base the record gains 100, and this test fails (1)
+     × AC1 100 identical plain HTTP requests to the run's filter port are each answered 403, and the record gains exactly one sandbox.denied for the run: egress-plain-http, its target naming the request's host 3544ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  plain-http.test.ts > AC1 #2399.a0cbc7fe with #1106's sample stack up, 100 identical plain HTTP requests sent to the run's filter port are each answered 403 and leave exactly one sandbox.denied for the run, with the operation egress-plain-http and that target; on the merge base the record gains 100, and this test fails > AC1 100 identical plain HTTP requests to the run's filter port are each answered 403, and the record gains exactly one sandbox.denied for the run: egress-plain-http, its target naming the request's host
+AssertionError: the 100 identical requests leave exactly one sandbox.denied for the run run:01M7E61G8VBZKYG3DYH6GPME9N with the operation egress-plain-http and the target dh2399-plain.invalid; the record gained 100: expected 100 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 100
+
+ ❯ plain-http.test.ts:29:210
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  runs.test.ts > AC4 #2399.d19e2d85 a refusal recorded for one run doesn't hide the same operation and target for a second run beside it, and the first refusal of a run started after another ended is recorded; a planted supervisor that keeps the set without the run records none for the second run and fails, naming the run > AC4 (wrong program) a supervisor that keeps the set without the run (DEEP_HUB_PLANT=egress-refusals-seen-without-run) fails the reading, naming the second run
+Error: BLOCKED: the hub didn't start (deep hub run --root /tmp/dh1106-abdhFn/root): file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/plant.js:119
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=egress-refusals-seen-without-run names no planted program
+    at plantOf (file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/plant.js:119:15)
+    at Module.runHub (file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/server.js:1672:19)
+    at hubCommand (file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub ../1106/helpers.ts:341:27
+    339|   });
+    340|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    341|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    342|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    343| }
+ ❯ upWorld ../1106/helpers.ts:432:15
+ ❯ scenario runs.test.ts:27:13
+ ❯ runs.test.ts:79:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  standin-refusals.test.ts > AC3 #2399.19cd984b #1106's third criterion runs unchanged and passes, and each of its three attempts sent a second time leaves the count of events as it was; a planted supervisor that records no refusal from the filter fails #1106's criterion, naming the placement > AC3 each of #1106's three attempts is refused and recorded once, and each sent a second time is refused again and leaves the count of the run's sandbox.denied events as it was
+AssertionError: the three attempts sent a second time leave the count of the run's sandbox.denied events at 3; the record gained [{"operation":"stand-in-to-other-host","target":"SHOP_API_KEY to https://127.0.0.1:33095"},{"operation":"stand-in-in-url","target":"SHOP_API_KEY to https://localhost:39039"},{"operation":"stand-in-in-body","target":"SHOP_API_KEY to https://localhost:39039"}]: expected 6 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 6
+
+ ❯ standin-refusals.test.ts:55:173
+     53|       const second = await denied(u.client, u.run);
+     54|       const more = gained(first, second);
+     55|       expect(second.length, `the three attempts sent a second time lea…
+       |                                                                                                                                                                             ^
+     56|     } finally {
+     57|       await downWorld(u);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  standin-refusals.test.ts > AC3 #2399.19cd984b #1106's third criterion runs unchanged and passes, and each of its three attempts sent a second time leaves the count of events as it was; a planted supervisor that records no refusal from the filter fails #1106's criterion, naming the placement > AC3 (wrong program) a supervisor that records no refusal from the filter (DEEP_HUB_PLANT=egress-refusals-unrecorded) fails #1106's third criterion, its own test file unchanged, naming each placement
+Error: BLOCKED: #1106's test couldn't start its hub: DEEP_HUB_PLANT=egress-refusals-unrecorded names no planted program
+ ❯ standin-refusals.test.ts:64:54
+     62|     const ran = await run1106(PLANT);
+     63|     const said = `${ran.failures}\n${ran.output}`;
+     64|     if (/names no planted program/.test(said)) throw Error(`BLOCKED: #…
+       |                                                      ^
+     65|     expect(ran.failed, `#1106's third criterion passes on a supervisor…
+     66|     expect(ran.passed).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tunnels.test.ts > AC2 #2399.c1245384 100 tunnels asked for to one host no credential names leave one sandbox.denied with the operation egress-host, and a tunnel to a second such host adds one more; a planted supervisor that keeps one refusal per operation records none for the second host and fails, naming the host > AC2 100 tunnels asked for to one host no credential names are each refused and leave one sandbox.denied (egress-host, that host), and one tunnel to a second such host adds exactly one more, naming it
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "100 tunnels asked for to the first host dh2399-first.invalid:443 left 100 sandbox.denied events for the run run:01M7E61BCJ82KXXAW08F80BRKB, not one",
++ ]
+
+ ❯ tunnels.test.ts:52:26
+     50|       expect(s.answers.filter((a) => a !== 403), `each of the ${TIMES …
+     51|       expect(s.marked, 'a refusal of a target not seen before, sent af…
+     52|       expect(s.problems).toEqual([]);
+       |                          ^
+     53|     } finally {
+     54|       await downWorld(u);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tunnels.test.ts > AC2 #2399.c1245384 100 tunnels asked for to one host no credential names leave one sandbox.denied with the operation egress-host, and a tunnel to a second such host adds one more; a planted supervisor that keeps one refusal per operation records none for the second host and fails, naming the host > AC2 (wrong program) a supervisor that keeps one refusal per operation (DEEP_HUB_PLANT=egress-refusal-once-per-operation) fails the reading, naming the second host
+Error: BLOCKED: the hub didn't start (deep hub run --root /tmp/dh1106-BPlBDX/root): file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/plant.js:119
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=egress-refusal-once-per-operation names no planted program
+    at plantOf (file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/plant.js:119:15)
+    at Module.runHub (file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/server.js:1672:19)
+    at hubCommand (file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub ../1106/helpers.ts:341:27
+    339|   });
+    340|   const line = await Promise.race([ready, sleep(20_000).then(() => und…
+    341|   if (!line?.ready) throw Error(`BLOCKED: the hub didn't start (deep h…
+       |                           ^
+    342|   return { pid: child.pid!, root, socket: line.socket as string, child…
+    343| }
+ ❯ upWorld ../1106/helpers.ts:432:15
+ ❯ scenario tunnels.test.ts:26:13
+ ❯ tunnels.test.ts:61:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed | 2 passed (8)
+   Start at  15:24:29
+   Duration  23.76s (tests 99%, import 1%)
+

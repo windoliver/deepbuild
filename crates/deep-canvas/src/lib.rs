@@ -38,6 +38,7 @@ pub mod scope;
 pub mod session;
 pub mod show;
 pub mod steps;
+pub mod streams;
 pub mod table;
 pub mod template;
 pub mod time;
