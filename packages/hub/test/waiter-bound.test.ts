@@ -127,18 +127,14 @@ it('binds the waiter of an idle session the restarted hub has not heard from, by
   });
 }, 120_000);
 
-it('binds no waiter in a process that runs two sessions, and ends a binding with its session', async () => {
+it('tells the waiter of a session that ended it is done, and binds none in a process that runs several threads', async () => {
   const c = '7c4d5e60-1851-4222-8333-44445555dddd';
-  const d = '7c4d5e60-1851-4222-8333-44445555eeee';
-  const e = '7c4d5e60-1851-4222-8333-44445555ffff';
+  const x = '7c4d5e60-1851-4222-8333-44445555eeee';
   await withHub(async (root, home) => {
     const sock = join(root, 'hub.sock');
     const sc = session(home, c);
-    const sd = session(home, d);
-    const se = session(home, e);
-    const start = (s: ReturnType<typeof session>) => reply(sock, hookLine(ulid(Date.now()), 'SessionStart', s.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
-    await start(sc);
-    // Bound while C is the one session this process runs; C ends before the wait, and the binding with it.
+    await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', sc.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
+    // Bound while C runs; C ends before the wait, and the binding with it: the waiter is done, and wakes nothing.
     const gate = join(home, 'go');
     const ending = rawWaiter(sock, c, c, gate);
     await sleep(1500);
@@ -146,13 +142,12 @@ it('binds no waiter in a process that runs two sessions, and ends a binding with
     writeFileSync(gate, '');
     const ended = await ending;
     expect(ended.lines[1], 'bound to C while it ran').toMatchObject({ role: `waiter:${c}` });
-    expect(JSON.stringify(ended.lines[2])).toContain(`This waiter's binding to session ${c} has ended`);
-    // Two live sessions in one process: neither binds a waiter by that process.
-    await start(sd);
-    await start(se);
-    const two = await rawWaiter(sock, d, d);
-    expect(JSON.stringify(two.lines[1])).toContain(`"code":"role"`);
-    expect(JSON.stringify(two.lines[1])).toContain(`its agent, process ${process.pid}, runs the threads of sessions`);
+    expect(ended.lines[2], `done once C ended: ${JSON.stringify(ended.lines[2])}`).toMatchObject({ result: { exit: `session ${c} has ended.` } });
+    // A Codex thread, whose process may run others: no waiter binds to it by that process.
+    const work = join(home, 'work');
+    await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', { session_id: x, transcript_path: null, cwd: work, hook_event_name: 'SessionStart', source: 'startup', model: 'gpt-5' }, { agent: 'codex', ppid: process.pid }));
+    const codex = await rawWaiter(sock, x, x);
+    expect(JSON.stringify(codex.lines[1]), 'a Codex thread binds no waiter').toContain('runs several threads');
   });
 }, 120_000);
 

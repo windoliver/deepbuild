@@ -238,7 +238,7 @@ export interface SessionStatePort {
   verify(meta: HookMeta): Promise<boolean>;
   forgetEnded(): void;
   waiterHello(fd: number | undefined, session: string, at: number): Promise<{ session: string; parent: { pid: number; start: string } } | { refused: string }>;
-  waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): string | undefined;
+  waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): { why: string; ended?: true } | undefined;
   mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }>;
   sessionRows(seen?: string): Promise<Record<string, unknown>[]>;
   rowsSeen(role: string, detail: boolean): Promise<Obj>;

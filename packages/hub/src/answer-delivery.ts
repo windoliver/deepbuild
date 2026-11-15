@@ -928,8 +928,10 @@ export class AnswerDelivery {
     // deep-hook's waiter waits only on the session its connection is bound to (#1851), while that binding holds.
     if (context.role.startsWith('waiter:')) {
       if (context.session !== session) throw refuse('role', '/params/session', `This waiter is bound to session ${context.session} by its agent, process ${context.parent?.pid} started ${context.parent?.start}; it waits only on that session's answers, not on ${session}'s.`, session);
-      const why = this.options.state().waiterUnbound(session, context.parent);
-      if (why) throw refuse('role', '/params/session', `This waiter's binding to session ${session} has ended: ${why}`, session);
+      const unbound = this.options.state().waiterUnbound(session, context.parent);
+      // A session that ended needs no waiter: it is told it is done, and exits without waking anything.
+      if (unbound?.ended) return { exit: unbound.why };
+      if (unbound) throw refuse('role', '/params/session', `This waiter's binding to session ${session} has ended: ${unbound.why}`, session);
     }
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
     // paseo's plugin on deep-hook's behalf, for a session deep-hook gates inside paseo (#55).

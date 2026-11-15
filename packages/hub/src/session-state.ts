@@ -850,25 +850,26 @@ export class SessionState {
     if (!(began <= at)) return { refused: `Process ${peer} started after this connection was made, or is gone: the process that connected is no longer there to bind as session ${session}'s waiter.` };
     const above = await parentOf(peer);
     const start = above === undefined ? undefined : await this.startOf(above, true);
-    const why = this.waiterUnbound(session, above === undefined || !start ? undefined : { pid: above, start });
-    return why ? { refused: `Process ${peer} can't wait as session ${session}'s waiter: ${why}` } : { session, parent: { pid: above!, start: start! } };
+    // Its start once more, after its parent was read: a PID that went and was reused meanwhile reads another.
+    if (Date.parse((await startOf(peer)) ?? '') !== began) return { refused: `Process ${peer} changed while the hub looked at it, so it isn't bound as session ${session}'s waiter.` };
+    const unbound = this.waiterUnbound(session, above === undefined || !start ? undefined : { pid: above, start });
+    return unbound ? { refused: `Process ${peer} can't wait as session ${session}'s waiter: ${unbound.why}` } : { session, parent: { pid: above!, start: start! } };
   }
 
   /**
-   * Why a waiter whose parent is `parent` can't wait on `session`, or nothing: the session must be live, its agent that
-   * process by PID and start time, and that process must run one thread only, so a process serving several threads,
-   * as Codex's shared one may, binds no waiter. IDs a `/compact` or a fork rotated in one process are one thread. A session this hub hasn't met since it started is the one the last hub
-   * watched in that process. Asked at the hello and at each wait, so a binding ends with its session or its agent.
+   * Why a waiter whose parent is `parent` can't wait on `session`, or nothing: the session must be live and its agent
+   * that process by PID and start time, an agent that runs one thread, so a process serving several, as Codex's shared
+   * one does, binds no waiter. A session this hub hasn't met since it started is the one the last hub watched in that
+   * process. Asked at the hello and at each wait, so a binding ends with its session or its agent; `ended` says the
+   * session is over, so the waiter is done.
    */
-  waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): string | undefined {
-    const same = (p: { pid: number; start: string }) => p.pid === parent?.pid && p.start === parent.start;
+  waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): { why: string; ended?: true } | undefined {
     const known = this.sessions.get(session);
-    const agent = known ? (known.ended ? undefined : { pid: known.pid, start: known.start, agent: known.agent }) : this.options.transcripts().cursors.get(session)?.watch;
-    if (!agent) return `the hub knows no live session ${session} to bind it to.`;
-    if (!parent || !same(agent)) return `it isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${parent ? `process ${parent.pid} started ${parent.start}` : 'gone'}.`;
-    const threads = new Set([...this.sessions.values()].filter((s) => !s.ended && same(s)).map((s) => s.thread));
-    for (const [id, cursor] of this.options.transcripts().cursors) if (!this.sessions.has(id) && cursor.watch && same(cursor.watch)) threads.add(id);
-    if (manyThreads(agent.agent) || threads.size > 1) return `its agent, process ${agent.pid}, runs ${threads.size > 1 ? `the threads of sessions ${[...threads].join(', ')}` : 'several threads'}, so no waiter is bound to one of them by that process.`;
+    if (known?.ended) return { why: `session ${session} has ended.`, ended: true };
+    const agent = known ? { pid: known.pid, start: known.start, agent: known.agent } : this.options.transcripts().cursors.get(session)?.watch;
+    if (!agent) return { why: `the hub knows no live session ${session} to bind it to.` };
+    if (!parent || parent.pid !== agent.pid || parent.start !== agent.start) return { why: `it isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${parent ? `process ${parent.pid} started ${parent.start}` : 'gone'}.` };
+    if (manyThreads(agent.agent)) return { why: `its agent, process ${agent.pid}, is ${agent.agent}'s, which runs several threads, so no waiter is bound to one of them by that process.` };
     return undefined;
   }
 
