@@ -33,6 +33,7 @@ mod film;
 mod fix;
 mod fixtures;
 mod flat;
+mod flows2d;
 mod frames;
 mod golden;
 mod groups;
@@ -455,6 +456,9 @@ pub enum Planted {
     BoundsBindPose,
     /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
     TrailAppendsPerFrame,
+    /// #451's: particles on a vector field's stream move instead in a straight line along the
+    /// field's arrow at their birth point (tests/acceptance/451/README.md: The planted program).
+    ParticlesFollowArrows,
     /// #226's wrong programs (tests/acceptance/226/README.md: The planted programs).
     AxesModAppliesTransform,
     Axes3dOwnTickRule,
@@ -579,6 +583,7 @@ impl Planted {
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
             "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "particles_follow_arrows" => Planted::ParticlesFollowArrows,
             "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
             "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
             "axes_mod_maps_every_frame" => Planted::AxesModMapsEveryFrame,
