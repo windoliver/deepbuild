@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, type Asks } from '@deepbuild/asks';
+import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
@@ -22,7 +22,7 @@ import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/ga
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { Landing } from './landing.js';
-import { openRunner, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
+import { openRunner, type Agent, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
 import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuild/supervisor';
 
 import { ClaudeSettings, readJson, STOP_HOLD_MS, words } from './claude-settings.js';
@@ -72,6 +72,7 @@ import { ISSUE_LINK, ISSUE_UNREAD, liveFetch, liveGraphql, readIssue, recordedFe
 import { OpenItems } from './open-items.js';
 import { isStatusQuestion, newestClaim, statusAnswer } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackThreads } from './reach.js';
+import { signInCheck } from './sign-in.js';
 
 import { Answers } from './answers.js';
 import { Runs } from './runs.js';
@@ -651,6 +652,8 @@ export class Core {
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({
       record: this.record, now: this.now, deliver: (d) => this.delivery.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck(),
+      // Each open sign-in task's probe, on the recorded login PATH (#1349).
+      signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
       errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
     });
@@ -2033,7 +2036,8 @@ export class Core {
     if (meta.transcript && !meta.fields?.agent_id) void this.recordUsage(meta).catch(() => undefined);
     const cause = String(data.cause);
     if (cause === 'unknown') return;
-    data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
+    // A sign-in is one task per agent (#1349): its signature names the agent alone, the same in every session and folder.
+    data.signature = cause === 'sign_in_required' || cause === 'token_refresh_failed' ? signInSignature(meta.agent) : signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
     // Who clears it. A spend limit reads as a rate limit, but only you can raise it (#85).
     data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' || meta.fields?.error === 'billing_error' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' || cause === 'timed_out' ? 'service' : 'agent';
     // The payload can't tell a dropped connection from a network you must reconnect, so the hub tried it (#85).

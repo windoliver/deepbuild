@@ -71,6 +71,8 @@ pub enum Target {
     Send,
     Undo,
     Step(usize),
+    /// A sign-in task's one button (#1349).
+    SignIn,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,6 +106,9 @@ pub enum Did {
     NeedsConfirmation(String),
     Undone,
     Switched,
+    /// Sign in was pressed on an agent's sign-in task (#1349), named by its handle: the shell starts that agent's sign-in,
+    /// which answers nothing.
+    SignIn(String),
 }
 
 /// One row the card draws: a line of text, or a control with its label.
@@ -122,6 +127,8 @@ pub enum Row {
     },
     Send,
     Undo,
+    /// A sign-in task's one button (#1349).
+    SignIn,
 }
 
 impl Row {
@@ -132,6 +139,7 @@ impl Row {
             Row::Option { label, .. } | Row::Step { label, .. } => label,
             Row::Send => "Send",
             Row::Undo => "Undo",
+            Row::SignIn => "Sign in",
         }
     }
 
@@ -396,6 +404,13 @@ impl Controller {
             }
             return rows;
         }
+        // An agent's sign-in task (#1349): one button, Sign in, then its steps, the plan line among them. Nothing on it
+        // answers the task: only the agent's probe closes it.
+        if let Some(steps) = &self.model.sign_in {
+            rows.push(Row::SignIn);
+            rows.extend(steps.iter().cloned().map(Row::Text));
+            return rows;
+        }
         for (index, option) in self.model.options.iter().enumerate() {
             let mut label = option.label.clone();
             if option.recommended {
@@ -577,6 +592,11 @@ impl Controller {
             State::Presented { .. } | State::Armed { .. }
         );
         match target {
+            // Sign in starts the agent's own sign-in (#1349): it answers nothing, so it needs no arming or confirmation.
+            Target::SignIn => match (&self.model.sign_in, phase) {
+                (Some(_), Phase::Up) if shown => Did::SignIn(self.model.ask.clone()),
+                _ => Did::Nothing,
+            },
             // An approval whose own steps are off runs nothing the core would take: the card holds it back.
             Target::Option(index) if self.is_allow(index) && !self.model.own_on() => {
                 self.switch_first = true;
@@ -1043,6 +1063,39 @@ mod tests {
             Did::Nothing => controller.press(hardware(t + 30, target, Phase::Up), events, t + 30),
             other => other,
         }
+    }
+
+    #[test]
+    fn a_sign_in_task_draws_one_button_and_its_steps_and_its_press_starts_the_agents_sign_in_answering_nothing(
+    ) {
+        let events = vec![ask(
+            "S",
+            "unblock",
+            json!([{"id": "done", "label": "I did it", "decision": "none"}, {"id": "wait", "label": "Leave it blocked", "decision": "none"}]),
+            json!({
+                "steps": ["Press Sign in: Claude Code opens its own window or browser page", "Claude Code needs a paid plan."],
+                "where": "Claude Code's own window or browser page", "why": "w", "unblocks": ["req:0"], "proves": "claude-code sign-in probe",
+            }),
+        )];
+        let mut card = Controller::present(&events, "ask:S", NOW, SLOT, Faults::default()).unwrap();
+        let controls: Vec<Row> = card
+            .rows()
+            .into_iter()
+            .filter(|row| !matches!(row, Row::Text(_)))
+            .collect();
+        assert_eq!(
+            controls,
+            vec![Row::SignIn],
+            "one button, Sign in: no option and no Send"
+        );
+        assert!(card
+            .lines()
+            .contains(&"Claude Code needs a paid plan.".to_owned()));
+        assert_eq!(
+            click(&mut card, &events, NOW + 10, Target::SignIn),
+            Did::SignIn("ask:S".into())
+        );
+        assert!(card.take_answers().is_empty(), "Sign in answers nothing");
     }
 
     #[test]
