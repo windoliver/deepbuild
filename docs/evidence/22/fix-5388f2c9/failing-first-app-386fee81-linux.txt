@@ -1,0 +1,9 @@
+test views::tests::a_record_with_no_list_and_no_batching_core_draws_and_counts_every_open_ask ... FAILED
+test views::tests::a_batching_record_with_no_list_counts_only_the_asks_it_draws ... FAILED
+thread 'views::tests::a_record_with_no_list_and_no_batching_core_draws_and_counts_every_open_ask' (2942915) panicked at crates/deep-app/src/views.rs:3974:9:
+  left: ["ask:a1", "ask:a2", "ask:a3", "ask:a4", "ask:a5"]
+ right: ["ask:a1", "ask:a2", "ask:a3", "ask:a4", "ask:a5", "ask:a6"]
+thread 'views::tests::a_batching_record_with_no_list_counts_only_the_asks_it_draws' (2942911) panicked at crates/deep-app/src/views.rs:3998:9:
+  left: 1
+ right: 0
+test result: FAILED. 110 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s

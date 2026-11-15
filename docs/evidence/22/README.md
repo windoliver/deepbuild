@@ -407,3 +407,22 @@ doesn't reopen; sha256 7e5323b2…), issue bodies from files matching GitHub's.
 
 The merge of main changed nothing in this PR's own diff: `git diff 2252dfd6 adaa0e19` and `git diff` of 6915a4fb
 against its merge base give the same lines (outside `docs/evidence`), so the third review, at 6915a4fb, covers it.
+
+## The fourth review, of the final diff, and its fixes (386fee81, 5388f2c9)
+
+A fresh agent, not told the earlier rounds' conclusions, reviewed the final diff at bfb01161 and found two real defects:
+
+- **A batch the record refused was not retried until the next batch time** (`packages/asks/src/showing.ts`): `show()`
+  marked the batch shown before the record took it. Now it marks it only after. `fix-5388f2c9/failing-first-batch-refused.txt`:
+  the new test in `packages/asks/test/timing.test.ts` failed first ("the refused batch is still due at the next beat:
+  expected false to be true"); after the fix the asks tests pass, 75 of 75, and the hub's batch tests 3 of 3.
+- **Needs you's count included asks it didn't draw, in a record with no hub list** (`crates/deep-app/src/record.rs`,
+  `views.rs`), a regression against main: a count-folded ask with no exception, or one waiting for its batch. Now such
+  a record draws every open ask when no batching core wrote it (as main did) and the count is the rows drawn.
+  deep-app now builds on Linux: `fix-5388f2c9/failing-first-app-386fee81-linux.txt`, at the test commit 110 pass and the
+  two new tests fail on their assertions (5 rows where 6 were wanted; a count of 1 over no rows); at 5388f2c9, 112 of 112.
+
+Disclosed, not changed: if the record refuses only the decision (or an overrule) in the answer's shared commit, the
+agent isn't handed the answer; the app finds a session's fold by session where the core keys it by thread (the hub
+sets thread to the session today, so they agree); an `ask.answered` whose text went through the evidence writer could
+commit after its decision (no `ask.answered` field is such a text today).
