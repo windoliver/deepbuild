@@ -75,7 +75,7 @@ const DOCS = {
   'deep.store.get': 'Reads the latest item of the plug-in\'s own store under a key, or nothing when there is none.',
   'deep.store.list': 'Reads the latest item under every key of the plug-in\'s own store.',
   'deep.schedule': 'Runs a job on a cadence: never overlapping, with a deadline per run and one catch-up run after sleep.',
-  'deep.schedule.read': 'Reads a source the job declared among its readings, for the run under way: a job calls it as its context\'s `read`, and outside a run it is refused.',
+  'deep.schedule.read': 'Reads a source the job declared among its readings, for the run under way: a job calls it as its context\'s `read`, and outside a run it is refused. Listing `deep.schedule` in `requires.preview` covers it.',
   'deep.secret': 'A handle to a secret: the hub adds its value to the request, and the plug-in never sees it.',
   'deep.send': 'Anything that leaves your machine for a person: an ask, or a standing rule.',
   'deep.provide': 'An output other pieces may use, by its interface name@major: readings, actions, notice kinds, views or checks.',

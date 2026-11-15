@@ -386,7 +386,7 @@ Reads the latest item under every key of the plug-in's own store.
 
 In R1 · preview · `d1:05a2343b28cd68859192ba8971bcbac01e101886005a29242a5fd1c2cc72e493`
 
-Reads a source the job declared among its readings, for the run under way: a job calls it as its context's `read`, and outside a run it is refused.
+Reads a source the job declared among its readings, for the run under way: a job calls it as its context's `read`, and outside a run it is refused. Listing `deep.schedule` in `requires.preview` covers it.
 
 | Parameter | Type | Required |
 |---|---|---|
