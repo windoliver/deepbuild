@@ -821,3 +821,46 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   changes `src/layouts.rs` and `layouts/judged.json`. On this host (`acceptance-linux-ac42c15b1.txt`): 20 pass, ac07
   among them against the merge base 291d63af6, and the same 4 are BLOCKED; `cargo test --locked -p deep-logic -p
   deep-canvas-sandbox`: 27 passed, 0 failed. The Mac run at b88135a36 is of the head before this merge.
+- **Round 52** (2026-11-14, a separate agent, at 12652bc19, in its own clone with local main at 291d63af6) found no
+  P1 and no P2: SCREENSHOTS STILL MATCH HEAD.
+  - The code since round 51 (c34e1bff4, e7cddf318, the merge ac42c15b1): in `crates/deep-logic`,
+    `crates/deep-canvas-sandbox` and `scripts/` the merge drops and doubles nothing of either side. `libraries_in`
+    covers the three replies whose `traps` can hold a trap: bake, `open_save` and the live frame; the baked view's
+    is always `[]`. `library_trap.rs` fails on a wrong program: with `saves.rs`'s line reverted it fails on the
+    opened save's trap, with `live.rs`'s on the live frame's, and restored it passes. `cargo test --locked -p
+    deep-logic -p deep-canvas-sandbox`: 27 passed, 0 failed.
+  - The evidence: `gen.test.ts` rerun (1 passed; `labels.json` and `grids.json` byte for byte the committed ones)
+    and the reply files compared field by field: every verdict, `ran` flag, hash, linked size, deep hash, route,
+    move count, refusal and row 7's trap with its library is equal; the differences are the known ones (timings,
+    the bake `keys`, `saves: []` and `frames: []`, the web plan regions' `type`, the runner source).
+  - The browser page rerun with `server.mjs` and `shoot.mjs` (Playwright headless Chromium 156): on the committed
+    `e2e-raw`, screenshots 00 to 06 come out byte for byte the committed ones; on the data regenerated at
+    12652bc19, 01 to 06 are byte for byte the same and 00 differs only in its header line, "code at …". The
+    browser's replies equal `browser-replies-chromium-156.json` both times. All 11 images were read against the
+    values.
+  - Not done: 07a to 07d were read, not retaken; the acceptance suite, `affected.mjs`, the oracle lane, clippy,
+    fmt and the Mac checks were not part of this round.
+  - Its one low finding, read from code and not run, older than this change's last commits: the canvas module's
+    `logic.determinism` and `logic.budget` failures and its `logic.trap` error (`module.rs`) report a trap without
+    the `library` field. Not fixed.
+- **Mac run at 12652bc19** (2026-11-14, the owner's go at the Mac; on AC; local main c740dede, which contains the merge
+  base 291d63af6; Docker 29.2.1 with the linux/amd64 image `rust:1.99.1-slim-bookworm`, pulled on the owner's word,
+  the same image ID; host name redacted; `mac/exits-12652bc19.txt`), the head with the merge of main 291d63af6. All
+  four files pass; no secret-scan hit:
+  - ac04 2 of 2 (`mac/ac04-12652bc19.txt`) and ac05 1 of 1 (`mac/ac05-12652bc19.txt`), with the linux/amd64
+    container. Criteria 4 and 5.
+  - ac07 1 of 1 (`mac/ac07-12652bc19.txt`), against merge base 291d63af6. Criterion 7.
+  - ac10 2 of 2 (`mac/ac10-12652bc19.txt`, `mac/ac10-gate-12652bc19.txt`), no load wait by the owner's choice: load
+    37.8 at its start and 32.9 at its end, thermal state 1. A timing under load; its quiet-Mac pass stays the one at
+    e44890825. Criterion 10.
+- **Merge of main 0e5572731 (b52031509, 2026-11-15)**, after a fifth conflict, in deep-logic: main's #213 and #542
+  add `services` and `mirrors` to logic@1 and an `only` argument to the step and range replies, where this change
+  adds `links`. The merge keeps both: `LATER` lists neither `links` nor `services` nor `mirrors`; the item's reply
+  carries `linked`, `libraries` and `link_ns` and, when declared, `services` and `mirrors`; the libraries' data check
+  runs after the services are placed, so it keeps clear of them too; bake and `open_save` take main's `only` and
+  still pass their traps through `libraries_in`. Main's side changes 13 files of deep-logic (`bake.rs`, `budget.rs`,
+  `lib.rs`, `live.rs`, `piece.rs`, `saves.rs` and `module.rs` among them; new `services.rs` and `mirrors.rs`) and
+  `scripts/lanes.mjs`; four of those deep-logic files and `lanes.mjs` are files this change edits. On this host
+  (`acceptance-linux-b52031509.txt`): 20 pass, ac07 among them against the merge base 0e5572731, and the same 4
+  are BLOCKED; `cargo test --locked -p deep-logic -p deep-canvas-sandbox` passes. The Mac run at 12652bc19 is of
+  the head before this merge.
