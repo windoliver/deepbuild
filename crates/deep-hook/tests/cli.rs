@@ -385,6 +385,71 @@ fn fake_hub(
     })
 }
 
+/// A hub's acknowledgement of request `id` with no hold, and the empty reply.
+fn empty_reply(id: &str) -> String {
+    format!(
+        "{{\"v\":1,\"ack\":\"{id}\",\"hold_until_ms\":null}}\n{{\"v\":1,\"exit\":0,\"stdout\":\"\",\"stderr\":\"\"}}\n"
+    )
+}
+
+#[test]
+fn a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too() {
+    let newer = RULES.replacen(
+        r#""entries":{"#,
+        r#""entries":{"newer":{"match":"effect:not-a-class","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":false},"#,
+        1,
+    );
+    for (case, text, why) in [
+        ("cut to 40 bytes", &RULES[..40], "isn't JSON"),
+        ("an entry with a match it doesn't know", &newer, "newer"),
+    ] {
+        for answering in [true, false] {
+            // A try the hub was late for (the call is spooled marked late) is the hub away: it is made again.
+            let mut tries = 0;
+            let (out, spooled) = loop {
+                let home = short_home("unread");
+                std::fs::write(home.join(".deepbuild/rules.json"), text).unwrap();
+                let hub = answering
+                    .then(|| fake_hub(&home, empty_reply, std::time::Duration::from_millis(50)));
+                let mut child = hook(&home, "PreToolUse");
+                feed(&mut child, PKILL);
+                let out = child.wait_with_output().unwrap();
+                let spooled = std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl"))
+                    .unwrap_or_default();
+                if let Some(hub) = hub {
+                    hub.join().unwrap();
+                }
+                std::fs::remove_dir_all(&home).unwrap();
+                tries += 1;
+                if !answering || !spooled.contains("\"late\":true") {
+                    break (out, spooled);
+                }
+                assert!(
+                    tries < 20,
+                    "INCONCLUSIVE: the hub was late for 20 tries; rerun alone"
+                );
+            };
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let hub = if answering { "answering" } else { "away" };
+            assert_eq!(
+                out.status.code(),
+                Some(2),
+                "rules.json {case}, the hub {hub}: `pkill -f node` is denied: {stderr}"
+            );
+            assert!(
+                stderr.contains("rules.json") && stderr.contains(why),
+                "rules.json {case}, the hub {hub}: the denial names the file and {why:?}: {stderr}"
+            );
+            // The call reaches the hub when it answers, and the spool when it doesn't, as before.
+            assert_eq!(
+                spooled.contains("pkill -f node"),
+                !answering,
+                "rules.json {case}, the hub {hub}: the spool: {spooled:?}"
+            );
+        }
+    }
+}
+
 /// Runs deep-hook's PreToolUse for `command` against `home`, and returns its exit code, how long it took, and the spool.
 fn pre_tool_use(
     home: &std::path::Path,
