@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -63,4 +63,17 @@ it('a journal compacted at open is synced before it replaces the old one, and it
   const temp = synced.findIndex((path) => basename(path).startsWith('.tmp-'));
   expect(temp, 'the compacted journal, before its rename').toBeGreaterThanOrEqual(0);
   expect(synced.indexOf(root, temp), 'the root that holds its new name').toBeGreaterThan(temp);
+});
+
+it('a file put again by path over one already stored is synced before it replaces it, so a synced file stays whole (#1410)', async () => {
+  const { root, store, sha, file } = await stored('the same bytes');
+  await store.sync([sha]);
+  const input = join(root, 'input.bin');
+  writeFileSync(input, 'the same bytes');
+  synced.length = 0;
+  const again = await store.connect({ role: 'deepbuild', via: 'capture' }).file({ file: input, kind: 'asset.pack', source: 'fixture/samples@1.0.0', redaction: 'complete', license: { name: 'CC0-1.0', allows: ['export'] } });
+  if (again.status !== 'stored') throw Error(again.reason);
+  expect(again.evidence.sha256).toBe(sha);
+  // The copy that replaced the file was synced under its own name, before the rename made it the file.
+  expect(synced.filter((path) => path !== file && !path.endsWith('records.jsonl')), 'a sync of the copy before it replaced the synced file').not.toEqual([]);
 });

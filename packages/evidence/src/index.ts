@@ -264,6 +264,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (file) {
           const path = fileOf(sha);
           await mkdir(dirname(path), { recursive: true });
+          // Over a file a FULL commit may have synced, the copy lasts before it takes the name (#1410).
+          if (existed) await syncOne(file.file);
           await rename(file.file, path);
         } else {
           const data = bytes as Uint8Array;
