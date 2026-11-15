@@ -87,6 +87,40 @@ export function scrub(text: Buffer, values: readonly string[], patterns = true):
   return Buffer.from(out + latin.slice(at), 'latin1');
 }
 
+/**
+ * A complete-line prefix whose masks do not cross the cut. Lookahead keeps multi-line rules and held values whole;
+ * field masks can extend beyond that window, so an unfinished one keeps its opening line until more text arrives.
+ * `end` is a byte offset in the UTF-8 input. Zero asks the caller for more complete lines, never an unsafe cut.
+ */
+export function scrubPrefix(text: Buffer, values: readonly string[], target: number, final: boolean): { end: number; bytes: Buffer } {
+  const lookahead = Math.max(MULTILINE_WINDOW, ...values.map((v) => Buffer.byteLength(v) * 3));
+  const ceiling = final ? text.length : Math.max(0, text.length - lookahead);
+  let end = text.lastIndexOf(10, Math.min(target, ceiling) - 1) + 1;
+  // A single long line is indivisible. It is eligible only when its complete line and lookahead are present.
+  if (!end) {
+    const newline = text.indexOf(10);
+    if (newline >= 0 && newline < ceiling) end = newline + 1;
+    else if (final) end = text.length;
+    else return { end: 0, bytes: Buffer.alloc(0) };
+  }
+  const { latin, masks, fields, matches } = masksOf(text, values, true);
+  const ranges = merge([...masks, ...fields, ...matches]);
+  for (const [from, to] of ranges) if (from < end && to >= end && end < text.length) {
+    const before = text.lastIndexOf(10, from - 1) + 1;
+    if (before) { end = before; break; }
+    const after = text.indexOf(10, to);
+    if (after >= 0 && after < ceiling) end = after + 1;
+    else if (final) end = text.length;
+    else return { end: 0, bytes: Buffer.alloc(0) };
+  }
+  let out = '', at = 0;
+  for (const [from, to, replacement = MASK] of ranges) {
+    if (from >= end) break;
+    out += latin.slice(at, from) + replacement; at = to;
+  }
+  return { end, bytes: Buffer.from(out + latin.slice(at, end), 'latin1') };
+}
+
 /** Each pattern rule's match in `text`, in order and once, as printed, and whether a field rule's mask covers part of it too. */
 export function patternMatches(text: Buffer): [match: Buffer, field: boolean][] {
   const { fields, matches } = masksOf(text, [], true);

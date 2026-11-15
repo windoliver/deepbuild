@@ -525,7 +525,10 @@ class SqliteRecord implements RecordStore {
         const appended = await run;
         // An archived copy is read as it lands, so an ask placing its plan's targets finds it parsed (#1098).
         if (input.kind === 'transcript.archived' && typeof (input.data as { evidence?: unknown } | undefined)?.evidence === 'string') {
-          await placingTranscript(this.options.evidence, this.placing, (input.data as { evidence: string }).evidence);
+          const sha = (input.data as { evidence: string }).evidence;
+          // A multi-part copy is read on demand. Eagerly parsing every preceding part on each append defeats the
+          // incremental archive and can exceed V8's string limit before the session's event has even returned.
+          if (!(await this.options.evidence?.get(sha))?.parts) await placingTranscript(this.options.evidence, this.placing, sha);
         }
         return appended;
       } finally {

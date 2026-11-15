@@ -35,7 +35,7 @@ If this is a long-running hook, pass a timeout value as the last argument or con
 AssertionError: the check fails on the twin, naming the first line that differs: expected [Function] to throw error including 'first differs at line 6 (message 935f…' but got '#2365 AC4 (twin): no reading of sessi…'
 
 Expected: "first differs at line 6 (message 935f60f9-f5e5-4eaa-a9eb-44b04547b2ad)"
-Received: "#2365 AC4 (twin): no reading of session:b97911e110544660a4007e9544b39c50's 3 copy event(s) joins to the transcript scrubbed. The closest, parts 4d1841fe9309, 22948ca7dab1, 9ae8f4182b3c (3 parts: the evidence of events 1…3 of 3), first differs at line 6, byte 7282: the transcript has «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"/Users/dev/src/this-69","sessionId":"b97911e1-1054-4660-a4… (277 chars)» and the parts have «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"/Users/dev/src/this-69","sessionId":"b97911e1-1054-4660-a4… (241 chars)»"
+Received: "#2365 AC4 (twin): no reading of session:b97911e110544660a4007e9544b39c50's 3 copy event(s) joins to the transcript scrubbed. The closest, parts 4d1841fe9309, 22948ca7dab1, 9ae8f4182b3c (3 parts: the evidence of events 1…3 of 3), first differs at line 6, byte 7282: the transcript has «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"<fixture>/src/this-69","sessionId":"b97911e1-1054-4660-a4… (277 chars)» and the parts have «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"<fixture>/src/this-69","sessionId":"b97911e1-1054-4660-a4… (241 chars)»"
 
  ❯ tests/acceptance/2365/rewrite.test.ts:117:148
 

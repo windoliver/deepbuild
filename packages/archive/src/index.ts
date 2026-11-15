@@ -5,16 +5,16 @@
 // the forge before the forge's retention deletes them, raises a "rotate this key" ask for a key pasted into chat, and
 // raises archive.quiet when an agent kept working for a day with nothing captured. It only writes: what it has
 // already copied it reads back from the record, so a restart copies nothing twice.
-import { isUtf8 } from 'node:buffer';
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
-import { patternMatches, scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
+import { scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
+import { copyTranscript, sourceStamp, type Part, type Prefix } from './copy.js';
 
 export interface ArchiveOptions {
   record: RecordStore;
@@ -59,8 +59,8 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 
 /** One transcript file: its agent, its session as the file names it, and where it is. */
 interface Source { agent: string; session: string; path: string; folderNames?: number }
-/** The last copy of a session: its source's size and hash, which the record keeps on transcript.archived@2. */
-interface Copied { size: number; sha256: string }
+/** The last copied prefix and its ordered evidence; legacy whole copies are a one-part prefix. */
+interface Copied extends Prefix { evidence: string; parts: string[]; stamp?: string }
 
 // What each placeholder of a facts `path` matches inside one path segment. The session's own placeholder is the
 // capture; the date and time placeholders are exact, so a session ID with dashes is never cut short.
@@ -121,24 +121,6 @@ async function sources(options: ArchiveOptions, archived = false): Promise<Sourc
 }
 
 /**
- * The keys the pattern scrub finds in a text. A field name's mask hides whatever sits under it, code and
- * placeholders too, and some rules match what sits under a secret name; so a match a field mask covers is a key
- * only when a rule finds all of it by itself, as one finds a pasted token but not a plain password. Two rules
- * can match one key, one with the text around it, as `curl -u user:k` does; the key alone is the one asked for,
- * unless what is around it reads as a secret too, as a password beside a key-shaped user does.
- */
-function secretsIn(text: string): string[] {
-  const keys = patternMatches(text).filter(({ match, field }) => !field || patternMatches(match).some((m) => m.match === match))
-    .map(({ match, at }) => ({ match, at, end: at + Buffer.byteLength(match) }))
-    .sort((a, b) => a.at - b.at || b.end - a.end);
-  // In start order, wider first: the keys a key holds start after it and before its end.
-  return keys.filter((key, n) => {
-    let around = key.match;
-    for (let next = n + 1; next < keys.length && keys[next]!.at < key.end; next++) if (keys[next]!.end <= key.end) around = around.replaceAll(keys[next]!.match, ' ');
-    return around === key.match || around.split(/[^\w+/=]+/).some((part) => part.length >= 8 && /\d/.test(part) && /[a-z]/i.test(part));
-  }).map(({ match }) => match);
-}
-/**
  * The folder a transcript's session worked in, as its agent recorded it: Claude Code's `cwd` on an entry, Codex's
  * on its `session_meta` (#356). Undefined when no line names one.
  */
@@ -170,16 +152,6 @@ function folderNamed(name: string, dir = '/'): string | undefined {
   }
   return undefined;
 }
-/** Whether a transcript line is a user message, however its agent nests the role. */
-function fromUser(line: string): { uuid?: string } | undefined {
-  let entry: unknown;
-  try { entry = JSON.parse(line); } catch { return undefined; }
-  if (!isObj(entry)) return undefined;
-  const role = entry.role ?? (isObj(entry.message) ? entry.message.role : undefined) ?? (isObj(entry.payload) ? entry.payload.role : undefined);
-  if (role !== 'user') return undefined;
-  return typeof entry.uuid === 'string' ? { uuid: entry.uuid } : {};
-}
-
 export async function openArchive(options: ArchiveOptions): Promise<Archive> {
   const { record, now } = options;
   const writer: Writer = options.evidence.connect({ role: 'deepbuild', via: 'capture' });
@@ -198,7 +170,10 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
   function remember(e: Event): void {
     const d = isObj(e.data) ? e.data : {};
     if (e.kind === 'transcript.archived' && typeof d.session === 'string' && isObj(d.source)) {
-      copied.set(d.session, { size: Number(d.source.size), sha256: String(d.source.sha256) });
+      copied.set(d.session, { size: Number(d.source.size), sha256: String(d.source.sha256), evidence: String(d.evidence),
+        parts: Array.isArray(d.parts) ? d.parts.map(String) : [String(d.evidence)],
+        ...(typeof d.source.stamp === 'string' ? { stamp: d.source.stamp } : {}),
+        ...(typeof d.source.ended === 'boolean' ? { ended: d.source.ended } : {}) });
       if (e.agent) captured.set(e.agent, Math.max(captured.get(e.agent) ?? 0, e.ts));
     } else if (e.kind === 'ci.archived') runs.add(`${String(d.repo)}#${String(d.run)}`);
     else if (e.kind === 'archive.quiet') alerted.add(`${String(d.agent)}@${String(d.last)}`);
@@ -227,50 +202,70 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     return sha;
   };
 
-  async function copy(source: Source): Promise<void> {
-    const info = await stat(source.path).catch(() => undefined);
+  // SessionEnd/on-demand and the hourly walk can overlap. Decide the prefix only after the earlier copy commits.
+  const copying = new Map<string, Promise<void>>();
+  function copy(source: Source): Promise<void> {
+    const key = `${source.agent}:${letters(source.session)}`;
+    const run = (copying.get(key) ?? Promise.resolve()).catch(() => undefined).then(() => copyNow(source));
+    copying.set(key, run);
+    void run.finally(() => { if (copying.get(key) === run) copying.delete(key); }).catch(() => undefined);
+    return run;
+  }
+  async function copyNow(source: Source): Promise<void> {
+    const info = await stat(source.path, { bigint: true }).catch(() => undefined);
     if (!info) return;
-    const mark = `${info.size}:${info.mtimeMs}`;
-    if (seen.get(source.path) === mark) return;
-    const raw = await readFile(source.path).catch(() => undefined);
-    if (!raw) return;
+    const size = Number(info.size);
+    const mark = sourceStamp(info);
     const session = `session:${letters(source.session)}`;
     const before = copied.get(session);
-    const sourceSha = sha256(raw);
-    if (before?.sha256 === sourceSha) { seen.set(source.path, mark); return; }
-    const text = raw.toString('utf8');
-    const redacted = Buffer.from(scrubText(text, { held: [...(options.held?.() ?? [])] }), 'utf8');
-    const evidence = await keep('transcript-copy', `archive:${source.agent}`, redacted, isUtf8(raw));
-    const named = source.folderNames === undefined ? undefined : source.path.split('/').at(source.folderNames);
-    const cwd = options.projectOf ? cwdOf(text) ?? (named ? folderNamed(named) : undefined) : undefined;
-    const project = cwd ? options.projectOf!(cwd, source.agent) : undefined;
-    await append(source.agent, 'transcript.archived', 2, { session, evidence, source: { size: raw.length, sha256: sourceSha } }, [evidence], undefined, project);
+    const previous = seen.get(source.path) ?? before?.stamp;
+    if (previous === mark && before?.size === size) return;
+    const added: string[] = [];
+    const keys: (Part['keys'][number] & { evidence: string })[] = [];
+    let cwd: string | undefined;
+    const result = await copyTranscript(source.path, size, mark, before, previous === mark, options.held?.() ?? [], letters(source.session), async (part) => {
+      const evidence = await keep('transcript-copy', `archive:${source.agent}`, part.bytes, part.complete);
+      added.push(evidence);
+      cwd ??= part.cwd;
+      keys.push(...part.keys.map((key) => ({ ...key, evidence })));
+    });
+    // Check the named file as well as the worker's open descriptor (a rename can replace only the former).
+    const after = await stat(source.path, { bigint: true }).catch(() => undefined);
+    if (!after || sourceStamp(after) !== mark) throw Error('the transcript changed or was replaced before its archive link');
+    // The checkpoint follows the asks: a failed ask must be retried, including after a process restart. Ask keys
+    // are deterministic, so a later link failure never makes a person answer the same key twice.
+    for (const key of keys) await rotateAsk(source, key);
+    // Record only a verified, complete generation. Parts written before a failure are not linked.
+    if (result.sha256 !== before?.sha256 || result.size !== before?.size) {
+      const parts = [...(result.grew ? before!.parts : []), ...added];
+      const put = await writer.put({ parts, kind: 'transcript-copy', source: `archive:${source.agent}`, redaction: 'complete', license: LICENSE });
+      if (put.status !== 'stored') throw Error(`the evidence store refused session ${session}: ${put.reason}`);
+      const linked = await options.evidence.get(put.evidence.sha256);
+      if (!linked || (linked.parts && (linked.parts.length !== parts.length || linked.parts.some((p, n) => p !== parts[n])))) throw Error(`the parts of ${session} didn't read back as written`);
+      const named = source.folderNames === undefined ? undefined : source.path.split('/').at(source.folderNames);
+      cwd ??= named ? folderNamed(named) : undefined;
+      const project = cwd ? options.projectOf?.(cwd, source.agent) : undefined;
+      const after = await stat(source.path, { bigint: true }).catch(() => undefined);
+      if (!after || sourceStamp(after) !== mark) throw Error('the transcript changed or was replaced before its archive link');
+      await append(source.agent, 'transcript.archived', 3, { session, evidence: put.evidence.sha256, parts,
+        source: { size: result.size, sha256: result.sha256, stamp: mark, ended: result.ended } }, parts, undefined, project);
+    }
     seen.set(source.path, mark);
-    // Only what the transcript gained since its last copy is searched for pasted keys, so a key asks once.
-    const grew = before && before.size <= raw.length && sha256(raw.subarray(0, before.size)) === before.sha256;
-    await rotateAsks(source, text.slice(grew ? raw.subarray(0, before.size).toString('utf8').length : 0), evidence);
   }
 
-  async function rotateAsks(source: Source, added: string, evidence: string): Promise<void> {
+  async function rotateAsk(source: Source, { key, uuid, evidence }: Part['keys'][number] & { evidence: string }): Promise<void> {
     const session = letters(source.session);
     const done = asked.get(session) ?? asked.set(session, new Set()).get(session)!;
-    for (const line of added.split('\n')) {
-      const user = fromUser(line);
-      if (!user) continue;
-      for (const secret of secretsIn(line)) {
-        const key = sha256(`${ROTATE_SOURCE}:${session}:${secret}`);
-        if (done.has(key)) continue;
-        done.add(key);
-        const ts = now();
-        await options.asks.raise({ ...options.connection, session, agent: source.agent }, ROTATE_SOURCE, {
-          kind: 'exception',
-          question: `A key was pasted into this session's chat${user.uuid ? ` (message ${user.uuid})` : ''}, so the agent and its provider have seen it. Rotate it?`,
-          options: [{ id: 'rotated', label: 'I rotated it', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }],
-          recommended: 'rotated', deadline: ts + 2 * DAY, fallback: 'you', default: 'later', provisional: false, owner: options.connection.actor,
-          key, pinned_to: { kind: 'evidence', ref: evidence },
-        });
-      }
-    }
+    if (done.has(key)) return;
+    const ts = now();
+    await options.asks.raise({ ...options.connection, session, agent: source.agent }, ROTATE_SOURCE, {
+      kind: 'exception',
+      question: `A key was pasted into this session's chat${uuid ? ` (message ${uuid})` : ''}, so the agent and its provider have seen it. Rotate it?`,
+      options: [{ id: 'rotated', label: 'I rotated it', decision: 'none' }, { id: 'later', label: 'Not now', decision: 'none' }],
+      recommended: 'rotated', deadline: ts + 2 * DAY, fallback: 'you', default: 'later', provisional: false, owner: options.connection.actor,
+      key, pinned_to: { kind: 'evidence', ref: evidence },
+    });
+    done.add(key);
   }
 
   /** An agent whose hooks kept landing for a day after its last capture: capture went quiet. */
@@ -329,10 +324,10 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
   return {
     async pass() {
       const failed: unknown[] = [];
-      for (const source of await sources(options)) await copy(source).catch((error: unknown) => failed.push(error));
+      for (const source of await sources(options)) await copy(source).catch((error: unknown) => failed.push(Error(`session:${letters(source.session)} (${source.agent}): ${error instanceof Error ? error.message : String(error)}`)));
       if (options.forge) await forgeRuns(options.forge).catch((error: unknown) => failed.push(error));
       await quiet();
-      if (failed.length) throw new AggregateError(failed, `the archive pass left ${failed.length} cop${failed.length === 1 ? 'y' : 'ies'} undone`);
+      if (failed.length) throw new AggregateError(failed, `the archive pass left ${failed.length} cop${failed.length === 1 ? 'y' : 'ies'} undone: ${failed.map(String).join('; ')}`);
     },
     async session(id) {
       const wanted = letters(id);

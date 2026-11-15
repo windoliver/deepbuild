@@ -657,6 +657,23 @@
       "initialReason": "Issue #18 first measurement: the merge base has no Claude Code bench. One process writes 100 sessions' transcripts over 30 days, each 2,000 lines of the corpus's recorded tools transcript, starts the hub on a temp home under the test VFS and backfills each through test.load, then counts the events through events.read, so p50 includes the writing, the hub's start and Node's; the issue's 2 minutes stays in tests/acceptance/18/kit/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "archive-growth",
+      "command": [
+        "node",
+        "benchmarks/archive-growth.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ms": 1000,
+        "maxGapMs": 50,
+        "rise": 64000000,
+        "added": 2000000
+      },
+      "criteria": ["#2365.76739980", "#2365.51dff57d"],
+      "initialReason": "Issue #2365 first measurement: a 100 MB Claude Code transcript, 94% tool results and one 2 MB line, is archived and gains 1 MB. One warm-up and five fresh-process passes report only that added-megabyte pass's wall time, longest 5 ms timer gap, RSS rise and evidence bytes; the targets judge uses the issue's exact limits and the reference-Mac/load policy. Existing archive-live, archive-month and archive-backlog definitions remain unchanged."
+    },
+    {
       "id": "archive-live",
       "command": [
         "node",
