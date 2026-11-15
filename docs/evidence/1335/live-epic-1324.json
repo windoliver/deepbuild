@@ -1,0 +1,196 @@
+{
+  "what": "#1335 Proof, second half: this repo's rule and what it selected on the live issues. Read-only: the open issues listed as the hub's standing run lists them, the hub's own rule and readiness code (packages/hub/src/work-rule.ts) applied, design links read on origin/main. No session started, nothing written to the forge.",
+  "at": "2026-11-14T21:32:15.368Z",
+  "repo": "windoliver/deepbuild",
+  "design_at": "a12be6c8c426e4ea9d87292cef42f12c564527f3",
+  "rule": {
+    "words": "every issue under epic #1324",
+    "labels": [],
+    "milestone": null,
+    "epic": 1324,
+    "roles": [
+      "OWNER",
+      "MEMBER",
+      "COLLABORATOR"
+    ]
+  },
+  "open_issues": 1204,
+  "meet_the_rules_structure": 28,
+  "by_outside_authors_or_apps": 0,
+  "joined": 28,
+  "stay_out": 0,
+  "stay_out_by_reason": {},
+  "order": [
+    "#1526 (R2 · Find, and trust the numbers)",
+    "#1527 (R2 · Find, and trust the numbers)",
+    "#1528 (R2 · Find, and trust the numbers)",
+    "#1529 (R2 · Find, and trust the numbers)",
+    "#1530 (R2 · Find, and trust the numbers)",
+    "#1531 (R2 · Find, and trust the numbers)",
+    "#1649 (R2 · Find, and trust the numbers)",
+    "#2403 (R2 · Find, and trust the numbers)",
+    "#2405 (R2 · Find, and trust the numbers)",
+    "#1327",
+    "#1335",
+    "#1339",
+    "#1340",
+    "#1341",
+    "#1343",
+    "#1344",
+    "#1345",
+    "#1349",
+    "#1350",
+    "#1666",
+    "#1835",
+    "#1872",
+    "#1873",
+    "#2047",
+    "#2082",
+    "#2338",
+    "#2339",
+    "#2340"
+  ],
+  "joined_issues": [
+    {
+      "issue": 1526,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Know when a plan session starts spending money: paid usage is read, held at your limit and counted"
+    },
+    {
+      "issue": 1527,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "A job that repeats wakes a model only when a no-model test finds something new, and the card says what a month costs"
+    },
+    {
+      "issue": 1528,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Anything that goes public gets the checks you wouldn't know to ask for: open data, other people's rows and secrets in what's served"
+    },
+    {
+      "issue": 1529,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "When the machine goes quiet you still hear about it, and when it's back it says what it missed"
+    },
+    {
+      "issue": 1530,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Say it from your chat app: your words become the same card, and your yes stays on the trusted path"
+    },
+    {
+      "issue": 1531,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "When something of DeepBuild's own breaks, the app says it in one line and the fix is a button"
+    },
+    {
+      "issue": 1649,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "An agent installed after setup is noticed, and one press sets it up"
+    },
+    {
+      "issue": 2403,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "The app speaks your language: every word the app draws of its own comes from one table, Simplified Chinese is the first after English, and a word outside the table fails a lane"
+    },
+    {
+      "issue": 2405,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "The studied-names list holds the products studied since it was written, so the public text lane catches a name that only a study round's own tool catches today"
+    },
+    {
+      "issue": 1327,
+      "milestone": null,
+      "title": "A new acceptance suite says how it runs from its own folder, so adding one needs no signed approval"
+    },
+    {
+      "issue": 1335,
+      "milestone": null,
+      "title": "A standing run: issues that meet a rule you approved join on their own, so new work needs no new approval"
+    },
+    {
+      "issue": 1339,
+      "milestone": null,
+      "title": "A hub on Linux can confirm a person: pairing, links and answers work with no Secure Enclave, and the service stays up after logout"
+    },
+    {
+      "issue": 1340,
+      "milestone": null,
+      "title": "Asks reach the right person: each ask names who answers, a second person covers, the answerer is recorded and nobody is asked twice"
+    },
+    {
+      "issue": 1341,
+      "milestone": null,
+      "title": "Give it a repo link: everything is set up from that one input, you answer one card, and work starts"
+    },
+    {
+      "issue": 1343,
+      "milestone": null,
+      "title": "The project page: what needs you on top, the project as a picture below, and nothing else unless you look"
+    },
+    {
+      "issue": 1344,
+      "milestone": null,
+      "title": "Demo: a repo link and a topic each become a running project, where you answer one card and then hear only what needs you"
+    },
+    {
+      "issue": 1345,
+      "milestone": null,
+      "title": "Taste calls wait for you, the work doesn't: a reversible change lands on everything else, and its calls reach you in one batch"
+    },
+    {
+      "issue": 1349,
+      "milestone": null,
+      "title": "Starting from nothing: a person with no agent and no developer tools gets from the download to a first result"
+    },
+    {
+      "issue": 1350,
+      "milestone": null,
+      "title": "Demo: two people who never touch a terminal get a trip plan and a client's monthly report from one sentence each, and see only what needs them"
+    },
+    {
+      "issue": 1666,
+      "milestone": null,
+      "title": "A started session commits in its own worktree, and the checkout and other worktrees stay closed to it"
+    },
+    {
+      "issue": 1835,
+      "milestone": null,
+      "title": "The budget window can close only budget-only issues: nothing ticks the criteria a Part of merge proved"
+    },
+    {
+      "issue": 1872,
+      "milestone": null,
+      "title": "The proof guard covers main-watch.mjs, known-failures-check.mjs and every key of known-failures.json"
+    },
+    {
+      "issue": 1873,
+      "milestone": null,
+      "title": "Listed failures end: a listed test that passes fails the lane, lint and timing entries lapse, and the main watch excuses timing only under load"
+    },
+    {
+      "issue": 2047,
+      "milestone": null,
+      "title": "Closed issues stay proven: a sweep finds each criterion of a closed issue that no test names, and reopens the issue naming it"
+    },
+    {
+      "issue": 2082,
+      "milestone": null,
+      "title": "contracts: build.rolled_back@1 lacks the shared envelope's evidence and the read cap on commit and restored (2 events tests fail on main)"
+    },
+    {
+      "issue": 2338,
+      "milestone": null,
+      "title": "The design can be read a section at a time: AGENTS.md asks for the sections an issue links, one script prints a section by its anchor, and a section's size only drops"
+    },
+    {
+      "issue": 2339,
+      "milestone": null,
+      "title": "The design states its principles once: a short section at the top of the technical design, each line linking the rule it comes from and naming the check that holds it"
+    },
+    {
+      "issue": 2340,
+      "milestone": null,
+      "title": "Each design section shows the work filed against it: one script lists every linked section with its closed and open issues, so built and designed are counted and not estimated"
+    }
+  ],
+  "stays_out": []
+}
