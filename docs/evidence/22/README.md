@@ -276,7 +276,10 @@ test files; a separate agent ran each on main b1a1ff86 in its own worktree:
 - `tests/acceptance/120/overrun.test.ts`, `tests/acceptance/1106/standin.test.ts` and `tests/bays.test.mjs` pass at the head.
 - `tests/acceptance/84/reach/switch.test.ts` is INCONCLUSIVE: 3 of 7 runs failed in the working checkout at the head;
   4 of 4 passed in a clean worktree at the head, 4 of 4 at 22cd7b05 and 5 of 5 on main.
-- `tests/acceptance/1332/show.test.ts` didn't finish on main (it waits on a Mac-served run): unclassified.
+- `tests/acceptance/1332/show.test.ts` fails the same way on main: run to a finish at b1a1ff86 in the clean worktree
+  (`1332-show-main-b1a1ff86.txt`, 81 minutes), 1 of 2 failed with the branch run's message, "the run serves the Mac's
+  issue: #100 landed: expected false to be true". Main's run was at load 56 to 79 and the test waits up to 40 minutes
+  for that landing, so by itself it would be INCONCLUSIVE; the branch's failure was at load 1, with the same message.
 - Of the lint lines, `packages/asks/src/index.ts` over its ceiling was this change's and is fixed in 093c5bc8 (2059 of
   2059); `packages/hub/src/core.ts` is at main's own 2639. `crates/deep-app/src/views.rs` is over a ceiling main already
   exceeds, and this change adds 70 lines to it.
