@@ -1,0 +1,78 @@
+Base commit: d8c46f0d5 ("Merge pull request #2601 from windoliver/worktree-swirling-sniffing-sundae"), also origin/main when run
+Run: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1960 --no-file-parallelism --testTimeout=600000
+     (vitest 5.0.5; cargo 1.99.1 on PATH; deep-show built with --features r1 in this checkout's target/, warm from one
+     prior build of the same command, which also wrote fixtures/ through the fixture script)
+Result: Test Files 3 failed (3); Tests 6 failed (6); exit 1. Duration 10.48 s.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1960/tsconfig.json, exit 0.
+Date: 2026-11-15  darwin-arm64
+
+What holds at the base: acme/shelf@1.0.0 and @3.0.0 install, and so does the control of the planted drop; under
+acme/shelf@1.0.0 the channel document opens clean and gives its record's values at the 100 sampled times (the fixture
+check inside criterion 1's test passes); mixed-versions.scene loads with all 12 instances migrated and `migrated`
+raised as #1959 left it, a3 expanding with shelves 4, and `read` gives writer B's layer file a hash. No test passes at
+the base: each criterion's own test needs behaviour the base lacks, and each planted test needs a planted name.
+
+Why each failing test fails at the base:
+
+- A rename carries no path (crates/deep-canvas/src/document/pack_kinds/migrate.rs, `apply` and `at_load` touch an
+  item's params only). So the pack check's corpus run leaves the channel document's `channels/lift/target` on
+  items/b1/params/levels, which b1 no longer holds, and refuses acme/shelf@2.0.0; and the scene loads with
+  `ref_unresolved` at channels/rise/target and bound_values/stock/target.
+- A driver's path var and a constraint's path are not resolved at check (crates/deep-canvas/src/document/check.rs runs
+  `check_targets` for `channels` and `bound_values` only), a `follow_path`'s `fraction` takes no `{path}`
+  (crates/deep-canvas-motion/src/constraint.rs, `Fraction::of`), and a step's `drop` is checked against no path, so the
+  planted drop installs.
+- `read` of a shared document carries no `opened` (crates/deep-show/src/shared.rs, `read`).
+- `deep_query` evaluates the stored items with the new major's defaults filled in (crates/deep-show/src/query.rs,
+  `keep_instances`), not the items as migrated, and with the scene's constraint in the document no channel or driver
+  is evaluated: the channel reads 4 at every time and the driver 0.
+- A patch's `set` on an item stored at an earlier major of its pack's kind is refused with `unknown_kind`.
+- None of the three planted values is a planted name (crates/deep-show/src/main.rs, the `planted` match ends
+  `_ => return None`), so those scenarios answer {"ok": false, "code": "bad_input"}.
+
+channel.test.ts
+  x #1960.fc74f8ec a corpus document with a channel ... opens at shelf.bookcase@2 ... and a migration that drops a
+    param a driver reads is refused at pack check, naming the driver's path
+      at "the corpus document under acme/shelf@2.0.0, and the migration that drops a param a driver reads": 8 failures
+        acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0) is refused, not installed: out_of_range at kinds/shelf.bookcase@2,
+          "fails its kit's migration part: corpus document a65ae32b..., saved at major 1, doesn't migrate and expand
+          clean", its issues: ref_unresolved at channels/lift/target, "items/b1/params/levels reaches nothing"
+        b1 opens as null, not shelf.bookcase@2                 (the document names a version that isn't installed)
+        read carries no opened document, so no path reads as the load left it (the channel lift: ...)
+        the channel lift, read at items/b1/params/shelves ..., gives null at 0.05s, not 4; differs at 100 of the 100 times
+        acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-drops-read) is installed: its step drops dividers, which its corpus
+          document's driver reads at items/b1/params/dividers, so its pack check must refuse it
+  x #1960.fc74f8ec a planted migrator that renames params only (migration_renames_params_only) ...
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+paths.test.ts
+  x #1960.5e2a1e73 after the load the channel, the driver's read, the bound value and the constraint path name ...
+      at "the load of mixed-versions.scene": 11 failures
+        read carries no opened document, so no path reads as the load left it (the channel rise: ...; the driver
+          reach: ...; the bound value stock: ...; the constraint slide: ...)
+        the channel rise (channels/rise/target) is left ref_unresolved, where it must name items/a1/params/shelves
+        the bound value stock (bound_values/stock/target) is left ref_unresolved, where it must name items/b1/params/span
+        the channel rise, read at items/a1/params/shelves ..., gives 4 at 2.0s, not 6; differs at 81 of the 101 times
+        the driver reach, read at items/gauge-a/at/pos/0 ..., gives 0 at 0.0s, not 160; differs at 101 of the 101 times
+  x #1960.5e2a1e73 a planted migrator that rewrites channel targets only (migration_rewrites_channel_targets_only) ...
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+store.test.ts
+  x #1960.40e69d87 writer A's patch sets items/a3/params/shelves to 5: after a restart ...
+      at "writer A's patch, a3's shelves set to 5, applies": {"outcome":"refused", ... "code":"unknown_kind","ids":["a3"],
+        "path":"items/a3/kind","actual":"shelf.bookcase@1","what":"this build doesn't know the item's kind: it is kept as
+        written, and never patched"}
+  x #1960.40e69d87 a planted store that writes A's migrated params under the saved major
+    (store_migrated_params_under_saved_major) ...
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+
+Sanity checks (one-off probes on the base binary, not kept):
+
+- The scene as a right load would leave it (all 12 at shelf.bookcase@3, the channel, the driver's read and the bound
+  value's target rewritten, the constraint left out or given a fixed fraction) gave the recorded values for the
+  channel and the driver at all 101 times; writer A's set of a3's shelves to 5 applied; the restart gave a3 shelves 5
+  and writer B's layer file its earlier hash; the undo applied after the restart; the second restart gave a3 shelves 4,
+  every expansion and both recorded values again. So the expected values can be reached and the harness holds.
+- The whole suite run once against a stand-in (the base binary fed each seeded document hand-migrated, with `opened`
+  put on `read`, 2.0.0 offered without its channel document, the planted drop's row set to refused with the driver's
+  path, and each planted value's symptom put on the reply) passed 6 of 6: each criterion's check passes on replies of
+  the right shape, and each planted test's check fails naming what its criterion says. The stand-in proves nothing
+  about an implementation.
