@@ -2608,16 +2608,25 @@ class Host implements ExtensionHost {
     const runs = typeof input.runs === 'number' ? input.runs : 20;
     const bots: (string | undefined)[] = Array.isArray(input.bots) && input.bots.length ? input.bots.map((b) => canonical(botOf(b))) : [undefined];
     const lacks: string[] = [];
+    // Each run's track, one copy a run: runs that recorded the same track need as many copies among the evidence.
+    const byTrack = new Map<string, string[]>();
     bots.forEach((bot, b) => {
       for (let i = 0; i < runs; i++) {
         const seed = runSeed(input.seed as number, i);
         const name = `${bots.length > 1 || bot !== undefined ? `bot ${b} ` : ''}run ${i} (seed ${seed})`;
         const plays = running.played.filter((p) => p.seed === seed && (bot === undefined || p.bot === bot));
         if (!plays.length) lacks.push(`${name}: it was never played`);
-        else if (!plays.some((p) => result.evidence.includes(p.track))) lacks.push(`${name}'s track among its evidence`);
         else if (!plays.some((p) => p.values)) lacks.push(`${name}'s values: its play read none`);
+        else byTrack.set(plays[0]!.track, [...(byTrack.get(plays[0]!.track) ?? []), name]);
       }
     });
+    for (const [track, names] of byTrack) {
+      const copies = result.evidence.filter((e) => e === track).length;
+      if (copies >= names.length) continue;
+      // Runs that recorded one track can't be told apart by it: each is named as one that may lack its copy.
+      if (!copies) lacks.push(...names.map((n) => `${n}'s track among its evidence`));
+      else lacks.push(`a copy of its track for each of ${names.join(', ')}, which recorded the same track: ${copies} of ${names.length} among its evidence`);
+    }
     if (result.testsRun !== runs * bots.length) lacks.push(`counting its ${runs * bots.length} runs: it counted ${result.testsRun}`);
     return lacks;
   }

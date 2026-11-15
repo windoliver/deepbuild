@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/playtest",
   "version": "1.0.0",
-  "digest": "d1:d3e8768b4db1b5f3d41f779bfe0cb01d55ae5e040dcf6dc23f998634d6814ab9",
+  "digest": "d1:21c37b4510d4a974b2dc4126921c1b2e8305abfd0b2835a55c8694c99729c913",
   "checks": [
     "playtest"
   ],

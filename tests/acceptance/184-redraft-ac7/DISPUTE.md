@@ -34,3 +34,9 @@ The design's rule holds: the redraft also fails on the work, so the first draft 
 - **No call at all**: the plug-in reads a piece's controls through `deep.canvas.read` before any play, and a redraft of
   the suites' hub gives the host a canvas core that serves the maze pieces, so the playtest can refuse with no replica
   call.
+
+## Ruled, Nov 15
+
+The owner chose "The replica's refusal is 'before any run'" (their words in session: "Replica refusal counts"). A blind
+job wrote clause 2 again on that ruling, in `tests/acceptance/184-redraft-ac7-2/`, which runs in its place; both
+earlier drafts' files run by hand.

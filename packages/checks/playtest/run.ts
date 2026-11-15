@@ -2,8 +2,8 @@
 // replica through `play`, judged from what it recorded, then its track played again without its bot, which must reach
 // the same full-state hashes. Evidence for each run: its track by hash and its frames by hash, its first, its
 // outcome's and any the input asks for. testsRun counts runs; a failure names its run (`bot <b> run <i>`) and starts
-// with its code. A play refused before it runs, such as a policy naming a control the piece doesn't declare, ends the
-// check there, before any other run.
+// with its code. Before any run, each bot plays no step at the check's own seed: a bot the piece can't take, such as a
+// policy naming a control it doesn't declare, is refused there by the replica, and the check ends with no run counted.
 import { createHash } from 'node:crypto';
 import type { CheckResult, Failure } from '@deepbuild/conformance';
 import { lower } from './bots.ts';
@@ -44,7 +44,7 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
       try {
         first = await play(input.piece, { ...common, seed, bot: lower(job.bot, seed), frames: [0] });
       } catch (e) {
-        refused = failure(test, `refused before any run: ${String((e as Error)?.message ?? e)}`, false);
+        refused = failure(test, `refused: ${String((e as Error)?.message ?? e)}`, false);
         return;
       }
       const stuck = input.stuck && { measure: input.stuck.measure, by: input.stuck.by ?? 1, within: steps(input.stuck.within ?? 10, first.step) };
@@ -56,11 +56,17 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
       ran.push({ test, seed, outcome, first, replay, reached });
     }
   };
-  // The first run alone, so a play refused before it runs (a control the piece doesn't declare) refuses only once.
-  const rest = jobs.splice(1);
-  await next();
-  jobs.push(...rest);
-  await Promise.all(Array.from({ length: AT_ONCE }, next));
+  // Each bot taken by the piece before any run: a play of no step at the check's own seed, which the replica refuses,
+  // naming what, for a bot the piece can't take, such as a policy on a control it doesn't declare.
+  for (const [b, bot] of input.bots.entries()) {
+    try {
+      await play(input.piece, { seed: input.seed, span: { steps: 0 }, bot: lower(bot, input.seed), values: [], frames: [] });
+    } catch (e) {
+      refused = failure(`bot ${b}`, `refused before any run: ${String((e as Error)?.message ?? e)}`, false);
+      break;
+    }
+  }
+  if (!refused) await Promise.all(Array.from({ length: AT_ONCE }, next));
   const order = (r: Ran): number[] => r.test.split(' ').filter((w) => /^\d+$/.test(w)).map(Number);
   ran.sort((a, b) => order(a)[0]! - order(b)[0]! || order(a)[1]! - order(b)[1]!);
 
@@ -73,6 +79,8 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
     const differs = firstDiffering(r.first, r.replay);
     if (differs !== undefined) failures.push(failure(r.test, `playtest.replay: ${r.test} (seed ${r.seed}): its track played again without its bot first differs in the full-state hash at step ${differs}`));
   }
+  // A refused bot ends the check before any run: nothing was played to reach or miss a goal.
+  if (refused) return { outcome: 'failed', testsRun: ran.length, failures: [refused, ...failures], evidence, read: [], mask: null };
   const counted = ran.filter((r) => r.outcome.kind !== 'invalid');
   for (const g of goals) {
     if (g.each) {
@@ -81,8 +89,7 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
       failures.push(failure(`goal ${g.name}`, `playtest.goal_missed: no run reached ${g.name}`));
     }
   }
-  if (refused) failures.unshift(refused);
-  const outcome = !failures.length ? 'passed' : failures.every((f) => !f.assertion) && !refused ? 'ran_nothing' : 'failed';
+  const outcome = !failures.length ? 'passed' : failures.every((f) => !f.assertion) ? 'ran_nothing' : 'failed';
   return { outcome, testsRun: ran.length, failures, evidence, read: [], mask: null };
 }
 

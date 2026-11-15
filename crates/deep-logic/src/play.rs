@@ -92,11 +92,10 @@ fn sha_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// A run's recorded track by hash: sha256 over what replays it, the run's seed and its entries as
-/// JSON in the track's order, so a replay at the same seed records the same hash and no two runs
-/// share one.
-fn track_hash(seed: u64, entries: &[Value]) -> String {
-    sha_hex(&serde_json::to_vec(&json!({"seed": seed, "entries": entries})).expect("entries serialize"))
+/// The recorded track by hash: sha256 over its entries as JSON, in the track's order. The run's
+/// seed is its own evidence beside it.
+fn track_hash(entries: &[Value]) -> String {
+    sha_hex(&serde_json::to_vec(entries).expect("entries serialize"))
 }
 
 /// The piece's full state as one hash: each of its items' deep hashes, in piece order.
@@ -513,7 +512,7 @@ pub fn play(
         "ok": true,
         "steps": steps,
         "step": step,
-        "track": track_hash(seed, &track),
+        "track": track_hash(&track),
         "entries": track,
         "values": values,
         "trap": trap,
