@@ -1,0 +1,6 @@
+$ node scripts/affected.mjs tests/acceptance/1875/helpers.mjs   # in the branch tree, 74fbac4aa, 2026-11-15T08:44:23Z, load 211.19
+parallel node: tests/acceptance/1875/affected.test.mjs
+BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+FAIL affected: 165 new, 44 already failing on main, 2 inconclusive or blocked, 0 listed skips, 4 passed, in 35 s at load 223; logs in <tmp>/deep-affected-…
+exit 1

@@ -1,0 +1,8 @@
+$ node scripts/affected.mjs tests/acceptance/685/kani.test.ts   # in the branch tree, c740dede7, 2026-11-15T08:42:49Z, load 203.81
+parallel node: tests/acceptance/1875/affected.test.mjs
+SKIP tests/acceptance/685/kani.test.ts (by hand)
+BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+INCONCLUSIVE 1 selected file was not run, left to a person or to a lane of its own: tests/acceptance/685/kani.test.ts (by hand)
+FAIL affected: 166 new, 44 already failing on main, 2 inconclusive or blocked, 0 listed skips, 4 passed, in 59 s at load 218; logs in <tmp>/deep-affected-…
+exit 1

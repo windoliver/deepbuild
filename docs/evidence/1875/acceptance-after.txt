@@ -1,0 +1,13 @@
+$ node --test tests/acceptance/1875/*.test.mjs   # this branch's affected.mjs, Linux arm64, 2026-11-15, load ~90
+✔ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (11108.932131ms)
+✔ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (19108.941002ms)
+✔ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (18397.656556ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (4865.702221ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 53759.666244

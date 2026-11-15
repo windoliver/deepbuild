@@ -1,0 +1,35 @@
+$ node --test --test-name-pattern="setup file a runner" tests/affected.test.mjs   # base c740dede7 scripts, this branch test
+✖ a setup file a runner config names feeds every suite, wherever the config names it; a config module it imports does not (42.933418ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 467.827285
+
+✖ failing tests:
+
+test at tests/affected.test.mjs:110:1
+✖ a setup file a runner config names feeds every suite, wherever the config names it; a config module it imports does not (42.933418ms)
+  AssertionError [ERR_ASSERTION]: tests/boot.ts
+  + actual - expected
+  
+  + []
+  - [
+  -   'tests/boot.ts'
+  - ]
+  
+      at TestContext.<anonymous> (file://<scratch>/draft/tests/affected.test.mjs:120:89)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'tests/boot.ts' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
