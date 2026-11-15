@@ -4484,7 +4484,12 @@ pub fn frame_planted(
     // #1653: terrain drawn as its atlas set, and each animated atlas row at its frame.
     let tiled = crate::atlas::apply(doc, items, record.pinned)?;
     // #538: keyed copy at the record's time, in the document's locale.
-    let copied = crate::copy::apply(doc, tiled.as_ref().unwrap_or(items), record.pinned, doc.get("locale").and_then(Value::as_str).unwrap_or("en"));
+    let copied = crate::copy::apply(
+        doc,
+        tiled.as_ref().unwrap_or(items),
+        record.pinned,
+        doc.get("locale").and_then(Value::as_str).unwrap_or("en"),
+    );
     let items = copied.as_ref().or(tiled.as_ref()).unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
@@ -5162,7 +5167,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
     // Issue #160: a path with ops, ends, an attachment or a bend, or a stroke that tapers or
     // waves, is an outline the R1 marks can't draw.
-    let kinetic = ["ops", "ends", "attach", "bend", "width", "opacity"]
+    // #466: a path's build draws a share of its strokes, which R1's marks can't.
+    let kinetic = ["ops", "ends", "attach", "bend", "width", "opacity", "build"]
         .iter()
         .any(|k| params.get(*k).is_some_and(|v| !v.is_null()))
         || stroke.is_some_and(|s| s.contains_key("taper") || s.contains_key("wave"))
@@ -5327,6 +5333,23 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         {
             let (_, verbs) = path_data()?;
             let verbs = attached(ctx, verbs, params, &path)?;
+            // #466: a build draws its strokes on in turn, and its fill when its fill says, as
+            // `path_report` and `<item>.build` read it.
+            let build = crate::build::read(params).map_err(|f| Refused {
+                code: "out_of_range",
+                path: format!("{path}/params/{f}"),
+            })?;
+            let verbs = match &build {
+                Some(b) => b.drawn(&verbs, id),
+                None => verbs,
+            };
+            let unfilled = build
+                .as_ref()
+                .filter(|b| !b.fills())
+                .map(|_| without_fill(params));
+            let paint = unfilled
+                .as_ref()
+                .map_or(paint, |p| object_or_empty(p.get("paint")));
             let built = build_path(ctx, id, verbs, params, paint, place)?;
             ctx.paints.shapes(id, &built, place, paint, &paint_path)?
         }
@@ -6342,6 +6365,44 @@ mod tests {
         };
         assert_eq!(spec.text, "75%");
         assert!(spec.bound, "a counter shapes with tabular figures");
+    }
+
+    /// #466's build, as a frame draws it: a path of four strokes at progress 0.3 draws its first
+    /// strokes only, and at 0 none, as `<item>.build` times them (found by #155's demo film).
+    #[test]
+    fn a_frame_draws_only_the_strokes_its_build_has_reached() {
+        let moves = |progress: f64| {
+            let doc = json!({
+                "size": [100, 100],
+                "layers": {"main": {"order": "a0"}},
+                "items": {"p": {"id": "p", "kind": "path@1", "layer": "main", "params": {
+                    "d": "M 0 10 L 90 10 M 0 30 L 90 30 M 0 50 L 90 50 M 0 70 L 90 70",
+                    "build": {"progress": progress}, "paint": {"stroke": {"role": "ink", "width": 2}}}}},
+            });
+            let doc = doc.as_object().unwrap();
+            let f = frame(
+                doc,
+                doc["items"].as_object().unwrap(),
+                &palette(),
+                &Record::default(),
+                1.0,
+            )
+            .unwrap();
+            f.layers
+                .iter()
+                .flat_map(|l| &l.marks)
+                .map(|m| match &m.mark {
+                    Mark::Shape { verbs, .. } => {
+                        verbs.iter().filter(|v| matches!(v, Verb::Move(_))).count()
+                    }
+                    Mark::Path { d, .. } => d.matches('M').count(),
+                    _ => 0,
+                })
+                .sum::<usize>()
+        };
+        assert_eq!(moves(1.0), 4);
+        assert_eq!(moves(0.3), 2, "stroke 0 whole and stroke 1 a fifth drawn");
+        assert_eq!(moves(0.0), 0);
     }
 
     fn board(items: Value) -> Value {
