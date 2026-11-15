@@ -2192,10 +2192,12 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-marks",
+ "deep-canvas-scene3d",
  "deep-effects-render",
  "deep-gpu",
  "deep-images",
  "deep-marks-gpui",
+ "deep-scene3d-render",
  "deep-text",
  "deep-text-gpui",
  "ed25519-dalek",
@@ -2221,6 +2223,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "wgpu 30.0.1",
+ "wgpu-profiler",
 ]
 
 [[package]]
