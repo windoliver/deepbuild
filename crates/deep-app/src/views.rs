@@ -1232,7 +1232,11 @@ pub fn count() -> usize {
 
 /// The count of what needs you in this view: as many as Needs you draws.
 pub fn count_of(view: &crate::record::View) -> usize {
-    states::count(&view.table())
+    let table = view.table();
+    if table.listed() {
+        return states::count(&table);
+    }
+    view.needs_you().len()
 }
 
 fn record(kind: Kind, opened: Option<&str>) -> Record {

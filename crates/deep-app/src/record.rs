@@ -205,12 +205,13 @@ impl View {
                 })
                 .collect();
         }
+        // With no batch of the core's there is nothing to wait for: every open ask draws, as before batches (#22).
         self.inbox
             .iter()
             .filter(|row| {
                 row["status"] == "shown"
                     || row["status"] == "later"
-                    || (!self.batched && row["status"] == "queued")
+                    || (!self.batched && row["status"] != "closed")
             })
             .collect()
     }

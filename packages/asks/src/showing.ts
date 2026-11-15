@@ -150,7 +150,6 @@ export class Showing {
     // A Later that ends shows its ask again, recorded like any showing; so does one that an ask joining the
     // exception since would outlast.
     const now = this.options.now();
-    this.shownAt = now;
     let acted = await this.showNow(this.options.open().filter((a) => a.later !== undefined && !a.theirs && (a.later <= now || this.dueBy(a) <= a.later)));
     const batches = this.batches();
     // With no batches declared, nothing waits for one.
@@ -174,6 +173,8 @@ export class Showing {
     // A deadline at the next batch's own time counts as passing first: an ask first shown at its deadline would
     // default only on a later call, after its deadline, so it shows now instead.
     if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next))) acted = true;
+    // Only a showing the record took counts as the batch shown: a refused one is still due at the next beat.
+    this.shownAt = now;
     return acted;
   }
 
