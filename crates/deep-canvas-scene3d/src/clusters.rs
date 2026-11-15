@@ -115,6 +115,7 @@ mod tests {
     fn camera() -> Camera {
         Camera {
             eye: [0.0, 0.0, 0.0],
+            target: [0.0, 0.0, -1.0],
             right: [1.0, 0.0, 0.0],
             up: [0.0, 1.0, 0.0],
             forward: [0.0, 0.0, -1.0],
