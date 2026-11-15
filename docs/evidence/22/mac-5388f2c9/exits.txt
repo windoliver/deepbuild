@@ -1,0 +1,36 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 12:34:59 load { 26.82 50.81 35.95 } thermal 1 free KB 54461512
+head 5388f2c932b3488bcc58fc0b8a72f75c34150901; failing-first 386fee817087ce1f0c05043d82e9270b1bd7e782; contains main 2252dfd6f: yes 12:35:01 load { 28.60 50.78 36.02 } thermal 1 free KB 54460884
+issue bodies fetched to files (issue:exit) 22:0 318:0 319:0 320:0 321:0 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53957284
+issues/22.md sha256 19314eb34a019eb13319e7f37503623ea568f6ee75bd4d5cd9797b2cd2618455 bytes 2261; session's copy same 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53957376
+issues/318.md sha256 89181f7cc7dfa142fcfa573694624310d7cb6a3c0daeb89645e2304e00a963b8 bytes 7720; session's copy same 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53957376
+issues/319.md sha256 267a29728a0f2ab9764b18c22317543dce5604df010eee11ed2317ec0f194694 bytes 3733; session's copy same 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53956340
+issues/320.md sha256 4761da3eb9c7aeca2e0fbdad2ae39888de0fdd9826a8c810b0ce84424462d94d bytes 1711; session's copy same 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53956340
+issues/321.md sha256 021c8fb2612b6d81bf5f8c6560d1a02a47199a9ef18d48e60e4dfa360a6d97d5 bytes 3305; session's copy same 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53956328
+copy checks before any build: sha256 db7d550e60f7bc1675eaad094803c57a7023c3d963c9371264bcbed79405d4e8 diff-lines=4 reopen-early-return=1 row22=1 other-gh-calls=0 12:35:07 load { 26.79 50.03 35.85 } thermal 1 free KB 53956308
+readIssue pre-check (before any build) exit=0, lines 5, 'blocked' count 0 12:35:08 load { 26.79 50.03 35.85 } thermal 1 free KB 53956288
+part 1 conditions: Now drawing from 'AC Power' 12:35:08 load { 26.79 50.03 35.85 } thermal 1 free KB 53956472
+0-failing-first.txt: cargo exit=101; test result: FAILED. 110 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s 12:40:40 load { 83.21 86.90 58.37 } thermal 1 free KB 43820284
+part 1 failed tests (2): views::tests::a_batching_record_with_no_list_counts_only_the_asks_it_draws views::tests::a_record_with_no_list_and_no_batching_core_draws_and_counts_every_open_ask ; compile errors: 1 12:40:40 load { 83.21 86.90 58.37 } thermal 1 free KB 43820280
+part 2 conditions: Now drawing from 'AC Power' 12:40:40 load { 83.21 86.90 58.37 } thermal 1 free KB 43820288
+1-deep-app-lib.txt: cargo exit=0; test result: ok. 112 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s 12:40:47 load { 82.95 86.78 58.50 } thermal 1 free KB 43596724
+2-deep-app-full.txt: cargo exit=101; test result: ok. 112 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s 12:42:34 load { 30.97 69.25 55.08 } thermal 1 free KB 41375336
+part 2 failing targets: [acceptance_1141 acceptance_34 hub_client ]; failed tests 6; same as main's six (22n list): yes 12:42:34 load { 30.97 69.25 55.08 } thermal 1 free KB 41375328
+part 3 conditions: Now drawing from 'AC Power' 12:42:34 load { 30.97 69.25 55.08 } thermal 1 free KB 41375328
+part 3 setup exit=0 12:43:30 load { 26.81 61.50 53.07 } thermal 1 free KB 40259844
+3a app run start; screen-lock flag 0; front app [Windows App] 12:43:30 load { 26.81 61.50 53.07 } thermal 1 free KB 40259912
+3a vitest exit=0; PNGs: 3; front app [Windows App] 12:47:19 load { 18.69 41.07 46.29 } thermal 0 free KB 36991432
+tests/acceptance/1459/identifier.test.ts exit=0; front app [Windows App] 13:03:12 load { 28.71 64.16 59.84 } thermal 1 free KB 29575344
+tests/acceptance/1459/panel.test.ts exit=1; front app [Windows App] 13:03:34 load { 22.25 60.40 58.59 } thermal 1 free KB 29571112
+tests/acceptance/1172/rows.test.ts exit=0; front app [Windows App] 13:05:04 load { 9.48 46.29 53.33 } thermal 1 free KB 29047764
+tests/acceptance/1172/panel.test.ts exit=0; front app [Windows App] 13:05:27 load { 8.17 43.02 51.95 } thermal 1 free KB 29037164
+tests/acceptance/1460/cli.test.ts exit=0; front app [Windows App] 13:05:51 load { 7.66 40.64 50.88 } thermal 1 free KB 28761288
+part 3-end conditions: Now drawing from 'AC Power' 13:05:51 load { 7.66 40.64 50.88 } thermal 1 free KB 28761284
+readIssue pre-check (after the build) exit=0, lines 5, 'blocked' count 0 13:05:51 load { 7.66 40.64 50.88 } thermal 1 free KB 28761268
+status before the judge [] 13:05:52 load { 7.61 40.08 50.63 } thermal 1 free KB 28759460
+judge gate: NOT NOMINAL at the start (load 7.61, thermal 1); no load wait, the user's standing choice at the Mac 13:05:52 load { 7.61 40.08 50.63 } thermal 1 free KB 28759432
+gh probe before the judge: exit=0 exit=0  13:05:53 load { 7.61 40.08 50.63 } thermal 1 free KB 28759304
+judge exit=0 wall 414 s (NOT NOMINAL at the start (load 7.61, thermal 1); no load wait, the user's standing choice at the Mac) 13:12:47 load { 5.46 14.35 33.37 } thermal 0 free KB 28721088
+gh probe after the judge: exit=0 exit=0  13:12:48 load { 5.46 14.35 33.37 } thermal 0 free KB 28721056
+status after [] 13:12:49 load { 5.46 14.35 33.37 } thermal 0 free KB 28720952
+login-name hits after redaction: 0 13:12:49 load { 5.46 14.35 33.37 } thermal 0 free KB 28720840
+secret scan hits=0 13:12:49 load { 5.46 14.35 33.37 } thermal 0 free KB 28722500

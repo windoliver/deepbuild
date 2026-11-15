@@ -426,3 +426,18 @@ Disclosed, not changed: if the record refuses only the decision (or an overrule)
 agent isn't handed the answer; the app finds a session's fold by session where the core keys it by thread (the hub
 sets thread to the session today, so they agree); an `ask.answered` whose text went through the evidence writer could
 commit after its decision (no `ask.answered` field is such a text today).
+
+## The Mac at 5388f2c9 (`mac-5388f2c9/`)
+
+On AC power throughout (`exits.txt`).
+
+- **Failing first** at 386fee81 (`0-failing-first.txt`): 110 pass, exactly the two new views tests fail.
+- **Unit tests** at 5388f2c9 (`1-deep-app-lib.txt`): 112 of 112.
+- **The whole `cargo test -p deep-app`** (`2-deep-app-full.txt`, `2-failed-names.txt`): only main 2252dfd6's six fail.
+- **The app by hand** (`e2e/`): passes. Nothing before the batch; 8 rows after it, D6 folded into "This session keeps
+  asking"; A1 and B1, count 2, after the bulk answer. A separate agent's check of the pictures, `SCREENSHOT-CHECK.md`:
+  all three OK, no regression against adaa0e19; nothing ties the binary to the commit beyond the run's log.
+- **The window suites** (`3-suites.txt`): 1459/identifier, 1172/rows, 1172/panel and 1460/cli pass. 1459/panel ended
+  BLOCKED, "deep-app has no window to read", with Windows App in front: the failure b51d52cd had in 22p's rerun.
+- **The judge** (`judge.txt`), from a copy pinned to 5388f2c9 that doesn't reopen issues: #22 PASS, all four parts
+  (`#22.48b6696b`, `#22.1f14a778`, `#22.f57a814c`, `#22.3d85284a`). NOT NOMINAL: load 7.6 and thermal state 1 at the start.
