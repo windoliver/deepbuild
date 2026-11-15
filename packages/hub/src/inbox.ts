@@ -97,6 +97,10 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
     const kind = extra.get(a.id)?.kind ?? a.why;
     const age = a.since === null ? '' : `  ${elapsed(Math.max(0, Date.now() - a.since))}`;
     say(`${a.title}  ${kind}  ${a.project ?? 'no repo'}  ${a.session}${age}${fallback}  ${a.id}`);
+    // Under it, the option IDs `deep inbox answer` takes (#2199), each with its label where that reads differently.
+    // The planted wrong program prints the labels alone.
+    const labels = activePlant() === 'inbox-labels-only';
+    if (a.actions.length) say(`    answer with ${a.actions.map((o) => (labels ? o.label : o.label.toLowerCase() === o.answer.toLowerCase() ? o.answer : `${o.answer} (${o.label})`)).join(', ')}`);
     const r = extra.get(a.id);
     if (!r) continue;
     // Where a task sends you, from the trusted path alone (#84).

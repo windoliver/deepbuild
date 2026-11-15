@@ -25,6 +25,8 @@ export interface Reading { source_id: string; link: string; title: string; body:
 
 /** An issue's link in a prompt: its owner, repo and number. */
 export const ISSUE_LINK = /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)(?![\d/])/;
+/** A failed prompt read, recorded once and shown on its session row until the next prompt. */
+export const ISSUE_UNREAD = "The issue couldn't be read:";
 
 /** A recording's answers, or none when the file can't be read. */
 async function recorded(file: string): Promise<Obj[]> {
@@ -45,12 +47,12 @@ export function recordedFetch(file: string): Fetch {
   };
 }
 /** The live API at `api`, the token as a bearer when set; a request that fails to reach it reads as a 599. */
-export function liveFetch(api: string, token: string | undefined): Fetch {
+export function liveFetch(api: string, token: string | undefined, signal?: AbortSignal): Fetch {
   return async (path, page) => {
     const headers: Record<string, string> = { accept: 'application/vnd.github+json' };
     if (token) headers.authorization = `Bearer ${token}`;
     try {
-      const res = await fetch(`${api}${path}?per_page=100&page=${page}`, { headers, signal: AbortSignal.timeout(20_000) });
+      const res = await fetch(`${api}${path}?per_page=100&page=${page}`, { headers, signal: signal ?? AbortSignal.timeout(20_000) });
       const out: Record<string, string> = {};
       res.headers.forEach((v, k) => { out[k.toLowerCase()] = v; });
       return { status: res.status, headers: out, body: await res.json().catch(() => undefined) };

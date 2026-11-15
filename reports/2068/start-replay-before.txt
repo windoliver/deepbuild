@@ -1,0 +1,32 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ × packages/hub/test/prompt-start-replay.test.ts > starts when a live issue hook arrives after the startup spool was renamed 10179ms
+   → startup replay must not await a live settlement that needs ready first: expected '' to contain '"ready"'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/prompt-start-replay.test.ts > starts when a live issue hook arrives after the startup spool was renamed
+AssertionError: startup replay must not await a live settlement that needs ready first: expected '' to contain '"ready"'
+
+- Expected
++ Received
+
+- "ready"
+
+ ❯ packages/hub/test/prompt-start-replay.test.ts:50:94
+     48|     release();
+     49|     await until(() => output.includes('"ready"'), 5000);
+     50|     expect(output, 'startup replay must not await a live settlement th…
+       |                                                                                              ^
+     51|     db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+     52|     const copies = db.prepare('SELECT count(*) AS n FROM events WHERE …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:51:14
+   Duration  11.27s (tests 99%, transform 1%)
+

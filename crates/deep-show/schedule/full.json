@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "8146dec15a1857b96e79b4ad8b83a9259b723995ee1952a07f3e83fdf433ad95",
+  "set_digest": "f4f4d6f425c504af6a38dd8e166cdd0b15203c11941a51460b33e62a2e62b11f",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "de541b43baa18be5ccd7dbf9f1cc77234acd412c2a80a4e6a48c40ae922c9ef8",
+      "digest": "caf3cb5a58ac2a30fe42d186b886d336cb219d63d8d5bee4fff01ecb98477554",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -232,7 +232,17 @@
       "implementation": {
         "name": "logic",
         "version": "1.0.0",
-        "pins": {},
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.5",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
         "equivalence": "bit",
         "state": "canonical"
       }
@@ -594,7 +604,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "d5a6bb2f51c1086a157667d2e775a9aebe6308d1196cebe5e4e9e4c09a5d3306",
+      "digest": "7f54bcff64a6dcd286b8f8105b80fe7a82577c72a20f6374a84671e452e6e75d",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -776,6 +786,21 @@
           "scene3d.scattered"
         ],
         "per": "item"
+      }
+    ],
+    "simulate": [
+      {
+        "operator": "logic.step",
+        "module": "logic",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "logic.state"
+        ],
+        "per": "document",
+        "step": 11760000
       }
     ],
     "items": [

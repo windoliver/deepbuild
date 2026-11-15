@@ -11,15 +11,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use deep_canvas_scene3d::light::Texels;
+use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::{Caps, Helper, DECODE_WORKER};
 use serde_json::{json, Value};
 
 use crate::{refused, App, Planted};
-
-/// A document's decoded-image cap, bytes (Image `image@1`: at most 64 MB decoded per document).
-pub const CAP: u64 = 64 << 20;
 
 /// What the run's decode worker made, by `<sha>:<role>`.
 #[derive(Default)]
@@ -35,50 +32,14 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
     (p == Some(Planted::AppliesImageGamma)).then_some("applies_image_gamma")
 }
 
-/// The job role a map's hash is made for: the color fields' sRGB, a normal map's two channels, an
-/// occlusion map alone's one channel, else linear data. The planted programs read a
+/// The job role a map's hash is made for (scene3d's `map_role`). The planted programs read a
 /// metallic-roughness or a normal map as sRGB color (#423 AC4, AC6).
 fn role(roles: &BTreeSet<&str>, planted: Option<Planted>) -> &'static str {
-    if roles.contains("base_color") || roles.contains("emission") {
-        "base_color"
-    } else if roles.contains("normal_map") {
-        match planted {
-            Some(Planted::NormalMapAsSrgb) => "base_color",
-            _ => "normal",
-        }
-    } else if roles.contains("metallic_roughness") && planted == Some(Planted::MrFromSrgb) {
-        "base_color"
-    } else if roles.len() == 1 && roles.contains("occlusion") {
-        "occlusion"
-    } else {
-        "data"
+    match (map_role(roles), planted) {
+        ("normal", Some(Planted::NormalMapAsSrgb)) => "base_color",
+        ("data", Some(Planted::MrFromSrgb)) if roles.contains("metallic_roughness") => "base_color",
+        (r, _) => r,
     }
-}
-
-/// Every map hash the scene's solids sample, with the fields that name it; a material
-/// operator's texture input by hash (#431) is linear data, its mips made from its texels' codes.
-fn usages(scene: &Scene) -> BTreeMap<String, BTreeSet<&'static str>> {
-    let mut out: BTreeMap<String, BTreeSet<&'static str>> = BTreeMap::new();
-    for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        let inputs =
-            s.op.as_ref()
-                .and_then(|o| o.item["params"]["inputs"].as_object());
-        for (_, i) in inputs.into_iter().flatten() {
-            if let Some(sha) = i["from"]["texture"].as_str() {
-                out.entry(sha.to_ascii_lowercase())
-                    .or_default()
-                    .insert("operator");
-            }
-        }
-        let Some(m) = &s.maps else { continue };
-        for (field, slot) in m.slots() {
-            if let Some(slot) = slot {
-                let name = field.rsplit('/').next().unwrap_or(field);
-                out.entry(slot.sha.clone()).or_default().insert(name);
-            }
-        }
-    }
-    out
 }
 
 /// The run's decode worker, started the first time a job needs it.
@@ -93,9 +54,11 @@ pub fn decoder(app: &mut App) -> Result<&mut Helper, Value> {
     Ok(app.made.decoder.as_mut().expect("started"))
 }
 
-/// The scene's maps made ready: its texels by hash and the receipt, or the cap's refusal.
+/// The scene's maps made ready: its texels by hash and the receipt, or the cap's refusal. A
+/// `doc` material's map whose image isn't in `paths` is refused at its field (#1729).
 pub fn prepare(
     app: &mut App,
+    doc: &Value,
     scene: &Scene,
     paths: &BTreeMap<String, PathBuf>,
 ) -> Result<(BTreeMap<String, Arc<Texels>>, Value), Value> {
@@ -103,13 +66,16 @@ pub fn prepare(
     let mut texels = BTreeMap::new();
     let mut receipt = Vec::new();
     let mut decoded = 0u64;
-    for (sha, roles) in usages(scene) {
+    for (sha, roles) in map_uses(scene) {
         let role = role(&roles, planted);
         let key = format!("{sha}:{role}");
         let transcoded = !app.made.ready.contains_key(&key);
         if transcoded {
             let Some(path) = paths.get(&sha) else {
-                continue;
+                match map_field(doc, &sha) {
+                    Some(field) => return Err(refused("asset_missing", field)),
+                    None => continue,
+                }
             };
             let out =
                 std::env::temp_dir().join(format!("deep-gpu-map-{}-{key}", std::process::id()));
@@ -142,7 +108,7 @@ pub fn prepare(
         receipt.push(json!({"sha256": sha, "source": source, "format": t.format, "roles": roles, "transcoded": transcoded}));
         texels.insert(sha, t.clone());
     }
-    if decoded > CAP {
+    if decoded > DECODED_CAP {
         let mut r = refused(
             "over_budget",
             format!("the document's maps take {decoded} B on the device, over its 64 MiB decoded-image cap"),
