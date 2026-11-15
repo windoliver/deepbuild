@@ -2,7 +2,6 @@
   "failures": {
     "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network": "fails on main 772f5482: the base loader reaches the network (#1620, added 2026-10-31)",
     "cargo -p deep-replica --test acceptance_327_card": "fails on main 772f5482: #327's blind card suite fails (#1620, added 2026-10-31)",
-    "packages/contracts/test/events.test.ts › the design says › an event keeps at most the read cap of any text field": "fails on main 72fe11a1: past build.rolled_back@1 it stops at ref.unguarded@1, row.set@1 to @4, session.context_fit@1, tool.before@4 and workspace.task@1, whose text fields hold another bound or none (#2082, added 2026-11-14)",
     "packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again": "failed on main 772f5482 at load 50 in one run, not re-run; may be load (#1621, added 2026-10-31)",
     "tests/acceptance/56/decision.test.mjs › #56 scope import(\"effect/Effect\") is timed on Node 22, and the command that times it measures this Node": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node (#1622, added 2026-10-31)",
     "tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node (#1622, added 2026-10-31)",
