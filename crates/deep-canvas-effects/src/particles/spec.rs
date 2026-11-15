@@ -420,7 +420,7 @@ pub fn read(doc: &Value, id: &str, p: &Value) -> Result<Spec, Refusal> {
         num(&p["inherit"]["normal"], "inherit/normal", 0.0)?,
         num(&p["inherit"]["velocity"], "inherit/velocity", 0.0)?,
     ];
-    Ok(Spec {
+    let spec = Spec {
         count,
         life,
         shape,
@@ -459,7 +459,17 @@ pub fn read(doc: &Value, id: &str, p: &Value) -> Result<Spec, Refusal> {
             }
         },
         per_edge: p["per_edge"].as_str().map(str::to_string),
-    })
+    };
+    // `per_edge` emits along a 2D graph's routed edges, one emitter an edge.
+    let along_many = matches!(&spec.motion, Motion::Along { many: Some(_), .. });
+    if spec.per_edge.is_some() && (spec.dimensions != 2 || !along_many) {
+        return Err(Refusal::new(
+            "out_of_range",
+            at("per_edge"),
+            format!("{id}: per_edge emits along a 2D item's motion.along.curves, a graph's edges"),
+        ));
+    }
+    Ok(spec)
 }
 
 /// `motion.along`'s many curves, read: the curves or a collection, the pick, the sideways

@@ -13,6 +13,7 @@ use deep_canvas_effects::particles::eval::{self, Baked};
 use deep_canvas_effects::particles::flows::Curve;
 use deep_canvas_effects::particles::spec::{self, Motion, Refusal};
 use deep_canvas_effects::particles::{births::Births, rule};
+use deep_canvas_marks::scene::{Palette, Rgb};
 use deep_canvas_marks::vector_field::{self, Method};
 use deep_canvas_motion::eval as motion;
 use deep_canvas_motion::program::Program;
@@ -161,11 +162,88 @@ pub(crate) fn flow(
     let arrows = planted == Some(Planted::ParticlesFollowArrows);
     let (named, laid) = curves(id, items, routes, &names, seconds, arrows)?;
     let doc_seed = doc["seed"].as_u64().unwrap_or(0);
+    let lanes = match &s.per_edge {
+        Some(column) => lanes(id, items, &named, column, s.count)?,
+        None => Vec::new(),
+    };
     let mut b = Baked::new(id, s, item_seed(doc_seed, id), [0.0; 3]);
     b.flows = laid;
+    b.lanes = lanes;
     b.births = Births::of(doc, id);
     b.planted = plants(planted).0;
     Ok(Flow { b, names: named })
+}
+
+/// `per_edge: column`: each edge named in `curves` emits at its row's `column` per second, with
+/// the item's rows shared out among the edges by their rates (largest remainder), so each edge's
+/// emitter is its own closed form.
+fn lanes(
+    id: &str,
+    items: &Map<String, Value>,
+    curves: &[String],
+    column: &str,
+    count: u32,
+) -> Result<Vec<eval::Lane>, Refusal> {
+    let path = format!("items/{id}/params/per_edge");
+    let mut rates = Vec::with_capacity(curves.len());
+    for name in curves {
+        let bad = |what: String| Refusal::new("out_of_range", &path, what);
+        let (graph, edge) = name
+            .split_once('#')
+            .filter(|(g, _)| items.get(*g).is_some_and(|i| i["kind"] == "graph@1"))
+            .ok_or_else(|| bad(format!("{id}: per_edge reads graph edges; {name} is none")))?;
+        let row = items[graph]["params"]["graph"]["edges"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|r| r["id"] == edge)
+            .ok_or_else(|| bad(format!("{id}: {graph} has no edge {edge}")))?;
+        let rate = row[column]
+            .as_f64()
+            .filter(|r| r.is_finite() && *r >= 0.0)
+            .ok_or_else(|| {
+                bad(format!(
+                    "{id}: edge {edge}'s {column} is no rate of 0 or more"
+                ))
+            })?;
+        rates.push(rate);
+    }
+    let total: f64 = rates.iter().sum();
+    let share = |r: f64| {
+        if total > 0.0 {
+            f64::from(count) * r / total
+        } else {
+            0.0
+        }
+    };
+    let mut slots: Vec<u32> = rates.iter().map(|r| share(*r).floor() as u32).collect();
+    let mut left = count.saturating_sub(slots.iter().sum());
+    let mut order: Vec<usize> = (0..rates.len()).collect();
+    order.sort_by(|a, b| {
+        let frac = |k: usize| share(rates[k]) - share(rates[k]).floor();
+        frac(*b).total_cmp(&frac(*a)).then(a.cmp(b))
+    });
+    for k in order {
+        if left == 0 || total <= 0.0 {
+            break;
+        }
+        slots[k] += 1;
+        left -= 1;
+    }
+    let mut first = 0;
+    Ok(rates
+        .iter()
+        .zip(slots)
+        .map(|(rate, n)| {
+            let lane = eval::Lane {
+                first,
+                slots: n,
+                rate: *rate,
+            };
+            first += n;
+            lane
+        })
+        .collect())
 }
 
 /// The document's items evaluated at `t` (flicks) and its graphs' routes then.
@@ -183,9 +261,17 @@ fn evaluated(
 
 /// An item's rows at `seconds`: each live row's place `[x, y]`, or none.
 fn rows(b: &Baked, seconds: f64) -> Vec<Option<[f64; 2]>> {
+    aged(b, seconds)
+        .into_iter()
+        .map(|r| r.map(|(p, _)| p))
+        .collect()
+}
+
+/// An item's rows at `seconds`: each live row's place and its age as a fraction of its life.
+fn aged(b: &Baked, seconds: f64) -> Vec<Option<([f64; 2], f64)>> {
     eval::columns_on(b, seconds, None)
         .chunks(eval::FLOATS)
-        .map(|r| (r[3] >= 0.0).then_some([r[0], r[1]]))
+        .map(|r| (r[3] >= 0.0).then_some(([r[0], r[1]], r[3])))
         .collect()
 }
 
@@ -209,15 +295,17 @@ fn hashed(rows: &[Option<[f64; 2]>]) -> (String, usize) {
 }
 
 /// `items` (evaluated at `t`, flicks) with every graph drawn as marks2d's items and each 2D
-/// particles item drawn as its live particles' dots, in its layer and order; and each such item's
-/// evaluated-data hash and live count, for film2d's `particles` field.
+/// particles item drawn as its live particles' dots, in its layer and order, each at its size and
+/// opacity over life; and the colors of dots whose roles mix at their age, as roles named by the
+/// dot, for the frame's palette.
 pub(crate) fn lower(
     doc: &Map<String, Value>,
     items: &mut Map<String, Value>,
     t: i64,
     planted: Option<Planted>,
-) -> Result<Map<String, Value>, Value> {
-    let mut report = Map::new();
+    palette: &Palette,
+) -> Result<Vec<(String, Rgb)>, Value> {
+    let mut mixed = Vec::new();
     let has_graph = items.values().any(|i| i["kind"] == "graph@1");
     let flows: Vec<String> = items
         .iter()
@@ -225,7 +313,7 @@ pub(crate) fn lower(
         .map(|(k, _)| k.clone())
         .collect();
     if !has_graph && flows.is_empty() {
-        return Ok(report);
+        return Ok(mixed);
     }
     let (drawn, routes) = deep_marks_render::graphs_drawn(doc, items)?;
     let whole = Value::Object(doc.clone());
@@ -233,30 +321,122 @@ pub(crate) fn lower(
     let mut out = drawn;
     for id in &flows {
         let f = flow(&whole, id, items, &routes, seconds, planted).map_err(|r| refusal(&r))?;
-        let here = rows(&f.b, seconds);
-        let (hash, live) = hashed(&here);
-        report.insert(id.clone(), json!({"hash": hash, "live": live}));
         let item = out.remove(id).unwrap_or_default();
         let p = &item["params"];
-        let r = 0.5 * p["size"].as_f64().unwrap_or(4.0);
-        let role = p["color"][0]["role"]
-            .as_str()
-            .or(p["color"].as_str())
-            .unwrap_or("accent");
+        let size = over_life(&p["size"], 4.0);
+        let opacity = over_life(&p["opacity"], 1.0);
+        let keys = color_keys(&p["color"]);
         let order = item["order"].as_str().unwrap_or("a").to_string();
-        for (row, at) in here.iter().enumerate() {
-            let Some([x, y]) = at else { continue };
+        for (row, at) in aged(&f.b, seconds).iter().enumerate() {
+            let Some(([x, y], age)) = at else { continue };
             let dot = format!("{id}.p{row}");
+            // One role holds the dot's color; keys of more than one role mix in OKLab at its age.
+            let role = match colour(&keys, *age, palette) {
+                Ok(role) => role.to_string(),
+                Err(rgb) => {
+                    mixed.push((dot.clone(), rgb));
+                    dot.clone()
+                }
+            };
             out.insert(
                 dot.clone(),
                 json!({"id": dot, "kind": "circle@1", "name": dot, "layer": item["layer"],
                        "order": format!("{order}{row:05}"), "at": {"pos": [x, y, 0]},
-                       "params": {"center": [0, 0], "r": r, "paint": {"fill": {"role": role}}}}),
+                       "params": {"center": [0, 0], "r": 0.5 * at_age(&size, *age),
+                                  "paint": {"fill": {"role": role, "opacity": at_age(&opacity, *age).clamp(0.0, 1.0)}}}}),
             );
         }
     }
     *items = out;
-    Ok(report)
+    Ok(mixed)
+}
+
+/// A channel over life (Particles `particles@1`: `size, opacity: channels over life`): a
+/// number, `[birth, death]`, or keys `[{at, value}]`, as keys over the life's fraction.
+fn over_life(v: &Value, default: f64) -> Vec<(f64, f64)> {
+    match v {
+        Value::Number(n) => vec![(0.0, n.as_f64().unwrap_or(default))],
+        Value::Array(a) if a.iter().all(Value::is_object) && !a.is_empty() => a
+            .iter()
+            .map(|k| {
+                (
+                    k["at"].as_f64().unwrap_or(0.0),
+                    k["value"].as_f64().unwrap_or(default),
+                )
+            })
+            .collect(),
+        Value::Array(a) if a.len() == 2 => vec![
+            (0.0, a[0].as_f64().unwrap_or(default)),
+            (1.0, a[1].as_f64().unwrap_or(default)),
+        ],
+        _ => vec![(0.0, default)],
+    }
+}
+
+/// Keys at `age` (a fraction of the life): the value between the keys either side of it.
+fn at_age(keys: &[(f64, f64)], age: f64) -> f64 {
+    let (k, f) = between(&keys.iter().map(|k| k.0).collect::<Vec<_>>(), age);
+    keys[k].1 + (keys[(k + 1).min(keys.len() - 1)].1 - keys[k].1) * f
+}
+
+/// The key at or before `age` among keys at `ats` (ascending), and how far toward the next.
+fn between(ats: &[f64], age: f64) -> (usize, f64) {
+    let k = ats.iter().rposition(|a| *a <= age).unwrap_or(0);
+    match ats.get(k + 1) {
+        Some(next) if *next > ats[k] => (k, ((age - ats[k]) / (next - ats[k])).clamp(0.0, 1.0)),
+        _ => (k, 0.0),
+    }
+}
+
+/// `color`: look roles over life, `[{at, role}]` or one role.
+fn color_keys(v: &Value) -> Vec<(f64, String)> {
+    let keys: Vec<(f64, String)> = match v {
+        Value::String(r) => vec![(0.0, r.clone())],
+        Value::Array(a) => a
+            .iter()
+            .filter_map(|k| {
+                Some((
+                    k["at"].as_f64().unwrap_or(0.0),
+                    k["role"].as_str()?.to_string(),
+                ))
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    if keys.is_empty() {
+        vec![(0.0, "accent".to_string())]
+    } else {
+        keys
+    }
+}
+
+/// The dot's color at `age`: a role when one holds it (one key, or keys of one role either side),
+/// or the two roles' colors mixed in OKLab.
+fn colour<'a>(keys: &'a [(f64, String)], age: f64, palette: &Palette) -> Result<&'a str, Rgb> {
+    use deep_canvas::color::{oklab_to_srgb, srgb_to_oklab, Oklab, Srgb};
+    let (k, f) = between(&keys.iter().map(|k| k.0).collect::<Vec<_>>(), age);
+    let (a, b) = (&keys[k].1, &keys[(k + 1).min(keys.len() - 1)].1);
+    let (Some(ca), Some(cb)) = (palette.get(a), palette.get(b)) else {
+        return Ok(a);
+    };
+    if a == b || f == 0.0 {
+        return Ok(a);
+    }
+    let lab = |c: &Rgb| {
+        srgb_to_oklab(Srgb {
+            r: f64::from(c[0]) / 255.0,
+            g: f64::from(c[1]) / 255.0,
+            b: f64::from(c[2]) / 255.0,
+        })
+    };
+    let (la, lb) = (lab(ca), lab(cb));
+    let m = oklab_to_srgb(Oklab {
+        l: la.l + (lb.l - la.l) * f,
+        a: la.a + (lb.a - la.a) * f,
+        b: la.b + (lb.b - la.b) * f,
+    });
+    let byte = |x: f64| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+    Err([byte(m.r), byte(m.g), byte(m.b)])
 }
 
 /// film2d's `particles` field at `t` (flicks): each asked item's evaluated-data hash and live

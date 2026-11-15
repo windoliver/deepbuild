@@ -172,7 +172,15 @@ fn marks_at(
     let mut items = eval::items(doc, program, state);
     // #451: graphs drawn as marks2d's items, and 2D particles as their dots along the curves as
     // laid out at t.
-    crate::flows2d::lower(doc, &mut items, t, planted)?;
+    let mixed = crate::flows2d::lower(doc, &mut items, t, planted, palette)?;
+    let mut held;
+    let palette = if mixed.is_empty() {
+        palette
+    } else {
+        held = palette.clone();
+        held.extend(mixed);
+        &held
+    };
     // #462: the masks at their evaluated poses, before any look moves them.
     let volumes = crate::regions::volumes_2d(&items);
     // #462: the look's motifs move the evaluated items a scene binds, never the document.

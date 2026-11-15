@@ -131,3 +131,47 @@ pub fn place(curve: &Curve, s: f64, off: f64, speed: f64) -> (V3, V3) {
     };
     (add(p, scale(side, off)), scale(tan, speed))
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::super::eval::{self, Baked, Lane};
+    use super::super::spec;
+    use super::Curve;
+
+    /// `per_edge` (#451): each edge's emitter is its own, so by 10 s an edge at 2 a second has
+    /// emitted 20 particles along its own curve and one at 6 a second 60, none on the other's.
+    #[test]
+    fn per_edge_emits_each_edge_at_its_rate() {
+        let doc = json!({"items": {}});
+        let p = json!({"dimensions": 2, "count": 80, "life": 20, "per_edge": "traffic",
+                       "motion": {"along": {"curves": ["g#a", "g#b"], "speed": [1, 1]}}});
+        let s = spec::read(&doc, "flow", &p).expect("read");
+        let mut b = Baked::new("flow", s, 451, [0.0; 3]);
+        b.flows = vec![
+            Curve::new(vec![[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]]),
+            Curve::new(vec![[0.0, 50.0, 0.0], [100.0, 50.0, 0.0]]),
+        ];
+        b.lanes = vec![
+            Lane {
+                first: 0,
+                slots: 20,
+                rate: 2.0,
+            },
+            Lane {
+                first: 20,
+                slots: 60,
+                rate: 6.0,
+            },
+        ];
+        let records = eval::records(&b, 9.999);
+        let on = |c: usize| records.iter().filter(|r| r.curve == Some(c)).count();
+        assert_eq!((on(0), on(1)), (20, 60));
+        // Each live particle sits on its own lane's curve.
+        for e in 0..80 {
+            let st = eval::state(&b, e, 9.999).expect("live");
+            assert_eq!(st.pos[1], if e < 20 { 0.0 } else { 50.0 }, "row {e}");
+        }
+    }
+}
