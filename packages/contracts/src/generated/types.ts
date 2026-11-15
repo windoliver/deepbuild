@@ -4086,6 +4086,10 @@ export interface AskMootV2 {
   } | {
     because: "network_reached";
     host: string;
+  } | {
+    because: "signed_in";
+    agent: string;
+    account: string | null;
   };
   evidence?: Array<string>;
 }
