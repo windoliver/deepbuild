@@ -180,7 +180,11 @@ export function testVfs(settings: VfsSettings): Durable {
         open(path) {
           file = path;
           // What a FULL commit last wrote is what the disk holds.
-          const db = existsSync(path) && statSync(path).size > 0 ? new Database(readFileSync(path)) : new Database(':memory:');
+          const image = existsSync(path) && statSync(path).size > 0 ? readFileSync(path) : undefined;
+          // sqlite3_deserialize cannot open WAL images. Its documented conversion changes only the in-memory
+          // copy's read/write format bytes; rows and the durable image on disk stay untouched.
+          if (image && image[18] === 2 && image[19] === 2) image[18] = image[19] = 1;
+          const db = new Database(image ?? ':memory:');
           db.pragma('synchronous = NORMAL');
           return db;
         },
