@@ -1,0 +1,38 @@
+# The #1164 acceptance suite's tic-tac-toe rules program: the logic item `rules`' program as an agent builds it, for
+# wasm32-unknown-unknown. Test tooling only, outside the workspace (the empty [workspace] table), no dependencies,
+# sharing nothing with the code under test. Each wrong program is this crate with one feature (README: Planted wrong
+# programs). helpers.ts builds each into its own folder under target/acceptance-1164-rules/<tag>/ with
+#   cargo build --locked --release --target wasm32-unknown-unknown [--features <one>]
+# run in this folder, so the checkout's rust-toolchain.toml and .cargo/config.toml apply (as for #531's rules/).
+[package]
+name = "acceptance-1164-rules"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+# AC1's wrong program: its step calls a function it imports (`env.note`).
+imports_function = []
+# AC2's wrong program: a press on a taken cell writes the mover's mark there.
+takes_taken_cell = []
+# AC6's wrong program: a press of 9 loops forever.
+loops_on_9 = []
+
+[profile.release]
+opt-level = 1
+debug = 0
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+strip = false
+lto = false
+codegen-units = 1
+incremental = false
+
+[workspace]
