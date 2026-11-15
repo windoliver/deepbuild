@@ -15,18 +15,29 @@ if (missing) {
   process.exit(1);
 }
 const docs = DOCS.map((where) => ({ where, text: readFileSync(where, 'utf8') }));
-// The listed names (`<name> #<issue>` a line); an entry counts only while its issue is open and names it in backticks.
+const named = catalogueDrift([...docs, ...issues.map(({ number, body }) => ({ where: `#${number}`, text: body ?? '' }))]);
+// The listed names (`<name> #<issue>` a line); an entry counts only while its issue is open and names it in backticks,
+// the name is one the lane would fail, and no line above holds it.
 const listed = new Set();
 const stale = [];
-for (const [i, raw] of readFileSync(LIST, 'utf8').split(/\r?\n/).entries()) {
+let lines;
+try {
+  lines = readFileSync(LIST, 'utf8').split(/\r?\n/);
+} catch (error) {
+  console.log(`FAIL ${LIST} can't be read (${error.code})`);
+  process.exit(1);
+}
+for (const [i, raw] of lines.entries()) {
   const line = raw.trim();
   if (!line || line.startsWith('#')) continue;
   const [, name, issue] = line.match(/^(\S+)\s+#(\d+)$/) ?? [];
   if (!name) stale.push(`line ${i + 1} isn't \`<name> #<issue>\``);
   else if (!issues.some(({ number, body }) => number === Number(issue) && body?.includes(`\`${name}\``))) stale.push(`${name} (#${issue} is not an open issue that names it: remove the entry)`);
+  else if (!named.some(({ kind }) => kind === name)) stale.push(`${name} (the lane reads it as no uncatalogued event kind: remove the entry)`);
+  else if (listed.has(name)) stale.push(`${name} (listed twice: remove one entry)`);
   else listed.add(name);
 }
-const drift = catalogueDrift([...docs, ...issues.map(({ number, body }) => ({ where: `#${number}`, text: body ?? '' }))]).filter(({ kind }) => !listed.has(kind));
+const drift = named.filter(({ kind }) => !listed.has(kind));
 // A doc's drift names the lines that hold the kind; an issue's names the issue.
 const where = ({ kind, where }) => {
   const doc = docs.find((d) => d.where === where);
@@ -37,7 +48,7 @@ const where = ({ kind, where }) => {
 if (drift.length || stale.length) {
   const problems = [
     drift.length && `${drift.length} event kinds named in backticks are not in the catalogue, nor in ${LIST}: ${drift.map((d) => `${d.kind} (${where(d)})`).join(', ')}`,
-    stale.length && `${stale.length} entries of ${LIST} are stale: ${stale.join(', ')}`,
+    stale.length && `${LIST} has ${stale.length} stale or useless entries: ${stale.join(', ')}`,
   ];
   console.log(`FAIL ${problems.filter(Boolean).join('; ')}`);
   process.exit(1);

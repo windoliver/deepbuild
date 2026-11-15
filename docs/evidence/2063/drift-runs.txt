@@ -1,23 +1,29 @@
-# The catalogue drift lane by hand, 2026-11-14, linux/arm64, on the live tracker (1,198 open issues) and main's docs.
-# Runs 3-6 read a copy of the tracker with three planted issues, #99001-#99003; the list was restored after each.
-== 1. main's lane (origin/main fcd8c3852 scripts/catalogue-drift.mjs) on the live tracker
+# The catalogue drift lane by hand, 2026-11-14, linux/arm64, on the live tracker (1,199 open issues) and main's docs.
+# Runs 3, 4 and 6 read a copy of the tracker with three planted issues, #99001-#99003; the list was restored after each run.
+== 1. main's lane (origin/main eb2822a36 scripts/catalogue-drift.mjs) on the live tracker
 FAIL 19 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:537), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
 exit=1
 == 2. this change on the live tracker and main's real docs
-catalogue drift: 2 docs and 1198 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (14 listed)
+catalogue drift: 2 docs and 1199 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (14 listed)
 exit=0
 == 3. this change, tracker copy with a planted planned check (plan.ghost #99001), kind rule (process.drain #99002) and fixture (archive.vault #99003), none listed
 FAIL 3 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: plan.ghost (#99001), process.drain (#99002), archive.vault (#99003)
 exit=1
 == 4. the same copy, the three listed beside their issues
-catalogue drift: 2 docs and 1201 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (17 listed)
+catalogue drift: 2 docs and 1202 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (17 listed)
 exit=0
 == 5. the same list on the live tracker, where #99001-#99003 are not open issues
-FAIL 3 entries of scripts/not-event-kinds.txt are stale: plan.ghost (#99001 is not an open issue that names it: remove the entry), process.drain (#99002 is not an open issue that names it: remove the entry), archive.vault (#99003 is not an open issue that names it: remove the entry)
+FAIL scripts/not-event-kinds.txt has 3 stale or useless entries: plan.ghost (#99001 is not an open issue that names it: remove the entry), process.drain (#99002 is not an open issue that names it: remove the entry), archive.vault (#99003 is not an open issue that names it: remove the entry)
 exit=1
 == 6. plan.overlay also listed under #99001, which names plan.ghost, not plan.overlay; plan.ghost stays unlisted
-FAIL 3 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: plan.ghost (#99001), process.drain (#99002), archive.vault (#99003); 1 entries of scripts/not-event-kinds.txt are stale: plan.overlay (#99001 is not an open issue that names it: remove the entry)
+FAIL 3 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: plan.ghost (#99001), process.drain (#99002), archive.vault (#99003); scripts/not-event-kinds.txt has 1 stale or useless entries: plan.overlay (#99001 is not an open issue that names it: remove the entry)
 exit=1
-== 7. offline: no cached issues and gh unreachable
+== 7. plan.overlay listed a second time, under #1261, which names it too, and the catalogued ask.created listed under #2135, which names it
+FAIL scripts/not-event-kinds.txt has 2 stale or useless entries: plan.overlay (listed twice: remove one entry), ask.created (the lane reads it as no uncatalogued event kind: remove the entry)
+exit=1
+== 8. the list missing
+FAIL scripts/not-event-kinds.txt can't be read (ENOENT)
+exit=1
+== 9. offline: no cached issues and gh unreachable
 INCONCLUSIVE could not fetch the open issues: none of the git remotes configured for this repository correspond to the GH_HOST environment variable. Try adding a matching remote or unsetting the variable
 exit=1
