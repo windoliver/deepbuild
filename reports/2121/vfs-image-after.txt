@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 /private/tmp/deepbuild-2121.WRTSs6/pr/packages/hub/test
+
+ ✓ vfs-image.test.ts > the VFS opens a closed WAL image, preserving FULL commits and losing later NORMAL commits at a cut 169ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:39:35
+   Duration  745ms (tests 46%, import 34%, transform 19%, worker 1%)
