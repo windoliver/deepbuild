@@ -29,12 +29,16 @@ const freeBytes = () => {
 /** Whether a shard may take its next group: the disk still holds a shard's growth above the floor. */
 export const roomy = () => freeBytes() - SHARD_BYTES >= FLOOR;
 const startOf = (pid) => spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
-/** Copy-on-write, on APFS one clone per file: a folder of the worktree's into the shard, replacing it. */
+/**
+ * A folder of the worktree's into the shard, replacing it: copy-on-write where the disk has it, on APFS one clone per
+ * file by `cp -c`, which only macOS's cp has, and elsewhere by GNU cp's --reflink=auto, which copies in full on a disk
+ * with none, as ext4 (#2574).
+ */
 const clone = (from, to) => {
   rmSync(to, { recursive: true, force: true });
   if (!existsSync(from)) return;
-  const result = spawnSync('cp', ['-c', '-R', '-p', from, to], { encoding: 'utf8' });
-  if (result.status !== 0) throw Error(`cp -c ${from} failed: ${result.stderr.trim()}`);
+  const result = spawnSync('cp', [process.platform === 'darwin' ? '-c' : '--reflink=auto', '-R', '-p', from, to], { encoding: 'utf8' });
+  if (result.status !== 0) throw Error(`cp ${from} failed: ${result.stderr.trim()}`);
 };
 
 /**
@@ -85,7 +89,9 @@ function prepare(root, k) {
   if (!made) {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
-    for (const name of readdirSync(root).filter((name) => name !== '.git')) clone(join(root, name), join(dir, name));
+    // Off macOS the worktree's target/ stays behind: with no copy-on-write it is a full copy of many GB a shard, so
+    // the shard builds its own, once.
+    for (const name of readdirSync(root).filter((name) => name !== '.git' && (name !== 'target' || process.platform === 'darwin'))) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);

@@ -47,22 +47,23 @@ test('a change reaches the tests that import it, near or far, through the packag
   const { root, files } = repo(t, packages);
   const { tests } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
   // Four imports away; a selector that follows only direct importers, takes a's whole entry for `deep` (so other.test.ts
-  // too) or counts a type-only import fails here.
-  assert.deepEqual(tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/4/entry.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
+  // too) or counts a type-only import fails here. The test starting b's build sees a only through b, so it is wide (#2574).
+  assert.deepEqual(tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/4/entry.test.ts']);
   // A change to the entry itself reaches everything imported through it by name.
   assert.deepEqual(select(root, ['packages/a/src/index.ts'], { files, workspace: [] }).tests,
-    ['tests/acceptance/1/b.test.ts', 'tests/acceptance/2/other.test.ts', 'tests/acceptance/4/entry.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
+    ['tests/acceptance/1/b.test.ts', 'tests/acceptance/2/other.test.ts', 'tests/acceptance/4/entry.test.ts']);
 });
 
-test('a test starting a package\'s build sees that package and the ones it depends on; deeper is wide, and a fixture reaches its folder', (t) => {
+test('a test starting a package\'s build sees that package; through one it depends on is wide (#2574), and a fixture reaches its folder', (t) => {
   const { root, files } = repo(t, packages);
-  // c's build reaches leaf.ts only through b, which c depends on, and a, which it doesn't.
+  // b's and c's builds reach leaf.ts only through other packages.
   const deep = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
   assert.equal(deep.tests.includes('tests/acceptance/6/c-build.test.mjs'), false);
-  assert.deepEqual(deep.wide, ['tests/acceptance/6/c-build.test.mjs']);
+  assert.deepEqual(deep.wide, ['tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
+  // b's own build is near; c's, which reaches b as a package it depends on, is wide.
   const near = select(root, ['packages/b/src/index.ts'], { files, workspace: [] });
-  assert.deepEqual(near.tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
-  assert.deepEqual(near.wide, []);
+  assert.deepEqual(near.tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
+  assert.deepEqual(near.wide, ['tests/acceptance/6/c-build.test.mjs']);
   // A fixture its test reads by a path built at run time reaches the tests of its own folder; a doc reaches none.
   const fixture = select(root, ['tests/acceptance/7/fixtures/case.json', 'packages/a/README.md', 'packages/a/notes.txt'], { files, workspace: [] });
   assert.deepEqual(fixture.tests, ['tests/acceptance/7/case.test.ts', 'tests/acceptance/7/other.test.ts']);
