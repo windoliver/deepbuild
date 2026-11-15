@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 <work>/work/tests/acceptance/2516
+
+ ↓ timing.test.ts > AC6 the three passes' GPU time on the reference Mac > AC6 the prepass, the occlusion and the blur are timed on the castle at 1080p, at 8 and 16 samples and half and full resolution, as p50 and p95 over five runs after warm-up, under the GPU lease
+ ✓ timing.test.ts > AC6 the three passes' GPU time on the reference Mac > AC6 a run timed while another GPU job holds the lease reads INCONCLUSIVE, never a number 4ms
+ ✓ timing.test.ts > AC6 the three passes' GPU time on the reference Mac > AC6 the design's Cost line for the look's ao carries a judged run's readings in place of its estimate 5ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 1 skipped (3)
+   Start at  01:23:35
+   Duration  1.15s (tests 96%, import 2%, transform 2%)

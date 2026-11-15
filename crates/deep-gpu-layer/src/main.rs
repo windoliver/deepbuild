@@ -145,6 +145,10 @@ pub enum Planted {
     EncodesEveryFrame,
     ReplaysAfterAdd,
     PairsNewestSlot,
+    /// #2516: wrong ambient-occlusion estimators (tests/acceptance/2516).
+    AoMainLoop,
+    AoUniformHemisphere,
+    AoFullRadius,
     /// #380's wrong programs (tests/acceptance/380/README.md: Planted programs).
     HostUnclipped,
     SlowGlow,
@@ -499,6 +503,9 @@ impl Planted {
             "encodes_every_frame" => Planted::EncodesEveryFrame,
             "replays_after_add" => Planted::ReplaysAfterAdd,
             "pairs_newest_slot" => Planted::PairsNewestSlot,
+            "ao_main_loop" => Planted::AoMainLoop,
+            "ao_uniform_hemisphere" => Planted::AoUniformHemisphere,
+            "ao_full_radius" | "ao_points_at_radius" => Planted::AoFullRadius,
             "host_unclipped" => Planted::HostUnclipped,
             "slow_glow" => Planted::SlowGlow,
             "compares_any_environment" => Planted::ComparesAnyEnvironment,
