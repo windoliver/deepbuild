@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 3 skipped (4)
+   Start at  01:44:03
+   Duration  18.19s (tests 97%, transform 2%)
+

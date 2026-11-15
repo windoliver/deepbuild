@@ -1,0 +1,237 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+stdout | tests/acceptance/2068/forge-wait.test.ts > #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait
+ISSUE2068_TIMING {"mode":"five-seconds","baseline":"1c4d1f0e2aaad8c6a6573848823566d04ff73d17","date":"2026-11-14T09:30:29.778Z","node":"v24.22.2","platform":"darwin","arch":"arm64","configured_b_after_a_ms":100,"b_sent_ms":102.63208299999951,"a_record":{"absent_ms":26553.552458,"present_ms":26566.960082999998,"log_pos":13},"b_record":{"absent_ms":26701.555708,"present_ms":26716.289124999996,"log_pos":17},"b_minus_first_forge_answer_ms":20511.678041999996,"forge":[{"path":"/repos/fixture-2068/widgets/issues/7","page":1,"requested_ms":1192.0102500000003,"answered_ms":6204.611083000001,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":1,"requested_ms":6307.996375,"answered_ms":11313.202416,"disconnected":false},{"path":"/repos/fixture-2068/widgets","page":1,"requested_ms":11408.765124999998,"answered_ms":16410.535,"disconnected":false},{"path":"/repos/fixture-2068/widgets/collaborators","page":1,"requested_ms":16425.542791,"answered_ms":21428.063666,"disconnected":false},{"path":"/repos/fixture-2068/widgets/collaborators","page":2,"requested_ms":21440.221166,"answered_ms":26474.939333000002,"disconnected":false}]}
+
+stdout | tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+ISSUE2068_TIMING {"mode":"never","baseline":"1c4d1f0e2aaad8c6a6573848823566d04ff73d17","date":"2026-11-14T09:31:02.377Z","node":"v24.22.2","platform":"darwin","arch":"arm64","configured_b_after_a_ms":100,"b_sent_ms":104.16345799999544,"a_record":{"absent_ms":20352.847207999992,"present_ms":20366.666249999995,"log_pos":14},"b_record":null,"b_minus_first_forge_answer_ms":null,"forge":[{"path":"/repos/fixture-2068/widgets/issues/7","page":1,"requested_ms":627.7282080000004,"answered_ms":null,"disconnected":null}],"acknowledged_hold_ms":2095,"prompt_at_deadline":false,"task_at_deadline":false,"b_at_deadline":false}
+
+stdout | tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+ISSUE2068_TIMING {"mode":"pages-forever","baseline":"1c4d1f0e2aaad8c6a6573848823566d04ff73d17","date":"2026-11-14T09:31:12.240Z","node":"v24.22.2","platform":"darwin","arch":"arm64","configured_b_after_a_ms":100,"b_sent_ms":113.64287499999045,"a_record":null,"b_record":null,"b_minus_first_forge_answer_ms":null,"forge":[{"path":"/repos/fixture-2068/widgets/issues/7","page":1,"requested_ms":360.145875000002,"answered_ms":361.5926669999899,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":1,"requested_ms":463.93299999999,"answered_ms":465.3666249999951,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":2,"requested_ms":484.50320799999463,"answered_ms":491.5395419999986,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":3,"requested_ms":723.8441669999884,"answered_ms":724.1399999999994,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":4,"requested_ms":733.1079170000012,"answered_ms":734.5529580000002,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":5,"requested_ms":737.6111249999958,"answered_ms":739.4281669999909,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":6,"requested_ms":743.1607499999955,"answered_ms":744.9077919999982,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":7,"requested_ms":747.3256669999973,"answered_ms":749.6729999999952,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":8,"requested_ms":751.0921669999952,"answered_ms":752.5693329999922,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":9,"requested_ms":756.7042499999952,"answered_ms":758.0242500000022,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":10,"requested_ms":759.3571669999947,"answered_ms":762.4010419999977,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":11,"requested_ms":772.7037500000006,"answered_ms":775.0331670000014,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":12,"requested_ms":781.6859580000018,"answered_ms":785.6253749999887,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":13,"requested_ms":790.9955419999897,"answered_ms":791.1209999999992,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":14,"requested_ms":793.0796249999985,"answered_ms":794.6569579999923,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":15,"requested_ms":806.2598749999888,"answered_ms":808.6207500000019,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":16,"requested_ms":819.9236249999958,"answered_ms":823.2039169999916,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":17,"requested_ms":826.3016669999924,"answered_ms":828.9569579999952,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":18,"requested_ms":839.596916999988,"answered_ms":846.5699579999928,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":19,"requested_ms":855.6243749999994,"answered_ms":874.6311669999996,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":20,"requested_ms":1109.4257079999952,"answered_ms":1112.2775419999962,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":21,"requested_ms":1113.6851669999887,"answered_ms":1114.6082079999906,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":22,"requested_ms":1115.9139999999898,"answered_ms":1116.497292,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":23,"requested_ms":1118.328582999995,"answered_ms":1120.6036249999888,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":24,"requested_ms":1122.327250000002,"answered_ms":1123.156582999989,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":25,"requested_ms":1125.9050829999906,"answered_ms":1126.326166999992,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":26,"requested_ms":1129.6414579999982,"answered_ms":1130.9776669999992,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":27,"requested_ms":1132.034832999998,"answered_ms":1134.3266250000015,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":28,"requested_ms":1135.6116249999905,"answered_ms":1136.089082999999,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":29,"requested_ms":1138.13270799999,"answered_ms":1139.6034169999912,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":30,"requested_ms":1141.5959999999905,"answered_ms":1144.2696670000005,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":31,"requested_ms":1148.0111669999897,"answered_ms":1150.466625000001,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":32,"requested_ms":1153.1134579999925,"answered_ms":1154.5171249999985,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":33,"requested_ms":1156.984541999991,"answered_ms":1157.0834999999934,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":34,"requested_ms":1158.2154169999994,"answered_ms":1160.3773749999964,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":35,"requested_ms":1162.64904199999,"answered_ms":1163.3014580000017,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":36,"requested_ms":1164.3857500000013,"answered_ms":1168.4508329999953,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":37,"requested_ms":1171.7686669999966,"answered_ms":1172.513249999989,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":38,"requested_ms":1175.169624999995,"answered_ms":1177.1540419999947,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":39,"requested_ms":1179.406999999992,"answered_ms":1180.7232079999958,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":40,"requested_ms":1182.044207999992,"answered_ms":1185.4035000000003,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":41,"requested_ms":1191.797458000001,"answered_ms":1195.8871669999935,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":42,"requested_ms":1204.5663749999949,"answered_ms":1206.025416999997,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":43,"requested_ms":1211.2334169999958,"answered_ms":1214.7925419999956,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":44,"requested_ms":1306.9004999999888,"answered_ms":1310.651417000001,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":45,"requested_ms":1326.6603329999925,"answered_ms":1343.7474999999977,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":46,"requested_ms":1367.9841249999881,"answered_ms":1368.0869169999933,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":47,"requested_ms":1390.804541999998,"answered_ms":1393.0400829999999,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":48,"requested_ms":1487.4207499999902,"answered_ms":1488.9198329999927,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":49,"requested_ms":1490.1500419999938,"answered_ms":1491.4520829999965,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":50,"requested_ms":1494.3507079999981,"answered_ms":1497.5202080000017,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":51,"requested_ms":1498.6657919999998,"answered_ms":1499.8343749999913,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":52,"requested_ms":1504.7025829999911,"answered_ms":1506.9688329999917,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":53,"requested_ms":1511.048708000002,"answered_ms":1513.7129579999892,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":54,"requested_ms":1515.252457999988,"answered_ms":1517.3122919999878,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":55,"requested_ms":1521.0813329999946,"answered_ms":1523.419167,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":56,"requested_ms":1527.6064169999881,"answered_ms":1531.2401249999966,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":57,"requested_ms":1535.7782079999888,"answered_ms":1538.059374999997,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":58,"requested_ms":1546.3586669999931,"answered_ms":1550.9780829999945,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":59,"requested_ms":1560.9147499999963,"answered_ms":1561.6262920000008,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":60,"requested_ms":1564.242624999999,"answered_ms":1568.5809579999914,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":61,"requested_ms":1580.945624999993,"answered_ms":1582.8941249999916,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":62,"requested_ms":1585.4706670000014,"answered_ms":1586.7774169999902,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":63,"requested_ms":1589.0960419999901,"answered_ms":1593.6072920000006,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":64,"requested_ms":1601.1345829999918,"answered_ms":1604.5146669999958,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":65,"requested_ms":1615.2497499999881,"answered_ms":1616.7643749999988,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":66,"requested_ms":1623.0848750000005,"answered_ms":1624.5556249999936,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":67,"requested_ms":1636.059832999992,"answered_ms":1637.802582999997,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":68,"requested_ms":1648.5339169999934,"answered_ms":1655.597332999998,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":69,"requested_ms":1668.091207999998,"answered_ms":1673.9498749999912,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":70,"requested_ms":1679.878291999994,"answered_ms":1680.8414169999887,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":71,"requested_ms":1688.4410419999913,"answered_ms":1690.2788329999894,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":72,"requested_ms":1692.6301669999957,"answered_ms":1696.982124999995,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":73,"requested_ms":1710.3004169999913,"answered_ms":1715.9539579999982,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":74,"requested_ms":1726.7403329999943,"answered_ms":1730.4433329999883,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":75,"requested_ms":1741.6844579999888,"answered_ms":1746.7098750000005,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":76,"requested_ms":1754.7549579999904,"answered_ms":1763.166041999997,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":77,"requested_ms":1775.8093329999974,"answered_ms":1778.2209169999987,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":78,"requested_ms":1780.0696669999888,"answered_ms":1783.0225829999981,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":79,"requested_ms":1785.5272079999995,"answered_ms":1787.9886669999978,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":80,"requested_ms":1792.47987499999,"answered_ms":1797.4974999999977,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":81,"requested_ms":1818.714374999996,"answered_ms":1825.9335419999989,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":82,"requested_ms":1836.5726670000004,"answered_ms":1838.0112079999963,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":83,"requested_ms":1849.9174169999897,"answered_ms":1850.3152499999997,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":84,"requested_ms":1863.0574579999957,"answered_ms":1865.6544999999896,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":85,"requested_ms":1877.170207999996,"answered_ms":1884.3763329999929,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":86,"requested_ms":1891.2354579999956,"answered_ms":1896.3404579999915,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":87,"requested_ms":1901.6892919999955,"answered_ms":1903.2078749999928,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":88,"requested_ms":1908.6749579999887,"answered_ms":1913.6715829999885,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":89,"requested_ms":1920.0112919999956,"answered_ms":1921.398583000002,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":90,"requested_ms":1925.5325420000008,"answered_ms":1930.627582999994,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":91,"requested_ms":1936.063666999995,"answered_ms":1937.5640829999902,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":92,"requested_ms":1942.1905419999966,"answered_ms":1948.2002499999944,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":93,"requested_ms":1952.6047919999983,"answered_ms":1954.5899579999968,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":94,"requested_ms":1960.2485420000012,"answered_ms":1963.7302079999936,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":95,"requested_ms":1966.9822920000006,"answered_ms":1967.252708,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":96,"requested_ms":1969.3845829999918,"answered_ms":1972.656833000001,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":97,"requested_ms":1976.2806249999994,"answered_ms":1980.3239999999932,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":98,"requested_ms":1982.2907500000001,"answered_ms":1984.5534169999883,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":99,"requested_ms":1988.5412499999948,"answered_ms":1990.3065829999978,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":100,"requested_ms":1992.031707999995,"answered_ms":1993.8193749999919,"disconnected":false},{"path":"/repos/fixture-2068/widgets/issues/7/comments","page":101,"requested_ms":2001.7159580000007,"answered_ms":null,"disconnected":null}],"acknowledged_hold_ms":2003,"prompt_at_deadline":false,"task_at_deadline":false,"b_at_deadline":false}
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts (4 tests | 3 failed) 88418ms
+   × #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait 33875ms
+   × #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning 32560ms
+   × #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers 11741ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait
+Error: INCONCLUSIVE AC1: no forge read in flight at B arrival; not proof of the wait
+ ❯ tests/acceptance/2068/forge-wait.test.ts:33:54
+     31|     timing('five-seconds', f, sentA, sentB, w);
+     32|     const first = f.requests.find((r) => r.answered !== undefined);
+     33|     if (!first || first.requested >= sentB.at) throw Error('INCONCLUSI…
+       |                                                      ^
+     34|     const recorded = w.events.find((e) => e.id === sentB.id);
+     35|     expect(recorded, 'AC1 forge wait: B PostToolUse must reach the rec…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+AssertionError: AC2 never forge wait: A prompt must be recorded by its acknowledged hold, not wait on a network request timeout: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ byDeadline tests/acceptance/2068/forge-wait.test.ts:46:76
+     44|   if (event && event.absent < deadline && event.present > deadline)
+     45|     throw Error(`INCONCLUSIVE ${assertion}: commit first observed acro…
+     46|   expect.soft(event !== undefined && event.present <= deadline, assert…
+       |                                                                            ^
+     47| }
+     48|
+ ❯ tests/acceptance/2068/forge-wait.test.ts:75:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+AssertionError: AC2 never forge wait: A task must open from your words by the same hold, not merely return a hook reply: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ byDeadline tests/acceptance/2068/forge-wait.test.ts:46:76
+     44|   if (event && event.absent < deadline && event.present > deadline)
+     45|     throw Error(`INCONCLUSIVE ${assertion}: commit first observed acro…
+     46|   expect.soft(event !== undefined && event.present <= deadline, assert…
+       |                                                                            ^
+     47| }
+     48|
+ ❯ tests/acceptance/2068/forge-wait.test.ts:76:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+AssertionError: AC2 never forge wait: later B must not remain behind A's read: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ byDeadline tests/acceptance/2068/forge-wait.test.ts:46:76
+     44|   if (event && event.absent < deadline && event.present > deadline)
+     45|     throw Error(`INCONCLUSIVE ${assertion}: commit first observed acro…
+     46|   expect.soft(event !== undefined && event.present <= deadline, assert…
+       |                                                                            ^
+     47| }
+     48|
+ ❯ tests/acceptance/2068/forge-wait.test.ts:77:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+AssertionError: AC2 forge wait: A's session row must say the issue could not be read, not silently fall back; visible row: {"why":"at work","note":"This session's Claude Code home (<fixture-home>/h/.claude) loads mods DeepBuild couldn't read (no claude on PATH to list and read the plugins with), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.","detailWhy":"last seen 21s ago"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts:94:165
+     92|         const unread = /couldn['’]?t|cannot|can['’]?t|unable|fail|unre…
+     93|         expect.soft(row, 'AC2 forge wait: A has a visible session row'…
+     94|         expect.soft(namesSource && unread, `AC2 forge wait: A's sessio…
+       |                                                                                                                                                                     ^
+     95|       }
+     96|     } finally { await w?.stop(); await f.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: A prompt must be recorded by its acknowledged hold, not wait on a network request timeout: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ byDeadline tests/acceptance/2068/forge-wait.test.ts:46:76
+     44|   if (event && event.absent < deadline && event.present > deadline)
+     45|     throw Error(`INCONCLUSIVE ${assertion}: commit first observed acro…
+     46|   expect.soft(event !== undefined && event.present <= deadline, assert…
+       |                                                                            ^
+     47| }
+     48|
+ ❯ tests/acceptance/2068/forge-wait.test.ts:75:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: A task must open from your words by the same hold, not merely return a hook reply: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ byDeadline tests/acceptance/2068/forge-wait.test.ts:46:76
+     44|   if (event && event.absent < deadline && event.present > deadline)
+     45|     throw Error(`INCONCLUSIVE ${assertion}: commit first observed acro…
+     46|   expect.soft(event !== undefined && event.present <= deadline, assert…
+       |                                                                            ^
+     47| }
+     48|
+ ❯ tests/acceptance/2068/forge-wait.test.ts:76:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: later B must not remain behind A's read: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ byDeadline tests/acceptance/2068/forge-wait.test.ts:46:76
+     44|   if (event && event.absent < deadline && event.present > deadline)
+     45|     throw Error(`INCONCLUSIVE ${assertion}: commit first observed acro…
+     46|   expect.soft(event !== undefined && event.present <= deadline, assert…
+       |                                                                            ^
+     47| }
+     48|
+ ❯ tests/acceptance/2068/forge-wait.test.ts:77:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: record the person's original words: expected undefined to be 'Fix expired token handling as request…' // Object.is equality
+
+- Expected:
+"Fix expired token handling as requested in https://github.com/fixture-2068/widgets/issues/7"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts:80:102
+     78|       const recorded = w.events.find((e) => e.id === sentA.id);
+     79|       const task = taskFor(w, a);
+     80|       expect.soft(recorded?.data.text, `AC2 ${mode} forge wait: record…
+       |                                                                                                      ^
+     81|       expect.soft(recorded?.data.from, `AC2 ${mode} forge wait: preser…
+     82|       // Match the requested subject, not a new exact generated title …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: preserve the person's origin: expected undefined to be 'person' // Object.is equality
+
+- Expected:
+"person"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts:81:96
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: fallback task names the expired-token request, not the forge title or partial criteria: expected '' to match /expir\w*.*token|token.*expir/i
+
+- Expected:
+/expir\w*.*token|token.*expir/i
+
++ Received:
+""
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts:83:165
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+AssertionError: AC2 pages-forever forge wait: the recorded prompt names the actual fallback task: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts:84:171
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  01:29:56
+   Duration  89.06s (tests 100%)
+
