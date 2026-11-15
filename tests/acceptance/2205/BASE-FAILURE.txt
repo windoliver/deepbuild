@@ -1,0 +1,98 @@
+# DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/2205/spec-checks.test.ts, run once on base b9131dbd9857aefc4dcc39dd0d534d007b1ef671 (2026-11-15, 06:24 UTC; the vitest job prints its own start in local time).
+# Below: the selection line affected.mjs printed, its vitest job's own log, its summary line and the command's exit status, with the machine's
+# paths replaced by <repo>, <logs> and node and the terminal's colour codes taken out; nothing else is changed. Of the summary's
+# counts, 6 of the 158 new failures and the 2 passed are this file's tests; the other 152 new and the 42 already failing on main are
+# lint findings of the whole repository, none naming a file of this suite. The run printed no WIDE and no INCONCLUSIVE line.
+
+parallel vitest: tests/acceptance/2205/spec-checks.test.ts
+
+## vitest job log (<logs>/vitest.log)
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2205/spec-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+xxx··xxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > AC1 #2205.a7438bd1 a name the done claim lists that checks doesn't define stands on the claim as BLOCKED, naming it > AC1 #2205.a7438bd1 with claims: {done: {checks: [unit, typechek]}} and unit and typecheck defined, a claim whose unit check passes is BLOCKED, naming typechek
+AssertionError: the done claim names typechek and checks defines only unit and typecheck, so typechek must stand on the claim as a check missing something outside the code and the claim is BLOCKED, never judged without it: claim:01M7EY269WXT3Q0VKXABB8HS9R: verdict PASS [".deepbuild/checks/expired-rejected.sh: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: unit passed, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:28:258
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > AC2 #2205.df00835d an entry the gate can't turn into a run stands on the claim as BLOCKED, naming it > AC2 #2205.df00835d with checks.checkout written as {type: journey, file: .deepbuild/journeys/checkout.yaml} and named by the done claim, the claim is BLOCKED, naming checkout
+AssertionError: the done claim names checkout, whose entry has a type and a file and no run line, so nothing can run it: checkout must stand on the claim as a check missing something outside the code and the claim is BLOCKED, never judged without it: claim:01M7EY2JCJNB08ZXCRN0G3MCQ6: verdict PASS [".deepbuild/checks/expired-rejected.sh: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: unit passed, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:37:286
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > AC3 #2205.e7406ea9 a done.yaml that doesn't parse makes the claim BLOCKED, naming the file and where the parser stopped > AC3 #2205.e7406ea9 with a done.yaml that ends inside an open checks: [ on its line 12, the claim is BLOCKED, naming .deepbuild/done.yaml and line 12, and is never PASS
+AssertionError: .deepbuild/done.yaml ends inside an open checks: [ on its line 12, so it doesn't parse and the claim must be BLOCKED, never judged on its definition alone as in a repo with no spec: claim:01M7EY2Y7AVVZDAE0JDDAG98TS: verdict PASS [".deepbuild/checks/expired-rejected.sh: PASS on 1 clean run"]; its runs: .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:46:230
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no claims block: the claim takes every check, so unit runs and passes, and checks.checkout written as {type: journey, file: .deepbuild/journeys/checkout.yaml} makes the claim BLOCKED, naming checkout, with you as owner
+AssertionError: the spec has no claims block, so the claim takes every check checks holds, and checkout has a type and a file and no run line: it must stand on the claim as a check missing something outside the code and the claim is BLOCKED, never judged without it: claim:01M7EY4240R0WS7YRE3ERXRDGZ: verdict PASS [".deepbuild/checks/expired-rejected.sh: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: unit passed, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:80:302
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no run line on a command entry: with checks.typecheck written as {type: command} and named by the done claim, the claim is BLOCKED, naming typecheck, with you as owner
+AssertionError: the done claim names typecheck, whose entry is of the command kind and has no run line, so the gate can't turn it into a run: typecheck must stand on the claim as a check missing something outside the code and the claim is BLOCKED, never judged without it: claim:01M7EY4E9Z8PQNNA2D73EFD58T: verdict PASS [".deepbuild/checks/expired-rejected.sh: PASS on 1 clean run","unit: PASS on 1 clean run"]; its runs: unit passed, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:89:308
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no checks block: with claims: {done: {checks: [typecheck]}} and nothing under checks, no check of the spec can run and the claim is BLOCKED, naming typecheck, with you as owner
+AssertionError: the done claim names typecheck and the spec defines no check, so typecheck must stand on the claim as a check missing something outside the code and the claim is BLOCKED, never judged on its definition alone: claim:01M7EY4TFZZYW16CGZ5KH903ES: verdict PASS [".deepbuild/checks/expired-rejected.sh: PASS on 1 clean run"]; its runs: .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:98:260
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 2 passed (8)
+   Start at  22:24:34
+   Duration  102.26s (tests 100%)
+
+## summary line and exit status
+FAIL affected: 158 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 115 s at load 193; logs in <logs>
+exit 1
