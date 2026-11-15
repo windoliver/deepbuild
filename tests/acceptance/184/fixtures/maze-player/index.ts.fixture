@@ -1,0 +1,28 @@
+// The maze player (#184 criteria 8, 11 and 12): a first-party test check plug-in other than the playtest. Its runner
+// makes the plays its config file names through deep.canvas.play, in order, writes each reply exactly as it arrived (or
+// the error that refused the call) as one JSON line to the config's `seen` file, and reports passed with the config's
+// testsRun and evidence: `tracks`, every play's track hash but the play at index `drop` when one is named; `frames`,
+// every frame hash its plays returned and nothing else (the planted runner whose PASS rests on frames alone).
+import { appendFileSync, readFileSync } from 'node:fs';
+
+export default function (deep: any): void {
+  const { config } = JSON.parse(readFileSync(new URL('./player.json', import.meta.url), 'utf8')) as { config: string };
+  deep.registerCheck('ext.maze-player.play', async () => {
+    const c = JSON.parse(readFileSync(config, 'utf8')) as {
+      seen: string; testsRun: number; evidence: 'tracks' | 'frames'; drop?: number; plays: { piece: string; run: Record<string, unknown> }[];
+    };
+    const evidence: string[] = [];
+    for (const [i, p] of c.plays.entries()) {
+      let reply: any;
+      try {
+        reply = await deep.canvas.play(p.piece, p.run);
+      } catch (e: any) {
+        reply = { error: String(e?.message ?? e) };
+      }
+      appendFileSync(c.seen, `${JSON.stringify({ piece: p.piece, run: p.run, reply })}\n`);
+      if (c.evidence === 'tracks' && i !== c.drop && typeof reply?.track === 'string') evidence.push(reply.track);
+      if (c.evidence === 'frames') for (const f of Array.isArray(reply?.frames) ? reply.frames : []) if (typeof f?.sha256 === 'string') evidence.push(f.sha256);
+    }
+    return { outcome: 'passed', testsRun: c.testsRun, failures: [], evidence, read: [], mask: null };
+  });
+}
