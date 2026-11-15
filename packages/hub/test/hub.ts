@@ -58,8 +58,8 @@ export function deep(home: string, cwd: string, args: readonly string[]): Promis
 }
 
 /** A hub `withHub` started: it can be restarted (with its own environment), and waited on when it kills itself. */
-/** `between` runs with the hub stopped, before it starts again. */
-export interface Hub { restart: (env?: Record<string, string>, between?: () => void | Promise<void>) => Promise<void>; exited: (within?: number) => Promise<void> }
+/** `between` runs with the hub stopped, before it starts again; `args` follow `deep hub run` at that start. */
+export interface Hub { restart: (env?: Record<string, string>, between?: () => void | Promise<void>, args?: string[]) => Promise<void>; exited: (within?: number) => Promise<void> }
 
 /** Runs `body` against a hub started on a temp home with `env` added, then stops the hub and removes the home. */
 export async function withHub(body: (root: string, home: string, hub: Hub) => Promise<void>, env: Record<string, string> = {}): Promise<void> {
@@ -67,8 +67,8 @@ export async function withHub(body: (root: string, home: string, hub: Hub) => Pr
   const root = join(home, '.deepbuild');
   mkdirSync(root, { recursive: true });
   let hub: ChildProcessByStdio<null, Readable, null>;
-  const start = async (extra: Record<string, string>) => {
-    hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home, ...extra }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const start = async (extra: Record<string, string>, args: string[] = []) => {
+    hub = spawn(process.execPath, [CLI, 'hub', 'run', ...args], { env: { ...process.env, HOME: home, ...extra }, stdio: ['ignore', 'pipe', 'inherit'] });
     let timer: NodeJS.Timeout | undefined;
     await new Promise((resolve, reject) => {
       hub.stdout.once('data', resolve);
@@ -92,7 +92,7 @@ export async function withHub(body: (root: string, home: string, hub: Hub) => Pr
   };
   try {
     await start(env);
-    await body(root, home, { restart: async (extra = {}, between) => { await stop(); await between?.(); await start(extra); }, exited });
+    await body(root, home, { restart: async (extra = {}, between, args) => { await stop(); await between?.(); await start(extra, args); }, exited });
   } finally {
     await stop();
     rmSync(home, { recursive: true, force: true });
