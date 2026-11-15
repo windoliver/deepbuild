@@ -8,6 +8,7 @@
 pub mod check;
 pub mod kit;
 pub mod layouts;
+pub mod link;
 pub mod module;
 pub mod rewrite;
 pub mod trap;

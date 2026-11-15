@@ -1,0 +1,245 @@
+Base commit: 0e5572731 (Merge pull request #2529), the brief's base; no implementation of #1946 exists there.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook (target/debug/deep-hook).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1946 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-15 (00:57 local)  Machine: Apple silicon Mac, load average 288 (1-minute) at the start
+Node: v24.22.0  vitest 5.0.5. Hosts: the Lima VMs deep-ubuntu (sudo-rs 0.2.13) and deep-fedora (sudo 1.9.17p2), both
+reached over SSH by the harness. Paths: <repo> is the worktree, ~ the home; the VM user, key paths and passwords are
+redacted. One run, not repeated.
+Result: Test Files 4 failed (4); Tests 8 failed (8); about 572 s.
+
+No test passed at the base. Every unplanted hub started, each throwaway user was made on its VM (sudo with its
+password, lingering on), the agents' sessions started (SessionStart through deep-hook), and on dh-ubuntu the setup
+worked at the base: the remote run as you wrote and enabled dh1946-<id>-web.service (listening on 127.0.0.1), the
+agent's root plan installed dh1946-<id>-pkg, approved with deep inbox answer and run by deep host run with the password
+typed at sudo's prompt, and the host's checks (draftMachine and the machine kind of packages/checks-host) passed before
+setup and failed after it at the service's address. The failures come at the first missing surface:
+
+  remove.test.ts (AC1 #1946.a67b553d, AC3 #1946.525c8ef7), dh-ubuntu
+    x AC1: after Remove it, the host's check still fails: "127.0.0.1:<port> listens on dh-ubuntu, beyond what was
+      asked" (deep host remove doesn't exist, so nothing was undone).
+    x AC3 judgeGrants, seven failures: no host.changed as you for the service (run.start's `changes` is ignored at the
+      base); the service still enabled; the host's checks fail naming it; `deep host remove dh-ubuntu` exit 2 with the
+      usage of deep host (no `remove`); no root plan raised; the package still installed; no host.undone.
+    x AC3 planted remove-undoes-all-as-root: the hub refuses the plant ("names no planted program").
+  partial.test.ts (AC3 #1946.525c8ef7, last clause), dh-ubuntu
+    x the remote run made its three files, but the record holds no host change as you for any of them (run.start's
+      `changes` is ignored at the base), so there is nothing for Remove it to undo; the judge stops there.
+  edited.test.ts (AC4 #1946.b7aba9e2), dh-ubuntu
+    x three failures: no host.changed as you for the unit; `deep host remove dh-ubuntu` exit 2 (usage, no `remove`),
+      so no partial report naming the unit; no host.undone in the record.
+    x planted remove-overwrites-edit: the hub refuses the plant.
+  sudo-rule.test.ts (AC2 #1946.fa254d06), dh-fedora
+    x deep_root_plan refuses `sudo_rule` ("unlisted_field": "the schema lists only host, script, steps").
+    x planted sudo-rule-names-path: the hub refuses the plant.
+
+Cleanup checked after the run: no dh1946 user, sudoers file, /var/lib/dh1946-* folder, root-plan folder or package
+left on either VM, and no /tmp/dh1946-* world folder. (deep-ubuntu still holds /var/lib/deepbuild/plans/01M74HD9...,
+made on Nov 10 by a #1945 run for a dh1945 user; it isn't this suite's and was left alone.)
+
+The run's output, as vitest printed it:
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1946/remove.test.ts (3 tests | 3 failed) 274135ms
+   ❯ #1946.a67b553d Remove it leaves the host passing the checks it passed before setup (1)
+     × the host's checks, drafted after a probe before setup and failing after it, pass again after Remove it 17ms
+   ❯ #1946.525c8ef7 Remove it, after a setup that enabled a user service as you and installed a package as root, disables the service as you with no root step and removes the package in one root plan; a planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service. An undo stopped after the first of its three steps records the step it undid and the two left (2)
+     × Remove it disables the user service as you, with no root step naming it, and removes the package in one root plan 2ms
+     × the planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service 5855ms
+ ❯ tests/acceptance/1946/sudo-rule.test.ts (2 tests | 2 failed) 58572ms
+   ❯ #1946.fa254d06 A sudo rule DeepBuild writes for a root plan names the script's sha256 digest, so with one byte of the allowed script changed sudo refuses it; the rule shows in the plan as a host change with its undo, and Remove it takes the rule out. A planted rule that names only the path runs the changed script and fails this test (2)
+     × the sudo rule for a root plan names its script's digest, so sudo refuses the script changed by one byte; the plan shows it with its undo, and Remove it takes it out 29610ms
+     × the planted rule that names only the path runs the changed script and fails the judge 19542ms
+ ❯ tests/acceptance/1946/edited.test.ts (2 tests | 2 failed) 216619ms
+   ❯ #1946.b7aba9e2 After setup writes a user service unit, editing one line of it by hand and then running Remove it keeps the edited file, saves a backup and reports the undo partial, naming the unit; a Remove that writes the recorded version over the edit fails this test (2)
+     × Remove it keeps a unit edited by hand after setup, saves a backup of it and reports the undo partial, naming the unit 205955ms
+     × the planted Remove that writes the recorded version over the edit fails the judge 4455ms
+ ❯ tests/acceptance/1946/partial.test.ts (1 test | 1 failed) 19055ms
+   ❯ #1946.525c8ef7 Remove it, after a setup that enabled a user service as you and installed a package as root, disables the service as you with no root step and removes the package in one root plan; a planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service. An undo stopped after the first of its three steps records the step it undid and the two left (1)
+     × an undo stopped after the first of its three steps records the step it undid and the two left 14388ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1946/edited.test.ts > #1946.b7aba9e2 After setup writes a user service unit, editing one line of it by hand and then running Remove it keeps the edited file, saves a backup and reports the undo partial, naming the unit; a Remove that writes the recorded version over the edit fails this test > Remove it keeps a unit edited by hand after setup, saves a backup of it and reports the undo partial, naming the unit
+AssertionError: the judge finds nothing wrong: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the record holds no host change as you for dh1946-88632745-edit.service on dh-ubuntu (host.changed, grant you, naming it), which the setup's remote run made",
++   "`deep host remove dh-ubuntu` didn't report the undo partial, naming dh1946-88632745-edit.service: it said \"exit 2: Usage: deep host run <ask>\\n       deep host changes <host>\\n       deep host list\\n       deep host facts <host> [--refresh]\\n\"",
++   "the record holds no partial undo on dh-ubuntu stopped at dh1946-88632745-edit.service (host.undone, partial true, stopped naming it): []",
++ ]
+
+ ❯ tests/acceptance/1946/edited.test.ts:18:67
+     16|     const { failures, seen } = await judgeEdited(w);
+     17|     proof('ac4-edited.json', { failures, seen, answered: w.answered });
+     18|     expect(failures.map(redact), 'the judge finds nothing wrong').toEq…
+       |                                                                   ^
+     19|   }, 1_800_000);
+     20|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/acceptance/1946/edited.test.ts > #1946.b7aba9e2 After setup writes a user service unit, editing one line of it by hand and then running Remove it keeps the edited file, saves a backup and reports the undo partial, naming the unit; a Remove that writes the recorded version over the edit fails this test > the planted Remove that writes the recorded version over the edit fails the judge
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=remove-overwrites-edit): file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=remove-overwrites-edit names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1946/helpers.ts:343:36
+
+ ❯ openWorld tests/acceptance/1946/helpers.ts:377:15
+ ❯ tests/acceptance/1946/edited.test.ts:22:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/acceptance/1946/partial.test.ts > #1946.525c8ef7 Remove it, after a setup that enabled a user service as you and installed a package as root, disables the service as you with no root step and removes the package in one root plan; a planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service. An undo stopped after the first of its three steps records the step it undid and the two left > an undo stopped after the first of its three steps records the step it undid and the two left
+AssertionError: the judge finds nothing wrong: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the record holds no host change as you for change 1 of 3 (/home/dh1946c244bb44/dh1946-c244bb44/p1/file) on dh-ubuntu",
++   "the record holds no host change as you for change 2 of 3 (/home/dh1946c244bb44/dh1946-c244bb44/p2/file) on dh-ubuntu",
++   "the record holds no host change as you for change 3 of 3 (/home/dh1946c244bb44/dh1946-c244bb44/p3/file) on dh-ubuntu",
++ ]
+
+ ❯ tests/acceptance/1946/partial.test.ts:18:67
+     16|     const { failures, seen } = await judgePartial(w);
+     17|     proof('ac3-partial.json', { failures, seen, answered: w.answered }…
+     18|     expect(failures.map(redact), 'the judge finds nothing wrong').toEq…
+       |                                                                   ^
+     19|   }, 1_800_000);
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/acceptance/1946/remove.test.ts > #1946.a67b553d Remove it leaves the host passing the checks it passed before setup > the host's checks, drafted after a probe before setup and failing after it, pass again after Remove it
+AssertionError: the host's checks pass after Remove it: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "after Remove it, the host's check fails on dh-ubuntu, which passed before setup: 127.0.0.1:34753 listens on dh-ubuntu, beyond what was asked",
++ ]
+
+ ❯ tests/acceptance/1946/remove.test.ts:29:77
+     27|     const failures = judgeChecks(flow);
+     28|     proof('ac1-checks.json', { failures, before: flow.before, after_se…
+     29|     expect(failures.map(redact), 'the host\'s checks pass after Remove…
+       |                                                                             ^
+     30|   });
+     31| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/acceptance/1946/remove.test.ts > #1946.525c8ef7 Remove it, after a setup that enabled a user service as you and installed a package as root, disables the service as you with no root step and removes the package in one root plan; a planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service. An undo stopped after the first of its three steps records the step it undid and the two left > Remove it disables the user service as you, with no root step naming it, and removes the package in one root plan
+AssertionError: the judge finds nothing wrong: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the record holds no host change as you for dh1946-15335369-web.service on dh-ubuntu (host.changed, grant you, naming it), which the setup's remote run made",
++   "after Remove it, dh1946-15335369-web.service is still enabled for your user on dh-ubuntu (systemctl --user is-enabled says enabled); `deep host remove dh-ubuntu` said \"exit 2: Usage: deep host run <ask>\\n       deep host changes <host>\\n       deep host list\\n       deep host facts <host> [--refresh]\\n\"",
++   "the host's checks fail on dh-ubuntu after Remove it, naming dh1946-15335369-web.service: dh1946-15335369-web.service still listens at 127.0.0.1:34753 (127.0.0.1:34753 listens on dh-ubuntu, beyond what was asked)",
++   "Remove it on dh-ubuntu raised 0 root plans, not one (none); `deep host remove dh-ubuntu` said \"exit 2: Usage: deep host run <ask>\\n       deep host changes <host>\\n       deep host list\\n       deep host facts <host> [--refresh]\\n\"",
++   "no root plan Remove it raised on dh-ubuntu removes dh1946-15335369-pkg (none names it)",
++   "after Remove it and its root plan ran, dh1946-15335369-pkg is still installed on dh-ubuntu: []",
++   "the record holds no undo of dh1946-15335369-pkg as root on dh-ubuntu (host.undone, grant root, listing it as undone)",
++ ]
+
+ ❯ tests/acceptance/1946/remove.test.ts:37:67
+     35|     const failures = judgeGrants(flow);
+     36|     proof('ac3-grants.json', { failures });
+     37|     expect(failures.map(redact), 'the judge finds nothing wrong').toEq…
+       |                                                                   ^
+     38|   });
+     39|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/acceptance/1946/remove.test.ts > #1946.525c8ef7 Remove it, after a setup that enabled a user service as you and installed a package as root, disables the service as you with no root step and removes the package in one root plan; a planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service. An undo stopped after the first of its three steps records the step it undid and the two left > the planted Remove that runs every undo as root leaves the service enabled for your user and fails the host's checks, naming the service
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=remove-undoes-all-as-root): file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=remove-undoes-all-as-root names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1946/helpers.ts:343:36
+
+ ❯ openWorld tests/acceptance/1946/helpers.ts:377:15
+ ❯ tests/acceptance/1946/remove.test.ts:41:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/acceptance/1946/sudo-rule.test.ts > #1946.fa254d06 A sudo rule DeepBuild writes for a root plan names the script's sha256 digest, so with one byte of the allowed script changed sudo refuses it; the rule shows in the plan as a host change with its undo, and Remove it takes the rule out. A planted rule that names only the path runs the changed script and fails this test > the sudo rule for a root plan names its script's digest, so sudo refuses the script changed by one byte; the plan shows it with its undo, and Remove it takes it out
+AssertionError: the judge finds nothing wrong: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the agent's root plan asking for a sudo rule on dh-fedora wasn't raised: deep_root_plan was refused: {\"code\":\"unlisted_field\",\"retryable\":false,\"remediation\":\"Leave out sudo_rule: the schema lists only host, script, steps.\",\"path\":\"/params/arguments/sudo_rule\",\"actual\":\"sudo_rule\",\"evidence\":[]}",
++ ]
+
+ ❯ tests/acceptance/1946/sudo-rule.test.ts:21:67
+     19|     const { failures, seen } = await judgeSudoRule(w, 'A');
+     20|     proof('ac2-sudo-rule.json', { failures, seen, answered: w.answered…
+     21|     expect(failures.map(redact), 'the judge finds nothing wrong').toEq…
+       |                                                                   ^
+     22|   }, 1_800_000);
+     23|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  tests/acceptance/1946/sudo-rule.test.ts > #1946.fa254d06 A sudo rule DeepBuild writes for a root plan names the script's sha256 digest, so with one byte of the allowed script changed sudo refuses it; the rule shows in the plan as a host change with its undo, and Remove it takes the rule out. A planted rule that names only the path runs the changed script and fails this test > the planted rule that names only the path runs the changed script and fails the judge
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=sudo-rule-names-path): file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=sudo-rule-names-path names no planted program
+    at plantOf (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/dev/claude-worktrees/github-issue-1946-15d7a6/agent-aee6ba56f0656a0ba/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1946/helpers.ts:343:36
+
+ ❯ openWorld tests/acceptance/1946/helpers.ts:377:15
+ ❯ tests/acceptance/1946/sudo-rule.test.ts:25:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  8 failed (8)
+   Start at  00:57:18
+   Duration  572.14s (tests 100%)
+
+VITEST EXIT 1

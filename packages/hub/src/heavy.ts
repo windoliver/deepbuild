@@ -445,9 +445,12 @@ function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number)
     if (child.pid) started(child.pid);
     child.on('error', (error) => { process.stderr.write(`deep lease: ${argv[0]}: ${error.message}\n`); resolve(127); });
     child.on('exit', async (code, signal) => {
-      exited();
-      // The leases hold while any process of the group runs; the command's status is its first process's.
-      while (groupAlive(child.pid!)) await sleep(100);
+      // The leases hold while any process of the group runs; the command's status is its first process's. The hub hears
+      // of the first process's exit only while its group runs on: a group that ended with it is told once, below (#2328).
+      if (groupAlive(child.pid!)) {
+        exited();
+        while (groupAlive(child.pid!)) await sleep(100);
+      }
       await ended();
       resolve(code ?? 128 + (signal ? ({ SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 } as Record<string, number>)[signal] ?? 1 : 1));
     });
@@ -466,10 +469,12 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
   let token: string;
   try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch { return unleased(argv, 'DeepBuild isn\'t set up here (no hub token)'); }
   const socket = hubAddress().path;
-  const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+  // Its own start is read while deep-hook heavy finds the command's entry: neither needs the other's result (#2328).
+  const start = startOf(process.pid);
+  const { jobs, flag } = jobsFor(argv);
+  const peer = { pid: process.pid, start: (await start) ?? '' };
   const ask = async (method: string, params: Obj): Promise<Reply> => call(socket, token, method, params, peer);
   let reply: Reply;
-  const { jobs, flag } = jobsFor(argv);
   try { reply = await ask('lease.wait', { kinds, command: argv.join(' '), cwd: process.cwd(), jobs }); } catch (error) { return unleased(argv, `the hub can't be reached (${error instanceof Error ? error.message : String(error)})`); }
   let shown = -Infinity;
   for (;;) {

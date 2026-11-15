@@ -18,7 +18,7 @@ import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
 import { registry } from './hookmap.js';
-import { agentReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, warnings, withWaits } from './hook-replies.js';
+import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
@@ -65,7 +65,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -81,7 +81,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
@@ -957,17 +957,12 @@ class Hub {
       const output = { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'DeepBuild answered this from your saved decision.', updatedInput: { questions: meta.call?.input.questions, answers: gate.answers } };
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
-    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
     // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call;
-    // a warn entry's words go with it.
-    const allow = 'late' in gate ? undefined : gate.allow;
-    if (allow !== undefined && (meta.agent === 'claude-code' || meta.agent === 'claude')) {
-      const past = !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode';
-      const additionalContext = [...warnings(ruled), allow].join('\n');
-      const output = { hookEventName: 'PreToolUse', ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext };
-      return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
-    }
-    conn.sock.end(ruled);
+    // a warn entry's words go with it, and so does the context of the extensions that handle the call, when none denies it.
+    const allow = 'late' in gate || (meta.agent !== 'claude-code' && meta.agent !== 'claude') ? undefined : gate.allow;
+    const allowed = allow === undefined ? undefined : { allow, past: !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode' };
+    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled, allowed);
+    conn.sock.end(allowed ? allowReply(allowed.allow, allowed.past, ruled) : ruled);
   }
 
   /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
@@ -1074,15 +1069,17 @@ class Hub {
    * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
    * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
    */
-  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string): Promise<void> {
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string, allowed?: { allow: string; past: boolean }): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
-    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled);
+    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled, allowed?.allow), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
+    // Your standing rule's yes stands unless an extension denies the call (#23): its allow, their context after its words.
+    const out = allowed && !reply?.denies.length ? allowReply(allowed.allow, allowed.past, ruled, reply ?? undefined, fitted) : reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled;
+    if (conn.sock.writable) conn.sock.end(out);
   }
 
   /**
@@ -1343,7 +1340,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health', role: conn.name }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;

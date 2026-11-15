@@ -1,0 +1,65 @@
+# tests/acceptance/190/oracle as committed at 34f30ffd5, run against a mutant of 34f30ffd5's crates/deep-canvas-sandbox/src/link.rs: each library segment placed at alignment 1, link order unchanged. The mutant is the diff below, applied by a script in a scratch clone at 34f30ffd5. Linux arm64, 2026-11-13.
+# NO_COLOR=1 CARGO_TARGET_DIR=<clone-target> npx vitest run --root tests/acceptance/190/oracle --no-file-parallelism --reporter=verbose
+diff --git a/crates/deep-canvas-sandbox/src/link.rs b/crates/deep-canvas-sandbox/src/link.rs
+index 0d63e51cb..babc66cd7 100644
+--- a/crates/deep-canvas-sandbox/src/link.rs
++++ b/crates/deep-canvas-sandbox/src/link.rs
+@@ -445,7 +445,7 @@ pub fn link(program: &[u8], libs: &[Object], stub_hosts: bool) -> Result<Linked,
+     for p in &parsed[1..] {
+         let mut at = Vec::new();
+         for (i, (_, r)) in p.data.iter().enumerate() {
+-            let a = p.align.get(i).copied().unwrap_or(1).max(1);
++            let a = 1;
+             let base = (end as u64).div_ceil(a as u64) * a as u64;
+             let past = base + r.len() as u64;
+             if past > u32::MAX as u64 {
+
+ RUN  v5.0.5 <clone>/tests/acceptance/190/oracle
+
+ × data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data 182ms
+   → data-layout.s's checks of our merged program:
+  alpha@1's data at 8200: expected 414c504841, got 4245544121
+  beta@1's data at 8208: expected 42455441212121, got 00000000000000
+  byte 8195 is 65, outside every object's data (expected 0): expected [ …(3) ] to deeply equal []
+ ✓ data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the layout check fails on a linker that lays libraries out in listing order (linker_links_in_listing_order) 77ms
+ ✓ function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the merged program of _start and ret32@1 imports nothing, holds (f32) -> (i32) and () -> (), and _start calls the internal ret32 146ms
+ ✓ function-imports.test.ts > #190.e0980599 function-imports.s: a call into a library becomes a call to an internal function, with no import left > #190.e0980599 the checks fail on a merged program that keeps an object's linking section (linker_adds_linking_section) and on the program object unlinked 70ms
+ ✓ undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 a program importing lib:grid_path.find_route and lib:turns.next_turn, linking only turns@1, is refused naming find_route and not next_turn 71ms
+ ✓ undefined.test.ts > #190.ea25cdd0 undefined.s: an import no listed library exports is refused, naming it and nothing defined > #190.ea25cdd0 the same program linking turns@1 and grid_path@1 is admitted, imports nothing and runs both calls 159ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  data-layout.test.ts > #190.e0980599 data-layout.s: the data of the program and its libraries in one memory, in link order, aligned > #190.e0980599 the program's data at 0, alpha@1's at 8200 and beta@1's at 8208 in one defined memory, and each library's address resolved to its data
+AssertionError: data-layout.s's checks of our merged program:
+  alpha@1's data at 8200: expected 414c504841, got 4245544121
+  beta@1's data at 8208: expected 42455441212121, got 00000000000000
+  byte 8195 is 65, outside every object's data (expected 0): expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "alpha@1's data at 8200: expected 414c504841, got 4245544121",
++   "beta@1's data at 8208: expected 42455441212121, got 00000000000000",
++   "byte 8195 is 65, outside every object's data (expected 0)",
++ ]
+
+ ❯ none ../helpers.ts:93:73
+     91| /** No failures; the message lists them. */
+     92| export function none(failures: readonly string[], what: string): void {
+     93|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     94| }
+     95| /** The first line two lists differ at, or null. */
+ ❯ data-layout.test.ts:123:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 5 passed (6)
+   Start at  22:19:07
+   Duration  8.41s (tests 99%, import 1%)
+
+vitest exit=1

@@ -73,7 +73,7 @@ import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { Writes } from './receipts.js';
 
-import { ghToken, type Obj } from "./hub-shared.js";
+import { ghToken, type Obj, isObj } from "./hub-shared.js";
 import type { Delivery } from '@deepbuild/asks';
 import type { IntakeService } from './intake-port.js';
 
@@ -163,7 +163,7 @@ export class HubControl {
   private async route(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health':
-      case 'health': return this.health();
+      case 'health': return this.health(context.role);
       case 'session.wait': return this.options.delivery().waitAnswer(params, context);
       case 'session.delivered': return this.options.delivery().placed(params, context);
       case 'session.stop_waiting': return this.options.delivery().stopWaiting(context);
@@ -198,6 +198,20 @@ export class HubControl {
       case 'numbers.sample': await this.options.state().notAnAgent(context, method); return this.options.services.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.readings.change(params);
       case 'evidence.read': return this.evidence.evidence(params);
+      case 'eval.report': {
+        // Keep the report's exact serialization, not an outcome asserted by its caller. replayCheck reads its runs.
+        let report: unknown;
+        try { report = typeof params.report === 'string' ? JSON.parse(params.report) : undefined; } catch { /* refused below */ }
+        if (!isObj(report) || !isObj(report.plan) || !Array.isArray(report.runs)) throw refuse('type', '/params/report', 'Send the finished eval report as JSON text holding its frozen plan and runs.');
+        const put = await this.options.services.store.connect({ role: 'deepbuild', via: 'job' }).put({
+          bytes: Buffer.from(params.report as string), kind: 'replay', source: 'config-eval',
+          redaction: 'unknown', license: { name: 'session', allows: [] },
+        });
+        if (put.status !== 'stored') throw refuse('unavailable', '', `The evidence store refused the eval report: ${put.reason}`, '', true);
+        const ev = put.evidence;
+        await this.options.events.appendCore('evidence.stored', { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] });
+        return { handle: `ev:${ev.sha256}` };
+      }
       case 'ask.answer': return this.answer(params, context);
       case 'ask.card': return this.human.askCard(params);
       case 'decision.overrule': return this.human.overrule(params, context);
@@ -266,6 +280,7 @@ export class HubControl {
       case 'host.plan': return this.options.services.hosts.plan(params.ask);
       case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
       case 'host.changes': return this.options.services.hosts.changes(params.host);
+      case 'host.remove': return this.options.services.hosts.remove(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -403,7 +418,7 @@ export class HubControl {
 
   async notifierGone(): Promise<void> { return this.readings.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.readings.health(); }
+  async health(role: string): Promise<Obj> { return this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined); }
 
   async forgeRepos(): Promise<string[]> { return this.readings.forgeRepos(); }
 

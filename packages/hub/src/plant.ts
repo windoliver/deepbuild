@@ -260,6 +260,9 @@ export type Plant =
   | 'job-speech-tools-enum'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
   | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #1946's: a sudo rule that names only the script's path, a Remove it that undoes every change as root, and one that
+  // writes over a target edited since.
+  | 'sudo-rule-names-path' | 'remove-undoes-all-as-root' | 'remove-overwrites-edit'
   // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
   // root plan that lists a package with install scripts as fully undoable.
   | 'root-plan-runs-agent-path' | 'host-skips-lingering' | 'host-package-fully-undoable'
@@ -377,6 +380,7 @@ const PLANTS: readonly string[] = [
   'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done', 'job-speech-tools-enum',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
+  'sudo-rule-names-path', 'remove-undoes-all-as-root', 'remove-overwrites-edit',
   'figure-in-needs-you', 'figure-feeds-verdict',
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',

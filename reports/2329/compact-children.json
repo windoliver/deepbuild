@@ -1,0 +1,62 @@
+{
+  "base": "d8c46f0d58162ff0a4a483544149316aec960637",
+  "command": "node benchmarks/hub.mjs compact",
+  "counter": "scripts/count-children.c",
+  "counter_sha256": "bfbf2b68a64a1b960d351b068342e11820ade69a4d310570b53316c7d3c1cf32",
+  "starts": 1021,
+  "compactions": 1020,
+  "runs_per_side": 1,
+  "machine": "Mac17,10",
+  "os": "macOS 27.2 (26B8119)",
+  "node": "v24.22.2 darwin arm64",
+  "measured_utc": "2026-11-15",
+  "timing_status": "INCONCLUSIVE: counted diagnostic run under a test grant on a loaded host, not a reference-Mac budget window",
+  "before": {
+    "exit": 0,
+    "children": 3115,
+    "by_executable": {
+      "(forked)": 2,
+      "claude": 2,
+      "deep-hook": 2,
+      "git": 1024,
+      "helper": 2,
+      "mkfifo": 1,
+      "node": 1,
+      "ps": 2044,
+      "sandbox-exec": 37
+    },
+    "readings": {
+      "bench": "hub",
+      "mode": "compact",
+      "p50Ms": 19.05500000000029,
+      "p95Ms": 31.092999999998938
+    },
+    "counter_log_sha256": "fc16aa18f608c14e2b5343bd4971b50dfa267e22ff508a615f307f530f5cfc13",
+    "redacted_trace": "compact-before.children.gz",
+    "redacted_trace_sha256": "0a88955ec39435fd8cb9b4eacbedbfa519775e19f8b070fd61a883b0d4231546"
+  },
+  "after": {
+    "exit": 0,
+    "children": 1074,
+    "by_executable": {
+      "(forked)": 2,
+      "claude": 2,
+      "deep-hook": 2,
+      "git": 1024,
+      "helper": 2,
+      "mkfifo": 1,
+      "node": 1,
+      "ps": 4,
+      "sandbox-exec": 36
+    },
+    "readings": {
+      "bench": "hub",
+      "mode": "compact",
+      "p50Ms": 19.621375000002445,
+      "p95Ms": 34.78920800000196
+    },
+    "counter_log_sha256": "4c5aa06f7ffc8dd7cc99f34ba47e659566156440855a8e4bb2e3b3e86805a08b",
+    "redacted_trace": "compact-after.children.gz",
+    "redacted_trace_sha256": "a3722b4d77c978d0775fbde4008719a11c292c7ec8ccc13fabbcdaf279bac77c"
+  }
+}
