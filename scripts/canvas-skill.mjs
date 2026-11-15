@@ -30,7 +30,21 @@ function dumpKinds() {
     execFileSync(show, ['kinds', '--dump', dir], { stdio: ['ignore', 'ignore', 'inherit'] });
     const [file, ...more] = readdirSync(dir).filter((f) => f.endsWith('.json'));
     if (!file || more.length) throw Error(`deep-show kinds --dump wrote ${more.length + Number(Boolean(file))} dumps, not one`);
-    return JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    const dump = JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    // The dump leaves out each structured field's form; deep_kinds' field lines carry it, so an agent reads a plume's
+    // or an arc's own fields as the core's reader declares them.
+    const shaped = dump.registries.flatMap((r) => r.entries).filter((e) => e.fields.some((f) => f.type === 'json'));
+    const calls = shaped.map((e) => ({ call: 'deep_kinds', op: 'field', path: e.name }));
+    const answer = JSON.parse(execFileSync(show, ['run'], { input: `${JSON.stringify({ evidence: dir, calls })}\n`, maxBuffer: 256 << 20 }).toString('utf8'));
+    if (!answer.ok) throw Error(`deep-show run refused the field listing: ${JSON.stringify(answer).slice(0, 400)}`);
+    shaped.forEach((e, i) => {
+      const lines = answer.replies[i]?.lines ?? [];
+      for (const f of e.fields) {
+        const forms = lines.find((l) => l.name === f.name)?.forms;
+        if (f.type === 'json' && Array.isArray(forms) && forms.length) f.forms = forms;
+      }
+    });
+    return dump;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -68,7 +82,7 @@ const ENVELOPE = {
 const CRAFT = JSON.parse(read('crates/deep-canvas/src/craft.json'));
 /** A field in brief: its name, then its type (unless free JSON), unit, [min, max] and = default (unless none). */
 const fieldLine = (f) => {
-  const type = f.type === 'json' ? '' : f.list ? `[${f.type}]` : f.type;
+  const type = f.type === 'json' ? (f.forms ?? []).join(' | ') : f.list ? `[${f.type}]` : f.type;
   const what = [type, f.unit ?? '', Array.isArray(f.range) ? `[${f.range.map((n) => (n === null ? '…' : n)).join(', ')}]` : ''].filter(Boolean).join(' ');
   return `${f.name}${what ? `: ${what}` : ''}${f.default !== undefined && f.default !== null ? ` = ${JSON.stringify(f.default)}` : ''}`;
 };
