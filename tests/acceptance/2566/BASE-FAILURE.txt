@@ -1,0 +1,56 @@
+# #2566 acceptance tests: the one run on the base
+
+Base 9f93f1e7b ("Merge pull request #2586 ..."; no implementation), 2026-11-15 18:11:51-18:28:14 UTC, macOS 27.2 on
+arm64 (the system follows 32 links), Node 24.22.2, cargo 1.99.1, a load average of 308 at the start and 271 at the
+end. Run once from the checkout, with cargo on PATH and only tests/acceptance/2566/ added. Its target/ was gone,
+removed between runs by something outside this job, so the run's own `cargo build --locked -q -p deep-hook` built
+target/debug/deep-hook first (8.5 minutes at that load), and AC2 built today's deep-hook itself, into
+target/acceptance-2566/base-9f93f1e7b (about 5 minutes); both are in the times below. The output is the run's, whole,
+and it exited 1; only the checkout's path is replaced, by <checkout>.
+
+AC1 (#2566.3f94de8b) FAILS, for the issue's reason: over pi's edit of back/../ × 1,000 (back -> none/../back, no
+none) the matcher took 29,449 and 24,481 ms in two runs and printed no line in 30 s in the other three, against 146 to
+501 ms over the same edit of plain/../ × 1,000 just before it on the same matcher: at least 60 times that plain twin
+and 24 s over it, in all five runs, where its caller gives it 1 s. The check of the same edit in a guarded folder
+comes after the timing and didn't run.
+
+AC2 (#2566.83c23c3c) PASSES, as it must at the base, where the checkout's deep-hook is today's: its line for pi's edit
+of plain/../ × 5,000 is the base's line, and in each round it retired 0.996 to 1.003 the base's instructions (3.84 to
+3.87 billion on each side), while the same processes' wall times wandered from 1.1 to 4.2 s.
+
+An earlier full run of the suite, at 08:55-08:57 UTC, before AC2 counted instructions and when it still timed three
+calls a side a round, read the same: AC1 failed with the link call at 5,668 to 7,710 ms against twins of 79 to 137 ms
+(a load average near 280), and AC2 passed at 0.99 to 1.05 the base's time. The README says why AC2 changed.
+
+$ git status --porcelain     # before the run
+?? tests/acceptance/2566/
+$ node --test --test-reporter=spec tests/acceptance/2566/looping-link.test.mjs
+
+✖ #2566.3f94de8b AC1 the matcher prints the line of an edit of `back/../` × 1,000, `back -> none/../back`, within the 1 s its caller gives it (146427.100834ms)
+ℹ an edit of back/../ × 1,000: 29449, none in 30000, none in 30000, none in 30000, 24481 ms; its plain twin, plain/../ × 1,000: 318, 384, 501, 146, 246 ms; limit 1000 ms, from the call's write to its line
+✔ #2566.83c23c3c AC2 an edit of `plain/../` × 5,000, a path that repeats no link, is read as the base reads it, and as fast: no more than 50% over its count (329220.709292ms)
+ℹ the checkout's count over the base's, round by round: 1.000, 0.996, 1.003, 0.999, 1.001 (limit 1.5, margin 5%); instructions retired, in billions: base 3.849, 3.868, 3.853, 3.858, 3.838; checkout 3.849, 3.852, 3.863, 3.856, 3.841; spawn to exit: base 2279, 4201, 1544, 1668, 1115 ms, checkout 3218, 2830, 1751, 2185, 1980 ms
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 980625.566208
+
+✖ failing tests:
+
+test at tests/acceptance/2566/looping-link.test.mjs:137:1
+✖ #2566.3f94de8b AC1 the matcher prints the line of an edit of `back/../` × 1,000, `back -> none/../back`, within the 1 s its caller gives it (146427.100834ms)
+  AssertionError [ERR_ASSERTION]: FAIL the link call costs the caller's whole 1000 ms more than its plain twin, and 20 times it, in every run: an edit of back/../ × 1,000: 29449, none in 30000, none in 30000, none in 30000, 24481 ms; its plain twin, plain/../ × 1,000: 318, 384, 501, 146, 246 ms; limit 1000 ms, from the call's write to its line
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2566/looping-link.test.mjs:155:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

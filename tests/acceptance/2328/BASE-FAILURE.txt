@@ -1,0 +1,34 @@
+Base commit: 9f93f1e7 (Merge pull request #2586 from windoliver/worktree-scalable-splashing-river)
+Command (Node 24.22.0, npm ci, npm run build --workspaces and the env-plants deep-hook build at the base):
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2328/lease.test.ts --testTimeout=600000 --silent=false
+Date: 2026-11-15  vitest 5.0.5  darwin-arm64, Apple M5 Max, 18 cores, load 388-431 (the machine shared with other sessions)
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/2328/tsconfig.json exits 0 at the base.
+
+Result: Tests 2 failed | 1 passed (3), 37.8 s. AC1 and AC2 fail at their count assertions for the reasons the issue
+gives; AC3 holds (a regression guard; its mutant run is in the README). Times are from the moment the agent's shell
+started `deep lease`; while this first command ran, the stand-in ps held every call 5 s. Lines trimmed to the readings
+and the failures; the lease's secret is left out by the test. An earlier run of the same files at load 127-168 read
+the same counts.
+
+== AC1 #2328.661c3161: failed
+  AC1: deep lease (pid 34688) started by +0 ms, first connection +5472 ms, granted +21544 ms, the command started +21845 ms
+  AC1: deep lease's own waits before the command started: wait 1: `ps -o lstart= -p 34688` by `deep lease`, `deep lease`'s start, +360 ms to +5431 ms
+  AC1: the hub's waits between deep lease's first call and its grant: wait 1: `ps -o lstart= -p 34688` by the hub, `deep lease`'s start, +5649 ms to +10797 ms; wait 2: `ps -A -o pid=,ppid=` by the hub, the process table, +10855 ms to +15992 ms; wait 3: `ps -o lstart= -p 34042` by the hub, the agent's start, +16023 ms to +21358 ms
+  AC1: every ps from deep lease's start on: `ps -o lstart= -p 34688` by `deep lease`, `deep lease`'s start, +360 ms to +5431 ms; `ps -o lstart= -p 34688` by the hub, `deep lease`'s start, +5649 ms to +10797 ms; `ps -A -o pid=,ppid=` by the hub, the process table, +10855 ms to +15992 ms; `ps -o lstart= -p 34042` by the hub, the agent's start, +16023 ms to +21358 ms; `ps -o lstart= -p 38162` by the hub, the command's start, +21679 ms to +26718 ms
+x #2328.661c3161 A leased command with the hub up starts after at most one `ps` wait in `deep lease` itself and two in the hub, counted by a stand-in `ps` on PATH
+  AssertionError: the hub waited on 3 ps, one after another, before it granted the lease and the command could start: wait 1: `ps -o lstart= -p 34688` by the hub, `deep lease`'s start, +5649 ms to +10797 ms; wait 2: `ps -A -o pid=,ppid=` by the hub, the process table, +10855 ms to +15992 ms; wait 3: `ps -o lstart= -p 34042` by the hub, the agent's start, +16023 ms to +21358 ms: expected 3 to be less than or equal to 2
+  (The issue's agentAbove: the caller's start, then the process table, then the session's start, each awaited in
+  turn. `deep lease` itself made one wait, its own start, before deep-hook heavy and its first call; the hub's read of
+  the command's start came after the command started and isn't counted.)
+
+== AC2 #2328.a793e073: failed
+  AC2: every call deep lease made: lease.wait +5590 ms answered +21544 ms: {"status":"granted","ticket":"lease-wait:605826ab0a31","secret":"<secret>","run":"run:LEASE605826AB0A31MWI5A3IH","leases":["lease:01M7G64QB1DAG9RM102HWTBXWP"],"makeflags":"-j11 --jobserver-auth=fifo:/; lease.started +21631 ms answered +26731 ms: {"tracked":true}; lease.exited +26754 ms answered +26759 ms: {"code":"type","retryable":false,"remediation":"no lease this deep lease holds has that ticket","path":"/params","actual":"lease.exited","evidence":[]}; lease.exited +26754 ms answered +26760 ms: {"code":"type","retryable":false,"remediation":"no lease this deep lease holds has that ticket","path":"/params","actual":"lease.exited","evidence":[]}
+x #2328.a793e073 The hub hears `lease.exited()` once for a command whose group ended with it
+  AssertionError: the hub heard lease.exited() 2 times for `leased-true`, whose process group ended with its one process: lease.exited +26754 ms answered +26759 ms: {"code":"type","retryable":false,"remediation":"no lease this deep lease holds has that ticket","path":"/params","actual":"lease.exited","evidence":[]}; lease.exited +26754 ms answered +26760 ms: {"code":"type","retryable":false,"remediation":"no lease this deep lease holds has that ticket","path":"/params","actual":"lease.exited","evidence":[]}: expected 2 to be 1 // Object.is equality
+  (runGroup's exited and ended each told the hub. Both answers here are refusals because the hub's tick had already
+  given the lease back while the held `lease.started` read ran; in AC3's second command, run without holds, the first
+  `lease.exited` answered {"ok":true} and the second was refused the same way. Two calls either way.)
+
+== AC3 #2328.7a05df84: passed
+  AC3: `deep lease` under agent pid 34042 (session 4f1e4dac-a0e7-48d4-97c2-effafb2a79f3): cpu.slot slow exclusive by session:4f1e4daca0e748d497c2effafb2a79f3 (released)
+  AC3: with pid 34042 reused, the second `deep lease`: lease.wait +348 ms answered +603 ms: {"status":"granted","ticket":"lease-wait:ac4a852b314b","secret":"<secret>","run":"run:LEASEAC4A852B314BMWI5A83U","leases":["lease:01M7G64X4BZW7GYGEWMK4X6SCS"],"makeflags":"-j11 --jobserver-auth=fifo:/; lease.started +610 ms answered +664 ms: {"tracked":true}; lease.exited +669 ms answered +674 ms: {"ok":true}; lease.exited +669 ms answered +674 ms: {"code":"type","retryable":false,"remediation":"no lease this deep lease holds has that ticket","path":"/params","actual":"lease.exited","evidence":[]}; cpu.slot slow exclusive by cli (released)

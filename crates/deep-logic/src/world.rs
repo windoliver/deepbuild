@@ -102,6 +102,9 @@ pub struct Record {
     /// When asked for: each step's services region of each item that asks services, as the step
     /// read it, in hex, by step and item (`{services}`).
     pub regions: Option<BTreeMap<i64, Map<String, Value>>>,
+    /// When asked for (#184's play): each step's time by item, as `(item, ns)`, so a bot's steps
+    /// are timed apart from the piece's. A reading, never part of a run.
+    pub ns: Option<Vec<(usize, u64)>>,
 }
 
 impl Record {
@@ -751,7 +754,11 @@ impl World {
             let mut held = Vec::new();
             self.seen += 1;
             for i in group {
+                let started = rec.ns.is_some().then(std::time::Instant::now);
                 self.step(i, &snapshot, rec, &mut held);
+                if let (Some(ns), Some(s)) = (rec.ns.as_mut(), started) {
+                    ns.push((i, s.elapsed().as_nanos() as u64));
+                }
                 self.published[i] = self.lives[i].arrays.clone();
                 // Right after the step, before any checkpoint or step k + 1 (Logic: between-step
                 // services); the planted module answers after the next checkpoint instead.
@@ -1609,6 +1616,14 @@ impl World {
                 kept[r.clone()].copy_from_slice(&memory[r]);
             }
             memory = kept;
+        }
+        // #1164's planted restore: the checkpoint a seek to step 225 restores from.
+        let spacing = self.lives[i].spacing;
+        if self.planted.restore_zeroes_move_count && s.step <= 225 && 225 < s.step + spacing {
+            let at = crate::piece::global_at(&item.given, "moves_at").map(|a| a as usize);
+            if let Some(count) = at.and_then(|a| memory.get_mut(a..a + 4)) {
+                count.fill(0);
+            }
         }
         if self.planted.restore_copies_assets && !item.assets.is_empty() {
             let b = item.asset_bytes();

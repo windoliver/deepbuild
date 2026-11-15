@@ -1,0 +1,34 @@
+
+ RUN  v5.0.5 ~/doneright-2118
+
+(node:3226) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:7776) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ packages/hub/test/extensions.test.ts (2 tests | 2 failed) 43303ms
+   ❯ an extension on the hub answers tool.before (2)
+     × denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold 21654ms
+     × is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning 21579ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning
+Error: the hub wasn't ready within 10 s
+ ❯ Timeout.<anonymous> packages/hub/test/hub.ts:76:39
+     74|       hub.stdout.once('data', resolve);
+     75|       hub.once('exit', () => reject(Error('the hub exited before it wa…
+     76|       timer = setTimeout(() => reject(Error("the hub wasn't ready with…
+       |                                       ^
+     77|     }).finally(() => clearTimeout(timer));
+     78|   };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  11:58:57
+   Duration  43.73s (tests 99%, transform 1%)
+
+extensions exit 1

@@ -167,6 +167,13 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
                 }
             }
         }
+        // #451: every curve of a flow, grown by its sideways offset.
+        Motion::Along { many: Some(m), .. } => {
+            let pts: Vec<V3> = b.flows.iter().flat_map(|c| c.points.clone()).collect();
+            bx = curve_box(&pts).unwrap_or(e);
+            bx[0].iter_mut().for_each(|v| *v -= m.lateral);
+            bx[1].iter_mut().for_each(|v| *v += m.lateral);
+        }
         Motion::Along { .. } => {
             bx = curve_box(&b.curve).unwrap_or(e);
         }
@@ -242,7 +249,9 @@ pub fn speed(b: &Baked, t: f64) -> f64 {
             };
             v + push + len(*gravity) * k1
         }
-        Motion::Along { speed, .. } => speed.abs(),
+        Motion::Along { speed, many, .. } => many
+            .as_ref()
+            .map_or(speed.abs(), |m| m.speed[0].abs().max(m.speed[1].abs())),
         Motion::Orbit { spin, .. } => spin.abs() * radius(b, &e),
         Motion::Drift {
             amplitude,
