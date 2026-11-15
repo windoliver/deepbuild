@@ -2351,3 +2351,70 @@ impl Plan {
         Some(out)
     }
 }
+
+/// A 3D document with its envelope camera posed as its shots write it at t (Shot: a shot alone
+/// writes its camera's pose), for the 3D frame and the checks that read it (#506); `None` when no timeline shot writes it.
+/// Each timeline shot of the envelope camera, its span in flicks, as the compiled plan reads
+/// them (the document's frame rate and tempo applied); `None` when the document doesn't compile
+/// or names no envelope camera with shots (#506: what the framing check samples).
+pub fn spans(doc: &Value) -> Option<Vec<(i64, i64)>> {
+    let program = Program::compile(doc.as_object()?).ok()?;
+    let plan = program.shots.as_deref()?;
+    let cam = plan.camera(doc.get("camera")?.as_str()?)?;
+    Some(
+        plan.shots
+            .iter()
+            .filter(|s| s.camera == cam)
+            .map(|s| (s.start, s.end))
+            .collect(),
+    )
+}
+
+pub fn posed(doc: &Value, t: i64) -> Option<Value> {
+    let shots = doc.get("shots")?.as_object()?;
+    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
+    // an entry on the played form's track chooses from its entry.
+    let staged = doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .is_some_and(|c| {
+            c.values().any(|c| {
+                c.get("stages")
+                    .and_then(Value::as_object)
+                    .is_some_and(|s| s.values().any(|s| s.get("shot").is_some()))
+            })
+        });
+    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
+        return None;
+    }
+    let program = Program::compile(doc.as_object()?).ok()?;
+    let plan = program.shots.as_deref()?;
+    let id = doc.get("camera")?.as_str()?;
+    let cam = plan.camera(id)?;
+    let mut state = program.state();
+    program.evaluate(t, Validity::Full, &mut state);
+    let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
+    let pose = plan.shown(cam, t, &At {
+        reduced: false,
+        planted: Planted::None,
+        indexed: None,
+        keyed: &keyed,
+    }).pose;
+    let mut out = doc.clone();
+    let params = out
+        .pointer_mut(&format!("/items/{id}/params"))?
+        .as_object_mut()?;
+    for k in ["orbit", "view_width", "kick"] {
+        params.remove(k);
+    }
+    params.insert("position".into(), json!(pose.position));
+    params.insert("target".into(), json!(pose.target));
+    params.insert("roll".into(), json!(pose.roll));
+    if pose.perspective() {
+        params.insert("fov".into(), json!(pose.fov));
+    } else {
+        params.insert("view_width".into(), json!(pose.view_width));
+    }
+    Some(out)
+}
+

@@ -1,0 +1,7 @@
+{"call":"open","piece":{"seed":53303,"controls":{"press":{"kind":"slider"}},"items":{"order":{"kind":"logic@1","params":{"program":"9a8f204c864a0b4fb76ab9ad9bdd92a58adfd823763f94a61c7e1d58e154d14b","writes":{"order":{"type":"f64","count":8}},"reads":["press"]}}},"assets":{"9a8f204c864a0b4fb76ab9ad9bdd92a58adfd823763f94a61c7e1d58e154d14b":"AGFzbQEAAAABBQFgAX4AAwMCAAAFBAEBAQEGDAJ/AEEAC38AQYAgCwcvBQZtZW1vcnkCAAhyZWFkc19hdAMACXdyaXRlc19hdAMBBGluaXQAAARzdGVwAAEKZAICAAtfAEGAIEEIKAIAuDkDAEGIIEEQKwMAOQMAQZAgQRgoAgC4OQMAQZggQSArAwA5AwBBoCBBKCgCALg5AwBBqCBBMCsDADkDAEGwIEE4KAIAuDkDAEG4IEHAACsDADkDAAsAFQRuYW1lAg4CAAEABHNlZWQBAQABaw=="}}}
+{"call":"step","session":"s1","to":2}
+{"call":"append","session":"s1","entry":{"t":47040000,"seq":3,"control":"press","value":13,"writer":"you","player":1}}
+{"call":"append","session":"s1","entry":{"t":35280000,"seq":2,"control":"press","value":12,"writer":"you","player":1}}
+{"call":"append","session":"s1","entry":{"t":35280000,"seq":1,"control":"press","value":21,"writer":"peer","player":2}}
+{"call":"append","session":"s1","entry":{"t":35280000,"seq":1,"control":"press","value":11,"writer":"you","player":1}}
+{"call":"step","session":"s1","to":4}

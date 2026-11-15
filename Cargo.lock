@@ -2314,6 +2314,7 @@ name = "deep-canvas-loop"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-motion",
  "deep-canvas-scene3d",
  "serde_json",
 ]
@@ -2713,6 +2714,7 @@ name = "deep-scene3d-render"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "deep-canvas",
  "deep-canvas-effects",
  "deep-canvas-marks",
  "deep-canvas-scene3d",
