@@ -2,7 +2,7 @@
 
 Base: `291d63af6` (current main when this branch began). No replay/comparison rule changed. No command, option or dependency added.
 
-**Automated behavior verified; full closure BLOCKED.** The PR remains a draft, `Part of #2495`, until the inherited-check disposition and the full-suite/live portion below are resolved. Nothing unrun counts as PASS.
+**Superseded by the [closure proof](closure/README.md).** The three issue criteria are now proven on the current integration: 42 distinct passing tests, five expected assertion failures on its exact base, and the unchanged #112/#1108 automated suites. The earlier draft's live/repository-wide blockers below were over-scoped; their unrun/FAIL states remain disclosed, never counted as PASS.
 
 ## Requirement → change → proof
 
