@@ -242,6 +242,8 @@ export interface CoreOptions {
   held: string[];
   plant?: Plant;
   vfs?: VfsSettings;
+  /** Safe mode, from `deep hub run --safe`: the extension host loads no extension. */
+  safe?: boolean;
   /** A module whose default export takes the local host and returns the host@1 the hub uses instead, from DEEP_HUB_TEST_HOST; only tests set it. */
   host?: string;
   /** The term of every lease the hub grants, from DEEP_HUB_TEST_LEASE_MS; only tests set it. */
