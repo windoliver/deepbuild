@@ -42,7 +42,18 @@ pub fn looks_of(call: &Value, theme: Option<&str>) -> Result<BTreeMap<String, Na
     let Some(all) = all.as_object() else {
         return Err(refused("bad_input", "looks maps names to look@1s"));
     };
+    // #463: a name may give a pack look by its ID, from the call's packs.
+    let manifests = crate::op_transition::manifests(call)?;
     for (name, def) in all {
+        let def = &match def {
+            Value::String(id) => crate::look_ops::pack_look(id, &manifests).ok_or_else(|| {
+                refused(
+                    "look_unknown",
+                    format!("looks/{name}: {id} isn't a look of the call's packs"),
+                )
+            })?,
+            _ => def.clone(),
+        };
         let json = theme.map_or_else(|| def.clone(), |t| crate::status::themed(def, t));
         let look =
             Look3::read(&json).map_err(|e| refused("bad_input", format!("looks/{name}: {e}")))?;
@@ -82,15 +93,69 @@ pub struct Side<'a> {
 /// A mask's volume: its shape and world matrix (its size applied).
 pub type Volume = (Shape, [[f64; 4]; 3]);
 
-/// A look's own edge, from its definition: a pixel look's steps, a stroke look's brush, a
-/// physical look's straight line, and a drawing's torn paper.
+/// A look's own edge, from its definition: the edge it names (#463: an art@1 look's edge style),
+/// else a pixel look's steps, a stroke look's brush, a physical look's straight line, and a
+/// drawing's torn paper.
 fn own_edge(def: &Value) -> Edge {
+    if let Some(e) = def
+        .get("edge")
+        .and_then(Value::as_str)
+        .and_then(Edge::named)
+    {
+        return e;
+    }
     match def.get("basis").and_then(Value::as_str) {
         Some("indexed") => Edge::Pixel,
         _ if def.get("strokes").is_some_and(|s| !s.is_null()) => Edge::Brush,
         Some("physical") => Edge::Straight,
         _ => Edge::Torn,
     }
+}
+
+/// The document with each look's signature transition (`transition: {kind, span}`, Look
+/// `look@1`) joining two shots where one ends as the next starts and they change look, no
+/// transition of the document's joins them, and the incoming look names one that isn't a cut; or
+/// `None` when no pair takes one.
+fn signature_transitions<'a>(
+    doc: &Map<String, Value>,
+    def: &impl Fn(&str) -> Option<&'a Value>,
+) -> Option<Map<String, Value>> {
+    let shots = doc.get("shots")?.as_object()?;
+    let joined = |a: &str, b: &str| {
+        doc.get("transitions")
+            .and_then(Value::as_object)
+            .is_some_and(|t| t.values().any(|t| t["from"] == a && t["to"] == b))
+    };
+    let mut added = Map::new();
+    for (a, sa) in shots {
+        for (b, sb) in shots {
+            let (Some(la), Some(lb)) = (sa["look"].as_str(), sb["look"].as_str()) else {
+                continue;
+            };
+            if a == b || la == lb || sa["end"] != sb["start"] || joined(a, b) {
+                continue;
+            }
+            let Some(tr) = def(lb).map(|d| &d["transition"]).filter(|t| t.is_object()) else {
+                continue;
+            };
+            if tr["kind"] == "cut" {
+                continue;
+            }
+            added.insert(
+                format!("look_{a}_{b}"),
+                json!({"from": a, "to": b, "kind": tr["kind"], "span": tr["span"]}),
+            );
+        }
+    }
+    if added.is_empty() {
+        return None;
+    }
+    let mut out = doc.clone();
+    let all = out
+        .entry("transitions")
+        .or_insert_with(|| Value::Object(Map::new()));
+    all.as_object_mut()?.extend(added);
+    Some(out)
 }
 
 impl Timeline {
@@ -108,7 +173,13 @@ impl Timeline {
             return Ok(None);
         }
         let map = doc.as_object().expect("an object: it has shots");
-        let program = Program::compile(map).map_err(|r| refused(r.code, r.path))?;
+        // #463: a look's signature transition joins two shots that meet and change look where no
+        // transition of the document's does; one that doesn't fit its shots leaves the cut.
+        let signed = signature_transitions(map, &def);
+        let program = match signed.as_ref().map(Program::compile) {
+            Some(Ok(p)) => p,
+            _ => Program::compile(map).map_err(|r| refused(r.code, r.path))?,
+        };
         let Some(plan) = program.shots.as_ref() else {
             return Ok(None);
         };
@@ -1017,5 +1088,39 @@ mod tests {
         let inv = inverse(&m).unwrap();
         assert!((signed_distance(&v, &inv, [-1.0, 0.5, 0.0]) - 1.0).abs() < 1e-12);
         assert!((signed_distance(&v, &inv, [0.5, 0.5, 0.0]) + 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_look_names_its_own_edge_before_one_is_derived() {
+        assert_eq!(
+            own_edge(&json!({"basis": "drawing", "edge": "pixel"})),
+            Edge::Pixel
+        );
+        assert_eq!(own_edge(&json!({"basis": "drawing"})), Edge::Torn);
+    }
+
+    #[test]
+    fn a_look_change_between_meeting_shots_takes_the_incoming_looks_transition() {
+        let looks = json!({
+            "a": {"transition": {"kind": "wipe", "span": "0.5s"}},
+            "b": {"transition": {"kind": "cross_fade", "span": "0.8s"}},
+        });
+        let def = |n: &str| looks.get(n);
+        let doc = json!({"shots": {
+            "one": {"start": "0s", "end": "2s", "look": "a"},
+            "two": {"start": "2s", "end": "4s", "look": "b"},
+            "three": {"start": "5s", "end": "6s", "look": "a"},
+        }});
+        let signed = signature_transitions(doc.as_object().unwrap(), &def).expect("one pair meets");
+        let added = signed["transitions"].as_object().unwrap();
+        assert_eq!(added.len(), 1, "only the shots that meet and change look");
+        assert_eq!(
+            added["look_one_two"],
+            json!({"from": "one", "to": "two", "kind": "cross_fade", "span": "0.8s"})
+        );
+        // A transition of the document's own between them keeps its place.
+        let mut own = doc.clone();
+        own["transitions"] = json!({"t": {"from": "one", "to": "two", "kind": "cut"}});
+        assert!(signature_transitions(own.as_object().unwrap(), &def).is_none());
     }
 }

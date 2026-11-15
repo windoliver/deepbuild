@@ -233,13 +233,26 @@ fn pack_sealed() -> Result<&'static deep_canvas::registry::Sealed, Value> {
         .ok_or_else(|| refused("render_failed", "the pack build's modules don't seal"))
 }
 
-fn parse(call: &Value) -> Result<Args, Value> {
+fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
     let text = std::fs::read_to_string(path).map_err(|e| bad(&format!("doc: {e}")))?;
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
     let theme = status::theme_of(call)?;
-    let look_json = status::themed(&call["look"], &theme);
+    // #463: a look by ID is one of the call's packs' looks.
+    let look_def = match &call["look"] {
+        Value::String(id) => {
+            let manifests = crate::op_transition::manifests(call)?;
+            crate::look_ops::pack_def(id, &manifests, planted).ok_or_else(|| {
+                refused(
+                    "look_unknown",
+                    format!("look: {id} isn't a look of the call's packs"),
+                )
+            })?
+        }
+        v => v.clone(),
+    };
+    let look_json = status::themed(&look_def, &theme);
     let look = Look3::read(&look_json).map_err(|e| bad(&format!("look: {e}")))?;
     let status = status::status_of(&look_json)?;
     let states = status::states(call).ok_or_else(|| bad("states maps handles to states"))?;
@@ -980,7 +993,7 @@ fn run_view(
     // The cold report's build time runs from here to the first frame's scene, less the view's
     // opening, which compiles (#428).
     let started = std::time::Instant::now();
-    let mut args = parse(call)?;
+    let mut args = parse(call, app.planted)?;
     // #462: the looks shots and regions name, and the document's shots that name them.
     let mut named = crate::regions::looks_of(call, Some(&args.theme))?;
     // #462: under reduced motion every look's motifs hold still.
@@ -993,6 +1006,47 @@ fn run_view(
     // #466: each operator transition's pass, checked and its reveal placed, before any frame.
     let by_progress = app.planted == Some(Planted::MosaicRevealByProgress);
     let op_passes = crate::op_transition::passes(call, &args.doc, timeline.as_mut(), by_progress)?;
+    // #463: each look's operator finish, the document's (`None`) and each named one's, checked
+    // and compiled before any frame.
+    let finishes = {
+        let manifests = crate::op_transition::manifests(call)?;
+        let of = |json: &Value, look: &Look3| {
+            let roles = look
+                .roles
+                .iter()
+                .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+                .collect();
+            crate::look_ops::of(json, &manifests, &roles)
+        };
+        let mut f = BTreeMap::from([(None, of(&args.look_json, &args.look)?)]);
+        for (name, n) in &named {
+            f.insert(Some(name.clone()), of(&n.json, &n.look)?);
+        }
+        f
+    };
+    // #463: a look's operator finish over a render's bytes (BGRA), status boxes kept, its GPU
+    // time added to the frame's.
+    let finish = |app: &App,
+                  key: &crate::regions::Key,
+                  bytes: &mut Vec<u8>,
+                  size: [u32; 2],
+                  timing: Option<&mut (f64, BTreeMap<String, f64>)>,
+                  profiler: Option<deep_scene3d_render::Profiler>,
+                  keep: &[[f64; 4]]|
+     -> Result<(), Value> {
+        // #422's planted draws_black leaves nothing in the final target, the finish's either.
+        let black = app.planted == Some(Planted::DrawsBlack);
+        let Some(f) = finishes.get(key).filter(|f| !f.is_empty() && !black) else {
+            return Ok(());
+        };
+        let prefix = key.as_ref().map_or_else(String::new, |k| format!("{k}/"));
+        let ms = f.apply(app, profiler, &prefix, bytes, size, keep, true)?;
+        if let (Some(ms), Some((gpu_ms, passes))) = (ms, timing) {
+            *gpu_ms += ms;
+            passes.insert(format!("{prefix}look.finish"), ms);
+        }
+        Ok(())
+    };
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
     let packs = install(&args.packs)?;
@@ -1927,6 +1981,13 @@ fn run_view(
             // own draw, the first reading back the depth the regions' coverage reads.
             let mut others: Vec<(crate::regions::Key, Vec<u8>)> = Vec::new();
             let mut region_depth: Option<Vec<u8>> = None;
+            // #463: what the other sides' renders spent on the GPU, by look, counted in the frame.
+            let mut others_ms: BTreeMap<String, f64> = BTreeMap::new();
+            let keep: Vec<[f64; 4]> = opened
+                .stage
+                .as_ref()
+                .and_then(|st| lock(st).layer.as_ref().map(|l| l.covers.clone()))
+                .unwrap_or_default();
             if let (Some(sides), false) = (&sides, noop) {
                 let base_key = sides[0].look.map(str::to_string);
                 let seen = crate::regions::Seen::Camera(scene.camera.clone());
@@ -2004,8 +2065,23 @@ fn run_view(
                     if region_depth.is_none() {
                         region_depth = d.view_depth.clone();
                     }
-                    if let Some(bytes) = d.bytes {
-                        others.push((key, bytes));
+                    let mut timing = d.timing;
+                    if let Some(mut bytes) = d.bytes {
+                        let profiler = opened.profiler.clone();
+                        finish(
+                            app,
+                            &key,
+                            &mut bytes,
+                            size,
+                            timing.as_mut(),
+                            profiler,
+                            &keep,
+                        )?;
+                        others.push((key.clone(), bytes));
+                    }
+                    if let Some((ms, _)) = timing {
+                        let name = key.as_deref().unwrap_or("document");
+                        others_ms.insert(format!("{name}/look"), ms);
                     }
                 }
             }
@@ -2105,6 +2181,24 @@ fn run_view(
                 "drawn": drawn_samples,
                 "settling": settling_now && drawn_samples < looks.export,
             });
+            // #463: the frame's own look's operator finish, and the other sides' GPU time.
+            if let Some(bytes) = drawn.bytes.as_mut() {
+                let key = sides.as_ref().and_then(|s| s[0].look.map(str::to_string));
+                let profiler = opened.profiler.clone();
+                finish(
+                    app,
+                    &key,
+                    bytes,
+                    size,
+                    drawn.timing.as_mut(),
+                    profiler,
+                    &keep,
+                )?;
+            }
+            if let Some((gpu_ms, passes)) = drawn.timing.as_mut() {
+                *gpu_ms += others_ms.values().sum::<f64>();
+                passes.extend(others_ms);
+            }
             // #462: the frame mixed from its looks' renders by their coverage, on the device.
             let operator = timeline
                 .as_ref()
