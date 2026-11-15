@@ -397,11 +397,10 @@ fn reveal_of(params: &Map<String, Value>, id: &str) -> Result<Option<Reveal>, Re
             }
         }
     }
-    if r.get("emits") == Some(&Value::Bool(true)) {
-        return Err(Refused {
-            code: "unsupported",
-            path: format!("{path}/emits"),
-        });
+    // #466: `emits` compiles each unit's reveal time into `<item>.reveal` at check.
+    match r.get("emits") {
+        None | Some(Value::Bool(_)) => {}
+        Some(_) => return Err(bad(format!("{path}/emits"))),
     }
     Ok(Some(Reveal {
         progress: num(r.get("progress")).unwrap_or(0.0).clamp(0.0, 1.0),
@@ -427,6 +426,24 @@ pub fn reveal_levels(
     let n = deep_text::unicode::grapheme_starts(&run.shown).len();
     let (lag, w) = reveal_span(n);
     Ok(Some((0..n).map(|u| (u as f64 * lag + 0.5) * w).collect()))
+}
+
+/// #466: a revealed text's units (graphemes of `text`), each with the progress at which its
+/// reveal starts and the share of the progress it reveals over: at progress p its opacity is
+/// ((p − start) ÷ w) clamped to [0, 1], as [`reveal_opacity`] draws it.
+pub fn reveal_units(text: &str) -> Vec<(String, f64, f64)> {
+    let starts = deep_text::unicode::grapheme_starts(text);
+    let n = starts.len();
+    let (lag, w) = reveal_span(n);
+    starts
+        .iter()
+        .enumerate()
+        .map(|(u, &at)| {
+            let end = starts.get(u + 1).copied().unwrap_or(text.len());
+            let unit = text[at..end].to_string();
+            (unit, u as f64 * lag * w, w)
+        })
+        .collect()
 }
 
 /// #1969: the progress a `type` cue keys a text's reveal to as it types each of its graphemes:

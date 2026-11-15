@@ -1,0 +1,47 @@
+#542 at the base, a50d92323 (Merge pull request #2504), on 2026-11-14, an arm64 Mac (Mac17,10, 18 cores, one-minute
+load about 170 to 210), deep-show, deep-input and deep-logic built by `cargo build --locked --bin <name>` (toolchain
+from rustup) and #544's assembler into target/acceptance-542-wat, after `npm ci && npm run build --workspaces`:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run --root tests/acceptance/542 --testTimeout=600000 --no-file-parallelism
+
+Test Files 10 failed (10); Tests 23 failed (23). `npx tsc --noEmit -p tests/acceptance/542` exits 0. Run once; every
+program assembled, and every failure is an assertion or a refusal the base gives; none is a crash.
+
+What the base already showed the fixtures do (checked once at the base with the suite's own fixtures and helpers, in a
+scratch file not kept): the list with no scroll control is presented; a trackpad gesture of 120 px down at (360, 120)
+zooms its camera (view width 480 to 874.6), so the zoom fixture zooms; `eval` at 1 s gives a frame; `deep-show screen`
+draws the reference window with the list's ten rows filling the panel's left half; `deep-logic` takes criterion 1's
+piece (a text control and `echo` with `saves`), saves slot 1 at step 300 on an empty track, and `open_save` opens it at
+300 with every checkpoint to 600 equal to the straight run's. The text fixtures are presented and Tab focuses the text
+control (the suite's own fixture checks passed).
+
+ac01-text-to-logic.test.ts (4 failed)
+- The program, the paste and the save: the scenario answers {"ok": false, "code": "bad_input"} (the base has no
+  `paste` event); the save test needs that run's entry.
+- e then U+0301: "Cmd+Enter appends [], not one entry of program" (no text control takes keys or commits).
+- `deep-logic` at the base refuses a track entry whose value is a string: {"ok": false, "code": "bad_input", "what":
+  "track"} (seen in the scratch check).
+
+ac02-scroll-steps.test.ts (3 failed), ac05-snap.test.ts (3 failed)
+- `deep-input input` refuses the document: {"ok": false, "code": "out_of_range", "path": "controls/list/kind"} (and
+  `controls/pager/kind`): the session has no scroll kind and no `scroll` op. The planted names answer bad_input.
+
+ac03-view-scroll.test.ts (4 failed), ac08-flick-drift.test.ts (1 failed), ac09-key-stops-tail.test.ts (2 failed),
+ac10-taste.test.ts (1 failed)
+- The list with a scroll control is refused at check: `ref_unresolved` at drivers/rows_y/vars/p ("motion.compile can't
+  evaluate this"): the base knows no value of a control of kind `scroll`. (Without the control, the same list is
+  presented, above.)
+
+ac04-ime.test.ts (2 failed)
+- The scenario answers bad_input (the base has no `ime` event, and no such planted name).
+
+ac06-leave-and-esc.test.ts (2 failed)
+- "\"ab\" typed and a click elsewhere write [], not one entry \"ab\" of name"; the Esc test fails on the same line, since
+  Esc writing none counts only beside it.
+
+ac07-undo.test.ts (1 failed)
+- "Enter appends [], not one entry \"a\" of name" and "the track holds [] of name" (the `logic` call answers; the track
+  is empty).
+
+No TASTE.json exists; with the behaviour built, criterion 10 is INCONCLUSIVE until a call is recorded.

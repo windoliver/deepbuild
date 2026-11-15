@@ -99,6 +99,8 @@ struct Gpu<'a> {
     /// The pixmaps in the atlas, and how many the renderer has uploaded.
     uploaded: &'a mut Vec<Uploaded>,
     uploads: &'a mut u64,
+    /// #468: the fills and glyph runs encoded into Vello GPU's scenes.
+    fills: &'a mut u64,
     /// #1485 AC5's wrong program: each paint uploads, and the drawing frees them all after.
     per_draw: Option<Vec<vello_cpu::ImageId>>,
     /// #385 AC1's wrong program: every solid fill two codes redder.
@@ -184,12 +186,14 @@ impl Canvas for Gpu<'_> {
         self.scene.set_stroke(stroke);
     }
     fn fill_path(&mut self, path: &BezPath) {
+        *self.fills += 1;
         self.scene.fill_path(path);
     }
     fn stroke_path(&mut self, path: &BezPath) {
         self.scene.stroke_path(path);
     }
     fn fill_rect(&mut self, rect: &Rect) {
+        *self.fills += 1;
         self.scene.fill_rect(rect);
     }
     fn push_clip_rect(&mut self, rect: &Rect) {
@@ -217,21 +221,22 @@ impl Canvas for Gpu<'_> {
 }
 
 impl Glyphs for Gpu<'_> {
-    fn glyph(
+    fn fill_run(
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
         (size, skew): (f32, f32),
         coords: &[i16],
-        glyph: vello_cpu::Glyph,
+        glyphs: &[vello_cpu::Glyph],
     ) {
+        *self.fills += 1;
         let run = self.scene.glyph_run(self.resources, font);
         let _ = run
             .font_size(size)
             .hint(false)
             .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
-            .fill_glyphs(std::iter::once(glyph));
+            .fill_glyphs(glyphs.iter().copied());
     }
 
     fn glyph_stroke(
@@ -244,6 +249,7 @@ impl Glyphs for Gpu<'_> {
         width: f64,
     ) {
         self.set_stroke(deep_marks_vello::stroke(width));
+        *self.fills += 1;
         let run = self.scene.glyph_run(self.resources, font);
         let _ = run
             .font_size(size)
@@ -304,6 +310,7 @@ pub struct Vello2d {
     /// Pixmaps the last frame didn't paint, freed from the atlas once the next drawing has rendered.
     freeing: Vec<vello_cpu::ImageId>,
     uploads: u64,
+    fills: u64,
 }
 
 impl Vello2d {
@@ -326,6 +333,7 @@ impl Vello2d {
             uploaded: Vec::new(),
             freeing: Vec::new(),
             uploads: 0,
+            fills: 0,
         }
     }
 
@@ -349,6 +357,12 @@ impl Vello2d {
     /// The pixmaps the renderer has uploaded to Vello GPU's atlas so far.
     pub fn uploads(&self) -> u64 {
         self.uploads
+    }
+
+    /// #468: the fills and glyph runs its drawings have encoded so far (a glyph run counts once,
+    /// however many glyphs it holds).
+    pub fn fills(&self) -> u64 {
+        self.fills
     }
 
     /// The format it draws into.
@@ -393,6 +407,7 @@ impl Vello2d {
             encoder,
             uploaded: &mut self.uploaded,
             uploads: &mut self.uploads,
+            fills: &mut self.fills,
             per_draw: (options.plant == Plant::UploadsPerFrame).then(Vec::new),
             shifts_fill: options.shifts_fill,
         };
@@ -548,21 +563,48 @@ fn straight(p: [u8; 4]) -> [u8; 4] {
 
 #[cfg(test)]
 mod tests {
-    /// Each Vello renderer's version an answer names, as Cargo.lock holds it.
+    /// The version of `name` this crate resolves in Cargo.lock (#2497). The lock may hold several
+    /// versions of one name: it holds vello_cpu 0.0.8 for deep-typeset beside the 0.3.0 drawn here.
+    /// Then this crate's own entry lists the dependency with its version; with a single version it
+    /// lists the bare name, and the entry of that name holds the version.
+    fn resolved(name: &str) -> Option<String> {
+        let lock = include_str!("../../../Cargo.lock");
+        let entry = |of: &str| {
+            lock.split("[[package]]")
+                .find(|p| p.starts_with(&format!("\nname = \"{of}\"\n")))
+        };
+        let dependency = entry(env!("CARGO_PKG_NAME"))?
+            .split_once("dependencies = [")?
+            .1
+            .split_once(']')?
+            .0
+            .lines()
+            .map(|line| line.trim().trim_end_matches(',').trim_matches('"'))
+            .find(|line| line.split(' ').next() == Some(name))?;
+        let version = match dependency.split(' ').nth(1) {
+            Some(version) => version,
+            None => entry(name)?
+                .split("version = \"")
+                .nth(1)?
+                .split('"')
+                .next()?,
+        };
+        Some(version.to_string())
+    }
+
+    /// Each Vello renderer's version an answer names is the one this crate resolves.
     #[test]
     fn the_named_versions_are_the_locked_ones() {
-        let lock = include_str!("../../../Cargo.lock");
-        let locked = |name: &str| {
-            lock.split("[[package]]")
-                .find(|p| p.contains(&format!("name = \"{name}\"\n")))
-                .and_then(|p| p.split("version = \"").nth(1))
-                .and_then(|v| v.split('"').next())
-                .map(str::to_string)
-        };
-        assert_eq!(locked("vello_gpu").as_deref(), Some(super::VELLO_GPU));
-        assert_eq!(
-            locked("vello_cpu").as_deref(),
-            Some(crate::raster::VELLO_CPU)
-        );
+        for (name, named) in [
+            ("vello_gpu", super::VELLO_GPU),
+            ("vello_cpu", crate::raster::VELLO_CPU),
+        ] {
+            let locked = resolved(name)
+                .unwrap_or_else(|| panic!("Cargo.lock gives deep-marks-render no {name}"));
+            assert_eq!(
+                locked, named,
+                "an answer names {name} {named}, but deep-marks-render resolves {name} {locked}"
+            );
+        }
     }
 }

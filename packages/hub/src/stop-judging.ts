@@ -1,5 +1,6 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import { StopReply } from './stop-reply.js';
+import { recordRefusal } from './claim-refusal.js';
 import type { AnswerDeliveryPort, TranscriptsPort, SessionFlagsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
 import { backgrounded } from './hub-shared.js';
 import type { Questions } from './questions.js';
@@ -13,7 +14,7 @@ import { basename, dirname, join } from 'node:path';
 import { duration, type Asks, type Delivery } from '@deepbuild/asks';
 import { type Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { type EvidenceStore } from '@deepbuild/evidence';
+import { scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
 import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
@@ -339,9 +340,12 @@ export class StopJudging {
     const instead = `Say Part of #${issue} instead`;
     if (spec.checks.length) {
       const head = (await headOf(cwd).catch(() => undefined))?.sha;
-      const merged = head ? await mergedWithMain(cwd, head) : undefined;
-      if (merged && 'conflict' in merged) return `DeepBuild blocked this: the pull request can't say Closes #${issue}: ${merged.conflict}, so its release checks (${spec.checks.join(', ')}) can't pass on its merge with main. ${instead}.`;
-      if (merged) {
+      const merged = await mergedWithMain(cwd, head ?? '');
+      const checks = this.options.mcp().checksOf(cwd);
+      const missing = [...spec.checks.filter((name) => !checks.has(name)).map((name) => `release check ${name} isn't defined in checks`), ...('missing' in merged ? [merged.missing] : [])];
+      if (missing.length) return `DeepBuild blocked this: the pull request can't say Closes #${issue}: its release checks (${spec.checks.join(', ')}) are BLOCKED, owner you: ${missing.join('; ')}. ${instead}.`;
+      if ('conflict' in merged) return `DeepBuild blocked this: the pull request can't say Closes #${issue}: ${merged.conflict}, so its release checks (${spec.checks.join(', ')}) can't pass on its merge with main. ${instead}.`;
+      if ('commit' in merged) {
         const rows = (await this.options.services.record.raw(`SELECT check_id, outcome FROM runs WHERE commit_sha = ? AND ended IS NOT NULL ORDER BY started`, [merged.commit])) as { check_id: string; outcome: string | null }[];
         const last = new Map(rows.map((r) => [r.check_id, r.outcome]));
         const open = spec.checks.filter((c) => last.get(c) !== 'passed');
@@ -513,7 +517,7 @@ export class StopJudging {
     const text = ask?.text ?? '';
     if (!/\b(?:pull request|PR)\b/i.test(text)) return undefined;
     const open = this.openRequirements(judged.claim);
-    if (!open.length || /\b(?:ends? the work|stop there|then stop|and stop)\b/i.test(text)) return null;
+    if (!open.length || !this.options.services.gate.standing(judged.claim).some((c) => c.result !== 'PASS' && c.result !== 'pending') || /\b(?:ends? the work|stop there|then stop|and stop)\b/i.test(text)) return null;
     return `DeepBuild: ${pr} is open as Part of its issue, with ${open.join(', ')} still unmet. Keep working on ${open.length === 1 ? 'it' : 'them'} in the same pull request: push to its branch, open no new one.`;
   }
 
@@ -641,23 +645,18 @@ export class StopJudging {
     await this.options.events.appendReading(meta.session, meta.agent, `${claim} stalled (${rule}), so it isn't sent back again: it reaches you as one decision, ${ask}.`).catch(() => undefined);
   }
 
-  /**
-   * A pull request's claim runs the repo's release checks on the PR's commit merged with main (#325): each as a spec
-   * check pinned to that commit, in the slow lane, once per head; one that can't merge fails, naming the conflict.
-   */
+  /** Release checks run once per merged head in the slow lane (#325); conflicts fail, missing prerequisites block. */
   private async releaseChecks(cwd: string, head: string): Promise<ClaimCheck[]> {
     const names = releaseSpec(cwd).checks;
-    if (!names.length || !/^[0-9a-f]{40}$/.test(head) || /^0+$/.test(head)) return [];
+    if (!names.length) return [];
     const merged = await mergedWithMain(cwd, head);
-    if (!merged) return [];
     const checks = this.options.mcp().checksOf(cwd);
-    return names.flatMap((name) => {
+    return names.map((name) => {
       const check = checks.get(name);
-      if (!check) return [];
-      const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-      const conflict = 'conflict' in merged ? merged.conflict : undefined;
-      const command = conflict ? `printf '%s\\n' ${shellQuote(conflict)} >&2; exit 1` : check.run;
-      return [{ check: name, approved: null, command, covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, commit: 'commit' in merged ? merged.commit : head, ...(deadline ? { deadline_ms: deadline } : {}) }];
+      const missing = !check ? `release check ${name} isn't defined in checks` : 'missing' in merged ? merged.missing : undefined;
+      const deadline = check?.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
+      const prerequisite: ClaimCheck['prerequisite'] = missing ? { outcome: 'missing', cause: missing } : 'conflict' in merged ? { outcome: 'failed', cause: merged.conflict } : undefined;
+      return { check: name, approved: null, command: check?.run ?? '', covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, commit: 'commit' in merged ? merged.commit : head, ...(prerequisite ? { prerequisite, holds: !missing } : {}), ...(deadline ? { deadline_ms: deadline } : {}) };
     });
   }
 
@@ -1045,7 +1044,8 @@ export class StopJudging {
       // What the claim leaves open becomes open items before any verdict is made on it (#323). Read beside the session's
       // log for the validity gate and the project's trust for its spec checks, none of which waits on another (#82).
       const spec = r.joins ? [] : this.specChecks(r.cwd);
-      const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), spec.length ? this.projectTrusted(r.cwd) : false]);
+      const releaseNames = !r.joins && await this.prOf(r.session) ? releaseSpec(r.cwd).checks : [], hasSpec = spec.length > 0 || releaseNames.length > 0;
+      const reads = Promise.all([r.definition === 'pending' ? undefined : this.sessionLog(r.session), hasSpec ? this.projectTrusted(r.cwd) : false]);
       reads.catch(() => undefined);
       if (!r.joins) {
         await this.options.services.openItems.atClaim({ session: r.session, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd, base: r.base, message, transcript: this.options.state().sessions.get(r.session)?.transcript, pr: await this.prOf(r.session), same })
@@ -1079,19 +1079,16 @@ export class StopJudging {
       // The repo's spec checks run beside the definition's (#322): in a project the core's trust decision marks
       // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
       // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
-      if (!r.joins) {
-        if (spec.length && trusted && this.options.settings.plant !== 'drafted-spec-only') {
-          checks.push(...spec);
-          // A claim on a pull request also runs the repo's release checks, on the PR's commit merged with main (#325).
-          if (await this.prOf(r.session)) checks.push(...await this.releaseChecks(r.cwd, r.commit));
-        }
-        else if (spec.length) {
-          this.watchOnlyClaims.add(r.claim);
-          if (!this.toldUntrusted.has(r.session)) {
-            this.toldUntrusted.add(r.session);
-            await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${spec.map((c) => c.check).join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
-            await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
-          }
+      if (hasSpec && trusted && this.options.settings.plant !== 'drafted-spec-only') {
+        const release = releaseNames.length ? await this.releaseChecks(r.cwd, r.commit) : [];
+        // A named release check runs on the merge only, even when the ordinary done claim names it too.
+        checks.push(...spec.filter((c) => !releaseNames.includes(c.check)), ...release);
+      } else if (hasSpec) {
+        this.watchOnlyClaims.add(r.claim);
+        if (!this.toldUntrusted.has(r.session)) {
+          this.toldUntrusted.add(r.session);
+          await this.options.events.appendReading(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', `This repo isn't trusted (neither by your answer in the app nor by Claude Code's or Codex's own trust), so its spec checks (${[...new Set([...spec.map((c) => c.check), ...releaseNames])].join(', ')}) never run here and its claims are watch-only: none passes until you trust it.`).catch(() => undefined);
+          await this.options.flags().watchOnly(r.session, this.options.state().live.get(r.session)?.agent ?? 'claude-code', 'checks', true);
         }
       }
       // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
@@ -1115,6 +1112,7 @@ export class StopJudging {
       if (!r.joins) {
         const add = (check: string, spec: CheckSpec | undefined, command: string): void => {
           if (!spec) return;
+          while (checks.some((c) => c.check === check)) check = `PR ${check}`;
           checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec' });
           kinded.set(check, { spec, of });
         };
@@ -1132,14 +1130,19 @@ export class StopJudging {
       this.verdictWrites.set(r.claim, written);
       written.catch(() => undefined).finally(() => { if (this.verdictWrites.get(r.claim) === written) this.verdictWrites.delete(r.claim); });
       return { ...ran, findings };
-    })();
-    this.lanes.set(r.claim, lane);
-    // A claim whose checks could not start is INCONCLUSIVE, naming why, as one past its budget is: never left with no verdict.
-    lane.catch((error: unknown) => {
-      const why = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
-      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE', 'checks_not_started').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+    })().catch(async (error: unknown) => {
+      // The lane awaits setup's BLOCKED, at a held stop or watch end (#2074). Scrub before bounding the cause,
+      // leaving room for owner, remedy and the reading's claim prefix.
+      const why = scrubText(error instanceof Error ? error.message : String(error), { held: this.options.settings.held }).slice(0, 7000);
+      const reason = `its checks did not start: ${why}; owner: you`;
+      const session = { session: r.session, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd };
+      await this.options.services.openItems.stillNeeded(session, [`BLOCKED: ${reason}. Resolve the cause and run the checks again.`]);
+      await recordRefusal(this.options.events, this.options.services.now(), r.claim, r.commit, reason, 'BLOCKED', 'checks_not_started');
+      await this.options.events.appendReading(session.session, session.agent, `${r.claim} BLOCKED: ${reason}. Resolve the cause and run the checks again.`);
+      return { fast: [], slow: [], snapshot: r.commit, readyAt: this.options.services.now(), budgetCost: [], changed: false, findings: [] };
     });
+    this.lanes.set(r.claim, lane);
+    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s setup failure wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
 
   /**
@@ -1176,7 +1179,7 @@ export class StopJudging {
       const projects = isObj(user.projects) ? user.projects : {};
       for (const key of [cwd, real]) { const p = projects[key]; if (isObj(p) && p.hasTrustDialogAccepted === true) return true; }
     } catch { /* no Claude Code settings */ }
-    return codexTrusted([cwd, real]);
+    return codexTrusted(this.options.services.root.dir, [cwd, real]);
   }
 
   /**
@@ -1262,7 +1265,9 @@ export class StopJudging {
     }
     // What a pending claim waited for closes once its run ended or your answer came (#82), before open items are read.
     const [owner] = (await this.options.services.record.raw(`SELECT subject_ref, session_id FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null; session_id: string | null }[];
-    if (owner?.subject_ref) await this.options.services.openItems.settled({ session: owner.session_id ?? '', agent: this.options.state().live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
+    // An older run ending is not recovery evidence for a newer claim's setup failure (#2074).
+    const [latest] = owner?.subject_ref ? (await this.options.services.record.raw('SELECT id FROM claims WHERE subject_ref = ? ORDER BY created DESC, id DESC LIMIT 1', [owner.subject_ref])) as { id: string }[] : [];
+    if (owner?.subject_ref && latest?.id === claim.slice(6)) await this.options.services.openItems.settled({ session: owner.session_id ?? '', agent: this.options.state().live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
@@ -1437,17 +1442,9 @@ export class StopJudging {
     }
   }
 
-  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why, by its code when it has one (#2029). */
+  /** The validity floor's INVALID and snapshot budget's INCONCLUSIVE, recorded before checks count. */
   async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID', code?: string): Promise<void> {
-    const ts = this.options.services.now();
-    const id = ulid(ts);
-    await this.options.events.append(this.options.events.connection('core'), {
-      v: code ? 2 : 1, id, kind: 'verdict.made', ts, subject: claim,
-      data: {
-        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], ...(code ? { why: [{ reason: code, text: reason.slice(0, 8192) }] } : {}), requirements: [], smallest: null, points_to: null, commit,
-        key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
-      },
-    });
+    await recordRefusal(this.options.events, this.options.services.now(), claim, commit, reason, outcome, code);
   }
 
   /** The denied calls that ran anyway in a claim's session (#1033): as they arrived, and as the record holds them. */

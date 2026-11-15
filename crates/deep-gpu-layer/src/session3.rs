@@ -47,6 +47,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
             ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
         },
+        dof: deep_scene3d_render::dof::Planted {
+            linear_coc: p == Some(Planted::CocLinearInDistance),
+        },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
@@ -419,6 +422,18 @@ pub fn cull_on_cpu(app: &mut App) {
     })
 }
 
+/// #506's planted cores: the next draws keep the backdrop copy and the mirror's picture the draw
+/// before them left.
+pub fn keep_first(app: &mut App, backdrop: bool, mirror: bool) {
+    app.worker.call(move |state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.keep_first(backdrop, mirror);
+            }
+        }
+    })
+}
+
 /// What each culled list of the frame just drawn kept (#484).
 pub fn kept(app: &mut App) -> Vec<deep_scene3d_render::KeptRow> {
     app.worker.call(|state| {
@@ -546,6 +561,8 @@ pub struct Drawn {
     pub reflection: Option<Vec<u8>>,
     /// #268: the water's foam share, f32 a pixel.
     pub foam: Option<Vec<u8>>,
+    /// #468: the depth of field's signed circle of confusion in px, f32 a pixel.
+    pub coc: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -688,6 +705,11 @@ pub fn draw_on(
                 },
                 foam: if read_targets && !noop {
                     r.read_foam(&device)
+                } else {
+                    None
+                },
+                coc: if read_targets && !noop {
+                    r.read_coc(&device)
                 } else {
                     None
                 },

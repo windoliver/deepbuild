@@ -95,6 +95,17 @@ pub struct Channel {
     pub glide: Option<Curve>,
     /// #494: a path channel's keys.
     pub path: Option<PathKeys>,
+    /// #468: a focus pull's keys on `dof.focus`, in key order, when one names an item: each
+    /// key's value is then its index, and what it names is here.
+    pub named: Option<Vec<FocusKey>>,
+}
+
+/// What a focus pull's key names (#468; Camera `camera@1`: lens): a distance in m, or an item
+/// (`ID` or `ID#anchor`) whose evaluated distance at t the key stands for.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FocusKey {
+    At(f64),
+    Item(String),
 }
 
 impl Channel {
@@ -995,8 +1006,8 @@ pub(crate) fn ease_of(value: &Value, path: &str) -> Result<Ease, Refused> {
     let single = value.as_object().filter(|o| o.len() == 1);
     if let Some(Value::Object(e)) = single.and_then(|o| o.get("ease")) {
         let name = e.get("name").and_then(Value::as_str);
-        return match Ease::NAMES.iter().find(|(n, _)| Some(*n) == name) {
-            Some((_, ease)) => Ok(*ease),
+        return match name.and_then(Ease::named) {
+            Some(ease) => Ok(ease),
             None => refuse("bad_interp", format!("{path}/ease/name")),
         };
     }
@@ -1344,6 +1355,11 @@ fn follow_of(
     })
 }
 
+/// The keyed value an iris's radius channel writes, by its transition's ID.
+pub fn iris_radius(transition: &str) -> String {
+    format!("transitions/{transition}/iris/radius")
+}
+
 fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
     let parts: Vec<&str> = text.split('/').collect();
     let (owner, field) = if in_clip {
@@ -1359,6 +1375,14 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
             ["data", name] if !name.is_empty() => {
                 return Ok(Target {
                     owner: format!("data/{name}"),
+                    field: vec!["value".into()],
+                })
+            }
+            // #466: an iris's radius, keyed as a value of its own (Transition: operator, iris
+            // and dip: `radius: channel`).
+            ["transitions", id, "iris", "radius"] if !id.is_empty() => {
+                return Ok(Target {
+                    owner: format!("data/{}", iris_radius(id)),
                     field: vec!["value".into()],
                 })
             }
@@ -2007,7 +2031,7 @@ fn modifier_of(
     Ok(Modifier { kind, influence })
 }
 
-fn channel_of(
+pub(crate) fn channel_of(
     id: &str,
     c: &Map<String, Value>,
     in_clip: bool,
@@ -2077,10 +2101,14 @@ fn channel_of(
             range,
             glide: None,
             path: None,
+            named: None,
         });
     }
     let mut keys = Vec::new();
     let mut path_shapes: Vec<(String, Option<crate::morph::Shape>, Option<String>)> = Vec::new();
+    // #468: keys on a dof's focus may name items (a focus pull), eased in_out_cubic by default.
+    let focus = !in_clip && ty == ValueType::F32 && target.field == ["params", "dof", "focus"];
+    let mut named: Vec<(String, FocusKey)> = Vec::new();
     let strict = match (ty, c.get("morph").and_then(Value::as_str), c.get("morph")) {
         (_, _, None) => false,
         (ValueType::Path, Some("match"), _) => false,
@@ -2109,7 +2137,17 @@ fn channel_of(
             )?
         };
         let value = match (ty, key.get("value")) {
-            (ValueType::F32 | ValueType::Angle, v) => vec![number(v, &format!("{kpath}/value"))?],
+            (ValueType::F32, Some(Value::String(item))) if focus && !item.is_empty() => {
+                named.push((kid.clone(), FocusKey::Item(item.clone())));
+                vec![0.0]
+            }
+            (ValueType::F32 | ValueType::Angle, v) => {
+                let x = number(v, &format!("{kpath}/value"))?;
+                if focus {
+                    named.push((kid.clone(), FocusKey::At(x)));
+                }
+                vec![x]
+            }
             (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
             (ValueType::Enum, Some(Value::String(s))) => {
                 let i = labels.iter().position(|l| l == s).unwrap_or_else(|| {
@@ -2145,6 +2183,9 @@ fn channel_of(
         };
         let mut interp = match (ty, key.get("interp")) {
             (ValueType::Bool | ValueType::Enum, None) => Interp::Hold,
+            (_, None) if focus => Interp::Ease(ease::Entry::opened(
+                ease::named("in_out_cubic", None).expect("a first-party ease"),
+            )),
             (_, v) => interp_of(v, &format!("{kpath}/interp"))?,
         };
         if glides {
@@ -2231,6 +2272,22 @@ fn channel_of(
         return refuse("bad_doc", format!("{path}/modifiers"));
     }
     keys.sort_by(|a, b| a.t.cmp(&b.t).then_with(|| a.id.cmp(&b.id)));
+    // #468: a focus pull's keys stand for their index; each one's distance is taken at t.
+    let named = named
+        .iter()
+        .any(|(_, n)| matches!(n, FocusKey::Item(_)))
+        .then(|| {
+            keys.iter_mut()
+                .enumerate()
+                .map(|(i, k)| {
+                    k.value = vec![i as f64];
+                    named
+                        .iter()
+                        .find(|(kid, _)| *kid == k.id)
+                        .map_or(FocusKey::At(0.0), |(_, n)| n.clone())
+                })
+                .collect::<Vec<_>>()
+        });
     match ty {
         // q and −q are one rotation: each key takes the sign nearest the key before it.
         ValueType::Quat if ctx.arc == quat::Arc::Short => {
@@ -2280,6 +2337,7 @@ fn channel_of(
         modifiers,
         follow: None,
         range,
+        named,
         glide: glides.then(|| {
             glide.sort_by_key(|k| k.t);
             let keys = glide
@@ -2854,15 +2912,18 @@ fn cuts_of(
         if names_shot("from") || names_shot("to") {
             continue;
         }
-        // #494: a match morph between two items is the morph's (crate::morph).
+        // #494: a match morph between two items is the morph's (crate::morph), and so (#1968)
+        // is a text diff between two code items.
         let items = doc.get("items").and_then(Value::as_object);
         let names_item = |f: &str| {
             tr.get(f)
                 .and_then(Value::as_str)
                 .is_some_and(|n| items.is_some_and(|i| i.contains_key(n)))
         };
-        if tr.get("kind").and_then(Value::as_str) == Some("match_morph")
-            && (names_item("from") || names_item("to"))
+        if matches!(
+            tr.get("kind").and_then(Value::as_str),
+            Some("match_morph" | "text_diff")
+        ) && (names_item("from") || names_item("to"))
         {
             continue;
         }

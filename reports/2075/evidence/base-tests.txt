@@ -1,0 +1,220 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/late-fast-lane.test.ts tests/acceptance/2075/slow-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/base
+
+x··xxxx··xx·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > starts no slow run while the fast check runs or after its zero-test run makes it INVALID
+AssertionError: INVALID starts no slow check: expected [ { claim: 'claim:late', …(9) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "approved": null,
++     "check": "slow.test.mjs",
++     "claim": "claim:late",
++     "command": "node --test slow.test.mjs",
++     "commit": "8ec847da2152c9af0d17bdf9fe1bf1c433dc2523",
++     "cwd": "<temporary-path>",
++     "deadline_ms": null,
++     "expected_ms": 300000,
++     "key": {
++       "base": false,
++       "check": "slow.test.mjs",
++       "claim": "claim:late",
++       "dir": "<temporary-path>",
++       "session": "session:late",
++       "stem": "87291bf86e4e87aaa5cf2a2d0c023613a98e3dea815730521fb1a55bf954fb37",
++       "withheld": false,
++     },
++     "lane": "slow",
++   },
++ ]
+
+ ❯ packages/hub/test/late-fast-lane.test.ts:108:54
+    106|     expect(w.gate.verdictOf(CLAIM)?.outcome).toBe('INVALID');
+    107|     await sleep(100);
+    108|     expect(w.slow(), 'INVALID starts no slow check').toEqual([]);
+       |                                                      ^
+    109|     expect(w.gate.standing(CLAIM).find((r) => r.check === SLOW)?.resul…
+    110|   }, 30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > observes the background ending before the fast lane finishes
+AssertionError: no obsolete background hold is created: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "data": "{\"session\":\"session:late\",\"claim\":\"claim:late\",\"check\":\"slow.test.mjs\",\"snapshot\":\"cb735b7caa0aa9a1b6eb6b0ea6fc98fb291e295a\",\"held_at\":0,\"reason\":\"build in the background\",\"started_at\":null,\"started_by\":null,\"replaced_by\":null}",
++   },
++   {
++     "data": "{\"session\":\"session:late\",\"claim\":\"claim:late\",\"check\":\"slow.test.mjs\",\"snapshot\":\"cb735b7caa0aa9a1b6eb6b0ea6fc98fb291e295a\",\"held_at\":0,\"reason\":\"build in the background\",\"started_at\":0,\"started_by\":\"loop_paused\",\"replaced_by\":null}",
++   },
++ ]
+
+ ❯ packages/hub/test/late-fast-lane.test.ts:140:70
+    138|     expect(w.slow(), 'ending background work never outruns the fast ch…
+    139|     w.release(); await w.passed();
+    140|     expect(await w.held(), 'no obsolete background hold is created').t…
+       |                                                                      ^
+    141|   }, 30_000);
+    142|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > observes the session ending before the fast lane finishes
+AssertionError: no obsolete background hold is created: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "data": "{\"session\":\"session:late\",\"claim\":\"claim:late\",\"check\":\"slow.test.mjs\",\"snapshot\":\"69529baa674b419e0def6245fdc3a4c9f63ac776\",\"held_at\":0,\"reason\":\"build in the background\",\"started_at\":null,\"started_by\":null,\"replaced_by\":null}",
++   },
++   {
++     "data": "{\"session\":\"session:late\",\"claim\":\"claim:late\",\"check\":\"slow.test.mjs\",\"snapshot\":\"69529baa674b419e0def6245fdc3a4c9f63ac776\",\"held_at\":0,\"reason\":\"build in the background\",\"started_at\":0,\"started_by\":\"loop_paused\",\"replaced_by\":null}",
++   },
++ ]
+
+ ❯ packages/hub/test/late-fast-lane.test.ts:140:70
+    138|     expect(w.slow(), 'ending background work never outruns the fast ch…
+    139|     w.release(); await w.passed();
+    140|     expect(await w.held(), 'no obsolete background hold is created').t…
+       |                                                                      ^
+    141|   }, 30_000);
+    142|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > retains a turn end received before the snapshot exists, without starting slow checks before fast completion
+AssertionError: both real checks pass: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ until packages/hub/test/late-fast-lane.test.ts:25:30
+     23| async function until(ok: () => boolean | Promise<boolean>, reason: str…
+     24|   for (const end = Date.now() + 15_000; Date.now() < end;) { if (await…
+     25|   expect(await ok(), reason).toBe(true);
+       |                              ^
+     26| }
+     27|
+ ❯ Object.passed packages/hub/test/late-fast-lane.test.ts:94:7
+ ❯ packages/hub/test/late-fast-lane.test.ts:146:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > cancels placement when a prompt arrives while the loop queue wait is being read
+AssertionError: the earlier reply cannot create a grace timer after the prompt: expected [ { claim: 'claim:late', …(9) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "approved": null,
++     "check": "slow.test.mjs",
++     "claim": "claim:late",
++     "command": "node --test slow.test.mjs",
++     "commit": "181f0fbe2ab6223e960d26029f7d463affdb9efc",
++     "cwd": "<temporary-path>",
++     "deadline_ms": null,
++     "expected_ms": 300000,
++     "key": {
++       "base": false,
++       "check": "slow.test.mjs",
++       "claim": "claim:late",
++       "dir": "<temporary-path>",
++       "session": "session:late",
++       "stem": "22940d999cbb0b91d203143c2c97eca663a232fd42e9e89ed7f0c02dc83019f4",
++       "withheld": false,
++     },
++     "lane": "slow",
++   },
++ ]
+
+ ❯ packages/hub/test/late-fast-lane.test.ts:164:88
+    162|     await placing;
+    163|     w.at(60_000); await sleep(100);
+    164|     expect(w.slow(), 'the earlier reply cannot create a grace timer af…
+       |                                                                                        ^
+    165|     expect(await w.held()).toEqual([]);
+    166|     await w.end([], 'person'); await w.passed();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > waits for the newer turn to stop, then starts once even when the snapshot is unchanged
+AssertionError: the previous reply cannot end the new turn: expected [ { claim: 'claim:late', …(9) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "approved": null,
++     "check": "slow.test.mjs",
++     "claim": "claim:late",
++     "command": "node --test slow.test.mjs",
++     "commit": "34a7e8b83117337cfd04a8ab8dcad886112a9fd4",
++     "cwd": "<temporary-path>",
++     "deadline_ms": null,
++     "expected_ms": 300000,
++     "key": {
++       "base": false,
++       "check": "slow.test.mjs",
++       "claim": "claim:late",
++       "dir": "<temporary-path>",
++       "session": "session:late",
++       "stem": "72d80d415d92acef4974cef56c90b391406dc0b9bd1337b9b762682eccd5adbe",
++       "withheld": false,
++     },
++     "lane": "slow",
++   },
++ ]
+
+ ❯ packages/hub/test/late-fast-lane.test.ts:174:68
+    172|     w.gate.prompted(SESSION);
+    173|     w.release(); await w.fastDone(); await sleep(100);
+    174|     expect(w.slow(), 'the previous reply cannot end the new turn').toE…
+       |                                                                    ^
+    175|     await w.end([], 'person'); await w.passed();
+    176|     await w.end([], 'person');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/2075/slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC1 starts once the fast check passes, with no new prompt, and the claim reaches a verdict
+AssertionError: the slow check .deepbuild/checks/slow.sh has no run in the record: the claim claim:01M7ECA1Y9J4FBND4PXV3ZRF5K is left pending (.deepbuild/checks/fast.sh ended passed at log 36; claim verdicts so far: []; runs of .deepbuild/checks/slow.sh: 0): expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/acceptance/2075/slow-checks.test.ts:21:125
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 5 passed (12)
+   Start at  17:14:20
+   Duration  114.29s (tests 99%, transform 1%)

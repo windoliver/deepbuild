@@ -1,0 +1,52 @@
+How ac3-hinge.test.ts fails at the base, abf74b4ee (main), on this Mac (macOS 27.2, arm64, Metal; cargo from Homebrew's
+rustup). Run once, not only read. Absolute paths are written <repo>.
+
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/468-redraft-ac3/tsconfig.json
+  (no output, exit 0)
+
+  $ NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+      node node_modules/vitest/vitest.mjs run --root tests/acceptance/468-redraft-ac3 --no-file-parallelism --testTimeout=3600000 ac3-hinge.test.ts
+
+   ❯ ac3-hinge.test.ts (2 tests | 2 failed) 6955ms
+     × AC3 #468.632af807 the label's leader ends within 0.5 px of lid#hinge's projection at 200 random times, seeked
+       and played have one pixel hash, and it hides exactly where the projection leaves the safe frame 4364ms
+     × AC3 #468.632af807 a 3D line with one point at lid#hinge passes through that anchor at every sampled time 785ms
+
+   FAIL  … the label's leader ends within 0.5 px …
+   AssertionError: the label played was drawn, not refused: {"code":"out_of_range","reason":"items/label/params/anchor"}
+    ❯ drawn ../506/helpers.ts:196:75
+    ❯ framesOf ../506/helpers.ts:213:3
+    ❯ ac3-hinge.test.ts:102:34
+
+   FAIL  … a 3D line with one point at lid#hinge passes through that anchor at every sampled time
+   AssertionError: the wire passes through lid#hinge at every sampled time:
+     frame 232: the frame reports no segments for wire (it lists [])
+     frame 668: the frame reports no segments for wire (it lists [])
+     … (one line for each of the 200 sampled frames)
+
+   Test Files  1 failed (1)
+        Tests  2 failed (2)
+     Duration  7.21s
+
+Why, for the reason the criterion names:
+
+1. The label: the base's overlay (`crates/deep-canvas-scene3d/src/scene.rs`, `overlay`) places an `overlay.frame@1`
+   only at an item's point and refuses one without `anchor.item`, so a label anchored to the right edge is refused
+   before any frame draws. It has no `leader` or `hide`, and its `overlays` rows have no `leader`. Both fixture guards
+   ran and held first (every sampled projection in front of the camera and at least 0.5 px from the safe frame's
+   edge; 136 inside, 64 outside; the label's frame 30 px clear).
+2. The wire: the base draws the document (200 sought frames, `counts: true`), but `segments` lists only mesh-edge and
+   logic-array lines, so the wire's are missing. Read from the code: its `lid#hinge` point is the lid's origin
+   (`point_of`: "an item's evaluated anchor (its origin)"), which projects up to 57 px from lid#hinge at the sampled
+   times inside the safe frame (the test's guard), so with its segments reported it would still fail.
+
+Scratch runs at the base, against this suite's numbers (not kept; nothing outside this folder changed):
+- An `overlay.frame@1` anchored to the lid at the hinge's point in the lid's own space, `{item: "lid", point: [0.28,
+  0.02, -0.2]}`, played 960 frames with `overlays: true`: #506's row's `at` equals this suite's projection of
+  lid#hinge (the pivot, the lid's opening, the orbit) within 1.8e-13 px at all 200 sampled frames. The reference is
+  the base's own projection.
+- The document without the label: played and sought, its 200 sampled frames have one `pixel_hash` each way; two sought
+  runs agree; the same document holding the label's frame and its children but no overlay hashes as the one without
+  them at all 200. So a hidden label can equal the frame without it, bit for bit. The 200 hashes are distinct.
+- 8 of the 64 outside frames put lid#hinge inside the frame but outside the safe frame; the projection crosses the safe
+  frame's edge once over the whole 960-frame grid, at frame 610.

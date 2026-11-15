@@ -18,8 +18,13 @@ mod determinism;
 mod efficiency;
 mod evidence;
 mod export;
+mod extended;
 mod familiar;
+mod fields;
+mod caption_design;
 mod film;
+mod film_operator;
+mod films;
 mod film_audit;
 mod film_layout;
 mod film_viewer;
@@ -40,14 +45,19 @@ mod kinds;
 mod kit;
 mod lengths;
 mod logic;
+mod maps;
 mod media;
 mod mixdown;
 mod modes;
+#[cfg(target_os = "macos")]
+mod momentum;
 mod narration;
+mod over3d;
 mod net;
 mod packs;
 mod physics;
 mod picks;
+mod pixels;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -96,6 +106,7 @@ mod timings;
 mod twins;
 mod verdict;
 mod video;
+mod warps;
 mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -644,6 +655,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             return Some(Call::Path {
                 doc: doc()?,
                 item: c.get("item")?.as_str()?.to_string(),
+                t: optional(c.get("t"), |t| crate::time::eval_time(Some(t)))?,
             })
         }
         // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path. It arrives on
@@ -830,7 +842,17 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "kit" => return Some(Call::Kit(Box::new(kit::KitCall::parse(c)?))),
         "manifest" => return Some(Call::Manifest),
         "catalog" => return Some(Call::Catalog),
-        "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
+        "verdict" => {
+            // #1938: `against`, a verdict another run made on the claim, is an object or absent.
+            let against = match c.get("against") {
+                None => None,
+                Some(v) => Some(v.as_object().map(|_| v.clone())?),
+            };
+            return Some(Call::Verdict(
+                c.get("claim")?.as_str()?.to_string(),
+                against,
+            ));
+        }
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
         "answer" => {
             return Some(Call::Answer {
@@ -1277,13 +1299,21 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
+                // #542's in the text field and the scroll control's router.
+                || deep_canvas_input::text::PLANTED.contains(p)
+                || deep_canvas_input::scroll::PLANTED.contains(p)
                 || deep_canvas_scene3d::pointer::PLANTED.contains(p)
                 // #538's in the cells, text and motion modules.
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
                 || deep_canvas_marks::copy::PLANTED.contains(p)
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
+                // #223's in the marks2d module's warp.
+                || deep_canvas_marks::warp::PLANTED.contains(p)
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
+                // #466's boil and blur in deep-show's frames.
+                || films::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1329,6 +1359,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
                 "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
                 "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
+                "pixel_checks_hold_anywhere" => Planted::PixelChecksHoldAnywhere,
+                "light_from_whole_frame" => Planted::LightFromWholeFrame,
+                "reduction_leaves_out_last_rows" => Planted::ReductionLeavesOutLastRows,
+                "regression_asks_every_verdict" => Planted::RegressionAsksEveryVerdict,
+                "loop_checks_cached_by_doc" => Planted::LoopChecksCachedByDoc,
+                "stale_fix_never_rebases" => Planted::StaleFixNeverRebases,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,
@@ -1371,6 +1407,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
@@ -1990,6 +2027,9 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-prog-registry",
     feature = "test-sandbox-needs-logic",
     feature = "test-sandbox-alt",
+    feature = "test-logic-patch",
+    feature = "test-leave-out-physics",
+    feature = "test-logic-needs-physics",
     feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
@@ -2085,8 +2125,11 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_canvas_media::module::module()
         });
-        // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
-        out.extend([deep_canvas_input::module::module(), deep_logic::module(), deep_canvas_export::module::module()]);
+        // Issue #308: controls and the input track's handling, with control@1.
+        out.extend([
+            deep_canvas_input::module::module(),
+            deep_canvas_export::module::module(),
+        ]);
         out.extend(physics::module());
         // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
         out.push(net::module());
@@ -2109,8 +2152,32 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_sandbox::module::module()
         });
     }
+    // Issue #533: the logic module, on sandbox, its arrays column sources (#535); `test-logic-patch` seals a patch release of the
+    // shipped implementation in its place, and `test-logic-needs-physics` plants a manifest that
+    // requires physics.
+    if set >= BuildSet::Full {
+        let logic = if cfg!(feature = "test-logic-patch") {
+            deep_logic::module::implementation(
+                deep_canvas::registry::Semver::parse("1.0.1").expect("a version"),
+            )
+        } else if cfg!(feature = "test-logic-needs-physics") {
+            logic_needs_physics()
+        } else {
+            deep_logic::module::module()
+        };
+        // A build without physics refuses the logic items that need it (#533); one with it binds
+        // physics.cast@1 for the items that ask it between steps (#213).
+        out.push(match physics::module() {
+            Some(_) => {
+                deep_logic::module::bind_services(physics::cast::bound);
+                logic
+            }
+            None => deep_logic::module::without_physics(logic),
+        });
+    }
+    // The logic module runs on sandbox, so a build without sandbox holds no logic either (#533).
     #[cfg(feature = "test-leave-out-sandbox")]
-    out.retain(|m| m.manifest.name != "sandbox");
+    out.retain(|m| m.manifest.name != "sandbox" && m.manifest.name != "logic");
     #[cfg(feature = "test-mesh-item")]
     out.push(deep_canvas_test_modules::sandbox::mesh());
     #[cfg(feature = "test-prog-registry")]
@@ -2239,6 +2306,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
     #[cfg(feature = "test-sim")]
     out.extend(test_sim::modules());
     out.extend(kit::modules::built());
+    // #403: a build without the logic module.
     #[cfg(feature = "test-leave-out-logic")]
     out.retain(|m| m.manifest.name != "logic");
     // #443: a build without the vector module, whose scene3d@1 and marks2d@1 digests equal the
@@ -2284,6 +2352,20 @@ pub fn sandbox_needs_logic() -> Module {
     let mut m = deep_canvas_sandbox::module::module();
     m.manifest.depends_on.insert(
         "logic".into(),
+        deep_canvas::registry::Dependency {
+            range: deep_canvas::registry::Range::parse("^1").expect("a range"),
+            optional: false,
+        },
+    );
+    m
+}
+
+/// #533: a logic module whose manifest declares physics among its required dependencies, which
+/// the seal refuses in a build without the physics module, naming both.
+pub fn logic_needs_physics() -> Module {
+    let mut m = deep_logic::module::module();
+    m.manifest.depends_on.insert(
+        "physics".into(),
         deep_canvas::registry::Dependency {
             range: deep_canvas::registry::Range::parse("^1").expect("a range"),
             optional: false,
@@ -2354,6 +2436,9 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             // holds, and its kit holds sandbox@1's own part.
             let interface = m.manifest.implements.clone();
             let sandbox = interface == deep_canvas_sandbox::module::INTERFACE;
+            // #533: logic@1's reference is the shipped implementation, whichever a test build
+            // holds.
+            let logic = interface == deep_logic::module::INTERFACE;
             let mut parts = kit.clone();
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
@@ -2362,6 +2447,7 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             // references are the shipped modules, whichever a test build holds.
             let reference = match interface.as_str() {
                 _ if sandbox => deep_canvas_sandbox::module::module(),
+                _ if logic => deep_logic::module::module(),
                 "look@1" => deep_canvas_marks::modules::look(),
                 "data@1" => deep_canvas_marks::modules::data(),
                 "graph@1" => deep_canvas_graph::module::module(),
@@ -2564,7 +2650,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
                 name: "kind@1".into(),
                 entries: entries.into_iter().map(Value::from).collect(),
                 rules: vec!["sheet_cap".into()],
-                passes: Vec::new(),
+                ..Default::default()
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
@@ -3101,6 +3187,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "admits_frame_json" => Ok(StartPlanted::Seal(Fault::AdmitsFrameJson)),
         "digest_hashes_private" => Ok(StartPlanted::Seal(Fault::DigestHashesPrivate)),
         "digest_covers_pins" => Ok(StartPlanted::Seal(Fault::DigestCoversPins)),
+        "digest_covers_version" => Ok(StartPlanted::Seal(Fault::DigestCoversVersion)),
         "runtime_digest_omits_physics" => Ok(StartPlanted::Seal(Fault::RuntimeOmitsPhysics)),
         "runtime_digest_hashes_only_shapes" => Ok(StartPlanted::Seal(Fault::RuntimeOnlyShapes)),
         "orders_steps_by_name" => Ok(StartPlanted::StepsByName),
@@ -3277,6 +3364,9 @@ fn main() {
                 line["registry"] = json!(r.name);
                 line["entries"] = json!(r.entries);
                 line["rules"] = json!(r.rules);
+                for (k, v) in &r.report {
+                    line[k.as_str()] = v.clone();
+                }
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }

@@ -192,8 +192,20 @@ fn check_by(
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
             // A canvas module's own kinds expanded at check, after recipes (#222).
             let planted = packs.planted.expander;
-            let module = super::expands::run(doc, items, sealed, &resolved, planted, &mut issues);
+            // A film recipe's markers and shots are there for the module's expansions (#142).
+            let with_sections;
+            let seen = if expansions.iter().any(|e| !e.sections.is_empty()) {
+                let mut d = doc.clone();
+                super::expands::merge(&mut d, &expansions);
+                with_sections = d;
+                &with_sections
+            } else {
+                doc
+            };
+            let module = super::expands::run(seen, items, sealed, &resolved, planted, &mut issues);
             expansions.extend(module);
+            // A film recipe's shots and transitions timed on its cue list's markers (#142).
+            super::expands::resolve_times(doc, &mut expansions, &mut issues);
             // A broken-out item its instance's version no longer derives stays the writer's
             // own, and the load says so (Pack: migrations as data; #1961).
             for e in &expansions {
@@ -214,7 +226,7 @@ fn check_by(
                 }
             }
             // The core's `kind_rules` check: each instance's rules once, after its expansion (#202).
-            let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted);
+            let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted, sealed);
             issues.extend(rules.issues);
             rules_ran = rules.ran;
             let derived: BTreeSet<&str> = expansions
@@ -1330,6 +1342,10 @@ struct ItemContext<'a> {
     facts: &'a BTreeMap<String, KindFacts<'a>>,
 }
 
+/// The canvas modules whose kinds a document uses without naming the module in
+/// `requires.modules`.
+const UNDECLARED_MODULES: &[&str] = &["logic"];
+
 /// What the build says about one kind text, worked out once per check: a document holds few
 /// kinds and many items.
 struct KindFacts<'a> {
@@ -1445,8 +1461,9 @@ fn check_item(
         return false;
     }
     // A document declares the canvas modules its kinds need (Document envelope), so a
-    // build without the module has the name to refuse with.
-    if let Some(module) = facts.module {
+    // build without the module has the name to refuse with. Logic `logic@1` items need no
+    // declaration (Document envelope: `requires`); one the build lacks is refused above.
+    if let Some(module) = facts.module.filter(|m| !UNDECLARED_MODULES.contains(m)) {
         let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
         // #222: an item its module expands at check never reaches a frame; what it expands to
         // (channels, markers) needs no declaration, so neither does it.

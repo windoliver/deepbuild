@@ -89,6 +89,8 @@ pub struct Motifs {
     holds: Vec<(i64, i64)>,
     tempo: Option<Tempo>,
     doc_seed: u64,
+    /// #466's planted motif: beats counted at the tempo map's first BPM throughout.
+    first_tempo: bool,
 }
 
 fn refused<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
@@ -297,7 +299,23 @@ impl Motifs {
             holds,
             tempo,
             doc_seed: doc.get("seed").and_then(Value::as_u64).unwrap_or(0),
+            first_tempo: program.options.planted == crate::program::Planted::MotifBeatsAtFirstTempo,
         }))
+    }
+
+    /// The tempo map's position in beats at `tau`; under the planted motif, beats of the first
+    /// segment's length throughout.
+    fn beats(&self, tau: i64) -> f64 {
+        let Some(tm) = self.tempo.as_ref() else {
+            return 0.0;
+        };
+        if self.first_tempo {
+            let (Ok(a), Ok(b)) = (tm.at_position(0.0), tm.at_position(1.0)) else {
+                return 0.0;
+            };
+            return (tau - a) as f64 / (b - a).max(1) as f64;
+        }
+        tm.position_of(tau)
     }
 
     /// Whether a slot binds `id`.
@@ -329,7 +347,7 @@ impl Motifs {
                 let tau = skipping(t, &spans);
                 let cycles = match m.rate {
                     Rate::Hz(hz) => hz * tau as f64 / FLICKS_PER_SECOND as f64,
-                    Rate::Beats(b) => self.tempo.as_ref().map_or(0.0, |tm| tm.position_of(tau)) / b,
+                    Rate::Beats(b) => self.beats(tau) / b,
                 };
                 let seed = if m.by_item {
                     fnv(id)

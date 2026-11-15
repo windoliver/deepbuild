@@ -540,10 +540,21 @@ pub enum Ease {
     OutCubic,
     InOutCubic,
     Bezier(Bezier),
+    /// #466: any other `ease@1` ease, such as a dip's `in_out_quad` progress.
+    Named(deep_canvas::ease::Entry),
 }
 
 impl Ease {
     /// The `ease@1` names motion lands, as written.
+    /// The ease named `name`: one of `NAMES`, else any `ease@1` ease at its default params.
+    pub fn named(name: &str) -> Option<Ease> {
+        match Ease::NAMES.iter().find(|(n, _)| *n == name) {
+            Some((_, e)) => Some(*e),
+            None => deep_canvas::ease::named(name, None)
+                .map(|n| Ease::Named(deep_canvas::ease::Entry::opened(n))),
+        }
+    }
+
     pub const NAMES: [(&'static str, Ease); 4] = [
         ("linear", Ease::Linear),
         ("in_cubic", Ease::InCubic),
@@ -564,6 +575,7 @@ impl Ease {
             }
             Ease::InOutCubic => deep_canvas::camera::ease_in_out_cubic(u),
             Ease::Bezier(b) => b.solve(u).y,
+            Ease::Named(e) => e.ease.at(u),
         }
     }
 }

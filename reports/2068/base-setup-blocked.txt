@@ -1,0 +1,78 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts (4 tests | 4 failed) 22545ms
+   × #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait 7387ms
+   × #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning 3217ms
+   × #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers 5263ms
+   × #2068 AC3: instant forge twin preserves issue criteria and every fixture author's membership role 4120ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait
+Error: BLOCKED: deep hub run did not start:  deep hub: the core stopped: Error: no deep-hook is built under <issue-worktree>/target; run cargo build -p deep-hook first
+    at deepHook (file://<issue-worktree>/packages/hub/dist/paths.js:216:15)
+    at Object.guard (file://<issue-worktree>/packages/hub/dist/core.js:369:75)
+    at Products.secure (file://<issue-worktree>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<issue-worktree>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<issue-worktree>/packages/hub/dist/core.js:815:29)
+    at async Core.init (file://<issue-worktree>/packages/hub/dist/core.js:561:9)
+
+ ❯ world tests/acceptance/2068/helpers.ts:133:30
+    131|     const first = output.split('\n')[0];
+    132|     const ready = first ? JSON.parse(first) as Line : undefined;
+    133|     if (!ready?.ready) throw Error(`BLOCKED: deep hub run did not star…
+       |                              ^
+    134|     const socket = String(ready.socket);
+    135|     db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+ ❯ tests/acceptance/2068/forge-wait.test.ts:25:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers
+Error: BLOCKED: deep hub run did not start:  deep hub: the core stopped: Error: no deep-hook is built under <issue-worktree>/target; run cargo build -p deep-hook first
+    at deepHook (file://<issue-worktree>/packages/hub/dist/paths.js:216:15)
+    at Object.guard (file://<issue-worktree>/packages/hub/dist/core.js:369:75)
+    at Products.secure (file://<issue-worktree>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<issue-worktree>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<issue-worktree>/packages/hub/dist/core.js:815:29)
+    at async Core.init (file://<issue-worktree>/packages/hub/dist/core.js:561:9)
+
+ ❯ world tests/acceptance/2068/helpers.ts:133:30
+    131|     const first = output.split('\n')[0];
+    132|     const ready = first ? JSON.parse(first) as Line : undefined;
+    133|     if (!ready?.ready) throw Error(`BLOCKED: deep hub run did not star…
+       |                              ^
+    134|     const socket = String(ready.socket);
+    135|     db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+ ❯ tests/acceptance/2068/forge-wait.test.ts:56:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC3: instant forge twin preserves issue criteria and every fixture author's membership role
+Error: BLOCKED: deep hub run did not start:  deep hub: the core stopped: Error: no deep-hook is built under <issue-worktree>/target; run cargo build -p deep-hook first
+    at deepHook (file://<issue-worktree>/packages/hub/dist/paths.js:216:15)
+    at Object.guard (file://<issue-worktree>/packages/hub/dist/core.js:369:75)
+    at Products.secure (file://<issue-worktree>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<issue-worktree>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<issue-worktree>/packages/hub/dist/core.js:815:29)
+    at async Core.init (file://<issue-worktree>/packages/hub/dist/core.js:561:9)
+
+ ❯ world tests/acceptance/2068/helpers.ts:133:30
+    131|     const first = output.split('\n')[0];
+    132|     const ready = first ? JSON.parse(first) as Line : undefined;
+    133|     if (!ready?.ready) throw Error(`BLOCKED: deep hub run did not star…
+       |                              ^
+    134|     const socket = String(ready.socket);
+    135|     db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+ ❯ tests/acceptance/2068/forge-wait.test.ts:104:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  01:26:07
+   Duration  23.91s (tests 97%, transform 2%, import 1%)
+

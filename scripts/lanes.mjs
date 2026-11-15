@@ -228,6 +228,8 @@ byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 // #1550's files build a GPUI text probe and deep-drive, and start replicas.
 alone.push('tests/acceptance/1550/');
+// #533's files build deep-logic, a wat assembler and four deep-show feature sets, and run the logic kit.
+alone.push('tests/acceptance/533/');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
@@ -397,6 +399,19 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/1936/');
 // #1935's files each build deep-show.
 alone.push('tests/acceptance/1935/');
+// #1938's files each build deep-show and draw on the GPU. The first draft's faults file and its Oracle lane are kept by
+// hand: their text-under-4.5:1 twin, "Seventy percent", fails the document's own honest-numbers check before contrast
+// decides anything (tests/acceptance/1938-redraft-contrast/DISPUTE.md); the blind redraft runs in their place.
+alone.push('tests/acceptance/1938/machines.test.ts', 'tests/acceptance/1938-redraft-contrast/');
+byHand.push('tests/acceptance/1938/faults.test.ts', 'tests/acceptance/1938-oracle/');
+// #1939's files each build deep-show and draw on the GPU; ac2-budget judges the readings' added time on the reference
+// Mac (building deep-show for release where it times).
+alone.push('tests/acceptance/1939/');
+timed.push('tests/acceptance/1939/ac2-budget.test.ts');
+// #2513's files each build deep-show and draw on the GPU; ac2-budget times the readings on a reference Mac (building
+// deep-show for release there).
+alone.push('tests/acceptance/2513/');
+timed.push('tests/acceptance/2513/ac2-budget.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
@@ -513,6 +528,8 @@ alone.push('tests/acceptance/1163/');
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
 alone.push('tests/acceptance/1401/');
+// #1729's files each build deep-show and deep-gpu and draw 3D revisions on the GPU.
+alone.push('tests/acceptance/1729/');
 // #1958's files each build deep-show, and its budgets build the merge base and time saves.
 alone.push('tests/acceptance/1958/');
 timed.push('tests/acceptance/1958/budgets.test.ts');
@@ -552,6 +569,8 @@ timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-red
 byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #540's files each build deep-show (most also #544's assembler), run logic programs, draw 3D and bake a world.
 alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
+// #542's files each build deep-show, deep-input or deep-logic and #544's assembler, run logic programs and draw the app's window.
+alone.push('tests/acceptance/542/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -604,6 +623,8 @@ alone.push('tests/acceptance/2144/');
 alone.push('tests/acceptance/1332/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
+// #1335's files each start their own hubs, a played forge and played agents, and run a standing run over its rule.
+alone.push('tests/acceptance/1335/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
 alone.push('tests/acceptance/1342/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
@@ -648,14 +669,28 @@ byHand.push('tests/acceptance/226-oracle/');
 // #462's files each build deep-gpu (and deep-canvas) and draw looks, regions and strokes on the Metal GPU; so do its
 // regressions in 2D films, exports, the live window and 3D motifs.
 alone.push('tests/acceptance/462/', 'tests/look-regions-paths.test.ts');
+// #466's files each build deep-show, deep-motion or deep-gpu and draw films through them (AC1 on the Metal GPU).
+// AC3, AC6 and AC7 are proved by their blind redraft, on the owner's ruling; the first draft's three files can't pass
+// on any program and are kept by hand (466/DISPUTE.md).
+alone.push('tests/acceptance/466/', 'tests/acceptance/466-redraft-ac3/', 'tests/acceptance/466-redraft-ac6/', 'tests/acceptance/466-redraft-ac7/');
+byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/acceptance/466/${f}.test.ts`));
 // #222's files each build deep-show and expand cue lists through it; budgets.test.ts times 512 cues in release.
 // AC7's blind redraft runs the same way, and the first draft's budgets file is kept by hand: its per-frame half
 // reads check-phase nodes as frame work, so it fails on whichever film loads first (222/REDRAFT-AC7.md).
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
+alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
+timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
+// #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
+// deep-show in release and deep-gpu for the frame budget. AC9 and AC10 are proved by their blind redraft, on the
+// owner's ruling; the first draft's two files can't pass on any program and are kept by hand (142/DISPUTE.md).
+alone.push('tests/acceptance/142/', 'tests/acceptance/142-redraft-ac9/', 'tests/acceptance/142-redraft-ac10/');
+byHand.push(...['ac9-timing', 'ac10-pack'].map((f) => `tests/acceptance/142/${f}.test.ts`));
+timed.push('tests/acceptance/142/ac6-budgets.test.ts');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views
 // frame by frame, draw the app's window and time the logic module's budgets on the reference Mac.
 alone.push('tests/acceptance/548/');
@@ -666,6 +701,42 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #1968's files build deep-show; the oracle lane builds deep-show; ac2-budgets judges the code film's budgets on the
+// reference Mac.
+alone.push('tests/acceptance/1968/', 'tests/acceptance/1968-oracle/');
+timed.push('tests/acceptance/1968/ac2-budgets.test.ts');
+// #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
+// after, so nothing else may build deep-marks-render in the checkout while it runs.
+alone.push('tests/acceptance/2497/');
+// #2073's file starts a real hub and an agent stand-in with its deep mcp for each test.
+alone.push('tests/acceptance/2073/');
+// #2073 has deep_run ask the project's trust first and run on the claim's commit as a claim's checks run, so the older
+// tests that call it in a fixture no trust record covers are their blind redrafts' since (each folder's REDRAFT.md);
+// the first drafts are kept as written, by hand only.
+alone.push('tests/acceptance/26-redraft-2073/', 'tests/acceptance/19-redraft-2073/', 'tests/acceptance/823-redraft-2073/', 'tests/acceptance/27-redraft-2073/', 'tests/acceptance/1942-redraft-2073/');
+timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
+slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
+byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
+  'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
+// #468's files each build deep-gpu (AC7 deep-show too) and draw on the Metal GPU; ac5-budgets judges the lens and
+// focus task's budgets on the reference Mac.
+// AC3 runs as its blind redraft, on the owner's ruling: the first draft reads view3d's `overlays` as an object keyed
+// by ID, where #506's suite already reads it as an array, so it is kept by hand (468-redraft-ac3/DISPUTE.md).
+alone.push('tests/acceptance/468/', 'tests/acceptance/468-redraft-ac3/');
+byHand.push('tests/acceptance/468/ac3-leader.test.ts');
+timed.push('tests/acceptance/468/ac5-budgets.test.ts');
+// #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
+// Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
+// role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
+alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
+byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
+alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
+timed.push('tests/acceptance/213/ac8-budgets.test.ts');
+// #213's criterion 3 went to a blind redraft once #548's logic replay began stopping at a trap
+// (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
+alone.push('tests/acceptance/213-redraft-ac3/');
+byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
