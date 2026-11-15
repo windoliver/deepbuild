@@ -12,6 +12,8 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1883's: a start that records folder trust by renaming over the config path, which replaces a link with a file.
+  | 'trust-renames-over-link'
   // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
   // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
   | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
@@ -356,7 +358,7 @@ const PLANTS: readonly string[] = [
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
   'append-unknown-kind', 'leak-file-per-session',
-  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket', 'trust-renames-over-link',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
