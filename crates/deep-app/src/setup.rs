@@ -107,6 +107,14 @@ fn installers() -> &'static Value {
     })
 }
 
+/// An agent's maker's price page (#1349), from the shipped facts: an https address, or none.
+pub fn price_page(agent: &str) -> Option<String> {
+    installers()[agent]["plan"]["page"]
+        .as_str()
+        .filter(|page| page.starts_with("https://"))
+        .map(str::to_owned)
+}
+
 static LOGIN: OnceLock<String> = OnceLock::new();
 
 /// Your login shell's PATH, read once off the UI thread for the rows found on it; until then, the app's own.

@@ -404,6 +404,7 @@ impl Card {
             Target::Send => "card-send".to_owned(),
             Target::Undo => "card-undo".to_owned(),
             Target::SignIn => "card-sign-in".to_owned(),
+            Target::Page => "card-price-page".to_owned(),
         })
     }
 
@@ -424,6 +425,7 @@ impl Card {
                         Row::Send => Some(Target::Send),
                         Row::Undo => Some(Target::Undo),
                         Row::SignIn => Some(Target::SignIn),
+                        Row::Page(_) => Some(Target::Page),
                         Row::Text(_) => None,
                     })
                     .collect()
@@ -582,6 +584,8 @@ impl Card {
         match did {
             Did::NeedsConfirmation(reason) => self.confirm(reason, cx),
             Did::SignIn(ask) => self.sign_in(ask, cx),
+            // The maker's own price page, in your browser (#1349): it answers nothing.
+            Did::Page(page) => cx.open_url(&page),
             _ => {}
         }
         self.send(cx);
@@ -669,6 +673,7 @@ impl Card {
             Row::Send => (Some(Control::Main), Some(Target::Send)),
             Row::Undo => (Some(Control::Plain), Some(Target::Undo)),
             Row::SignIn => (Some(Control::Main), Some(Target::SignIn)),
+            Row::Page(_) => (Some(Control::Plain), Some(Target::Page)),
         };
         // Each control keyed by what it is, never its place (#1462); a line by its place.
         let id: ElementId = match target.and_then(|target| self.id_of(target)) {

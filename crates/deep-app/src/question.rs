@@ -73,6 +73,8 @@ pub enum Target {
     Step(usize),
     /// A sign-in task's one button (#1349).
     SignIn,
+    /// A sign-in task's plan line, which opens the maker's price page (#1349).
+    Page,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,6 +111,8 @@ pub enum Did {
     /// Sign in was pressed on an agent's sign-in task (#1349), named by its handle: the shell starts that agent's sign-in,
     /// which answers nothing.
     SignIn(String),
+    /// The plan line was pressed (#1349): the shell opens the maker's price page, from the app's own facts.
+    Page(String),
 }
 
 /// One row the card draws: a line of text, or a control with its label.
@@ -129,13 +133,15 @@ pub enum Row {
     Undo,
     /// A sign-in task's one button (#1349).
     SignIn,
+    /// A sign-in task's plan line (#1349), which opens the maker's price page.
+    Page(String),
 }
 
 impl Row {
     /// The row's words, what an assistive client reads.
     pub fn label(&self) -> &str {
         match self {
-            Row::Text(text) => text,
+            Row::Text(text) | Row::Page(text) => text,
             Row::Option { label, .. } | Row::Step { label, .. } => label,
             Row::Send => "Send",
             Row::Undo => "Undo",
@@ -147,6 +153,7 @@ impl Row {
     fn marked(self) -> Row {
         match self {
             Row::Text(text) => Row::Text(visible(&text)),
+            Row::Page(text) => Row::Page(visible(&text)),
             Row::Option {
                 index,
                 label,
@@ -408,7 +415,18 @@ impl Controller {
         // answers the task: only the agent's probe closes it.
         if let Some(steps) = &self.model.sign_in {
             rows.push(Row::SignIn);
-            rows.extend(steps.iter().cloned().map(Row::Text));
+            // The step naming the price page's host is the plan line, and opens that page: the address is the app's own,
+            // from the facts it ships, never one the record carries.
+            let host = self
+                .model
+                .price_page
+                .as_deref()
+                .and_then(|page| page.strip_prefix("https://"))
+                .and_then(|rest| rest.split('/').next());
+            rows.extend(steps.iter().cloned().map(|step| match host {
+                Some(host) if step.contains(host) => Row::Page(step),
+                _ => Row::Text(step),
+            }));
             return rows;
         }
         for (index, option) in self.model.options.iter().enumerate() {
@@ -595,6 +613,10 @@ impl Controller {
             // Sign in starts the agent's own sign-in (#1349): it answers nothing, so it needs no arming or confirmation.
             Target::SignIn => match (&self.model.sign_in, phase) {
                 (Some(_), Phase::Up) if shown => Did::SignIn(self.model.ask.clone()),
+                _ => Did::Nothing,
+            },
+            Target::Page => match (&self.model.price_page, phase) {
+                (Some(page), Phase::Up) if shown => Did::Page(page.clone()),
                 _ => Did::Nothing,
             },
             // An approval whose own steps are off runs nothing the core would take: the card holds it back.
@@ -1096,6 +1118,42 @@ mod tests {
             Did::SignIn("ask:S".into())
         );
         assert!(card.take_answers().is_empty(), "Sign in answers nothing");
+    }
+
+    #[test]
+    fn a_sign_in_tasks_plan_line_opens_the_makers_price_page_from_the_apps_own_facts() {
+        // The record's step names the page's host; the address opened is the one the app ships, whatever the record says.
+        let events = vec![ask(
+            "P",
+            "unblock",
+            json!([{"id": "done", "label": "I did it", "decision": "none"}]),
+            json!({
+                "steps": ["Press Sign in", "Claude Code needs a paid plan. Its plans: claude.com/pricing"],
+                "where": "w", "why": "w", "unblocks": ["req:0"], "proves": "claude-code sign-in probe",
+            }),
+        )];
+        let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
+        let controls: Vec<Row> = card
+            .rows()
+            .into_iter()
+            .filter(|row| !matches!(row, Row::Text(_)))
+            .collect();
+        assert_eq!(
+            controls,
+            vec![
+                Row::SignIn,
+                Row::Page("Claude Code needs a paid plan. Its plans: claude.com/pricing".into())
+            ],
+            "Sign in, and the plan line as the way to the price page"
+        );
+        assert_eq!(
+            click(&mut card, &events, NOW + 10, Target::Page),
+            Did::Page("https://claude.com/pricing".into())
+        );
+        assert!(
+            card.take_answers().is_empty(),
+            "the price page answers nothing"
+        );
     }
 
     #[test]

@@ -144,6 +144,8 @@ pub struct Model {
     pub scope: Option<Scope>,
     /// On an agent's sign-in task (#1349): its steps, the plan line among them, under its one button.
     pub sign_in: Option<Vec<String>>,
+    /// On an agent's sign-in task (#1349): its maker's price page, from the app's own facts, which the plan line opens.
+    pub price_page: Option<String>,
 }
 
 /// Whether a plan step can be undone: its `undo` names how, unless it says it can't.
@@ -376,7 +378,7 @@ impl Model {
             Kind::Taste => past_calls(events, ask),
             _ => Vec::new(),
         };
-        let sign_in = matches!(kind, Kind::Unblock)
+        let agent = matches!(kind, Kind::Unblock)
             .then(|| text(&data["proves"]))
             .and_then(|proves| proves.strip_suffix(SIGN_IN_PROBE).map(str::to_owned))
             .filter(|agent| {
@@ -384,15 +386,16 @@ impl Model {
                     && agent
                         .chars()
                         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            })
-            .map(|_| {
-                data["steps"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(text)
-                    .collect()
             });
+        let price_page = agent.as_deref().and_then(crate::setup::price_page);
+        let sign_in = agent.map(|_| {
+            data["steps"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(text)
+                .collect()
+        });
         Some(Model {
             ask: handle.to_owned(),
             kind,
@@ -415,6 +418,7 @@ impl Model {
             past,
             scope: scope(events, ask),
             sign_in,
+            price_page,
         })
     }
 
