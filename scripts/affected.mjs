@@ -37,8 +37,8 @@ export { cargoResults, reportResults };
 const root = fileURLToPath(new URL('../', import.meta.url));
 const BASELINE = 'scripts/known-failures.json';
 const CODE = /\.(?:[cm]?[jt]s|tsx)$/;
-// Files every suite reads, so a change to one is verified by the full preflight; so are the setup files a runner config
-// names (select, below).
+// Files every suite reads, so a change to one is verified by the full preflight; so are those a runner config names, as
+// its setup files (select, below).
 const EVERY = ['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'];
 // A folder holding more files than this, as tests/acceptance, is named as a pattern, not as what a file reads.
 const WIDE = 400;
@@ -242,8 +242,8 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
     return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)) };
   };
   const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [];
-  // The setup files a runner config names, as the guard reads them, run in every test's process.
-  const { setup } = namedByConfig(cwd, null, all);
+  // The files a runner config names, as the guard reads them: its setup files and the config modules it imports.
+  const setup = namedByConfig(cwd, null, all);
   const feedsEvery = (path) => EVERY.includes(path) || setup.has(path);
   for (const path of changed) {
     if (feedsEvery(path)) every.push(path);
@@ -510,7 +510,7 @@ async function main(args) {
     for (const path of selection.every) console.log(`INCONCLUSIVE ${path} feeds every suite; run npm run preflight`);
     if (selection.wide.length) console.log(`INCONCLUSIVE ${selection.wide.length} suites that see the change through another package's process were not run; the release preflight or --wide runs them`);
     if (unrunTimed.length) console.log(`INCONCLUSIVE ${unrunTimed.length} timed ${unrunTimed.length === 1 ? 'file was' : 'files were'} not run; --timed runs them under a timed grant: ${unrunTimed.join(' ')}`);
-    if (skipped.length) console.log(`INCONCLUSIVE ${skipped.length} selected ${skipped.length === 1 ? 'file was' : 'files were'} not run, left to a person or to a lane of its own: ${skipped.join(' ')}`);
+    if (skipped.length) console.log(`INCONCLUSIVE ${skipped.length} selected ${skipped.length === 1 ? 'file was' : 'files were'} not run, left to a person or to a lane of its own; run each by hand or in its lane: ${skipped.join(' ')}`);
     if (unrunSlow.length) console.log(`INCONCLUSIVE ${unrunSlow.length} slow ${unrunSlow.length === 1 ? 'file was' : 'files were'} not run; --slow runs them: ${unrunSlow.join(' ')}`);
     console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
     const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || skipped.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
