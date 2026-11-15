@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "e07dd5693b2d1ac663054abd96b433ea2d9a228e6adaea8135995bc880316ece",
+  "set_digest": "41623e1632e4124f364d683fc96690f787781d42cb60c5f132095200c6747df7",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "de541b43baa18be5ccd7dbf9f1cc77234acd412c2a80a4e6a48c40ae922c9ef8",
+      "digest": "caf3cb5a58ac2a30fe42d186b886d336cb219d63d8d5bee4fff01ecb98477554",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -232,7 +232,17 @@
       "implementation": {
         "name": "logic",
         "version": "1.0.0",
-        "pins": {},
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.5",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
         "equivalence": "bit",
         "state": "canonical"
       }
@@ -776,6 +786,21 @@
           "scene3d.scattered"
         ],
         "per": "item"
+      }
+    ],
+    "simulate": [
+      {
+        "operator": "logic.step",
+        "module": "logic",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "logic.state"
+        ],
+        "per": "document",
+        "step": 11760000
       }
     ],
     "items": [
