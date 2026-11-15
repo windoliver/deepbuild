@@ -13,12 +13,13 @@ pub mod clouds;
 pub mod created;
 pub mod cull;
 mod diag;
+pub mod dof;
 pub mod env;
+pub mod exposure;
 pub mod flare;
 mod glass;
 pub mod held;
 pub mod history;
-pub mod exposure;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -171,6 +172,8 @@ pub struct Planted {
     pub winding_ignores_determinant: bool,
     /// #465: the flare's wrong programs.
     pub flare: flare::Planted,
+    /// #468: the depth of field's wrong programs.
+    pub dof: dof::Planted,
     /// #166: the water's wrong program.
     pub water: water::Planted,
     /// #421: opaque solids submitted in an order that turns over each frame, ties left to the
@@ -1818,6 +1821,10 @@ pub struct Renderer {
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     flarer: Option<Box<flare::Flarer>>,
     flaring: bool,
+    /// #468: the depth of field's passes, made when a frame first has one, and whether this
+    /// frame has.
+    doffer: Option<Box<dof::Dofer>>,
+    dofing: bool,
     /// #166: the water's pass, made when a frame first has water, and whether this frame has.
     waterer: Option<Box<water::Waterer>>,
     watering: bool,
@@ -3291,6 +3298,8 @@ impl Renderer {
             mirroring: false,
             flarer: None,
             flaring: false,
+            doffer: None,
+            dofing: false,
             waterer: None,
             watering: false,
             reflection: None,
@@ -4641,13 +4650,31 @@ impl Renderer {
                     depth,
                     grows,
                     planted,
-                    look.exposure,
+                    scene.exposure.unwrap_or(look.exposure),
                 );
                 true
             }
             None => {
                 if let Some(f) = self.flarer.as_mut() {
                     f.rest();
+                }
+                false
+            }
+        };
+        // #468: the depth of field at t, at the internal size the targets draw.
+        self.dofing = match &scene.dof {
+            Some(d) => {
+                let planted = self.planted.dof;
+                let exposure = scene.exposure.unwrap_or(look.exposure);
+                let internal = self.internal();
+                self.doffer
+                    .get_or_insert_with(|| Box::new(dof::Dofer::new(device)))
+                    .prepare(device, d, &scene.camera, internal, exposure, planted);
+                true
+            }
+            None => {
+                if let Some(d) = self.doffer.as_mut() {
+                    d.rest();
                 }
                 false
             }
@@ -5716,7 +5743,7 @@ impl Renderer {
             exposure: if self.planted.draws_black {
                 0.0
             } else {
-                look.exposure as f32
+                scene.exposure.unwrap_or(look.exposure) as f32
             },
             map,
             white: white as f32,
@@ -7490,6 +7517,18 @@ impl Renderer {
                 jobs.push((WATER_PASS.into(), job));
             }
         }
+        // #468: the depth of field over the linear image, before the effects read it.
+        if let (true, Some(d), Some(t)) = (self.dofing, self.doffer.as_mut(), self.targets.as_ref())
+        {
+            let job = d.job(
+                device,
+                t.size,
+                (&t.linear, &t.linear_view),
+                &t.depth_view,
+                &self.profiler,
+            );
+            jobs.push((dof::DOF_PASS.into(), job));
+        }
         let covers = after.as_deref().and_then(|a| a.covers());
         deep_gpu::alloc::outside(|| self.cover(device, covers));
         let Some(t) = self.targets.as_ref() else {
@@ -8297,6 +8336,20 @@ impl Renderer {
     /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the
     /// distance in m along the view axis from the eye to what the depth target holds there;
     /// infinite where nothing is drawn.
+    /// #468: the depth of field's signed circle of confusion, f32 a pixel in px, rows top-down;
+    /// `None` on a frame with no depth of field.
+    pub fn read_coc(&self, device: &Device) -> Option<Vec<u8>> {
+        let (texture, size) = self.doffer.as_ref().filter(|_| self.dofing)?.coc()?;
+        let raw = read_texture(device, texture, size, 8)?;
+        Some(
+            raw.as_chunks::<8>()
+                .0
+                .iter()
+                .flat_map(|p| [p[0], p[1], p[2], p[3]])
+                .collect(),
+        )
+    }
+
     pub fn read_view_depth(&self, device: &Device) -> Option<Vec<u8>> {
         let t = self.targets.as_ref()?;
         let raw = read_texture(device, t.depth_view.texture(), t.size, 4)?;
@@ -9174,6 +9227,18 @@ impl Module3 {
                 writes: vec!["linear", "ids", "depth"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.3,
+                determinism: Determinism::SameMachine,
+            },
+            // #468: depth of field, after the geometry and before bloom, drawn only while a
+            // frame has one.
+            Pass {
+                name: dof::DOF_PASS.into(),
+                place: "effects",
+                order: 0,
+                reads: vec!["linear", "depth"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.4,
                 determinism: Determinism::SameMachine,
             },
             // #465: the flare, after the effects' bloom, drawn only while a frame has one.

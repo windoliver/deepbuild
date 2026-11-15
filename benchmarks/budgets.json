@@ -991,6 +991,23 @@
       ]
     },
     {
+      "id": "canvas-lens-focus",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "lens-focus"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "dof_gpu_ms": 0.8
+      },
+      "initialReason": "Issue #468 first measurement: the merge base has no depth of field and no such task. A release deep-gpu draws #465's 1080p stage (a floor plate, twelve boxes, a sun, a point light, an orbiting camera) through a 50 mm lens at f/2.8 for 300 frames a side, five runs after a warm-up one, each a fresh process: an effect@1 of kind dof (64 taps, focus 6 m) against none, the difference of the sides' median GPU time. canvas.mjs judge holds it on a reference Mac; tests/acceptance/468/ac5-budgets.test.ts holds the issue's numbers for the dof, the paints and the composed transition. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#468.43d77df2"
+      ]
+    },
+    {
       "id": "canvas-water",
       "command": [
         "node",

@@ -118,6 +118,10 @@ struct Args {
     packs: Vec<(Option<String>, std::path::PathBuf)>,
     /// The paths whose evaluated values each frame reports (#429).
     evaluate: Vec<String>,
+    /// #468: world points each frame projects through the camera it draws, as `projected`.
+    project: Vec<[f64; 3]>,
+    /// #468: each frame reports its overlays: whether each shows, and its leader's ends.
+    overlays: bool,
     /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
     /// (#2016).
     sway: Vec<String>,
@@ -294,10 +298,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 | "depth"
                 | "reflection"
                 | "foam"
+                | "coc"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection and foam",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam and coc",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -379,6 +384,16 @@ fn parse(call: &Value) -> Result<Args, Value> {
             _ => return Err(bad("evaluate lists paths items/<id>/…")),
         }
     }
+    let mut project = Vec::new();
+    for p in call["project"].as_array().into_iter().flatten() {
+        match p
+            .as_array()
+            .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
+        {
+            Some(Some(v)) if v.len() == 3 => project.push([v[0], v[1], v[2]]),
+            _ => return Err(bad("project lists world points [x, y, z]")),
+        }
+    }
     let mut sway = Vec::new();
     for id in call["sway"].as_array().into_iter().flatten() {
         match id.as_str() {
@@ -393,6 +408,8 @@ fn parse(call: &Value) -> Result<Args, Value> {
         world: world.ok_or_else(|| bad("world lists item IDs"))?,
         packs,
         evaluate,
+        project,
+        overlays: call["overlays"].as_bool().unwrap_or(false),
         sway,
         docs,
         doc,
@@ -1068,6 +1085,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "depth",
         "reflection",
         "foam",
+        "coc",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1288,8 +1306,34 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 None
             } else {
                 let at = (&read as deep_canvas_scene3d::scene::Assets<'_>, app.planted);
-                Some(crate::fed::values(&composed, t, &args.evaluate, at)?)
+                Some(crate::fed::values(
+                    &composed,
+                    &scene,
+                    t,
+                    &args.evaluate,
+                    at,
+                )?)
             };
+            // #468: each callout's state: whether it shows, and its leader's ends in frame px.
+            let callouts = args.overlays.then(|| {
+                let rows: Map<String, Value> = (scene.callouts.iter())
+                    .map(|c| {
+                        let leader = c.leader.map(|[from, to]| json!({"from": from, "to": to}));
+                        (c.id.clone(), json!({"shown": c.shown, "leader": leader}))
+                    })
+                    .collect();
+                Value::Object(rows)
+            });
+            // #468: the call's world points through the camera this frame draws.
+            let projected = (!args.project.is_empty()).then(|| {
+                let at = |p: &[f64; 3]| scene.camera.project(*p).map(|q| json!([q[0], q[1]]));
+                Value::Array(
+                    args.project
+                        .iter()
+                        .map(|p| at(p).unwrap_or(Value::Null))
+                        .collect(),
+                )
+            });
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423), and its videos' frames at t there (#503).
             let (texels, made) = crate::textures::prepare(app, &composed, &scene, &map_paths)?;
@@ -1970,17 +2014,38 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let operator = timeline
                 .as_ref()
                 .and_then(|tl| tl.operator_at(t))
-                .and_then(|(w, p)| Some((op_passes.get(&w.id)?, p)));
-            if let (Some((pass, p)), Some(sides), Some(bytes)) =
+                .and_then(|(w, p)| {
+                    Some((format!("transition/{}", w.id), op_passes.get(&w.id)?, p))
+                });
+            // #468: the transition's declared cost this frame, by its pass's label.
+            let mut op_declared = None;
+            if let (Some((label, tr, p)), Some(sides), Some(bytes)) =
                 (operator, &sides, drawn.bytes.as_mut())
             {
-                // #466: the pass over the outgoing side's finished render and the incoming one's.
+                // #466: the pass over the outgoing side's finished render and the incoming one's,
+                // on the GPU, its time counted in the frame's (#468).
                 let incoming = sides
                     .get(1)
                     .and_then(|s| others.iter().find(|(k, _)| k.as_deref() == s.look))
                     .map(|(_, b)| b.clone())
                     .unwrap_or_else(|| bytes.clone());
-                *bytes = crate::op_transition::draw(pass, bytes, &incoming, p, size)?;
+                let outgoing = std::mem::take(bytes);
+                let (out, ms) = crate::op_transition::draw(
+                    app,
+                    opened.profiler.clone(),
+                    &label,
+                    tr,
+                    outgoing,
+                    incoming,
+                    p,
+                    size,
+                )?;
+                *bytes = out;
+                if let (Some(ms), Some((gpu_ms, passes))) = (ms, drawn.timing.as_mut()) {
+                    *gpu_ms += ms;
+                    passes.insert(label.clone(), ms);
+                }
+                op_declared = Some((label, tr.declared_ms(size)));
             } else if let (Some(tl), Some(sides), Some(bytes)) =
                 (&timeline, &sides, drawn.bytes.as_mut())
             {
@@ -2133,6 +2198,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some(values) = values {
                 frame.insert("values".into(), values);
             }
+            if let Some(p) = projected {
+                frame.insert("projected".into(), p);
+            }
+            if let Some(c) = callouts {
+                frame.insert("overlays".into(), c);
+            }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
             frame.extend(trails.map(|p| ("trails".to_string(), p)));
             if call["strokes"] == true {
@@ -2208,6 +2279,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
                     frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
+                }
+                // #468: each pixel's signed circle of confusion, f32.
+                if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
+                    frame.insert("coc".into(), json!(write_named(out, c, "f32")?));
                 }
                 if let Some((material, f)) = &shore {
                     let bytes: Vec<u8> = f.cells.iter().flat_map(|c| c.to_le_bytes()).collect();
@@ -2437,6 +2512,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .declared
                     .iter()
                     .map(|(k, v)| (k.to_string(), json!(v)))
+                    .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
             }

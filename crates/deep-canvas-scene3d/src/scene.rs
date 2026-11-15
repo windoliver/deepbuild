@@ -328,6 +328,9 @@ pub struct Line {
     pub cap: crate::points::Cap,
     /// What its trail draws at t (#450), or `None` for a line of its own points.
     pub trail: Option<Arc<crate::trail::Drawn>>,
+    /// #468: a `mark.line@1`'s written points in the world at t, an `ID#anchor` point at its
+    /// anchor; empty for a line drawn from anything else.
+    pub points: Vec<Vec3>,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -501,6 +504,9 @@ pub enum Depth {
 pub struct Camera {
     pub size: [f64; 2],
     pub eye: Vec3,
+    /// The point the view aims at: points are measured from it, so a field of view near 0,
+    /// whose eye stands far off, keeps their places exact (#468).
+    pub target: Vec3,
     pub right: Vec3,
     pub up: Vec3,
     pub forward: Vec3,
@@ -536,10 +542,20 @@ fn normalize(a: Vec3) -> Vec3 {
 }
 
 impl Camera {
-    /// A point in the view's frame: right, up, and depth along the forward axis from the eye.
+    /// A point in the view's frame: right, up, and depth along the forward axis from the eye,
+    /// each measured from the target, so none grows with the eye's distance (#468).
     pub fn to_view(&self, p: Vec3) -> Vec3 {
-        let d = sub(p, self.eye);
-        [dot(d, self.right), dot(d, self.up), dot(d, self.forward)]
+        let d = sub(p, self.target);
+        [
+            dot(d, self.right),
+            dot(d, self.up),
+            dot(d, self.forward) + self.reach(),
+        ]
+    }
+
+    /// The target's depth along the view from the eye.
+    pub fn reach(&self) -> f64 {
+        dot(sub(self.target, self.eye), self.forward)
     }
 
     /// The world point at frame px (`sx`, `sy`) and depth `vz` along the forward axis: the
@@ -555,8 +571,8 @@ impl Camera {
         };
         let (vx, vy) = (x / s, -y / s);
         add(
-            add(add(self.eye, mul(self.right, vx)), mul(self.up, vy)),
-            mul(self.forward, vz),
+            add(add(self.target, mul(self.right, vx)), mul(self.up, vy)),
+            mul(self.forward, vz - self.reach()),
         )
     }
 
@@ -593,8 +609,15 @@ impl Camera {
     /// The world-to-clip matrix, rows for clip x, y, z and w over (x, y, z, 1): the projection
     /// above, with depth laid out as `depth` says.
     pub fn clip(&self, depth: Depth) -> [[f64; 4]; 4] {
-        let row = |axis: Vec3| -> [f64; 4] { [axis[0], axis[1], axis[2], -dot(axis, self.eye)] };
-        let (vx, vy, vz) = (row(self.right), row(self.up), row(self.forward));
+        // Each row measured from the target, as `to_view` measures (#468).
+        let row = |axis: Vec3, add: f64| -> [f64; 4] {
+            [axis[0], axis[1], axis[2], add - dot(axis, self.target)]
+        };
+        let (vx, vy, vz) = (
+            row(self.right, 0.0),
+            row(self.up, 0.0),
+            row(self.forward, self.reach()),
+        );
         let [w, h] = self.size;
         let [c, sn] = self.roll;
         let (ox, oy) = (self.centre[0] - w / 2.0, self.centre[1] - h / 2.0);
@@ -766,6 +789,16 @@ pub struct MotionSolid {
     pub meshes: Option<(Arc<crate::geom::Mesh>, Arc<crate::geom::Mesh>)>,
 }
 
+/// An overlay anchored to the frame's edge or corner at t (#468; Overlay): whether it shows, and
+/// its leader from the label's nearest side, less the gap, to its target's anchor projected
+/// through the camera at t.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Callout {
+    pub id: String,
+    pub shown: bool,
+    pub leader: Option<[[f64; 2]; 2]>,
+}
+
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -775,6 +808,9 @@ pub struct Scene {
     /// The 3D writer layers that draw something, in layer order.
     pub layers: Vec<Layer3>,
     pub overlays: Vec<Overlay>,
+    /// #468: each `overlay.text@1` anchored to the frame's edge or corner, with whether it shows
+    /// at t and its leader's ends in frame px.
+    pub callouts: Vec<Callout>,
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
     /// Every light, in layer and item order (#421): what shades the solids that name a material.
@@ -823,6 +859,13 @@ pub struct Scene {
     pub mirror: Option<crate::mirror::Mirror>,
     /// The view's flare (#465; Effect: flare): the first `effect@1` of kind flare.
     pub flare: Option<Arc<crate::flare::Flare>>,
+    /// The view's depth of field at t (#468; Effect: dof): the first `effect@1` of kind dof.
+    pub dof: Option<Arc<crate::dof::Dof>>,
+    /// The camera's lens, aperture, shutter and ISO at t (#468; Camera `camera@1`: lens).
+    pub optics: crate::lens::Optics,
+    /// The camera's exposure as a linear scale, when it sets one (an EV100 or `from_lens`); the
+    /// look's otherwise.
+    pub exposure: Option<f64>,
     /// The view's water (#166; Material: water), which its own pass draws after the mirror's.
     pub water: Option<Arc<crate::water::Water>>,
     /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
@@ -1579,18 +1622,20 @@ fn order_key(item: &Value) -> &str {
 }
 
 /// An entry of a line's `points`: a point, or an item's evaluated anchor (its origin).
-fn point_of(items: &Items<'_>, v: &Value, path: &str) -> Result<Vec3, Refused> {
+/// A line's point in its own frame: written, or an item's (`ID#anchor`'s) evaluated world point
+/// at t carried into the line's frame by the inverse of its `model` (#468), so it stays on the
+/// part it names.
+fn point_of(items: &Items<'_>, v: &Value, path: &str, model: &Affine3) -> Result<Vec3, Refused> {
     if let Some(p) = vec3(Some(v)) {
         return Ok(p);
     }
     let Some(handle) = v.as_str() else {
         return refused("out_of_range", path);
     };
-    let id = handle.split('#').next().unwrap_or(handle);
-    if !items.contains_key(id) {
+    let Some(p) = anchor_point(items, handle) else {
         return refused("ref_unresolved", path);
-    }
-    Ok(origin(&world(items, id)))
+    };
+    Ok(apply(&crate::cut::inverse(model), p))
 }
 
 /// A `mark.text@1`'s label at the world `m` (#226: a module's marks draw theirs through it too).
@@ -1651,6 +1696,7 @@ pub(crate) fn line(
     (map, t): (&Map<String, Value>, i64),
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
+    let model = world(items, id);
     // #537: points that read a logic array, each with whether it hides.
     let (points, hidden) = match crate::points::of(map, id, params, t)? {
         Some(read) => read,
@@ -1661,7 +1707,7 @@ pub(crate) fn line(
                 .map_or(Ok(Vec::new()), |list| {
                     list.iter()
                         .enumerate()
-                        .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
+                        .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}"), &model))
                         .collect::<Result<Vec<_>, _>>()
                 })?,
             Vec::new(),
@@ -1677,6 +1723,7 @@ pub(crate) fn line(
         _ => None,
     };
     let written = points.len();
+    let written_points: Vec<Vec3> = points.iter().map(|p| apply(&model, *p)).collect();
     let (points, along) = match drawn_line.as_ref().and_then(|l| l.profile.as_ref()) {
         Some(p) => profiled_points(&points, p),
         None => {
@@ -1710,7 +1757,6 @@ pub(crate) fn line(
     let Some(pairs) = crate::points::segments(mode, n) else {
         return refused("out_of_range", format!("{path}/mode"));
     };
-    let model = world(items, id);
     // A point that can't narrow hides each segment that meets it, which keeps its record.
     let hides = |i: usize| n == written && hidden.get(i) == Some(&true);
     let segments = pairs
@@ -1735,6 +1781,7 @@ pub(crate) fn line(
         dash_world: false,
         cap: crate::points::cap(params, &path)?,
         trail: None,
+        points: written_points,
     })
 }
 
@@ -2058,6 +2105,7 @@ fn edge_line(
         dash_world: world,
         cap: Default::default(),
         trail: None,
+        points: Vec::new(),
     })
 }
 
@@ -2240,10 +2288,7 @@ pub(crate) fn camera(
     bounds: &[Vec3],
     path: &str,
 ) -> Result<Camera, Refused> {
-    let spec = Spec::read(&with_defaults("camera@1", params), path).map_err(|r| Refused {
-        code: r.code,
-        path: r.path,
-    })?;
+    let spec = lensed(params, size, path)?;
     let rig = spec.rig(path).map_err(|r| Refused {
         code: r.code,
         path: r.path,
@@ -2256,6 +2301,63 @@ pub(crate) fn camera(
         bounds.iter().copied(),
     );
     Ok(cam)
+}
+
+/// Whether `params` sets `field` to something.
+pub(crate) fn has(params: &Map<String, Value>, field: &str) -> bool {
+    params.get(field).is_some_and(|v| !v.is_null())
+}
+
+/// The camera's spec from its params at t on a frame of `size`, its defaults filled, with the
+/// field of view and the shift its lens gives (#468; Camera `camera@1`: lens).
+pub(crate) fn lensed(
+    params: &Map<String, Value>,
+    size: [f64; 2],
+    path: &str,
+) -> Result<Spec, Refused> {
+    let optics = crate::lens::read(params, path, has(params, "fov"))?;
+    let mut filled = with_defaults("camera@1", params);
+    if let Some(fov) = optics.fov(size) {
+        filled.insert("fov".into(), fov.into());
+    }
+    if optics.shift != [0.0, 0.0] {
+        let lens = optics.frame_shift(size);
+        let own = filled
+            .get("shift")
+            .and_then(Value::as_array)
+            .map(|a| [num(a.first()).unwrap_or(0.0), num(a.get(1)).unwrap_or(0.0)])
+            .unwrap_or([0.0; 2]);
+        filled.insert(
+            "shift".into(),
+            serde_json::json!([own[0] + lens[0], own[1] + lens[1]]),
+        );
+    }
+    Spec::read(&filled, path).map_err(|r| Refused {
+        code: r.code,
+        path: r.path,
+    })
+}
+
+/// A world point at t: `ID` the item's origin, `ID#anchor` its named anchor (#468).
+pub(crate) fn anchor_point(items: &Items<'_>, handle: &str) -> Option<Vec3> {
+    let (id, anchor) = match handle.split_once('#') {
+        Some((id, a)) => (id, Some(a)),
+        None => (handle, None),
+    };
+    if !items.contains_key(id) {
+        return None;
+    }
+    let m = world(items, id);
+    match anchor {
+        None => Some(origin(&m)),
+        Some(a) => {
+            let local = items
+                .get(id)?
+                .pointer(&format!("/params/anchors/{a}"))
+                .and_then(|v| vec3(Some(v)))?;
+            Some(apply(&m, local))
+        }
+    }
 }
 
 /// The camera `spec` and `rig` pose under `offsets` on a frame of `size` px, before its near
@@ -2274,6 +2376,7 @@ pub(crate) fn posed(spec: &Spec, rig: &Rig, offsets: &Offsets, size: [f64; 2]) -
     Camera {
         size,
         eye: pose.position,
+        target: pose.target,
         right,
         up,
         forward,
@@ -3149,6 +3252,7 @@ pub(crate) fn evaluate_compiled(
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
     let mut readout_items: Vec<(String, Value)> = Vec::new();
+    let mut callout_items: Vec<(String, String, Value)> = Vec::new();
     // The document as builders read it (the curves they name), made once when one draws.
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
@@ -3189,6 +3293,7 @@ pub(crate) fn evaluate_compiled(
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
     let mut flare: Option<Arc<crate::flare::Flare>> = None;
+    let mut dof: Option<crate::dof::Spec> = None;
     let mut probe_items: Vec<crate::probe::Wanted> = Vec::new();
     // The IES tables the lights name (#446).
     let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
@@ -3645,6 +3750,13 @@ pub(crate) fn evaluate_compiled(
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
                 // #1183: an overlay whose `show` is false at t draws nothing.
                 "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
+                // #468: one anchored to the frame's edge or corner, or with a leader, is a callout.
+                "overlay.text@1"
+                    if params.get("anchor").is_some_and(Value::is_string)
+                        || params.get("leader").is_some_and(Value::is_object) =>
+                {
+                    callout_items.push((id.clone(), layer_id.to_string(), params.clone()))
+                }
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
@@ -3716,7 +3828,12 @@ pub(crate) fn evaluate_compiled(
                 "camera@1" | "sky@1" | "material@1" | "group@1" => {}
                 // #424: an instancer's elements, placed once its prototypes are read.
                 "instance@1" => instancers.push((layers.len(), id.clone())),
-                // #465: the first flare is the view's; scene3d draws no other effect kind.
+                // #465, #468: the first flare and the first dof are the view's; scene3d draws no
+                // other effect kind.
+                "effect@1" if params.get("kind").and_then(Value::as_str) == Some("dof") => {
+                    let d = crate::dof::parse(id, params)?;
+                    dof.get_or_insert(d);
+                }
                 "effect@1" => {
                     let f = crate::flare::parse(id, params, look)?;
                     flare.get_or_insert_with(|| Arc::new(f));
@@ -3932,6 +4049,26 @@ pub(crate) fn evaluate_compiled(
         &bounds,
         &cam_path,
     )?;
+    // #468: the lens's optics, its exposure, and the depth of field through this camera at t.
+    let optics = crate::lens::read(cam_params, &cam_path, has(cam_params, "fov"))?;
+    let rate = frame_interval(map) as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+    let exposure = optics
+        .ev100(1.0 / rate)
+        .map(deep_canvas_marks::finish::exposure_scale);
+    let dof = match &dof {
+        None => None,
+        Some(spec) => {
+            let point = |h: &str| anchor_point(&items, h);
+            let evaluated = match &spec.focus {
+                crate::dof::Focus::Distance(m) => Some(*m),
+                crate::dof::Focus::Item(_) => None,
+            };
+            let focus = crate::dof::pulled(program, spec, evaluated, &camera, point)?;
+            Some(Arc::new(crate::dof::resolve(
+                spec, &camera, &optics, focus, point,
+            )?))
+        }
+    };
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
@@ -3984,6 +4121,147 @@ pub(crate) fn evaluate_compiled(
                 .unwrap_or([255, 255, 255]),
         });
         top += quad[1] + 4.0;
+    }
+    // #468: the callouts, each placed against the safe frame's edge or corner its anchor names.
+    let safe = map.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
+    let mut callouts = Vec::new();
+    for (id, layer_id, params) in &callout_items {
+        let path = format!("items/{id}/params");
+        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
+        let size = num(params.get("size")).unwrap_or(13.0);
+        let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
+        let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
+        let quad = [
+            run_box[0] * size / f64::from(shaped_at),
+            run_box[1] * size / f64::from(shaped_at),
+        ];
+        let [w, h] = camera.size;
+        let frame = [safe, safe, w - safe, h - safe];
+        let anchor = params
+            .get("anchor")
+            .and_then(Value::as_str)
+            .unwrap_or("right");
+        let offset = xy(params.get("offset")).unwrap_or([0.0; 2]);
+        let (fx, fy) = match anchor {
+            "left" => (0.0, 0.5),
+            "right" => (1.0, 0.5),
+            "top" => (0.5, 0.0),
+            "bottom" => (0.5, 1.0),
+            "top_left" => (0.0, 0.0),
+            "top_right" => (1.0, 0.0),
+            "bottom_left" => (0.0, 1.0),
+            "bottom_right" => (1.0, 1.0),
+            _ => return refused("out_of_range", format!("{path}/anchor")),
+        };
+        // The label's box inside the safe frame, against the side its anchor names.
+        let centre = [
+            frame[0] + quad[0] / 2.0 + fx * (frame[2] - frame[0] - quad[0]) + offset[0],
+            frame[1] + quad[1] / 2.0 + fy * (frame[3] - frame[1] - quad[1]) + offset[1],
+        ];
+        let leader = params.get("leader").filter(|l| l.is_object());
+        let target = match leader.map(|l| l.get("to").and_then(Value::as_str)) {
+            None => None,
+            Some(Some(to)) => Some(anchor_point(&items, to).ok_or_else(|| Refused {
+                code: "ref_unresolved",
+                path: format!("{path}/leader/to"),
+            })?),
+            Some(None) => return refused("out_of_range", format!("{path}/leader/to")),
+        };
+        let at = target.and_then(|p| {
+            (!camera.perspective || camera.to_view(p)[2] > 0.0)
+                .then(|| camera.project(p))
+                .flatten()
+                .map(|q| [q[0], q[1]])
+        });
+        let inside = |p: [f64; 2]| {
+            p[0] >= frame[0] && p[0] <= frame[2] && p[1] >= frame[1] && p[1] <= frame[3]
+        };
+        let hides = match params.get("hide").and_then(Value::as_str) {
+            None | Some("off_frame") => target.is_some(),
+            Some("never") => false,
+            Some(_) => return refused("out_of_range", format!("{path}/hide")),
+        };
+        let shown = !hides || at.is_some_and(inside);
+        // From the label's side nearest the target, less the gap, to the target.
+        let segment = at.filter(|_| shown).map(|to| {
+            let gap = leader.and_then(|l| num(l.get("gap"))).unwrap_or(4.0);
+            let half = [quad[0] / 2.0 + gap, quad[1] / 2.0 + gap];
+            let d = [to[0] - centre[0], to[1] - centre[1]];
+            let from = if d[0].abs() * half[1] >= d[1].abs() * half[0] {
+                [centre[0] + half[0].copysign(d[0]), centre[1]]
+            } else {
+                [centre[0], centre[1] + half[1].copysign(d[1])]
+            };
+            [from, to]
+        });
+        callouts.push(Callout {
+            id: id.clone(),
+            shown,
+            leader: segment,
+        });
+        if !shown {
+            continue;
+        }
+        let depth = if camera.perspective {
+            2.0 * camera.near
+        } else {
+            camera.near + 0.01
+        };
+        let ink = look.role("ink").unwrap_or([255, 255, 255]);
+        readouts.push(Label {
+            id: id.clone(),
+            text: text.to_string(),
+            role: Role::Body,
+            glyphs,
+            bounds: run_box,
+            pos: camera.unproject(centre[0], centre[1], depth),
+            em: size,
+            quad,
+            world: false,
+            facing: Facing::Camera,
+            axes: [camera.right, camera.up],
+            color: look.role("stone").unwrap_or(ink),
+        });
+        if let (Some([from, to]), Some(l)) = (segment, leader) {
+            let width = num(l.get("width")).unwrap_or(1.5);
+            let color = match l.get("line").and_then(Value::as_str) {
+                None => ink,
+                Some(role) => look.role(role).ok_or_else(|| Refused {
+                    code: "ref_unresolved",
+                    path: format!("{path}/leader/line"),
+                })?,
+            };
+            let a = camera.unproject(from[0], from[1], depth);
+            let b = camera.unproject(to[0], to[1], depth);
+            let line = Line {
+                id: id.clone(),
+                segments: vec![Segment {
+                    a,
+                    b,
+                    wa: width,
+                    wb: width,
+                    hidden: false,
+                }],
+                world: false,
+                color,
+                edges: None,
+                over: true,
+                joined: false,
+                dash: [0.0; 2],
+                dash_world: false,
+                cap: Default::default(),
+                trail: None,
+                points: Vec::new(),
+            };
+            match layers.iter_mut().find(|l| &l.id == layer_id) {
+                Some(layer) => layer.lines.push(line),
+                None => layers.push(Layer3 {
+                    id: layer_id.clone(),
+                    lines: vec![line],
+                    ..Layer3::default()
+                }),
+            }
+        }
     }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
@@ -4042,6 +4320,7 @@ pub(crate) fn evaluate_compiled(
         motion: None,
         velocity: None,
         readouts,
+        callouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
         cutaway: None,
@@ -4057,6 +4336,9 @@ pub(crate) fn evaluate_compiled(
         ),
         mirror: None,
         flare,
+        dof,
+        optics,
+        exposure,
         water: None,
         read_reflection: false,
         read_foam: false,

@@ -21,6 +21,8 @@ pub const OUTPUT_PASS: &str = "scene3d.output";
 pub const MIRROR_PASS: &str = "scene3d.mirror";
 /// #465: the flare, added into the linear image before tone mapping.
 pub const FLARE_PASS: &str = "scene3d.flare";
+/// #468: depth of field over the linear image, after the geometry and before bloom.
+pub const DOF_PASS: &str = "scene3d.dof";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
@@ -442,6 +444,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(MIRROR_PASS, "geometry");
     r.pass(WATER_PASS, "geometry");
+    r.pass(DOF_PASS, "effects");
     r.pass(FLARE_PASS, "bloom");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
