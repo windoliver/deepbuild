@@ -30,10 +30,10 @@ export async function installCommand(args: readonly string[], setUp: () => Promi
   }
   const from = resolve(folders[0]!);
   if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
-    const stopped = await setUp();
-    if (stopped) return stopped;
     try {
       const pack = readPack(from);
+      const stopped = await setUp();
+      if (stopped) return stopped;
       process.stdout.write(`Source: ${from}\n  ${pack.ref}, digest ${pack.digest}\n  Assets fetch only on first use after an authority ask or your standing rule.\n`);
       const result = await callAsYou('extension.install', { from, digest: pack.digest }, 'nothing was installed');
       if (typeof result === 'number') return result;

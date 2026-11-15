@@ -118,17 +118,19 @@ describe('deep <command> --help', () => {
     }
   }, 70_000);
 
-  // #2200: arguments a command can't read, a file one names that isn't there included, are exit 2 before the first
-  // command's setup has run.
-  it.each([[['status', 'x', 'y']], [['inbox', 'answer']], [['off', 'extra']], [['secret', 'add', 'onlyone']], [['guard', 'add', 'missing.json']], [['install', 'missing']]])('deep %j, arguments it can\'t read, exits 2 and leaves a fresh home byte-identical', (args) => {
+  // #2200: arguments a command can't read, a file one names that isn't there or can't be read included, end the
+  // command before the first command's setup has run: exit 2, or the 1 an unreadable pack.json already was.
+  it.each([[['status', 'x', 'y'], 2], [['inbox', 'answer'], 2], [['off', 'extra'], 2], [['secret', 'add', 'onlyone'], 2], [['guard', 'add', 'missing.json'], 2], [['install', 'missing'], 2], [['install', 'pack'], 1]] as [string[], number][])('deep %j, arguments it can\'t read, exits %i and leaves a fresh home byte-identical', (args, status) => {
     const { home, env } = fresh();
     try {
+      mkdirSync(join(home, 'pack'));
+      writeFileSync(join(home, 'pack', 'pack.json'), 'not JSON\n');
       const before = snapshot(home);
       const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
       const after = snapshot(home);
       const written = [...after].find(([path, state]) => before.get(path) !== state)?.[0];
       expect(written, `deep ${args.join(' ')} wrote ${written} (${result.stderr.trim().slice(0, 300)})`).toBeUndefined();
-      expect(result.status).toBe(2);
+      expect(result.status).toBe(status);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
