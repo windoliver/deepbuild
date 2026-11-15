@@ -143,3 +143,47 @@ pub(super) fn register(r: &mut Registrar) {
                "at_times": ["0s", "0.25s"], "inputs": [{"step": RESTORED, "kind": "poke", "target": "puck", "data": {"push": [1, 0, 0]}}]}),
     );
 }
+
+/// #191: the physics interface's behavior part on this build's backend, through the same
+/// `behavior_kit` call the `deep-physics` binary answers: a case per fixture that ran, failing with
+/// the backend, the fixture, the measure, the answer and the tolerance; each fixture its caps
+/// exclude listed beside the cases, never passed; a refused candidate failing, naming its claims.
+pub(crate) fn behavior(module: &str) -> Option<super::super::kit::PartRun> {
+    use super::super::kit::{failure, Case, PartRun, Verdict};
+    if module != "physics" {
+        return None;
+    }
+    let reply =
+        deep_physics_rapier::runner::Run::new(None)?.answer(&json!({"call": "behavior_kit"}))?;
+    let results = reply["results"].as_array().cloned().unwrap_or_default();
+    let mut part = PartRun::new(results.len().max(1) as u64);
+    if reply["admitted"] != true {
+        let mut case = Case::new("behavior:refused", Verdict::Pass);
+        case.fail(
+            Verdict::Fail,
+            failure("refused", module, "behavior", reply["refused"].clone()),
+        );
+        part.cases.push(case);
+        return Some(part);
+    }
+    let (excluded, ran): (Vec<Value>, Vec<Value>) = results
+        .into_iter()
+        .partition(|r| r["result"] == "excluded_by_caps");
+    for r in ran {
+        let mut case = Case::new(
+            format!("behavior:{}", r["fixture"].as_str().unwrap_or("")),
+            Verdict::Pass,
+        )
+        .with("result", r.clone());
+        if r["result"] != "pass" {
+            case.fail(
+                Verdict::Fail,
+                failure("outside_tolerance", module, "behavior", r),
+            );
+        }
+        part.cases.push(case);
+    }
+    part.extra
+        .insert("excluded_by_caps".into(), json!(excluded));
+    Some(part)
+}

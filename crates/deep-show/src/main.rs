@@ -2443,6 +2443,10 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
             }
+            // #191: physics@1's behavior part, its fixtures held by the interface's crate.
+            if interface == deep_canvas_physics::module::INTERFACE {
+                parts.push("behavior".to_string());
+            }
             // #418, #399, #421: look@1's, data@1's, graph@1's, vector@1's and scene3d@1's
             // references are the shipped modules, whichever a test build holds.
             let reference = match interface.as_str() {

@@ -511,6 +511,7 @@ impl<'a> Hub<'a> {
             "catalog" => catalog::run(self, ctx),
             "migration" => migration::run(self, ctx),
             "bit" => interface::bit(self, ctx),
+            "behavior" if ctx.module == "physics" => crate::physics::kit::behavior(ctx.module),
             "behavior" => interface::behavior(self, ctx),
             REGISTRY_PART => self.registries_part(ctx.module),
             SANDBOX_PART => sandbox_part(ctx.module),

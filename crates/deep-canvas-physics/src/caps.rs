@@ -20,7 +20,15 @@ pub struct Caps {
     pub dynamic_couplings: bool,
     /// What it does that a world can't change, each as one sentence (World and backend).
     pub declared: &'static [&'static str],
+    /// #191: the features it claims, each of [`CLAIMS`]; the behavior kit runs a fixture only on a
+    /// backend that claims every cap the fixture names, and the check refuses a world needing one
+    /// it doesn't claim.
+    pub claims: &'static [&'static str],
 }
+
+/// #191: the features a backend's caps may claim: swept collision for a body with `ccd`, soft
+/// bodies, and a character controller.
+pub const CLAIMS: [&str; 3] = ["ccd", "soft_bodies", "character_controller"];
 
 /// Rapier 0.36.1 in 3D, as the design pins it.
 pub const RAPIER3D: Caps = Caps {
@@ -42,4 +50,5 @@ pub const RAPIER3D: Caps = Caps {
         "It runs gear, rack, pulley and path joints only in kinematic mode.",
         "A contact with restitution 1 or more never comes to rest.",
     ],
+    claims: &["ccd", "soft_bodies"],
 };
