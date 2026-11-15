@@ -1,0 +1,60 @@
+Acceptance tests for #1851 on the base c740dede7 (main: deep-hook's waiter reads ~/.deepbuild/control.token and says
+hello to the hub as `cli`, `wait_once` in crates/deep-hook/src/main.rs; the hub serves `session.wait` to cli with no
+binding), run on 2026-11-15 (the job began 2026-11-14) on Linux arm64 (20 cores), Node v24.22.0, after `npm ci`,
+`npm run build --workspaces` and `cargo build --locked -q -p deep-hook --features env-plants`:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1851 --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1851/tsconfig.json   -> no errors
+
+The base is the wrong program of all three criteria: AC1's waiter can't connect without the token, and AC2's and AC3's
+waiters, holding the token, are admitted for any session and, as the newest waiter, take the answer. The machine was
+loaded by other sessions throughout (1-minute load 109 to 234 on 20 cores), and under that load #25's helpers'
+`deep_ask` sometimes read the hub as unreachable before any ask was filed, making a test BLOCKED before it reached its
+criterion. No run had all three reach their assertion, so two runs are shown; the BLOCKED runs are listed after.
+Trimmed to each test's first failure.
+
+Run 2 (00:10, load 109): Tests 3 failed (3)
+
+FAIL waiter.test.ts  AC1 #1851.94c55f89 with control.token removed after the hub starts, an answer to an idle Claude Code session is still delivered by the waiter within 2 s
+  AssertionError: AC1 with control.token removed after the hub started, your answer to ask:01M7F4459YMN7YWQ5F0Z9C0X2H
+  (session b88c428a-0eb8-40de-8989-82930dbf66b6, idle) must be delivered by its waiter (exit 2); no waiter exited 2
+  within 30 s of the answer. Live waiters: [{"pid":3807747,"stderr":""}]: expected undefined to be defined
+  (Expected: the base waiter finds no token, so it never connects and keeps looking every 500 ms; the message names the ask.)
+
+FAIL waiter.test.ts  AC2 #1851.57086353 a waiter started for session A that asks to wait on session B is refused, naming the binding, and B answer never reaches A
+  AssertionError: AC2 session B 7c5dbdd6-a2be-41e9-93d1-c837f771cf31's answer to ask:01M7F45E67S42G5WFF31K37X9W must
+  never reach the waiter started under session A 51c00533-ee0a-44fc-bdd8-d93a48604747's agent (pid 3854563) that asked
+  to wait on B; it did: the waiter (pid 3857961) under A's agent exited 2 with stderr "DeepBuild delivers your
+  answers:\nYour answer to ask:01M7F45E67S42G5WFF31K37X9W (\"Which header colour for 4d6482f9?\"): Green header
+  4d6482f9 (green4d6482f9).\n"
+  (Expected: as cli the waiter waits on whatever session its payload names, replacing B's own waiter as the newest.)
+
+FAIL waiter.test.ts  AC3 (not counted: a fault of this suite, since fixed) the outsider was started as
+  `/bin/sh -c 'exec <command>'`, but setup's command already begins with `exec`, so the shell ran `exec exec ...` and
+  exited 127 ("exec: not found"). The outsider now runs the command as it is when it already execs, and the test is
+  BLOCKED if the outsider exits 126 or 127 before you answer.
+
+Run 3 (00:12, load 180), after that fix: Tests 3 failed (3)
+
+FAIL waiter.test.ts  AC1: as in run 2 (ask:01M7F47AJJ1TSZMT33CDBV7QPQ, session b84f6ed6-8998-46f1-b10a-c8569313ce37,
+  live waiter pid 3908236 with empty stderr; no waiter exited 2 within 30 s of the answer).
+
+FAIL waiter.test.ts  AC2: BLOCKED: timed out after 60000 ms waiting for the deep_ask "Which header colour for
+  71c9e388?" filed under 5f86487d-9d82-4f68-b703-ff28e19196d7; deep_ask replied ... "code":"unavailable" ... "The
+  DeepBuild hub is unreachable (no answer on its socket); nothing was recorded." (the load; see above)
+
+FAIL waiter.test.ts  AC3 #1851.c180d03e a process that is not a child of the session agent, saying hello as that session waiter, is refused, naming the process
+  AssertionError: AC3 session cae15b02-745d-4774-93b3-78a2b3a1b27a's answer to ask:01M7F4ATNV1XG6SFG0ZTPHB8H9 must
+  never reach a waiter outside its agent's process tree (pid 3997144, parent this test process 3900620, not a child of
+  agent 3993186); it did: the outsider waiter (pid 3997144) exited 2 with stderr "DeepBuild delivers your
+  answers:\nYour answer to ask:01M7F4ATNV1XG6SFG0ZTPHB8H9 (\"Which header colour for c48c2606?\"): Green header
+  c48c2606 (greenc48c2606).\n"
+  (Expected: the token alone admits the outsider; nothing checks its process, and as the newest waiter it takes A's answer.)
+
+Other runs on the base, and why they don't count:
+- Run 1 (00:06, load 117): AC1 and AC2 failed as in run 2; AC3 BLOCKED (the deep_ask "hub unreachable" above).
+- Run 4 (00:14, load 234): all three BLOCKED at the same deep_ask step, before any waiter ran.
+
+Not reached on the base, so unverified until a fix exists: the passing side of each test, AC1's 2 s bound, the controls
+that B's (AC2) and A's (AC3) own waiters wake their sessions, and the refusal assertions of AC2 (names session A or its
+agent PID) and AC3 (names the outsider's PID). No processes or temp folders of this suite were left after the runs.
