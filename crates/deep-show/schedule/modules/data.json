@@ -17,6 +17,32 @@
         "per": "item"
       },
       {
+        "operator": "data.follow_stream",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.vector_field",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.vector_field"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "data.decimate",
         "module": "data",
         "version": "1.0.0",
@@ -44,7 +70,11 @@
   },
   "contributions": {
     "core.fields": [
-      "data.columns"
+      "data.columns",
+      "data.vector_field"
+    ],
+    "core.transform": [
+      "data.follow"
     ]
   }
 }

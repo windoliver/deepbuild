@@ -268,6 +268,36 @@ impl<'a> Hub<'a> {
         }
     }
 
+    /// #225: a vector field at its frame: its streams, its arrows and its flow windows at t, its
+    /// vars as the frame read them, by the integrator the scenario plants, if any.
+    pub fn vector_field(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let method =
+            deep_canvas_marks::vector_field::method_of(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let Some(items) = crate::warps::items_at(&self.sched, session) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let Some(field) = items.get(item).filter(|i| {
+            i.get("kind").and_then(Value::as_str) == Some(deep_canvas_marks::vector_field::KIND)
+        }) else {
+            return json!({"outcome": "refused", "code": "ref_unresolved", "item": item});
+        };
+        let seconds = t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        match deep_canvas_marks::vector_field::read_item(item, field, &|_| None, method) {
+            Ok(vf) => deep_canvas_marks::vector_field::answer(item, &vf, seconds),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
     /// One frame of a document's session (`eval`). #542: a golden pins each view setting to its
     /// declared default (Scope and input classes), so the frame leaves the session's view-class
     /// values out, and the live session gets them back after.
