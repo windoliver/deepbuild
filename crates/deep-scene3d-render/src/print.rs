@@ -435,6 +435,54 @@ impl Printer {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use deep_gpu::device::{Backend, Gpu};
+
+    /// Canvas primitives, Frame budget: a pass whose values and views hold binds what the pass
+    /// before it made; another source makes a group and no buffer; other values make both.
+    #[test]
+    fn a_pass_whose_values_and_views_hold_makes_no_buffer_and_no_bind_group() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let d = &device.device;
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let view = |usage| {
+            crate::texture2d(d, "test print", [16, 16], format, usage)
+                .create_view(&Default::default())
+        };
+        let sampled = wgpu::TextureUsages::TEXTURE_BINDING;
+        let (sources, target) = (
+            [view(sampled), view(sampled)],
+            view(wgpu::TextureUsages::RENDER_ATTACHMENT),
+        );
+        let mut printer = Printer::new(d);
+        let mut made = |source: usize, flag: u32| {
+            let mut params = Params::zeroed();
+            params.flags[0] = flag;
+            let before = d.counts().read();
+            let mut encoder = d.create_command_encoder(&Default::default());
+            printer.record(
+                d,
+                &mut encoder,
+                &params,
+                &sources[source],
+                &Coverage::None,
+                &target,
+                format,
+                None,
+            );
+            device.queue.submit([encoder.finish()]);
+            let made = d.counts().read().since(before);
+            (made.buffers, made.bind_groups)
+        };
+        assert_eq!(made(0, 0), (2, 1), "the first pass");
+        assert_eq!(made(0, 0), (0, 0), "the same values and views");
+        assert_eq!(made(1, 0), (0, 1), "another source");
+        assert_eq!(made(1, 1), (2, 1), "other values");
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
+
     #[test]
     fn the_print_shader_validates() {
         let module = naga::front::wgsl::parse_str(super::SOURCE)

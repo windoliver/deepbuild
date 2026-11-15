@@ -221,3 +221,71 @@ fn inverse(m: &[[f64; 4]; 3]) -> [[f32; 4]; 3] {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::tests::{orbiting_camera, stamped};
+    use crate::{Planted, Renderer};
+    use deep_canvas_scene3d::frames::Frames;
+    use deep_canvas_scene3d::look::Look3;
+    use deep_canvas_scene3d::scene::Labels;
+    use deep_gpu::device::{Backend, Gpu};
+    use serde_json::json;
+
+    /// A swaying tree and a subsurface slab under a still camera.
+    fn doc() -> serde_json::Value {
+        stamped(
+            &[
+                ("cam", orbiting_camera().0),
+                (
+                    "needles",
+                    json!({"kind": "material@1", "params": {"base_color": [0.1, 0.4, 0.2, 1], "roughness": 0.8}}),
+                ),
+                (
+                    "wax",
+                    json!({"kind": "material@1", "params": {"base_color": [0.8, 0.7, 0.6, 1], "subsurface": {"weight": 1}}}),
+                ),
+                (
+                    "tree",
+                    json!({"kind": "lathe@1", "params": {"outline": [[0.15, 0, false], [0.15, 1, false], [1, 1, false], [0, 3, false]], "segments": 8}, "material": "needles", "modifiers": [{"kind": "mod.sway@1", "params": {"amount": 0.3, "wind": {"direction": 0, "speed": 5, "gust": {"scale": 20}}, "seed": 7}}], "at": {"pos": [0, 0, 0]}}),
+                ),
+                (
+                    "slab",
+                    json!({"kind": "mark.box@1", "params": {"size": [1, 1, 1]}, "at": {"pos": [3, 0.5, 0]}, "material": "wax"}),
+                ),
+            ],
+            json!({}),
+        )
+    }
+
+    fn look() -> Look3 {
+        Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap()
+    }
+
+    /// Canvas primitives, Frame budget: a still view draws nothing. A frame whose scene holds,
+    /// a swaying tree and a subsurface slab in it, writes nothing to the queue; a later t
+    /// writes the tree's params again.
+    #[test]
+    fn a_frame_whose_scene_holds_writes_nothing_for_a_swaying_and_a_subsurface_part() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let (doc, look) = (doc(), look());
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        let mut renderer = Renderer::new(&device, Planted::default());
+        let mut writes = |t: i64| {
+            frames
+                .at(t, [128, 96], &Default::default(), &mut labels)
+                .unwrap();
+            let before = device.device.counts().read();
+            renderer.prepare(&device, frames.scene(), &look);
+            device.device.counts().read().since(before).writes
+        };
+        let first = writes(0);
+        assert!(first > 0, "the first frame writes its uniforms");
+        assert_eq!(writes(0), 0, "the same frame again");
+        assert!(writes(211_680_000) > 0, "the tree 0.3 s on");
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
+}
