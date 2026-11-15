@@ -1,0 +1,130 @@
+Base commit: c740dede7 (Merge pull request #2559), the brief's base; no implementation of #1879 exists there.
+Built first (by the caller): npm workspaces build (packages/cli/dist, packages/hub/dist) and target/debug/deep-hook.
+Date: 2026-11-15  Machine: Linux arm64  Node: v24.22.0  vitest 5.0.5. Paths: <repo> is the base checkout, ~ the home.
+Each run inside: systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=2G env NO_COLOR=1 ...
+
+Run 1 (the README's command), 2026-11-15T10:51:04Z:
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1879-redraft-ac1
+  Result: exit 1; Test Files 1 failed (1); Tests 1 failed (1).
+Run 2 (as the proof lanes run it: the repo's vitest.config.ts, no flags), 2026-11-15T10:51:12Z:
+  node node_modules/vitest/vitest.mjs run tests/acceptance/1879-redraft-ac1
+  Result: exit 1; Test Files 1 failed (1); Tests 1 failed (1).
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1879-redraft-ac1/tsconfig.json passes (exit 0).
+
+Both fail at the criterion's assertion, naming the package. The precondition held first: on an ordinary hub,
+deep install of test/safe1879 exited 0 and find_actions listed ext.safe1879.ping. Then, with that home started
+with deep hub run --safe, the package was loaded:
+
+  AssertionError: the hub started with deep hub run --safe loaded test/safe1879: find_actions lists
+  [{"action":"ext.safe1879.ping","extension":"test/safe1879","declares":"read",...}]: expected [ { …(4) } ] to deeply equal []
+
+Step 3 (the safe-mode refusal) didn't run at the base, since step 2 failed first. Nothing was left running after
+either run (no process naming /tmp/dh1879r1-*), and the temp folders were removed.
+
+The two runs' output follows.
+---------------------------------------------------------------------------------------------------------------- Run 1
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1879-redraft-ac1
+
+ ❯ safe.test.ts (1 test | 1 failed) 6819ms
+   ❯ #1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it (1)
+     × a hub started with deep hub run --safe, test/safe1879 installed, lists none of its actions, and a load of it is refused with "safe mode: the hub loads no extension" 6765ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  safe.test.ts > #1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it > a hub started with deep hub run --safe, test/safe1879 installed, lists none of its actions, and a load of it is refused with "safe mode: the hub loads no extension"
+AssertionError: the hub started with deep hub run --safe loaded test/safe1879: find_actions lists [{"action":"ext.safe1879.ping","extension":"test/safe1879","declares":"read","input":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}}]: expected [ { …(4) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "action": "ext.safe1879.ping",
++     "declares": "read",
++     "extension": "test/safe1879",
++     "input": {
++       "additionalProperties": false,
++       "properties": {
++         "text": {
++           "type": "string",
++         },
++       },
++       "required": [
++         "text",
++       ],
++       "type": "object",
++     },
++   },
++ ]
+
+ ❯ safe.test.ts:32:132
+     30|       for (const deadline = Date.now() + 5000; ;) {
+     31|         const loaded = ofPackage(await actions.find());
+     32|         expect(loaded, `the hub started with deep hub run --safe loade…
+       |                                                                                                                                    ^
+     33|         if (Date.now() >= deadline) break;
+     34|         await sleep(500);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  02:51:04
+   Duration  7.25s (tests 96%, import 3%, transform 1%)
+
+---------------------------------------------------------------------------------------------------------------- Run 2
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1879-redraft-ac1/safe.test.ts (1 test | 1 failed) 4154ms
+   ❯ #1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it (1)
+     × a hub started with deep hub run --safe, test/safe1879 installed, lists none of its actions, and a load of it is refused with "safe mode: the hub loads no extension" 3999ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1879-redraft-ac1/safe.test.ts > #1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it > a hub started with deep hub run --safe, test/safe1879 installed, lists none of its actions, and a load of it is refused with "safe mode: the hub loads no extension"
+AssertionError: the hub started with deep hub run --safe loaded test/safe1879: find_actions lists [{"action":"ext.safe1879.ping","extension":"test/safe1879","declares":"read","input":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}}]: expected [ { …(4) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "action": "ext.safe1879.ping",
++     "declares": "read",
++     "extension": "test/safe1879",
++     "input": {
++       "additionalProperties": false,
++       "properties": {
++         "text": {
++           "type": "string",
++         },
++       },
++       "required": [
++         "text",
++       ],
++       "type": "object",
++     },
++   },
++ ]
+
+ ❯ tests/acceptance/1879-redraft-ac1/safe.test.ts:32:132
+     30|       for (const deadline = Date.now() + 5000; ;) {
+     31|         const loaded = ofPackage(await actions.find());
+     32|         expect(loaded, `the hub started with deep hub run --safe loade…
+       |                                                                                                                                    ^
+     33|         if (Date.now() >= deadline) break;
+     34|         await sleep(500);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  02:51:12
+   Duration  4.55s (tests 94%, transform 3%, import 3%)
+

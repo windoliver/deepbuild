@@ -1,0 +1,12 @@
+// The one installed package of #1879 AC1's redraft. Loaded, it registers one read action, ext.safe1879.ping, which
+// find_actions (deep-actions) then lists to agents; not loaded, nothing lists it. It reads and changes nothing: it
+// returns its input's text in upper case and the text's length (conformance refuses an action that answers only ok).
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default function (deep: any): void {
+  deep.registerAction('ext.safe1879.ping', {
+    declares: 'read',
+    input: strict({ text: { type: 'string' } }),
+    output: strict({ upper: { type: 'string' }, length: { type: 'integer' } }),
+  }, async (input: { text: string }) => ({ upper: input.text.toUpperCase(), length: input.text.length }));
+}
