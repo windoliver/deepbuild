@@ -516,6 +516,11 @@ timed.push('tests/acceptance/154/budgets.test.ts');
 alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
 timed.push('tests/acceptance/154-redraft/budgets.test.ts');
 byHand.push('tests/acceptance/154/stems.test.ts');
+// #155's files each build deep-show, and most start hubs that render foley variants through the supervisor; the
+// Oracle lane also renders a score stem. budgets.test.ts times every preset's render and soaks 32 voices for 10 min.
+alone.push('tests/acceptance/155/', 'tests/acceptance/155-oracle/');
+timed.push('tests/acceptance/155/budgets.test.ts');
+slow.push('tests/acceptance/155/budgets.test.ts');
 // #1700's files each build deep-show; budgets.test.ts also builds it in release and times every geometry.shape
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');

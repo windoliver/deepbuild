@@ -2963,9 +2963,10 @@ fn cuts_of(
 }
 
 /// The marker kinds (canvas primitives: Marker), with a reading hold (#419), which motion blur
-/// never spans; #507's present-mode fields are read in `present`.
-pub(crate) const MARKER_KINDS: [&str; 9] = [
-    "cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold",
+/// never spans, and #155's `press`, an authored moment like `moment` that a spawn reads through
+/// `markers.press`; #507's present-mode fields are read in `present`.
+pub(crate) const MARKER_KINDS: [&str; 10] = [
+    "cue", "shot", "section", "stage", "beat", "word", "moment", "record", "hold", "press",
 ];
 
 /// Resolves every marker at check, in dependency order: a marker whose time names another marker

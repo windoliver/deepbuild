@@ -1660,6 +1660,16 @@
       "criteria": [
         "#213.16543e66"
       ]
+    },
+    {
+      "id": "foley-render",
+      "command": [
+        "node",
+        "benchmarks/foley.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #155 first measurement (#155.3c3c0a49): the merge base has no foley renderer. Every foley@1 preset (90) renders its twelve variants at once, each in its own foley-render@1.0.0 process given the params foley_plan gives on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 30 s limit on the reference Mac and the 32 spawned voices' 10-minute soak stay in tests/acceptance/155/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
