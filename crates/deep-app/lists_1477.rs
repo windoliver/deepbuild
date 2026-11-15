@@ -53,6 +53,9 @@ fn allocations() -> u64 {
 extern "C" {
     fn clock_gettime(clock: u32, out: *mut [i64; 2]) -> i32;
     fn getloadavg(out: *mut f64, n: i32) -> i32;
+}
+#[cfg(target_os = "macos")]
+extern "C" {
     fn proc_pid_rusage(pid: i32, flavor: i32, out: *mut [u64; 64]) -> i32;
 }
 
@@ -63,14 +66,20 @@ fn cpu_ns() -> i64 {
     t[0] * 1_000_000_000 + t[1]
 }
 
-/// The process's physical footprint, as Activity Monitor's Memory column reads it (rusage_info_v2).
-fn footprint() -> u64 {
+/// The process's physical footprint, as Activity Monitor's Memory column reads it (rusage_info_v2). Only macOS has
+/// that reading (libproc's proc_pid_rusage), so anywhere else there is none.
+#[cfg(target_os = "macos")]
+fn footprint() -> Option<u64> {
     let mut out = [0u64; 64];
     // rusage_info_v2: a 16-byte UUID, then u64s; ri_phys_footprint is the 8th u64.
     if unsafe { proc_pid_rusage(std::process::id() as i32, 2, &mut out) } != 0 {
-        return 0;
+        return Some(0);
     }
-    out[2 + 7]
+    Some(out[2 + 7])
+}
+#[cfg(not(target_os = "macos"))]
+fn footprint() -> Option<u64> {
+    None
 }
 
 fn load() -> f64 {
@@ -288,7 +297,7 @@ enum Body {
 struct Run {
     frame: usize,
     started: Option<(Instant, u64, i64)>,
-    ended: Option<(Duration, u64, i64, u64)>,
+    ended: Option<(Duration, u64, i64, Option<u64>)>,
     /// When this frame's scroll was applied: an update runs from there through layout, prepaint and paint.
     applied: Option<Instant>,
     times: Vec<f64>,
@@ -528,6 +537,8 @@ fn arm(name: &str) -> Json {
                     json!({ "arm": name2, "status": "INCONCLUSIVE", "reason": problem })
                 } else if let Some(why) = &r.missed {
                     json!({ "arm": name2, "status": "missed", "reason": why, "rows": rows, "columns": COLUMNS })
+                } else if let Some((.., None)) = r.ended {
+                    json!({ "arm": name2, "status": "INCONCLUSIVE", "reason": format!("the working set is macOS's physical footprint, which {} can't read", std::env::consts::OS) })
                 } else {
                     let (elapsed, allocs, cpu, working_set) = r.ended.expect("counted");
                     let frames = r.times.len();

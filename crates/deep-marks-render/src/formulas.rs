@@ -178,6 +178,11 @@ pub fn evaluated(
     if has_handles(doc) {
         handles(doc, &mut items, &values(doc, &program, t, ctx));
     }
+    // #223: a warp's vars read at t.
+    if deep_canvas_marks::warp::binds(&items) {
+        let seconds = t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        deep_canvas_marks::warp::bind(&mut items, seconds, &values(doc, &program, t, ctx));
+    }
     if !has_formulas(doc) {
         return Ok((items, None));
     }

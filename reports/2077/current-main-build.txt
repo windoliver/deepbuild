@@ -1,0 +1,165 @@
+
+> @deepbuild/adapters@0.0.0 build
+> tsc -b tsconfig.json
+
+
+> @deepbuild/archive@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/asks@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/briefs@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/budget@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/buying@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-command@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-journey@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-numbers@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-review@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-work@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/cli@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/config-eval@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/conformance@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/env-local@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/evidence@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/extension-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/gate@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/github@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+
+> @deepbuild/leases@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/otlp@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/paseo@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/pi@0.1.0 build
+> tsc -p tsconfig.json && node tools.mjs
+
+
+> @deepbuild/proof@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/reading@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/readings@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/record@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/resolver-decisions@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/routing-replay@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/runner@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/supervisor@0.0.0 build
+> tsc -p tsconfig.json && node build-helper.mjs
+
+
+> @deepbuild/verdicts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/wiki@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/workspaces@0.0.0 build
+> tsc -p tsconfig.json
+
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.15
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling zeroize v1.9.1
+   Compiling untrusted v0.9.0
+   Compiling rustls v0.23.46
+   Compiling once_cell v1.21.4
+   Compiling subtle v2.6.1
+   Compiling deep-contracts v0.0.0 (<checkout>/crates/deep-contracts)
+   Compiling cc v1.9.0
+   Compiling rustls-pki-types v1.15.1
+   Compiling ring v0.17.14
+   Compiling getrandom v0.2.17
+   Compiling rustls-webpki v0.103.16
+   Compiling deep-hook v0.0.0 (<checkout>/crates/deep-hook)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.76s

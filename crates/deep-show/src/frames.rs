@@ -18,7 +18,7 @@ use deep_canvas_marks::modules::{Drawing, Run, StatusDrawing};
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::hub::{Call, Eval, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
+use crate::hub::{Call, Eval, EvalTime, Frames, Hub, Show, INTERFACE_RUNS, SEAL_RUNS};
 use crate::snapshot::{self, Drawn, Unfit};
 
 /// An operator's error as a revision's issue.
@@ -238,6 +238,35 @@ impl<'a> Hub<'a> {
     }
 
     /// One frame of a document's session (`eval`).
+    /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
+    /// through its groups' warps at their values then, each sub-path flattened to its points.
+    pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let planted = crate::warps::planted(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let (Some(form), Some(items)) = (
+            session.document().and_then(Value::as_object).cloned(),
+            crate::warps::items_at(&self.sched, session),
+        ) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        match crate::warps::drawn(&form, &items, item, planted) {
+            Ok(Some(subpaths)) => {
+                json!({"item": item, "t": t, "subpaths": subpaths, "notices": []})
+            }
+            Ok(None) => json!({"outcome": "refused", "code": "ref_unresolved", "item": item}),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
     pub fn eval(&mut self, e: &Eval) -> Value {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
@@ -359,6 +388,16 @@ impl<'a> Hub<'a> {
                         .as_ref()
                         .and_then(|v| v.as_typed::<f64>())
                         .map(|x| json!(*x));
+                    // #533: a logic item's array `<logic ID>.<name>` of count 1, as the logic
+                    // module's last step at or before the frame left it.
+                    let logic = || {
+                        let state = evaluated.array(&self.sched, deep_logic::module::STATE)?;
+                        let state = state.as_typed::<deep_logic::module::State>()?;
+                        match state.arrays.get(name)?.as_slice() {
+                            [one] => Some(one.clone()),
+                            _ => None,
+                        }
+                    };
                     // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
                     let doc = evaluated.document();
                     let bands = || {
@@ -367,7 +406,10 @@ impl<'a> Hub<'a> {
                         })
                         .map(|m| json!(m.values))
                     };
-                    (name.clone(), n.or(x).or_else(bands).unwrap_or(Value::Null))
+                    (
+                        name.clone(),
+                        n.or(x).or_else(logic).or_else(bands).unwrap_or(Value::Null),
+                    )
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
@@ -650,19 +692,16 @@ impl<'a> Hub<'a> {
         drawing: &Painted,
         size: Option<[u16; 2]>,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
-        let drawn = self
-            .renderer
-            .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|u| match u.code {
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        // #506: with its insets' pictures, its overlay frames at their anchors and its view
+        // overlays (over3d.rs).
+        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
             "unsupported_platform" => Unfit {
                 code: "gpu_unavailable",
                 path: "snapshots".into(),
             },
             _ => u,
         })?;
-        let over = self.renderer.raster(&drawn, size, None);
-        snapshot::over(&mut rgba, &over);
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }

@@ -1,0 +1,88 @@
+Base commit: c12a5f748 ("design(#2551): the adapter rules in adapter.facts@1 are twelve, with the two #1296 added"):
+the docs-only commit that amends the design's sentence. packages/contracts/schemas/adapter.facts@1.json is untouched
+by this job and already holds twelve x-rules.
+Date: 2026-11-14  Linux aarch64, Node 24.22.0, vitest 5.0.5. Paths under the checkout are shown as <repo>.
+
+== 1. The ORIGINAL test on the base: fails, 12 against 10 ==
+
+Run: NO_COLOR=1 npx vitest run tests/acceptance/313/fakes.test.ts        (exit 1; 1 failed, 21 passed of 22)
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/313/fakes.test.ts (22 tests | 1 failed) 758ms
+   ❯ AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message (4)
+     × AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/313/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id
+AssertionError: expected 12 to be 10 // Object.is equality
+
+- Expected
++ Received
+
+- 10
++ 12
+
+ ❯ tests/acceptance/313/fakes.test.ts:117:25
+    115|   it('AC12 adapter.facts@1 lists the ten rules in the design\'s order,…
+    116|     const list = rules();
+    117|     expect(list.length).toBe(RULE_PHRASES.length);
+       |                         ^
+    118|     list.forEach((rule, i) => {
+    119|       expect(rule.rule.toLowerCase(), `rule ${i + 1} is ${RULE_PHRASES…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  17:42:21
+   Duration  1.00s (tests 81%, transform 10%, import 7%, setup 1%)
+
+
+The other three AC12 tests of the file pass on the base (they are among the 21): each rule has one fake, the five
+named fakes sit under their rules, and the kit check names the rule whose fake is removed.
+
+== 2. The REDRAFT on the base: passes, 8 of 8 ==
+
+Run: NO_COLOR=1 npx vitest run tests/acceptance/313-redraft-2551/ --reporter=verbose        (exit 0)
+Type-check: npx tsc -p tests/acceptance/313-redraft-2551/tsconfig.json                      (exit 0, no output)
+
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 adapter.facts@1 lists the twelve rules in the design's order, each with an id (redraft 2551) 1ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list that holds only the first ten rules fails this test, twelve against ten (redraft 2551) 1ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list that lacks a rule in the middle fails this test (redraft 2551) 0ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list with a thirteenth rule the design doesn't name fails this test (redraft 2551) 0ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list with the last two rules swapped fails this test, naming rule 11 and the design's phrase (redraft 2551) 0ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list with two of the first ten rules swapped fails this test, naming the first of them (redraft 2551) 0ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list whose twelfth rule says something else fails this test, naming rule 12 and the design's phrase (redraft 2551) 0ms
+ ✓ tests/acceptance/313-redraft-2551/fakes.test.ts > AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message > AC12 (wrong program) a list with one id used twice, or an id out of form, fails this test (redraft 2551) 1ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  17:42:22
+   Duration  316ms (transform 48%, import 25%, tests 24%, setup 3%, worker 1%)
+
+
+The redrafted test passes on the base, and that is expected: this is not a test of a fix to the program. The
+published schema has held these twelve rules since #1296; what was behind was the design's sentence and the frozen
+test's phrase list, and the base commit amends the sentence. So the base is the right program for the redraft, as
+#313's own program is, and the base can't be its wrong program.
+
+What shows the redraft can fail are the seven tests headed "(wrong program)" above. Each feeds the same assertion
+(expectDesignRules, the original's four expectations word for word) a copy of the published list with one fault
+planted in memory, and expects the assertion to throw:
+
+  the first ten rules only (the list the frozen test wanted)   expected 10 to be 12
+  a rule missing in the middle                                 expected 11 to be 12
+  a thirteenth rule the design doesn't name, last or inside    expected 13 to be 12
+  rules 11 and 12 swapped                                      rule 11 is a block the model needs goes out only on an output the facts mark as reaching the model
+  rules 3 and 4 swapped                                        rule 3 is a clock stepped back
+  rule 12 reworded to allow stderr on exit 0                   rule 12 is a block the model needs never goes out as stderr on exit 0
+  one id used twice; an id out of form                         expected 11 to be 12 (distinct ids); to match /^[a-z][a-z0-9_-]*$/
+
+No repo file was edited to make any of these; the schema is read through getSchema and copied.
