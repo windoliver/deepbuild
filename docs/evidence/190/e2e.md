@@ -864,3 +864,40 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   (`acceptance-linux-b52031509.txt`): 20 pass, ac07 among them against the merge base 0e5572731, and the same 4
   are BLOCKED; `cargo test --locked -p deep-logic -p deep-canvas-sandbox` passes. The Mac run at 12652bc19 is of
   the head before this merge.
+- **Round 53** (2026-11-15, a separate agent, the merge resolution b52031509 alone, in its own clone with local main
+  at 0e5572731): MERGE RESOLUTION SOUND.
+  - In `crates/deep-logic` and `scripts/lanes.mjs` nothing of either side is dropped or doubled. Against the two
+    sides' own diffs the only differences are `LATER` (both removals together) and the libraries' data check moved
+    below `services::asked`.
+  - It found the move correct: a service region inside the libraries' data would share their bytes, so refusing it
+    is right, and no valid piece is newly refused. Mirrors and assets are checked against the linked program's data
+    segments; main's `only` filters steps and ranges, never traps.
+  - `cargo test --locked -p deep-logic -p deep-canvas-sandbox`: 33 passed, 0 failed. The three oracle files: 6 of 6.
+    ac05 passes on this host up to its x86_64 leg, BLOCKED without the linux/amd64 image.
+  - Not run: a piece with both links and services (read from code); the rest of the suite and `affected.mjs`.
+  - Its one low finding is main's code, not this change's: the preview region's check (`piece.rs`, from 5810a8f41)
+    isn't made against any data segment, the program's own or a library's, so a `preview_at` inside static data is
+    accepted. Noted for main; not fixed here.
+- **Mac run at 57499bf18** (2026-11-15, the owner's go at the Mac; on AC; local main 0e5572731, the merge base;
+  Docker 29.2.1 with the linux/amd64 image `rust:1.99.1-slim-bookworm`, pulled on the owner's word, the same image
+  ID; host name redacted; `mac/exits-57499bf18.txt`), the head with the merge of main 0e5572731. All four files
+  pass; no secret-scan hit:
+  - ac04 2 of 2 (`mac/ac04-57499bf18.txt`) and ac05 1 of 1 (`mac/ac05-57499bf18.txt`), with the linux/amd64
+    container. Criteria 4 and 5.
+  - ac07 1 of 1 (`mac/ac07-57499bf18.txt`), against merge base 0e5572731. Criterion 7.
+  - ac10 2 of 2 (`mac/ac10-57499bf18.txt`, `mac/ac10-gate-57499bf18.txt`), no load wait by the owner's choice: load
+    42.9 at its start and 35.6 at its end, thermal state 1. Its budgets held; as a timing taken under load it is
+    INCONCLUSIVE, and its quiet-Mac pass stays the one at e44890825. Criterion 10.
+- **Round 54** (2026-11-15, a separate agent, at the code of 57499bf18, which is b52031509's plus evidence): no
+  screenshot differs from the head. SCREENSHOTS STILL MATCH HEAD.
+  - The evidence regenerated: `gen.test.ts` 1 passed, with `labels.json` and `grids.json` byte for byte the
+    committed ones; the five deep-logic runs exit 0, with the committed line counts.
+  - The replies, field by field: every verdict, hash, size, refusal and the trap at offset 451 is equal. Beyond the
+    known differences, main 0e5572731 adds `service_ns: 0` and `mirror_ns: 0` to each step item and an `ns` timing
+    to each checkpoint; the page reads only `step` and `deep_hash` from those, so no image shows them.
+  - Screenshots 00 to 06 retaken twice each with `server.mjs` and `shoot.mjs` (Playwright headless Chromium 156): on
+    the committed `e2e-raw` all seven are byte for byte the committed ones; on the data regenerated at this code 01 to
+    06 are, and 00 differs only in its header line, "code at 57499bf18". The browser's replies equal
+    `browser-replies-chromium-156.json` both times. All 11 images were read against the values.
+  - Not done: 07a to 07d were read, not retaken; the suite, `affected.mjs`, cargo test, clippy, fmt and the Mac
+    checks weren't part of this round.
