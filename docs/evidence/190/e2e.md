@@ -798,3 +798,10 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
     script are the same on both).
   - The earlier single run at 4b10b58f1 (`affected-linux-4b10b58f1.txt`) was in this worktree, whose `node_modules`
     was of 2026-11-09 and lacked `@deepbuild/briefs`; this comparison replaces it as the reading.
+- **Mac run at eabed12b6** (2026-11-14, the owner's go at the Mac; macOS 27.2.1, on AC; local main d3326d3c, merge
+  base 2c1c8cacc; host name redacted; `mac/exits-eabed12b6.txt`), the head with the trap replies' fix:
+  - ac07 1 of 1 (`mac/ac07-eabed12b6.txt`) and ac10 2 of 2 (`mac/ac10-eabed12b6.txt`) pass; ac10 with no load
+    wait, the owner's choice: load 42.4 at its start and 36.9 at its end, thermal state 0.
+  - ac04 and ac05 are BLOCKED, not run (`mac/ac04-eabed12b6.txt`, `mac/ac05-eabed12b6.txt`): Docker Desktop was
+    open, and `docker info` answered 500 for 22 minutes (`mac/docker-info-eabed12b6.txt`). Their last passes are at
+    4b10b58f1, before the fix.
