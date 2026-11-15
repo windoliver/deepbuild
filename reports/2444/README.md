@@ -1,6 +1,18 @@
 # #2444 — Part of, not Closes
 
-## Requirement → change → proof
+## Closeout attempt, 2026-11-15
+
+The follow-up uses isolated worktrees based on freshly fetched main `f989212187f28d65ab7e80c3a22545d5edaee37e`. The original dirty checkout was not reset, cleaned or committed. Tests were committed before implementation; the runner changes are their own approval-eligible commit `33ad71d38`. The same blind acceptance files remain byte-identical.
+
+- **AC1 passes on the current base plus this change:** 12 fixture/regression cases pass, AC2 explicitly unrun (`current-head-focused.txt`). On this new base the unchanged tests first gave 8 expected assertion failures (`current-main-red.txt`). A further current-main integration regression ensures the final diagnostic names the unlisted failure rather than the earlier listed one: red then green unchanged (`diagnostic-red.txt`, `diagnostic-green.txt`).
+- **Clean-main AC2 is blocked by an actual check result, not just load:** `node scripts/known-failures-check.mjs` exits **1** on clean main: all seven remaining failure entries are older than 14 days (`known-failures-main.txt`). Their open repair issues are #1620, #1621, #1622, #1623 and #1624. No date, exemption, check or budget was changed to hide this.
+- **Real preflight attempted:** `scripts/preflight` launched on that clean main, with `npm ci` completed, at 21:53:58 UTC. It never obtained a timed grant: one-minute load ranged from 31.90 to 109.68 on 18 cores, thermal state `fair`, mains power, Low Power Mode off. After the deterministic clean-main lint failure was established, only this run's PID was stopped at 21:57:34 UTC, still before warmup/checks. `preflight-main-attempt.json` records the clean tree, machine, loads, dates and SIGTERM. Its 216 s wall time is **grant wait, not checks elapsed or budget proof**.
+- **Affected verification attempted:** the current-base selection has no WIDE line and leaves 33 timed and 9 slow files unrun. The execution also hit missing built `@deepbuild/config-eval` exports in the clean worktree/shards, repository-rule findings outside this change, and a failing #1113 nested-throttle assertion. Partial outputs are retained in `affected-current.txt`, `affected-setup.txt`, `affected-repo-rules.txt` and `affected-node-failures.txt`. It was stopped by its own process tree's recorded PIDs; no final summary/PASS was reached. Do not count this as complete regression proof.
+- **Approval remains required:** `lanes.mjs` and `affected.mjs` are protected tooling. No SSH-signed approval tag was forged or created. The guard command was attempted but hit the 120 s command limit without output; it has no result.
+
+**Issue stays open.** Resolve the linked main failures (including #1624's protected test/list changes through its approved process), build the fresh workspace and complete affected verification, obtain the tooling approval, then measure a complete preflight on quiet, thermally nominal reference hardware at clean current main after the fix lands. The 900 s budget remains unchanged; any increase needs a measured, approved proposal. A pre-merge branch run is not clean-main proof.
+
+## Original requirement → change → proof
 
 | Requirement | Change | Proof |
 | --- | --- | --- |
@@ -28,4 +40,4 @@ To finish AC2, the changes need to land and a full `scripts/preflight` must run 
 
 The blind suite's AC2 evidence reader is only a preliminary check: it does not independently establish current-main identity, reference hardware, or every lane's completion. Its canned output and self-test cannot close AC2. The suite's printed directory-form invocation is not accepted by this Node version; the recorded runs use the explicit `.test.mjs` path. The acceptance files were preserved rather than edited.
 
-No commit, PR or approval tag was created. The pre-existing lane-list edits for #2078, #2084 and #2516 remain untouched. These runner changes still require the repository's normal protected-tooling review/approval before merge.
+The initial pass created no commit, PR or approval tag; the follow-up above commits the isolated current-main branch for a draft PR. The original checkout's pre-existing lane-list edits for #2078, #2084 and #2516 remain untouched. These runner changes still require the repository's normal protected-tooling review/approval before merge.
