@@ -72,7 +72,11 @@ impl HdrLayer {
         Ok(HdrLayer { layer, surface })
     }
 
-    /// Configures the surface at `size` device px; `read` lets a frame be copied out.
+    /// Configures the surface at `size` device px; `read` lets a frame be copied out. A frame
+    /// presents as soon as it's drawn, never waiting for the display's refresh: the window is
+    /// composited, so Core Animation shows it on the refresh anyway, and a pass into a drawable that
+    /// waits for the refresh holds the GPU until the display lets the drawable go (the HDR pass read
+    /// 2.20 ms that way and 0.41 ms without, at 3024 × 1964 on this Mac17,10; reports/177.md).
     pub fn configure(&self, device: &wgpu::Device, size: [u32; 2], read: bool) {
         let mut usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
         if read {
@@ -86,7 +90,7 @@ impl HdrLayer {
                 color_space: wgpu::SurfaceColorSpace::ExtendedSrgbLinear,
                 width: size[0].max(1),
                 height: size[1].max(1),
-                present_mode: wgpu::PresentMode::Fifo,
+                present_mode: wgpu::PresentMode::Immediate,
                 desired_maximum_frame_latency: 2,
                 alpha_mode: wgpu::CompositeAlphaMode::Opaque,
                 view_formats: Vec::new(),
@@ -233,6 +237,23 @@ pub struct ScreenLayer {
     /// The layer's size in device px.
     pub size: [u32; 2],
     screen: Retained<objc2_app_kit::NSScreen>,
+    app: Retained<objc2_app_kit::NSApplication>,
+}
+
+/// Dispatches the events NSApp.run would for `seconds`: the window's visibility and the display's
+/// EDR headroom reach AppKit through them, and nothing else runs the app's loop in this process.
+fn pump(app: &objc2_app_kit::NSApplication, seconds: f64) {
+    let until = objc2_foundation::NSDate::dateWithTimeIntervalSinceNow(seconds);
+    while let Some(event) = unsafe {
+        app.nextEventMatchingMask_untilDate_inMode_dequeue(
+            objc2_app_kit::NSEventMask::Any,
+            Some(&until),
+            objc2_foundation::NSDefaultRunLoopMode,
+            true,
+        )
+    } {
+        app.sendEvent(&event);
+    }
 }
 
 impl ScreenLayer {
@@ -243,7 +264,12 @@ impl ScreenLayer {
         };
         let mtm =
             objc2::MainThreadMarker::new().ok_or("the screen's window needs the main thread")?;
-        let _app = NSApplication::sharedApplication(mtm);
+        // A process with no bundle shows no window until it says what kind of app it is.
+        let app = NSApplication::sharedApplication(mtm);
+        app.setActivationPolicy(objc2_app_kit::NSApplicationActivationPolicy::Accessory);
+        app.finishLaunching();
+        #[allow(deprecated)]
+        app.activateIgnoringOtherApps(true);
         let screen = NSScreen::mainScreen(mtm).ok_or("no main display")?;
         let frame = screen.frame();
         let scale = screen.backingScaleFactor();
@@ -269,8 +295,19 @@ impl ScreenLayer {
         CATransaction::setDisableActions(true);
         layer.layer.setFrame(host.bounds());
         CATransaction::commit();
+        window.makeKeyAndOrderFront(None);
         window.orderFrontRegardless();
         CATransaction::flush();
+        // AppKit marks the window visible as its run loop turns, and nothing else turns it here:
+        // turn it until the window reports itself visible, so its surface hands out drawables.
+        let shown = std::time::Instant::now();
+        while !window
+            .occlusionState()
+            .contains(objc2_app_kit::NSWindowOcclusionState::Visible)
+            && shown.elapsed() < std::time::Duration::from_secs(3)
+        {
+            pump(&app, 0.05);
+        }
         let size = [
             (frame.size.width * scale).round() as u32,
             (frame.size.height * scale).round() as u32,
@@ -280,11 +317,19 @@ impl ScreenLayer {
             layer,
             size,
             screen,
+            app,
         })
     }
 
+    /// The main display's refresh rate, its frames' clock.
+    pub fn refresh_hz(&self) -> f64 {
+        self.screen.maximumFramesPerSecond() as f64
+    }
+
     /// The main display's potential and current EDR headroom.
+    /// Read on the main thread after its events are dispatched, so the value is current.
     pub fn headroom(&self) -> (f32, f32) {
+        pump(&self.app, 0.25);
         (
             self.screen
                 .maximumPotentialExtendedDynamicRangeColorComponentValue() as f32,

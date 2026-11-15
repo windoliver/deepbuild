@@ -283,6 +283,9 @@ struct Run {
     last: Option<Row>,
     ledger: u64,
     prev_rect: Option<[f64; 4]>,
+    /// Where the HDR layer stands now: it's placed again only when the view's rect changes, so a
+    /// still view's frames spend nothing on the UI thread for it.
+    placed: Option<[f64; 4]>,
     paint: Rc<RefCell<Paint>>,
     _observer: Option<
         objc2::rc::Retained<objc2::runtime::ProtocolObject<dyn objc2_foundation::NSObjectProtocol>>,
@@ -450,11 +453,12 @@ pub fn run(path: &str, cx: &mut App) {
             last: None,
             ledger: gpu_ledger::read().gpu_ns,
             prev_rect: None,
+            placed: None,
             paint: paint.clone(),
             _observer: Some(observer),
         });
         let run = run.clone();
-        window.on_next_frame(move |window, cx| step(window, cx, run, 0));
+        visible(window, 0, move |window, cx| step(window, cx, run, 0));
         cx.new(|_| Root {
             page,
             paint: root_paint,
@@ -463,6 +467,24 @@ pub fn run(path: &str, cx: &mut App) {
     })
     .expect("open the window");
     cx.activate(true);
+}
+
+/// Runs `then` on the first frame after AppKit reports the window visible, asking for a frame
+/// until it does: a request made before the window shows can stop GPUI's display link with
+/// nothing asked again, and then no frame would ever come.
+fn visible(window: &mut Window, tries: u32, then: impl FnOnce(&mut Window, &mut App) + 'static) {
+    window.refresh();
+    window.on_next_frame(move |window, cx| {
+        let shown = gpui_view(window).window().is_some_and(|w| {
+            w.occlusionState()
+                .contains(objc2_app_kit::NSWindowOcclusionState::Visible)
+        });
+        if shown || tries > 240 {
+            then(window, cx);
+        } else {
+            visible(window, tries + 1, then);
+        }
+    });
 }
 
 /// Frame `k`: finishes frame k − 1's row, then asks for frame k and paints it.
@@ -523,7 +545,10 @@ fn step(window: &mut Window, cx: &mut App, run: Rc<RefCell<Option<Run>>>, k: u64
             .map(|c| c.instance.clone())
             .expect("a GPU seam");
         match HdrLayer::beneath(view, &instance) {
-            Ok(l) => *r.hdr.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(l)),
+            Ok(l) => {
+                *r.hdr.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(l));
+                r.placed = None;
+            }
             Err(e) => eprintln!("deep-app --hdr: {e}"),
         }
     }
@@ -554,8 +579,11 @@ fn step(window: &mut Window, cx: &mut App, run: Rc<RefCell<Option<Run>>>, k: u64
         } else {
             rect64
         };
-        if let Some(l) = r.hdr.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-            l.place(view, placed);
+        if r.placed != Some(placed) {
+            if let Some(l) = r.hdr.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                l.place(view, placed);
+            }
+            r.placed = Some(placed);
         }
         Some(placed)
     } else {
