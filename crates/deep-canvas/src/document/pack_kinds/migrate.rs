@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::super::packs::{
-    input_fault, rule_number, Input, Pack, PackId, Packs, Resolved, RuleScope,
+    input_fault, rule_number, Input, Pack, PackId, Packs, Planted, Resolved, RuleScope,
 };
 use super::super::{kind_text, Issue, Notice};
 use super::PackKind;
@@ -290,12 +290,19 @@ fn number(v: f64) -> Value {
 /// One step on an instance's params: rename, then set from the old params, then drop. A renamed
 /// param the instance leaves out stays out and a 0 stays 0, and a set whose expression reads a
 /// param the instance leaves out is left to the new major's default. Returns the params it set.
-fn apply<'a>(step: &'a Step, params: &mut Map<String, Value>) -> Vec<&'a str> {
+/// `zero_as_absent` is #1959's planted migrator, which takes a 0 for a param left out.
+fn apply<'a>(
+    step: &'a Step,
+    params: &mut Map<String, Value>,
+    zero_as_absent: bool,
+) -> Vec<&'a str> {
     let old = params.clone();
     for (from, to) in &step.rename {
         if !params.contains_key(to) {
             if let Some(v) = params.shift_remove(from) {
-                params.insert(to.clone(), v);
+                if !(zero_as_absent && v.as_f64() == Some(0.0)) {
+                    params.insert(to.clone(), v);
+                }
             }
         }
     }
@@ -436,7 +443,7 @@ pub(in crate::document) fn corpus_faults(
                             origin.insert(b.clone(), o);
                         }
                     }
-                    for p in apply(step, &mut params) {
+                    for p in apply(step, &mut params, false) {
                         origin.insert(p.to_string(), (f, p.to_string()));
                     }
                 }
@@ -509,11 +516,42 @@ fn current<'a>(pack: &'a Pack, full: &str) -> Option<(u64, &'a PackKind)> {
 }
 
 /// Migrates each instance saved at an earlier major of its pinned pack's kind, on the check's
-/// copy and before expansion: one major a step, one `migrated` notice a step (Migration).
-pub fn at_load(items: &mut Map<String, Value>, resolved: &Resolved, notices: &mut Vec<Notice>) {
+/// copy and before expansion: one major a step, one `migrated` notice a step (Migration). Each
+/// item migrates from its own saved major, so a document mixing majors across writers' layers
+/// opens with every item at the current one (#1959).
+pub fn at_load(
+    items: &mut Map<String, Value>,
+    resolved: &Resolved,
+    planted: Planted,
+    notices: &mut Vec<Notice>,
+) {
+    // #1959's planted loader: one saved major, the lowest a pack-kind item holds, for every item.
+    let whole = planted
+        .migrate_one_major
+        .then(|| {
+            items
+                .values()
+                .filter_map(|item| saved_major(item, resolved))
+                .min()
+        })
+        .flatten();
     for (key, item) in items.iter_mut() {
-        migrate_item(key, item, resolved, notices);
+        migrate_item(
+            key,
+            item,
+            resolved,
+            (whole, planted.migrate_zero_as_absent),
+            notices,
+        );
     }
+}
+
+/// The major an item of a pack kind was saved at, if its pinned pack carries the kind.
+fn saved_major(item: &Value, resolved: &Resolved) -> Option<u64> {
+    let (full, saved) = kind_text(item)?.rsplit_once('@')?;
+    let family = full.split_once('.')?.0;
+    current(resolved.by_name.get(family)?, full)?;
+    saved.parse().ok()
 }
 
 /// Stores the migrations of the pack-kind items in `layer`, the writer's, in place, and returns
@@ -528,7 +566,8 @@ pub fn store_migrations(doc: &mut Value, layer: &str, packs: &Packs) -> Vec<(Str
     for (key, item) in items.iter_mut() {
         if item.get("layer").and_then(Value::as_str) == Some(layer) {
             let was = item.clone();
-            if migrate_item(key, item, &resolved, &mut Vec::new()) {
+            let zero = packs.planted.migrate_zero_as_absent;
+            if migrate_item(key, item, &resolved, (None, zero), &mut Vec::new()) {
                 out.push((key.clone(), was));
             }
         }
@@ -537,11 +576,13 @@ pub fn store_migrations(doc: &mut Value, layer: &str, packs: &Packs) -> Vec<(Str
 }
 
 /// One item through its pinned pack's chain, if it is saved at an earlier major of the pack's
-/// kind; whether it moved.
+/// kind; whether it moved. `planted` is #1959's: a saved major taken for the whole document, and
+/// a 0 taken for a param left out.
 fn migrate_item(
     key: &str,
     item: &mut Value,
     resolved: &Resolved,
+    planted: (Option<u64>, bool),
     notices: &mut Vec<Notice>,
 ) -> bool {
     let Some(text) = kind_text(item).map(str::to_string) else {
@@ -550,7 +591,8 @@ fn migrate_item(
     let Some((full, saved)) = text.rsplit_once('@') else {
         return false;
     };
-    let (Some(saved), Some((family, _))) = (saved.parse::<u64>().ok(), full.split_once('.')) else {
+    let saved = planted.0.or(saved.parse::<u64>().ok());
+    let (Some(saved), Some((family, _))) = (saved, full.split_once('.')) else {
         return false;
     };
     let Some((major, kind)) = resolved
@@ -577,7 +619,7 @@ fn migrate_item(
         .cloned()
         .unwrap_or_default();
     for (from, step) in (saved..).zip(chain) {
-        apply(step, &mut params);
+        apply(step, &mut params, planted.1);
         let major = |m: u64| u32::try_from(m).unwrap_or(u32::MAX);
         notices.push(Notice {
             code: "migrated",

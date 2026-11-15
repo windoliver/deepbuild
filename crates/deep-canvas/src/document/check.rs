@@ -184,7 +184,7 @@ fn check_by(
                     migrate_item(key, item, &mut notices, kinds);
                 }
             }
-            super::pack_kinds::migrate::at_load(items, &resolved, &mut notices);
+            super::pack_kinds::migrate::at_load(items, &resolved, packs.planted, &mut notices);
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.

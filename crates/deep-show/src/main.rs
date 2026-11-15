@@ -1452,6 +1452,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
+                "migration_one_major_per_document" => Planted::MigrationOneMajor,
+                "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,

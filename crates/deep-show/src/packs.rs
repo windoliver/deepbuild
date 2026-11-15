@@ -302,7 +302,12 @@ pub fn timings(
     let resolve_ms = started.elapsed().as_secs_f64() * 1000.0;
     let mut items = doc["items"].as_object().cloned().unwrap_or_default();
     let started = std::time::Instant::now();
-    deep_canvas::document::pack_kinds::at_load(&mut items, &resolved, &mut Vec::new());
+    deep_canvas::document::pack_kinds::at_load(
+        &mut items,
+        &resolved,
+        packs.planted,
+        &mut Vec::new(),
+    );
     let migrate_ms = started.elapsed().as_secs_f64() * 1000.0;
     let mut out = Map::new();
     out.insert(
