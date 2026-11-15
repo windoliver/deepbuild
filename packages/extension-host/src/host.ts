@@ -2414,8 +2414,7 @@ class Host implements ExtensionHost {
     let refusal: string | undefined;
     if (m.stability === 'stable') {
       if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
-      // A work source's context fetch is part of the deep.registerSource that registered it (#66), and a run's read of
-      // the deep.schedule that registered its job (#1887).
+      // A work source's context fetch is part of its deep.registerSource (#66); a run's read, of its deep.schedule (#1887).
     } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method === 'deep.schedule.read' ? 'deep.schedule' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
     if (!refusal) return;
     // Kept on the run, so a package that never awaits the call is refused all the same.
