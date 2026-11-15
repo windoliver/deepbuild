@@ -298,6 +298,9 @@ timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
+// #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
+// CPU and wall times.
+alone.push('tests/acceptance/190/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
@@ -510,6 +513,8 @@ alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 alone.push('tests/acceptance/1956/');
 // #1959's files each build deep-show (r1); the mixed-version scene's test restarts a hub on the same state folder.
 alone.push('tests/acceptance/1959/');
+// #1960's files each build deep-show (r1); the lifecycle test restarts a hub twice on the same state folder.
+alone.push('tests/acceptance/1960/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.

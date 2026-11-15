@@ -162,7 +162,7 @@ export class HubControl {
   private async route(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health':
-      case 'health': return this.health();
+      case 'health': return this.health(context.role);
       case 'session.wait': return this.options.delivery().waitAnswer(params, context);
       case 'session.delivered': return this.options.delivery().placed(params, context);
       case 'session.stop_waiting': return this.options.delivery().stopWaiting(context);
@@ -404,7 +404,7 @@ export class HubControl {
 
   async notifierGone(): Promise<void> { return this.readings.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.readings.health(); }
+  async health(role: string): Promise<Obj> { return this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined); }
 
   async forgeRepos(): Promise<string[]> { return this.readings.forgeRepos(); }
 

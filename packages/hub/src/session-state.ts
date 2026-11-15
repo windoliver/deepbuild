@@ -971,12 +971,12 @@ export class SessionState {
   /** A failed OS read is not a cached absence of a parent; public peer checks still refuse it as before. */
   private async readAgentAbove(peer: CallContext['peer']): Promise<string | undefined> {
     if (!peer) return undefined;
-    const actual = await this.startOf(peer.pid, true);
+    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read;
+    // with one, the caller's start and the table are read together, not one ps after the other (#2328).
+    const others = [...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid);
+    const [actual, up] = await Promise.all([this.startOf(peer.pid, true), others ? parents() : undefined]);
     if (!actual) throw Error('the peer process start could not be read');
-    if (actual !== peer.start) return undefined;
-    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read.
-    if (![...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid)) return undefined;
-    const up = await parents();
+    if (actual !== peer.start || !up) return undefined;
     if (!up.has(peer.pid)) throw Error('the peer process is missing from the process table');
     const seen = new Set<number>();
     for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {

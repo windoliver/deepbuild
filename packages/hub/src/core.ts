@@ -2635,5 +2635,5 @@ export class Core {
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.control.health(); }
+  async health(role: string): Promise<Obj> { return this.control.health(role); }
 }
