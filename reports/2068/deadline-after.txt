@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ✓ packages/hub/test/github-deadline.test.ts > cancels the real gh token child at the caller deadline without reading credentials 219ms
+ ✓ packages/hub/test/github-deadline.test.ts > cancels an unfinished JSON body with the same signal that reached the headers 108ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:15:33
+   Duration  800ms (tests 56%, transform 38%, import 5%, setup 1%)
+

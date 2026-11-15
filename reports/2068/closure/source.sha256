@@ -1,0 +1,10 @@
+31a24b5aa71a07f52589f09169614ae5ca76065cf05f275fd8002be55b6ad2e6  packages/hub/src/ask-tasks.ts
+4987f81d761c618c91b3cc38aa2a4e79fbc9bd48339d681c329ecfa8ae53b7f1  packages/hub/src/core.ts
+8faf1061d0d21fbe2f37ec48e154d1a5875d035b8db4edfe687d7ddac2f94087  packages/hub/src/github-source.ts
+6c0744e44987221b1b8faf2ae5bf75783e34434cb683d05df0a251b220d6c810  packages/hub/src/hub-shared.ts
+0c69b2dea06c4847244c1efa1b08d8f2c7328811b11b15ea2d8e4ba606baa3a1  packages/hub/src/prompt-items.ts
+4ce0603c1517fde3710353f4d57bffcbb271caaab50384801d73d9c696e11dc1  packages/hub/src/rows.ts
+868c9a46b07d8ee853922df5dfdd81c001b257996d85addab7189db7563f0f4d  packages/hub/test/prompt-items.test.ts
+080283f84af1db5393e553f5361d0f038e99dbd3e10d151775be1b5b4a5099b8  packages/hub/test/prompt-start-replay.test.ts
+b36c4c93def0d8d61fe587f228269f518c931d7e39286a526e3c27e7560a49c9  packages/hub/test/github-deadline.test.ts
+1c2a118b0c1aff477ffd513f7de62a3fec2f74b05c7f885920f370eb160a5ba4  packages/hub/test/prompt-workspace-stop.test.ts
