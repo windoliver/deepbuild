@@ -203,6 +203,7 @@ pub fn moved(camera: &Camera, by: &Affine3) -> Camera {
     };
     Camera {
         eye: apply(camera.eye),
+        target: apply(camera.target),
         right: turn(camera.right),
         up: turn(camera.up),
         forward: turn(camera.forward),
@@ -290,6 +291,7 @@ mod tests {
         Camera {
             size: [320.0, 180.0],
             eye: [1.0, 0.5, 4.0],
+            target: [1.0, 0.5, 3.0],
             right: [1.0, 0.0, 0.0],
             up: [0.0, 1.0, 0.0],
             forward: [0.0, 0.0, -1.0],
