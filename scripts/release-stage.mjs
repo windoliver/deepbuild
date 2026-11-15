@@ -65,7 +65,14 @@ for (const [arch, [triple, zigTarget]] of Object.entries(LINUX)) {
   mkdirSync(out, { recursive: true });
   writeFileSync(linker, `#!/bin/sh\nfor a in "$@"; do shift; a=$(printf '%s' "$a" | sed 's/,--fix-cortex-a53-843419//; s/^--fix-cortex-a53-843419$//'); case "$a" in ''|-Wl) ;; *) set -- "$@" "$a";; esac; done\nexec '${zig}' cc -target ${zigTarget} "$@"\n`, { mode: 0o755 });
   const key = triple.toUpperCase().replaceAll('-', '_');
-  run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-hook', '--target', triple], { ...cargoEnv, [`CARGO_TARGET_${key}_LINKER`]: linker, [`CARGO_TARGET_${key}_RUSTFLAGS`]: '-C link-self-contained=no' });
+  // zig also compiles and archives the C a dependency builds for that target (cc-rs reads CC_<triple> and AR_<triple>).
+  // cc-rs names the target as rustc's triple, which zig doesn't parse; zig takes its own.
+  const compiler = join(out, `.c-${triple}`);
+  writeFileSync(compiler, `#!/bin/sh\nfor a in "$@"; do shift; case "$a" in --target=*) ;; *) set -- "$@" "$a";; esac; done\nexec '${zig}' cc -target ${zigTarget} "$@"\n`, { mode: 0o755 });
+  const ar = join(out, `.ar-${triple}`);
+  writeFileSync(ar, `#!/bin/sh\nexec '${zig}' ar "$@"\n`, { mode: 0o755 });
+  const cc = triple.replaceAll('-', '_');
+  run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-hook', '--target', triple], { ...cargoEnv, [`CARGO_TARGET_${key}_LINKER`]: linker, [`CARGO_TARGET_${key}_RUSTFLAGS`]: '-C link-self-contained=no', [`CC_${cc}`]: compiler, [`AR_${cc}`]: ar });
   builds.set(`linux-${arch}`, join(REPO, 'target', triple, 'release', 'deep-hook'));
 }
 

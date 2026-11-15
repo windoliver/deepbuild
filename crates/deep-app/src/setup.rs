@@ -153,7 +153,9 @@ fn read_plan() -> Vec<(Step, bool)> {
             // Only once your login shell's PATH is read: the app's own PATH, from Finder, finds no agent anywhere.
             Found::None(programs) => {
                 LOGIN.get().is_some()
-                    && programs.iter().all(|program| find(&path, program).is_none())
+                    && programs
+                        .iter()
+                        .all(|program| find(&path, program).is_none())
                     && installers()
                         .as_object()
                         .into_iter()
@@ -546,10 +548,7 @@ fn find(path: &str, name: &str) -> Option<PathBuf> {
 /// The app's own runtime folder's `deep` (#1349), beside its program in the bundle: `Contents/MacOS/deep-app` ships
 /// with `Contents/Resources/runtime/bin/deep`.
 fn shipped(exe: &Path) -> Option<PathBuf> {
-    let deep = exe
-        .parent()?
-        .parent()?
-        .join("Resources/runtime/bin/deep");
+    let deep = exe.parent()?.parent()?.join("Resources/runtime/bin/deep");
     deep.is_file().then_some(deep)
 }
 
