@@ -342,9 +342,12 @@ export function classify(failures, findings, baseline, load = loadavg()[0]) {
 // blocks. It still runs under the session's cpu.slot. A shard's job runs in its shard.
 const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-closures|record-reader-guard|color-literal-guard|guide)\.mjs$/;
 // The jobs running now, so a run stopped by its PID stops them too (main): they pass through on its one grant, which is
-// free once it has stopped, so a job left running would run beside the next run uncounted.
+// free once it has ended, so a job left running would run beside the next run uncounted. Once stopped, the run starts
+// no job: each reads as run by none.
 const live = new Set();
+let stopped = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
+  if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const descriptor = openSync(log, 'w');
   const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
@@ -444,10 +447,11 @@ async function main(args) {
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
   if (held === undefined) return queued(args, files, started);
-  // Stopped, the run stops its jobs first, then itself, so none runs on once its grant is given back.
+  // Stopped, the run passes the stop to its jobs, starts none, and ends once they have, through its own clean-up (its
+  // shards' locks too, which a shard still being made keeps till it is), so none runs on once its grant is given back.
   for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => {
+    stopped ??= signal;
     for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
-    process.exit(128 + constants.signals[signal]);
   });
 
   const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
@@ -510,6 +514,7 @@ async function main(args) {
     if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism'], 'vitest-timed'));
     if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed'));
 
+    if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [];
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);

@@ -91,10 +91,10 @@ function prepare(root, k) {
     mkdirSync(dir, { recursive: true });
     // Off macOS the worktree's target/ stays behind: with no copy-on-write it is a full copy of many GB a shard, so
     // the shard builds its own, once. A folder holding another worktree of the repository's, as the main checkout's
-    // ignored .claude/worktrees/ holds them all, stays behind everywhere: the shard runs this tree, never theirs.
+    // ignored .claude/worktrees/ holds them all, or that is one, stays behind everywhere: the shard runs this tree only.
     const own = realpathSync(root);
     const others = git(root, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9)).filter((path) => path.startsWith(`${own}/`));
-    for (const name of readdirSync(root).filter((name) => name !== '.git' && (name !== 'target' || process.platform === 'darwin') && !others.some((path) => path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
+    for (const name of readdirSync(root).filter((name) => name !== '.git' && (name !== 'target' || process.platform === 'darwin') && !others.some((path) => path === `${own}/${name}` || path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);

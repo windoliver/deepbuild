@@ -50,14 +50,15 @@ function scene(t, scripts = join(CHECKOUT, 'scripts'), extra = {}) {
   chmodSync(join(bin, 'cargo'), 0o755);
   const env = { ...process.env, HOME: home, PATH: `${bin}${delimiter}${process.env.PATH}`, T_SHARDS_EVENTS: join(dir, 'events.jsonl'), DEEP_SHARDS: '2', DEEP_TEST_SHARD_FLOOR: '0', ...extra };
   for (const name of ['DEEP_THROTTLE', 'NODE_TEST_CONTEXT', 'CARGO_TARGET_DIR']) delete env[name];
-  const affected = (args) => new Promise((done) => {
+  // The run's promise carries its pid, so a test stops the run it started by that pid.
+  const affected = (args) => {
     const child = spawn(process.execPath, ['scripts/affected.mjs', ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let out = '';
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.stderr.on('data', (chunk) => { out += chunk; });
     t.after(() => { if (child.exitCode === null) try { process.kill(-child.pid, 'SIGKILL'); } catch {} });
-    child.on('close', (status) => done({ status, out }));
-  });
+    return Object.assign(new Promise((done) => child.on('close', (status) => done({ status, out }))), { pid: child.pid });
+  };
   const events = () => (existsSync(env.T_SHARDS_EVENTS) ? readFileSync(env.T_SHARDS_EVENTS, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []);
   const at = (name, event) => events().find((e) => e.name === name && e.event === event);
   return { tree, files: Object.keys(files), affected, events, at, home };
@@ -134,22 +135,24 @@ test('the merge base\'s scripts, the wrong program, run the two alone folders on
 });
 
 // From the main checkout, whose ignored .claude/worktrees/ holds every other worktree with its own target/, a new
-// shard copied them all in full off macOS (#2574's review: 81 worktrees there). The merge base made no shard on Linux.
+// shard copied them all in full off macOS (#2574's review: 81 worktrees there); a worktree at the top level too.
 test('a new shard leaves behind the other worktrees the checkout holds', async (t) => {
   const s = scene(t);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: s.tree, stdio: 'pipe' });
-  writeFileSync(join(s.tree, '.git/info/exclude'), '.claude/worktrees/\n');
+  writeFileSync(join(s.tree, '.git/info/exclude'), '.claude/worktrees/\ntop/\n');
   git('worktree', 'add', '-q', '-b', 'other', '.claude/worktrees/other');
+  git('worktree', 'add', '-q', '-b', 'top', 'top');
   const run = await s.affected([`${A}shard-a.test.mjs`, `${B}shard-b.test.mjs`]);
   const shards = join(s.home, 'deepbuild-shards');
   const made = existsSync(shards) ? readdirSync(shards).filter((name) => /^\d+$/.test(name)) : [];
   assert.ok(made.length, `no shard was made\n${run.out}`);
-  for (const k of made) assert.equal(existsSync(join(shards, k, '.claude/worktrees/other')), false, `shard ${k} holds a copy of another worktree\n${run.out}`);
+  for (const k of made) for (const other of ['.claude/worktrees/other', 'top']) assert.equal(existsSync(join(shards, k, other)), false, `shard ${k} holds a copy of the worktree ${other}\n${run.out}`);
   assert.match(run.out, /^PASS affected: /m, run.out);
 });
 
-// A run stopped by its PID stops its jobs too: they ran on its one grant, which is free once it has stopped, so a job
-// left running would run beside the next run uncounted. The merge base gave each job a grant of its own.
+// A run stopped by its PID stops its jobs too, and ends only once they have: they ran on its one grant, which is free
+// once it has ended, so a job left running would run beside the next run uncounted. Its last line says it was stopped,
+// and it exits 128 plus the signal. The merge base gave each job a grant of its own.
 test('a run stopped by its PID stops the jobs it started', async (t) => {
   const s = scene(t);
   const file = `${A}shard-long.test.mjs`;
@@ -164,10 +167,11 @@ test('long', async () => {
   const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end && !ok();) await new Promise((done) => setTimeout(done, 100)); return ok(); };
   assert.ok(await until(() => s.at('long', 'start'), 60000), 'the long probe never started');
   const { pid } = s.at('long', 'start');
-  const outer = Number(execFileSync('pgrep', ['-o', '-f', `scripts/affected.mjs ${file}`], { encoding: 'utf8' }).trim().split('\n')[0]);
   t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
-  process.kill(outer, 'SIGTERM');
+  process.kill(running.pid, 'SIGTERM');
   const run = await running;
   const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  assert.equal(await until(() => !alive(), 10000), true, `the run stopped and its job ran on\n${run.out}`);
+  assert.equal(alive(), false, `the run ended with its job still running\n${run.out}`);
+  assert.equal(run.status, 143, `the run stopped by SIGTERM exited ${run.status}\n${run.out}`);
+  assert.match(run.out.trim().split('\n').at(-1), /^BLOCKED affected: stopped by SIGTERM/, run.out);
 });
