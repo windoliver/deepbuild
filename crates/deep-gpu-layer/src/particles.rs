@@ -27,6 +27,58 @@ use crate::{refused, App, Planted};
 /// Flicks a second (Units and axes: time).
 const FLICKS: f64 = 705_600_000.0;
 
+/// The scene of `doc` at `t` as the view draws it (deep_canvas_scene3d's `evaluate_sourced`),
+/// its plumes' and airflows' particles following their effects' params at `t`.
+pub(crate) fn evaluate_sourced(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: deep_canvas_scene3d::scene::Assets<'_>,
+    outlines: deep_canvas_scene3d::scene::Outlines<'_>,
+) -> Result<Scene, deep_canvas_scene3d::scene::Refused> {
+    let mut scene =
+        deep_canvas_scene3d::scene::evaluate_sourced(doc, t, look, labels, assets, outlines)?;
+    follow_effects(&mut scene, doc);
+    Ok(scene)
+}
+
+/// #508: a plume's and an airflow's particles follow their effect's params as evaluated at t, so
+/// a driver on a reach, a heat or a speed moves them: each particles item `effect::lower` wrote
+/// takes the params its effect's evaluated params lower to (an airflow's paths read from `doc`).
+/// The bake, the draw, the footprint and the readings all read them from the scene.
+fn follow_effects(scene: &mut Scene, doc: &Value) {
+    use deep_canvas_effects::effect;
+    let mut items = Map::new();
+    for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
+        let mut item = doc["items"][&o.id].clone();
+        item["params"] = o.params.clone();
+        let paths: Vec<&str> = o.params["airflow"]["paths"]
+            .as_array()
+            .map_or(Vec::new(), |a| a.iter().filter_map(Value::as_str).collect());
+        if effect::kind_of(&item).is_none() || paths.iter().any(|c| doc["items"].get(c).is_none()) {
+            continue;
+        }
+        for c in paths {
+            items.insert(c.to_string(), doc["items"][c].clone());
+        }
+        items.insert(o.id.clone(), item);
+    }
+    if items.is_empty() {
+        return;
+    }
+    let mut lowered = json!({ "items": items });
+    effect::lower(&mut lowered);
+    for o in scene.others.iter_mut().filter(|o| o.kind == "particles@1") {
+        if let Some(d) = lowered["items"]
+            .get(&o.id)
+            .filter(|d| d.get("lowered").is_some())
+        {
+            o.params = d["params"].clone();
+        }
+    }
+}
+
 /// The particle path's plants under `--planted`: the CPU and table switches, the kernel's flag
 /// word, and a cap the check applies to every class.
 pub(crate) fn plants(p: Option<Planted>) -> (Plants, u32, Option<u32>) {
@@ -128,8 +180,9 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         return Ok(json!({"outcome": "refused", "issues": issues_json(&early)}));
     }
     let look = Look3::read(&closed::neutral_look(&doc)).map_err(|e| bad(&format!("look: {e}")))?;
-    let scene =
+    let mut scene =
         evaluate(&doc, 0, &look, &mut Labels::new()).map_err(|r| refused(r.code, r.path))?;
+    follow_effects(&mut scene, &doc);
     let held = match checked(&doc, &scene, plants, every) {
         Ok(h) => h,
         Err(issues) => return Ok(json!({"outcome": "refused", "issues": issues_json(&issues)})),
@@ -743,5 +796,65 @@ pub(crate) fn refuse(doc: &Value, planted: Option<Planted>) -> Result<(), Value>
         Ok(())
     } else {
         Err(json!({"code": "refused", "issues": issues_json(&errors)}))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A document with a plume on a throttle that drives its reach, at the throttle's `at`.
+    fn throttled(at: f64) -> Value {
+        let mut doc = json!({
+            "format": 1, "id": "driven-plume", "profile": "scene", "title": "t", "description": "d",
+            "size": [320, 240], "camera": "cam", "seed": 508, "transport": {"span": "4s"},
+            "requires": {"modules": {"scene3d": "^1", "motion": "^1", "input": "^1", "effects": "^1"}},
+            "controls": {"throttle": {"kind": "slider", "class": "document", "label": "Throttle",
+                                      "role": "slider", "range": [0, 1], "default": at, "increment": 0.01}},
+            "drivers": {"plume-reach": {"target": "items/plume/params/plume/reach", "expr": "0.4 + 1.6 * th",
+                                        "vars": {"th": "controls/throttle/value"}}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "orthographic", "position": [0, 0, 10], "target": [0, 0, 0],
+                                   "view_width": 6.4, "near": 0.05, "far": 100}},
+                "plume": {"id": "plume", "kind": "effect@1", "order": "a1",
+                          "params": {"kind": "plume", "axis": [1, 0, 0],
+                                     "plume": {"radius": 0.1, "reach": 1.0, "heat": 1.0, "turbulence": 0.0}}},
+            },
+        });
+        deep_canvas_effects::effect::lower(&mut doc);
+        doc
+    }
+
+    /// How far along +X the plume's live particles reach at 2 s, as the CPU f64 closed form
+    /// evaluates the particles of the scene the view draws.
+    fn reach_at_2s(doc: &Value) -> f64 {
+        let look = Look3::read(&closed::neutral_look(doc)).expect("the look reads");
+        let mut labels = Labels::new();
+        let scene = evaluate_sourced(doc, 0, &look, &mut labels, &|_| None, Default::default())
+            .expect("the scene evaluates");
+        let plants = Plants::default();
+        let held = baked(doc, &scene, "plume.particles", 7, plants, &mut vec![])
+            .expect("the plume's particles bake");
+        eval::columns(&held.0, 2.0)
+            .chunks(eval::FLOATS)
+            .filter(|r| r[3] >= 0.0)
+            .map(|r| r[0])
+            .fold(f64::MIN, f64::max)
+    }
+
+    /// #508: a driver on a plume's reach reaches its particles: with the throttle at its top
+    /// (reach 2 m) they reach farther than at its bottom (0.4 m), in the scene the view draws.
+    #[test]
+    fn a_driven_plume_reach_moves_its_particles() {
+        let (low, high) = (reach_at_2s(&throttled(0.0)), reach_at_2s(&throttled(1.0)));
+        assert!(
+            low > 0.3 && low < 0.6,
+            "at the throttle's bottom the particles reach {low} m, not about 0.4"
+        );
+        assert!(
+            high > 1.8,
+            "at the throttle's top the particles reach {high} m, not about 2 (the bottom's {low})"
+        );
     }
 }
