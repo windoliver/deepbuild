@@ -50,7 +50,7 @@
   },
   "data": {
     "version": "1.0.0",
-    "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
+    "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -254,7 +254,8 @@
       "carried_state": "PASS",
       "late_entry": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "behavior": "PASS"
     }
   },
   "record": {

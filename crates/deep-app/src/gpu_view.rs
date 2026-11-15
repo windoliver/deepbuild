@@ -55,3 +55,23 @@ pub fn paint(ui: &Ui, bounds: Bounds<Pixels>, window: &mut Window) -> Option<u64
     window.paint_surface(bounds, shown);
     Some(frame)
 }
+
+/// #177: latches the view's newest slot as [`paint`] does, but paints the clear region in its
+/// place, so the window leaves `bounds` clear over a live view's HDR surface beneath it; whatever
+/// paints after it (the question card, overlays) draws over that as usual. The slot isn't sampled,
+/// so it frees on the next latch. Returns the frame it shows.
+#[cfg(target_os = "macos")]
+pub fn paint_clear(ui: &Ui, bounds: Bounds<Pixels>, window: &mut Window) -> Option<u64> {
+    let (_, frame) = ui.latch()?;
+    window.paint_surface(bounds, CLEAR.with(Clone::clone)?);
+    Some(frame)
+}
+
+#[cfg(target_os = "macos")]
+thread_local! {
+    /// The clear region's pixel buffer, registered with the GPUI patch once per UI thread.
+    static CLEAR: Option<deep_gpu::surface::Shown> =
+        deep_gpu::surface::clear_region().ok().inspect(|b| {
+            gpui_apple::metal_renderer::clear_surface::register(deep_gpu::view::identity(b));
+        });
+}

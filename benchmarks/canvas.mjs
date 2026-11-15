@@ -1106,8 +1106,13 @@ const EFFICIENCY = {
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
+  // #184: each reading by its own name (benchmarks/playtest.mjs).
+  'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
+  'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work']);
+/** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
+const FLOORS = new Set(['fixture_realtime_x']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1176,6 +1181,8 @@ function judgeEfficiency(current) {
       verdict = values.length === RUNS && values.every(Number.isFinite)
         ? (values.some((v) => v > limit) ? { status: 'FAIL', limit, runs: values } : { status: 'PASS', limit, runs: values })
         : { status: 'BLOCKED', limit, runs: values, reason: `a count is judged on five runs, got ${JSON.stringify(values)}` };
+    } else if (FLOORS.has(name)) {
+      verdict = { ...judgeLimit({ limit: -limit, runs: values.map((v) => -v), fingerprint: current.fingerprint }), limit, runs: values };
     } else {
       verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint });
     }
@@ -1557,6 +1564,9 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
+// #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
+// plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
+for (const task of ['playtest-maze', 'playtest-throughput']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

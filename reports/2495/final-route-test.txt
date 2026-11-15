@@ -1,0 +1,8 @@
+
+ RUN  v5.0.5 <change>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:38:44
+   Duration  1.05s (tests 79%, transform 18%, import 2%, setup 1%)

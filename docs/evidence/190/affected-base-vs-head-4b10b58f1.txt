@@ -1,0 +1,45 @@
+# node scripts/affected.mjs <the 107 paths of 2c1c8cacc..4b10b58f1>, at the merge base 2c1c8cacc and then at the head 4b10b58f1,
+# one after the other in one scratch clone (npm ci and a workspace build on each side), one isolated HOME with its own throttle
+# table and RUSTUP_HOME, CARGO_HOME, npm_config_cache, GH_CONFIG_DIR and GIT_CONFIG_GLOBAL at the real ones. Linux arm64, 2026-11-14.
+base: FAIL affected: 486 new, 48 already failing on main, 93 inconclusive or blocked, 0 listed skips, 920 passed, in 2691 s at load 8; logs in <tmp>
+head: FAIL affected: 505 new, 48 already failing on main, 90 inconclusive or blocked, 0 listed skips, 946 passed, in 1958 s at load 32; logs in <tmp>
+WIDE lines: base 0, head 0
+distinct NEW FAIL lines (timings cut): base 276, head 293; on both sides 270
+
+== only at the head (23)
+NEW FAIL cards: crates/deep-canvas-sandbox/README.md: a deviation names lib.interface@1, which crates/deep-canvas-sandbox doesn't have
+NEW FAIL color literal: crates/deep-app/panels/338-canvas/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/
+NEW FAIL color literal: crates/deep-app/panels/338-cap20/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/c
+NEW FAIL color literal: crates/deep-app/panels/338-drop-folded/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/l
+NEW FAIL color literal: crates/deep-app/panels/338-hide-newest/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/l
+NEW FAIL color literal: crates/deep-app/panels/338-home/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/cl
+NEW FAIL color literal: crates/deep-app/panels/338-line/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/cl
+NEW FAIL color literal: crates/deep-app/panels/338-list-superseded/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-mar
+NEW FAIL color literal: crates/deep-app/panels/338-needs-you/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/loo
+NEW FAIL color literal: crates/deep-app/panels/338-sidebar/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks
+NEW FAIL color literal: crates/deep-app/panels/338-tab/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/cle
+NEW FAIL deps: tests/acceptance/190/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/190/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+NEW FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+NEW FAIL size: crates/deep-logic/src/lib.rs: 1648 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-logic/src/piece.rs: 2003 lines, over 1500 with no ceiling
+NEW FAIL tests/acceptance/1348/fixture.test.ts › (file): the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (<tmp>/dump.json)
+NEW FAIL tests/acceptance/190/ac07-no-links.test.ts › #190.2d024832 a piece without links is untouched by the linker › #190.2d024832 a piece without links keeps the merge base's rewritten program 
+NEW FAIL tests/acceptance/689/preflight-env.test.mjs › criterion 3: with RUSTUP_HOME and CARGO_HOME set, every lane's commands get the caller's own values: no lane ran vitest; preflight printed:
+NEW FAIL tests/acceptance/824/sessions/readings.test.ts › AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuil
+NEW FAIL tests/acceptance/879/checkout.test.mjs › AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged: no PASS cards line
+NEW FAIL tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the guard passes the app, and fails each planted literal naming its file and line (the views.rs one with the role to use); an exception at
+NEW FAIL tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the lint lane runs the guard: a planted rgb(0x2563eb) in views.rs fails the lane, naming views.rs and the line: Expected values to be stri
+
+== only at the base (6)
+NEW FAIL scripts/canvas-closures.mjs: exited 1: deep lease: DeepBuild isn't set up here (no hub token), so `<home>/.local/opt/node-v24.22.0-linux-arm64/bin/node scripts/canvas-closures.mjs closure
+NEW FAIL size: crates/deep-logic/src/lib.rs: 1614 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-logic/src/piece.rs: 1931 lines, over 1500 with no ceiling
+NEW FAIL tests/acceptance/1348/fixture.test.ts › (file): the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (<tmp>/dump.json)
+NEW FAIL tests/acceptance/689/preflight-env.test.mjs › criterion 3: with RUSTUP_HOME and CARGO_HOME set, every lane's commands get the caller's own values: no lane ran tsc; preflight printed:
+NEW FAIL tests/acceptance/879/checkout.test.mjs › AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged: failures the base doesn't p
+
+== INCONCLUSIVE summary lines at the head
+INCONCLUSIVE 33 timed files were not run; --timed runs them under a timed grant: tests/acceptance/1113/load.test.mjs tests/acceptance/120/budgets-idle-redraft.test.ts tests/acceptance/120/budgets.test.ts tests/acceptance/138/budgets.test.ts tests/acceptance/139/budgets.test.ts tests/acceptance/140/platform/budgets.test.ts tests/acceptance/1432/budgets.test.mjs tests/acceptance/1637/budgets.test.ts
+INCONCLUSIVE 9 slow files were not run; --slow runs them: tests/acceptance/1113/before.test.mjs tests/acceptance/1114/lanes.test.mjs tests/acceptance/1117/proofs.test.mjs tests/acceptance/139/apisurface.test.ts tests/acceptance/48/harness.test.mjs tests/acceptance/824/cycles.test.ts tests/acceptance/910/ac1-issue-link.test.mjs tests/acceptance/910/ac2-renamed-heading.test.mjs tests/acceptance/910/
+INCONCLUSIVE lines: base 44, head 41; BLOCKED lines: base 51, head 51

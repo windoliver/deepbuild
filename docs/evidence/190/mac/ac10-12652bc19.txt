@@ -1,0 +1,20 @@
+== git rev-parse HEAD: 12652bc19e441d770a80de40e044e74d79b44f91
+== command: npx vitest run tests/acceptance/190/ac10-budgets.test.ts --no-file-parallelism --reporter=verbose
+== sw_vers: 27.2.1
+Now drawing from 'AC Power'
+== start 2026-11-14 23:44:49 23:44  up 1 day, 16:46, 2 users, load averages: 37.80 38.49 40.88 thermalState 1
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s 9849ms
+ ✓ tests/acceptance/190/ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base 10244ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  23:44:50
+   Duration  21.56s (tests 100%)
+
+
+== end 2026-11-14 23:45:12 23:45  up 1 day, 16:47, 2 users, load averages: 32.91 37.32 40.41 thermalState 1
+vitest exit=0

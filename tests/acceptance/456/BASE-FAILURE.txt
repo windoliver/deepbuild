@@ -1,0 +1,50 @@
+At base d8c46f0d5 ("Merge pull request #2601 …", main), on 2026-11-15, on an arm64 Mac with Metal (one-minute load 175 to 290), deep-show was built at the base and every file was run there once. Lines marked "observed" are what ran here.
+
+The commands the implementing session runs, at the base and after (from <worktree>):
+
+  npm ci --ignore-scripts
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/456 --no-file-parallelism --testTimeout=600000
+  npx tsc -p tests/acceptance/456/tsconfig.json
+
+Observed: `npx tsc -p tests/acceptance/456/tsconfig.json` exits 0 (the repo's TypeScript and vitest 5.0.5 pins, after `npm ci --ignore-scripts`). `cargo build --locked --bin deep-show --no-default-features --features full` finished in 56 min from a cloned cache on the loaded machine. The suite then ran in about 25 s: "Test Files 7 failed (7)", "Tests 7 failed (7)". No test passed or skipped. `spans` from scripts/proof-change.mjs reads all 7 test names (and their describe blocks) with their IDs.
+
+Observed: no module registers render.review, so every render.review row at the base is
+  {"kind":"render.review","issues":[],"result":"BLOCKED","blocked":[{"code":"module_missing","kind":"render.review","ids":[]}]}
+with no `reading`. The scenario's `review_model` is ignored. No planted name of this suite exists at the base (a scenario naming one is refused bad_input); no test reaches one there.
+
+Observed at the base, each test's first failing assertion:
+
+review.test.ts (#456.04d3fc26), 1 test: fails
+  at review.test.ts:62, "render.review records the judgment as a reading, opens a taste ask on doubt, and passes nothing":
+    render.review of revision 0, the model answering yes to every ask and claiming PASS: the row carries no reading: {… "result":"BLOCKED","blocked":[{"code":"module_missing","kind":"render.review","ids":[]}]}
+    render.review of revision 0, the model answering that the brief is not met: the row carries no reading: {… same …}
+
+session.test.ts (#456.e76ba4d1), 1 test: fails
+  The plant takes at the base: alpha's `messages` hold the hint and alpha's patch with the hint in its reason is applied as revision 1. Then at session.test.ts:62 (contextOf):
+    render.review of revision 1: the render.review row carries its reading as `reading`; the row is {… "result":"BLOCKED","blocked":[{"code":"module_missing",…}]}: expected false to be true
+
+idview.test.ts (#456.58ad7293), 1 test: fails
+  at idview.test.ts:84 (roomView, the first run, which learns the ID view's numbers):
+    render.review of the review room: the render.review row carries its reading as `reading`; the row is {… "result":"BLOCKED","blocked":[{"code":"module_missing",…}]}: expected false to be true
+
+stable.test.ts (#456.b4b19f96), 1 test: fails
+  at stable.test.ts:68 (run A's grounded row):
+    render.review with grounding: ids: the render.review row carries its reading as `reading`; the row is {"id":"req:01JB0456Q00000000000000041", … "result":"BLOCKED","blocked":[{"code":"module_missing",…}]}: expected false to be true
+
+ask.test.ts (#456.b291398a), 1 test: fails
+  at ask.test.ts:54 (roomView, the run that learns the lantern's number):
+    render.review of the review room: the render.review row carries its reading as `reading`; the row is {… "result":"BLOCKED","blocked":[{"code":"module_missing",…}]}: expected false to be true
+
+findings.test.ts (#456.a599239f), 1 test: fails
+  at findings.test.ts:113 (revision 0's reading). Before it, the run itself holds at the base: both of alpha's patches are applied.
+    render.review of revision 0: the render.review row carries its reading as `reading`; the row is {"id":"req:01JB0456Q00000000000000006", … "result":"BLOCKED","blocked":[{"code":"module_missing",…}]}: expected false to be true
+
+shots.test.ts (#456.95e1edbb), 1 test: fails
+  at shots.test.ts:41, before any picture is written (docs/evidence/456/ isn't created):
+    render.review of the review room: the render.review row carries its reading as `reading`; the row is {… "result":"BLOCKED","blocked":[{"code":"module_missing",…}]}: expected false to be true
+  After an implementation, without tests/acceptance/456/TASTE.json it fails "INCONCLUSIVE: no taste call is recorded …; this is not a pass".
+
+Fixture checks observed at the base, outside the suite (a scratch file in this folder, since removed):
+  - the review room presents at revision 0; on a 16 px grid of 300 render_back probes the nearest hits are crate 15, globe 8, chest 12, melon 8, stool 12, pearl 7, block 9, orb 8, brick 16, bead 8, wall 25 and sky 172; the lantern none;
+  - five crates: camera.framing keeping each crate FAILs loop.framing (cut) at revision 0; after the first patch (applied) crate-a's and crate-c's PASS and the others FAIL; after the second (applied) crate-c's FAILs again;
+  - your `ask` to alpha's session about the panel is queued, and alpha's `messages` hold its words.
