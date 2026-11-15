@@ -3,7 +3,7 @@
 // enum lists judges INVALID, naming the raw code, never PASS.
 import { listSchemas } from '@deepbuild/contracts';
 import type { JsonValue, SchemaEntry } from '@deepbuild/contracts';
-import { getAt } from './pointer.js';
+import { getAt, segment } from './pointer.js';
 import { FAMILIES, isObject } from './types.js';
 import type { CodeFamily, FamilyName, Judgement, Verdict } from './types.js';
 
@@ -98,7 +98,7 @@ export function unmappedCodes(schemas?: readonly SchemaEntry[]): { family: Famil
       for (const branch of node.oneOf) if (isObject(branch) && isObject(branch.properties)) for (const [key, p] of Object.entries(branch.properties)) if (isObject(p) && typeof p.const === 'string') tags.set(key, [...(tags.get(key) ?? []), p.const]);
       for (const values of tags.values()) if (values.includes('PASS')) for (const v of values) if (!verdicts.has(v)) outside.add(v);
     }
-    for (const [key, child] of Object.entries(node)) if (key !== 'enum') walk(child, `${at}/${key}`);
+    for (const [key, child] of Object.entries(node)) if (key !== 'enum') walk(child, `${at}${segment(key)}`);
   };
   for (const entry of schemas ?? listSchemas()) walk(entry.schema as JsonValue, `${entry.name} `);
   return [...unmapped, ...[...outside].map((code) => ({ family: 'verdict' as const, code }))];
