@@ -152,6 +152,20 @@ it('binds no waiter in a process that runs two sessions, and ends a binding with
     await start(se);
     const two = await rawWaiter(sock, d, d);
     expect(JSON.stringify(two.lines[1])).toContain(`"code":"role"`);
-    expect(JSON.stringify(two.lines[1])).toContain(`its agent, process ${process.pid}, runs sessions`);
+    expect(JSON.stringify(two.lines[1])).toContain(`its agent, process ${process.pid}, runs the threads of sessions`);
+  });
+}, 120_000);
+
+it('binds the waiter of a session a /compact rotated in its process: its IDs are one thread', async () => {
+  const g = '7c4d5e60-1851-4222-8333-444455551111';
+  const h = '7c4d5e60-1851-4222-8333-444455552222';
+  await withHub(async (root, home) => {
+    const sock = join(root, 'hub.sock');
+    const sg = session(home, g);
+    const sh = session(home, h);
+    await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', sg.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
+    await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', sh.payload('SessionStart', { source: 'compact' }), { ppid: process.pid }));
+    const bound = await rawWaiter(sock, h, h);
+    expect(bound.lines[1], `bound to ${h}: ${JSON.stringify(bound.lines[1])}`).toMatchObject({ role: `waiter:${h}` });
   });
 }, 120_000);

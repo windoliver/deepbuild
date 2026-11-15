@@ -1297,6 +1297,11 @@ class Hub {
     if (value.hello === 'waiter') {
       // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
       const session = typeof value.session === 'string' ? value.session : '';
+      // A session's ID as its hooks carry it, and short: nothing else costs the hub a look at processes.
+      if (!/^[\w.:-]{1,128}$/.test(session)) {
+        conn.write({ id: null, error: refusal('type', '/session', "Name the waiter's session by its ID, as its hooks carry it.") });
+        return conn.end();
+      }
       const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
       const bound = (await this.core.request({ op: 'waiter-hello', fd, session, at: conn.at }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error) }))) as { session: string; parent: { pid: number; start: string } } | { refused: string };
       if ('refused' in bound) {
