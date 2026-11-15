@@ -1,0 +1,12 @@
+# branch 652708223: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1836 --no-file-parallelism --reporter verbose
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-1836-subagent-stop-hold-a7b2c2/tests/acceptance/1836
+
+ ✓ proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 in the turn a proceed started, after a Claude Code subagent's stop, `gh pr merge 12` is held at PreToolUse with one authority ask naming the proceed 6593ms
+ ✓ proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 (wrong program) a hub whose proceed-turn query counts a child's stop (DEEP_HUB_PLANT=proceed-ends-at-child-stop) lets the merge run and fails this test, naming the call 1996ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:23:49
+   Duration  8.76s (tests 100%)
+
