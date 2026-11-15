@@ -39,14 +39,16 @@ const budgetsIn = (text) => {
   return rows.slice(2).flatMap((cells) => /^(\d+) over\b/.exec(cells[budget] ?? '')?.[1] ?? []).join();
 };
 
-// The files the merge base's runner configs name by path from the config's folder, resolved as vite
+// The files the runner configs of `base` (the merge base, for the guard) name by path from the config's folder, resolved as vite
 // resolves them: those under the test paths, other than tests, named anywhere in a config, as
 // setupFiles names them, with those each imports; and wherever they are, the setup files and the
 // project configs a config lists, whose own names count too. They run in every test's process, or
-// configure it, so they are checks as the config is.
-function namedByConfig(root, base) {
-  const queue = git(root, ['ls-tree', '-r', '-z', '--name-only', base]).split('\0').filter((path) => RUNNER_CONFIG.test(path));
-  const named = new Set();
+// configure it, so they are checks as the config is. `files` are the tree's, and `base` null reads the
+// worktree. `setup` is `named` without the config modules a config imports: what runs in every test's
+// process, which affected.mjs counts as feeding every suite.
+export function namedByConfig(root, base, files) {
+  const queue = files.filter((path) => RUNNER_CONFIG.test(path));
+  const named = new Set(), modules = new Set();
   const resolved = (config, value) => resolveModule(root, base, posix.normalize(posix.join(posix.dirname(config), value)));
   for (let at = 0; at < queue.length; at += 1) {
     const config = queue[at], text = show(root, base, config) ?? '';
@@ -59,6 +61,7 @@ function namedByConfig(root, base) {
     const imported = relativeImports(config, text).map((path) => resolveModule(root, base, path)).filter((path) => show(root, base, path) !== null && !queue.includes(path) && configures(path));
     for (const path of imported) {
       named.add(path);
+      modules.add(path);
       queue.push(path);
     }
     for (const { key, values } of keyedStrings(text, ['setupFiles', 'globalSetup', 'projects', 'workspace'])) for (const value of values) {
@@ -68,7 +71,7 @@ function namedByConfig(root, base) {
       if (key === 'projects' || key === 'workspace') queue.push(path); // a project's config names its own
     }
   }
-  return named;
+  return { named, setup: new Set([...named].filter((path) => !modules.has(path))) };
 }
 
 // The approvers list (#1326): who may approve, so a change to it is guarded as a check is, and judged by the list at
@@ -97,7 +100,7 @@ export function guard({ root, change, issue }, approvals, say) {
     say('FAIL', 'guard', `${APPROVERS}: ${name} is a key that signs without a touch or a biometric, so anything running as its owner could approve with it; the list refuses it`, LIST_FIX);
   }
   const lanesOnMain = show(root, change.base, 'scripts/proof-guard.mjs') !== null;
-  const configNamed = lanesOnMain ? namedByConfig(root, change.base) : new Set();
+  const configNamed = lanesOnMain ? namedByConfig(root, change.base, git(root, ['ls-tree', '-r', '-z', '--name-only', change.base]).split('\0')).named : new Set();
   // A node_modules folder a test's imports walk up to: one in a folder that holds, at any depth, a
   // test or a file under the test paths a test imports, such as a shared helper.
   const reached = lanesOnMain ? new Map(listFiles(root).filter(isTestFile).flatMap((test) => [...testImports(root, null, test)])) : new Map();
