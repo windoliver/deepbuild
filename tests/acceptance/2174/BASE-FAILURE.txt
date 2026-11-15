@@ -1,0 +1,92 @@
+# #2174 acceptance tests: the one run on the base
+
+Base 72fe11a11 ("Merge pull request #2523 ..."; no implementation), 2026-11-14 23:18:27-23:18:28 UTC, Linux, Node
+24.22.0, cargo 1.99.1, 20 cores at a load average of 74. Run once from the checkout; target/debug/deep-hook was
+built just before by `cargo build --locked -q -p deep-hook` (43 s). The output below is the run's, whole; only the
+checkout's path is replaced, by <checkout>.
+
+AC1 (#2174.efc37644) FAILS, for the issue's reason: on the Edit of the link to itself `deep-hook match` ends on
+SIGABRT after 455 ms, "has overflowed its stack", and prints no line.
+
+AC2 (#2174.1713a70d) FAILS, for the issue's cause, at its first call: the forwarded hook for `ls <link>` gives no
+decision. In this run the stack ran out after 312 ms, before the watchdog's 500 ms, so the hook ended on SIGABRT
+with no denial: the case the issue says "was not shown". It is a race in this debug build on Linux: of 12 more calls
+by hand just after (6 of `ls <link>`, 6 of `ls <link>; pkill -f node`), 9 exited 2 after 508-540 ms with the
+watchdog's unreadable-call denial, as the issue's release build did, and 3 ended on SIGABRT after 368-521 ms, 2 of
+them the pkill line. The test fails on either: a signal is no decision, and the watchdog's denial is not a reading.
+
+AC3 (#2174.9080b65a) FAILS as AC1 does: on the Edit of one of two links that name each other the matcher ends on
+SIGABRT after 515 ms and prints no line.
+
+AC4 (#2174.acad9277) PASSES, as a guard of what the base already does must.
+
+$ git status --porcelain     # before the run
+?? tests/acceptance/2174/
+$ node --test --test-reporter=spec tests/acceptance/2174/self-link.test.mjs
+
+✖ #2174.efc37644 AC1 the matcher prints the line of an Edit that names a link to itself, and reads the next call (458.022107ms)
+✖ #2174.1713a70d AC2 a forwarded hook, shipped entries and no hub, rules `ls` and Read of a link to itself by what matches, inside its 50 ms (312.856689ms)
+✖ #2174.9080b65a AC3 two links that name each other read as one that names itself: the matcher answers and stays up, the hook rules in its usual time (516.386873ms)
+✔ #2174.acad9277 AC4 a link to a file that is not there yet still reads as that file: a write through it to an agent config is denied naming deep_propose (147.537566ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1776.238512
+
+✖ failing tests:
+
+test at tests/acceptance/2174/self-link.test.mjs:208:1
+✖ #2174.efc37644 AC1 the matcher prints the line of an Edit that names a link to itself, and reads the next call (458.022107ms)
+  AssertionError [ERR_ASSERTION]: an Edit of a link that names itself: the matcher ended without printing the call's line: SIGABRT after 455 ms, stdout "", stderr "\nthread 'main' (401821) has overflowed its stack\nfatal runtime error: stack overflow, aborting\n"
+      at Object.ask (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:162:18)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async matcherAnswers (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:196:20)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:209:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2174/self-link.test.mjs:212:1
+✖ #2174.1713a70d AC2 a forwarded hook, shipped entries and no hub, rules `ls` and Read of a link to itself by what matches, inside its 50 ms (312.856689ms)
+  AssertionError [ERR_ASSERTION]: `ls` of a link that names itself: the hook ended on a signal or never ended, with no decision: exit null (SIGABRT) after 311.7 ms, stdout "", stderr "\nthread 'main' (402057) has overflowed its stack\nfatal runtime error: stack overflow, aborting\n"
+      at allowed (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:88:10)
+      at hookRules (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:129:3)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:213:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2174/self-link.test.mjs:216:1
+✖ #2174.9080b65a AC3 two links that name each other read as one that names itself: the matcher answers and stays up, the hook rules in its usual time (516.386873ms)
+  AssertionError [ERR_ASSERTION]: an Edit of two links that name each other: the matcher ended without printing the call's line: SIGABRT after 515 ms, stdout "", stderr "\nthread 'main' (402204) has overflowed its stack\nfatal runtime error: stack overflow, aborting\n"
+      at Object.ask (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:162:18)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async matcherAnswers (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:196:20)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2174/self-link.test.mjs:217:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
