@@ -1,0 +1,20 @@
+{
+  "#542.c4a60183": [
+    "text_normalizes_nfc"
+  ],
+  "#542.e7435bc2": [
+    "scroll_rounds_each_frame"
+  ],
+  "#542.8b5ba7e9": [
+    "wheel_to_list_everywhere"
+  ],
+  "#542.8bfb66e0": [
+    "text_commits_on_ime_confirm"
+  ],
+  "#542.e6403c8d": [
+    "scroll_snaps_to_nearest"
+  ],
+  "#542.f0bbc9b7": [
+    "scroll_tail_survives_keys"
+  ]
+}

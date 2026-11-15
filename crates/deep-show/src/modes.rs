@@ -419,6 +419,7 @@ impl Hub<'_> {
                     dash_world: false,
                     cap: Default::default(),
                     trail: None,
+                    points: Vec::new(),
                 }],
                 ..Default::default()
             });

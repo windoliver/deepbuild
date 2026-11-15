@@ -372,6 +372,8 @@ pub enum Planted {
     TargetWritesBakedChannel,
     /// #501: media fills export.target@1's `png` with a reader that is its own writer.
     TargetReaderIsWriter,
+    /// #2085: effects sealed with an operator check that trusts a compute write's index.
+    TrustsWriteIndex,
     /// #501: the mixer's Linux build adds one 16-bit step to every sample.
     MixerLinuxOneStep,
     /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
@@ -2481,6 +2483,9 @@ impl<'a> Hub<'a> {
             // #466: an operator transition's pass, checked before any frame draws it.
             issues.extend(crate::film_operator::check(form));
             issues.extend(deep_canvas_input::point::check(form));
+            // #542: text and scroll controls' fields.
+            issues.extend(deep_canvas_input::text::check(form));
+            issues.extend(deep_canvas_input::scroll::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {

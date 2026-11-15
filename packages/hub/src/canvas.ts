@@ -173,16 +173,19 @@ export class Canvas {
     if (this.child) return this.child;
     const child = spawn(canvasCore(), ['canvas'], { stdio: ['pipe', 'pipe', 'pipe'] });
     child.stderr.resume();
+    child.stdin.on('error', () => undefined);
     createInterface({ input: child.stdout }).on('line', (line) => {
       let value: Obj;
       try { value = JSON.parse(line) as Obj; } catch { value = { ok: false, code: 'bad_output' }; }
       this.waiting.shift()?.(value);
     });
-    child.on('exit', () => {
+    const gone = () => {
       if (this.child === child) this.child = undefined;
       this.world = '';
       for (const wake of this.waiting.splice(0)) wake({ ok: false, code: 'canvas_core_exited' });
-    });
+    };
+    child.once('exit', gone);
+    child.once('error', gone);
     this.child = child;
     return child;
   }

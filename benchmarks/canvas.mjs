@@ -822,6 +822,41 @@ workloads['flares-mirrors'] = () => {
   }
 };
 
+// #468: depth of field's GPU cost at 1080p on a release `deep-gpu`: the difference of two sides' median `gpu_ms` over
+// 300 frames of #465's stage seen through a 50 mm lens at f/2.8, with and without an `effect@1` of kind dof (64 taps,
+// focus 6 m); one warm-up run and five, each a fresh process. tests/acceptance/468/ac5-budgets.test.ts holds the
+// issue's numbers, the paints' and the transition's beside it.
+workloads['lens-focus'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixtures = join(root, 'tests', 'acceptance', '465', 'fixtures');
+  const look2d = JSON.parse(readFileSync(join(fixtures, 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'lens-468', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const docs = Object.fromEntries(['plain', 'dof'].map((k) => {
+      const doc = flareStage();
+      doc.id = `lens-focus-${k}`;
+      doc.items.cam.params = { ...doc.items.cam.params, fov: undefined, lens: { focal_length: 50, sensor: [36, 24], fit: 'wider' }, aperture: { f_stop: 2.8, blades: 0 } };
+      if (k === 'dof') doc.items.fx = { id: 'fx', name: 'fx', order: 'a999', layer: 'main', kind: 'effect@1', params: { kind: 'dof', dof: { focus: 6, taps: 64, max_coc: 24 } } };
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(doc));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.plain), side(docs.dof)] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [plain, dof] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { plain_gpu_ms: plain, dof_gpu_ms: Math.max(0, dof - plain) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-lens-focus', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #166: the water's GPU cost at 1080p on a release `deep-gpu`, each the difference of two sides' median `gpu_ms` over
 // 300 frames, the water against the same plate as a plain mirror (strength 1, blur 0, roughness 0), so the mirror's own
 // pass is in both: a 400 m lake filling the lower half of the frame (four waves, ripples, rain) seen level from 2 m, and
@@ -1056,6 +1091,7 @@ const EFFICIENCY = {
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
+  'canvas-lens-focus': { dof_gpu_ms: (r) => r.dof_gpu_ms },
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
   'canvas-ground': {
@@ -1520,6 +1556,7 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

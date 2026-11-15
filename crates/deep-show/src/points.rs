@@ -29,6 +29,9 @@ use crate::hub::Hub;
 pub struct Gesture {
     pub button: Option<String>,
     pub mods: [bool; 4],
+    /// #542: a scroll's unit is a wheel's line, and the scroll is a gesture's momentum tail.
+    pub line: bool,
+    pub momentum: bool,
 }
 
 pub fn gesture(v: &Value) -> Gesture {
@@ -48,6 +51,8 @@ pub fn gesture(v: &Value) -> Gesture {
             has(&["alt", "option"]),
             has(&["meta", "cmd"]),
         ],
+        line: v.get("unit").and_then(Value::as_str) == Some("line"),
+        momentum: v.get("momentum").and_then(Value::as_bool) == Some(true),
     }
 }
 
@@ -704,12 +709,12 @@ impl Hub<'_> {
             .and_then(Value::as_u64)
             .filter(|p| (1..=8).contains(p))
             .unwrap_or(2);
-        let piece = match self.logic_piece(&form) {
+        let track = self.track_read(doc);
+        let piece = match self.logic_piece(&form, &track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let track = self.track_read(doc);
         let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
         let mut copies = Vec::new();
         for player in 1..=players {
