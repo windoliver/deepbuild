@@ -1,4 +1,11 @@
 {
+  "#2063.d47f7c6f": [
+    "passes-any-name-once-listed",
+    "never-reads-entry-issue"
+  ],
+  "#2063.0ccaf9ec": [
+    "never-reads-entry-issue"
+  ],
   "#2063.0d14edf8": [
     "passes-listed-families"
   ]

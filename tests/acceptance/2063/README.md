@@ -147,8 +147,10 @@ start of its name.
 - **Docs are planted for criterion 1 too.** The criterion is about "the open issues of a recorded copy of the
   tracker". The base's `docs/technical-design.md:537` names `brief.uncited`; whether a listed name passes in a doc,
   or the doc is reworded, is the change's choice and no test asks for either.
-- **The planted wrong lane** is kept as a twin folder that `scripts/proof-runs.mjs` lays over the change
-  (`twins/README.md`), not started from inside the test: a twin replaces code under test and is never chosen by the
+- **The planted wrong lanes** are kept as twin folders that `scripts/proof-runs.mjs` lays over the change
+  (`twins/README.md`), not started from inside the tests. Criterion 4 names its own. Criteria 2 and 3 have one each
+  way their assertion can be missed, because on the base their tests fail at the clean run, before the assertion
+  the criterion is about. A twin replaces code under test and is never chosen by the
   test or an environment variable.
 
 ## What the issue leaves untestable or open
@@ -174,8 +176,8 @@ and the base's lane. Each failed the tests written for it, and the throwaway fix
   `ac4-listed-family.test.mjs`: one file per criterion, six tests.
 - `fixtures/open-issues-2026-11-14.json`, `fixtures/not-event-kinds-2026-11-14.txt`: the recorded tracker copy and
   the list recorded with it.
-- `twins/passes-listed-families/scripts/catalogue-drift.mjs`, `twins.json`, `twins/README.md`: criterion 4's planted
-  lane.
+- `twins/passes-listed-families/`, `twins/passes-any-name-once-listed/`, `twins/never-reads-entry-issue/` (each a
+  `scripts/catalogue-drift.mjs`), `twins.json`, `twins/README.md`: the planted lanes for criteria 4, 2, and 2 and 3.
 - `BASE-FAILURE.txt`: the run on the base, the base's lane on the record, and the planted programs.
 
 No fixture holds a secret or personal data. Issue numbers 9601 to 9640 are made up.

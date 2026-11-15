@@ -137,3 +137,16 @@ whose main.js exits 97 saying it was run:
 | The base, with packages/cli/dist | 6 fail in setup ("the built CLI was run") | 6 fail at their assertions, the same output as the row above |
 | The throwaway fix, with packages/cli/dist | not run | 6 pass |
 | twins/passes-listed-families, with packages/cli/dist | not run | only criterion 4's fails |
+
+## Twins for criteria 2 and 3, added on a dispute
+
+On the base, criterion 2's and criterion 3's tests fail at their clean run, never at the assertion the criterion is
+about. Two twins now show each of those assertions failing (twins/README.md). Each was put in place of
+scripts/catalogue-drift.mjs in a scratch checkout of the base fcd8c3852 (with a packages/cli/dist, as above) and the
+whole suite run once:
+
+| Twin | Tests that failed, each at its own assertion | Passed |
+|---|---|---|
+| passes-any-name-once-listed | criterion 2's first ("the lane's verdict on an open issue naming ask.ghosted is FAIL"); criterion 4's ("the lane let plan.ghost through …") | 4 |
+| never-reads-entry-issue | criterion 2's second ("the lane's verdict with ask.ghosted listed under #9606, which does not name it, is FAIL"); criterion 3's first ("… listed under the closed #9608 is FAIL") and second ("… listed under #9608, which no longer names it, is FAIL") | 3 |
+| passes-listed-families | criterion 4's ("the lane let plan.ghost through …") | 5 |
