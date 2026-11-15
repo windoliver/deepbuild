@@ -705,3 +705,13 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   checkpoint's `step` and `deep_hash` and no `ns`. On this host (`acceptance-linux-0aff36be1.txt`): 20 pass, 4
   BLOCKED (ac04's Mac comparison, ac05's two machines, ac10's two budgets), and ac07 passes against the merge base
   06b6e6d7a, unchanged. Criterion 7 is proven on Linux at this head. No Mac run has covered a head after 34f30ffd5.
+- **Mac run at e44890825** (2026-11-14, the owner's go at the Mac; macOS 27.2.1, Apple M3, on AC; local main
+  fcd8c385, merge base 06b6e6d7a; host name redacted; `mac/exits-e44890825.txt`):
+  - ac10 passes 2 of 2 (`mac/ac10-e44890825.txt`), started once the Mac was quiet: load 3.96 and thermal state 0
+    at its start after an 811 s wait, load 3.88 and thermal state 0 at its end. Criterion 10 is proven at this head.
+  - ac07 passes 1 of 1 (`mac/ac07-e44890825.txt`) at load 195–258 and thermal state 1; it has no timed check.
+    Criterion 7 is proven at this head on both machines.
+  - ac04 and ac05 are BLOCKED, not run (`mac/ac04-e44890825.txt`, `mac/ac05-e44890825.txt`): Docker Desktop, opened
+    by the run at load 40–199, never answered; `docker info` returned 500 from its socket
+    (`mac/docker-info-e44890825.txt`). Criteria 4 and 5 have no Mac result at this head: criterion 4's last is at
+    34f30ffd5 and criterion 5's at f55dc2e5a.
