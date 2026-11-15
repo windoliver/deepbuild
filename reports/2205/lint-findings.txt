@@ -173,3 +173,12 @@ Lines naming a file this change touches (packages/hub/src/release.ts, packages/h
 NEW FAIL size: packages/hub/src/core.ts: 2639 lines, over its ceiling of 2638
 NEW FAIL size: packages/hub/src/server.ts: 1599 lines, over 1500 with no ceiling
 (packages/hub/src/core.ts is 2,639 lines on main abf74b4ee itself.)
+
+## The run after the second merge, with main 9f93f1e7b (2026-11-15)
+merged: 175 NEW FAIL, 45 KNOWN.
+Lines naming a file this change touches: 0
+
+### lines naming packages/hub/src, both in files this change leaves as main has them
+NEW FAIL size: packages/hub/src/core.ts: 2640 lines, over its ceiling of 2638
+NEW FAIL size: packages/hub/src/server.ts: 1525 lines, over 1500 with no ceiling
+(packages/hub/src/core.ts is 2,640 lines on main 9f93f1e7b itself.)

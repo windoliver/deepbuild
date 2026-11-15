@@ -1,8 +1,8 @@
-# DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/2205/spec-checks.test.ts on the branch merged with main abf74b4ee (commit d77fc88ab, workspaces and deep-hook rebuilt), 2026-11-14.
-# The selection line, the summary line and the test job's log. The summary's 166 new and 45 known are lint findings of the whole repository; none names a file of this change.
+# DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/2205/spec-checks.test.ts on the branch merged with main 9f93f1e7b (commit bd39e18ec, workspaces and deep-hook rebuilt), 2026-11-15.
+# The selection line, the summary line and the test job's log. The summary's 175 new and 45 known are lint findings of the whole repository; none names a file of this change.
 
 alone vitest: tests/acceptance/2205/spec-checks.test.ts
-FAIL affected: 166 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 8 passed, in 1012 s at load 90; logs in <logs>
+FAIL affected: 175 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 8 passed, in 1507 s at load 331; logs in <logs>
 
 ## test job log
 deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2205/spec-checks.test.ts` runs unleased
@@ -13,9 +13,22 @@ deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vi
 
  Test Files  1 passed (1)
       Tests  8 passed (8)
+   Start at  01:22:37
+   Duration  336.87s (tests 100%)
+
+## The same suite on the branch merged with main abf74b4ee (commit d77fc88ab), 2026-11-14
+alone vitest: tests/acceptance/2205/spec-checks.test.ts
+FAIL affected: 166 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 8 passed, in 1012 s at load 90; logs in <logs>
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2205/spec-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+········
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
    Start at  23:01:04
    Duration  280.82s (tests 100%)
-
 
 ## The same suite on the fix alone, at the base b9131dbd9 (commit f87893905's tree, hub rebuilt), 2026-11-14
 parallel vitest: tests/acceptance/2205/spec-checks.test.ts
