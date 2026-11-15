@@ -768,6 +768,19 @@ fn constraint_cycle(v: &Value) -> Result<(), String> {
     }
 }
 
+/// The `constraint@1` entries the design gives a module other than motion, with that module
+/// (#225): a build without it refuses a document holding one with `module_missing`, naming it,
+/// and motion compiles past one, so motion names no other module's kind.
+pub const CONSTRAINT_OWNERS: [(&str, &str); 1] = [("follow_stream", "data")];
+
+/// The module the design gives a `constraint@1` kind outside motion, if any.
+pub fn constraint_owner(kind: &str) -> Option<&'static str> {
+    CONSTRAINT_OWNERS
+        .iter()
+        .find(|(k, _)| *k == kind)
+        .map(|(_, m)| *m)
+}
+
 fn constraint() -> RegistryDef {
     let fixture = |read: Value, order: Value, ops: Value, seek: &str, cycle: Value| json!({"read": read, "order": order, "ops": ops, "play": "p1", "seek": seek, "cycle": cycle});
     let reads = json!(["target.bounds", "self.bounds"]);

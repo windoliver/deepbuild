@@ -340,6 +340,7 @@ fn check_by(
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, sealed, &mut issues);
+                    check_constraints(&lowered, sealed, &mut issues);
                     check_assemblies(&lowered, &mut issues);
                     check_card(&lowered, &mut issues);
                     super::variants::check(&lowered, &mut issues);
@@ -2161,6 +2162,34 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
         };
         for key in entries.keys() {
             check_key(section, key, issues);
+        }
+    }
+}
+
+/// A constraint kind the design gives a module other than motion (#225: `follow_stream`, the
+/// data module's) in a build that left that module out is refused with `module_missing` at
+/// `constraints/<id>/kind`, naming the module.
+fn check_constraints(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "constraints").and_then(Value::as_object) else {
+        return;
+    };
+    for (key, entry) in entries {
+        let Some(kind) = entry.get("kind").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(module) = registry::core_lists::constraint_owner(kind) else {
+            continue;
+        };
+        if sealed.lacks(module) {
+            issues.push(Issue::error(
+                "module_missing",
+                key,
+                format!("constraints/{key}/kind"),
+                json!(kind),
+                &format!(
+                    "constraint kind `{kind}` is the {module} module's, which this build lacks"
+                ),
+            ));
         }
     }
 }
