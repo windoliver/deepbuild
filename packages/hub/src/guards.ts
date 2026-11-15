@@ -167,7 +167,7 @@ const USAGE = 'Usage: deep guard add <file>';
 
 /** `deep guard add <file>`: exit 0 added, 1 refused, 2 a usage error, 3 not decided. */
 export async function guardCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
-  if (args.length !== 2 || args[0] !== 'add' || args[1]!.startsWith('-')) {
+  if (args.length !== 2 || args[0] !== 'add') {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }

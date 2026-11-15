@@ -118,8 +118,9 @@ describe('deep <command> --help', () => {
     }
   }, 70_000);
 
-  // #2200: a file its argument names that can't be read is exit 2 as well, so the first command's setup hasn't run.
-  it.each([[['guard', 'add', 'missing.json']], [['install', 'missing']]])('deep %j, naming a file that isn\'t there, exits 2 and leaves a fresh home byte-identical', (args) => {
+  // #2200: arguments a command can't read, a file one names that isn't there included, are exit 2 before the first
+  // command's setup has run.
+  it.each([[['status', 'x', 'y']], [['inbox', 'answer']], [['off', 'extra']], [['secret', 'add', 'onlyone']], [['guard', 'add', 'missing.json']], [['install', 'missing']]])('deep %j, arguments it can\'t read, exits 2 and leaves a fresh home byte-identical', (args) => {
     const { home, env } = fresh();
     try {
       const before = snapshot(home);
@@ -128,6 +129,20 @@ describe('deep <command> --help', () => {
       const written = [...after].find(([path, state]) => before.get(path) !== state)?.[0];
       expect(written, `deep ${args.join(' ')} wrote ${written} (${result.stderr.trim().slice(0, 300)})`).toBeUndefined();
       expect(result.status).toBe(2);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
+
+  // #2200: setup waits for the command to read its arguments, and then still runs, whichever command comes first.
+  it.each([[[]], [['inbox']], [['secret', 'list']], [['off']], [['on']], [['env', 'up']], [['memory']], [['guard', 'add', 'guards.json']], [['install', 'package']]] as string[][][])('deep %j, the first command in a fresh home, sets it up', (args) => {
+    const { home, env } = fresh();
+    try {
+      writeFileSync(join(home, 'guards.json'), '[]\n');
+      mkdirSync(join(home, 'package'));
+      writeFileSync(join(home, 'package', 'deepbuild.json'), '{}\n');
+      const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      expect(existsSync(join(home, '.deepbuild', 'setup-finished.json')) || existsSync(join(home, '.deepbuild', 'setup-stopped.json')), `deep ${args.join(' ')} set nothing up (exit ${result.status}: ${result.stderr.trim().slice(0, 300)})`).toBe(true);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
