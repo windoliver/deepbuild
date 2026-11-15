@@ -93,7 +93,7 @@
         "why": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 2000,
+          "maxLength": 8192,
           "description": "Why the breaker paused the run."
         },
         "from": {
@@ -113,7 +113,7 @@
           "items": {
             "type": "string",
             "pattern": "^#[0-9]+$",
-            "maxLength": 64
+            "maxLength": 8192
           },
           "maxItems": 10000,
           "description": "The issues whose change the run landed in the week."
@@ -123,7 +123,7 @@
           "items": {
             "type": "string",
             "pattern": "^#[0-9]+$",
-            "maxLength": 64
+            "maxLength": 8192
           },
           "maxItems": 10000,
           "description": "The issues that joined the run and haven't landed."

@@ -88968,9 +88968,7 @@ impl Contract for WorkRunV2DataStep {
     }
 }
 
-static RULE_345: deep_contracts::Rule = deep_contracts::Rule::String { min: Some(1), max: Some(2000), format: None, pattern: None };
-
-static PATTERN_346: &[deep_contracts::Inst] = &[
+static PATTERN_345: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Char(&[(35, 35)]),
     deep_contracts::Inst::Char(&[(48, 57)]),
     deep_contracts::Inst::Split(3, 5),
@@ -88979,9 +88977,9 @@ static PATTERN_346: &[deep_contracts::Inst] = &[
     deep_contracts::Inst::Match,
 ];
 
-static RULE_347: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(64), format: None, pattern: Some(PATTERN_346) };
+static RULE_346: deep_contracts::Rule = deep_contracts::Rule::String { min: None, max: Some(8192), format: None, pattern: Some(PATTERN_345) };
 
-static RULE_348: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(10000), items: Some(&RULE_347) };
+static RULE_347: deep_contracts::Rule = deep_contracts::Rule::Array { min: None, max: Some(10000), items: Some(&RULE_346) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkRunV2DataSpent {
@@ -89023,11 +89021,11 @@ impl Contract for WorkRunV2Data {
         deep_contracts::check_member(members, at, "ask", &RULE_96)?;
         deep_contracts::check_member(members, at, "scope", &RULE_6)?;
         deep_contracts::check_member(members, at, "breaker", &RULE_96)?;
-        deep_contracts::check_member(members, at, "why", &RULE_345)?;
+        deep_contracts::check_member(members, at, "why", &RULE_6)?;
         deep_contracts::check_member(members, at, "from", &RULE_4)?;
         deep_contracts::check_member(members, at, "to", &RULE_4)?;
-        deep_contracts::check_member(members, at, "landed", &RULE_348)?;
-        deep_contracts::check_member(members, at, "left", &RULE_348)?;
+        deep_contracts::check_member(members, at, "landed", &RULE_347)?;
+        deep_contracts::check_member(members, at, "left", &RULE_347)?;
         Ok(Self {
             ask: deep_contracts::required(members, at, "ask")?,
             step: deep_contracts::required(members, at, "step")?,
