@@ -1308,7 +1308,7 @@ fn run_view(
             };
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423), and its videos' frames at t there (#503).
-            let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
+            let (texels, made) = crate::textures::prepare(app, &composed, &scene, &map_paths)?;
             scene.texels = videos.at(app, &composed, n, &scene, texels)?;
             pictures.paint(&mut scene)?;
             videos.clouds(app, &fx, &scene)?;

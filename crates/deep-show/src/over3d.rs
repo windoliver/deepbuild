@@ -48,52 +48,44 @@ impl Hub<'_> {
         }
         let posed = crate::film::posed(doc, t);
         let doc = posed.as_ref().unwrap_or(doc);
-        let palette = self.look.light.clone();
+        let (mut scene, look) = self.evaluate3d(doc, t, size)?;
         let record = self.record();
-        if self.gpu3().is_none() {
-            return Err(Unfit {
-                code: "gpu_unavailable",
-                path: "snapshots".into(),
-            });
-        }
-        let Some(Some(gpu)) = self.gpu3.as_mut() else {
-            unreachable!("opened above");
-        };
-        let (renderer, kept) = (&mut self.renderer, &mut self.inset_pictures);
-        let (look, evidence) = (&self.look, &self.scenario.evidence);
-        let mut failed = None;
-        let mut paint = |scene: &mut Scene| {
-            let keys: Vec<&str> = scene.pictures.iter().map(|p| p.key.as_str()).collect();
-            kept.retain(|k, _| keys.contains(&k.as_str()));
-            for p in &scene.pictures {
-                if !kept.contains_key(&p.key) {
-                    let map = p.document.as_object().cloned().unwrap_or_default();
-                    let drawn = match renderer.prepare(&map, 0, &look.light, None, &record, evidence) {
-                        Ok(d) => d,
-                        Err(u) => {
-                            failed = Some(u);
-                            return;
-                        }
-                    };
-                    let px = p.size.map(|v| v.min(u32::from(u16::MAX)) as u16);
-                    let mut rgba = renderer.raster(&drawn, px, None);
-                    deep_canvas_scene3d::inset::bleed(&mut rgba, p.size);
-                    let texels = Texels {
-                        format: "rgba8unorm-srgb".into(),
-                        size: p.size,
-                        mips: 1,
-                        data: Arc::new(rgba),
-                    };
-                    kept.insert(p.key.clone(), Arc::new(texels));
-                }
-                scene.texels.insert(p.key.clone(), kept[&p.key].clone());
+        let keys: Vec<String> = scene.pictures.iter().map(|p| p.key.clone()).collect();
+        self.inset_pictures.retain(|k, _| keys.contains(k));
+        for p in &scene.pictures {
+            if !self.inset_pictures.contains_key(&p.key) {
+                let map = p.document.as_object().cloned().unwrap_or_default();
+                let drawn = self.renderer.prepare(
+                    &map,
+                    0,
+                    &self.look.light,
+                    None,
+                    &record,
+                    &self.scenario.evidence,
+                )?;
+                let px = p.size.map(|v| v.min(u32::from(u16::MAX)) as u16);
+                let mut rgba = self.renderer.raster(&drawn, px, None);
+                deep_canvas_scene3d::inset::bleed(&mut rgba, p.size);
+                let texels = Texels {
+                    format: "rgba8unorm-srgb".into(),
+                    size: p.size,
+                    mips: 1,
+                    data: Arc::new(rgba),
+                };
+                self.inset_pictures.insert(p.key.clone(), Arc::new(texels));
             }
-        };
-        let drawn = gpu.draw_painted(doc, t, &palette, size, &mut paint)?;
-        match failed {
-            Some(u) => Err(u),
-            None => Ok(drawn),
+            scene
+                .texels
+                .insert(p.key.clone(), self.inset_pictures[&p.key].clone());
         }
+        let rgba = self
+            .gpu3()
+            .and_then(|g| g.draw(&scene, &look))
+            .ok_or_else(|| Unfit {
+                code: "unsupported_platform",
+                path: String::new(),
+            })?;
+        Ok((rgba, scene))
     }
 
     /// `doc`'s frame at `t` and `size` with what #506 sets in and over it (see the module's note).
@@ -171,7 +163,7 @@ impl Hub<'_> {
         let size = snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)));
         match self.frame3d(doc, t, size, None) {
             Ok(rgba) => Ok(Some((rgba, size))),
-            Err(u) if u.code == "gpu_unavailable" => Ok(None),
+            Err(u) if u.code == "unsupported_platform" => Ok(None),
             Err(u) => Err(json!({"code": u.code, "path": u.path})),
         }
     }

@@ -653,7 +653,13 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
         // #506: with its insets' pictures, its overlay frames at their anchors and its view
         // overlays (over3d.rs).
-        let mut rgba = self.frame3d(doc, t, size, Some(drawing))?;
+        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
+            "unsupported_platform" => Unfit {
+                code: "gpu_unavailable",
+                path: "snapshots".into(),
+            },
+            _ => u,
+        })?;
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
