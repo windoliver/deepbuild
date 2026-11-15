@@ -146,6 +146,30 @@ impl Timeline {
         }))
     }
 
+    /// #466: the transition windows, in the plan's order.
+    pub fn windows(&self) -> &[Transition] {
+        &self.windows
+    }
+
+    /// The document's frame rate.
+    pub fn rate(&self) -> (u32, u32) {
+        self.rate
+    }
+
+    /// #466: window `i` placed so the frame `reveal` flicks into it lands on its cut.
+    pub fn place(&mut self, i: usize, reveal: i64) {
+        deep_canvas_motion::shots::placed(&mut self.windows[i], reveal);
+    }
+
+    /// #466: the operator transition whose window holds `t`, and its progress.
+    pub fn operator_at(&self, t: i64) -> Option<(&Transition, f64)> {
+        self.windows
+            .iter()
+            .find(|w| w.start <= t && t < w.end)
+            .filter(|w| matches!(w.kind, deep_canvas_motion::shots::Kind::Operator(_)))
+            .map(|w| (w, w.progress(t).clamp(0.0, 1.0)))
+    }
+
     fn shot(&self, i: usize) -> Side<'_> {
         let s = &self.shots[i];
         Side {

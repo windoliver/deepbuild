@@ -18,8 +18,12 @@ mod determinism;
 mod efficiency;
 mod evidence;
 mod export;
+mod extended;
 mod familiar;
+mod caption_design;
 mod film;
+mod film_operator;
+mod films;
 mod film_audit;
 mod film_layout;
 mod film_viewer;
@@ -48,6 +52,7 @@ mod net;
 mod packs;
 mod physics;
 mod picks;
+mod pixels;
 mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -830,7 +835,17 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "kit" => return Some(Call::Kit(Box::new(kit::KitCall::parse(c)?))),
         "manifest" => return Some(Call::Manifest),
         "catalog" => return Some(Call::Catalog),
-        "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
+        "verdict" => {
+            // #1938: `against`, a verdict another run made on the claim, is an object or absent.
+            let against = match c.get("against") {
+                None => None,
+                Some(v) => Some(v.as_object().map(|_| v.clone())?),
+            };
+            return Some(Call::Verdict(
+                c.get("claim")?.as_str()?.to_string(),
+                against,
+            ));
+        }
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
         "answer" => {
             return Some(Call::Answer {
@@ -1284,6 +1299,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
+                // #466's boil and blur in deep-show's frames.
+                || films::PLANTED.contains(p)
+                || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1329,6 +1347,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
                 "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
                 "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
+                "pixel_checks_hold_anywhere" => Planted::PixelChecksHoldAnywhere,
+                "light_from_whole_frame" => Planted::LightFromWholeFrame,
+                "reduction_leaves_out_last_rows" => Planted::ReductionLeavesOutLastRows,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,
