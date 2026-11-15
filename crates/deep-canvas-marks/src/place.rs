@@ -63,6 +63,33 @@ impl Place {
         self.turned(self.unturned(p))
     }
 
+    /// The point that draws at `q` (#223: a warp reads its group's own space): turned back, then
+    /// moved and scaled back. `None` for a place that scales to nothing.
+    pub(crate) fn back(&self, q: [f64; 2]) -> Option<[f64; 2]> {
+        if self.scale[0] == 0.0 || self.scale[1] == 0.0 {
+            return None;
+        }
+        let q = if self.turn == 0.0 {
+            q
+        } else {
+            let (s, c) = crate::turn::sin_cos(self.turn);
+            let d = [q[0] - self.about[0], q[1] - self.about[1]];
+            [
+                self.about[0] + c * d[0] + s * d[1],
+                self.about[1] - s * d[0] + c * d[1],
+            ]
+        };
+        Some([
+            (q[0] - self.offset[0]) / self.scale[0],
+            (q[1] - self.offset[1]) / self.scale[1],
+        ])
+    }
+
+    /// The larger of its scales' sizes: how many u of where it draws one of its own u spans.
+    pub(crate) fn size(&self) -> f64 {
+        self.scale[0].abs().max(self.scale[1].abs())
+    }
+
     fn unturned(&self, p: [f64; 2]) -> [f64; 2] {
         [
             self.scale[0] * p[0] + self.offset[0],
@@ -152,6 +179,20 @@ mod tests {
             [100.0, 50.0, 20.0, 10.0],
             "a box stays unturned"
         );
+    }
+
+    #[test]
+    fn back_undoes_where_a_point_draws() {
+        let p = Place::of(
+            &json!({"kind": "rect@1", "params": {"box": [0, 0, 20, 10]}, "at": {"pos": [100, 50, 0], "rot": [0, 0, 30], "scale": [2, 0.5, 1], "pivot": "c"}}),
+        );
+        for q in [[0.0, 0.0], [20.0, 0.0], [7.0, -3.0], [-11.0, 40.0]] {
+            let b = p.back(p.at(q)).unwrap();
+            assert!(
+                (b[0] - q[0]).abs() < 1e-9 && (b[1] - q[1]).abs() < 1e-9,
+                "{q:?} → {b:?}"
+            );
+        }
     }
 
     #[test]

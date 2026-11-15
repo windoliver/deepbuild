@@ -228,6 +228,8 @@ byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 // #1550's files build a GPUI text probe and deep-drive, and start replicas.
 alone.push('tests/acceptance/1550/');
+// #533's files build deep-logic, a wat assembler and four deep-show feature sets, and run the logic kit.
+alone.push('tests/acceptance/533/');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
@@ -672,8 +674,17 @@ byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/accept
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
+alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
+timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
+// #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
+// deep-show in release and deep-gpu for the frame budget. AC9 and AC10 are proved by their blind redraft, on the
+// owner's ruling; the first draft's two files can't pass on any program and are kept by hand (142/DISPUTE.md).
+alone.push('tests/acceptance/142/', 'tests/acceptance/142-redraft-ac9/', 'tests/acceptance/142-redraft-ac10/');
+byHand.push(...['ac9-timing', 'ac10-pack'].map((f) => `tests/acceptance/142/${f}.test.ts`));
+timed.push('tests/acceptance/142/ac6-budgets.test.ts');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views
 // frame by frame, draw the app's window and time the logic module's budgets on the reference Mac.
 alone.push('tests/acceptance/548/');
@@ -684,6 +695,10 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #1968's files build deep-show; the oracle lane builds deep-show; ac2-budgets judges the code film's budgets on the
+// reference Mac.
+alone.push('tests/acceptance/1968/', 'tests/acceptance/1968-oracle/');
+timed.push('tests/acceptance/1968/ac2-budgets.test.ts');
 // #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
 // after, so nothing else may build deep-marks-render in the checkout while it runs.
 alone.push('tests/acceptance/2497/');
@@ -697,6 +712,11 @@ timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
 slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
 byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
   'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
+// #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
+// Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
+// role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
+alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
+byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

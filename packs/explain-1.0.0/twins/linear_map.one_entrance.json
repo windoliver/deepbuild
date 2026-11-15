@@ -1,0 +1,79 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "Two entrances at once",
+  "description": "Two entrances at once: explain@1's linear_map.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "2s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.linear_map@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "vectors": [
+          {
+            "id": "v",
+            "coords": [
+              1,
+              1
+            ],
+            "role": "accent",
+            "label": "v"
+          },
+          {
+            "id": "w",
+            "coords": [
+              -1,
+              1
+            ],
+            "role": "accent",
+            "label": "w"
+          }
+        ],
+        "cues": [
+          {
+            "id": "cue_opening",
+            "kind": "explain.add_vector",
+            "params": {
+              "id": "v"
+            },
+            "span": "0.5s"
+          },
+          {
+            "id": "cue_crowd",
+            "kind": "explain.add_vector",
+            "params": {
+              "id": "w"
+            },
+            "span": "0.5s",
+            "when": "with"
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  }
+}
