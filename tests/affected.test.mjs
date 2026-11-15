@@ -107,6 +107,21 @@ test('a Rust change reaches its crate and the crates depending on it, their [[te
   assert.deepEqual(select(root, ['packages/a/src/leaf.ts'], { files, workspace }).crates, ['r2']);
 });
 
+test('a setup file a runner config names feeds every suite, wherever the config names it; a config module it imports does not', (t) => {
+  const { root, files } = repo(t, {
+    'vitest.config.ts': "import { globs } from './scripts/globs.mjs';\nexport default { test: { include: globs, setupFiles: ['./tests/boot'] } };\n",
+    'scripts/globs.mjs': '// Read by defineConfig callers.\nexport const globs = [];\n',
+    'tests/boot.ts': "import './boot-helper.ts';\n",
+    'tests/boot-helper.ts': 'export {};\n',
+    'tests/acceptance/1/vitest.config.ts': "export default { test: { globalSetup: '../../hold.ts' } };\n",
+    'tests/hold.ts': 'export default () => {};\n',
+  });
+  // Named by the root config through extension resolution, imported by that setup file, and named by a nested config.
+  for (const path of ['tests/boot.ts', 'tests/boot-helper.ts', 'tests/hold.ts']) assert.deepEqual(select(root, [path], { files, workspace: [] }).every, [path], path);
+  // A selector holding the repo's own setup path by name, or counting the config's imported module, fails here.
+  assert.deepEqual(select(root, ['scripts/globs.mjs'], { files, workspace: [] }).every, []);
+});
+
 test('each test runs with its own runner, alone or in parallel as lanes.mjs says, and never one it leaves to a person', (t) => {
   const { root } = repo(t, {
     'tests/acceptance/348/a.test.ts': vitest(''),
