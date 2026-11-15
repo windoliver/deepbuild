@@ -717,6 +717,8 @@ byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/h
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #1851's files start real hubs and Claude Code stand-ins, and time the waiter's wake against 2 s.
+alone.push('tests/acceptance/1851/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
