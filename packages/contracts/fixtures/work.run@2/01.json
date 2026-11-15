@@ -1,0 +1,27 @@
+{
+  "v": 2,
+  "kind": "work.run",
+  "subject": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "ts": 1760618251123,
+  "data": {
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "step": "notice",
+    "scope": "work through open issues labelled \"ready\" with Claude Code, two at a time",
+    "from": 1760013451123,
+    "to": 1760618251123,
+    "landed": [
+      "#100",
+      "#103"
+    ],
+    "left": [
+      "#101"
+    ],
+    "spent": {
+      "attempts": 4
+    }
+  }
+}

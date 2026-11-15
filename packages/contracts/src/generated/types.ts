@@ -9366,6 +9366,46 @@ export interface StartApproval {
   evidence?: Array<string>;
 }
 
+/** start.approval@2 */
+export interface StartApprovalV2 {
+  v: 2;
+  id: string;
+  kind: "start.approval";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    repo: string;
+    issues: Array<number>;
+    rule?: {
+      labels: Array<string>;
+      milestone: string | null;
+      by: "you" | "you or a collaborator";
+    };
+    agents: Array<string>;
+    homes: { [key: string]: string };
+    modes: { [key: string]: string };
+    at_once: number;
+    plan_share: number;
+    until: number | null;
+    hosts: Array<string>;
+    sandbox: { [key: string]: {
+      sandboxed: boolean;
+      walls: {
+        writes: boolean;
+        credentials: boolean;
+        network: boolean;
+      };
+    } };
+  };
+  evidence?: Array<string>;
+}
+
 /** start.refused@1 */
 export interface StartRefused {
   v: 1;
@@ -11195,6 +11235,35 @@ export interface WorkRun {
     ask: string;
     step: "asked" | "paused";
     scope: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** work.run@2 */
+export interface WorkRunV2 {
+  v: 2;
+  id: string;
+  kind: "work.run";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "asked" | "paused" | "resumed" | "notice";
+    scope: string;
+    breaker?: string;
+    why?: string;
+    from?: number;
+    to?: number;
+    landed?: Array<string>;
+    left?: Array<string>;
+    spent?: {
+      attempts: number;
+    };
   };
   evidence?: Array<string>;
 }

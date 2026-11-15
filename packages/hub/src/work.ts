@@ -14,6 +14,15 @@
 // state word is recorded as `work.state`, which `deep work show` prints. A workspace's run (#1347) takes its tasks from
 // the record the same way, with no forge read or written: a task's change finishes on the workspace's own main once
 // its PASS covers the merge, the version before it kept a step back.
+//
+// A standing run (#1335) names a rule instead of a set, and its set follows the forge: each open issue the rule's
+// labels and milestone name, written by you or a collaborator (never by a bot or an app, so nothing an agent writes
+// joins by itself), once it's ready to join, checked with no model: acceptance criteria, a design link into the repo
+// that resolves on the default branch, and dependencies the forge can read. One that isn't ready stays out, named on
+// the run's page, and is never asked about; a rule that would read an issue's text is refused at approval. The
+// earliest milestone goes first, then the order above. It has no end: at its plan share it waits for the next window,
+// every 7 days it records a notice of what it landed, left and spent, which needs no answer, and five attempts in a
+// row ending in anything but PASS pause it with one ask, whose "resume" starts it again.
 import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -21,9 +30,10 @@ import type { Asks } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { gitEnv } from '@deepbuild/gate';
 import type { WorkItem } from './ask-tasks.js';
+import { criteriaOf } from './github-source.js';
 import { mergeOf, onlyWindow, type Landing, type Outcome } from './landing.js';
 import type { Plant } from './plant.js';
-import type { Starts } from './starts.js';
+import type { Rule, Starts } from './starts.js';
 import type { WorkspaceService } from './workspaces-port.js';
 import { refusal, Refused } from './wire.js';
 
@@ -38,6 +48,12 @@ const FORGE_MS = 30_000;
 const PR_MS = 5_000;
 /** Replaced attempts on one issue at which the run asks you instead of starting another. */
 const BREAKER = 3;
+/** Attempts in a row ending in anything but PASS at which a standing run pauses with one ask (#1335). */
+const RUN_BREAKER = 5;
+/** How often a standing run records its notice of what it landed, left and spent. */
+const WEEK = 7 * DAY;
+/** The authors GitHub associates with a repo whose work joins a standing run: its owner, members and collaborators. */
+const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 /** The words GitHub reads as linking an issue, closing ones first, and `Part of`, which links without closing. */
 const LINKS = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+#(\d+)\b/i;
 /** The baseline of issues closed before the gate: the repo's file, as the commit that added it holds it. */
@@ -65,7 +81,7 @@ export interface WorkOptions {
   token(): Promise<string | undefined>;
   repoOf(remote: string): string | undefined;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
-  appendCore(kind: string, data: Obj, extra?: { subject?: string }): Promise<void>;
+  appendCore(kind: string, data: Obj, extra?: { subject?: string; v?: number }): Promise<void>;
   starts(): Starts;
   landing(): Landing;
   asks(): Asks;
@@ -94,6 +110,8 @@ export class Work {
   private judgements = 0;
   /** Each attempt's worktree as it started: a turn that ends with it unchanged replaced the attempt. */
   private readonly snapshots = new Map<string, string>();
+  /** Each standing run's reading of the forge, kept as long as its issues are: who may join and who stays out, and why. */
+  private readonly lists = new Map<string, { at: number; ready: number[]; out: Map<number, { waits_on: string; why: string }>; due: Map<number, number> }>();
   private you: string | undefined;
   constructor(private readonly o: WorkOptions) {}
 
@@ -155,15 +173,19 @@ export class Work {
 
   // ---- What the record holds.
 
-  /** The runs `deep work` raised, oldest first, each with its repo and whether it is paused; with a repo, only its runs. */
-  private async runs(repo?: unknown): Promise<{ ask: string; scope: string; repo: string; paused: boolean }[]> {
+  /**
+   * The runs `deep work` raised, oldest first, each with its repo and whether it is paused, and the ask its breaker
+   * paused it with (#1335); with a repo, only its runs.
+   */
+  private async runs(repo?: unknown): Promise<{ ask: string; scope: string; repo: string; paused: boolean; breaker?: string }[]> {
     const rows = (await this.o.raw(`SELECT w.data AS data, (SELECT json_extract(a.data, '$.repo') FROM events a WHERE a.kind = 'start.approval' AND a.subject = w.subject LIMIT 1) AS repo
       FROM events w WHERE w.kind = 'work.run' ORDER BY w.log_pos`)) as { data: string; repo: string | null }[];
-    const runs = new Map<string, { ask: string; scope: string; repo: string; paused: boolean }>();
+    const runs = new Map<string, { ask: string; scope: string; repo: string; paused: boolean; breaker?: string }>();
     for (const row of rows) {
-      const d = JSON.parse(row.data) as { ask: string; step: string; scope: string };
+      const d = JSON.parse(row.data) as { ask: string; step: string; scope: string; breaker?: string };
       const r = runs.get(d.ask) ?? { ask: d.ask, scope: d.scope, repo: row.repo ?? '', paused: false };
-      if (d.step === 'paused') r.paused = true;
+      if (d.step === 'paused') { r.paused = true; if (d.breaker) r.breaker = d.breaker; else delete r.breaker; }
+      if (d.step === 'resumed') { r.paused = false; delete r.breaker; }
       runs.set(d.ask, r);
     }
     const only = typeof repo === 'string' && repo ? real(await git(repo, 'rev-parse', '--show-toplevel').catch(() => repo)) : undefined;
@@ -249,7 +271,8 @@ export class Work {
    */
   private async read(repo: string, set: number[], fresh: boolean): Promise<{ issues: Map<number, Issue>; pulls: Pull[] }> {
     const kept = this.forge.get(repo);
-    if (kept && !fresh && this.o.now() - kept.at < FORGE_MS) return kept;
+    // Kept only while it holds every issue asked for: a standing run's set grows, and two runs of a repo share it.
+    if (kept && !fresh && this.o.now() - kept.at < FORGE_MS && set.every((n) => kept.issues.has(n))) return kept;
     const issues = new Map<number, Issue>();
     const want = [...set];
     for (let i = 0; i < want.length; i++) {
@@ -377,14 +400,17 @@ export class Work {
     return this.passing;
   }
 
-  private async passRun(run: { ask: string; paused: boolean }): Promise<void> {
-    const approval = await this.o.starts().approvalOf(run.ask);
-    if (!approval) return;
+  private async passRun(run: { ask: string; scope: string; paused: boolean; breaker?: string }): Promise<void> {
+    const approved = await this.o.starts().approvalOf(run.ask);
+    if (!approved) return;
     // A workspace's run reads its tasks from the record, and never a forge.
-    const space = this.o.spaces().idAt(approval.repo);
-    const repo = space ?? await this.slugOf(approval.repo);
-    const readAll = (fresh: boolean) => (space ? this.readSpace(space, approval.issues) : this.read(repo, approval.issues, fresh));
+    const space = this.o.spaces().idAt(approved.repo);
+    const repo = space ?? await this.slugOf(approved.repo);
     let attempts = await this.attempts(run.ask);
+    // A standing run's set follows the forge (#1335): the issues its rule takes that are ready, and every one it worked.
+    const standing = approved.rule && !space ? await this.standing(repo, approved, approved.rule) : undefined;
+    const approval = standing ? { ...approved, issues: [...new Set([...standing.ready, ...attempts.keys()])].sort((a, b) => a - b) } : approved;
+    const readAll = (fresh: boolean) => (space ? this.readSpace(space, approval.issues) : this.read(repo, approval.issues, fresh));
     let { issues, pulls } = await readAll(false);
     // An attempt whose turn ended may have just opened its PR: the forge is read again for it, at most every 5 s.
     const starts = this.o.starts();
@@ -409,6 +435,8 @@ export class Work {
       ({ issues, pulls } = await readAll(true));
       asks = await this.openAsks();
     }
+    // A standing run's own breaker pauses it with one ask, and your "resume" starts it again (#1335).
+    const paused = standing ? await this.runBreaker(run) : run.paused;
     const landed = space ? await this.finishedIn(space) : await this.landed(repo);
     const baseline = space ? new Set<number>() : await this.baseline(approval.repo);
     const login = space ? undefined : await this.login();
@@ -470,17 +498,21 @@ export class Work {
       row(last?.ended?.cause === 'sent back past its rounds' ? 'sent back' : 'queued', 'a free slot', 'ready');
       ready.push(n);
     }
-    // The order: the ready issue that unblocks most in the set, then the lowest number.
+    // An issue the rule takes that isn't ready to join stays out: named on the run's page, never asked about (#1335).
+    for (const [n, out] of standing?.out ?? []) if (!rows.has(n)) rows.set(n, { issue: n, word: 'queued', waits_on: out.waits_on, why: out.why });
+    // The order: a standing run's earliest milestone first (#1335), then the ready issue that unblocks most in the set,
+    // then the lowest number.
     const unblocks = (n: number): number[] => approval.issues.filter((m) => { const b = issues.get(m)?.blockers; return Array.isArray(b) && b.includes(n) && rows.get(m)?.word !== 'PASS'; });
-    ready.sort((a, b) => unblocks(b).length - unblocks(a).length || a - b);
+    const due = (n: number): number => standing?.due.get(n) ?? Infinity;
+    ready.sort((a, b) => (due(a) < due(b) ? -1 : due(a) > due(b) ? 1 : 0) || unblocks(b).length - unblocks(a).length || a - b);
     const live = [...attempts.values()].filter((list) => { const a = list.at(-1); return a && !a.ended && starts.live(a.run); }).length;
-    const stopped = run.paused ? "the run's pause" : approval.until !== null && this.o.now() >= approval.until ? `the run's end at ${new Date(approval.until).toISOString()}` : undefined;
+    const stopped = paused ? "the run's pause" : approval.until !== null && this.o.now() >= approval.until ? `the run's end at ${new Date(approval.until).toISOString()}` : undefined;
     let free = stopped ? 0 : Math.max(0, approval.at_once - live);
     for (const n of ready) {
       if (this.closed) return;
       if (stopped || free <= 0) { rows.set(n, { ...rows.get(n)!, waits_on: stopped ?? 'a free slot' }); continue; }
       const blocked = unblocks(n);
-      const order = `${blocked.length ? `it unblocks ${blocked.map((m) => `#${m}`).join(', ')}` : 'it unblocks none in the set'}, then the lowest number`;
+      const order = `${standing ? 'the earliest milestone first, then ' : ''}${blocked.length ? `it unblocks ${blocked.map((m) => `#${m}`).join(', ')}` : 'it unblocks none in the set'}, then the lowest number`;
       const r = await this.start(run.ask, approval, n, issues.get(n)!, attempts.get(n) ?? [], order, space !== undefined);
       if (r.started) { rows.set(n, { issue: n, word: 'working', waits_on: null, why: r.why }); free--; }
       else rows.set(n, { ...rows.get(n)!, waits_on: r.why });
@@ -492,6 +524,122 @@ export class Work {
       if (b && b.word === r.word && b.waits_on === r.waits_on) continue;
       await this.o.appendCore('work.state', { ask: run.ask, issue: r.issue, word: r.word, waits_on: r.waits_on?.slice(0, 8192) ?? null, why: r.why.slice(0, 2000) }, { subject: run.ask });
     }
+    if (standing) await this.notice(run, approval, repo, rows, new Set(attempts.keys()));
+  }
+
+  // ---- A standing run (#1335).
+
+  /**
+   * A standing run's reading of the forge, read again at most every 30 s: the open issues its rule's labels and
+   * milestone name, written by you or a collaborator and never by a bot or an app (an agent's session writes as one),
+   * each ready to join or staying out with why, and each one's milestone's due time. A list the forge didn't give
+   * keeps the last one read.
+   */
+  private async standing(repo: string, approval: Approval, rule: Rule): Promise<{ ready: number[]; out: Map<number, { waits_on: string; why: string }>; due: Map<number, number> }> {
+    const kept = this.lists.get(approval.ask);
+    if (kept && this.o.now() - kept.at < FORGE_MS) return kept;
+    const listed = await this.listed(repo, rule);
+    if (!listed) return kept ?? { ready: [], out: new Map(), due: new Map() };
+    const you = await this.login();
+    const ready: number[] = [];
+    const out = new Map<number, { waits_on: string; why: string }>();
+    const due = new Map<number, number>();
+    for (const i of listed) {
+      const n = Number(i.number);
+      const user = isObj(i.user) ? i.user : {};
+      const yours = you !== undefined && user.login === you;
+      if (user.type !== 'User' || i.performed_via_github_app || !(yours || (rule.by !== 'you' && TRUSTED.has(String(i.author_association))))) continue;
+      const milestone = isObj(i.milestone) ? i.milestone : undefined;
+      if (rule.milestone !== null && milestone?.title !== rule.milestone) continue;
+      if (milestone) due.set(n, typeof milestone.due_on === 'string' && Date.parse(milestone.due_on) ? Date.parse(milestone.due_on) : Number.MAX_SAFE_INTEGER);
+      // Ready to join, checked with no model: its acceptance criteria, then its design link.
+      const body = typeof i.body === 'string' ? i.body : '';
+      const missing = criteriaOf(body).length ? await this.designOf(body, approval.repo, repo) : { waits_on: 'acceptance criteria', why: 'it has no acceptance criteria' };
+      if (missing) out.set(n, { waits_on: missing.waits_on, why: `${missing.why}, so it stays out of the run` });
+      else ready.push(n);
+    }
+    const read = { at: this.o.now(), ready, out, due };
+    this.lists.set(approval.ask, read);
+    return read;
+  }
+  /** The forge's open issues carrying every label a rule names, page by page; undefined when a page can't be read. */
+  private async listed(repo: string, rule: Rule): Promise<Obj[] | undefined> {
+    const out: Obj[] = [];
+    for (let page = 1; ; page++) {
+      const r = await this.get(`/repos/${repo}/issues?state=open&per_page=100&page=${page}${rule.labels.length ? `&labels=${encodeURIComponent(rule.labels.join(','))}` : ''}`);
+      if (r.status !== 200 || !Array.isArray(r.body)) return undefined;
+      // The list holds pull requests too: only issues join.
+      out.push(...r.body.filter((i): i is Obj => isObj(i) && !i.pull_request));
+      if (r.body.length < 100) return out;
+    }
+  }
+  /**
+   * Why an issue's design link doesn't resolve, or undefined when it does: its `**Design:**` line links files of this
+   * repo, as this repo's issues write them, and the default branch holds each such file with each section it names.
+   */
+  private async designOf(body: string, checkout: string, repo: string): Promise<{ waits_on: string; why: string } | undefined> {
+    const waits_on = 'a design link that resolves';
+    const line = /\*{0,2}Design\*{0,2}:\*{0,2}([^\n]*)/i.exec(body)?.[1];
+    const links = [...(line ?? '').matchAll(/https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/blob\/[^/\s)]+\/([^#\s)?]+)(?:#([^\s)]+))?/g)].filter((m) => m[1]!.toLowerCase() === repo.toLowerCase());
+    if (!links.length) return { waits_on, why: line === undefined ? 'it has no design link' : 'its design link names no file of this repo' };
+    for (const [link, , path, anchor] of links) {
+      const text = await onMain(checkout, decodeURIComponent(path!));
+      if (text === undefined) return { waits_on, why: `its design link ${link} names a file the default branch doesn't hold` };
+      if (anchor && !anchorsOf(text).has(decodeURIComponent(anchor).toLowerCase())) return { waits_on, why: `its design link ${link} names a section ${path!} doesn't have` };
+    }
+    return undefined;
+  }
+  /**
+   * A standing run's own breaker: once its attempts end five in a row in anything but PASS, it pauses with one ask,
+   * and your "resume" starts it again, counting afresh. A landing resets the count; an attempt that gave up its slot to
+   * wait on you counts neither way. Whether the run is paused now.
+   */
+  private async runBreaker(run: { ask: string; scope: string; paused: boolean; breaker?: string }): Promise<boolean> {
+    if (run.paused) {
+      if (!run.breaker) return true;
+      const [answer] = (await this.o.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE subject = ? AND kind IN ('ask.answered', 'ask.defaulted') ORDER BY log_pos LIMIT 1`, [run.breaker])) as { answer: string | null }[];
+      if (answer?.answer !== 'resume') return true;
+      await this.o.appendCore('work.run', { ask: run.ask, step: 'resumed', scope: run.scope, breaker: run.breaker }, { subject: run.ask, v: 2 });
+      return false;
+    }
+    const [resumed] = (await this.o.raw(`SELECT MAX(log_pos) AS at FROM events WHERE kind = 'work.run' AND subject = ? AND json_extract(data, '$.step') = 'resumed'`, [run.ask])) as { at: number | null }[];
+    const ended = (await this.o.raw(`SELECT log_pos, data FROM events WHERE kind = 'work.attempt' AND subject = ? AND json_extract(data, '$.step') = 'ended' AND log_pos > ? ORDER BY log_pos`, [run.ask, resumed?.at ?? 0])) as { log_pos: number; data: string }[];
+    let streak: { d: Obj; at: number }[] = [];
+    for (const row of ended) {
+      const d = JSON.parse(row.data) as Obj;
+      if (d.cause === 'PASS' || d.cause === 'landed with the budget window open') streak = [];
+      else if (d.cause !== 'gave up its slot') streak.push({ d, at: row.log_pos });
+    }
+    if (streak.length < RUN_BREAKER) return false;
+    const last = streak.slice(-RUN_BREAKER);
+    const pin = key({ kind: 'work.run-breaker', ask: run.ask, at: last.at(-1)!.at });
+    const lines = last.map(({ d }) => `#${String(d.issue)} attempt ${String(d.attempt)}: ${d.agent === 'claude-code' ? 'Claude Code' : d.agent === 'codex' ? 'Codex' : String(d.agent)}${d.model ? ` on ${String(d.model)}` : ''}, ${String(d.cause)}`);
+    const handle = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'work.breaker', {
+      kind: 'exception', question: `The standing run ${run.ask} paused: its last ${RUN_BREAKER} attempts in a row ended in anything but PASS. ${lines.join('; ')}. Resume the run, or leave it paused?`.slice(0, 2000),
+      options: [{ id: 'resume', label: 'Resume the run', decision: 'none' }, { id: 'leave', label: 'Leave it paused', decision: 'none' }],
+      recommended: 'leave', deadline: this.o.now() + DAY, fallback: 'you', default: 'leave', provisional: false, owner: 'you', key: pin, pinned_to: { kind: 'evidence', ref: pin },
+    });
+    await this.o.appendCore('work.run', { ask: run.ask, step: 'paused', scope: run.scope, breaker: handle, why: `${RUN_BREAKER} attempts in a row ended in anything but PASS` }, { subject: run.ask, v: 2 });
+    return true;
+  }
+  /**
+   * A standing run's notice, which needs no answer: every 7 days from its approval, what it landed in the week, the
+   * issues it joined that it left unlanded, and what it spent, recorded as `work.run` with step `notice`.
+   */
+  private async notice(run: { ask: string; scope: string }, approval: Approval, repo: string, rows: Map<number, Row>, worked: Set<number>): Promise<void> {
+    const [last] = (await this.o.raw(`SELECT MAX(ts) AS at FROM events WHERE kind = 'work.run' AND subject = ? AND json_extract(data, '$.step') = 'notice'`, [run.ask])) as { at: number | null }[];
+    const from = last?.at ?? approval.at;
+    const to = this.o.now();
+    if (to - from < WEEK) return;
+    const landings = (await this.o.raw(`SELECT json_extract(data, '$.issue') AS issue FROM events WHERE kind = 'landing.made' AND json_extract(data, '$.step') = 'landed'
+      AND json_extract(data, '$.repo') = ? AND ts > ? AND ts <= ? ORDER BY log_pos`, [repo, from, to])) as { issue: number }[];
+    const landed = [...new Set(landings.map((l) => Number(l.issue)).filter((n) => worked.has(n)))];
+    const left = approval.issues.filter((n) => !landed.includes(n) && rows.get(n) && rows.get(n)!.word !== 'PASS');
+    const [spent] = (await this.o.raw(`SELECT COUNT(*) AS attempts FROM events WHERE kind = 'work.attempt' AND subject = ? AND json_extract(data, '$.step') = 'started' AND ts > ? AND ts <= ?`, [run.ask, from, to])) as { attempts: number }[];
+    await this.o.appendCore('work.run', {
+      ask: run.ask, step: 'notice', scope: run.scope, from, to,
+      landed: landed.map((n) => `#${n}`), left: left.map((n) => `#${n}`), spent: { attempts: Number(spent?.attempts ?? 0) },
+    }, { subject: run.ask, v: 2 });
   }
 
   // ---- Attempts.
@@ -507,6 +655,9 @@ export class Work {
   private async start(ask: string, approval: Approval, n: number, issue: Issue, list: Attempt[], order: string, task = false): Promise<{ started: boolean; why: string }> {
     const k = list.length;
     const agent = approval.agents[k % approval.agents.length]!;
+    // At its plan share a run waits for the next window, asking for no start meanwhile (#1335).
+    const share = await this.o.starts().atShare(ask, agent);
+    if (share) return { started: false, why: `the next plan window: ${share}` };
     const turn = approval.agents.length > 1 ? `${agent}'s turn, as the approved agents take turns` : `${agent}, the approved agent`;
     const last = list.at(-1);
     const tree = last ? await this.o.starts().treeOf(last.run) : undefined;
@@ -625,20 +776,63 @@ function unserved(body: string): string | undefined {
   return names.some(serves) ? undefined : names.join(', ');
 }
 
+/** A file as the default branch the checkout last fetched holds it, or undefined when it holds none there. */
+async function onMain(checkout: string, path: string): Promise<string | undefined> {
+  for (const ref of ['refs/remotes/origin/HEAD', 'refs/remotes/origin/main']) {
+    const text = await new Promise<string | undefined>((done) => execFile('git', ['-C', checkout, 'show', `${ref}:${path}`], { encoding: 'utf8', env: gitEnv(), timeout: 30_000, maxBuffer: 64 << 20 }, (error, out) => done(error ? undefined : String(out))));
+    if (text !== undefined) return text;
+  }
+  return undefined;
+}
+/** The sections a markdown file has on GitHub: each heading's anchor (a repeat gets -1, -2, ...) and each `<a id>` or `name`. */
+function anchorsOf(text: string): Set<string> {
+  const out = new Set<string>();
+  const seen = new Map<string, number>();
+  for (const m of text.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)) {
+    const slug = m[1]!.toLowerCase().replace(/<[^>]*>/g, '').replace(/[^\p{L}\p{N}\s_-]/gu, '').trim().replace(/\s/g, '-');
+    const k = seen.get(slug) ?? 0;
+    seen.set(slug, k + 1);
+    out.add(k ? `${slug}-${k}` : slug);
+  }
+  for (const m of text.matchAll(/<a\s+(?:id|name)="([^"]+)"/gi)) out.add(m[1]!.toLowerCase());
+  return out;
+}
+
+/** Words that would read an issue's text, not its structure: its text, body, title or comments mentioning something. */
+const TEXT_RULE = /\b(?:(?:whose|where|with|that|which)\s+(?:its\s+|the\s+)?)?(?:text|body|title|description|comments?)\s+(?:mentions?|contains?|says?|match(?:es)?|includes?|reads?)\b\s*(?:"[^"]*"|'[^']*'|\S+)?|\b(?:mentioning|containing|about)\s+(?:"[^"]*"|'[^']*')/i;
+/** The words in quotes, in order. */
+const quoted = (s: string): string[] => [...s.matchAll(/"([^"]+)"|'([^']+)'|`([^`]+)`/g)].map((m) => (m[1] ?? m[2] ?? m[3])!.trim()).filter(Boolean);
 /**
- * A scope's words as #1330's bounds: the issues it names by number (`#12`, `#12-#15`), the agents in the order it names
- * them (Claude Code, Codex), how many at once (`two at a time`, `3 at once`), its plan share (`50% of each plan
- * window`) and its end (`until <ISO time>`). Bounds it doesn't say take defaults: Claude Code alone, one at a time, the
- * whole plan window, no end. A string says what's missing.
+ * A standing run's rule in a scope's words (#1335): its labels (`labelled "ready"`, `labelled "a" and "b"`), its
+ * milestone (`in milestone "M1"`), and whose work joins (`by you`, else you or a collaborator); null when they name none.
+ */
+function ruleIn(words: string): Rule | null {
+  const labelled = /\blabell?ed\s+((?:(?:"[^"]+"|'[^']+'|`[^`]+`)(?:\s*(?:,|and)\s*)?)+|[\w:./-]+)/i.exec(words)?.[1];
+  const labels = labelled ? (quoted(labelled).length ? quoted(labelled) : [labelled]) : [];
+  const ms = /\b(?:in|from|under)\s+(?:the\s+)?milestone\s+("[^"]+"|'[^']+'|`[^`]+`|[\w.-]+)/i.exec(words)?.[1];
+  const milestone = ms ? quoted(ms)[0] ?? ms : null;
+  if (!labels.length && !milestone) return null;
+  return { labels, milestone, by: /\bby you\b(?!\s+or\b)/i.test(words) ? 'you' : 'you or a collaborator' };
+}
+
+/**
+ * A scope's words as #1330's bounds: the issues it names by number (`#12`, `#12-#15`), or a standing run's rule
+ * (#1335) when it names none, the agents in the order it names them (Claude Code, Codex), how many at once (`two at a
+ * time`, `3 at once`), its plan share (`50% of each plan window`) and its end (`until <ISO time>`). Bounds it doesn't say
+ * take defaults: Claude Code alone, one at a time, the whole plan window, no end. A string says what's missing, or names
+ * the rule that would read an issue's text, which no run takes.
  */
 export function scopeOf(words: string, now: number): Obj | string {
+  const text = TEXT_RULE.exec(words)?.[0].trim();
+  if (text) return `"${text}" reads the issue's text, and a run's rule reads only its structure: author role, labels, milestone or epic, and its Runs on: line. Nothing was asked.`;
   const issues = new Set<number>();
   for (const m of words.matchAll(/#(\d+)(?:\s*(?:-|–|to|through)\s*#?(\d+))?/g)) {
     const from = Number(m[1]);
     const to = m[2] ? Number(m[2]) : from;
     for (let n = from; n <= to && n - from < 1000; n++) issues.add(n);
   }
-  if (!issues.size) return 'Name the issues by number, such as "work through #12, #14 and #15 with Claude Code, two at a time".';
+  const rule = issues.size ? null : ruleIn(words);
+  if (!issues.size && !rule) return 'Name the issues by number, such as "work through #12, #14 and #15 with Claude Code, two at a time", or a rule, such as "work through open issues labelled "ready" with Claude Code".';
   const agents = [...new Set([...words.matchAll(/\b(claude[ -]?code|claude|codex)\b/gi)].map((m) => (/codex/i.test(m[1]!) ? 'codex' : 'claude-code')))];
   const NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
   const once = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+at\s+(?:a\s+time|once)\b/i.exec(words);
@@ -647,7 +841,7 @@ export function scopeOf(words: string, now: number): Obj | string {
   const end = until ? Date.parse(until[1]!) : null;
   if (until && (end === null || Number.isNaN(end) || end <= now)) return `"${until[1]}" is no time still to come: give the end as an ISO time.`;
   return {
-    issues: [...issues].sort((a, b) => a - b), agents: agents.length ? agents : ['claude-code'],
+    issues: [...issues].sort((a, b) => a - b), ...(rule ? { rule } : {}), agents: agents.length ? agents : ['claude-code'],
     at_once: once ? (NUM[once[1]!.toLowerCase()] ?? Number(once[1])) : 1, plan_share: share ? Math.min(100, Number(share[1])) : 100,
     ...(end !== null ? { until: end } : {}),
   };

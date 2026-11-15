@@ -598,6 +598,8 @@ timed.push('tests/acceptance/2197/budget.test.ts');
 alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
+// #1335's files each start a hub, a played forge and played agents, and run a standing run (AC4 steps the hub's clock).
+alone.push('tests/acceptance/1335/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
