@@ -158,7 +158,7 @@ export class StopReply {
     if (!block && !proceeded) {
       const due = live?.due && live.due.at > this.options.services.now() ? live.due : null;
       const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
-      await this.options.services.gate.turnEnded(lane && judged?.claim ? judged.claim : null, background, stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
+      await this.options.services.gate.turnEnded(judged?.claim ?? null, background, stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
       if (live) live.words = undefined;
       if (lane && judged?.claim && background.length && lane.slow.length) await this.options.events.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
     }

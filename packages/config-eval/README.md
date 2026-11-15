@@ -7,7 +7,7 @@ Configuration evals (#112). A change to instruction files, skills, hooks, guards
 ## Where new code goes
 
 - `src/index.ts`: the eval (`runEval`) and its shapes.
-- `src/archive.ts`: reading real past tasks from the archive (`archivedTasks`), each with its session's outside calls.
+- `src/archive.ts`: reading real past tasks from the archive (`archivedTasks`), each with its session's outside calls. `src/removal.ts`: a removal lesson's frozen plan (#2077), the newest 20 tasks from the same git repository and up to four older tasks reported separately; three repeats per side. The hub records that plan and the result, and owns the conditional removal.
 - `src/launcher.ts`: the default launcher, the real agents and judge on your plan, headless as the adapters' facts launch them; the replayed agent's throwaway home and sandbox.
 - `src/recording.ts`: what counts as an outside call, matching one to the recording, and the replay's answering server (the recorded MCP servers, the shell hook, the tunnel to the model endpoint).
 - Tests: `test/`, against fake `claude` and `codex` executables; the acceptance suites are `tests/acceptance/112/` (with the live run) and `tests/acceptance/1108/`.

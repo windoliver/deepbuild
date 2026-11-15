@@ -137,8 +137,13 @@ fn vmul(a: [f64; 2], k: f64) -> [f64; 2] {
 /// The heads of `verbs` (after its ops), for a stroke `stroke` u wide: at the start pointing back
 /// along the path, at the end pointing on.
 pub fn build(verbs: &[Verb], ends: &Ends, stroke: f64) -> Vec<Built> {
-    let length = pathops::length(verbs);
-    if length <= 0.0 {
+    build_sized(verbs, ends, stroke, pathops::length(verbs))
+}
+
+/// [`build`] with heads sized for a path `length` u long (#223: a head redrawn under a warp keeps
+/// the size it has on the path unwarped).
+pub fn build_sized(verbs: &[Verb], ends: &Ends, stroke: f64, length: f64) -> Vec<Built> {
+    if length <= 0.0 || pathops::length(verbs) <= 0.0 {
         return Vec::new();
     }
     let mut out = Vec::new();

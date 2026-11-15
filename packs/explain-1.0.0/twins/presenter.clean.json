@@ -1,0 +1,67 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "presenter: every rule kept",
+  "description": "presenter: every rule kept: explain@1's presenter.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "2s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.presenter@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "cue_opening",
+            "kind": "fade_in",
+            "text": "MAKE",
+            "span": "0.5s",
+            "sub": "it move",
+            "data": {
+              "size": 124,
+              "sub_size": 40
+            }
+          },
+          {
+            "id": "cue_leave",
+            "kind": "fade_out",
+            "targets": [
+              "cue_opening"
+            ],
+            "span": "0.25s"
+          },
+          {
+            "id": "cue_coda",
+            "kind": "fade_in",
+            "text": "END",
+            "span": "0.75s"
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  }
+}

@@ -26,6 +26,7 @@ pub mod history;
 pub mod hit;
 pub mod hull;
 pub mod ies;
+pub mod inset;
 pub mod label;
 pub mod lens;
 pub mod light;
@@ -60,6 +61,7 @@ pub mod tints;
 pub mod trail;
 pub mod uv;
 pub mod vars;
+pub mod views;
 pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building

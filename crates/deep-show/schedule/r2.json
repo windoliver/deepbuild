@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "976b73c6e9baaaf84c2e849194bfa0548584197790a52d34bedafbd23759612c",
+  "set_digest": "23ccefca24e42df0e84b40c312fa8dd8c5bc14c198a82a1fd87da1a23e62602a",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "cells@1": {
@@ -151,7 +151,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
+      "digest": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -180,7 +180,7 @@
       }
     },
     "motion@1": {
-      "digest": "ea5176c236b992e3607f46c3d4b544a9172517ace31435fff4fb7e1756ed01c2",
+      "digest": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -512,6 +512,19 @@
         ],
         "writes": [
           "look.finish"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
         ],
         "per": "item"
       },
@@ -960,6 +973,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "marks2d.warp",
       "motion.fields",
       "motion.flip",
       "text.columns"

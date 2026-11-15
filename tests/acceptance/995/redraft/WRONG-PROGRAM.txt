@@ -1,0 +1,168 @@
+#995, the blind redraft: the saved failing output of tests/acceptance/995/redraft/panel.rs on wrong programs.
+
+Conditions of every run: November 13, 2026, a Linux arm64 box (shared and loaded, so only the memory readings are
+evidence, no timing), GPUI's headless renderer on wgpu, the dev profile, in a scratch worktree of the base (origin/main
+at e0c90a5a5) with three changes that only let deep-app build on Linux and are no part of the base: gpui-pre-wgpu patched
+to a scratch copy with one extra match arm (.cargo/config.toml, and Cargo.lock after it, so no --locked), and one
+macOS-only call in crates/deep-app/src/main.rs put under cfg(target_os = "macos"). Memory is VmRSS + VmSwap of the test's
+process. Paths are shortened to <scratch> and ~. The base already holds #995's fix, so the issue's wrong program ("the
+merge base", a panel that keeps every picture it was ever shown) is planted as a mutant; each mutant was reverted after
+its run (git diff -- crates/deep-app/src/show.rs was empty).
+
+Command, from the checkout:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 nice cargo test -p deep-app --test acceptance_995
+
+The third verdict is INCONCLUSIVE in every run off macOS, on the base too (README: Platforms).
+
+==== Wrong program 1: the panel keeps every picture it was ever shown (the issue's problem, the merge base's) ====
+
+diff --git a/crates/deep-app/src/show.rs b/crates/deep-app/src/show.rs
+index 07bb5597c..55c3a076f 100644
+--- a/crates/deep-app/src/show.rs
++++ b/crates/deep-app/src/show.rs
+@@ -262,7 +262,7 @@ impl CanvasPanel {
+         };
+         let unused = &mut self.unused;
+         self.pictures.retain(|h| {
+-            let keep = used(&h.sha);
++            let keep = used(&h.sha) || true; // mutant: the panel keeps every picture it was ever shown
+             if !keep && h.painted {
+                 unused.push(h.image.clone());
+             }
+
+     Running ../../tests/acceptance/995/redraft/panel.rs (target/debug/deps/acceptance_995-<hash>)
+
+running 3 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+the canvas panel's process held 212.3 MB after revision 10, 1259.2 MB after revision 1000: 1047.0 MB more
+test presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ... FAILED
+
+---- presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ----
+FAIL: the canvas panel held 1047.0 MB more after 1000 revisions than after the first 10 (212.3 MB after revision 10, 1259.2 MB after revision 1000): past the issue's 20 MB, about 1.06 MB a revision, each with a new 1 MB picture
+
+test after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ... FAILED
+
+---- after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ----
+FAIL: the canvas panel still held revision 999's picture after revision 1000 replaced it: with the picture gone from the evidence store, a later revision naming it drew [135, 249, 249], its color ([135, 249, 249]); only the shown pictures may be held
+
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+
+---- the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ----
+INCONCLUSIVE: off macOS the GPU's textures needn't count in the process's memory, so the reading (212.3 MB after revision 10, 1259.2 MB after revision 1000) can't show them freed; the reference Macs judge this
+
+
+test result: FAILED. 0 passed; 3 failed
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+
+Caused by:
+  process didn't exit successfully: `<scratch>/target/debug/deps/acceptance_995-<hash>` (exit status: 1)
+exit 1
+
+==== Wrong program 2, the opposite: the panel keeps only the newest shown revision's pictures ====
+
+diff --git a/crates/deep-app/src/show.rs b/crates/deep-app/src/show.rs
+index 07bb5597c..085c4e02b 100644
+--- a/crates/deep-app/src/show.rs
++++ b/crates/deep-app/src/show.rs
+@@ -255,7 +255,7 @@ impl CanvasPanel {
+         self.shown
+             .retain(|s| s.rect != p.rect || s.session != p.session);
+         self.shown.push(p);
+-        let (shown, waiting) = (&self.shown, &self.waiting);
++        let (shown, waiting) = (&self.shown[self.shown.len() - 1..], &self.waiting); // twin: only the newest revision's pictures are kept
+         let used = |sha: &str| {
+             (shown.iter().chain(waiting))
+                 .any(|p| p.layers.iter().any(|l| l.picture.as_deref() == Some(sha)))
+
+     Running ../../tests/acceptance/995/redraft/panel.rs (target/debug/deps/acceptance_995-<hash>)
+
+running 3 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+the canvas panel's process held 202.0 MB after revision 10, 209.9 MB after revision 1000: 7.9 MB more
+test presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ... ok
+test after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ... FAILED
+
+---- after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ----
+FAIL: after revision 1000 of one document, the canvas panel drew [255, 255, 255] at the middle of the other document's panel, not its shown revision's picture ([178, 252, 78]): it freed a picture a shown revision uses; after revision 1001 with revision 1000's picture again, the canvas panel drew [232, 250, 24] and [255, 255, 255] at the middles of its panels, not the shown pictures ([232, 250, 24] and [178, 252, 78]): it freed a picture a shown revision uses
+
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+
+---- the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ----
+INCONCLUSIVE: off macOS the GPU's textures needn't count in the process's memory, so the reading (202.0 MB after revision 10, 209.9 MB after revision 1000) can't show them freed; the reference Macs judge this
+
+
+test result: FAILED. 1 passed; 2 failed
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+
+Caused by:
+  process didn't exit successfully: `<scratch>/target/debug/deps/acceptance_995-<hash>` (exit status: 1)
+exit 1
+
+==== Wrong program 3: the panel loads no picture ====
+
+diff --git a/crates/deep-app/src/show.rs b/crates/deep-app/src/show.rs
+index 07bb5597c..33fa41816 100644
+--- a/crates/deep-app/src/show.rs
++++ b/crates/deep-app/src/show.rs
+@@ -325,6 +325,7 @@ fn picture(evidence: &Path, sha: &str) -> Option<Arc<RenderImage>> {
+     #[cfg(feature = "canvas-fixture")]
+     crate::canvas_fixture::planted_decode();
+     let bytes = std::fs::read(evidence.join(sha.get(..2)?).join(sha.get(2..)?)).ok()?;
++    let bytes = bytes.get(..0)?.to_vec(); // twin: the panel loads no picture
+     let mut reader =
+         image::ImageReader::with_format(std::io::Cursor::new(bytes), image::ImageFormat::Png);
+     let mut limits = image::Limits::default();
+
+     Running ../../tests/acceptance/995/redraft/panel.rs (target/debug/deps/acceptance_995-<hash>)
+
+running 3 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+the canvas panel's process held 199.6 MB after revision 10, 206.9 MB after revision 1000: 7.4 MB more
+test presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ... FAILED
+
+---- presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ----
+FAIL: after revision 10, the canvas panel drew [255, 255, 255] at the middle of its panel, not revision 10's picture ([202, 2, 54]); after revision 1000, the canvas panel drew [255, 255, 255] at the middle of its panel, not revision 1000's picture ([232, 250, 24])
+
+test after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ... FAILED
+
+---- after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ----
+FAIL: after revision 1000, the canvas panel drew [255, 255, 255] at the middle of its panel, not revision 1000's picture ([232, 250, 24]); after revision 1000 of one document, the canvas panel drew [255, 255, 255] at the middle of the other document's panel, not its shown revision's picture ([178, 252, 78]): it freed a picture a shown revision uses; after revision 1001 with revision 1000's picture again, the canvas panel drew [255, 255, 255] and [255, 255, 255] at the middles of its panels, not the shown pictures ([232, 250, 24] and [178, 252, 78]): it freed a picture a shown revision uses
+
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+
+---- the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ----
+INCONCLUSIVE: off macOS the GPU's textures needn't count in the process's memory, so the reading (199.6 MB after revision 10, 206.9 MB after revision 1000) can't show them freed; the reference Macs judge this
+
+
+test result: FAILED. 0 passed; 3 failed
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+
+Caused by:
+  process didn't exit successfully: `<scratch>/target/debug/deps/acceptance_995-<hash>` (exit status: 1)
+exit 1
+
+==== For comparison, the base itself (the same run conditions) ====
+
+     Running ../../tests/acceptance/995/redraft/panel.rs (target/debug/deps/acceptance_995-<hash>)
+
+running 3 tests
+TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device /dev/dri/renderD128 (VK_ERROR_INCOMPATIBLE_DRIVER)
+the canvas panel's process held 203.6 MB after revision 10, 210.4 MB after revision 1000: 6.7 MB more
+test presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ... ok
+test after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ... ok
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+
+---- the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ----
+INCONCLUSIVE: off macOS the GPU's textures needn't count in the process's memory, so the reading (203.6 MB after revision 10, 210.4 MB after revision 1000) can't show them freed; the reference Macs judge this
+
+
+test result: FAILED. 2 passed; 1 failed
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+
+Caused by:
+  process didn't exit successfully: `<scratch>/target/debug/deps/acceptance_995-<hash>` (exit status: 1)
+exit 1

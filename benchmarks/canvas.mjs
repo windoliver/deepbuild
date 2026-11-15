@@ -1104,8 +1104,10 @@ const EFFICIENCY = {
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
   // #548: each reading by its own name (benchmarks/logic-budgets.mjs).
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
+  // #1968: each reading by its own name (benchmarks/code-film.mjs).
+  'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1551,6 +1553,9 @@ workloads['logic-budgets'] = async () => (await import('./logic-budgets.mjs')).l
 workloads.axes3d = async () => (await import('./axes3d.mjs')).axes3d({ root, release, once, runs });
 // #224's budget: the helicoid-to-catenoid family's 128 × 128 rebuild as its slider moves (benchmarks/surface.mjs).
 workloads.surface = async () => (await import('./surface.mjs')).surface({ release, once, runs });
+// #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
+// still code item's steps per frame (benchmarks/code-film.mjs).
+workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
