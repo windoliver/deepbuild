@@ -431,9 +431,13 @@ pub fn reads(event: &Value) -> bool {
 
 /// Each ask the event puts in front of you, keyed by the event and the ask: the core showing it, at its batch or at
 /// once (#22), the core's undo of its default, or the core moving its deadline (#908), so the notification names the
-/// time its default applies.
+/// time its default applies. An ask being raised is one too, for a record nothing shows its asks in: it notifies only
+/// if the ask is in sight when it comes due, and one waiting for its batch isn't.
 fn openings(event: &Value) -> Vec<(String, String)> {
     let id = event["id"].as_str().unwrap_or_default();
+    if event["kind"] == "ask.created" {
+        return vec![(id.to_owned(), states::handle(event))];
+    }
     if event["writer"] != "core" {
         return Vec::new();
     }
@@ -669,16 +673,23 @@ mod tests {
         let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
             "question": "Push?", "default": "no", "deadline": 99_000_000,
             "options": [{"id": "no", "label": "No"}]}});
+        // The record is a batching core's: an earlier ask was shown and answered.
+        let before = [
+            json!({"kind": "ask.created", "id": "a0", "session": "s1", "writer": "mcp:agent", "data": {"question": "Lint?"}}),
+            json!({"kind": "ask.batched", "id": "b0", "writer": "core", "data": {"asks": [{"ask": "ask:a0"}]}}),
+            json!({"kind": "ask.answered", "id": "c0", "writer": "core", "subject": "ask:a0", "data": {}}),
+        ];
+        let with = |events: &[Value]| view(&[&before[..], events].concat());
         let mut notifier = Notifier::new(Duration::from_secs(1));
         notifier.start(&View::default(), Vec::new());
         notifier.saw(&ask, 1_000);
-        let early = notifier.due(&view(std::slice::from_ref(&ask)), 5_000, None, false);
+        let early = notifier.due(&with(std::slice::from_ref(&ask)), 5_000, None, false);
         assert_eq!(early.len(), 0, "notified before its batch: {early:?}");
 
         let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {
             "batch": "batch:1970-01-01T08:00:00.000Z", "asks": [{"ask": "ask:a1"}]}});
         notifier.saw(&shown, 6_000);
-        let posted = notifier.due(&view(&[ask, shown]), 8_000, None, false);
+        let posted = notifier.due(&with(&[ask, shown]), 8_000, None, false);
         let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
         assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
     }

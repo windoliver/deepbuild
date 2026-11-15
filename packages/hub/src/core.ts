@@ -600,8 +600,8 @@ export class Core {
 
     this.store = await openEvidenceStore({ root: this.root.evidence, now: this.now });
     const storage = this.durable.backend();
-    // Each event its own commit: the durable write points a run makes depend only on the events it appends,
-    // never on how many arrived together, so a cut at any one can be replayed.
+    // Each event its own commit, but the core's own made in one turn, an answer and the decision it saves, share one
+    // (#22): the durable write points a run makes depend only on the events it appends, so a cut at any one can be replayed.
     this.record = receipting(await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}), ...(this.options.plant === 'turn-closes-at-child-stop' ? { plant: this.options.plant } : {}) }));
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);

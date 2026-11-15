@@ -3975,7 +3975,13 @@ mod tests {
         for id in ["a1", "d1", "d2", "d3", "d4", "d5"] {
             view.apply(ask(id, "taste", "mcp:agent"));
         }
-        view.apply(ask("x", "exception", "core"));
+        // The core's "keeps asking" for sd, keyed on its thread as the core keys it.
+        let mut keeps_asking = ask("x", "exception", "core");
+        keeps_asking["data"]["key"] = {
+            use sha2::Digest;
+            format!("{:x}", sha2::Sha256::digest(b"asks.fold:sd")).into()
+        };
+        view.apply(keeps_asking);
         view.apply(ask("d6", "taste", "mcp:agent"));
         let rows = |view: &crate::record::View| -> Vec<(String, String)> {
             read(view, Kind::NeedsYou, None)
