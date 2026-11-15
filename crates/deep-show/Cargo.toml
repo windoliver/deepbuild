@@ -74,6 +74,11 @@ test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #533: the logic module's test builds (the #533 acceptance README: Test features of
+# deep-show): a patch release of the shipped logic implementation in its place, and a planted
+# logic module that requires physics; #1919's `test-leave-out-physics` is the full set without it.
+test-logic-patch = []
+test-logic-needs-physics = []
 # Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
 plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
@@ -119,6 +124,8 @@ test-tick = ["dep:deep-canvas-test-modules"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #497: a module stepping at its item's step_rate into a held array.
 test-held = ["dep:deep-canvas-test-modules"]
+# #169: test.latch, whose checkpoint keeps two plays that draw alike apart.
+test-page-latch = ["dep:deep-canvas-test-modules"]
 # Issue #388: test builds that leave look, or text, out of the build set's list; the seal
 # refuses each at startup, naming the module.
 test-leave-out-look = []
@@ -241,6 +248,8 @@ test-rules-shared = ["dep:deep-canvas-test-modules"]
 test-rules-isolated = ["dep:deep-canvas-test-modules"]
 test-registries-load = ["dep:deep-canvas-test-modules"]
 test-leave-out-effects = []
+# Issue #1940: a planted loop module that registers effects.audit itself and so requires effects.
+test-effects-audit-in-loop = []
 # Issue #499: a build without the media module; the test module that probes an asset through the
 # decode worker, and its planted twin that calls through media; the planted media@1 whose reverb
 # checkpoint leaves out its tail.
@@ -312,7 +321,7 @@ deep-text = { path = "../deep-text" }
 # Issue #402: a terminal's PTY (openpty, login_tty, the window size) and stopping what serve
 # started, by PID; already in the lockfile.
 libc = "0.2"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.

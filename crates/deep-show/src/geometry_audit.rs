@@ -21,6 +21,8 @@ pub const GEOMETRY_AUDIT: &str = "geometry.audit";
 pub enum Planted {
     SamplesOnly,
     OverlapsOnly,
+    /// #1941's: a floating item's fix deletes it instead of lowering it.
+    FloatingFixDeletes,
     /// #1700's, in the shape readings (`geometry.shape`).
     Shape(crate::geometry::shape::Planted),
     /// #409's, in the film audit's craft@1 checks.
@@ -33,6 +35,7 @@ pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
     Some(crate::hub::Planted::Audit(match name {
         "sweep_audits_samples_only" => Planted::SamplesOnly,
         "audit_checks_overlaps_only" => Planted::OverlapsOnly,
+        "floating_fix_deletes_item" => Planted::FloatingFixDeletes,
         _ => match crate::geometry::shape::planted(name) {
             Some(p) => Planted::Shape(p),
             None => Planted::Craft(crate::film_audit::craft::planted(name)?),
@@ -123,6 +126,19 @@ fn boundary_edges(mesh: &deep_canvas_scene3d::geom::Mesh, m: &Affine3) -> Vec<[V
         .filter(|(n, _)| *n == 1)
         .map(|(_, e)| e.map(|i| apply(m, mesh.positions[i as usize])))
         .collect()
+}
+
+/// #1725: each solid's resting gap at `t` (Geometry audit: scenes, `support`), as the audit reads
+/// its true shapes: `{id, gap}` in m, how far it falls along -Y before it meets a part under it,
+/// 0 when it rests on or in one, and null when nothing is under it. A reading, never a check.
+pub(crate) fn resting(doc: &Value, t: i64) -> Value {
+    let Ok(solids) = solids_at(doc, t, &BTreeSet::new()) else {
+        return json!([]);
+    };
+    let rows: Vec<Value> = (0..solids.len())
+        .map(|i| json!({"id": solids[i].id, "gap": deep_canvas::geometry_audit::gap_below(&solids, i)}))
+        .collect();
+    Value::Array(rows)
 }
 
 /// Every solid part of `doc` at `t` (flicks), as the audit reads it: its true shape placed in the
@@ -626,8 +642,13 @@ fn issue(f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>, fix: Value)
         ),
         _ => format!("an end of {} lands on nothing", f.ids[0]),
     };
+    // #1938: a fix that is patch ops is also under `fix_ops`, where every check kind's is.
+    let ops = fix.is_array().then(|| fix.clone());
     let mut v = json!({"check": GEOMETRY_AUDIT, "code": f.code, "severity": "error", "ids": f.ids,
                        "state": state, "t": t, "what": what, "fix": fix});
+    if let Some(ops) = ops {
+        v["fix_ops"] = ops;
+    }
     if f.code == OVERLAP {
         v["depth"] = json!(f.by);
     }
@@ -1048,6 +1069,7 @@ impl crate::hub::Hub<'_> {
         let mut out = std::collections::BTreeMap::new();
         let samples_only = self.planted(crate::hub::Planted::Audit(Planted::SamplesOnly));
         let overlaps_only = self.planted(crate::hub::Planted::Audit(Planted::OverlapsOnly));
+        let deletes = self.planted(crate::hub::Planted::Audit(Planted::FloatingFixDeletes));
         for r in c
             .requirements
             .iter()
@@ -1082,6 +1104,11 @@ impl crate::hub::Hub<'_> {
                 j.ms += run.ms;
                 for mut i in run.issues {
                     i["doc"] = json!(doc);
+                    if deletes && i["code"] == deep_canvas::geometry_audit::FLOATING {
+                        let ops = json!([{"op": "delete", "id": i["ids"][0]}]);
+                        i["fix"] = ops.clone();
+                        i["fix_ops"] = ops;
+                    }
                     j.issues.push(i);
                 }
                 for s in run.not_run {

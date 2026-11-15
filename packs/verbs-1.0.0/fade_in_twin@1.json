@@ -1,0 +1,40 @@
+{
+  "id": "verbs.fade_in_twin",
+  "version": "1.0",
+  "title": "Fade in, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of fade_in: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "shift": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "about": "the offset each target fades in from, back to where it is"
+    },
+    "from": {
+      "type": "ID",
+      "default": "none",
+      "about": "an item each target fades in from, in place of shift"
+    },
+    "scale": {
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "about": "the scale each target fades in from, as a share of its own"
+    }
+  },
+  "steps": {
+    "fade": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/opacity": 0
+        }
+      }
+    }
+  }
+}

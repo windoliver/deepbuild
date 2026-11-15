@@ -592,9 +592,19 @@ impl Hub<'_> {
             .as_ref()
             .map(|v| v.cuts.clone())
             .unwrap_or_default();
-        let captions = captions::layout(&lines, &limits, frame, &graphemes, &cuts).map_err(|m| {
+        let mut captions = captions::layout(&lines, &limits, frame, &graphemes, &cuts).map_err(|m| {
             json!({"outcome": "refused", "code": "narration.words_differ", "line": m.line, "words": m.words, "record_words": m.times})
         })?;
+        // #466's planted design times each caption from the end of its entrance.
+        if self.scenario.module_planted.as_deref() == Some(crate::caption_design::AFTER_ENTRANCE)
+            && self.caption_design(doc).is_some()
+        {
+            for c in &mut captions {
+                let by = crate::caption_design::entrance_span(c.start, c.end);
+                c.start += by;
+                c.end += by;
+            }
+        }
         Ok(Some(Laid {
             profile,
             limits,
@@ -630,7 +640,24 @@ impl Hub<'_> {
         let Some(caption) = laid.captions.iter().find(|c| c.start <= t && t < c.end) else {
             return;
         };
-        self.renderer.caption = self.caption_drawn(doc, caption, laid.limits.max_lines);
+        // #466: a caption whose words already show on screen points at them and draws nothing.
+        let ignored = self.scenario.module_planted.as_deref()
+            == Some(crate::caption_design::SHOWN_BY_IGNORED);
+        if let Some(by) = doc
+            .pointer("/script/captions/shown_by")
+            .and_then(Value::as_str)
+        {
+            if !ignored && crate::caption_design::shown_by(doc, by, &caption.lines) {
+                return;
+            }
+        }
+        self.renderer.caption = self.caption_drawn(doc, caption, laid.limits.max_lines, t);
+    }
+
+    /// The caption design of `doc`'s look, when it gives one.
+    pub(crate) fn caption_design(&self, doc: &Value) -> Option<crate::caption_design::Design> {
+        let def = self.look_def_of(doc)?;
+        crate::caption_design::design_of(&def).ok().flatten()
     }
 
     /// One caption as the layer draws it: its lines, centred, in the block's font role at its
@@ -640,7 +667,44 @@ impl Hub<'_> {
         doc: &Value,
         caption: &Caption,
         max_lines: usize,
+        t: i64,
     ) -> Option<Arc<crate::snapshot::Drawn>> {
+        let (items, key) = self.caption_items(doc, caption, max_lines, t)?;
+        if let Some(found) = self.media.captions_drawn.get(&key) {
+            return Some(found.clone());
+        }
+        let size = doc.get("size")?;
+        let mut layer = json!({"format": 1, "id": doc.get("id").cloned().unwrap_or(json!("captions")), "profile": "figure",
+            "title": "Captions", "description": "The caption layer of a film: the caption showing now.", "size": size,
+            "layers": {"captions": {"writer": "captions", "title": "Captions", "order": "a0"}}, "items": items});
+        if let Some(look) = doc.get("look") {
+            layer["look"] = look.clone();
+        }
+        let mut sched = Scheduler::new(&self.startup.sealed, self.options());
+        let mut session: DocSession = self.new_session();
+        session.load(&mut sched, &layer);
+        session.frame(&mut sched, 0, &default_view(&layer));
+        let painted = crate::frames::drawing_of(&sched, &session)?;
+        let drawn = Arc::new(
+            self.renderer
+                .prepare_drawing(&painted, &self.scenario.evidence)
+                .ok()?,
+        );
+        self.media.captions_drawn.insert(key, drawn.clone());
+        Some(drawn)
+    }
+
+    /// One caption's items as the layer draws them at `t` (its plate and its text, `plate` and
+    /// `text`), and the key its drawing is kept by: its lines, centred, in the block's font role
+    /// at its size, inside its box, over a rect of the box in its plate role when it names one;
+    /// or, when the look designs captions (#466), its plate and entrance as the design says.
+    pub(crate) fn caption_items(
+        &self,
+        doc: &Value,
+        caption: &Caption,
+        max_lines: usize,
+        t: i64,
+    ) -> Option<(serde_json::Map<String, Value>, String)> {
         let block = doc
             .pointer("/script/captions")
             .cloned()
@@ -661,12 +725,29 @@ impl Hub<'_> {
             return None;
         }
         let text = caption.lines.join("\n");
+        let design = self.caption_design(doc);
+        let entrance = crate::caption_design::entrance_span(caption.start, caption.end);
+        let into = design
+            .as_ref()
+            .map_or(0, |_| (t - caption.start).clamp(0, entrance));
+        let plant = self.scenario.module_planted.as_deref()
+            == Some(crate::caption_design::PLATE_IN_TEXT_ROLE);
         let key = hex(Sha256::digest(format!(
-            "{text}\n{block}\n{rect:?}\n{w}x{h}\n{}",
+            "{text}\n{block}\n{rect:?}\n{w}x{h}\n{}\n{into}/{entrance}\n{plant}",
             doc.get("look").unwrap_or(&Value::Null)
         )));
-        if let Some(found) = self.media.captions_drawn.get(&key) {
-            return Some(found.clone());
+        let font = block.get("font").and_then(Value::as_str).unwrap_or("body");
+        if let Some(d) = &design {
+            let role = block.get("plate").and_then(Value::as_str);
+            let items = crate::caption_design::items(
+                d,
+                &caption.lines,
+                (font, text_size, role),
+                ([w, h], safe),
+                (into, entrance),
+                plant,
+            );
+            return Some((items, key));
         }
         let mut items = serde_json::Map::new();
         if let Some(role) = block.get("plate").and_then(Value::as_str) {
@@ -674,27 +755,10 @@ impl Hub<'_> {
                 "params": {"box": rect, "paint": {"fill": {"role": role}}}}));
         }
         items.insert("text".into(), json!({"id": "text", "kind": "text@1", "layer": "captions", "name": "Caption", "order": "a2",
-            "params": {"text": text, "font": block.get("font").and_then(Value::as_str).unwrap_or("body"), "size": text_size,
+            "params": {"text": text, "font": font, "size": text_size,
                 "box": {"w": rect[2], "h": rect[3]}, "autosize": "none", "align": "center", "valign": "middle"},
             "at": {"pos": [rect[0], rect[1], 0]}}));
-        let mut layer = json!({"format": 1, "id": doc.get("id").cloned().unwrap_or(json!("captions")), "profile": "figure",
-            "title": "Captions", "description": "The caption layer of a film: the caption showing now.", "size": [w, h],
-            "layers": {"captions": {"writer": "captions", "title": "Captions", "order": "a0"}}, "items": items});
-        if let Some(look) = doc.get("look") {
-            layer["look"] = look.clone();
-        }
-        let mut sched = Scheduler::new(&self.startup.sealed, self.options());
-        let mut session: DocSession = self.new_session();
-        session.load(&mut sched, &layer);
-        session.frame(&mut sched, 0, &default_view(&layer));
-        let painted = crate::frames::drawing_of(&sched, &session)?;
-        let drawn = Arc::new(
-            self.renderer
-                .prepare_drawing(&painted, &self.scenario.evidence)
-                .ok()?,
-        );
-        self.media.captions_drawn.insert(key, drawn.clone());
-        Some(drawn)
+        Some((items, key))
     }
 
     /// The caption layer over a finished frame: the caption set for this frame, drawn once.

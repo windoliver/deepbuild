@@ -21,7 +21,7 @@ import { ownHome } from './keychain.js';
 import { adapterOf } from './hookmap.js';
 import { type Piece } from './context-fit.js';
 
-import { isPrCreate } from './forge.js';
+import { prCommands } from './pr-commands.js';
 
 import { type Plant } from './plant.js';
 
@@ -66,9 +66,9 @@ export const rulePieces = (head: string, rules: readonly (readonly [string, stri
   [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
 
 /** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
-export const ghToken = (): Promise<string | undefined> => {
+export const ghToken = (signal?: AbortSignal): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
-  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
+  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000, ...(signal ? { signal } : {}) }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
 
 export const SECRETS_TTL = 10_000;
@@ -239,7 +239,7 @@ export function callOf(d: Obj, { effects, tools }: ReturnType<typeof effectEntri
   const kind = String(d.kind);
   const command = typeof d.command === 'string' ? d.command : undefined;
   const matched = (Array.isArray(d.matched) ? d.matched : []).flatMap((n) => effects.get(String(n)) ?? []);
-  const pr = kind === 'shell' && command !== undefined && isPrCreate(command);
+  const pr = kind === 'shell' && command !== undefined && prCommands(command).some((pr) => pr.verb === 'create');
   // An MCP tool sends when its facts give it such an effect, or when it counts as send or destructive, by its facts or your rules.json.
   const counts = kind === 'mcp' ? tools.get(`mcp__${String(d.server)}__${String(d.tool)}`) ?? d.counts : undefined;
   const send = pr || matched.some((c) => EFFECTS.has(c)) || (kind === 'mcp' && ((typeof d.effect === 'string' && EFFECTS.has(d.effect)) || counts === 'send' || counts === 'destructive'));

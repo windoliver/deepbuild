@@ -1,0 +1,14 @@
+✔ SIGKILL of the real lease while the owner lives ends its Cargo group and releases captured output (1146.5175ms)
+✔ real deep lease cancels all binary builders after SIGTERM, with no recreated run root (2431.652792ms)
+✔ real deep lease cancels all binary builders after SIGKILL, with no recreated run root (1798.272583ms)
+✔ a failed process scan cannot turn a build with a live descendant into a successful result (10218.250042ms)
+✔ killing the recorded supervisor wrapper cannot strand Cargo (325.406ms)
+✔ successful build leader cannot leave a writer behind (380.488584ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16552.961291

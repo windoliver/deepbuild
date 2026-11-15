@@ -1,0 +1,8 @@
+## modules each command loads, in a set-up home with no hub (Node's loader hook), base -> work
+deep --version: 4 -> 4 modules; of them the contracts entry's: 0 -> 0; node:tls: 0 -> 0
+deep (no arguments): 45 -> 24 modules; of them the contracts entry's: 18 -> 0; node:tls: 1 -> 0
+deep status: 45 -> 24 modules; of them the contracts entry's: 18 -> 0; node:tls: 1 -> 0
+deep inbox: 42 -> 22 modules; of them the contracts entry's: 18 -> 0; node:tls: 0 -> 0
+deep hub status: 42 -> 16 modules; of them the contracts entry's: 18 -> 0; node:tls: 0 -> 0
+deep lease -- /usr/bin/true: 18 -> 18 modules; of them the contracts entry's: 0 -> 0; node:tls: 0 -> 0
+deep mcp: 42 -> 42 modules; of them the contracts entry's: 18 -> 18; node:tls: 0 -> 0

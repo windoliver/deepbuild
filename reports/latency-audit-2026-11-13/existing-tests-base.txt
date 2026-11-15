@@ -1,0 +1,35 @@
+# The two files whose failures above are not the change's: the same files on the base's sources and build.
+# node node_modules/vitest/vitest.mjs run packages/hub/test/onboarding.test.ts tests/acceptance/1338/proof.test.ts --no-file-parallelism --testTimeout=600000 --reporter=verbose
+ ✓ packages/hub/test/onboarding.test.ts > deep doctor in a home nobody set up > names deep setup as the fix for the hub, not deep hub start, which starts a hub no hook reaches 119ms
+ × packages/hub/test/onboarding.test.ts > deep setup > says in one line what it added, with no line for a timing relation that holds 937ms
+   → Its hooks and status line forwarder are in <tmp>/deep-test/h/.claude/settings.json, beside yours; its MCP server in <tmp>/deep-test/h/.claude.json; its skill at <tmp>/deep-test/h/.claude/skills/deepbuild; its safety rules at <tmp>/deep-test/h/.deepbuild/rules.json.
+ ✓ packages/hub/test/onboarding.test.ts > deep status with no session yet > says how a session comes to be listed, beside the count 0ms
+ ✓ packages/hub/test/onboarding.test.ts > deep status with no session yet > says nothing more once a session is listed 0ms
+ ✓ packages/hub/test/onboarding.test.ts > the Node that files outliving this run name > is Homebrew's opt link, which the next upgrade keeps, when that link runs the same Node 1ms
+ ✓ packages/hub/test/onboarding.test.ts > the Node that files outliving this run name > stays the Node running when the opt link names another version, or there is none 2ms
+ ✓ packages/hub/test/onboarding.test.ts > the Node that files outliving this run name > is the path as it is for a Node outside a Cellar 0ms
+ ✓ packages/hub/test/onboarding.test.ts > the hub's login service on macOS > never starts a job another home's plist loaded under the same label, and names that plist 218ms
+ ✓ packages/hub/test/onboarding.test.ts > the hub's login service on macOS > starts its own job again when that job is the one loaded 15340ms
+ ✓ packages/hub/test/onboarding.test.ts > the hub's login service on macOS > gives the hub its own HOME, so a hub launchd starts reads and writes only its own home 15419ms
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > never starts a unit another home's file loaded under the same name, and names that file
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > starts its own unit again when that unit is the one loaded
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > gives the hub its own HOME, so a hub systemd starts reads and writes only its own home
+ ↓ packages/hub/test/onboarding.test.ts > the hub's login service on Linux > starts through the real user manager from a home whose units it doesn't read
+ ✓ packages/hub/test/onboarding.test.ts > setup on a machine without what it needs > says to install Rust when cargo is missing, never a bare ENOENT 0ms
+ ✓ packages/hub/test/onboarding.test.ts > setup on a machine without what it needs > keeps a failed build's own message when cargo ran 0ms
+Error: ENOTEMPTY, Directory not empty: '<tmp>/deep-test'
+Error: Cannot find module '../16/helpers.ts' imported from <base>/tests/acceptance/1338/helpers.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: Its hooks and status line forwarder are in <tmp>/deep-test/h/.claude/settings.json, beside yours; its MCP server in <tmp>/deep-test/h/.claude.json; its skill at <tmp>/deep-test/h/.claude/skills/deepbuild; its safety rules at <tmp>/deep-test/h/.deepbuild/rules.json.
+ Test Files  2 failed (2)
+      Tests  1 failed | 11 passed | 4 skipped (16)
+vitest exit 1
+
+# tests/acceptance/1338/proof.test.ts again, with the helpers of tests/acceptance/16 it imports copied beside it
+ × tests/acceptance/1338/proof.test.ts > AC5 #1338.4e201b52 a credential copied to a machine without its key is refused, naming the proof > AC5 #1338.4e201b52 bob's credential copied to carol's machine, without bob's key, is refused there, naming the proof 2046ms
+   → bob's read lists maya's session cf431dab: exit 0; stdout: Working:
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: bob's read lists maya's session cf431dab: exit 0; stdout: Working:
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+vitest exit 1

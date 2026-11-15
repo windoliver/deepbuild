@@ -309,6 +309,7 @@ impl Hub<'_> {
         let mut form = doc.clone();
         let _ = self.inline_tables(&mut form);
         let _ = self.inline_vectors(&mut form);
+        self.inline_programs(&mut form);
         let session = self.evaluated(&form, t);
         let mut hits: Vec<(String, String)> = Vec::new();
         let mut quote = None;
@@ -436,6 +437,7 @@ impl Hub<'_> {
         for (asked, path) in [
             (probes.camera.is_some(), "camera"),
             (!probes.at.is_empty(), "probes"),
+            (!probes.views.is_empty(), "sheet"),
         ] {
             if asked {
                 return json!({"code": "out_of_range", "path": path});

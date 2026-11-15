@@ -219,6 +219,8 @@ fn register_compiling(
     .run(channels);
     register_arrange(r);
     register_score(r);
+    // #222: cue lists, expanded at check through the verbs of `cue.kind@1`.
+    crate::cues::register(r);
     // #538: a flip by array in the frame the hub draws.
     crate::held::register(r);
     r.code(
@@ -503,11 +505,15 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
 pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
 
 /// #504's wrong programs a scenario names, each compiled into the program.
-pub const PLANTED: [&str; 3] = [
+pub const PLANTED: [&str; 4] = [
     "slider_entries_ignored",
     "stage_sets_nothing",
     "stage_shot_cuts",
+    DIP_CROSS_FADES,
 ];
+
+/// #466's planted dip: its two sides cross-fade under its color at half weight.
+pub const DIP_CROSS_FADES: &str = "dip_cross_fades_under_ink";
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
@@ -524,6 +530,7 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
         Some("slider_entries_ignored") => crate::program::Planted::SliderEntriesIgnored,
         Some("stage_sets_nothing") => crate::program::Planted::StageSetIgnored,
         Some("stage_shot_cuts") => crate::program::Planted::StageShotCuts,
+        Some(DIP_CROSS_FADES) => crate::program::Planted::DipCrossFadesUnderInk,
         _ => Default::default(),
     };
     let options = crate::program::Options {
@@ -713,9 +720,9 @@ fn slide() -> Value {
 fn register_arrange(r: &mut Registrar) {
     use crate::arrange;
     use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-    let json_param = |name: &'static str| Param {
+    let json_param = |name: &'static str, form: &'static str| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: json!([]),
         min: None,
@@ -732,9 +739,12 @@ fn register_arrange(r: &mut Registrar) {
                 major: 1,
                 minor: 0,
                 params: vec![
-                    json_param("items"),
-                    json_param("relations"),
-                    json_param("broken_out"),
+                    json_param("items", "[item ID]"),
+                    json_param(
+                        "relations",
+                        "[{a: ID, rel: on | inside | next_to | against | facing | near | apart, b: ID, d?: m}]",
+                    ),
+                    json_param("broken_out", "[item ID]"),
                 ],
             }],
             migrations: Vec::new(),

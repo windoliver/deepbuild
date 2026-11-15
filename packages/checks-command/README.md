@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The first-party command check kind (#30). It runs a check's shell command in its checkout, hermetically, through host@1 (#236), and reports a closed run outcome, never a verdict: the exit, the scrubbed output, and from the tools' own reports (Vitest, Jest, node:test, pytest, go test) the tests that ran, every attempt, where each failure failed and the files read. `commandCheckKind(host)` fills the check.kind@1 slot.
+The first-party command check kind (#30). It runs a check's shell command in its checkout, hermetically, through host@1 (#236), and reports a closed run outcome, never a verdict: the exit, the scrubbed output, and from the tools' own reports (Vitest, Jest, node:test, pytest, go test) the tests that ran, every attempt, where each failure failed and the files read. `commandCheckKind(host)` fills the check.kind@1 slot. The hub holds the kind in its kind table (`packages/hub/src/kinds.ts`) and runs a claim's command checks through `runCommandCheck`; `@deepbuild/checks-journey` answers a command spec through it.
 
 ## Where new code goes
 

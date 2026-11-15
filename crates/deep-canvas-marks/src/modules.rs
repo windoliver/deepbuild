@@ -139,17 +139,26 @@ pub fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
         return item;
     };
     let mut placed = at.to_json();
-    if let (Some(own), Some(out)) = (fields.lowered.get("at"), placed.as_object_mut()) {
+    let own = fields.lowered.get("at");
+    if let Some(out) = placed.as_object_mut() {
         for k in ["place", "align", "anchor"] {
-            if let Some(v) = own.get(k) {
-                let mut v = v.clone();
-                if let Some(e) = edited.as_ref().and_then(|e| e.get(k)) {
-                    overlay(&mut v, e);
+            let edit = edited.as_ref().and_then(|e| e.get(k));
+            let v = match (own.and_then(|o| o.get(k)), edit) {
+                (Some(v), edit) => {
+                    let mut v = v.clone();
+                    if let Some(e) = edit {
+                        overlay(&mut v, e);
+                    }
+                    v
                 }
-                out.insert(k.into(), v);
-            }
+                // #1969: an anchor a channel keys on an item that names none (a `type` cue's
+                // cursor).
+                (None, Some(e)) if k == "anchor" => e.clone(),
+                (None, _) => continue,
+            };
+            out.insert(k.into(), v);
         }
-        if let Some(p) = own.get("pivot").filter(|p| p.is_string()) {
+        if let Some(p) = own.and_then(|o| o.get("pivot")).filter(|p| p.is_string()) {
             out.insert("pivot".into(), p.clone());
         }
     }
@@ -283,7 +292,13 @@ fn register_text(r: &mut Registrar) {
     r.operator(
         "counter",
         "items",
-        &["core.fields", "refs", "reading", "view(locale)", "text.copy"],
+        &[
+            "core.fields",
+            "refs",
+            "reading",
+            "view(locale)",
+            "text.copy",
+        ],
         &["text.counter"],
     )
     .applies(is_bound_text)
@@ -406,12 +421,14 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {
+    let params = item.get("params");
     is_text(doc, id, item)
-        && item
-            .get("params")
+        && (params
             .and_then(|p| p.get("animators"))
             .and_then(Value::as_array)
             .is_some_and(|a| !a.is_empty())
+            // #466: a reveal fades its units by the progress the frame evaluated.
+            || params.and_then(|p| p.get("reveal")).is_some_and(|r| !r.is_null()))
 }
 
 /// What a bound value or counter shows, its numbers in the view's locale.
@@ -512,6 +529,16 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
             if let Some(o) = fade {
                 unit[1] = (unit[1] + w * (o - 1.0)).clamp(0.0, 1.0);
+            }
+        }
+    }
+    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    if let Some(Value::Object(params)) = fields.get("params") {
+        if let Some(shares) =
+            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
+        {
+            for (unit, share) in out.iter_mut().zip(shares) {
+                unit[1] *= share;
             }
         }
     }
@@ -892,14 +919,41 @@ fn finish_kind() -> deep_canvas::kinds::Entry {
             major: 1,
             minor: 0,
             params: vec![
-                param("tone_map", ParamType::Json, json!("none")),
+                // The forms each reader takes (#1973): `read_tone_map` takes any object holding
+                // `agx`, whatever its value; `read_grade` any white balance; the finish skips a
+                // deband_lsb that is no number; ao and bloom as look@1's readers take them.
+                param(
+                    "tone_map",
+                    ParamType::Json(
+                        "none | filmic | agx | neutral | {agx} (agx: {white: f32, contrast: f32})",
+                    ),
+                    json!("none"),
+                ),
                 // EV100; the default's exposure scale is 1.
-                param("exposure", ParamType::Json, Value::Null),
-                param("grade", ParamType::Json, json!({})),
+                param("exposure", ParamType::Json("EV100"), Value::Null),
+                param(
+                    "grade",
+                    ParamType::Json(
+                        "{white_balance, slope: linear RGB, offset: linear RGB, power: linear RGB, saturation: f32} (white_balance: {temperature: K, tint})",
+                    ),
+                    json!({}),
+                ),
                 param("deband", ParamType::Str, json!("none")),
-                param("deband_lsb", ParamType::Json, json!(1)),
-                param("ao", ParamType::Json, json!("none")),
-                param("bloom", ParamType::Json, json!("none")),
+                param("deband_lsb", ParamType::Json("0..2 (8-bit steps)"), json!(1)),
+                param(
+                    "ao",
+                    ParamType::Json(
+                        "none | {radius, strength, samples, resolution, multi_bounce, specular} (radius: m, samples: 8 | 16, resolution: half | full)",
+                    ),
+                    json!("none"),
+                ),
+                param(
+                    "bloom",
+                    ParamType::Json(
+                        "none | {intensity, radius, threshold, tint, dirt} (threshold: EV100 | none, tint: linear RGB, dirt: {texture: sha256 | seeded, intensity})",
+                    ),
+                    json!("none"),
+                ),
             ],
         }],
         migrations: vec![],
@@ -1734,11 +1788,16 @@ impl Runs<'_> {
 
 impl relations::Bounds for Runs<'_> {
     fn own(&mut self, id: &str, item: &Value, part: Option<&str>) -> Option<relations::Box4> {
-        if part.is_some() {
-            return None;
-        }
         let kind = item.get("kind").and_then(Value::as_str)?;
         let params = object_or_empty(item.get("params"));
+        // #1966: a text's line or token, `<id>#line:n` or `<id>#tok:k`, in its shaped run.
+        if let Some(part) = part {
+            if kind != "text@1" {
+                return None;
+            }
+            let local = crate::lines::anchor_box(params, &*self.shaped(id, item)?, part)?;
+            return Some(relations::placed(local, relations::place_of(item, None)));
+        }
         if kind == "text@1" {
             let shaped = self.shaped(id, item)?;
             let w = params

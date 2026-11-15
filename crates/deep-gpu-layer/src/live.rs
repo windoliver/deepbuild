@@ -18,7 +18,7 @@ use deep_canvas::camera::Offsets;
 use deep_canvas::document::check_in;
 use deep_canvas::registry::{BuildSet, Registry, Sealed};
 use deep_canvas::show::{stamp, Writer, WriterKind};
-use deep_canvas_scene3d::frames::Frames;
+use deep_canvas_scene3d::frames::{self, Frames};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Labels;
 use deep_effects_render::docops::{self, item_of_mark, DocOps, Drew};
@@ -243,6 +243,8 @@ struct Args {
     windows: Vec<String>,
     named: bool,
     look: Look3,
+    /// #462: the looks the documents' shots and regions name.
+    looks: BTreeMap<String, crate::regions::Named>,
     /// The look's frame-history window, 0 without history.
     history: u32,
     frames: u64,
@@ -303,6 +305,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         .filter(|f| *f >= 1)
         .ok_or_else(|| bad("fps"))?;
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let looks = crate::regions::looks_of(call, None)?;
     let history = if look.history.on() {
         look.history.window
     } else {
@@ -486,6 +489,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         named: call.get("windows").is_some(),
         windows,
         look,
+        looks,
         history,
         frames,
         fps,
@@ -704,6 +708,7 @@ fn warm_up(
     look: &Look3,
     labels: &mut Labels,
     plants: &Plants,
+    assets: Option<frames::Reader>,
 ) -> Result<Warm, Vec<Value>> {
     let mut all = BTreeMap::new();
     let mut first = BTreeMap::new();
@@ -718,8 +723,8 @@ fn warm_up(
         if crate::flat::is_flat(&doc) {
             continue;
         }
-        let Ok(mut frames) =
-            Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels))
+        let Ok(mut frames) = Frames::compile(&doc)
+            .and_then(|p| Frames::with_program(&doc, p, look, labels, assets.clone()))
         else {
             continue;
         };
@@ -772,6 +777,7 @@ pub(crate) fn admit(
     labels: &mut Labels,
     warm: Option<(&Value, &Plants)>,
     planted: Option<Planted>,
+    assets: Option<frames::Reader>,
 ) -> Result<Admitted, Vec<Value>> {
     let w = writer_of(writer).ok_or_else(|| {
         vec![issue(
@@ -820,7 +826,7 @@ pub(crate) fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let frames = content_with(&doc, program, look, labels)?;
+    let frames = content_with(&doc, program, look, labels, assets.clone())?;
     let moving = camera_moves(&doc);
     // Frame history's upscale renders at the look's scale (#173).
     let base_scale = match look.history.mode {
@@ -863,7 +869,9 @@ pub(crate) fn admit(
     let side = u64::from(deep_scene3d_render::shadow::SIZE);
     let skips = meter::climb_skips(&shape, &fit, limits.gpu_bytes, 3 * side * side * 4 * 4);
     let warm = match warm {
-        Some((raw, plants)) => warm_up(raw, &w, writer, doc_id, size, look, labels, plants)?,
+        Some((raw, plants)) => {
+            warm_up(raw, &w, writer, doc_id, size, look, labels, plants, assets)?
+        }
         None => Warm::default(),
     };
     Ok(Admitted {
@@ -885,6 +893,7 @@ fn content_with(
     program: Result<deep_canvas_motion::program::Program, deep_canvas_scene3d::scene::Refused>,
     look: &Look3,
     labels: &mut Labels,
+    assets: Option<frames::Reader>,
 ) -> Result<Content, Vec<Value>> {
     let unevaluated = |(code, path): (&str, String)| {
         vec![issue(
@@ -901,15 +910,26 @@ fn content_with(
     } else {
         Content::Scene(Box::new(
             program
-                .and_then(|p| Frames::with_program(doc, p, look, labels))
+                .and_then(|p| Frames::with_program(doc, p, look, labels, assets))
                 .map_err(|r| unevaluated((r.code, r.path)))?,
         ))
     })
 }
 
 /// A stamped document's frames, compiled again: a view rebuilt on a reopened device (#1413).
-fn content_of(doc: &Value, look: &Look3, labels: &mut Labels) -> Result<Content, Vec<Value>> {
-    content_with(doc, Frames::compile(doc), look, labels)
+fn content_of(
+    doc: &Value,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: frames::Reader,
+) -> Result<Content, Vec<Value>> {
+    content_with(doc, Frames::compile(doc), look, labels, Some(assets))
+}
+
+/// #1729: the call's assets, files by hash, as a document's frames read them.
+fn reader(files: &BTreeMap<String, PathBuf>) -> frames::Reader {
+    let files = files.clone();
+    Arc::new(move |sha: &str| std::fs::read(files.get(sha)?).ok())
 }
 
 /// Whether a channel moves the document's camera: its view then moves, and renders at the
@@ -1336,6 +1356,7 @@ impl Live {
             &mut self.labels,
             (!input).then_some((&raw, &self.plants)),
             self.plants.planted,
+            Some(reader(&self.args.assets)),
         );
         let ses = &mut self.sessions[s];
         ses.checks
@@ -1513,6 +1534,29 @@ impl Live {
                 v.window = rev.fit.history;
             }
         }
+        // #462: the looks the revision's shots and regions name, checked before it shows.
+        if let Some(v) = ses.view.as_mut() {
+            let independent = self.plants.planted == Some(Planted::RegionSidesClipIndependently);
+            if let Err(e) = v.set_regions(
+                &self.device,
+                &rev.doc,
+                &self.args.look,
+                &self.args.looks,
+                &mut self.labels,
+                crate::session3::msaa_planted(self.plants.planted),
+                independent,
+            ) {
+                let _ = crate::effects::pollster_block(scope.pop());
+                row.1 = "failed";
+                row.2 = match e["issues"].as_array() {
+                    Some(issues) => issues.clone(),
+                    None => vec![e],
+                };
+                ses.view = None;
+                self.results.release(rev.id);
+                return;
+            }
+        }
         // Frame history on the grid of the frames the view shows, one a call frame (#173).
         if let Some(v) = ses.view.as_mut() {
             let past = self.plants.history_past;
@@ -1662,7 +1706,9 @@ impl Live {
             let newer = ses.pending.is_some();
             if let Some(mut rev) = ses.current.take().filter(|_| !newer) {
                 if rev.frames.is_none() {
-                    rev.frames = content_of(&rev.doc, &self.args.look, &mut self.labels).ok();
+                    let assets = reader(&self.args.assets);
+                    rev.frames =
+                        content_of(&rev.doc, &self.args.look, &mut self.labels, assets).ok();
                 }
                 if rev.frames.is_some() {
                     ses.pending = Some(rev);
@@ -2633,6 +2679,7 @@ impl Live {
             &self.device,
             &self.kit,
             &self.args.look,
+            &self.args.looks,
             &rev.doc,
             size,
             self.t(of),
@@ -2867,6 +2914,7 @@ fn render_canonical(
     device: &Arc<Device>,
     kit: &Kit,
     look: &Look3,
+    looks: &BTreeMap<String, crate::regions::Named>,
     doc: &Value,
     size: [u32; 2],
     t: i64,
@@ -2879,10 +2927,12 @@ fn render_canonical(
     fail: &[String],
     out: Option<(&str, bool, bool)>,
 ) -> Value {
-    let _ = assets;
     let mut doc = doc.clone();
     doc["size"] = json!(size);
-    let frames = match Frames::new(&doc, look, labels) {
+    // #1729: its `mesh.asset@1` files and HDRs read from the call's assets by hash.
+    let frames = Frames::compile(&doc)
+        .and_then(|p| Frames::with_program(&doc, p, look, labels, Some(reader(assets))));
+    let frames = match frames {
         Ok(f) => f,
         Err(r) => return refused(r.code, r.path),
     };
@@ -2907,6 +2957,11 @@ fn render_canonical(
     if let Some(s) = surface {
         view.surface = s;
         view.scale = s.scale;
+    }
+    // #462: the looks its shots and regions name, each rendered whole and mixed into the frame.
+    let independent = plants.planted == Some(Planted::RegionSidesClipIndependently);
+    if let Err(e) = view.set_regions(device, &doc, look, looks, labels, planted3, independent) {
+        return e;
     }
     #[cfg(feature = "test-meter")]
     let mut results: Cache<crate::testgpu::Made> = Cache::new(cache::Planted::default());
@@ -3044,6 +3099,10 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
         Ok(l) => l,
         Err(e) => return bad(&format!("look: {e}")),
     };
+    let looks = match crate::regions::looks_of(call, None) {
+        Ok(l) => l,
+        Err(e) => return e,
+    };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
     let plants = Plants::of(app.planted);
     let wants = |name: &str| {
@@ -3071,6 +3130,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
                 &mut labels,
                 None,
                 None,
+                None,
             )
         });
         let doc = match admitted {
@@ -3083,6 +3143,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
             &device,
             &kit,
             &look,
+            &looks,
             &doc,
             size,
             t,
@@ -3130,6 +3191,7 @@ mod tests {
             0,
             Path::Copy,
             &mut Labels::new(),
+            None,
             None,
             None,
         )

@@ -6,6 +6,7 @@ use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
 use serde_json::{json, Map, Value};
 
+use crate::audit;
 use crate::check;
 use crate::fx::Named;
 use crate::graph::{self, Class, Kind, Origin};
@@ -13,6 +14,8 @@ use crate::graph::{self, Class, Kind, Origin};
 pub const GRID: &str = "effects.grid";
 pub const SHADOW: &str = "effects.shadow";
 pub const SPARKS: &str = "effects.particles";
+/// #462: a look's strokes on surfaces, drawn before the particles.
+pub const STROKES: &str = "effects.strokes";
 pub const OUTLINE: &str = "effects.outline";
 pub const GLOW: &str = "effects.glow";
 
@@ -21,6 +24,7 @@ pub const GLOW: &str = "effects.glow";
 pub const PASSES: &[(&str, &str)] = &[
     (GRID, "effects"),
     (SHADOW, "effects"),
+    (STROKES, "effects"),
     (SPARKS, "effects"),
     (OUTLINE, "effects"),
     (GLOW, "bloom"),
@@ -73,27 +77,34 @@ pub const OPERATOR_KINDS: [(&str, &str); 3] = [
 ];
 
 /// An operator item's fields (GPU operator: Fields), every one structured, which the operator
-/// check reads.
-const OPERATOR_FIELDS: &[&str] = &[
-    "about",
-    "inputs",
-    "steps",
-    "source",
-    "outputs",
-    "determinism",
-    "cost",
-    "resolution",
-    "fallback",
-    "uses",
-    "origin",
-    "chain",
-    "order",
-    "applies_to",
-    "elements",
-    "workgroup",
-    "after",
+/// check reads, each with the forms `graph::read` takes for it (#1973), the same for all three
+/// kinds.
+const OPERATOR_FIELDS: &[(&str, &str)] = &[
+    ("about", "string ≤ 400 (chars)"),
+    (
+        "inputs",
+        "{name → {type, unit?, range?: [min, max], default?, from}} (from: t | time | seed | {param | channel | texture | texture3d | storage | phase | role | column | attribute | time | seed})",
+    ),
+    ("steps", "{step ID → {op: <name>@<major>, args?, when?: step ID}} ≤ 256"),
+    ("source", "{wgsl: asset ID}"),
+    (
+        "outputs",
+        "{name → step ID | number | bool | [number | bool] | {from | texture | texture3d | storage | readback | instances}} (blend: replace | over | add | multiply | screen)",
+    ),
+    ("determinism", "exact | same_machine | live_only"),
+    ("cost", "{ns_per_px | ns_per_element: f32}"),
+    ("resolution", "full | half | quarter | {of: <input>, scale: ratio}"),
+    ("fallback", "none | look"),
+    ("uses", "[<operator>@<major>]"),
+    ("origin", "shipped | pack | composed"),
+    ("chain", "effects | finish"),
+    ("order", "key (fractional)"),
+    ("applies_to", "view | collection"),
+    ("elements", "u32 ≤ 1048576 | {from: <op>.<output>, max: u32 ≤ 1048576}"),
+    ("workgroup", "64 | 128 | 256 | [8, 8] | [16, 16]"),
+    ("after", "[operator ID]"),
     // Whether a pixel-wise pass may fuse with its neighbours (#432: pass fusion).
-    "fuse",
+    ("fuse", "pixel_wise | none"),
 ];
 
 fn operator_entry(name: &'static str) -> Entry {
@@ -105,9 +116,9 @@ fn operator_entry(name: &'static str) -> Entry {
             minor: 0,
             params: OPERATOR_FIELDS
                 .iter()
-                .map(|f| Param {
-                    name: f,
-                    ty: ParamType::Json,
+                .map(|&(field, form)| Param {
+                    name: field,
+                    ty: ParamType::Json(form),
                     unit: "",
                     default: Value::Null,
                     min: None,
@@ -726,6 +737,18 @@ fn register(r: &mut Registrar) {
     }
     r.fixture("shadowed-box", shadowed_box(), None)
         .sidecar(json!({"codes": [], "covers": {"kinds": ["light.sun@1"], "fields": ["light.sun@1/params/shadow"]}}));
+    // #1940: effects.audit is the effects module's, so the loop module depends only on scene3d
+    // and look; it reads nothing yet (#2485), so its fixture raises its unread error.
+    r.check(audit::KIND, "same", &[audit::UNREAD], audit::issues)
+        .check_report(audit::report);
+    r.code(
+        audit::UNREAD,
+        "effects.audit couldn't read an effect's peak count, bounds, overdraw or GPU time.",
+        "Nothing in the document fixes it: the check's readings land with #2485.",
+        false,
+    );
+    r.fixture("audit-unread", box_figure("An effects audit with nothing read", "figure", json!({})), None)
+        .sidecar(json!({"checks": [{"kind": audit::KIND}], "oracles": ["analytic"], "codes": [audit::UNREAD]}));
 }
 
 /// A figure of one box, its camera and `extra` items, in budget class `class`.

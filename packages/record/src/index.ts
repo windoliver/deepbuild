@@ -180,7 +180,7 @@ const SCHEMA_VERSION = 1;
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
 const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
-  'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
+  'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'claim.progress']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
@@ -468,6 +468,7 @@ class SqliteRecord implements RecordStore {
       if (Object.hasOwn(input, field)) throw new RecordError('forged', `the payload carries ${field}, which only the connection or the hub supplies`, { path: `/${field}` });
     }
     const kind = typeof input.kind === 'string' ? input.kind : '';
+    if (kind === 'ask.created' && isObj(input.data) && 'action' in input.data && connection.writer !== 'core') throw new RecordError('writer', 'only the core records what a done-gate ask does', { kind });
     if ((CORE_ONLY.has(kind) || STORE_ONLY.has(kind) || kind === LEARN_CHECK) && connection.writer !== 'core') throw new RecordError('writer', `${kind} is appended only by the core, not by ${connection.writer}`, { kind });
     const plugin = this.versions.has(kind) ? undefined : PLUGIN_KIND.exec(kind)?.[1];
     if (plugin !== undefined && /^ext:[^/]+\/(.+)$/.exec(connection.writer)?.[1] !== plugin) throw new RecordError('writer', `${kind} is appended only by the plug-in ${plugin}, not by ${connection.writer}`, { kind });

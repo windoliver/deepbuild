@@ -1,0 +1,20 @@
+# packages/extension-host/test/host.test.ts -t '#2419' at main 0329cec8e, 4 runs alike
+      Tests  1 passed | 65 skipped (66)
+
+# wrong host 1: interpreter() without its home check
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: an install that is your home is not: expected [ …(3) ] to not include '/tmp/deep-ext-test-CQpdAv/home/you'
+      Tests  1 failed | 65 skipped (66)
+
+# wrong host 2: interpreter() never grants
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: an install of its own is readable: expected [ …(2) ] to include '/tmp/deep-ext-test-HtXaGH/opt/node-own'
+      Tests  1 failed | 65 skipped (66)
+
+# the package-folder half (the same test, a third step), at main ec4e7bdbd: 4 runs alike
+      Tests  1 passed | 65 skipped (66)
+
+# wrong host 3: interpreter() without its package check
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: an install that holds the package is not: expected [ …(3) ] to not include '/tmp/deep-ext-test-I6jxpq/home'
+      Tests  1 failed | 65 skipped (66)

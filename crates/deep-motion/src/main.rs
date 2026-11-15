@@ -89,6 +89,8 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "framer_ignores_apart" => Planted::FramerIgnoresApart,
             "readout_reads_document" => Planted::ReadoutReadsDocument,
             "assembly_value_from_previous_frame" => Planted::AssemblyValueFromPreviousFrame,
+            "iris_center_at_window_start" => Planted::IrisCenterAtWindowStart,
+            "motif_beats_at_first_tempo" => Planted::MotifBeatsAtFirstTempo,
             _ => return None,
         },
         Some(_) => return None,
@@ -310,6 +312,14 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         Some(film) => film,
         None => return bad_input(),
     };
+    // #466: the line's look's motifs, moving the items the document's slots bind (#462).
+    let motifs = match input.get("look").filter(|l| l.get("motifs").is_some()) {
+        Some(look) => match deep_canvas_motion::motif::Motifs::compile(look, doc, &program) {
+            Ok(m) => m,
+            Err(r) => return refusal(r),
+        },
+        None => None,
+    };
     let mut frames = Vec::with_capacity(times.len());
     let mut degenerate: Vec<Value> = Vec::new();
     let mut previous: Option<i64> = None;
@@ -333,7 +343,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         let track = shows_track.then(|| {
             json!({"hash": track_hash(&program.options.input), "entries": program.options.input.len()})
         });
-        let f = frame_with(doc, &program, t, Validity::Full, &mut state);
+        let mut f = frame_with(doc, &program, t, Validity::Full, &mut state);
+        if let Some(m) = &motifs {
+            m.apply(&mut f.items, f.doc_t, film_reduced(input));
+        }
         let passes = previous.map_or(0, |p| {
             let (_, before) = position(motion, p);
             (f.pass - before).max(0)
@@ -467,6 +480,11 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         if !film.project.is_empty() {
             frame["projected"] = projected_json(doc, &program, &state, f.doc_t, &film);
         }
+        // #466: each transition whose window holds this time, and an iris's centre and radius.
+        let transitions = transitions_json(doc, &program, &state, f.doc_t, &film);
+        if !transitions.is_empty() {
+            frame["transitions"] = Value::Object(transitions);
+        }
         // #491: each laid-out item's box at this time, where the document lays any out.
         if let Some(boxes) = program.boxes(f.doc_t).filter(|b| !b.is_empty()) {
             frame["boxes"] = json!(boxes);
@@ -548,6 +566,15 @@ struct Film {
     planted: Planted,
 }
 
+/// Whether the line's view asks for reduced motion.
+fn film_reduced(input: &Map<String, Value>) -> bool {
+    input
+        .get("view")
+        .and_then(|v| v.get("reduced_motion"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 fn film_of(input: &Map<String, Value>, program: &Program) -> Option<Film> {
     let project = match input.get("project") {
         None => Vec::new(),
@@ -576,6 +603,45 @@ fn film_of(input: &Map<String, Value>, program: &Program) -> Option<Film> {
         reduced: program.options.reduced_motion,
         planted: program.options.planted,
     })
+}
+
+/// #466: each transition whose window holds `t`: its kind and progress, and an iris's centre and
+/// radius in px of the document's size, through the camera of the side inside it.
+fn transitions_json(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    t: i64,
+    film: &Film,
+) -> Map<String, Value> {
+    let Some(plan) = program.shots.as_ref() else {
+        return Map::new();
+    };
+    let keyed = |c: usize| plan.keyed_pose(c, program, state);
+    let at = At {
+        reduced: film.reduced,
+        planted: film.planted,
+        indexed: film.indexed,
+        keyed: &keyed,
+    };
+    let size = match doc.get("size").and_then(Value::as_array).map(Vec::as_slice) {
+        Some([w, h]) => [w.as_f64().unwrap_or(1920.0), h.as_f64().unwrap_or(1080.0)],
+        _ => [1920.0, 1080.0],
+    };
+    let mut out = Map::new();
+    for tr in &plan.transitions {
+        if t < tr.start || t >= tr.end {
+            continue;
+        }
+        let mut o = json!({"kind": tr.kind.name(), "progress": tr.progress(t)});
+        if let deep_canvas_motion::shots::Kind::Iris(iris) = &tr.kind {
+            let from_start = film.planted == Planted::IrisCenterAtWindowStart;
+            let i = iris.at(program, doc, state, plan, tr, t, &at, size, from_start);
+            o["iris"] = json!({"center": i.center, "radius": i.radius});
+        }
+        out.insert(tr.id.clone(), o);
+    }
+    out
 }
 
 /// Each camera's pose at t, as the frame reports it (#493: the pose it is drawn through, its

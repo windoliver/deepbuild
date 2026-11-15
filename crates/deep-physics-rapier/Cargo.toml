@@ -19,6 +19,12 @@ base64 = "0.22"
 bincode = "1"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
+# Issue #524: a soft volume's source item's welded mesh and a balloon's geodesic ball, built by the
+# scene3d builders its skin draws, so the particles are the drawn lattice's vertices. Native builds
+# only: scene3d links meshopt, whose C++ doesn't build for wasm32 (#2466).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+
 [dev-dependencies]
 # Issue #2012: Rapier's own tests/simd_backend_parity.rs names simba's SIMD types; the version and
 # feature are the ones rapier3d 0.36.1 resolves, so it adds nothing to the build.
@@ -39,6 +45,9 @@ test-reverse-pairs = []
 # Issue #1919 criterion 1's test backend (tests/acceptance/1919): Rapier with each query() call
 # counted by kind, which `backend_calls` answers.
 test-count-calls = []
+# Issue #524 criterion 3's test build (tests/acceptance/524): the soft-body solver swapped for a small
+# one of ours, in src/soft.rs alone, with no world document changed.
+test-swap-soft-solver = []
 
 # Issue #2012: Rapier's own tests gate on `not(feature = "simd8")`, a feature this crate never has
 # (scripts/physics-build.mjs refuses rapier3d's), so the name is declared for the cfg check only.

@@ -11,5 +11,6 @@ pub mod mips;
 pub mod planted;
 pub mod reference;
 pub mod runner;
+pub mod strokes;
 mod uniformity;
 pub use deep_gpu::structural;

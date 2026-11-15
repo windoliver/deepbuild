@@ -1,0 +1,27 @@
+{
+  "id": "verbs.move_along",
+  "version": "1.0",
+  "title": "Move along",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A move: each target travels the shape of the path `path` names, starting from where it is.",
+  "inputs": {
+    "path": {
+      "type": "ID",
+      "default": "path",
+      "about": "the path item whose shape the targets travel"
+    }
+  },
+  "steps": {
+    "travel": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "at/pos": {
+            "along": "path"
+          }
+        }
+      }
+    }
+  }
+}

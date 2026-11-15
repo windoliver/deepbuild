@@ -25,6 +25,7 @@ pub mod history;
 pub mod hit;
 pub mod hull;
 pub mod ies;
+pub mod inset;
 pub mod label;
 pub mod light;
 pub mod lod;
@@ -44,21 +45,26 @@ pub mod scene;
 pub mod sets;
 pub mod shapes;
 pub mod shore;
+pub mod skin;
 pub mod sky;
 pub mod slots;
 pub mod spatial;
 pub mod spec;
 pub mod stack;
+pub mod strokes;
+pub mod surface;
 pub mod sweep;
 pub mod terrain;
 pub mod tints;
 pub mod trail;
 pub mod uv;
+pub mod vars;
+pub mod views;
 pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 23] = [
+pub const PLANTED: [&str; 28] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -87,4 +93,12 @@ pub const PLANTED: [&str; 23] = [
     // in metres.
     terrain::OTHER_DIAGONAL,
     terrain::CAP_IN_METRES,
+    // #224: grid lines counted from the range's start, a mesher numbering vertices by thread,
+    // an octree dropping cells by their corners' signs or stopping mid-level, and a build that
+    // keeps its first mesh.
+    surface::PLANTS[0],
+    surface::PLANTS[1],
+    surface::PLANTS[2],
+    surface::PLANTS[3],
+    surface::PLANTS[4],
 ];

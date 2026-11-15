@@ -18,6 +18,7 @@ pub mod flare;
 mod glass;
 pub mod held;
 pub mod history;
+pub mod exposure;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -35,6 +36,7 @@ mod sway;
 pub mod targets;
 mod ties;
 mod tint;
+pub mod inset;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -77,7 +79,9 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 const SHADER: &str = concat!(
     include_str!("scene3d.wgsl"),
     include_str!("tint.wgsl"),
-    include_str!("caps.wgsl")
+    include_str!("caps.wgsl"),
+    include_str!("inset_lit.wgsl"),
+    include_str!("inset.wgsl")
 );
 const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
 /// The line that plants #425's per-band mask keys.
@@ -137,6 +141,10 @@ pub use deep_canvas_scene3d::module::{
 pub struct Planted {
     /// Depth cleared to 1, compared less, with a finite far plane at 10 km.
     pub forward_z: bool,
+    /// #506's planted cores: a view drawn with the backdrop copy, or the mirror's picture, that
+    /// the view drawn before it left, each kept for one frame (see [`Renderer::keep_first`]).
+    pub keeps_backdrop: bool,
+    pub keeps_mirror: bool,
     /// #431: the emission target is the color target's excess over 1, never the emitted radiance.
     pub emission_thresholds_color: bool,
     /// #431: a material operator's `sample_grad` takes implicit derivatives.
@@ -1715,6 +1723,11 @@ pub struct Renderer {
     ies: local::Tables,
     /// The terrain overlays' cells (#537).
     tints: tint::Store,
+    /// The projected insets (#506), and the unlit ones' pass with the clip-to-world matrix it
+    /// reads, made when one draws.
+    insets: inset::Store,
+    unlit: Option<inset::Unlit>,
+    to_world: Option<[f32; 16]>,
     /// The light grid this frame, and the buffer its cells are in (#446).
     clusters: Option<clusters::Grid>,
     cluster_buffer: wgpu::Buffer,
@@ -1814,6 +1827,9 @@ pub struct Renderer {
     /// #465: the mirror's pass, made when a frame first has a mirror, and whether this frame has.
     mirrorer: Option<Box<mirror::Mirrorer>>,
     mirroring: bool,
+    /// #506: each view inset's own renderer, by the inset's ID, drawn whole before this view's
+    /// geometry, one level deep.
+    views: BTreeMap<String, Box<Renderer>>,
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     flarer: Option<Box<flare::Flarer>>,
     flaring: bool,
@@ -2094,8 +2110,9 @@ pub(crate) fn shape_code(s: Shape) -> u64 {
 
 // Position and normal, then (#423) uv0 and uv1 as one attribute and the tangent at 13 and 14,
 // after the records'.
+// The normal's w carries a vertex's own packed color (#224).
 const MESH_VERTEX: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-    0 => Float32x3, 1 => Float32x3, 13 => Float32x4, 14 => Float32x4
+    0 => Float32x3, 1 => Float32x4, 13 => Float32x4, 14 => Float32x4
 ];
 // Location 8 is the solid's tie rank, which the vertex stage reads (#421); 15 its material
 // operator's time, seed and opacity (#429).
@@ -2165,7 +2182,7 @@ fn lights_bind(
     locals: &wgpu::TextureView,
     ies: &local::Tables,
     grid: &wgpu::Buffer,
-    tints: &wgpu::Buffer,
+    [tints, insets]: [&wgpu::Buffer; 2],
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -2195,6 +2212,7 @@ fn lights_bind(
             wgpu::BindingResource::TextureView(env.bg[0].as_ref().map_or(&env.stub, |c| &c.view)),
             wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
             tints.as_entire_binding(),
+            insets.as_entire_binding(),
         ],
     )
 }
@@ -2866,6 +2884,7 @@ impl Renderer {
                     count: None,
                 },
                 tint::entry(),
+                inset::entry(),
             ],
         });
         let oit = oit::Oit::new(d);
@@ -2921,6 +2940,7 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let tints = tint::Store::new(d);
+        let insets = inset::Store::new(d);
         let lights_bind = lights_bind(
             d,
             &lights_layout,
@@ -2932,7 +2952,7 @@ impl Renderer {
             &cascade_stub(d),
             &ies,
             &cluster_buffer,
-            &tints.buffer,
+            [&tints.buffer, &insets.buffer],
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -3221,6 +3241,9 @@ impl Renderer {
             shadow_mark,
             ies,
             tints,
+            insets,
+            unlit: None,
+            to_world: None,
             clusters: None,
             cluster_buffer,
             env,
@@ -3287,6 +3310,7 @@ impl Renderer {
             print_source: None,
             mirrorer: None,
             mirroring: false,
+            views: BTreeMap::new(),
             flarer: None,
             flaring: false,
             waterer: None,
@@ -3552,6 +3576,13 @@ impl Renderer {
     }
 
     /// Plants the upscale's wrong programs (#386).
+    /// #506's planted cores: the next frames draw with the backdrop copy and the mirror's
+    /// picture the frame before left, never their own.
+    pub fn keep_first(&mut self, backdrop: bool, mirror: bool) {
+        self.planted.keeps_backdrop = backdrop;
+        self.planted.keeps_mirror = mirror;
+    }
+
     pub fn plant_upscale(&mut self, planted: surface::Planted) {
         self.planted.upscale = planted;
     }
@@ -3870,7 +3901,7 @@ impl Renderer {
             locals,
             &self.ies,
             &self.cluster_buffer,
-            &self.tints.buffer,
+            [&self.tints.buffer, &self.insets.buffer],
         );
         self.lights_generation += 1;
     }
@@ -4451,6 +4482,7 @@ impl Renderer {
             self.ensure_rows(device);
         }
         self.prepare_frame(device, scene, look);
+        self.prepare_views(device, scene, look);
         // #166: view3d's `reflection` target, made while a frame asks for it.
         let internal = self.internal();
         self.reflection = match self.reflection.take() {
@@ -4539,7 +4571,8 @@ impl Renderer {
         }
         // #537: the terrain overlays' changed rows, before the batches bind the lights' group.
         let keep = self.planted.overlay_keeps_grid_on_seek;
-        if self.tints.upload(device, &scene.tints, keep) {
+        let remade = self.insets.ensure(device, &scene.projected, &scene.texels);
+        if self.tints.upload(device, &scene.tints, keep) | remade {
             self.rebind_lights(device);
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
@@ -4548,6 +4581,11 @@ impl Renderer {
         }
         self.sways.move_all(device, scene);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
+        self.insets
+            .write(device, &scene.projected, &scene.texels, &self.picks);
+        if self.insets.unlit && self.unlit.is_none() {
+            self.unlit = Some(inset::Unlit::new(&device.device));
+        }
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -4579,13 +4617,10 @@ impl Renderer {
         }
         self.update_culls(device);
         self.ensure_casters(device, scene);
-        self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
-            (Some(m), Some(t)) => {
-                self.motion
-                    .prepare(device, scene, m, &self.meshes, &t.linear_view, t.size)
-            }
-            _ => None,
-        };
+        self.motion_frame = self.targets.as_ref().and_then(|t| {
+            self.motion
+                .prepare(device, scene, &self.meshes, &t.linear_view, t.size)
+        });
         self.prepare_core(device, scene);
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
@@ -4599,7 +4634,9 @@ impl Renderer {
                     .water
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
-                mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                if !self.planted.keeps_mirror {
+                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                }
                 true
             }
             None => {
@@ -4767,6 +4804,27 @@ impl Renderer {
     /// The core targets this frame reads (#431), made at the internal size, and their draws:
     /// velocity from the scene's evaluations at t ± s/2 (no travel where it has none), emission
     /// from every opaque solid's set.
+    /// #506: each view inset's view at t from its own camera, by a renderer of its own, so its
+    /// levels, light cut, backdrop copy and mirror are its own; its picture is what the window's
+    /// maps read this frame.
+    fn prepare_views(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.views
+            .retain(|id, _| scene.views.iter().any(|v| &v.id == id));
+        let mut pictures = BTreeMap::new();
+        for v in &scene.views {
+            let planted = self.planted;
+            let r = self
+                .views
+                .entry(v.id.clone())
+                .or_insert_with(|| Box::new(Renderer::new(device, planted)));
+            r.prepare(device, &deep_canvas_scene3d::views::seen(scene, v), look);
+            if let Some((_, view)) = r.linear() {
+                pictures.insert(deep_canvas_scene3d::inset::view_key(&v.id), view.clone());
+            }
+        }
+        self.maps.set_views(pictures);
+    }
+
     fn prepare_core(&mut self, device: &Device, scene: &Scene) {
         let Some((size, linear)) = self
             .targets
@@ -4776,18 +4834,10 @@ impl Renderer {
             return;
         };
         self.core.ensure(&device.device, size);
-        self.velocity_frame = self.core.velocity.is_some().then(|| {
-            let still;
-            let motion = match &scene.velocity {
-                Some(m) => m.as_ref(),
-                None => {
-                    still = still_motion(scene);
-                    &still
-                }
-            };
-            self.motion
-                .target_frame(device, scene, motion, &self.meshes, size)
-        });
+        let wanted = self.core.velocity.is_some();
+        self.velocity_frame = self
+            .motion
+            .target_frame(device, scene, wanted, &self.meshes, size);
         let draws: Vec<targets::EmissionDraw> = self
             .order
             .iter()
@@ -5524,6 +5574,8 @@ impl Renderer {
             rows[0][c] += jx * wc;
             rows[1][c] += jy * wc;
         }
+        // #506: what the unlit insets' pass unprojects the resolved depth through.
+        self.to_world = inset::inverse_columns(rows);
         self.maps.texels.clone_from(&scene.texels);
         self.filter_taps = look.filter_taps;
         let mut clip = [[0f32; 4]; 4];
@@ -7273,6 +7325,7 @@ impl Renderer {
             _ => None,
         };
         let copy_late = self.planted.backdrop_after_see_through;
+        let keeps_backdrop = self.planted.keeps_backdrop;
         let glass_copy = glass.as_ref().and(self.glass.clone());
         // The subsurface share and spread after the resolve (#481).
         let subsurface = self.subsurface.clone().map(|sub| {
@@ -7416,7 +7469,9 @@ impl Renderer {
                         );
                         return;
                     }
-                    copy.record(encoder, &linear_texture);
+                    if !keeps_backdrop {
+                        copy.record(encoder, &linear_texture);
+                    }
                     let late: Vec<LateDraw> = late.iter().map(|(d, _)| d.clone()).collect();
                     glass_pass(
                         encoder,
@@ -7469,6 +7524,15 @@ impl Renderer {
                 Box::new(move |encoder| ao.record(&profiler, encoder)),
             ));
         }
+        // #506: each view inset's view up to its output, before the geometry reads its picture.
+        for r in self.views.values_mut() {
+            jobs.extend(
+                r.jobs(device, slot, None, None)
+                    .into_iter()
+                    .take_while(|(name, _)| name != OUTPUT_PASS)
+                    .map(|(_, job)| (inset::VIEW_PASS.to_string(), job)),
+            );
+        }
         jobs.push((GEOMETRY_PASS.into(), geometry));
         // #465: the mirror's view and its picture over the mirror's parts, before the effects.
         if let (true, Some(m), Some(t)) = (
@@ -7478,7 +7542,8 @@ impl Renderer {
         ) {
             let (linear, ids) = (t.linear_view.clone(), t.ids_view.clone());
             let reflection = self.reflection.as_ref().map(|r| r.1.clone());
-            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler));
+            let keep = self.planted.keeps_mirror;
+            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler, keep));
         }
         // #166: the water over the bed the geometry left, under the mirror's picture.
         if let (true, Some(w), Some(t)) =
@@ -7696,6 +7761,26 @@ impl Renderer {
                     })
                 }),
             ));
+        }
+        // #506: the unlit projected insets, at display size after the upscale, under the
+        // outlines, labels and status colors.
+        if let (true, Some(u), Some(to_world), Some(t)) = (
+            self.insets.unlit,
+            self.unlit.as_ref(),
+            self.to_world,
+            self.targets.as_ref(),
+        ) {
+            let job = u.job(
+                &device.device,
+                &self.insets,
+                to_world,
+                t.size,
+                self.size,
+                &t.drawn.ids,
+                &t.drawn.depth,
+                slot,
+            );
+            jobs.push((inset::UNLIT_PASS.into(), job));
         }
         // Status outlines draw as the status colors, where the frame has them, over the labels.
         let (outlines, statuses) = match self.outline_draw(false).map(after) {
@@ -8269,6 +8354,21 @@ impl Renderer {
         Some((floats, ids))
     }
 
+    /// #2513: what render.exposure's reduction reads of the last frame: the linear image the
+    /// output pass read (as [`Self::read_pre_tone`] reads it), its object-ID target, their size.
+    pub fn light_source(&self) -> Option<(&wgpu::TextureView, &wgpu::TextureView, [u32; 2])> {
+        let t = self.targets.as_ref()?;
+        let pre_tone = self.pre_tone.as_ref().unwrap_or(&t.linear_view);
+        Some((pre_tone, &t.ids_view, t.size))
+    }
+
+    /// The frame's object-ID target alone, each pixel's u32 in little-endian bytes, rows top-down
+    /// (#1939); `None` on a backend with no pixels.
+    pub fn read_ids(&self, device: &Device) -> Option<Vec<u8>> {
+        let t = self.targets.as_ref()?;
+        read_texture(device, &t.ids, t.size, 4)
+    }
+
     /// The depth target, f32 per pixel (reversed Z: larger is nearer), which a 3D pick's ties
     /// read (#424).
     pub fn read_depth(&self, device: &Device) -> Option<Vec<u8>> {
@@ -8323,6 +8423,12 @@ impl Renderer {
             out.extend(d.to_le_bytes());
         }
         Some(out)
+    }
+
+    /// #462: the depth target the last frame drew, reversed Z, and its size, which look regions'
+    /// composite reads each pixel's view depth from.
+    pub fn depth_target(&self) -> Option<(&wgpu::TextureView, [u32; 2])> {
+        self.targets.as_ref().map(|t| (&t.depth_view, t.size))
     }
 
     /// Whether depth reads nearer as it grows: reversed Z, unless the planted forward Z.
@@ -8984,6 +9090,15 @@ impl RenderModule for Module3 {
             0.4,
             Determinism::LiveOnly,
         ));
+        // #506: the unlit projected insets, under the outlines and labels.
+        passes.push(pass(
+            inset::UNLIT_PASS,
+            2,
+            vec!["depth", "ids"],
+            vec!["slot"],
+            0.05,
+            Determinism::SameMachine,
+        ));
         passes.push(pass(
             OUTLINE_PASS,
             2,
@@ -9150,6 +9265,17 @@ impl Module3 {
                 reads: vec!["ids"],
                 writes: vec!["linear"],
                 resolution: Resolution::Half,
+                ns_per_px: 0.5,
+                determinism: Determinism::SameMachine,
+            },
+            // #506: each view inset's own view, drawn whole before the geometry reads it.
+            Pass {
+                name: inset::VIEW_PASS.into(),
+                place: "shadows",
+                order: 3,
+                reads: Vec::new(),
+                writes: Vec::new(),
+                resolution: Resolution::Full,
                 ns_per_px: 0.5,
                 determinism: Determinism::SameMachine,
             },
@@ -9343,7 +9469,7 @@ mod tests {
     }
 
     /// A scene document of `items` in one layer, each stamped with its ID, name, order and layer.
-    fn stamped(
+    pub(crate) fn stamped(
         items: &[(&str, serde_json::Value)],
         channels: serde_json::Value,
     ) -> serde_json::Value {
@@ -9363,7 +9489,7 @@ mod tests {
         })
     }
 
-    fn orbiting_camera() -> (serde_json::Value, serde_json::Value) {
+    pub(crate) fn orbiting_camera() -> (serde_json::Value, serde_json::Value) {
         (
             json!({"kind": "camera@1", "params": {"projection": "perspective", "target": [0, 0.8, 0], "orbit": {"azimuth": 30, "elevation": 20, "distance": 14}, "fov": 45, "near": 0.1, "far": 500}}),
             json!({"orbit": {"target": "items/cam/params/orbit/azimuth", "type": "f32", "keys": {"k0": {"t": "0s", "value": 30, "interp": "linear"}, "k1": {"t": "60s", "value": 390, "interp": "linear"}}}}),
@@ -9378,10 +9504,12 @@ mod tests {
     }
 
     /// Frames 1 to 5 of `doc`, each prepared whole and its jobs recorded into a slot as the GPU
-    /// layer's view does: what the device made and wrote in each.
-    fn played(
+    /// layer's view does: what the device made and wrote in each. `host` leaves each frame's
+    /// scene and the renderer as a host would before the renderer takes the frame.
+    pub(crate) fn played(
         doc: &serde_json::Value,
         mut post: Option<&mut dyn Post>,
+        host: impl Fn(&mut Renderer, &mut Scene),
     ) -> Vec<deep_gpu::counted::Reading> {
         let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
         let device = gpu.device();
@@ -9408,8 +9536,10 @@ mod tests {
                     &mut labels,
                 )
                 .unwrap();
+            let mut scene = frames.scene().clone();
+            host(&mut renderer, &mut scene);
             let made = counted(&device, || {
-                renderer.prepare(&device, frames.scene(), &look);
+                renderer.prepare(&device, &scene, &look);
                 let mut encoder = device.device.create_command_encoder(&Default::default());
                 let post = post.as_deref_mut().map(|p| p as &mut dyn Post);
                 for (_, job) in renderer.jobs(&device, &slot, post, None) {
@@ -9473,7 +9603,7 @@ mod tests {
             ],
             channels,
         );
-        for (n, made) in played(&doc, None).iter().enumerate() {
+        for (n, made) in played(&doc, None, |_, _| {}).iter().enumerate() {
             assert_eq!(
                 (made.buffers, made.bind_groups),
                 (0, 0),
@@ -9525,7 +9655,7 @@ mod tests {
             ("its own target", Hands(Some(own))),
             ("the geometry's", Hands(None)),
         ] {
-            for (n, made) in played(&doc, Some(&mut post)).iter().enumerate() {
+            for (n, made) in played(&doc, Some(&mut post), |_, _| {}).iter().enumerate() {
                 assert_eq!(
                     made.bind_groups,
                     0,

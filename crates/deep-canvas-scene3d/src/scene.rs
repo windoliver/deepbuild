@@ -834,6 +834,21 @@ pub struct Scene {
     pub probes: Vec<crate::probe::Probe>,
     /// Each terrain plate's overlays at t (#537), which tint its cover's base color.
     pub tints: Vec<crate::tints::Tint>,
+    /// #462: each box, cylinder and sphere item's shape and world matrix (its size applied) at t,
+    /// drawn or not, by ID: the world-space volumes a look region's mask names.
+    pub volumes: BTreeMap<String, (Shape, [[f64; 4]; 3])>,
+    /// #462: the items the look's strokes land on, each with the fill role that paints it; empty
+    /// for a look with no strokes.
+    pub stroked: BTreeMap<String, Option<String>>,
+    /// #506: the pictures the view's insets draw, which the host rasters into `texels`.
+    pub pictures: Vec<crate::inset::Picture>,
+    /// #506: the view's projected insets, at most [`crate::inset::MAX_PROJECTED`].
+    pub projected: Vec<crate::inset::Projected>,
+    /// #506: its view insets, each drawn from its own camera one level deep.
+    pub views: Vec<crate::views::View>,
+    /// #506: its layers before their levels of detail were resolved, which a nested view
+    /// resolves at its own camera; `None` while they are unresolved.
+    pub sources: Option<Arc<Vec<Layer3>>>,
 }
 
 impl Scene {
@@ -2390,6 +2405,10 @@ pub fn evaluate_any(
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
     };
+    // #506: an item a view-class control's value hides (Control: `binds` on its `visible`, as
+    // the core's draw reads it), such as a card its close button closed.
+    let unbound = bound_hidden(map);
+    let map = unbound.as_ref().unwrap_or(map);
     // #166: a wake behind an item a logic array moves, refused at check before anything else.
     crate::water::logic_moved(map)?;
     // #268: a shore item that anything moves or reshapes, refused at check.
@@ -2399,6 +2418,32 @@ pub fn evaluate_any(
         path: r.path,
     })?;
     evaluate_compiled(map, &program, t, look, labels, assets, outlines)
+}
+
+/// The document with each item hidden that a view-class control bound to its `visible` holds
+/// off (#506); `None` when no such control is off.
+fn bound_hidden(map: &Map<String, Value>) -> Option<Map<String, Value>> {
+    let hidden: Vec<String> = map
+        .get("controls")
+        .and_then(Value::as_object)?
+        .values()
+        .filter(|c| c.get("class").and_then(Value::as_str) == Some("view"))
+        .filter(|c| c.get("default") == Some(&Value::Bool(false)))
+        .flat_map(|c| c.get("binds").and_then(Value::as_array).into_iter().flatten())
+        .filter_map(|b| b.as_str()?.strip_prefix("items/")?.strip_suffix("/visible"))
+        .map(str::to_string)
+        .collect();
+    if hidden.is_empty() {
+        return None;
+    }
+    let mut out = map.clone();
+    let items = out.get_mut("items").and_then(Value::as_object_mut)?;
+    for id in hidden {
+        if let Some(item) = items.get_mut(&id).and_then(Value::as_object_mut) {
+            item.insert("visible".into(), Value::Bool(false));
+        }
+    }
+    Some(out)
 }
 
 /// The items a scatter's field names: an item's ID (a part's `<item>#<part>` as its item), or a
@@ -3057,13 +3102,33 @@ pub(crate) fn evaluate_compiled(
     tones(map)?;
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
+    // #224: every formula's vars bound at t, so its builder reads numbers.
+    let lowered = crate::vars::lowered(map, program, &state, t, outlines.planted)?;
+    let map = lowered.as_ref().unwrap_or(map);
     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
     let empty = Map::new();
     let doc_items = map
         .get("items")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let written = eval::written(map, program, &state);
+    // #462: the look's motifs move the evaluated items the document's slots bind, never the
+    // document; under reduced motion they hold still.
+    let motifs = match look.motifs.is_empty() {
+        true => None,
+        false => deep_canvas_motion::motif::Motifs::bind(look.motifs.clone(), map, program)
+            .map_err(|r| Refused {
+                code: r.code,
+                path: r.path,
+            })?,
+    };
+    let written = match &motifs {
+        Some(m) => {
+            let mut w = eval::written_with(map, program, &state, |id| m.binds(id));
+            m.apply(&mut w, t, look.reduced_motion);
+            w
+        }
+        None => eval::written(map, program, &state),
+    };
     let mut items = Items::new(doc_items, &written, &state, program);
     // #2013: a frame draws each rested item where its rest puts it; the check reports a rest
     // that finds no support.
@@ -3076,6 +3141,7 @@ pub(crate) fn evaluate_compiled(
         &mut Vec::new(),
     );
     let items = items;
+    let mut volumes = BTreeMap::new();
     let size = match map
         .get("size")
         .and_then(Value::as_array)
@@ -3181,6 +3247,23 @@ pub(crate) fn evaluate_compiled(
             // a prototype is read either way, for its instancers.
             let visible = shown(&items, id);
             let proto = protos_wanted.contains(id.as_str());
+            // #462: a box, cylinder or sphere's volume, drawn or not, for the masks regions name.
+            let primitive = match kind {
+                "mark.box@1" => Some(Shape::Box),
+                "mark.cylinder@1" => Some(Shape::Cylinder),
+                "mark.sphere@1" => Some(Shape::Sphere),
+                _ => None,
+            };
+            if let (Some(shape), Some(s)) =
+                (primitive, size3(item.pointer("/params/size"), [1.0; 3]))
+            {
+                let scaled = [
+                    [s[0], 0.0, 0.0, 0.0],
+                    [0.0, s[1], 0.0, 0.0],
+                    [0.0, 0.0, s[2], 0.0],
+                ];
+                volumes.insert(id.clone(), (shape, matmul(&world(&items, id), &scaled)));
+            }
             if !visible && !proto {
                 continue;
             }
@@ -3399,6 +3482,11 @@ pub(crate) fn evaluate_compiled(
                     if mesh.triangles() == 0 {
                         continue;
                     }
+                    // #224: a surface's per-vertex colors through the look.
+                    let mesh = match k {
+                        "surface@1" => crate::surface::tinted(mesh, params, look, &path)?,
+                        _ => mesh,
+                    };
                     let model = world(&items, id);
                     let [lo, hi] = mesh.bounds();
                     for c in 0..8 {
@@ -3421,7 +3509,13 @@ pub(crate) fn evaluate_compiled(
                         seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
                     });
                     let key = h.finish().0;
-                    let material = light::material(item, |m| items.get(m), look, id)?;
+                    let mut material = light::material(item, |m| items.get(m), look, id)?;
+                    // #224: a surface is two-sided unless it says not.
+                    if k == "surface@1" && params.get("two_sided") != Some(&Value::Bool(false)) {
+                        if let Some(m) = material.as_mut() {
+                            m.double_sided = true;
+                        }
+                    }
                     let maps = light::maps(item, |m| items.get(m))?;
                     let mut hash = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
@@ -3473,6 +3567,16 @@ pub(crate) fn evaluate_compiled(
                         row: 0,
                         sway,
                     });
+                    // #224: a surface's grid lines, along its mesh's edges.
+                    if k == "surface@1" {
+                        let solid = layer.solids.last().expect("just pushed");
+                        let built = solid.mesh.clone().expect("a built mesh");
+                        if let Some(l) =
+                            crate::surface::grid_line(id, &built, params, look, solid.model)?
+                        {
+                            layer.lines.push(l);
+                        }
+                    }
                     // #2017: a plate with levels draws as its tiles, each at the level its error
                     // projected at the view chooses.
                     if k == "plate@1" && uniform(&model) {
@@ -3578,12 +3682,16 @@ pub(crate) fn evaluate_compiled(
                     layer.labels.push(l);
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
+                // #506: read once every solid is placed, below.
+                crate::inset::KIND | crate::views::KIND => {}
                 // #1183: an overlay whose `show` is false at t draws nothing.
                 "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
-                    layer.puffs.push(puff(id, params, origin(&m), &path)?);
+                    layer
+                        .puffs
+                        .push(puff(id, params, origin(&m), &path, outlines.planted)?);
                     puffs += 1;
                 }
                 "light.sun@1" if sun.is_none() => {
@@ -3865,6 +3973,21 @@ pub(crate) fn evaluate_compiled(
         &bounds,
         &cam_path,
     )?;
+    // #506: the insets: their windows join the layers; their pictures, views and casts, the scene.
+    let get = |k: &str| items.get(k);
+    let world_of = |k: &str| world(&items, k);
+    let insets = crate::inset::evaluate(
+        &crate::inset::Ctx {
+            doc: map,
+            get: &get,
+            world: &world_of,
+            bounds: &bounds,
+            camera: &camera,
+            planted: outlines.planted,
+        },
+        look,
+        &mut layers,
+    )?;
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
@@ -3995,7 +4118,21 @@ pub(crate) fn evaluate_compiled(
         read_foam: false,
         probes,
         tints: crate::tints::tints(map, look, t)?,
+        volumes,
+        stroked: BTreeMap::new(),
+        pictures: insets.pictures,
+        projected: insets.projected,
+        views: insets.views,
+        sources: None,
     };
+    if let Some(s) = &look.strokes {
+        let solids = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .map(|s| s.id.clone());
+        scene.stroked = crate::strokes::targets(map, s, solids);
+    }
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     // #166: the water, its wake's path, and its own mirror unless a material names one.
@@ -4158,8 +4295,16 @@ fn xy(v: Option<&Value>) -> Option<[f64; 2]> {
     Some([num(a.first())?, num(a.get(1))?])
 }
 
-/// A `puff@1` at `pos` (#422).
-fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused> {
+/// A `puff@1` at `pos` (#422). #1974's planted `defaults_reader_falls_back_to_2`, reachable only
+/// through `deep-show kinds --defaults --planted`, takes 2 m for a radius left out where the
+/// kind's line says 1.
+fn puff(
+    id: &str,
+    params: &Value,
+    pos: Vec3,
+    path: &str,
+    planted: Option<&str>,
+) -> Result<Puff, Refused> {
     let field = |k: &str, default: f64, ok: fn(f64) -> bool| -> Result<f64, Refused> {
         match params.get(k) {
             None => Ok(default),
@@ -4169,7 +4314,12 @@ fn puff(id: &str, params: &Value, pos: Vec3, path: &str) -> Result<Puff, Refused
             }),
         }
     };
-    let radius = field("radius", 1.0, |r| r > 0.0)?;
+    let left_out = if planted == Some("defaults_reader_falls_back_to_2") {
+        2.0
+    } else {
+        1.0
+    };
+    let radius = field("radius", left_out, |r| r > 0.0)?;
     let light = params.get("light");
     let on = |k: &str, yes: &str| -> Result<bool, Refused> {
         match light.and_then(|l| l.get(k)) {
@@ -4391,7 +4541,10 @@ impl Scene {
 /// Whether `doc` holds any of scene3d's marks: a document a 2D renderer can't draw alone.
 /// A scene3d kind, or one a module draws through its fills (#226).
 fn is_3d_or_contributed(kind: &str) -> bool {
-    is_3d(kind) || crate::contributed::draws(kind)
+    // A mesh read from the store draws in 3D too, so a scene of glTF models alone is one (#1729).
+    is_3d(kind)
+        || crate::contributed::draws(kind)
+        || matches!(kind, "mesh.asset@1" | "mesh.sequence@1")
 }
 
 pub fn has_3d(doc: &Value) -> bool {

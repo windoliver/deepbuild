@@ -5,11 +5,13 @@
 //! logic.budget. #532 adds the checkpoint ring's byte budget, bake keys, seeks, goldens,
 //! logic.determinism, logic.budget's fixed cost, data assets and a live view whose seeks run
 //! across frames. #547 keeps a bake's arrays as each step's changed ranges with whole arrays at
-//! checkpoints (`bake`), and a session's keyframes every 10 s of play in a cache (`keyframes`).
-//! `deep-logic` serves it as JSON lines (the #531, #532 and #547 acceptance READMEs: deep-logic),
+//! checkpoints (`bake`), and a session's keyframes every 10 s of play in a cache (`keyframes`);
+//! #534 adds saves, written whole, opened by the viewer, refused or migrated. `deep-logic` serves
+//! it as JSON lines (the #531, #532, #534 and #547 acceptance READMEs: deep-logic),
 //! and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
 
 pub mod bake;
+pub mod bindings;
 pub mod budget;
 pub mod checks;
 pub mod judder;
@@ -20,6 +22,7 @@ pub mod live;
 pub mod module;
 pub mod piece;
 pub mod point;
+pub mod saves;
 pub mod world;
 
 use std::collections::BTreeMap;
@@ -52,6 +55,11 @@ pub struct Planted {
     pub restore_keeps_regions_only: bool,
     pub restore_copies_assets: bool,
     pub simulate_runs_all_steps: bool,
+    pub read_region_orders_by_arrival: bool,
+    pub read_region_drops_player: bool,
+    pub save_drops_globals: bool,
+    pub save_drops_input_position: bool,
+    pub open_reapplies_segments: bool,
     pub replay_changes_step_37: bool,
     pub budget_counts_lane_reading: bool,
     pub seek_repeats_occurrences: bool,
@@ -70,6 +78,12 @@ pub struct Planted {
     pub ring_drops_oldest: bool,
     pub keyframes_held_in_ring: bool,
     pub store_fails_at_step_120: bool,
+    /// #548: a preview that runs on the item's own instance rather than a throwaway copy.
+    pub preview_writes_item_memory: bool,
+    /// #548: a preview that runs only when a control it reads changes, not after a step or seek.
+    pub preview_runs_on_hover_only: bool,
+    /// #548: a region map that lays the reads out by name rather than in declaration order.
+    pub map_reads_by_name: bool,
 }
 
 impl Planted {
@@ -78,11 +92,16 @@ impl Planted {
         let p = &mut self;
         match name {
             "check_compares_step_hashes" => p.check_step_hashes_only = true,
+            "read_region_orders_by_arrival" => p.read_region_orders_by_arrival = true,
+            "read_region_drops_player" => p.read_region_drops_player = true,
             "budget_sums_fuel_only" => p.budget_sums_only_fuel = true,
             "checkpoint_drops_globals" => p.checkpoint_drops_globals = true,
             "restore_keeps_regions_only" => p.restore_keeps_regions_only = true,
             "restore_copies_assets" => p.restore_copies_assets = true,
             "simulate_runs_all_steps" => p.simulate_runs_all_steps = true,
+            "save_drops_globals" => p.save_drops_globals = true,
+            "save_drops_input_position" => p.save_drops_input_position = true,
+            "open_reapplies_segments" => p.open_reapplies_segments = true,
             "tracker_skips_memory_copy" => p.rewrite.skip_copy_pages = true,
             "tracker_skips_memory_fill" => p.rewrite.skip_fill_pages = true,
             "ranges_drop_second_at_step_5000" => p.ranges_drop_second_at_step_5000 = true,
@@ -107,6 +126,8 @@ impl Planted {
             "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
             "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
             "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
+            "preview_writes_item_memory" => p.preview_writes_item_memory = true,
+            "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
             _ => return None,
         }
         Some(self)
@@ -272,6 +293,8 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
                             value: (*value).into(),
                             writer: "tour".into(),
                             player: 1,
+                            as_of: None,
+                            arrived: 0,
                         });
                         seq += 1;
                     }
@@ -281,6 +304,24 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
     }
     entries.sort_by_key(|e| (e.t, e.player, e.seq));
     Some(entries)
+}
+
+/// A golden's checkpoint hashes from each item's checkpoints: each one's step and deep hash, and
+/// never the time taking it took (`ns`), which differs from run to run.
+fn checkpoint_hashes(checkpoints: &Value) -> Value {
+    let hashes = |list: &Value| -> Option<Value> {
+        let list = list.as_array()?.iter();
+        Some(
+            list.map(|c| json!({"step": c["step"], "deep_hash": c["deep_hash"]}))
+                .collect(),
+        )
+    };
+    let items = checkpoints.as_object().into_iter().flatten();
+    Value::Object(
+        items
+            .filter_map(|(id, list)| Some((id.clone(), hashes(list)?)))
+            .collect(),
+    )
 }
 
 /// The runtime digest a golden carries: the seal's, of the set this crate's runner holds, the
@@ -516,8 +557,11 @@ impl Logic {
             Some("golden_verify") => self.golden_verify(line).unwrap_or_else(|e| e),
             Some("view") => self.view(line).unwrap_or_else(|e| e),
             Some("frame") => self.frame(line).unwrap_or_else(|e| e),
+            Some("baked") => self.view_bake(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
+            Some("append") => self.append(line).unwrap_or_else(|e| e),
+            Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),
         }
     }
@@ -553,6 +597,8 @@ impl Logic {
             &mut rec,
             None,
         )?;
+        world.saves_dir = saves_dir(line);
+        world.adapter = adapter(line);
         let mut probed: Vec<(usize, Result<Value, Value>)> = Vec::new();
         world.run(steps, &mut rec, &mut |w, k| {
             for (i, p) in probes.iter().enumerate().filter(|(_, p)| p.at == k) {
@@ -598,11 +644,13 @@ impl Logic {
                 .ok_or_else(|| bad("peek"))?;
             peeks.push(json!({"item": item, "at": at, "len": len, "hex": hex}));
         }
+        let saves = saves::written(&mut world)?;
+        let frames = frames(&piece, line.get("frames"), &rec, None)?;
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece), "ring": world.ring(),
-            "traps": rec.traps, "budgets": budgets, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": rec.traps, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
     }
@@ -729,7 +777,7 @@ impl Logic {
         let golden = json!({
             "bake_key": keys, "runtime_digest": runtime_digest(),
             "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu()},
-            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": occurrences_hash,
+            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": checkpoint_hashes(&Value::Object(rec.checkpoints.clone())), "occurrences_hash": occurrences_hash,
             "record_on": host, "verify_on": [other, "web"],
         });
         Ok((golden, rec, piece))
@@ -782,7 +830,7 @@ impl Logic {
             json!({"first_step": k, "item": id, "field": field})
         });
         let same = mine["bake_key"] == golden["bake_key"]
-            && mine["checkpoint_hashes"] == golden["checkpoint_hashes"]
+            && mine["checkpoint_hashes"] == checkpoint_hashes(&golden["checkpoint_hashes"])
             && first_step.is_none();
         let machines = if golden["machine"]["arch"] == mine["machine"]["arch"] {
             "same"
@@ -928,6 +976,10 @@ impl Logic {
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
         let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        // The web runner fills no reading's slot yet: a plan it would run short is refused.
+        if !piece.sources.is_empty() {
+            return Err(bad("the web player doesn't read readings yet"));
+        }
         let items: Vec<Value> = piece
             .items
             .iter()
@@ -940,6 +992,7 @@ impl Logic {
                     .map(|e| {
                         let (kind, from, offset) = match &e.read {
                             piece::Read::Control => ("control", Value::Null, 0),
+                            piece::Read::Reading { .. } => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::None => ("write", Value::Null, 0),
@@ -1048,8 +1101,20 @@ impl Logic {
                     .ok_or_else(|| bad("set"))?,
             )),
         };
+        // #548: point controls' hovers from this frame on, `[cx, cy]` or null: viewer state.
+        let mut hover = Vec::new();
+        for (control, cell) in line.get("hover").and_then(Value::as_object).into_iter().flatten() {
+            let cell = match cell {
+                Value::Null => None,
+                c => match c.as_array().map(Vec::as_slice) {
+                    Some([x, y]) => Some([x.as_f64().ok_or_else(|| bad("hover"))?, y.as_f64().ok_or_else(|| bad("hover"))?]),
+                    _ => return Err(bad("hover")),
+                },
+            };
+            hover.push((control.clone(), cell));
+        }
         let mut ui_ns = budget::cpu_ns() - ui;
-        let mut out = v.frame(live::Latched { t: v.t, set }).ok_or_else(
+        let mut out = v.frame(live::Latched { t: v.t, set, hover, baked: false }).ok_or_else(
             || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
         )?;
         let ui = budget::cpu_ns();
@@ -1065,6 +1130,16 @@ impl Logic {
         Ok(out)
     }
 
+    /// A view session's bake of the steps it has run (#548): its input track, step records,
+    /// checkpoints and the bake's bytes, as a `bake` of the same piece and track gives them.
+    fn view_bake(&mut self, line: &Value) -> Result<Value, Value> {
+        let session = line.get("session").and_then(Value::as_str).ok_or_else(|| bad("session"))?;
+        let v = self.views.get_mut(session).ok_or_else(|| bad("session"))?;
+        let latched = live::Latched { t: v.t, set: None, hover: Vec::new(), baked: true };
+        v.frame(latched)
+            .ok_or_else(|| json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}))
+    }
+
     fn open(&mut self, line: &Value) -> Result<Value, Value> {
         let piece = Rc::new(self.check(line)?);
         let entries = track(&piece, line, 0).ok_or_else(|| bad("track"))?;
@@ -1077,6 +1152,8 @@ impl Logic {
             &mut rec,
             None,
         )?;
+        world.saves_dir = saves_dir(line);
+        world.adapter = adapter(line);
         // A recorded match's replay keeps a keyframe every 10 s of play in the cache (#547).
         if let Some(c) = line
             .get("cache")
@@ -1107,7 +1184,35 @@ impl Logic {
         let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
-        Ok(json!({"ok": true, "step": to, "failed": w.failed(), "deep_hash": w.deep_hashes()}))
+        let track: Vec<Value> = w.entries().iter().map(Entry::to_json).collect();
+        let saves = saves::written(w)?;
+        Ok(json!({
+            "ok": true,
+            "step": to,
+            "failed": w.failed(),
+            "steps": rec.steps_json(&w.piece),
+            "track": track,
+            "deep_hash": w.deep_hashes(),
+            "saves": saves,
+        }))
+    }
+
+    /// An entry joining a session's track as it arrives: a test writer's control entry as
+    /// stamped, or a value a reading's source delivers, `{reading, value, as_of}`, which the
+    /// logic module stamps (Logic: readings).
+    fn append(&mut self, line: &Value) -> Result<Value, Value> {
+        let s = line
+            .get("session")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("session"))?;
+        let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
+        let mut e = line.get("entry").cloned().ok_or_else(|| bad("entry"))?;
+        if e.get("reading").is_some() {
+            e["t"] = json!(0);
+            e["writer"] = json!("plugin");
+        }
+        let e = Entry::parse(&e).ok_or_else(|| bad("entry"))?;
+        Ok(json!({"ok": true, "entry": w.append(e)?.to_json()}))
     }
 
     /// A session's seek to the state after step `to`: the nearest checkpoint its ring holds or
@@ -1144,6 +1249,132 @@ impl Logic {
         w.run(to + 1, &mut Record::default(), &mut |_, _| {});
         Ok(json!({"ok": true, "to": to, "from": from, "deep_hash": w.deep_hashes()}))
     }
+
+    /// The viewer opens a slot's save from the app (Logic: saves), never the piece's logic.
+    fn open_save(&mut self, line: &Value) -> Result<Value, Value> {
+        let (piece, entries, steps) = self.baked(line)?;
+        let dir = saves_dir(line).ok_or_else(|| bad("saves_dir"))?;
+        let slot = line
+            .get("slot")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| bad("slot"))?;
+        saves::open(
+            piece,
+            &dir,
+            slot,
+            &entries,
+            steps,
+            self.planted,
+            &adapter(line),
+            line.get("frames"),
+        )
+    }
+}
+
+/// The adapter fingerprint a call names for its run, or this host's own: what a save of
+/// same-machine state binds.
+fn adapter(line: &Value) -> String {
+    line.get("adapter")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            static HOST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+            HOST.get_or_init(|| {
+                let host = format!(
+                    "{}\n{}\n{}\n",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH,
+                    cpu()
+                );
+                rewrite::hash(host.as_bytes())
+            })
+            .clone()
+        })
+}
+
+/// Frames (Logic: interpolated writes): per span, `count` frames at 60 Hz from flick `from`, each
+/// reading the named hold arrays as the last step at or before its time left them. `opened` is a
+/// save's step s and its arrays, as step s − 1 left them.
+pub(crate) fn frames(
+    piece: &Piece,
+    spans: Option<&Value>,
+    rec: &Record,
+    opened: Option<(i64, &Map<String, Value>)>,
+) -> Result<Value, Value> {
+    let Some(spans) = spans else {
+        return Ok(json!([]));
+    };
+    let len = piece.items.first().map_or(0, |i| i.step);
+    if len == 0 || !piece.items.windows(2).all(|w| w[0].step == w[1].step) {
+        return Err(bad("frames need every item at one step rate"));
+    }
+    let what = |w: String| json!({"ok": false, "code": "bad_input", "what": w});
+    let mut out = Vec::new();
+    for span in spans.as_array().ok_or_else(|| bad("frames"))? {
+        let (Some(from), Some(count), Some(names)) = (
+            span.get("from").and_then(Value::as_i64),
+            span.get("count")
+                .and_then(Value::as_i64)
+                .filter(|n| *n >= 0),
+            span.get("arrays").and_then(Value::as_array),
+        ) else {
+            return Err(bad("frames"));
+        };
+        let names: Vec<&str> = names
+            .iter()
+            .map(Value::as_str)
+            .collect::<Option<_>>()
+            .ok_or_else(|| bad("frames"))?;
+        let linear = piece.items.iter().flat_map(|i| {
+            i.writes
+                .iter()
+                .filter(|w| w.linear)
+                .map(move |w| format!("{}.{}", i.id, w.name))
+        });
+        if let Some(n) = linear.into_iter().find(|n| names.contains(&n.as_str())) {
+            return Err(what(format!(
+                "{n} is a linear write, whose frames a bake doesn't give yet (#2099)"
+            )));
+        }
+        let mut list = Vec::new();
+        // The last step's arrays, rebuilt once for the frames that fall in it.
+        let mut at: Option<(i64, Option<Map<String, Value>>)> = None;
+        for j in 0..count {
+            let t = j
+                .checked_mul(F / 60)
+                .and_then(|d| d.checked_add(from))
+                .ok_or_else(|| bad("frames"))?;
+            let k = t.div_euclid(len);
+            // The arrays as step k left them, rebuilt from the bake (#547), at a step this run ran.
+            if at.as_ref().is_none_or(|(s, _)| *s != k) {
+                let row = match opened {
+                    Some((s, arrays)) if k == s - 1 => Some(arrays.clone()),
+                    _ => rec.rows().contains_key(&k).then(|| rec.arrays_at(piece, k)),
+                };
+                at = Some((k, row));
+            }
+            let row = at.as_ref().and_then(|(_, r)| r.as_ref());
+            let arrays: Map<String, Value> = names
+                .iter()
+                .map(|n| Some((n.to_string(), row?.get(*n)?.clone())))
+                .collect::<Option<_>>()
+                .ok_or_else(|| {
+                    what(format!(
+                        "no step this run reports wrote {names:?} at or before flick {t}"
+                    ))
+                })?;
+            list.push(json!({"t": t, "arrays": arrays}));
+        }
+        out.push(Value::Array(list));
+    }
+    Ok(Value::Array(out))
+}
+
+/// The folder a call names for the piece's saves.
+fn saves_dir(line: &Value) -> Option<std::path::PathBuf> {
+    line.get("saves_dir")
+        .and_then(Value::as_str)
+        .map(Into::into)
 }
 
 #[cfg(test)]
@@ -1158,8 +1389,11 @@ mod tests {
                 seed: 0,
                 class: deep_canvas::budget::Class::Figure,
                 controls: Default::default(),
+                sources: Default::default(),
                 tour: Some(json!({"idle_after": 0, "keys": {"a": [[-1, 1]]}})),
                 items: Vec::new(),
+                machine: Vec::new(),
+                document: String::new(),
             };
             let entries = track(&piece, &json!({}), 0).expect("a track");
             let played: Vec<(i64, world::Given)> = entries.iter().map(|e| (e.t, e.value.clone())).collect();
@@ -1167,6 +1401,165 @@ mod tests {
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));
         assert_eq!(got, Ok(vec![(-F, world::Given::Number(1.0))]));
+    }
+
+    #[test]
+    fn a_reading_waits_for_its_readers_alone() {
+        // `r` reads the feed at 60 Hz and `s` reads nothing at 15 Hz, so after step 3 `s` has run
+        // to 12/60 s while `r` next runs step 4: the reading is stamped at 4/60 s, and taken.
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let item = |hz: i64, reads: Value| {
+            json!({"kind": "logic@1", "params": {"program": sha, "step_rate": hz, "reads": reads,
+                "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}})
+        };
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each"}},
+            "items": {"r": item(60, json!(["reading:feed"])), "s": item(15, json!([]))}, "assets": assets});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 3}));
+        let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+        let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+        assert_eq!(got["entry"]["t"], json!(4 * F / 60), "{got}");
+    }
+
+    /// #533: entries a slow item reads in one step keep the track's order, by time first, then
+    /// player and seq. A 15 Hz item's step 1 takes the stamps 1/60 s to 4/60 s: player 2's entry
+    /// at 1/60 s comes before player 1's at 2/60 s, whichever arrived first.
+    #[test]
+    fn a_slow_items_step_reads_its_entries_by_time_then_player_and_seq() {
+        // Writes the [player, value] of the first two entries of `press` in its read region.
+        let bytes = wat::parse_str(
+            r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
+            (global (export "writes_at") i32 (i32.const 4096)) (func (export "init") (param $seed i64))
+            (func (export "step") (param $k i64)
+              (f64.store (i32.const 4096) (f64.convert_i32_u (i32.load (i32.const 8))))
+              (f64.store (i32.const 4104) (f64.load (i32.const 16)))
+              (f64.store (i32.const 4112) (f64.convert_i32_u (i32.load (i32.const 24))))
+              (f64.store (i32.const 4120) (f64.load (i32.const 32)))))"#,
+        )
+        .expect("the program assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "controls": {"press": {"kind": "slider"}}, "assets": assets,
+            "items": {"order": {"kind": "logic@1", "params": {"program": sha, "step_rate": 15,
+                "reads": ["press"], "writes": {"order": {"type": "f64", "count": 4}}}}}});
+        let order = |first: (i64, i64, i64), second: (i64, i64, i64)| {
+            let mut logic = Logic::new(Planted::default());
+            let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+            let session = opened["session"].as_str().expect("a session").to_string();
+            for (sixtieths, player, value) in [first, second] {
+                let entry = json!({"t": sixtieths * F / 60, "seq": 0, "control": "press",
+                    "value": value, "writer": "you", "player": player});
+                let got =
+                    logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+                assert_eq!(got["ok"], json!(true), "{got}");
+            }
+            let ran = logic.handle(&json!({"call": "step", "session": session, "to": 1}));
+            ran["steps"][1]["arrays"]["order.order"].clone()
+        };
+        let wanted = json!([2.0, 21.0, 1.0, 12.0]);
+        assert_eq!(
+            order((1, 2, 21), (2, 1, 12)),
+            wanted,
+            "the earlier entry arriving first"
+        );
+        assert_eq!(
+            order((2, 1, 12), (1, 2, 21)),
+            wanted,
+            "the earlier entry arriving last"
+        );
+    }
+
+    /// #533: two items read one feed at 60 Hz and 15 Hz. After step 3 of each, `s` has read to
+    /// 12/60 s, so the reading is stamped at the first step either runs after that, 13/60 s.
+    #[test]
+    fn a_reading_two_rates_read_is_stamped_after_what_both_have_read() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let item = |hz: i64| {
+            json!({"kind": "logic@1", "params": {"program": sha, "step_rate": hz, "reads": ["reading:feed"],
+                "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}})
+        };
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each"}},
+            "items": {"r": item(60), "s": item(15)}, "assets": assets});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 3}));
+        let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+        let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+        assert_eq!(got["entry"]["t"], json!(13 * F / 60), "{got}");
+    }
+
+    /// #533: an item on a turn clock runs the step a reading it reads is recorded at (Logic:
+    /// turn clock), and no other.
+    #[test]
+    fn a_reading_wakes_the_turn_clock_item_that_reads_it() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        for delivery in ["each", "latest"] {
+            let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": delivery}}, "assets": assets,
+                "items": {"r": {"kind": "logic@1", "params": {"program": sha, "clock": "on_input", "reads": ["reading:feed"],
+                    "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}}}});
+            let mut logic = Logic::new(Planted::default());
+            let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+            let session = opened["session"].as_str().expect("a session").to_string();
+            logic.handle(&json!({"call": "step", "session": session, "to": 2}));
+            let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+            let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+            let at = got["entry"]["t"].as_i64().expect("a stamp") / (F / 60);
+            let ran = logic.handle(&json!({"call": "step", "session": session, "to": 9}));
+            let steps: Vec<i64> = ran["steps"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| s["step"].as_i64())
+                .collect();
+            assert_eq!(
+                steps,
+                vec![at],
+                "{delivery}: the steps run after the reading: {ran}"
+            );
+        }
+    }
+
+    /// #533: values past an `each` reading's `max_per_step` wait for the next step, and that wait
+    /// asks a turn-clock item for the step: three values at one a step run three steps.
+    #[test]
+    fn readings_still_waiting_ask_a_turn_clock_item_for_its_next_step() {
+        let bytes = wat::parse_str(include_str!("fixture.wat")).expect("the fixture assembles");
+        let sha = rewrite::hash(&bytes);
+        let mut assets = Map::new();
+        assets.insert(sha.clone(), json!(B64.encode(&bytes)));
+        let piece = json!({"seed": 533, "sources": {"feed": {"shape": "scalar", "delivery": "each", "max_per_step": 1}},
+            "assets": assets, "items": {"r": {"kind": "logic@1", "params": {"program": sha, "clock": "on_input",
+                "reads": ["reading:feed"], "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}}}});
+        let mut logic = Logic::new(Planted::default());
+        let opened = logic.handle(&json!({"call": "open", "piece": piece}));
+        let session = opened["session"].as_str().expect("a session").to_string();
+        logic.handle(&json!({"call": "step", "session": session, "to": 2}));
+        for _ in 0..3 {
+            let entry = json!({"reading": "reading:feed", "value": 7, "as_of": 1});
+            let got = logic.handle(&json!({"call": "append", "session": session, "entry": entry}));
+            assert_eq!(got["ok"], json!(true), "{got}");
+        }
+        let ran = logic.handle(&json!({"call": "step", "session": session, "to": 9}));
+        let steps: Vec<i64> = ran["steps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["step"].as_i64())
+            .collect();
+        assert_eq!(steps, vec![3, 4, 5], "{ran}");
     }
 
     /// #1920: a golden carries the seal's runtime digest in place of the logic module's own. The
@@ -1178,5 +1571,44 @@ mod tests {
         let golden = Logic::default().handle(&line)["golden"].clone();
         let none = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
         assert_eq!(golden["runtime_digest"], json!(none));
+    }
+
+    /// A golden holds no time (#532, #534's checkpoint `ns`): the same piece gives the same golden
+    /// twice and verifies against it, as does a golden recorded with each checkpoint's `ns`, while
+    /// one whose checkpoint's deep hash differs fails.
+    #[test]
+    fn a_golden_holds_no_time_and_verifies_by_step_and_deep_hash() {
+        let program = wat::parse_str(
+            r#"(module (memory (export "memory") 1 1)
+  (global (export "reads_at") i32 (i32.const 0)) (global (export "writes_at") i32 (i32.const 1024))
+  (func (export "init") (param i64))
+  (func (export "step") (param $k i64) (i32.store (i32.const 1024) (i32.wrap_i64 (local.get $k)))))"#,
+        )
+        .expect("a program");
+        let sha = rewrite::hash(&program);
+        let params = json!({"program": sha, "writes": {"a": {"type": "i32", "count": 1}}});
+        let piece = json!({"seed": 0, "assets": {&sha: B64.encode(&program)}, "items": {"e": {"kind": "logic@1", "params": params}}});
+        let call = |call: &str, golden: Option<&Value>| {
+            let line = json!({"call": call, "piece": piece, "steps": 121, "golden": golden});
+            Logic::default().handle(&line)
+        };
+        let golden = call("golden", None)["golden"].clone();
+        let steps: Vec<&Value> = golden["checkpoint_hashes"]["e"]
+            .as_array()
+            .expect("checkpoints")
+            .iter()
+            .map(|c| &c["step"])
+            .collect();
+        assert_eq!(steps, [0, 60, 120]);
+        let again = call("golden", None)["golden"].clone();
+        assert_eq!(again["checkpoint_hashes"], golden["checkpoint_hashes"]);
+        assert_eq!(again, golden);
+        assert_eq!(call("golden_verify", Some(&golden))["verdict"], "PASS");
+        let mut timed = golden.clone();
+        timed["checkpoint_hashes"]["e"][1]["ns"] = json!(4576);
+        assert_eq!(call("golden_verify", Some(&timed))["verdict"], "PASS");
+        let mut other = golden.clone();
+        other["checkpoint_hashes"]["e"][1]["deep_hash"] = json!("0000000000000000");
+        assert_eq!(call("golden_verify", Some(&other))["verdict"], "FAIL");
     }
 }

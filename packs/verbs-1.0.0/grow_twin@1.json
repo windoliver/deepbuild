@@ -1,0 +1,55 @@
+{
+  "id": "verbs.grow_twin",
+  "version": "1.0",
+  "title": "Grow, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of grow: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "from": {
+      "type": "ID",
+      "default": "none",
+      "about": "the item whose place it grows from; its bounds' center when none"
+    }
+  },
+  "steps": {
+    "grow": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "at/scale": [
+            0.5,
+            0.5,
+            "now[2]"
+          ]
+        }
+      }
+    },
+    "center": {
+      "op": "cue",
+      "when": "from == none",
+      "params": {
+        "from": {
+          "at/pos": [
+            "cx",
+            "cy",
+            "now[2]"
+          ]
+        }
+      }
+    },
+    "anchor": {
+      "op": "cue",
+      "when": "from != none",
+      "params": {
+        "from": {
+          "at/pos": [
+            "from_now[0]",
+            "from_now[1]",
+            "now[2]"
+          ]
+        }
+      }
+    }
+  }
+}

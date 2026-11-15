@@ -1,0 +1,28 @@
+✖ a spawn timeout through real lease returns nonzero and leaves no compiler descendants (8266.778583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8350.387041
+
+✖ failing tests:
+
+test at tests/proof-binaries-timeout.test.mjs:10:1
+✖ a spawn timeout through real lease returns nonzero and leaves no compiler descendants (8266.778583ms)
+  AssertionError [ERR_ASSERTION]: timeout stops the whole owned build group
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///private/tmp/deep-1123-complete/timeout-wrong/tests/proof-binaries-timeout.test.mjs:23:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

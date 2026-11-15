@@ -251,6 +251,7 @@ impl<'a> Hub<'a> {
             Some(track) => self.load_with(&e.doc, track, t),
             None => self.load_frame(&e.doc, t),
         }
+
         // Planted (#504): a document with controls runs a program through the sandbox each frame.
         if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
             && self
@@ -260,6 +261,17 @@ impl<'a> Hub<'a> {
         {
             self.sandbox.runs += 1;
         }
+        // #169: every row of the core's carried-state list as a play on this track leaves it at
+        // `t`, so steps the live session ran under another track never answer for it.
+        let carried: Option<Value> = self.played_form(&e.doc).filter(|_| e.carried).map(|form| {
+            let form = e
+                .track
+                .as_ref()
+                .map_or(form.clone(), |t| crate::played::with_track(&form, t));
+            (self.carried_at(&form, t).into_iter())
+                .map(|c| json!({"owner": c.module, "kind": c.kind, "key": c.key, "hash": c.hash}))
+                .collect()
+        });
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
@@ -347,6 +359,16 @@ impl<'a> Hub<'a> {
                         .as_ref()
                         .and_then(|v| v.as_typed::<f64>())
                         .map(|x| json!(*x));
+                    // #533: a logic item's array `<logic ID>.<name>` of count 1, as the logic
+                    // module's last step at or before the frame left it.
+                    let logic = || {
+                        let state = evaluated.array(&self.sched, deep_logic::module::STATE)?;
+                        let state = state.as_typed::<deep_logic::module::State>()?;
+                        match state.arrays.get(name)?.as_slice() {
+                            [one] => Some(one.clone()),
+                            _ => None,
+                        }
+                    };
                     // #503: a spectrum's bands, the array the document's bake fills, as this frame reads them.
                     let doc = evaluated.document();
                     let bands = || {
@@ -355,13 +377,22 @@ impl<'a> Hub<'a> {
                         })
                         .map(|m| json!(m.values))
                     };
-                    (name.clone(), n.or(x).or_else(bands).unwrap_or(Value::Null))
+                    (
+                        name.clone(),
+                        n.or(x).or_else(logic).or_else(bands).unwrap_or(Value::Null),
+                    )
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);
         }
         if !e.paths.is_empty() {
             reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
+        if let Some(rows) = carried {
+            reply["carried"] = rows;
+        }
+        if e.data_hash {
+            reply["data_hash"] = json!(crate::data_hash::of(&self.sched, evaluated));
         }
         if self.startup.test_build {
             reply["access"] = json!(report
@@ -385,7 +416,11 @@ impl<'a> Hub<'a> {
         // #507: the timeline position the frame at this clock time shows.
         reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
         let drawing = if e.pixels || e.film || e.texts {
-            drawing_of(&self.sched, evaluated)
+            drawing_of(&self.sched, evaluated).map(|p| match &document {
+                // #466: the look's boil on the frame's lines.
+                Some(d) => self.boiled(d, t, reduced, p),
+                None => p,
+            })
         } else {
             None
         };
@@ -412,6 +447,10 @@ impl<'a> Hub<'a> {
                 (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
                 _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
             };
+            // #466: every list the document's reveals compile.
+            if let Some(d) = &document {
+                reply["film"]["occurrences"] = Value::Object(self.reveal_lists(d));
+            }
         }
         if e.texts {
             reply["texts"] = Value::Object(
@@ -542,7 +581,17 @@ impl<'a> Hub<'a> {
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let ground = self.ground(opaque);
-        let ink = self.look.light.get("ink").copied().unwrap_or([0; 3]);
+        // #466: a dip's color is a look role, ink unless it names another.
+        let role = match &sides.mix {
+            Some(crate::film::Mix::Dip { role, .. }) => role.as_str(),
+            _ => "ink",
+        };
+        let Some(ink) = self.look.light.get(role).copied() else {
+            return Err(Unfit {
+                code: "role_unresolved",
+                path: "transitions".into(),
+            });
+        };
         let frame = drawn.frame.size;
         let mut pictures = Vec::with_capacity(sides.sides.len());
         for side in &sides.sides {
@@ -561,7 +610,10 @@ impl<'a> Hub<'a> {
             pictures.push(rgba);
         }
         let mut rgba = match (&sides.mix, pictures.len()) {
-            (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
+            (Some(mix), 2) => {
+                let pass = self.transition_pass(doc, mix, &pictures, size)?;
+                crate::film::blend(&pictures[0], &pictures[1], mix, size, ink, pass.as_deref())
+            }
             _ => pictures.swap_remove(0),
         };
         self.caption_over(&mut rgba, size);
@@ -570,6 +622,28 @@ impl<'a> Hub<'a> {
         let over = self.renderer.raster(&status, size, None);
         crate::film::over(&mut rgba, &over);
         Ok((rgba, status, size))
+    }
+
+    /// #466: an operator transition's pass over the two finished sides, or `None` for a mix of
+    /// another kind.
+    fn transition_pass(
+        &self,
+        doc: &Value,
+        mix: &crate::film::Mix,
+        pictures: &[Vec<u8>],
+        size: [u16; 2],
+    ) -> Result<Option<Vec<u8>>, Unfit> {
+        let crate::film::Mix::Operator { id, op, p } = mix else {
+            return Ok(None);
+        };
+        let roles = self
+            .look
+            .light
+            .iter()
+            .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+            .collect();
+        let sides = [pictures[0].as_slice(), pictures[1].as_slice()];
+        crate::film_operator::draw(doc, id, op, *p, sides, size, &roles).map(Some)
     }
 
     /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
@@ -589,16 +663,16 @@ impl<'a> Hub<'a> {
         drawing: &Painted,
         size: Option<[u16; 2]>,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
-        let drawn = self
-            .renderer
-            .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|()| Unfit {
-            code: "gpu_unavailable",
-            path: "snapshots".into(),
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        // #506: with its insets' pictures, its overlay frames at their anchors and its view
+        // overlays (over3d.rs).
+        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
+            "unsupported_platform" => Unfit {
+                code: "gpu_unavailable",
+                path: "snapshots".into(),
+            },
+            _ => u,
         })?;
-        let over = self.renderer.raster(&drawn, size, None);
-        snapshot::over(&mut rgba, &over);
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
@@ -1039,6 +1113,7 @@ fn cell_grids(
                     to: *to,
                     role: String::new(),
                     color: *c,
+                    opacity: 1.0,
                 })
                 .collect();
             let text = row.text.trim_end().to_string();
@@ -1046,6 +1121,8 @@ fn cell_grids(
                 item: id.clone(),
                 spec: scene::TextSpec {
                     spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
+                    gap: 0.0,
+                    indent: 0.0,
                     text,
                     font: "mono".into(),
                     family: Some(deep_text::Role::Mono.family()),

@@ -1,0 +1,6 @@
+{"type":"start","file":"<clean-checkout>/tests/acceptance/1123/environment.test.mjs","name":"#1123.cd6b3dd8 childEnv discards a shell binary directory","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"<clean-checkout>/tests/acceptance/1123/environment.test.mjs","name":"#1123.cd6b3dd8 childEnv discards a shell binary directory","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"<clean-checkout>/tests/acceptance/1123/environment.test.mjs","name":"#1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"<clean-checkout>/tests/acceptance/1123/environment.test.mjs","name":"#1123.cd6b3dd8 childEnv preserves the explicit per-side binary directory","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"<clean-checkout>/tests/acceptance/1123/environment.test.mjs","name":"wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"<clean-checkout>/tests/acceptance/1123/environment.test.mjs","name":"wrong-program proof: deleting DEEP_BIN_DIR after the merge fails the same per-side assertion","nesting":0,"suite":false,"skip":false,"todo":false}

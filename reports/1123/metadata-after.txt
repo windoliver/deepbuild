@@ -1,0 +1,12 @@
+✔ binary demand stays with its consumer instead of names in unrelated selected tests (5247.939292ms)
+✔ a binary consumer without a Cargo workspace is blocked before it executes (579.065166ms)
+✔ named helper imports do not build unused binary exports (3652.801958ms)
+✔ named helper imports build only their used binary (5130.537667ms)
+✔ metadata-only scope check does not build an unused helper binary (2280.024334ms)
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 17461.46675

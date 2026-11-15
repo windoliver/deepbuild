@@ -39,7 +39,6 @@ export const AC8 = 'AC8 #303.0ca34012';
 export const AC9 = 'AC9 #303.8c347a59';
 export const AC10 = 'AC10 #303.fd687f1e';
 export const AC11 = 'AC11 #303.447eb97a';
-export const AC12 = 'AC12 #303.323ca6a1';
 
 /** The prompts the issue names, word for word, and the ones this suite adds (README, The prompts). */
 export const BEHAVIOR = 'make the auth middleware reject expired tokens';

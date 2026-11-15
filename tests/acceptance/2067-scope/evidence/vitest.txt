@@ -1,0 +1,236 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `<HOME>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2067-scope/inherited-reuse.test.ts tests/acceptance/2067-scope/promisor.test.ts tests/acceptance/2067-scope/review-name.test.ts` runs unleased
+
+ RUN  v5.0.5 <BASE>
+
+Cloning into bare repository '<FIXTURE>/origin.git'...
+done.
+Cloning into '<FIXTURE>/fetch-capable-twin'...
+done.
+stdout | tests/acceptance/2067-scope/review-name.test.ts > #2067 scope: undefined release review is not satisfied by the automatic PR reviewer
+2067 scope review {"verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DYCEC1ENA6DKYSN8K5T10C from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76","unit carried run:01M7DYCEANBEBPTNVKG0SJVN36 from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76",".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCR08YXVB0RW4EFEAHW79 from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76"],"checks":[{"check":"review","outcome":"passed"}],"closes":{"allowed":false,"reason":"DeepBuild blocked this: the pull request can't say Closes #2067 until the repo's release check passes on its commit merged with main (e89472a84f0d): review is still to run there. Say Part of #2067 instead; the PR's claim runs it there in the slow lane."}}
+
+xstdout | tests/acceptance/2067-scope/inherited-reuse.test.ts > #2067 scope / AC4: the same inherited release failure stays BLOCKED on a second claim
+2067 scope inherited first {"verdict":"BLOCKED","reasons":["preflight: inherited: also fails on the merge base: release is ready",".deepbuild/checks/expired-token.sh carried run:01M7DYCEA3RRSMH69333H315BA from claim:01M7DYCDKMZ6SNTV9YP0ZQ5HPC in session:ae00ff1053384cc6ab384380c7f68a13","unit carried run:01M7DYCE8N41WC43SXE6RP7MQW from claim:01M7DYCDKMZ6SNTV9YP0ZQ5HPC in session:ae00ff1053384cc6ab384380c7f68a13",".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCR072K0JR7XFR2BCYVMS from claim:01M7DYCDKMZ6SNTV9YP0ZQ5HPC in session:ae00ff1053384cc6ab384380c7f68a13"],"runs":[{"commit":"e77a516cc487e18545e194408b34b9505e215fe7","result":{"run":"run:01M7DYCT51FF6X4GYQTCXVWEAE","outcome":"failed","tests_run":1,"passed":0,"runs":1,"evidence":["4db89065c1c6605aced33a364bb80b85bb1883c4d2bd3ed37428c95d8816b793","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"preflight","assertion":"release is ready","expected":null,"actual":null,"step":null,"points_to":"tests/release.test.js:4","findings":["release is ready (tests/release.test.js:4): Expected values to be strictly equal:\n\nfalse !== true\n"],"environment":"darwin-arm64"}},{"commit":"bed45ced75fb7aa14ba425eb54a5cdd3fe6d9b9a","result":{"run":"run:01M7DYCV06B69V5DPZ2HEA8CA8","outcome":"failed","tests_run":1,"passed":0,"runs":1,"evidence":["47103db479f9d52d6d544ce8a8530fe58570d0164261c95bc47bcc043fe00ed7","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"preflight","assertion":"release is ready","expected":null,"actual":null,"step":null,"points_to":"tests/release.test.js:4","findings":["release is ready (tests/release.test.js:4): Expected values to be strictly equal:\n\nfalse !== true\n"],"environment":"darwin-arm64","key":{"id":"637b63f74752f78d7cb912a2bd29db7b1ee1ee665c1fb3e3312fa044460ad2d1","stem":"3bbe5a582a8de2ab3607566784bd1df658857418bea66850886d5d19c10c68cf","paths":["tests/release.test.js"],"claim":"claim:01M7DYCRS29TA61X7YMYTVRGER","session":"session:ae00ff1053384cc6ab384380c7f68a13","base":true,"withheld":false,"plain":true}}}]}
+
+stdout | tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+2067 scope promisor {"localMainResolved":true,"control":["merge-tree","fetch"],"observed":["merge-tree","fetch","merge-tree"],"verdict":"PASS","reasons":[".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run","review: PASS on 1 clean run","preflight: PASS on 1 clean run",".deepbuild/checks/expired-token.sh carried run:01M7DYCEG7D1ZWFGT30X0ANZZN from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6","unit carried run:01M7DYCEEWS2D9ZD0029ETH4FJ from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6",".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCQYBJY244N9EJRK0BT2Z from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6"],"checks":[{"check":"review","outcome":"passed"},{"check":"preflight","outcome":"passed"}],"closes":{"allowed":true,"reason":""}}
+
+xstdout | tests/acceptance/2067-scope/inherited-reuse.test.ts > #2067 scope / AC4: the same inherited release failure stays BLOCKED on a second claim
+2067 scope inherited second {"verdict":"BLOCKED","reasons":["preflight: inherited: also fails on the merge base: release is ready",".deepbuild/checks/expired-token.sh carried run:01M7DYCEA3RRSMH69333H315BA from claim:01M7DYCDKMZ6SNTV9YP0ZQ5HPC in session:ae00ff1053384cc6ab384380c7f68a13","unit carried run:01M7DYCE8N41WC43SXE6RP7MQW from claim:01M7DYCDKMZ6SNTV9YP0ZQ5HPC in session:ae00ff1053384cc6ab384380c7f68a13","review carried run:01M7DYCSN0VZRKVTEXGZJ2NR16 from claim:01M7DYCRS29TA61X7YMYTVRGER in session:ae00ff1053384cc6ab384380c7f68a13",".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCR072K0JR7XFR2BCYVMS from claim:01M7DYCDKMZ6SNTV9YP0ZQ5HPC in session:ae00ff1053384cc6ab384380c7f68a13","preflight carried its base run run:01M7DYCV06B69V5DPZ2HEA8CA8 from claim:01M7DYCRS29TA61X7YMYTVRGER in session:ae00ff1053384cc6ab384380c7f68a13"],"releaseRuns":2}
+
+·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: nothing is fetched, including Git internal promisor retrieval: expected [ 'fetch' ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:48:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: preflight cannot vanish or be replaced by another check: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:97:96
+     95| export function missing(r: Awaited<ReturnType<Awaited<ReturnType<typeo…
+     96|   const why = JSON.stringify(r.verdict.data.reasons);
+     97|   expect.soft(r.verdict.data.outcome, `${name} cannot vanish or be rep…
+       |                                                                                                ^
+     98|   // Names may be qualified to avoid collisions; no invented ID policy.
+     99|   expect.soft(r.change.checks.some((c: { check: string; outcome: strin…
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:49:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: preflight stands as a missing check on the receipt: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:99:183
+     97|   expect.soft(r.verdict.data.outcome, `${name} cannot vanish or be rep…
+     98|   // Names may be qualified to avoid collisions; no invented ID policy.
+     99|   expect.soft(r.change.checks.some((c: { check: string; outcome: strin…
+       |                                                                                                                                                                                       ^
+    100|   expect.soft(why).toMatch(new RegExp(name, 'i'));
+    101|   expect.soft(why, 'missing outside-code cause').toMatch(cause);
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:49:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: missing outside-code cause: expected '[".deepbuild/checks/expired-token.sh:…' to match /(?:main\s*(?:line)?.*(?:read|unavail…/i
+
+- Expected:
+/(?:main\s*(?:line)?.*(?:read|unavailable|missing)|(?:read|unavailable|missing).*main\s*(?:line)?)/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\"preflight: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DYCEG7D1ZWFGT30X0ANZZN from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6\",\"unit carried run:01M7DYCEEWS2D9ZD0029ETH4FJ from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCQYBJY244N9EJRK0BT2Z from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6\"]"
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:101:50
+     99|   expect.soft(r.change.checks.some((c: { check: string; outcome: strin…
+    100|   expect.soft(why).toMatch(new RegExp(name, 'i'));
+    101|   expect.soft(why, 'missing outside-code cause').toMatch(cause);
+       |                                                  ^
+    102|   expect.soft(why, 'owner is you').toMatch(/\byou\b/i);
+    103| }
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:49:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: owner is you: expected '[".deepbuild/checks/expired-token.sh:…' to match /\byou\b/i
+
+- Expected:
+/\byou\b/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\"preflight: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DYCEG7D1ZWFGT30X0ANZZN from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6\",\"unit carried run:01M7DYCEEWS2D9ZD0029ETH4FJ from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCQYBJY244N9EJRK0BT2Z from claim:01M7DYCDREARCB3BW958QMMRRB in session:b9ade0c48810495ab87bf3dbecede8f6\"]"
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:102:36
+    100|   expect.soft(why).toMatch(new RegExp(name, 'i'));
+    101|   expect.soft(why, 'missing outside-code cause').toMatch(cause);
+    102|   expect.soft(why, 'owner is you').toMatch(/\byou\b/i);
+       |                                    ^
+    103| }
+    104|
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:49:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: unreadable release input holds Closes: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:50:72
+     48|   expect.soft(observed.filter((c) => c === 'fetch'), 'nothing is fetch…
+     49|   missing(result, 'preflight', /(?:main\s*(?:line)?.*(?:read|unavailab…
+     50|   expect.soft(closes.allowed, 'unreadable release input holds Closes')…
+       |                                                                        ^
+     51|   expect.soft(closes.reason).toMatch(/preflight/i);
+     52| }, 540_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/promisor.test.ts > #2067 scope: locally resolvable main with a promised missing tree is BLOCKED without a lazy fetch
+AssertionError: expected '' to match /preflight/i
+
+- Expected:
+/preflight/i
+
++ Received:
+""
+
+ ❯ tests/acceptance/2067-scope/promisor.test.ts:51:30
+     49|   missing(result, 'preflight', /(?:main\s*(?:line)?.*(?:read|unavailab…
+     50|   expect.soft(closes.allowed, 'unreadable release input holds Closes')…
+     51|   expect.soft(closes.reason).toMatch(/preflight/i);
+       |                              ^
+     52| }, 540_000);
+     53|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/review-name.test.ts > #2067 scope: undefined release review is not satisfied by the automatic PR reviewer
+AssertionError: review cannot vanish or be replaced by another check: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:97:96
+     95| export function missing(r: Awaited<ReturnType<Awaited<ReturnType<typeo…
+     96|   const why = JSON.stringify(r.verdict.data.reasons);
+     97|   expect.soft(r.verdict.data.outcome, `${name} cannot vanish or be rep…
+       |                                                                                                ^
+     98|   // Names may be qualified to avoid collisions; no invented ID policy.
+     99|   expect.soft(r.change.checks.some((c: { check: string; outcome: strin…
+ ❯ tests/acceptance/2067-scope/review-name.test.ts:13:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/review-name.test.ts > #2067 scope: undefined release review is not satisfied by the automatic PR reviewer
+AssertionError: review stands as a missing check on the receipt: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:99:183
+     97|   expect.soft(r.verdict.data.outcome, `${name} cannot vanish or be rep…
+     98|   // Names may be qualified to avoid collisions; no invented ID policy.
+     99|   expect.soft(r.change.checks.some((c: { check: string; outcome: strin…
+       |                                                                                                                                                                                       ^
+    100|   expect.soft(why).toMatch(new RegExp(name, 'i'));
+    101|   expect.soft(why, 'missing outside-code cause').toMatch(cause);
+ ❯ tests/acceptance/2067-scope/review-name.test.ts:13:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/review-name.test.ts > #2067 scope: undefined release review is not satisfied by the automatic PR reviewer
+AssertionError: missing outside-code cause: expected '[".deepbuild/checks/expired-token.sh:…' to match /(?:not|isn't|undefined|no|missing|un…/i
+
+- Expected:
+/(?:not|isn't|undefined|no|missing|unknown|cannot|can't).*(?:defin|check)|(?:check|review).*(?:not defined|undefined|missing|unknown)/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DYCEC1ENA6DKYSN8K5T10C from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76\",\"unit carried run:01M7DYCEANBEBPTNVKG0SJVN36 from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCR08YXVB0RW4EFEAHW79 from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76\"]"
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:101:50
+     99|   expect.soft(r.change.checks.some((c: { check: string; outcome: strin…
+    100|   expect.soft(why).toMatch(new RegExp(name, 'i'));
+    101|   expect.soft(why, 'missing outside-code cause').toMatch(cause);
+       |                                                  ^
+    102|   expect.soft(why, 'owner is you').toMatch(/\byou\b/i);
+    103| }
+ ❯ tests/acceptance/2067-scope/review-name.test.ts:13:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  tests/acceptance/2067-scope/review-name.test.ts > #2067 scope: undefined release review is not satisfied by the automatic PR reviewer
+AssertionError: owner is you: expected '[".deepbuild/checks/expired-token.sh:…' to match /\byou\b/i
+
+- Expected:
+/\byou\b/i
+
++ Received:
+"[\".deepbuild/checks/expired-token.sh: PASS on 1 clean run\",\"unit: PASS on 1 clean run\",\"review: PASS on 1 clean run\",\".deepbuild/checks/expired-token.sh carried run:01M7DYCEC1ENA6DKYSN8K5T10C from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76\",\"unit carried run:01M7DYCEANBEBPTNVKG0SJVN36 from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76\",\".deepbuild/checks/expired-token.sh carried its base run run:01M7DYCR08YXVB0RW4EFEAHW79 from claim:01M7DYCDMKK1A0PR1QW8XPFGMY in session:811a03c3a9a9479ea4455d44fe3d3a76\"]"
+
+ ❯ missing tests/acceptance/2067-scope/fixture.ts:102:36
+    100|   expect.soft(why).toMatch(new RegExp(name, 'i'));
+    101|   expect.soft(why, 'missing outside-code cause').toMatch(cause);
+    102|   expect.soft(why, 'owner is you').toMatch(/\byou\b/i);
+       |                                    ^
+    103| }
+    104|
+ ❯ tests/acceptance/2067-scope/review-name.test.ts:13:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 1 passed (3)
+   Start at  13:10:58
+   Duration  17.01s (tests 99%)
+

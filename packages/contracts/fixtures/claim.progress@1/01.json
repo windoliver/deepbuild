@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "claim.progress",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "task": "task:item42",
+    "rounds": 2,
+    "last": {
+      "items": "[\"retry: FAIL\"]",
+      "passing": [
+        "unit"
+      ]
+    },
+    "seen": [
+      "run:01K74G00000000000000000001"
+    ],
+    "stalled": null
+  }
+}

@@ -995,8 +995,8 @@ pub(crate) fn ease_of(value: &Value, path: &str) -> Result<Ease, Refused> {
     let single = value.as_object().filter(|o| o.len() == 1);
     if let Some(Value::Object(e)) = single.and_then(|o| o.get("ease")) {
         let name = e.get("name").and_then(Value::as_str);
-        return match Ease::NAMES.iter().find(|(n, _)| Some(*n) == name) {
-            Some((_, ease)) => Ok(*ease),
+        return match name.and_then(Ease::named) {
+            Some(ease) => Ok(ease),
             None => refuse("bad_interp", format!("{path}/ease/name")),
         };
     }
@@ -1344,6 +1344,11 @@ fn follow_of(
     })
 }
 
+/// The keyed value an iris's radius channel writes, by its transition's ID.
+pub fn iris_radius(transition: &str) -> String {
+    format!("transitions/{transition}/iris/radius")
+}
+
 fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
     let parts: Vec<&str> = text.split('/').collect();
     let (owner, field) = if in_clip {
@@ -1359,6 +1364,14 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
             ["data", name] if !name.is_empty() => {
                 return Ok(Target {
                     owner: format!("data/{name}"),
+                    field: vec!["value".into()],
+                })
+            }
+            // #466: an iris's radius, keyed as a value of its own (Transition: operator, iris
+            // and dip: `radius: channel`).
+            ["transitions", id, "iris", "radius"] if !id.is_empty() => {
+                return Ok(Target {
+                    owner: format!("data/{}", iris_radius(id)),
                     field: vec!["value".into()],
                 })
             }
@@ -2007,7 +2020,7 @@ fn modifier_of(
     Ok(Modifier { kind, influence })
 }
 
-fn channel_of(
+pub(crate) fn channel_of(
     id: &str,
     c: &Map<String, Value>,
     in_clip: bool,
@@ -2826,7 +2839,7 @@ fn with_target(o: &Map<String, Value>) -> Map<String, Value> {
 
 /// FNV-1a over a string's bytes: the seed a document without one takes from its ID, and what a
 /// placement's ID adds to it, until the design's `hash@1` is defined.
-fn fnv1a(text: &str) -> u64 {
+pub(crate) fn fnv1a(text: &str) -> u64 {
     text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
         (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
     })
@@ -3109,7 +3122,7 @@ pub(crate) enum Start {
 
 /// The order a stagger starts its targets in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Order {
+pub(crate) enum Order {
     Index,
     Reverse,
     /// A permutation drawn from the document's seed and the placement's ID, the same on every
@@ -3126,7 +3139,7 @@ struct Raw {
 }
 
 #[derive(Clone, Copy)]
-enum Lag {
+pub(crate) enum Lag {
     Ratio(f64),
     Flicks(i64),
 }
@@ -3290,7 +3303,7 @@ fn placement_of(
 
 /// A stagger's lag (a ratio, or a time), its order and `reverse_on_close` (Placement and Follow:
 /// `stagger`).
-fn stagger_of(
+pub(crate) fn stagger_of(
     st: &Map<String, Value>,
     ctx: &Ctx,
     path: &str,
@@ -3319,7 +3332,7 @@ fn stagger_of(
 
 /// Each of `n` targets' rank in a stagger's `order`: its index, reversed, or a Fisher–Yates
 /// permutation drawn from `seed`, the same on every machine and at every evaluation.
-fn ranks(n: usize, order: Order, seed: u64) -> Vec<usize> {
+pub(crate) fn ranks(n: usize, order: Order, seed: u64) -> Vec<usize> {
     let mut shuffled: Vec<usize> = (0..n).collect();
     if order == Order::Seeded {
         let mut rng = Seeded::new(seed);

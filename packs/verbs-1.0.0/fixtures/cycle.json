@@ -1,0 +1,309 @@
+{
+  "verb": "cycle",
+  "document": {
+    "format": 1,
+    "profile": "film",
+    "title": "Cycle fixture",
+    "description": "Cycle fixture: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ],
+    "items": {
+      "a": {
+        "id": "a",
+        "kind": "rect@1",
+        "name": "Square a",
+        "order": "ca",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            -80,
+            0,
+            0
+          ]
+        }
+      },
+      "b": {
+        "id": "b",
+        "kind": "rect@1",
+        "name": "Square b",
+        "order": "cb",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            60,
+            0
+          ]
+        }
+      },
+      "c": {
+        "id": "c",
+        "kind": "rect@1",
+        "name": "Square c",
+        "order": "cc",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            80,
+            0,
+            0
+          ]
+        }
+      },
+      "list": {
+        "id": "list",
+        "kind": "cues@1",
+        "name": "Cue list",
+        "order": "z0",
+        "params": {
+          "cues": [
+            {
+              "id": "v",
+              "kind": "cycle",
+              "targets": [
+                "a",
+                "b",
+                "c"
+              ],
+              "when": {
+                "at": "0.5s"
+              },
+              "span": "1.0s"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "reference": {
+    "format": 1,
+    "profile": "film",
+    "title": "Cycle fixture written by hand",
+    "description": "Cycle fixture written by hand: a fixture of the deepbuild/verbs pack.",
+    "size": [
+      640,
+      360
+    ],
+    "transport": {
+      "span": "4s"
+    },
+    "items": {
+      "a": {
+        "id": "a",
+        "kind": "rect@1",
+        "name": "Square a",
+        "order": "ca",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            -80,
+            0,
+            0
+          ]
+        }
+      },
+      "b": {
+        "id": "b",
+        "kind": "rect@1",
+        "name": "Square b",
+        "order": "cb",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            0,
+            60,
+            0
+          ]
+        }
+      },
+      "c": {
+        "id": "c",
+        "kind": "rect@1",
+        "name": "Square c",
+        "order": "cc",
+        "params": {
+          "box": [
+            -20,
+            -20,
+            40,
+            40
+          ],
+          "paint": {
+            "fill": {
+              "role": "ink"
+            }
+          }
+        },
+        "at": {
+          "pos": [
+            80,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    "channels": {
+      "a": {
+        "target": "items/a/at/pos",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              -80,
+              0,
+              0
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              0,
+              60,
+              0
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "b": {
+        "target": "items/b/at/pos",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              0,
+              60,
+              0
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              80,
+              0,
+              0
+            ],
+            "interp": "hold"
+          }
+        }
+      },
+      "c": {
+        "target": "items/c/at/pos",
+        "type": "vec3",
+        "keys": {
+          "k0": {
+            "t": 352800000,
+            "value": [
+              80,
+              0,
+              0
+            ],
+            "interp": {
+              "ease": {
+                "name": "sigmoid",
+                "params": 10
+              }
+            }
+          },
+          "k1": {
+            "t": 1058400000,
+            "value": [
+              -80,
+              0,
+              0
+            ],
+            "interp": "hold"
+          }
+        }
+      }
+    }
+  },
+  "paths": [
+    "items/a/at/pos",
+    "items/b/at/pos",
+    "items/c/at/pos"
+  ]
+}

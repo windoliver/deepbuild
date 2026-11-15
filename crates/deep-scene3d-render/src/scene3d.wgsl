@@ -435,6 +435,10 @@ fn fetch(k: u32, t: texture_2d<f32>, sm: sampler, uv: vec4<f32>, g: array<vec4<f
     return textureSampleGrad(t, sm, map_uv(k, uv), map_d(k, g[0]), map_d(k, g[1]));
 }
 
+// #506: how an inset's picture in the base color slot draws (maps.rs).
+const MAP_OVER: u32 = 256u;
+const MAP_AT_PIXEL: u32 = 512u;
+
 fn has_map(k: u32) -> bool {
     return (maps.has.x & (1u << k)) != 0u;
 }
@@ -528,7 +532,8 @@ const IDS_BY_PLACE: bool = false;
 @vertex
 fn mesh_vs(
     @location(0) p: vec3<f32>,
-    @location(1) n: vec3<f32>,
+    // The normal, and in w a vertex's own sRGB color as r × 65536 + g × 256 + b, or −1 (#224).
+    @location(1) n: vec4<f32>,
     @location(2) r0: vec4<f32>,
     @location(3) r1: vec4<f32>,
     @location(4) r2: vec4<f32>,
@@ -549,10 +554,20 @@ fn mesh_vs(
     return mesh_out(p, n, Element(r0, r1, r2, color, pick, flags, tie, emission, base, surface, specular, op), uv, tangent);
 }
 
+// A vertex's packed sRGB color (#224) in linear RGB, w 1; zero where it has none.
+fn tint_of(w: f32) -> vec4<f32> {
+    if w < 0.0 {
+        return vec4<f32>(0.0);
+    }
+    let c = u32(w);
+    let srgb = vec3<f32>(f32((c >> 16u) & 255u), f32((c >> 8u) & 255u), f32(c & 255u)) / 255.0;
+    return vec4<f32>(srgb_decode(srgb), 1.0);
+}
+
 @vertex
 fn mesh_row_vs(
     @location(0) p: vec3<f32>,
-    @location(1) n: vec3<f32>,
+    @location(1) n: vec4<f32>,
     @location(2) row: u32,
     @location(13) uv: vec4<f32>,
     @location(14) tangent: vec4<f32>,
@@ -565,7 +580,8 @@ fn mesh_row_vs(
     return mesh_out(p, n, e, uv, tangent);
 }
 
-fn mesh_out(p: vec3<f32>, n: vec3<f32>, e: Element, uv: vec4<f32>, tangent: vec4<f32>) -> MeshOut {
+fn mesh_out(p: vec3<f32>, n4: vec4<f32>, e: Element, uv: vec4<f32>, tangent: vec4<f32>) -> MeshOut {
+    let n = n4.xyz;
     let r0 = e.r0;
     let r1 = e.r1;
     let r2 = e.r2;
@@ -642,7 +658,19 @@ fn mesh_out(p: vec3<f32>, n: vec3<f32>, e: Element, uv: vec4<f32>, tangent: vec4
     // turns the bitangent over with the winding.
     let tw = vec3<f32>(dot(r0.xyz, tangent.xyz), dot(r1.xyz, tangent.xyz), dot(r2.xyz, tangent.xyz));
     out.tangent = vec4<f32>(tw, tangent.w * sign(dot(c0, cross(c1, c2))));
+    // #224: a vertex's own color rides in the tangent of a solid that samples no map, which
+    // reads no tangent, its w 2 where a tangent's is ±1 (the 16 inter-stage variables are
+    // taken).
+    let tint = tint_of(n4.w);
+    if tint.w > 0.5 && (flags & MAPS) == 0u {
+        out.tangent = vec4<f32>(tint.rgb, 2.0);
+    }
     return out;
+}
+
+// Whether a fragment carries a vertex's own color (#224), in its tangent.
+fn tinted_by_vertex(in: MeshOut) -> bool {
+    return in.tangent.w > 1.5;
 }
 
 // The maps' surface at a pixel (#423). Base color and emission maps are sampled from sRGB
@@ -656,9 +684,20 @@ fn mapped(in: MeshOut, n: vec3<f32>, s0: Surface, g: array<vec4<f32>, 2>) -> Map
     var emission = in.emission.rgb;
     var spread = 1.0;
     if has_map(0u) {
-        let c = fetch(0u, map_base, sampler_base, in.uv, g);
-        s.base = s.base * c.rgb;
-        alpha = alpha * c.a;
+        // #506: an eye inset's window reads its view's picture at this px; a content inset
+        // lays its straight-alpha color over the face's.
+        if (maps.has.x & MAP_AT_PIXEL) != 0u {
+            let k = vec2<f32>(textureDimensions(map_base)) / frame.viewport.xy;
+            let c = textureLoad(map_base, vec2<i32>(in.pos.xy * k), 0);
+            s.base = s.base * c.rgb;
+        } else if (maps.has.x & MAP_OVER) != 0u {
+            let c = fetch(0u, map_base, sampler_base, in.uv, g);
+            s.base = mix(s.base, c.rgb, c.a);
+        } else {
+            let c = fetch(0u, map_base, sampler_base, in.uv, g);
+            s.base = s.base * c.rgb;
+            alpha = alpha * c.a;
+        }
     }
     if has_map(1u) {
         let c = fetch(1u, map_mr, sampler_mr, in.uv, g);
@@ -1940,8 +1979,8 @@ fn pattern(id: u32, q: vec3<f32>, n: vec3<f32>, seed: u32) -> vec2<f32> {
 }
 
 fn surface_of(in: MeshOut, local_n: vec3<f32>) -> Surface {
-    var s = Surface(in.base.rgb, in.surface.x, in.surface.y, in.surface.z, in.specular.rgb, in.surface.w, in.specular.w,
-        lobe_index(in), vec3<f32>(0.0), vec3<f32>(0.0), 0.0, 0.0);
+    var s = Surface(select(in.base.rgb, in.tangent.rgb, tinted_by_vertex(in)), in.surface.x, in.surface.y, in.surface.z,
+        in.specular.rgb, in.surface.w, in.specular.w, lobe_index(in), vec3<f32>(0.0), vec3<f32>(0.0), 0.0, 0.0);
     let id = (in.flags >> 9u) & 15u;
     if id != 0u {
         let t = pattern(id, in.local / max(in.base.w, 1e-6), local_n, in.flags >> 16u);
@@ -2389,7 +2428,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
-        m.s.base = tinted(m.s.base, in.pick, in.local);
+        m.s.base = projected(tinted(m.s.base, in.pick, in.local), in.pick, in.world, geometric);
         // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
         // and its occlusion scales only what the map's does: the ambient light (#486).
         if op_normal.w > 0.0 {
@@ -2484,7 +2523,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
-    let albedo = tinted(paint(in.color), in.pick, in.local);
+    let albedo = projected(tinted(select(paint(in.color), in.tangent.rgb, tinted_by_vertex(in)), in.pick, in.local), in.pick, in.world, n);
     let lit = ambient * occlusion(in.pos.xy, albedo) + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);

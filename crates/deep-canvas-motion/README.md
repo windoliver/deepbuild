@@ -10,13 +10,14 @@ The line's slice of the motion module (issue #391): channels and keys (linear, h
 - The compiled per-revision program goes in `src/program.rs`, its canonical bytes in `src/canonical.rs`; evaluation after the first frame allocates nothing.
 - Key insertion goes in `src/insert.rs`; the frame clock in `src/clock.rs`; the manifest and operators in `src/module.rs`.
 - Eases go in `src/ease.rs`, the spring's closed form in `src/spring.rs`, modifiers in `src/modifier.rs`, follow channels in `src/follow.rs`, constraint solves in `src/constraint.rs` with their `constraint@1` entries and kit fixtures in `src/kit.rs`, and the per-component order in `src/schedule.rs`.
+- Cue lists `cues@1` (#222) go in `src/cues.rs`: their timing and the channels and markers they expand to at check; a `cue.kind@1` verb's recipe is read in `src/cues/verb.rs`, and the registry with its cue kit in `src/cues/kit.rs`. The verbs themselves are data in `packs/verbs-1.0.0`.
 - The tempo map (#491) goes in `src/tempo.rs`, cue alignment on markers in `src/cue.rs`, the occurrence-list reads drivers make in `src/occurrence.rs`; `first` markers are solved and layout glides mixed in `src/program.rs`, beside the other compiled reads.
 - A placement's time from `in` through `quantize` goes in `src/eval.rs`, how its value lands on a path in `src/blend.rs`, time remaps in `src/remap.rs`, rotations in `src/quat.rs`; `first`-marker-style late reads (occurrences, the input track) are resolved in `Program::resolve_times`.
 - Tests go in `tests/` or a `#[cfg(test)]` module in the file; the acceptance tests are in `tests/acceptance/391`.
 
 ## What it may import
 
-A canvas module crate. It reaches the core only through the `deep-canvas` crate and uses third-party crates listed in `lint/canvas/crates.json`. Its math is f64 through deep-canvas's ops module on pinned libm, as `scripts/canvas-lint.mjs` requires. No GPU crate, no app.
+A canvas module crate. It reaches the core only through the `deep-canvas` crate, and the marks module's path reader through `deep-canvas-marks`, which reads and flattens a path key's SVG `d` (#494), and uses third-party crates listed in `lint/canvas/crates.json`. Its math is f64 through deep-canvas's ops module on pinned libm, as `scripts/canvas-lint.mjs` requires. No GPU crate, no app.
 
 ## Deviations
 

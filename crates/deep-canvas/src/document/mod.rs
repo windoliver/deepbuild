@@ -19,10 +19,12 @@
 mod apply;
 mod check;
 mod close;
+pub mod expands;
 mod merge;
 mod order;
 pub mod pack_kinds;
 pub mod packs;
+pub mod patch_schema;
 mod requires;
 mod rows;
 mod rules;
@@ -232,7 +234,7 @@ pub struct Issue {
     pub actual: Value,
     pub what: String,
     pub fix: String,
-    /// The forms a field takes; only on `bad_unit`.
+    /// The forms a field takes: on `bad_unit`, and on a structured value no form takes (#1973).
     pub forms: Vec<String>,
     /// The fix as patch ops, where the code's fix is ops (the check catalog).
     pub fix_ops: Option<Vec<Value>>,
@@ -280,14 +282,18 @@ impl Issue {
         out.insert("actual".into(), cut(&self.actual));
         out.insert("what".into(), json!(self.what));
         out.insert("fix".into(), json!(self.fix));
-        if self.code == "bad_unit" {
+        if self.code == "bad_unit" || !self.forms.is_empty() {
             out.insert("forms".into(), json!(self.forms));
         }
         // The column view's issue names its reader, column, row, value and step (#397); a terrain
         // overlay's its array, cell, value and step (#537); a bake's empty bands, theirs (#503).
         if matches!(
             self.code,
-            "column.out_of_range" | "terrain.overlay_range" | "spectrum_band_empty"
+            "column.out_of_range"
+                | "terrain.overlay_range"
+                | "spectrum_band_empty"
+                | "surface.nonfinite"
+                | "surface.coarse"
         ) {
             if let Value::Object(fields) = &self.actual {
                 for (k, v) in fields {

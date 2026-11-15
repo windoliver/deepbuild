@@ -27,6 +27,7 @@ pub(crate) fn params(mut params: Vec<crate::spec::P>) -> Vec<crate::spec::P> {
         max: None,
         class: "shading",
         sweep: (Value::Null, Value::Null),
+        form: None,
     });
     params
 }

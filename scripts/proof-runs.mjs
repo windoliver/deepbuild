@@ -8,6 +8,7 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { claimPair, isBay } from './bays.mjs';
+import { binaryNames, buildBinaries } from './proof-binaries.mjs';
 import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
@@ -71,7 +72,9 @@ export function removeTemporaries() {
 
 /** The environment for the runs: a lane's own `node --test` must not report to a parent runner. */
 export function childEnv(extra = {}) {
-  const environment = { ...process.env, ...extra };
+  const inherited = { ...process.env };
+  delete inherited.DEEP_BIN_DIR;
+  const environment = { ...inherited, ...extra };
   delete environment.NODE_TEST_CONTEXT;
   // A test under a mutant that runs the lanes itself mustn't hand that mutant to their own runs.
   delete environment.__STRYKER_ACTIVE_MUTANT__;
@@ -410,6 +413,13 @@ function runVitest(directory, files, env) {
  * fileErrors holds files that failed outside every test, unrunnable those whose runner couldn't run.
  */
 function runTests(directory, files, { env = {}, timed = [] } = {}) {
+  try {
+    // A bay can be replaced by a twin later in this proof: every use snapshots its own build outside the bay.
+    const bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), binaryNames(directory, [...files]), (command, args, options) => spawnIn(directory, command, args, options));
+    env = { ...env, DEEP_BIN_DIR: bin };
+  } catch (error) {
+    return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };
+  }
   // A runner given no file runs every test it finds, so each starts only with files of its own.
   const run = (some) => [some.filter((file) => !file.endsWith('.ts')), some.filter((file) => file.endsWith('.ts'))]
     .map((group, at) => group.length && (at ? runVitest : runNode)(directory, group, env)).filter(Boolean);
@@ -610,7 +620,8 @@ export function before(runs, kills, say, print) {
   const proven = new Set();
   if (runs.timed?.length) print(`before: the timed set, from the timed list in scripts/lanes.mjs, run only under a timed grant (${runs.timed.length}): ${runs.timed.join(' ')}`);
   for (const [path, cause] of runs.head.fileErrors) say('FAIL', 'before', `${path}: fails on the change outside its tests (${cause})`, BEFORE_FIX);
-  for (const [path, cause] of runs.head.unrunnable) say('BLOCKED', 'before', `${path}: cannot run on the change: ${cause}`, BEFORE_FIX);
+  const unrunState = (cause) => cause.startsWith('INCONCLUSIVE no grant:') ? 'INCONCLUSIVE' : 'BLOCKED';
+  for (const [path, cause] of runs.head.unrunnable) say(unrunState(cause), 'before', `${path}: cannot run on the change: ${cause}`, BEFORE_FIX);
   for (const key of runs.unrun ?? []) say('FAIL', 'before', `${key}: declared and not skipped, but the runner never reported it on the change`, BEFORE_FIX);
   for (const path of runs.only ?? []) say('FAIL', 'before', `${path}: a .only in the file keeps its other tagged tests from running`, BEFORE_FIX);
   for (const test of runs.tests) {
@@ -641,8 +652,8 @@ export function before(runs, kills, say, print) {
     if (test.twinsError) say('BLOCKED', 'before', `${test.key}: ${test.twinsError}`, BEFORE_FIX);
     else if (refused.length) say('FAIL', 'before', `${test.key}: its planted wrong program ${refused.map(({ twin, key }) => `${twin} ${runs.twins.get(key).refused}`).join('; ')}`, BEFORE_FIX);
     else if (runs.base.blocked) say('BLOCKED', 'before', `${test.key}: cannot run on the merge base: ${runs.base.blocked}`, BEFORE_FIX);
-    else if (runs.base.unrunnable.has(test.path)) say('BLOCKED', 'before', `${test.key}: cannot run on the merge base: ${runs.base.unrunnable.get(test.path)}`, BEFORE_FIX);
-    else if (unrun.length) say('BLOCKED', 'before', `${test.key}: cannot run on its planted wrong program ${unrun.map(({ twin, key }) => `${twin}: ${runs.twins.get(key).unrunnable.get(test.path)}`).join('; ')}`, BEFORE_FIX);
+    else if (runs.base.unrunnable.has(test.path)) say(unrunState(runs.base.unrunnable.get(test.path)), 'before', `${test.key}: cannot run on the merge base: ${runs.base.unrunnable.get(test.path)}`, BEFORE_FIX);
+    else if (unrun.length) say(unrun.every(({ key }) => unrunState(runs.twins.get(key).unrunnable.get(test.path)) === 'INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED', 'before', `${test.key}: cannot run on its planted wrong program ${unrun.map(({ twin, key }) => `${twin}: ${runs.twins.get(key).unrunnable.get(test.path)}`).join('; ')}`, BEFORE_FIX);
     // A test that no longer fails on its planted wrong program checks nothing now, edited or not.
     else if (test.twins.length) say('FAIL', 'before', `${test.key}: ${[...new Set(test.twins.map(({ tag }) => tag))].join(', ')}: fails on neither the merge base nor its planted wrong program`, BEFORE_FIX);
     // A tagged test this change leaves alone, such as one an earlier change of the issue landed with
