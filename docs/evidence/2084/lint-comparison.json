@@ -1,0 +1,10 @@
+{
+  "base": "b9131dbd9857aefc4dcc39dd0d534d007b1ef671",
+  "candidate": "76ce65580",
+  "normalization": "The same Map projections failure can share a log line with scripts/lease output; normalized to its diagnostic.",
+  "introduced": [],
+  "resolved": [
+    "NEW FAIL size: packages/hub/src/server.ts: 1565 lines, over 1500 with no ceiling"
+  ],
+  "unchangedUnique": 140
+}

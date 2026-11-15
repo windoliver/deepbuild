@@ -1,0 +1,210 @@
+Issue: #2119
+Base: 2baafea73726387c4fabe5057599be0831774f0a
+Acceptance tests: independent draft from the issue, design and pristine base.
+Built first in the checkout: npm ci --no-audit --no-fund; scripts/lease nice -n 10 npm run build --workspaces. No cargo
+  build: no test runs deep-hook, whose stand-in setup finds as npm installs it.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2119/ --testTimeout=600000
+Date: 2026-11-14 (2026-11-15T06:46:17Z)  macOS 27.2  Node v24.22.2  vitest 5.0.5
+Paths: <checkout> is the checkout the run was made in. /private/tmp/dh2119-* and /Users/Shared/dh2119-* are the run's
+  own folders, removed at its end. No user name is left in what follows.
+Exit code: 1
+Result: Test Files 4 failed (4); Tests 4 failed (4). Duration 1.45 s, about 2 s of wall time.
+
+Failed, each at its one expect, as the issue says of the base:
+  #2119.92207f0e at merge-at-write.test.ts:35: after setup, ~/.claude.json holds DeepBuild's two servers and not the
+    "projects" key the stand-in deep-hook wrote while setup ran its --help ("Today the key is gone").
+  #2119.8f1b0393 at record-write.test.ts:34: the write of the next record was cut once setup.json itself was open, and
+    setupRecord read { files: {}, created: [] } ("Today it reads as empty").
+  #2119.6d54a255 at codex-home.test.ts:86: every Codex text of doctor's and of the hub's named <home>/.codex/hooks.json
+    or <home>/.codex/config.toml, the default home, not the folder setup wrote in; and the project trusted in that
+    folder's config.toml read as untrusted ("Today each names the default home").
+  #2119.c097fc3c at service-program.test.ts:69: hub.service read service_unpromoted at level fail, naming Node's
+    folder as "a checkout" ("Today it is fail and names Node's folder").
+
+The lanes' rule for a failure at an assertion (scripts/proof-runs.mjs, atAssertion) reads each of the four as at its
+assertion, its innermost frame in its own test file, in a second run through scripts/proof-vitest-reporter.mjs with the
+same result. The setup runs exit 3 because the launcher stand-in loads no hub; that comes after both of setup's writes
+and is not asserted.
+
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2119/record-write.test.ts (1 test | 1 failed) 154ms
+   × #2119.8f1b0393 setup's own record is written through a temporary file: a write of the next record cut once the file is open leaves the earlier record, and setupRecord reads it 63ms
+ ❯ tests/acceptance/2119/service-program.test.ts (1 test | 1 failed) 260ms
+   × #2119.c097fc3c doctor judges the program the login service runs, not the folder Node is installed in: a service definition whose arguments are a node under a folder that holds .git, a CLI script in no git folder, hub, run reads as service_unpromoted at level warn 168ms
+ ❯ tests/acceptance/2119/merge-at-write.test.ts (1 test | 1 failed) 742ms
+   × #2119.92207f0e setup merges its entries into ~/.claude.json as it is at the write: a key a session wrote there while setup ran deep-hook's --help, between its plan and its write, is still there beside DeepBuild's two servers 665ms
+ ❯ tests/acceptance/2119/codex-home.test.ts (1 test | 1 failed) 1211ms
+   × #2119.6d54a255 the Codex health texts and the trust read name the Codex home setup wrote in: with setup run under CODEX_HOME set to another folder and the Stop entry's timeout edited there, doctor's texts and the hub's relations, run with no CODEX_HOME, name that folder's hooks.json or config.toml, and a project trusted in that folder's config.toml reads as trusted 1140ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2119/codex-home.test.ts > #2119.6d54a255 the Codex health texts and the trust read name the Codex home setup wrote in: with setup run under CODEX_HOME set to another folder and the Stop entry's timeout edited there, doctor's texts and the hub's relations, run with no CODEX_HOME, name that folder's hooks.json or config.toml, and a project trusted in that folder's config.toml reads as trusted
+AssertionError: The Codex texts doctor and the hub gave with no CODEX_HOME, setup having written in /private/tmp/dh2119-w1SZca/codex:
+that folder: /private/tmp/dh2119-w1SZca/codex; the default home: /private/tmp/dh2119-w1SZca/h/.codex; the project: /private/tmp/dh2119-w1SZca/project
+doctor's codex.hooks, before the edit: DeepBuild's entries are in /private/tmp/dh2119-w1SZca/h/.codex/hooks.json as setup wrote them | Nothing to do.
+doctor's codex.hooks, after the edit: Codex's Stop entry was modified in /private/tmp/dh2119-w1SZca/h/.codex/hooks.json: it isn't what setup wrote, so Codex asks for trust again and holds may not fit | Put the entry back as /private/tmp/dh2119-w1SZca/h/.deepbuild/codex-hooks.json has it, then approve it once in /hooks if Codex asks.
+doctor's timing.codex_slow_lane, after the edit: slow lane broken: its expected 20 minutes must end at least 5 s before Codex's Stop hook timeout, which is 60 s where setup set 45 minutes, so a stop with a slow check isn't held and its verdict comes with your next message; put the Stop entry's timeout back in /private/tmp/dh2119-w1SZca/h/.codex/hooks.json | Put the value back as the reading says; setup never changes it, since Codex asks for trust again when an entry's timeout changes.
+doctor's timing.codex_deep_ask, after the edit: deep_ask broken: the tool_timeout_sec Codex gives DeepBuild's MCP server is 5 s, too short to wait in, so deep_ask returns at once with the ask's ID, deadline and default and the agent waits with deep_wait; set it to at least 10 under [mcp_servers.deep] in /private/tmp/dh2119-w1SZca/h/.codex/config.toml | Put the value back as the reading says; setup never changes it, since Codex asks for trust again when an entry's timeout changes.
+the hub's relation slow lane: slow lane broken: its expected 20 minutes must end at least 5 s before Codex's Stop hook timeout, which is 60 s where setup set 45 minutes, so a stop with a slow check isn't held and its verdict comes with your next message; put the Stop entry's timeout back in /private/tmp/dh2119-w1SZca/h/.codex/hooks.json
+the hub's relation deep_ask: deep_ask broken: the tool_timeout_sec Codex gives DeepBuild's MCP server is 5 s, too short to wait in, so deep_ask returns at once with the ask's ID, deadline and default and the agent waits with deep_wait; set it to at least 10 under [mcp_servers.deep] in /private/tmp/dh2119-w1SZca/h/.codex/config.toml
+the hub's readings of the entries: Codex's Stop entry was modified in /private/tmp/dh2119-w1SZca/h/.codex/hooks.json: it isn't what setup wrote, so Codex asks for trust again and holds may not fit
+(end of the texts): expected { …(9) } to deeply equal { …(9) }
+
+- Expected
++ Received
+
+  {
+-   "a hooks.json or config.toml any Codex text names outside that folder": [],
+-   "doctor's codex.hooks, after the edit": "names <that folder>/hooks.json",
+-   "doctor's codex.hooks, before the edit": "names <that folder>/hooks.json",
+-   "doctor's timing.codex_deep_ask, after the edit": "names <that folder>/config.toml",
+-   "doctor's timing.codex_slow_lane, after the edit": "names <that folder>/hooks.json",
+-   "the hub reads the project trusted in that config.toml as trusted": true,
+-   "the hub's readings of the entries": "names <that folder>/hooks.json",
+-   "the hub's relation deep_ask": "names <that folder>/config.toml",
+-   "the hub's relation slow lane": "names <that folder>/hooks.json",
++   "a hooks.json or config.toml any Codex text names outside that folder": [
++     "<the default home>/hooks.json",
++     "<the default home>/config.toml",
++   ],
++   "doctor's codex.hooks, after the edit": "names <the default home>/hooks.json",
++   "doctor's codex.hooks, before the edit": "names <the default home>/hooks.json",
++   "doctor's timing.codex_deep_ask, after the edit": "names <the default home>/config.toml",
++   "doctor's timing.codex_slow_lane, after the edit": "names <the default home>/hooks.json",
++   "the hub reads the project trusted in that config.toml as trusted": false,
++   "the hub's readings of the entries": "names <the default home>/hooks.json",
++   "the hub's relation deep_ask": "names <the default home>/config.toml",
++   "the hub's relation slow lane": "names <the default home>/hooks.json",
+  }
+
+ ❯ tests/acceptance/2119/codex-home.test.ts:86:153
+     84|     ...texts.flatMap(([where, list]) => list.map((text) => `${where}: …
+     85|   ].join('\n');
+     86|   expect(seen, `The Codex texts doctor and the hub gave with no CODEX_…
+       |                                                                                                                                                         ^
+     87| }, 600_000);
+     88|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2119/merge-at-write.test.ts > #2119.92207f0e setup merges its entries into ~/.claude.json as it is at the write: a key a session wrote there while setup ran deep-hook's --help, between its plan and its write, is still there beside DeepBuild's two servers
+AssertionError: /private/tmp/dh2119-TPONIh/h/.claude.json after setup ended, which a session wrote "projects" into while setup ran deep-hook's --help:
+{
+  "numStartups": 7,
+  "autoUpdates": false,
+  "mcpServers": {
+    "deepbuild": {
+      "type": "stdio",
+      "command": "/opt/homebrew/opt/node@24/bin/node",
+      "args": [
+        "<checkout>/packages/cli/dist/main.js",
+        "mcp"
+      ]
+    },
+    "deep-actions": {
+      "type": "stdio",
+      "command": "/private/tmp/dh2119-TPONIh/node_path/@deepbuild/deep-hook-darwin-arm64/bin/deep-hook",
+      "args": [
+        "mcp",
+        "actions"
+      ]
+    }
+  }
+}
+
+$ HOME=/private/tmp/dh2119-TPONIh/h NODE_PATH=/private/tmp/dh2119-TPONIh/node_path deep setup
+exit 3
+stdout:
+  | Its hooks and status line forwarder are in /private/tmp/dh2119-TPONIh/h/.claude/settings.json, beside yours; its MCP server in /private/tmp/dh2119-TPONIh/h/.claude.json; its skill at /private/tmp/dh2119-TPONIh/h/.claude/skills/deepbuild; its safety rules at /private/tmp/dh2119-TPONIh/h/.deepbuild/rules.json.
+stderr:
+  | deep hub start: /private/tmp/dh2119-TPONIh/launcher exited 1:
+  | deep setup: the hub didn't start through its login service; deep doctor names what is missing.
+(end of the run): expected { projects: undefined, …(1) } to deeply equal { projects: { …(1) }, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "projects": {
+-     "/private/tmp/dh2119-TPONIh/work": {
+-       "hasTrustDialogAccepted": true,
+-     },
+-   },
++   "projects": undefined,
+    "servers": [
+      "deep-actions",
+      "deepbuild",
+    ],
+  }
+
+ ❯ tests/acceptance/2119/merge-at-write.test.ts:35:199
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2119/record-write.test.ts > #2119.8f1b0393 setup's own record is written through a temporary file: a write of the next record cut once the file is open leaves the earlier record, and setupRecord reads it
+AssertionError: setupRecord after the write of the next record was cut once /private/tmp/dh2119-BZ8Smh/h/.deepbuild/setup.json was open (the save threw: the write of /private/tmp/dh2119-BZ8Smh/h/.deepbuild/setup.json was cut after the file was opened)
+$ HOME=/private/tmp/dh2119-BZ8Smh/h node fixtures/cut-record.mjs <checkout> /private/tmp/dh2119-BZ8Smh/h/.deepbuild <285 bytes of JSON> <420 bytes of JSON>
+exit 0
+stdout:
+  | {"before":{"files":{"/private/tmp/dh2119-BZ8Smh/h/.claude/settings.json":{"before":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","after":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},"created":["/private/tmp/dh2119-BZ8Smh/h/.claude/skills/deepbuild"]},"cut":["/private/tmp/dh2119-BZ8Smh/h/.deepbuild/setup.json"],"threw":"the write of /private/tmp/dh2119-BZ8Smh/h/.deepbuild/setup.json was cut after the file was opened","after":{"files":{},"created":[]}}
+stderr: nothing
+(end of the run): expected { files: {}, created: [] } to deeply equal { files: { …(1) }, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "created": [
+-     "/private/tmp/dh2119-BZ8Smh/h/.claude/skills/deepbuild",
+-   ],
+-   "files": {
+-     "/private/tmp/dh2119-BZ8Smh/h/.claude/settings.json": {
+-       "after": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+-       "before": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-     },
+-   },
++   "created": [],
++   "files": {},
+  }
+
+ ❯ tests/acceptance/2119/record-write.test.ts:34:202
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2119/service-program.test.ts > #2119.c097fc3c doctor judges the program the login service runs, not the folder Node is installed in: a service definition whose arguments are a node under a folder that holds .git, a CLI script in no git folder, hub, run reads as service_unpromoted at level warn
+AssertionError: doctor's hub.service item, for a login service that runs /private/tmp/dh2119-R6SHc9/prefix/bin/node /Users/Shared/dh2119-WtQwVU/cli/dist/main.js hub run:
+{
+  "item": "hub.service",
+  "agent": "deepbuild",
+  "code": "service_unpromoted",
+  "level": "fail",
+  "evidence": "the hub's login service (/private/tmp/dh2119-R6SHc9/h/Library/LaunchAgents/com.deepbuild.hub.plist) runs /private/tmp/dh2119-R6SHc9/prefix/bin/node, in a checkout, /private/tmp/dh2119-R6SHc9/prefix, which can move or vanish under the run",
+  "fix": "Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current."
+}
+$ HOME=/private/tmp/dh2119-R6SHc9/h deep doctor --json: exit 1
+(end of the item): expected { code: 'service_unpromoted', …(1) } to deeply equal { code: 'service_unpromoted', …(1) }
+
+- Expected
++ Received
+
+  {
+    "code": "service_unpromoted",
+-   "level": "warn",
++   "level": "fail",
+  }
+
+ ❯ tests/acceptance/2119/service-program.test.ts:69:236
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  4 failed (4)
+   Start at  22:46:17
+   Duration  1.45s (tests 87%, transform 5%, setup 4%, import 3%, worker 1%)
+

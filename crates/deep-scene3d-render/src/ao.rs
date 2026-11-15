@@ -538,3 +538,29 @@ impl Frame {
         });
     }
 }
+
+impl crate::Renderer {
+    /// This frame's ao passes over every batch's solids, in layer order; `None` with ao off.
+    pub(crate) fn ao_frame(&self) -> Option<Frame> {
+        if !self.ao.is_on() {
+            return None;
+        }
+        let solids = self
+            .order
+            .iter()
+            .filter_map(|id| self.batches.get(id))
+            .flat_map(|b| &b.solids)
+            .filter_map(|((shape, ..), set)| {
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                Some((
+                    mesh.vertices.clone(),
+                    mesh.indices.clone(),
+                    mesh.count,
+                    buffer.clone(),
+                    set.len(),
+                ))
+            })
+            .collect();
+        self.ao.frame(&self.frame_bind, solids)
+    }
+}

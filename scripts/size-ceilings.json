@@ -38,7 +38,7 @@
   "crates/deep-marks-render/src/macos.rs": 2818,
   "crates/deep-marks-render/src/raster.rs": 1865,
   "crates/deep-replica/src/drive/mod.rs": 2299,
-  "crates/deep-scene3d-render/src/lib.rs": 9168,
+  "crates/deep-scene3d-render/src/lib.rs": 9166,
   "crates/deep-scene3d-render/src/scene3d.wgsl": 3159,
   "crates/deep-show/src/hub.rs": 2692,
   "crates/deep-show/src/kit/modules.rs": 1523,

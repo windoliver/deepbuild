@@ -24,6 +24,8 @@ pub(crate) fn class_of(control: &Value) -> &str {
     match control.get("class").and_then(Value::as_str) {
         Some(c) => c,
         None if control.get("variant").is_some() => "view",
+        // #542: a scroll control is class view unless it says document (Control: scroll).
+        None if control.get("kind").and_then(Value::as_str) == Some("scroll") => "view",
         None => "document",
     }
 }
@@ -226,6 +228,21 @@ impl Hub<'_> {
         t: i64,
         serial: u64,
     ) -> Result<Option<Value>, Value> {
+        let appended = self.enter_quiet(doc, control, value, t, serial)?;
+        self.replay(doc, t);
+        Ok(appended)
+    }
+
+    /// [`Hub::enter`] without the replay, for an input that writes several values (#542: a
+    /// scroll's steps), which replays once after them.
+    pub(crate) fn enter_quiet(
+        &mut self,
+        doc: &str,
+        control: &str,
+        value: Value,
+        t: i64,
+        serial: u64,
+    ) -> Result<Option<Value>, Value> {
         let form = self
             .forms
             .get(doc)
@@ -234,6 +251,11 @@ impl Hub<'_> {
             .get("controls")
             .and_then(|c| c.get(control))
             .ok_or_else(|| json!({"code": "unknown_control", "control": control}))?;
+        // #542: a text control takes a string within its cap and line rule, a scroll control a
+        // position within its range, however the value arrives.
+        if !crate::fields::admits(c, &value) {
+            return Err(json!({"code": "out_of_range", "control": control, "value": value}));
+        }
         let options = variants::option_names(form, c);
         if value.is_string()
             && !options.is_empty()
@@ -280,7 +302,6 @@ impl Hub<'_> {
             }
             _ => {}
         }
-        self.replay(doc, t);
         Ok(appended)
     }
 

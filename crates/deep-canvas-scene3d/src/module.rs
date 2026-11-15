@@ -21,6 +21,8 @@ pub const OUTPUT_PASS: &str = "scene3d.output";
 pub const MIRROR_PASS: &str = "scene3d.mirror";
 /// #465: the flare, added into the linear image before tone mapping.
 pub const FLARE_PASS: &str = "scene3d.flare";
+/// #468: depth of field over the linear image, after the geometry and before bloom.
+pub const DOF_PASS: &str = "scene3d.dof";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
 /// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
@@ -447,6 +449,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(MIRROR_PASS, "geometry");
     r.pass(WATER_PASS, "geometry");
+    r.pass(DOF_PASS, "effects");
     r.pass(INSET_VIEW_PASS, "shadows");
     r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
@@ -484,6 +487,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     }));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
     r.fixture("rest-no-support", unsupported(), None)
+        .planted()
         .sidecar(json!({
             "codes": ["no_support"],
             "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},

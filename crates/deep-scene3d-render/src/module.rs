@@ -1,10 +1,9 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, history, inset, local, lock, read_texture, texture2d, After, Planted, Post,
-    Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS, MSAA,
-    OUTLINE_PASS, OUTPUT_PASS, PYRAMID_NS_PER_PX, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS,
-    WATER_PASS,
+    ao, clouds, cull, dof, history, inset, local, lock, read_texture, texture2d, After, Planted,
+    Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS,
+    MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS, WATER_PASS,
 };
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
@@ -14,6 +13,35 @@ use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+
+/// The key light's direction, toward the light: what shades the solids and casts the shadow map.
+pub const LIGHT: [f64; 3] = [0.35, 0.8, 0.5];
+
+/// The depth pyramid's declared cost per pixel (#1637): 0.385 ms at 1920 × 1080 in the city
+/// walk, the median of four frames on an M5 Max (Mac17,10).
+pub const PYRAMID_NS_PER_PX: f32 = 0.186;
+
+/// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
+pub type Profiler = Arc<Mutex<wgpu_profiler::GpuProfiler>>;
+
+/// Runs `f`, which records one render pass, with that pass's timestamps going to `profiler`
+/// under `label` when one is set.
+pub fn timed(
+    profiler: &Option<Profiler>,
+    label: &'static str,
+    encoder: &mut wgpu::CommandEncoder,
+    f: impl FnOnce(&mut wgpu::CommandEncoder, Option<wgpu::RenderPassTimestampWrites<'_>>),
+) {
+    match profiler {
+        Some(p) => {
+            let p = lock(p);
+            let q = p.begin_pass_query(label, encoder);
+            f(encoder, q.render_pass_timestamp_writes());
+            p.end_query(encoder, q);
+        }
+        None => f(encoder, None),
+    }
+}
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -407,6 +435,17 @@ impl Module3 {
                 writes: vec!["linear", "ids", "depth"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.3,
+                determinism: Determinism::SameMachine,
+            },
+            // #468: depth of field, after geometry and before bloom, only while a frame has one.
+            Pass {
+                name: dof::DOF_PASS.into(),
+                place: "effects",
+                order: 0,
+                reads: vec!["linear", "depth"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.4,
                 determinism: Determinism::SameMachine,
             },
             // #465: the flare, after the effects' bloom, drawn only while a frame has one.

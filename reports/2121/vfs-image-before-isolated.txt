@@ -1,0 +1,32 @@
+
+ RUN  v5.0.5 /private/tmp/deepbuild-2121.WRTSs6/pr/packages/hub/test
+
+ × vfs-image.test.ts > the VFS opens a closed WAL image, preserving FULL commits and losing later NORMAL commits at a cut 26ms
+   → a WAL image must be usable by the in-memory crash backend: expected [Function] to not throw an error but 'SqliteError: unable to open database …' was thrown
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  vfs-image.test.ts > the VFS opens a closed WAL image, preserving FULL commits and losing later NORMAL commits at a cut
+AssertionError: a WAL image must be usable by the in-memory crash backend: expected [Function] to not throw an error but 'SqliteError: unable to open database …' was thrown
+
+- Expected:
+undefined
+
++ Received:
+"SqliteError: unable to open database file"
+
+ ❯ vfs-image.test.ts:20:117
+     18|     expect([before[18], before[19]]).toEqual([2, 2]);
+     19|     const backend = testVfs({ cutAfter: Number.MAX_SAFE_INTEGER }).bac…
+     20|     expect(() => { memory = backend.open(path); }, 'a WAL image must b…
+       |                                                                                                                     ^
+     21|     expect(memory!.prepare('SELECT id FROM events ORDER BY log_pos').p…
+     22|     expect(readFileSync(path), 'opening an image is not a write to the…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:39:14
+   Duration  378ms (transform 55%, import 21%, tests 16%, worker 7%)

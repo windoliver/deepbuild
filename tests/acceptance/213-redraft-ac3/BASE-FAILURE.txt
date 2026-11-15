@@ -1,0 +1,141 @@
+The criterion-3 redraft run once at this checkout: base 658b44f04 ("Merge pull request #2499 …"; no implementation of
+#213) with the first blind suite on top, on macOS 27.2 arm64 (rustc 1.99.1, Node 24.22.2, vitest 5.0.5), the checkout's
+path redacted to <checkout>. deep-show and #544's assembler were built just before under the throttle's build grant
+(`cargo build --locked -p deep-show --bin deep-show`, 7 min 8 s), so the run's own build was a no-op, and the run held a
+test grant:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- sh scripts/lease \
+    npx vitest run --root tests/acceptance/213-redraft-ac3 --testTimeout=600000 --no-file-parallelism
+
+`scripts/lease` found no `deep` on PATH and no built CLI and ran it unleased, as it says.
+
+Run: 2 of 2 tests fail, each at an assertion in ac3-trap-fuel.test.ts (`isPresented`, reached from `baked`), none in a
+harness and none BLOCKED or INCONCLUSIVE: the range whose logic item declares services
+{physics.cast@1: {max_per_step: 256}} is refused at check, `logic_refused` naming the item, "services isn't built yet in
+logic@1". Neither test reaches the handles, the bake read, the trap or the fuel.
+
+Before this run a throwaway probe (deleted, not committed) presented the same range with the flood, the meter and the
+idle program in items without `services`, at the base: all three are presented (they assemble and pass sandbox@1's
+check with a 4,000,000 fuel budget). deep_query's logic read of the meter gives fuel 40,985 at every step 0 to 40 (its
+own fuel is the same at every step), `asked` COUNTS[k mod 8] and `answered` 0; of the flood, `n` k and `asked` 256 (257 at
+step 20, whose fuel is 41,144 for the 257th request's bytes, 40,984 elsewhere) and no trap; the writes sit at writes_at
++ 0 and + 8.
+
+The run's output:
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/213-redraft-ac3 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/213-redraft-ac3
+
+ ❯ ac3-trap-fuel.test.ts (2 tests | 2 failed) 4402ms
+   ❯ #213.b4f8dc3a physics.cast@1 past its max_per_step traps services, and each answered request costs the next step 4,000 fuel (2)
+     × #213.b4f8dc3a a step that writes 257 ray requests with max_per_step 256 traps services, naming physics.cast@1 and 257, and the item's arrays keep the last good step's 2731ms
+     × #213.b4f8dc3a each answered request adds 4,000 fuel to the next step in the bake 174ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-trap-fuel.test.ts > #213.b4f8dc3a physics.cast@1 past its max_per_step traps services, and each answered request costs the next step 4,000 fuel > #213.b4f8dc3a a step that writes 257 ray requests with max_per_step 256 traps services, naming physics.cast@1 and 257, and the item's arrays keep the last good step's
+AssertionError: the flood: the range with flood asking physics.cast@1 (its program asking nothing) is presented with no error: expected { outcome: 'refused', …(1) } to deeply equal { outcome: 'presented', errors: [] }
+
+- Expected
++ Received
+
+  {
+-   "errors": [],
+-   "outcome": "presented",
++   "errors": [
++     {
++       "actual": {
++         "code": "logic_refused",
++         "item": "flood",
++         "ok": false,
++         "refusals": [
++           {
++             "field": "services",
++             "rule": "field",
++             "what": "services isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)",
++           },
++         ],
++       },
++       "check": "document.validate",
++       "code": "logic_refused",
++       "fix": "See the issue.",
++       "ids": [
++         "flood",
++       ],
++       "path": "items/flood/params",
++       "severity": "error",
++       "what": "the logic module refuses this logic item",
++     },
++   ],
++   "outcome": "refused",
+  }
+
+ ❯ isPresented ac3-trap-fuel.test.ts:104:89
+    102|   const issues = reply?.['issues'];
+    103|   const errors = (Array.isArray(issues) ? issues : []).filter((i) => i…
+    104|   expect({ outcome: reply?.['outcome'], errors }, `${what} is presente…
+       |                                                                                         ^
+    105| }
+    106|
+ ❯ baked ac3-trap-fuel.test.ts:120:3
+ ❯ ac3-trap-fuel.test.ts:141:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac3-trap-fuel.test.ts > #213.b4f8dc3a physics.cast@1 past its max_per_step traps services, and each answered request costs the next step 4,000 fuel > #213.b4f8dc3a each answered request adds 4,000 fuel to the next step in the bake
+AssertionError: the meter: the range with meter asking physics.cast@1 (its program asking nothing) is presented with no error: expected { outcome: 'refused', …(1) } to deeply equal { outcome: 'presented', errors: [] }
+
+- Expected
++ Received
+
+  {
+-   "errors": [],
+-   "outcome": "presented",
++   "errors": [
++     {
++       "actual": {
++         "code": "logic_refused",
++         "item": "meter",
++         "ok": false,
++         "refusals": [
++           {
++             "field": "services",
++             "rule": "field",
++             "what": "services isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)",
++           },
++         ],
++       },
++       "check": "document.validate",
++       "code": "logic_refused",
++       "fix": "See the issue.",
++       "ids": [
++         "meter",
++       ],
++       "path": "items/meter/params",
++       "severity": "error",
++       "what": "the logic module refuses this logic item",
++     },
++   ],
++   "outcome": "refused",
+  }
+
+ ❯ isPresented ac3-trap-fuel.test.ts:104:89
+    102|   const issues = reply?.['issues'];
+    103|   const errors = (Array.isArray(issues) ? issues : []).filter((i) => i…
+    104|   expect({ outcome: reply?.['outcome'], errors }, `${what} is presente…
+       |                                                                                         ^
+    105| }
+    106|
+ ❯ baked ac3-trap-fuel.test.ts:120:3
+ ❯ ac3-trap-fuel.test.ts:158:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  08:59:08
+   Duration  4.55s (tests 99%, transform 1%)
+

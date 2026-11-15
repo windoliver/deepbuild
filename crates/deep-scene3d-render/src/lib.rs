@@ -13,12 +13,13 @@ pub mod clouds;
 pub mod created;
 pub mod cull;
 mod diag;
+pub mod dof;
 pub mod env;
+pub mod exposure;
 pub mod flare;
 mod glass;
 pub mod held;
 pub mod history;
-pub mod exposure;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -61,7 +62,7 @@ use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
-pub use crate::module::{draw_offscreen, AfterFrame, Counts, Module3, PostFrame, Shared};
+pub use crate::module::{draw_offscreen, timed, AfterFrame, Counts, Module3, PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX};
 pub use crate::planted::Planted;
 use crate::mesh::Mesh;
 use crate::set::Set;
@@ -122,9 +123,6 @@ const LABEL: &str = include_str!("label.wgsl");
 const RESOLVE: &str = include_str!("resolve.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
-/// The depth pyramid's declared cost per pixel of the frame (#1637): 0.385 ms at 1920 × 1080
-/// in the city walk, the median of four frames on an M5 Max (Mac17,10).
-pub const PYRAMID_NS_PER_PX: f32 = 0.186;
 /// The camera's occluders drawn depth-only before the pyramid is built from them (#1637).
 pub const OCCLUDER_PASS: &str = "scene3d.occluders";
 /// The occluders: a culled set whose mesh has at most this many indices (64 triangles) draws
@@ -141,32 +139,6 @@ pub const RESOLVE_PASS: &str = "scene3d.sample_resolve";
 pub use deep_canvas_scene3d::module::{
     CASCADE_PASS, CULL_PASS, FLARE_PASS, MIRROR_PASS, WATER_PASS,
 };
-
-/// The key light's direction, toward the light: what the solids are shaded by and what casts the
-/// shadow map.
-pub const LIGHT: [f64; 3] = [0.35, 0.8, 0.5];
-
-/// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
-pub type Profiler = Arc<Mutex<wgpu_profiler::GpuProfiler>>;
-
-/// Runs `f`, which records one render pass, with that pass's timestamps going to `profiler`
-/// under `label` when one is set.
-pub fn timed(
-    profiler: &Option<Profiler>,
-    label: &'static str,
-    encoder: &mut wgpu::CommandEncoder,
-    f: impl FnOnce(&mut wgpu::CommandEncoder, Option<wgpu::RenderPassTimestampWrites<'_>>),
-) {
-    match profiler {
-        Some(p) => {
-            let p = lock(p);
-            let q = p.begin_pass_query(label, encoder);
-            f(encoder, q.render_pass_timestamp_writes());
-            p.end_query(encoder, q);
-        }
-        None => f(encoder, None),
-    }
-}
 
 /// The outline pass's draws, ready to record into a target: thin lines and strokes, and the
 /// status outlines, which draw as the status colors.
@@ -1631,6 +1603,10 @@ pub struct Renderer {
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     flarer: Option<Box<flare::Flarer>>,
     flaring: bool,
+    /// #468: the depth of field's passes, made when a frame first has one, and whether this
+    /// frame has.
+    doffer: Option<Box<dof::Dofer>>,
+    dofing: bool,
     /// #166: the water's pass, made when a frame first has water, and whether this frame has.
     waterer: Option<Box<water::Waterer>>,
     watering: bool,
@@ -3111,6 +3087,8 @@ impl Renderer {
             views: BTreeMap::new(),
             flarer: None,
             flaring: false,
+            doffer: None,
+            dofing: false,
             waterer: None,
             watering: false,
             reflection: None,
@@ -4477,13 +4455,31 @@ impl Renderer {
                     depth,
                     grows,
                     planted,
-                    look.exposure,
+                    scene.exposure.unwrap_or(look.exposure),
                 );
                 true
             }
             None => {
                 if let Some(f) = self.flarer.as_mut() {
                     f.rest();
+                }
+                false
+            }
+        };
+        // #468: the depth of field at t, at the internal size the targets draw.
+        self.dofing = match &scene.dof {
+            Some(d) => {
+                let planted = self.planted.dof;
+                let exposure = scene.exposure.unwrap_or(look.exposure);
+                let internal = self.internal();
+                self.doffer
+                    .get_or_insert_with(|| Box::new(dof::Dofer::new(device)))
+                    .prepare(device, d, &scene.camera, internal, exposure, planted);
+                true
+            }
+            None => {
+                if let Some(d) = self.doffer.as_mut() {
+                    d.rest();
                 }
                 false
             }
@@ -5576,7 +5572,7 @@ impl Renderer {
             exposure: if self.planted.draws_black {
                 0.0
             } else {
-                look.exposure as f32
+                scene.exposure.unwrap_or(look.exposure) as f32
             },
             map,
             white: white as f32,
@@ -6595,30 +6591,6 @@ impl Renderer {
         enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) })
     }
 
-    /// This frame's ao passes over every batch's solids, in layer order; `None` with ao off.
-    fn ao_frame(&self) -> Option<ao::Frame> {
-        if !self.ao.is_on() {
-            return None;
-        }
-        let solids = self
-            .order
-            .iter()
-            .filter_map(|id| self.batches.get(id))
-            .flat_map(|b| &b.solids)
-            .filter_map(|((shape, ..), set)| {
-                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
-                Some((
-                    mesh.vertices.clone(),
-                    mesh.indices.clone(),
-                    mesh.count,
-                    buffer.clone(),
-                    set.len(),
-                ))
-            })
-            .collect();
-        self.ao.frame(&self.frame_bind, solids)
-    }
-
     /// What the GPU drew for `solid` in the frame just drawn (#2016): the gust its sway used,
     /// with one, and each vertex of the mesh it draws from, through its model, in world m.
     pub fn read_sway(
@@ -7362,6 +7334,18 @@ impl Renderer {
             if let Some(job) = w.job(targets, &self.profiler) {
                 jobs.push((WATER_PASS.into(), job));
             }
+        }
+        // #468: the depth of field over the linear image, before the effects read it.
+        if let (true, Some(d), Some(t)) = (self.dofing, self.doffer.as_mut(), self.targets.as_ref())
+        {
+            let job = d.job(
+                device,
+                t.size,
+                (&t.linear, &t.linear_view),
+                &t.depth_view,
+                &self.profiler,
+            );
+            jobs.push((dof::DOF_PASS.into(), job));
         }
         let covers = after.as_deref().and_then(|a| a.covers());
         deep_gpu::alloc::outside(|| self.cover(device, covers));
@@ -8190,6 +8174,20 @@ impl Renderer {
     /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the
     /// distance in m along the view axis from the eye to what the depth target holds there;
     /// infinite where nothing is drawn.
+    /// #468: the depth of field's signed circle of confusion, f32 a pixel in px, rows top-down;
+    /// `None` on a frame with no depth of field.
+    pub fn read_coc(&self, device: &Device) -> Option<Vec<u8>> {
+        let (texture, size) = self.doffer.as_ref().filter(|_| self.dofing)?.coc()?;
+        let raw = read_texture(device, texture, size, 8)?;
+        Some(
+            raw.as_chunks::<8>()
+                .0
+                .iter()
+                .flat_map(|p| [p[0], p[1], p[2], p[3]])
+                .collect(),
+        )
+    }
+
     pub fn read_view_depth(&self, device: &Device) -> Option<Vec<u8>> {
         let t = self.targets.as_ref()?;
         let raw = read_texture(device, t.depth_view.texture(), t.size, 4)?;

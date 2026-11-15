@@ -9,6 +9,8 @@
 //! is discarded once; Shift is 1/20 speed (1/10 for `turn`) and a Shift change moves the anchor;
 //! past a limit the anchor moves by the overshoot; ⌘ snaps to `increment`.
 
+mod scrolls;
+
 use std::collections::BTreeMap;
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
@@ -83,6 +85,10 @@ pub struct Planted {
     pub no_keyboard: bool,
     /// An agent's pointer input writes an entry.
     pub agent_input: bool,
+    /// #542: a scroll control rounds each frame's share of a delta on its own.
+    pub scroll_rounds_each_frame: bool,
+    /// #542: a snapping scroll control ends a gesture on the nearest snap point.
+    pub scroll_snaps_to_nearest: bool,
 }
 
 impl Planted {
@@ -100,6 +106,8 @@ impl Planted {
             "tour_writes_during_drag" => p.tour_ignores_you = true,
             "smoothing_fall_from_peak" => p.smoothing_from_peak = true,
             "scanning_lookup" => p.scanning_lookup = true,
+            "scroll_rounds_each_frame" => p.scroll_rounds_each_frame = true,
+            "scroll_snaps_to_nearest" => p.scroll_snaps_to_nearest = true,
             _ => return None,
         }
         Some(p)
@@ -221,6 +229,8 @@ pub struct Session {
     tour: Option<Tour>,
     hover: BTreeMap<usize, (bool, Vec<(i64, f64)>)>,
     built: BTreeMap<String, Channel>,
+    /// #542: the document's scroll controls.
+    scrolls: scrolls::Scrolls,
 }
 
 /// A refusal: the code and what it names.
@@ -300,6 +310,7 @@ impl Session {
             tour,
             hover: BTreeMap::new(),
             built: BTreeMap::new(),
+            scrolls: scrolls::Scrolls::of(doc),
         })
     }
 
@@ -631,6 +642,7 @@ impl Session {
                 self.playhead = t;
                 Ok(json!({"dropped": dropped}))
             }
+            "scroll" => self.scroll(op, need_t()?),
             "advance" => {
                 let (frames, work, appended) = self.advance(need_t()?, true);
                 Ok(json!({"frames": frames, "input_work": work, "appended": appended}))
@@ -1337,6 +1349,10 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     let Some(kind) = c.get("kind").and_then(Value::as_str) else {
         return Ok(None);
     };
+    // #542: a scroll control's steps are `scrolls`'; a text control takes no pointer here.
+    if matches!(kind, "scroll" | "text") {
+        return Ok(None);
+    }
     let Some(behavior) = KINDS
         .iter()
         .chain(extra.iter())
