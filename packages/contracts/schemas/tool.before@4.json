@@ -323,7 +323,7 @@
             "host": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 253,
+              "maxLength": 8192,
               "description": "The host the fetch call's URL names, never its path or query (#2021); absent when the call names no URL."
             },
             "late": {
