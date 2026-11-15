@@ -95,6 +95,7 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod track_call;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
@@ -454,6 +455,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
+        "track" => {
+            return Some(Call::Track {
+                doc: doc()?,
+                load: optional(c.get("load"), |l| l.as_array().cloned())?,
+            })
+        }
         "session" => {
             return Some(Call::Session {
                 doc: doc()?,
@@ -1343,8 +1350,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .and_then(Value::as_str)
         .filter(|p| familiar::PLANTED.contains(p))
         .map(str::to_string);
+    let logic_planted = crate::logic::planted(input.get("planted"))?;
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
+        Some(_) if logic_planted.is_some() => None,
         Some(None) => return None,
         Some(Some(_)) if module_planted.is_some() || pack_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
@@ -1734,6 +1743,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         planted,
         module_planted,
         pack_planted,
+        logic_planted,
         calls,
         at,
         seeds,
