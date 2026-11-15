@@ -1,0 +1,14 @@
+{
+  "issue": 1164,
+  "criterion": "#1164.6ccc5166",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation of the taste call in the approved plan for #1164; not the owner's own call, which can overrule it on the PR",
+  "when": "2026-11-15T21:26:14Z",
+  "screenshots": {
+    "x-and-o.png": "03b90abab65e90389962df462f3cf0c73b47b2b507d5ab5750734a708ffd1788",
+    "taken-cell.png": "7636fcab21d8125094155b36b5bbecd293b9011ea335ec3ed177a8da9f10903d",
+    "win.png": "11cc3f04b9fdd442b62f4f09e3e5419423c4fc85df6599be824e8f4002c0d9f2",
+    "game-keys.mp4": "043fac6961f6b052814272af2f38e46aab5085a26414a0d18c453de3f7930c9e"
+  },
+  "note": "The board places X and O where the presses put them: after O's press on the taken cell 1 the board still holds the one X; after O 4, X on cell 1 and O on cell 4; after X 3, X across the top row with O on 4 and 5. The recording plays the game from an empty board through the win and holds it past O's press of 9. The page draws at the panel's left edge, as the canvas places a page, with blank space to its right."
+}
