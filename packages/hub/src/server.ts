@@ -1318,7 +1318,7 @@ class Hub {
     switch (method) {
       case 'hub.stop':
         conn.write({ id, result: { stopping: true } });
-        return void this.stop('requested');
+        return void this.stop('requested', conn.sock);
       case 'gates.off':
       case 'gates.on': {
         const off = method === 'gates.off';
@@ -1397,15 +1397,17 @@ class Hub {
   }
 
   /** A stop with its reason recorded: no new connections, the core's clean stop, then only our own socket removed. */
-  async stop(reason: string): Promise<void> {
+  async stop(reason: string, requester?: net.Socket): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
+    // Its close is the CLI's completion signal: keep only this socket until cleanup and process exit.
+    requester?.pause();
     clearTimeout(this.waitTimer);
     this.server.close();
     this.network?.close();
     // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
     const answers = this.plant === 'stop-answers-waiting';
-    if (!answers) for (const conn of this.conns) conn.sock.destroy();
+    if (!answers) for (const conn of this.conns) if (conn.sock !== requester) conn.sock.destroy();
     try {
       await Promise.race([this.core.request({ op: 'stop', reason }), new Promise((_, reject) => setTimeout(() => reject(Error('the core took over 20 s to stop')), 20_000))]);
     } catch (error) {

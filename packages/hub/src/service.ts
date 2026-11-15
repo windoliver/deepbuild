@@ -2,10 +2,10 @@
 // never as a child of the terminal or hook that first needed it: launchd on macOS, a systemd user service on
 // Linux. A dev hub (--root) is started in a session of its own, so it outlives its terminal too.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, watch, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf, underTemp } from './paths.js';
 import { onPath } from './setup-steps.js';
 import { line } from './wire.js';
@@ -18,8 +18,16 @@ const STEP_MS = 10;
 const FILES = 8192;
 type Obj = Record<string, unknown>;
 
-/** A connection's lines, read one at a time. */
-function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): Promise<Obj>; send(o: object): void; close(): void }> {
+interface Connection {
+  hello: Obj;
+  closed: Promise<void>;
+  next(): Promise<Obj>;
+  send(o: object): void;
+  close(): void;
+}
+
+/** A connection's lines, read one at a time, and the peer's close without a polling delay. */
+function connect(path: string, timeoutMs = 2000): Promise<Connection> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(path);
     const lines: Obj[] = [];
@@ -28,6 +36,7 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
     let failed: Error | undefined;
     const timer = setTimeout(() => fail(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
     const fail = (error: Error) => {
+      if (failed) return;
       failed = error;
       clearTimeout(timer);
       sock.destroy();
@@ -37,7 +46,10 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
     };
     sock.setEncoding('utf8');
     sock.on('error', (error) => fail(error));
-    sock.on('close', () => { if (!failed) failed = Error('the hub closed the connection'); });
+    const closed = new Promise<void>((done) => sock.once('close', () => {
+      fail(Object.assign(Error('the hub closed the connection'), { code: 'EOF' }));
+      done();
+    }));
     sock.on('data', (chunk: string) => {
       buffer += chunk;
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
@@ -52,24 +64,70 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
       const ready = lines.shift();
       if (ready) return done(ready);
       if (failed) return stop(failed);
-      const t = setTimeout(() => stop(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
+      const t = setTimeout(() => fail(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
       waiting.push({ wake: (o) => { clearTimeout(t); done(o); }, stop: (e) => { clearTimeout(t); stop(e); } });
     });
     // Connected once the hub's hello arrives.
-    next().then((hello) => { clearTimeout(timer); resolve({ hello, next, send: (o) => sock.write(line(o)), close: () => sock.destroy() }); }, () => undefined);
+    next().then((hello) => { clearTimeout(timer); resolve({ hello, closed, next, send: (o) => sock.write(line(o)), close: () => sock.destroy() }); }, () => undefined);
   });
 }
 /** Whether a hub answers at `path` with its hello. */
-const answers = (path: string) => connect(path).then((c) => { c.close(); return true; }, () => false);
+const answers = (path: string, timeoutMs = 2000) => connect(path, timeoutMs).then((c) => { c.close(); return true; }, () => false);
 /** The hub's hello at `path`, which names its start ID and contract; undefined when no hub answers. */
 export const helloAt = (path: string): Promise<Obj | undefined> => connect(path).then((c) => { c.close(); return c.hello; }, () => undefined);
 async function waitForHub(path: string): Promise<boolean> {
   const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline) {
-    if (await answers(path)) return true;
-    await new Promise((done) => setTimeout(done, STEP_MS));
+  let wake = () => {};
+  let watcher: ReturnType<typeof watch> | undefined;
+  try {
+    watcher = watch(dirname(path), (_event, name) => { if (name === null || name.toString() === basename(path)) wake(); });
+    watcher.on('error', () => { watcher?.close(); wake(); });
+  } catch { /* A filesystem without notifications still gets the connection retries below. */ }
+  try {
+    while (Date.now() < deadline) {
+      if (await answers(path, Math.min(2000, deadline - Date.now()))) return true;
+      await new Promise<void>((done) => {
+        // A socket file may appear before listen(), with no second filesystem event. Keep that race short too.
+        const retry = setTimeout(done, Math.min(STEP_MS, Math.max(0, deadline - Date.now())));
+        wake = () => { clearTimeout(retry); done(); };
+      });
+    }
+    return false;
+  } finally {
+    watcher?.close();
   }
-  return false;
+}
+
+/** A closed control connection alone isn't proof: another connection must no longer get a hello. */
+async function waitForStop(path: string, connection: Connection): Promise<void> {
+  const deadline = Date.now() + WAIT_MS;
+  const timeout = () => Error(`no answer within ${WAIT_MS} ms`);
+  try {
+    for (;;) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          connection.closed,
+          new Promise<never>((_, reject) => { timer = setTimeout(() => reject(timeout()), Math.max(0, deadline - Date.now())); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw timeout();
+      try {
+        // A still-answering peer is watched to closure. Silence is not proof that it stopped.
+        connection = await connect(path, remaining);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT' || code === 'ECONNREFUSED') return;
+        // A connection accepted just before shutdown can close before its hello; verify the listener again.
+        if (code !== 'EOF' && code !== 'ECONNRESET') throw error;
+      }
+    }
+  } finally {
+    connection.close();
+  }
 }
 
 /** One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds. */
@@ -82,6 +140,7 @@ export async function control(path: string, tokenFile: string, method: string, p
     c.send({ id: method, method, params });
     const reply = await c.next();
     if (reply.error) throw Error(`${method} was refused: ${JSON.stringify(reply.error)}`);
+    if (method === 'hub.stop') await waitForStop(path, c);
     return reply.result as Obj;
   } finally {
     c.close();
@@ -258,8 +317,6 @@ export async function stopHub(options: { root: string }): Promise<number> {
     process.stderr.write(`deep hub stop: no hub could be stopped at unix:${root.socket}: ${error instanceof Error ? error.message : String(error)}\n`);
     return 3;
   }
-  const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
   return 0;
 }
 
@@ -272,11 +329,8 @@ export function removeService(): void {
   rmSync(file, { force: true });
   if (process.platform === 'linux') run('systemctl', ['--user', 'daemon-reload']);
 }
-/** Stops the hub at `root` if one answers there, and waits for its socket to go quiet. */
-export async function stopIfRunning(root: string): Promise<void> {
-  const at = rootOf(root);
-  if (!(await answers(at.socket))) return;
-  try { await control(at.socket, at.token, 'hub.stop'); } catch { return; }
-  const deadline = Date.now() + WAIT_MS;
-  while (Date.now() < deadline && (await answers(at.socket))) await new Promise((done) => setTimeout(done, STEP_MS));
+/** Stops the hub at `root` if one answers there; a live hub that cannot stop is still a failure. */
+export async function stopIfRunning(root: string): Promise<number> {
+  if (!(await answers(rootOf(root).socket))) return 0;
+  return stopHub({ root });
 }
