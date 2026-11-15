@@ -3,12 +3,12 @@
   "criterion": "#468.ce8ac7ee",
   "verdict": "looks_right",
   "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"validate for me and close the gaps\"); not the owner's own call",
-  "when": "2026-11-15T06:33:45Z",
+  "when": "2026-11-15T07:20:59Z",
   "screenshots": {
     "bokeh-disc.png": "97207cec7138023df0b09e65f6ed628c7d9d20c7cfbddc2dec71f6419c035606",
     "focus-pull.png": "102da32821862362b2a9fe19bd36f596bff89748f31be4f4206c02cb3038935b",
-    "lid-leader.png": "3b7ada486d1dc259e6d74a68b4849b3bca0b84ad58f42a2abf8f11a0692239e0",
-    "focus-pull-and-lid.apng": "fb8d76cb05738201321f2fb6fe389149ef42844facc152c3b8cdd7f7273467fd"
+    "lid-leader.png": "49bf3ae6b077664d8bb2038474510868eca526f952228cc9a7ddaa61b34832a7",
+    "focus-pull-and-lid.apng": "3b7bfc2eda9293204267156f219af743f7b82c5aef7814ceeb4a94d119ba5e54"
   },
-  "note": "Looked at each still at full size and in zoomed crops, and at frames 15, 25, 35 and 45 of the focus pull and 0, 20, 40, 60 and 80 of the lid. Bokeh: lights behind the sharp box spread into clean six-sided discs of their own colours, larger with distance; an earlier draft left a ragged fringe on the box outline (the spiral sampled a 1.5 px near blur unevenly) and laid the near blur too thinly over sharp parts, both fixed before this call. Focus pull: A sharp with B soft at 0.5 s, both soft mid-pull, B sharp with A soft at 1.5 s, the near box blurring over the bases of the posts behind it. Lid: the leader runs from the label at the right edge to the hinge and stays on it as the lid opens and the camera orbits; the wire stops where it pierces the case on its way to the hinge."
+  "note": "Looked at each still at full size and in zoomed crops, and at frames 15, 25, 35 and 45 of the focus pull and 0, 20, 40, 60 and 80 of the lid. Bokeh: lights behind the sharp box spread into clean six-sided discs of their own colours, larger with distance; an earlier draft left a ragged fringe on the box outline (the spiral sampled a 1.5 px near blur unevenly) and laid the near blur too thinly over sharp parts, both fixed before this call. Focus pull: A sharp with B soft at 0.5 s, both soft mid-pull, B sharp with A soft at 1.5 s, the near box blurring over the bases of the posts behind it. Lid: the leader runs from the label at the right edge to the hinge and stays on it as the lid opens and the camera orbits; the wire stops where it pierces the case on its way to the hinge. Redrawn after merging main: the lid label is now an overlay.frame@1 card at the right edge (the accepted AC3 contract), its leader leaving level, turning once and ending in a dot on the hinge through the open and the orbit (frames 0, 40 and 80 looked at); the bokeh and focus-pull pictures are byte-identical."
 }

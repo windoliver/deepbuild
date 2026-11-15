@@ -94,8 +94,11 @@ function lid() {
     cam: { kind: 'camera@1', params: { projection: 'perspective', target: [0.1, 0.3, 0], orbit: { azimuth: -30, elevation: 25, distance: 2.4 }, fov: 40, near: 0.05, far: 50 } },
     sky: SKY, sun: SUN, case_mat: material({ base_color: [0.35, 0.3, 0.25, 1], roughness: 0.6 }), lid_mat: material({ base_color: [0.6, 0.5, 0.35, 1], roughness: 0.5 }),
     case: box([0.4, 0.5, 0.3], [0.2, 0.25, 0], 'case_mat'),
-    lid: { kind: 'mark.box@1', params: { size: [0.4, 0.02, 0.3], anchors: { hinge: pivot } }, at: { pos: [0.2, 0.5, -0.15], rot: [0, 0, 0], pivot }, material: 'lid_mat' },
-    callout: { kind: 'overlay.text@1', role: 'label', params: { anchor: 'right', role: 'caption', template: 'Hinge', size: 16, leader: { to: 'lid#hinge', line: 'ink', width: 1.5, end: 'dot', elbow: 'none', gap: 6 }, hide: 'off_frame' } },
+    lid: { kind: 'mark.box@1', params: { size: [0.4, 0.02, 0.3] }, at: { pos: [0.2, 0.5, -0.15], rot: [0, 0, 0], pivot }, anchors: { hinge: { pos: pivot, rot: [0, 0, 0] } }, material: 'lid_mat' },
+    'callout-frame': { kind: 'frame@1', params: { box: [0, 0, 96, 32] } },
+    'callout-bg': { kind: 'rect@1', parent: 'callout-frame', params: { box: [0, 0, 96, 32], paint: { fill: { role: 'muted' } } } },
+    'callout-text': { kind: 'text@1', parent: 'callout-frame', params: { text: 'Hinge', font: 'body', size: 16, box: { w: 76, h: 22 }, paint: { fill: { role: 'stone' } } }, at: { pos: [12, 6, 0] } },
+    callout: { kind: 'overlay.frame@1', params: { frame: 'callout-frame', anchor: 'e', offset: [0, 0], leader: { to: 'lid#hinge', line: 'stone', width: 1.5, end: 'dot' }, hide: 'off_frame' } },
     wire: { kind: 'mark.line@1', params: { points: [[-0.4, 0, 0.3], 'lid#hinge'], width: 2, paint: { fill: { role: 'ink' } } } },
   }, { channels: { orbit: linear('items/cam/params/orbit/azimuth', [[0, -30], [4, 40]]), open: linear('items/lid/at/rot/0', [[0, 0], [4, -110]]) } });
 }
