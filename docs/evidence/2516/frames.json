@@ -24,5 +24,7 @@
     "multi_bounce": true,
     "specular": true
   },
-  "taste": "Owner accepted the recommendation to keep these exact frames and defaults; see tests/acceptance/2516/TASTE.json for the verbatim instruction and hashes. Acceptance still requires the matching renderer check."
+  "taste": "Owner accepted the recommendation to keep these exact frames and defaults; tests/acceptance/2516/TASTE.json records the verbatim instruction and hashes. The unchanged official taste check reproduces and matches them on final integrated code b85c4522b39ce1ff97be0933bd6d2365a1b82891.",
+  "verified_change_commit": "b85c4522b39ce1ff97be0933bd6d2365a1b82891",
+  "verified_change_binary": "16b8a262fbf59cf700feaa3f68217c7ac019dda91ac2cac8b1f76bcb90d588db"
 }

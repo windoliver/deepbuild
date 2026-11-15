@@ -4,12 +4,16 @@ These are unmodified PNGs from `deep-gpu run` / `view3d`, captured under the ren
 
 The room uses #418's frozen room and look helpers, at 640 × 480. The castle uses `packs/examples/castle.json`, `castle.look.json` and its composite pack, at 1280 × 800. AO is at every shipped default on both sides: radius 0.5 m, strength 1, eight samples, half resolution, multi-bounce and specular on.
 
-These images are for the issue's one owner taste call only. No numerical criterion judges a picture. The owner approved keeping the displayed defaults with “goea d do whatever you reockemnd to close the issue”, after these exact frames and the recommendation were shown. [TASTE.json](../../../tests/acceptance/2516/TASTE.json) records the original instruction and the four hashes; it records acceptance of the recommendation, not an invented detailed visual review. The unchanged taste check still has to reproduce and match them. The four files do not replace, bless, or re-record any golden.
+These images are for the issue's one owner taste call only. No numerical criterion judges a picture. The owner approved keeping the displayed defaults with “goea d do whatever you reockemnd to close the issue”, after these exact frames and the recommendation were shown. [TASTE.json](../../../tests/acceptance/2516/TASTE.json) records the original instruction and the four hashes; it records acceptance of the recommendation, not an invented detailed visual review. The unchanged official taste check has reproduced and matched them, including on final integrated code `b85c4522b39ce1ff97be0933bd6d2365a1b82891`. The four files do not replace, bless, or re-record any golden.
 
 | Scene | Main | Change |
 |---|---|---|
 | #418 room | ![Room on main](room-main.png) | ![Room after the AO change](room-after.png) |
 | Castle | ![Castle on main](castle-main.png) | ![Castle after the AO change](castle-after.png) |
+
+## Final integrated acceptance
+
+[Command/exit/source-hash manifest](proof.json), [final non-timing output](acceptance-final.txt) (**29/29, no skips**), and [Cost-line/lease output](cost-line-and-lease.txt) (**2/2 selected assertions**). The measurement case had already passed under the qualified timed grant below and was not retried in the assertion-only run. Logs redact machine paths only; expected values, outcomes and measured numbers are unchanged. These files prove selected criteria, not a globally green repository; [the report](../../../reports/2516-closure.md) discloses global failures and unrun checks.
 
 ## Five-run GPU measurement
 
