@@ -1,0 +1,99 @@
+[
+  {
+    "label": "finish-build",
+    "command": [
+      "sh",
+      "-c",
+      "npm run build --workspaces && cargo build --locked --offline -p deep-hook"
+    ],
+    "exit": 0,
+    "signal": null,
+    "seconds": 245.702
+  },
+  {
+    "label": "reverted-emission",
+    "command": [
+      "node",
+      "<proof>/reverted-clock.mjs",
+      "revert",
+      "<proof>/main-list.ts"
+    ],
+    "exit": 0,
+    "signal": null,
+    "seconds": 1.047
+  },
+  {
+    "label": "frozen-inbox-reverted",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/acceptance/2331/inbox.test.ts",
+      "--no-file-parallelism",
+      "--reporter=verbose",
+      "--reporter=json",
+      "--outputFile.json=<evidence>/frozen-inbox-reverted.json"
+    ],
+    "exit": 1,
+    "signal": null,
+    "seconds": 14.137
+  },
+  {
+    "label": "restored-emission",
+    "command": [
+      "node",
+      "<proof>/reverted-clock.mjs",
+      "restore",
+      "<proof>/main-list.ts"
+    ],
+    "exit": 0,
+    "signal": null,
+    "seconds": 0.802
+  },
+  {
+    "label": "frozen-current-main",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "tests/acceptance/2331",
+      "--no-file-parallelism",
+      "--reporter=verbose",
+      "--reporter=json",
+      "--outputFile.json=<evidence>/frozen-current-main.json"
+    ],
+    "exit": 0,
+    "signal": null,
+    "seconds": 69.393
+  },
+  {
+    "label": "unchanged-1463-current-main",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "--root",
+      "tests/acceptance/1463",
+      "--no-file-parallelism",
+      "--reporter=verbose",
+      "--reporter=json",
+      "--outputFile.json=<evidence>/unchanged-1463-current-main.json"
+    ],
+    "exit": 1,
+    "signal": null,
+    "seconds": 1326.645
+  },
+  {
+    "label": "finish-affected",
+    "command": [
+      "node",
+      "scripts/affected.mjs",
+      "tests/acceptance/2331/inbox.test.ts",
+      "tests/acceptance/2331/week.test.ts",
+      "tests/acceptance/2331/judges.test.ts"
+    ],
+    "exit": 1,
+    "signal": null,
+    "seconds": 28.055
+  }
+]

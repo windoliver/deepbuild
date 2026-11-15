@@ -1,0 +1,232 @@
+{
+  "baseCommit": "ccbdefd1f1a6a475732d2e00cc047b3cc39e02bd",
+  "productionDiff": "none",
+  "regressionTestDiff": "none",
+  "complete": true,
+  "overall": "BLOCKED",
+  "counts": {
+    "planned": 35,
+    "run": 35,
+    "passed": 31,
+    "failed": 3,
+    "inconclusive": 1,
+    "skipped": 0
+  },
+  "tests": [
+    {
+      "file": "tests/acceptance/1463/budget.test.ts",
+      "name": "#1463.0c303476 #1463.0c303476: the perf lane has the task deep-list-700, a first measurement naming #1463, valid against the merge base's budgets, and it runs",
+      "status": "passed",
+      "durationMs": 10288.186792
+    },
+    {
+      "file": "tests/acceptance/1463/budget.test.ts",
+      "name": "#1463.0c303476 #1463.0c303476: deep answers within 100 ms over the socket on 700 rows",
+      "status": "inconclusive",
+      "durationMs": 15476.174791999998,
+      "error": "AssertionError: INCONCLUSIVE: thermal state not nominal (NSProcessInfo.thermalState 1); the timing is a reading only"
+    },
+    {
+      "file": "tests/acceptance/1463/deep.test.ts",
+      "name": "#1463.824c8001 #1463.824c8001: deep prints the list, the same rows and count as the app, then nothing else, and exits 0",
+      "status": "passed",
+      "durationMs": 862438.1446250001
+    },
+    {
+      "file": "tests/acceptance/1463/deep.test.ts",
+      "name": "#1463.824c8001 #1463.824c8001: a planted second count fails, naming it",
+      "status": "passed",
+      "durationMs": 70.86687499994878
+    },
+    {
+      "file": "tests/acceptance/1463/deep.test.ts",
+      "name": "#1463.824c8001 #1463.824c8001: on a machine that isn't set up, deep runs setup first, then prints the list and exits 0",
+      "status": "passed",
+      "durationMs": 3046.6545000000624
+    },
+    {
+      "file": "tests/acceptance/1463/deep.test.ts",
+      "name": "#1463.59289fca #1463.59289fca: with the hub stopped, deep prints the rows it can read from the database, says the hub isn't answering and since when, and no count reads 0",
+      "status": "passed",
+      "durationMs": 325.75720800005365
+    },
+    {
+      "file": "tests/acceptance/1463/detail.test.ts",
+      "name": "#1463.03f69be1 #1463.03f69be1: with ten finished sessions of 30 calls each and two open asks, the last line of deep status is the count sentence and the output is under 40 lines",
+      "status": "passed",
+      "durationMs": 10839.873625
+    },
+    {
+      "file": "tests/acceptance/1463/inbox.test.ts",
+      "name": "#1463.8ad45787 #1463.8ad45787: an ask that defaults to No at 16:40 today reads \"If you don't answer: No, at 16:40\" in deep inbox, and its --json row holds default and default_at",
+      "status": "passed",
+      "durationMs": 7941.38025
+    },
+    {
+      "file": "tests/acceptance/1463/inbox.test.ts",
+      "name": "#1463.8ad45787 #1463.8ad45787: a planted line with no default fails, naming the ask",
+      "status": "passed",
+      "durationMs": 83.50379199999952
+    },
+    {
+      "file": "tests/acceptance/1463/inbox.test.ts",
+      "name": "#1463.91324b7e #1463.91324b7e: deep inbox prints each question before its handle",
+      "status": "passed",
+      "durationMs": 106.81666600000062
+    },
+    {
+      "file": "tests/acceptance/1463/inbox.test.ts",
+      "name": "#1463.91324b7e #1463.91324b7e: deep inbox answer <handle> still works",
+      "status": "passed",
+      "durationMs": 580.6672500000004
+    },
+    {
+      "file": "tests/acceptance/1463/inbox.test.ts",
+      "name": "#1463.dacb7e33 #1463.dacb7e33: deep inbox undo says when the ask now defaults as a clock time in your time zone",
+      "status": "passed",
+      "durationMs": 108.39158300000054
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges shapeFailures: the row shape, a boolean unread",
+      "status": "passed",
+      "durationMs": 1.2427079999999933
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges rowFailures: rows, order, word and unread, naming the row",
+      "status": "passed",
+      "durationMs": 1.0096250000000282
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges drawnFailures: each row drawn by its id, in order, with its title and word",
+      "status": "passed",
+      "durationMs": 0.5537089999999694
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges textRowFailures, countFailures and afterListFailures: the list as text",
+      "status": "passed",
+      "durationMs": 0.7624999999999886
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges inboxFailures and defaultFieldFailures: the question first, the default, the handle last",
+      "status": "passed",
+      "durationMs": 112.864916
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges clockFailures: a clock time in the zone, never UTC",
+      "status": "passed",
+      "durationMs": 1.4550419999999917
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges leakFailures and notificationFailures: no other session, no ID",
+      "status": "passed",
+      "durationMs": 0.5244589999999789
+    },
+    {
+      "file": "tests/acceptance/1463/judges.test.ts",
+      "name": "judges endFailures and downFailures: the count last, the hub not answering",
+      "status": "passed",
+      "durationMs": 0.6707920000000058
+    },
+    {
+      "file": "tests/acceptance/1463/list.test.ts",
+      "name": "#1463.f9ab70a8 #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos",
+      "status": "failed",
+      "durationMs": 15531.561458,
+      "error": "AssertionError: the window draws see's rows, by their ids, in their order: expected [ …(5) ] to deeply equal []"
+    },
+    {
+      "file": "tests/acceptance/1463/list.test.ts",
+      "name": "#1463.f9ab70a8 #1463.f9ab70a8: a planted second order fails, naming the row",
+      "status": "passed",
+      "durationMs": 78.29033300000083
+    },
+    {
+      "file": "tests/acceptance/1463/list.test.ts",
+      "name": "#1463.f9ab70a8 #1463.f9ab70a8: a planted word fails, naming the row",
+      "status": "passed",
+      "durationMs": 77.3662919999988
+    },
+    {
+      "file": "tests/acceptance/1463/list.test.ts",
+      "name": "#1463.17f151eb #1463.17f151eb: the fields the first criterion compares include unread, and a planted deep status that disagrees with the app on unread fails, naming the row",
+      "status": "passed",
+      "durationMs": 81.06833300000108
+    },
+    {
+      "file": "tests/acceptance/1463/notification.test.ts",
+      "name": "#1463.bfbc08f9 #1463.bfbc08f9: with open asks in three projects, each notification's title names its project",
+      "status": "passed",
+      "durationMs": 10545.319291
+    },
+    {
+      "file": "tests/acceptance/1463/notification.test.ts",
+      "name": "#1463.bfbc08f9 #1463.bfbc08f9: a planted title that holds a session ID fails, naming it",
+      "status": "passed",
+      "durationMs": 2328.5844579999994
+    },
+    {
+      "file": "tests/acceptance/1463/scope.test.ts",
+      "name": "#1463.31fc1678 #1463.31fc1678: an agent's deep_status holds no other session's asks",
+      "status": "passed",
+      "durationMs": 1893.976083
+    },
+    {
+      "file": "tests/acceptance/1463/scope.test.ts",
+      "name": "#1463.31fc1678 #1463.31fc1678: a planted row leak fails, naming the session",
+      "status": "passed",
+      "durationMs": 1796.1058749999997
+    },
+    {
+      "file": "tests/acceptance/1463/words.test.ts",
+      "name": "#1463.cc5d1e3f #1463.cc5d1e3f: 992/agree still holds",
+      "status": "failed",
+      "durationMs": 364439.980541,
+      "error": "AssertionError: tests/acceptance/992's agree.test.ts must pass as it is: exit 1, 1 ⎯⎯⎯⎯⎯⎯⎯"
+    },
+    {
+      "file": "tests/acceptance/1463/words.test.ts",
+      "name": "#1463.cc5d1e3f #1463.cc5d1e3f: every word comes from states::TABLE",
+      "status": "passed",
+      "durationMs": 11033.556125000003
+    },
+    {
+      "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+      "name": "judges, redrafted: states::TABLE and its words stateTable() reads states::TABLE whole: every row of the design's table, with its entry and its never-words",
+      "status": "passed",
+      "durationMs": 7.054874999999811
+    },
+    {
+      "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+      "name": "judges, redrafted: states::TABLE and its words tableFailures: every word with its entry passes; any other word, or a word with another entry, fails naming the row",
+      "status": "passed",
+      "durationMs": 4.98700000000008
+    },
+    {
+      "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+      "name": "judges, redrafted: states::TABLE and its words tableFailures reads the table it is handed: a word it gains passes, a word it lacks fails",
+      "status": "passed",
+      "durationMs": 0.4960839999998825
+    },
+    {
+      "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+      "name": "judges, redrafted: states::TABLE and its words retiredFailures: a list in the table's words passes; each word that goes fails, in any case, naming it and the reader",
+      "status": "failed",
+      "durationMs": 4.186041000000159,
+      "error": "AssertionError: \"Gone quiet: Search index\" holds \"gone quiet\", a word no state goes by: expected 0 to be greater than 0"
+    },
+    {
+      "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+      "name": "judges, redrafted: states::TABLE and its words retiredFailures reads the table it is handed: its multi-word never-words go, single words and parts of words stay",
+      "status": "passed",
+      "durationMs": 0.6353340000000571
+    }
+  ],
+  "note": "This establishes the complete current-main results, not a green regression suite. No failures were waived or rewritten."
+}

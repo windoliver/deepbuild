@@ -1,0 +1,119 @@
+{
+  "proposal": "188fd91cdafb1b7d7aee3a3a9bef71c7dfb00d12",
+  "base": "f989212187f28d65ab7e80c3a22545d5edaee37e",
+  "file": "tests/acceptance/1463/helpers.ts",
+  "scope": "Owner-approved case-insensitive retired-state detection, retaining observed and lowercase spellings in its diagnostic. No test expectation changed.",
+  "approval": {
+    "conversation": true,
+    "question": "Do you approve a separate, narrowly scoped correction to the protected #1463 helper’s case sensitivity?",
+    "response": "yes",
+    "signedTag": "not supplied; merge guard remains blocked"
+  },
+  "before": {
+    "total": 5,
+    "passed": 4,
+    "failed": 1,
+    "skipped": 0,
+    "tests": [
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words stateTable() reads states::TABLE whole: every row of the design's table, with its entry and its never-words",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words tableFailures: every word with its entry passes; any other word, or a word with another entry, fails naming the row",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words tableFailures reads the table it is handed: a word it gains passes, a word it lacks fails",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words retiredFailures: a list in the table's words passes; each word that goes fails, in any case, naming it and the reader",
+        "status": "failed",
+        "error": "AssertionError: \"Gone quiet: Search index\" holds \"gone quiet\", a word no state goes by: expected 0 to be greater than 0"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words retiredFailures reads the table it is handed: its multi-word never-words go, single words and parts of words stay",
+        "status": "passed"
+      }
+    ]
+  },
+  "after": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0,
+    "skipped": 0,
+    "tests": [
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges shapeFailures: the row shape, a boolean unread",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges rowFailures: rows, order, word and unread, naming the row",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges drawnFailures: each row drawn by its id, in order, with its title and word",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges textRowFailures, countFailures and afterListFailures: the list as text",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges inboxFailures and defaultFieldFailures: the question first, the default, the handle last",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges clockFailures: a clock time in the zone, never UTC",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges leakFailures and notificationFailures: no other session, no ID",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/judges.test.ts",
+        "name": "judges endFailures and downFailures: the count last, the hub not answering",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words stateTable() reads states::TABLE whole: every row of the design's table, with its entry and its never-words",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words tableFailures: every word with its entry passes; any other word, or a word with another entry, fails naming the row",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words tableFailures reads the table it is handed: a word it gains passes, a word it lacks fails",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words retiredFailures: a list in the table's words passes; each word that goes fails, in any case, naming it and the reader",
+        "status": "passed"
+      },
+      {
+        "file": "tests/acceptance/1463/redraft-judges/table-judges.test.ts",
+        "name": "judges, redrafted: states::TABLE and its words retiredFailures reads the table it is handed: its multi-word never-words go, single words and parts of words stay",
+        "status": "passed"
+      }
+    ]
+  }
+}
