@@ -298,6 +298,8 @@ timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
+// #2179's file builds busy_disk and deep-hook in a target folder of its own and swaps in a stand-in hook.
+alone.push('tests/acceptance/2179/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
@@ -999,23 +1001,27 @@ export function reportResults(cwd, text, label = '') {
 export function cargoResults(output, status, workspace) {
   const targets = new Map(workspace.flatMap((crate) => crate.targets.flatMap((target) => [[target.key, target.rerun], ...(target.doc ? [[`doc ${target.doc}`, `-p ${crate.name} --doc`]] : [])])));
   const failures = [], passed = [], skips = [], failed = new Set();
-  let target = null;
+  // `reported`: whether the target running now reported a failure, so its rerun line names no second one.
+  let target = null, reported = false;
   for (const line of output.split('\n')) {
     const running = line.match(/^\s*Running (?:unittests )?(.+?) \(.*?deps\/(\w+)-[0-9a-f]+\)\s*$/);
     const doc = line.match(/^\s*Doc-tests (\w+)\s*$/);
     if (running || doc) {
       const key = running ? `${running[2]} ${running[1]}` : `doc ${doc[1]}`;
       target = targets.get(key) ?? key;
+      reported = false;
     }
     const test = line.match(/^test (.+?) \.\.\. (ok|FAILED)$/);
     if (test && test[2] === 'ok') passed.push(`cargo ${target} › ${test[1]}`);
-    if (test && test[2] === 'FAILED') failures.push({ id: `cargo ${target} › ${test[1]}`, state: 'FAIL', message: '' }), failed.add(target);
+    if (test && test[2] === 'FAILED') failures.push({ id: `cargo ${target} › ${test[1]}`, state: 'FAIL', message: '' }), failed.add(target), (reported = true);
     const ignored = line.match(/^test (.+?) \.\.\. ignored(?:, (.*))?$/);
     if (ignored) skips.push({ id: `cargo ${target} › ${ignored[1]}`, note: ignored[2] ?? '' });
     // A harness that ran nothing says so, and nothing unrun passes.
-    if (/^test result: INCONCLUSIVE/.test(line)) failures.push({ id: `cargo ${target}`, state: 'INCONCLUSIVE', message: line.slice(13) }), failed.add(target);
-    // cargo names each failed target by the arguments that rerun it.
+    if (/^test result: INCONCLUSIVE/.test(line)) failures.push({ id: `cargo ${target}`, state: 'INCONCLUSIVE', message: line.slice(13) }), failed.add(target), (reported = true);
+    // cargo names each failed target by the arguments that rerun it: right after its run, where it is the target that
+    // just reported, under its Running key when no workspace maps it, and again in --no-fail-fast's closing list.
     const rerun = line.match(/(?:to rerun pass |^\s+)`(-p \S+ --\w+(?: \S+)?)`\s*$/)?.[1];
+    if (rerun && /to rerun pass/.test(line) && reported) failed.add(rerun);
     if (rerun && !failed.has(rerun)) failures.push({ id: `cargo ${rerun}`, state: 'FAIL', message: 'the target failed outside any test it reported' }), failed.add(rerun);
   }
   if (status !== 0 && !failed.size) failures.push({ id: 'cargo test', state: 'FAIL', message: output.split('\n').find((line) => /^error/.test(line)) ?? `exited ${status}` });
