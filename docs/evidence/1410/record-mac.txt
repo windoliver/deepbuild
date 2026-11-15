@@ -1,11 +1,11 @@
-# packages/record, tests named #1410, at 05b8016c on the owner's Mac, same run as acceptance-mac.txt; as the Mac runner saved it; the run's own lines give the commit, macOS version, power, time and load.
+# packages/record, tests named #1410, at c3c58e9c on the owner's Mac, same run as acceptance-mac.txt; as the Mac runner saved it; the run's own lines give the commit, macOS version, power, time and load.
 
-== head 05b8016c57dbf74596992106b120ccfcd727ca52 packages/record test/record.test.ts -t 1410
+== head c3c58e9c9c0207a816324452627ec89b7761c0af packages/record test/record.test.ts -t 1410
 == command: npx vitest run --root packages/record test/record.test.ts -t 1410 --reporter=verbose
 sw_vers 27.2.1 node v24.22.0 Now drawing from 'AC Power'
-== start 2026-11-14 16:15:41 load { 15.62 27.75 85.85 } thermal 0
+== start 2026-11-15 01:28:34 load { 23.24 32.90 27.21 } thermal 1
 
- RUN  v5.0.5 ~/private/dbc-1410e/packages/record
+ RUN  v5.0.5 ~/private/dbc-1410g/packages/record
 
  ↓ test/record.test.ts > an event ID is one event, with what its connection proved > the same ID from a connection with another actor is a conflict, not the same event
  ↓ test/record.test.ts > raw SQL cannot disarm the append-only log > a statement that writes is refused, the triggers included, and events stay as they were
@@ -78,15 +78,20 @@ sw_vers 27.2.1 node v24.22.0 Now drawing from 'AC Power'
  ↓ test/record.test.ts > the decisions projection tells a revocation from an overrule > a decision revoked on the trusted path reads revoked with no overruler; an overruled one names the event that overruled it
  ↓ test/record.test.ts > a prompt the core answered in the model's place (#83) > the core's finish after the claim and the answered prompt ends the session: a cut while it idles loses nothing, its claim stays open
  ↓ test/record.test.ts > readSince follows the log for a fold > hands on each event of its kinds once, in log order, across pages, and moves the cursor past the rest
- ✓ test/record.test.ts > a commit that waited behind an evidence sync is judged by the log as it is when it commits (#1410) > a prompt queued behind its session's stop, both behind a sync, still resumes with a FULL commit 39ms
- ✓ test/record.test.ts > a verdict's commit syncs the evidence its requirements stand on, without citing it (#1410) > the files its requirements name are synced before the verdict commits, and its own evidence list stays empty 14ms
+ ✓ test/record.test.ts > a commit that waited behind an evidence sync is judged by the log as it is when it commits (#1410) > a prompt queued behind its session's stop, both behind a sync, still resumes with a FULL commit 38ms
+ ✓ test/record.test.ts > a verdict's commit syncs the evidence its requirements stand on, without citing it (#1410) > the files its requirements name are synced before the verdict commits, and its own evidence list stays empty 13ms
+ ✓ test/record.test.ts > a FULL commit syncs the evidence its data names beside its own list (#1410) > an answer given as a screenshot names its image, and the page it approved, and it is synced before the commit 16ms
+ ✓ test/record.test.ts > a FULL commit syncs the evidence its data names beside its own list (#1410) > a lock names the bytes it approved: each check, each expected output and each held-out file, and it is synced before the commit 18ms
+ ✓ test/record.test.ts > a FULL commit syncs the evidence its data names beside its own list (#1410) > a workspace's reading names the bytes it read, and it is synced before the commit 12ms
+ ✓ test/record.test.ts > a FULL commit whose evidence fails to sync is refused, and nothing of it is in the log (#1410) > a verdict, committed alone 29ms
+ ✓ test/record.test.ts > a FULL commit whose evidence fails to sync is refused, and nothing of it is in the log (#1410) > a prompt that resumes its session, committed in a batch 26ms
  ↓ test/record.test.ts > a read-only connection to the record > holds SQLite's 2 MB page cache, as the writer's does
  ↓ test/record.test.ts > a read-only connection to the record > opens on a file that is no database, and its first read says so
 
  Test Files  1 passed (1)
-      Tests  2 passed | 73 skipped (75)
-   Start at  16:15:41
-   Duration  290ms (transform 60%, tests 23%, import 16%, worker 1%)
+      Tests  7 passed | 73 skipped (80)
+   Start at  01:28:35
+   Duration  393ms (tests 46%, transform 42%, import 11%)
 
-== end 2026-11-14 16:15:42 load { 15.62 27.75 85.85 } thermal 0
+== end 2026-11-15 01:28:35 load { 23.24 32.90 27.21 } thermal 1
 vitest exit=0
