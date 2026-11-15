@@ -1,0 +1,20 @@
+== git rev-parse HEAD: 57499bf1852ae85186da0b5462c5f14623549035
+== command: npx vitest run tests/acceptance/190/ac04-machines-browser.test.ts --no-file-parallelism --reporter=verbose
+== sw_vers: 27.2.1
+Now drawing from 'AC Power'
+== start 2026-11-15 01:31:42  1:31  up 1 day, 18:33, 2 users, load averages: 10.65 21.48 23.47 thermalState 0
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac04-machines-browser.test.ts > #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host > #190.2d5bb5ea the two pieces' merged programs are byte for byte the same on macOS arm64 and Linux x86_64 163505ms
+ ✓ tests/acceptance/190/ac04-machines-browser.test.ts > #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host > #190.2d5bb5ea grid_path@1's fixtures give the same full-state hashes in the app and in headless Chrome's own WebAssembly engine 1784ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  01:31:43
+   Duration  202.72s (tests 100%)
+
+
+== end 2026-11-15 01:35:06  1:35  up 1 day, 18:37, 2 users, load averages: 41.39 29.89 26.54 thermalState 1
+vitest exit=0

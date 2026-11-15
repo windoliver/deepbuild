@@ -13,7 +13,7 @@ export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
   | { op: 'mcp-hello'; fd?: number | undefined; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'waiter-hello'; fd?: number | undefined; session: string; at: number }
-  | { op: 'health' }
+  | { op: 'health'; role: string }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
   // The extensions' context for a call, fitted inside the agent's cap on injected output (#1296).
@@ -52,7 +52,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'call': return core.call(request.method, request.params, request.context);
     case 'mcp-hello': return core.mcpHello(request.fd, request.parent, request.paseo);
     case 'waiter-hello': return core.waiterHello(request.fd, request.session, request.at);
-    case 'health': return core.health();
+    case 'health': return core.health(request.role);
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'context-fit': return core.fitContext(request.meta, request.parts, request.join);
