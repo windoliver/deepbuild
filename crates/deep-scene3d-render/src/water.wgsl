@@ -448,8 +448,15 @@ struct Shaded {
     // #268: the foam's share mixed in, the steep waves', the wake's and the shore's together
     // (view3d's `foam` target).
     @location(2) foam: f32,
-    // #968: the shaded normal, world space (view3d's `normal` target).
-    @location(3) normal: vec4<f32>,
+};
+
+// What a pixel of water shades to, with #968's shaded normal (view3d's `normal` target, which
+// `normal_fs` writes in a pass of its own: beside the other targets it passes a sample's 32 bytes).
+struct Pixel {
+    color: vec4<f32>,
+    reflection: vec4<f32>,
+    foam: f32,
+    normal: vec3<f32>,
 };
 
 struct Lit {
@@ -479,6 +486,18 @@ fn apart(xy: vec2<f32>, a: f32, b: f32, size: vec2<f32>) -> bool {
 
 @fragment
 fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
+    let p = pixel(at, true);
+    return Shaded(p.color, p.reflection, p.foam);
+}
+
+// #968: the shaded normal alone, world space.
+@fragment
+fn normal_fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(pixel(at, false).normal, 0.0);
+}
+
+// The pixel's water; `keep` is whether the planted foam keeps its running value from this look.
+fn pixel(at: vec4<f32>, keep: bool) -> Pixel {
     let px = vec2<i32>(at.xy);
     let size = vec2<f32>(textureDimensions(ids));
     let resolved = is_part(textureLoad(ids, px, 0).r);
@@ -525,7 +544,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
             sum += textureLoad(bed_color, px, 0).rgb;
             continue;
         }
-        let lit = shade(at.xy, select(centre, z[s], edge), size);
+        let lit = shade(at.xy, select(centre, z[s], edge), size, keep);
         sum += lit.color;
         foamed += lit.foam;
         normals += lit.normal;
@@ -538,12 +557,12 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
     let color = sum / f32(looks);
     // The `reflection` target holds a lookup only where the resolved ID is the water's.
     let reflection = select(vec4<f32>(0.0), vec4<f32>(mirrored, 1.0), resolved);
-    return Shaded(vec4<f32>(color, 1.0), reflection, foamed / f32(looks), vec4<f32>(normalize(normals), 0.0));
+    return Pixel(vec4<f32>(color, 1.0), reflection, foamed / f32(looks), normalize(normals));
 }
 
 // The water at the point on the pixel's centre ray at depth z: the bed tinted through it, the
 // mirror's picture, and foam.
-fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
+fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
     let t = params.eye.w;
     let px = vec2<i32>(xy);
     let p = world_at(xy, z, size);
@@ -667,7 +686,7 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
         }
         foam = max(foam, band * params.shore[1].y);
     }
-    if params.wake.w > 0.5 {
+    if params.wake.w > 0.5 && keep {
         // The planted foam keeps a running value from frame to frame.
         let k = u32(px.x) % 1024u;
         kept[k] = kept[k] * 0.9 + foam;

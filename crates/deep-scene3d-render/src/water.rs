@@ -111,9 +111,10 @@ pub struct Targets {
 pub struct Waterer {
     layout: wgpu::BindGroupLayout,
     ids: wgpu::RenderPipeline,
-    /// The shading pass by which of the `reflection` (1), `foam` (2) and `normal` (4) targets it
-    /// writes.
-    shade: [wgpu::RenderPipeline; 8],
+    /// The shading pass by which of the `reflection` (1) and `foam` (2) targets it writes.
+    shade: [wgpu::RenderPipeline; 4],
+    /// #968: the pass writing the `normal` target alone.
+    normals: wgpu::RenderPipeline,
     /// The pass copying the depth target into the bed's depth, and its layout.
     bed_copy: wgpu::RenderPipeline,
     bed_layout: wgpu::BindGroupLayout,
@@ -358,22 +359,12 @@ impl Waterer {
             bind_group_layouts: &[Some(&layout), None, Some(&samples_layout)],
             immediate_size: 0,
         });
-        let shade = |k: usize| {
-            let target = |format| wgpu::ColorTargetState {
-                format,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            };
-            let targets = [
-                Some(target(LINEAR)),
-                (k & 1 != 0).then(|| target(REFLECTION)),
-                (k & 2 != 0).then(|| target(FOAM)),
-                (k & 4 != 0).then(|| target(NORMAL)),
-            ];
-            let used = targets
-                .iter()
-                .rposition(Option::is_some)
-                .map_or(1, |i| i + 1);
+        let target = |format| wgpu::ColorTargetState {
+            format,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        };
+        let shade = |entry: &str, targets: &[Option<wgpu::ColorTargetState>]| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(WATER_PASS),
                 layout: Some(&shade_layout),
@@ -388,15 +379,26 @@ impl Waterer {
                 multisample: Default::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &module,
-                    entry_point: Some("shade_fs"),
+                    entry_point: Some(entry),
                     compilation_options: Default::default(),
-                    targets: &targets[..used],
+                    targets,
                 }),
                 multiview_mask: None,
                 cache: None,
             })
         };
-        let shade = std::array::from_fn(shade);
+        let normals = shade("normal_fs", &[Some(target(NORMAL))]);
+        let shade = std::array::from_fn(|k| {
+            let targets = [
+                Some(target(LINEAR)),
+                (k & 1 != 0).then(|| target(REFLECTION)),
+                (k & 2 != 0).then(|| target(FOAM)),
+            ];
+            shade(
+                "shade_fs",
+                &targets[..if k & 2 != 0 { 3 } else { 1 + (k & 1) }],
+            )
+        });
         let bed_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(WATER_PASS),
             entries: &[entry(0, frag, tex(wgpu::TextureSampleType::Depth))],
@@ -474,6 +476,7 @@ impl Waterer {
             layout,
             ids,
             shade,
+            normals,
             bed_copy,
             bed_layout,
             samples_layout,
@@ -916,10 +919,10 @@ impl Waterer {
         let draws = self.draws.clone();
         let (ids_pipeline, bed_copy, profiler) =
             (self.ids.clone(), self.bed_copy.clone(), profiler.clone());
-        let shade = self.shade[usize::from(t.reflection.is_some())
-            | (2 * usize::from(t.foam.is_some()))
-            | (4 * usize::from(t.normal.is_some()))]
+        let shade = self.shade
+            [usize::from(t.reflection.is_some()) | (2 * usize::from(t.foam.is_some()))]
         .clone();
+        let normals = self.normals.clone();
         let samples = self.samples.as_ref()?.1.clone();
         let extent = crate::extent([w, h]);
         let origin = wgpu::Origin3d { x, y, z: 0 };
@@ -1002,18 +1005,12 @@ impl Waterer {
                     ops: load(),
                 })
             };
-            let mut colors = vec![
-                attach(&linear.1),
-                reflection.as_ref().and_then(attach),
-                foam.as_ref().and_then(attach),
-                normal.as_ref().and_then(attach),
-            ];
-            colors.truncate(
-                colors
-                    .iter()
-                    .rposition(Option::is_some)
-                    .map_or(1, |i| i + 1),
-            );
+            let mut colors = vec![attach(&linear.1), reflection.as_ref().and_then(attach)];
+            if let Some(f) = &foam {
+                colors.push(attach(f));
+            } else if reflection.is_none() {
+                colors.pop();
+            }
             crate::timed(&profiler, WATER_PASS, encoder, |encoder, timestamps| {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(WATER_PASS),
@@ -1027,6 +1024,19 @@ impl Waterer {
                 pass.set_bind_group(2, &samples, &[]);
                 pass.draw(0..3, 0..1);
             });
+            // #968: the `normal` target, shaded again in a pass of its own while a frame asks.
+            if let Some(n) = &normal {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(WATER_PASS),
+                    color_attachments: &[attach(n)],
+                    ..Default::default()
+                });
+                pass.set_scissor_rect(x, y, w, h);
+                pass.set_pipeline(&normals);
+                pass.set_bind_group(0, &draws[0].0, &[]);
+                pass.set_bind_group(2, &samples, &[]);
+                pass.draw(0..3, 0..1);
+            }
         }))
     }
 }
