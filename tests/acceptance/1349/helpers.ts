@@ -212,16 +212,17 @@ export class Model {
     server.on('connect', (_req: http.IncomingMessage, socket: net.Socket, early: Buffer) => {
       socket.on('error', () => undefined);
       socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-      let buffer = early.toString('utf8');
+      // A tunnel's socket refuses setEncoding (RFC 7230, section 3): its bytes are kept as they come and decoded whole.
+      let buffer = Buffer.from(early);
       const take = (): void => {
-        const at = buffer.indexOf('\n');
+        const at = buffer.indexOf(0x0a);
         if (at < 0) return;
         socket.removeAllListeners('data');
         let prompt = '';
-        try { prompt = String((JSON.parse(buffer.slice(0, at)) as Line).prompt ?? ''); } catch { /* not JSON */ }
+        try { prompt = String((JSON.parse(buffer.subarray(0, at).toString('utf8')) as Line).prompt ?? ''); } catch { /* not JSON */ }
         void model!.reply(prompt).then((line) => { if (!socket.destroyed) socket.end(`${line}\n`); });
       };
-      socket.setEncoding('utf8').on('data', (d: string) => { buffer += d; take(); });
+      socket.on('data', (d: Buffer) => { buffer = Buffer.concat([buffer, d]); take(); });
       take();
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
