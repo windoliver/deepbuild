@@ -592,6 +592,8 @@ timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelop
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 // #2070's tests each start their own hub, paseo daemon stand-in and agent stand-in.
 alone.push('tests/acceptance/2070/', 'tests/acceptance/2070-gaps/');
+// #1851's files start real hubs and Claude Code stand-ins, and time the waiter's wake against 2 s.
+alone.push('tests/acceptance/1851/');
 // #1725's tests each start their own hub with two agent stand-ins, and play deep-show run beside it.
 alone.push('tests/acceptance/1725/');
 // #55's AC13 is its blind redraft's since #2070's dispute, settled by the owner (tests/acceptance/55-redraft-ac13/DISPUTE.md).
