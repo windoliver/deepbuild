@@ -312,10 +312,7 @@ pub fn turned_camera(
         .cloned()
         .unwrap_or_default();
     let path = format!("items/{id}/params");
-    let spec = Spec::read(&with_defaults("camera@1", &params), &path).map_err(|r| Refused {
-        code: r.code,
-        path: r.path,
-    })?;
+    let spec = crate::scene::lensed(&params, [f64::from(size[0]), f64::from(size[1])], &path)?;
     let mut bounds = Vec::new();
     for l in &scene.layers {
         for s in &l.solids {
@@ -367,6 +364,10 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     // A light's place and power (#421) and another module's items (#380) move with fields
     // this path doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
+        // #468: a depth of field's focus and a lens's field of view follow the whole scene.
+        || scene.dof.is_some()
+        || scene.optics.focal_length.is_some()
+        || scene.exposure.is_some()
         || !scene.lights.is_empty()
         || !scene.others.is_empty()
         // A builder's solid isn't a unit mesh its size scales (#420).

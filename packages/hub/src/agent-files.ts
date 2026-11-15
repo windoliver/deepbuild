@@ -130,8 +130,9 @@ export function setupRecord(root: string): SetupRecord {
     return { files: {}, created: [] };
   }
 }
+/** Through a temporary file, as every agent file is, so a write cut short leaves the record before it. */
 export function saveRecord(root: string, record: SetupRecord): void {
-  writeFileSync(recordFile(root), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+  writeThrough(recordFile(root), `${JSON.stringify(record, null, 2)}\n`);
 }
 /** Keeps the file's bytes before setup's first write to it (once: a later setup keeps the first copy). */
 export function keepOriginal(root: string, record: SetupRecord, file: string): void {

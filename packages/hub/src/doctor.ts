@@ -25,7 +25,7 @@ import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
-import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
+import { hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
 /** Runs a program with a 10 s cap; its exit code and output, or null when it couldn't start. */
@@ -202,7 +202,9 @@ function serviceItem(root: string): Item {
   const args = file.endsWith('.plist')
     ? [...(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(text)?.[1] ?? '').matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) => unxml(m[1]!))
     : [...(/^ExecStart=(.*)$/m.exec(text)?.[1] ?? '').matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!.replace(/\\(.)/g, '$1'));
-  const programs = args.filter((a) => a.startsWith('/'));
+  const all = args.filter((a) => a.startsWith('/'));
+  // A service that runs a script through Node is judged by that script, not by where Node is installed.
+  const programs = all.length > 1 && /\/node$/.test(all[0]!) ? all.slice(1) : all;
   const versions = join(root, 'versions') + sep;
   const where = (program: string): string | undefined => {
     if (program.startsWith(versions)) return undefined;
@@ -253,7 +255,7 @@ export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
     const gone = unrunnable(root).filter((u) => u.agent === 'codex');
     for (const text of changed) add('codex.hooks', agent, 'hooks_modified', 'fail', text, `Put the entry back as ${root}/codex-hooks.json has it, then approve it once in /hooks if Codex asks.`);
     for (const u of changed.length ? [] : gone) add('codex.hooks', agent, 'hook_program_missing', 'fail', `${describe(u)}, so those hooks can't run`, 'Run `deep setup`, which builds deep-hook and points the entries at it.');
-    if (!changed.length && !gone.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${codexHooks()} as setup wrote them`, 'Nothing to do.');
+    if (!changed.length && !gone.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${join(recordedHome(root), 'hooks.json')} as setup wrote them`, 'Nothing to do.');
   }
   // Trust is Codex's to say, by its own hook list, as the hub read it at a Codex session's start: doctor starts no Codex.
   const ours = readTrust(root);

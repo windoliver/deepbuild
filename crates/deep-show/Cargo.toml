@@ -63,6 +63,9 @@ test-physics-shapes-empty = ["test-leave-out-physics"]
 test-leave-out-motion = []
 test-ease-in-motion = []
 test-ease-renumbered = []
+# Issue #225: the planted motion module that fills follow_stream in constraint@1 itself; built
+# with test-leave-out-data, motion@1's digest then differs from the full set's.
+test-follow-stream-in-motion = []
 # Issue #493: the planted layout that registers camera@1 in the scene3d module, not the core.
 test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
@@ -276,6 +279,9 @@ test-gpu-output-in-effects = []
 # readings entry hands the column view no changed ranges, and a motion module with one more operator
 # that reads the physics module's occurrence list by its array name.
 test-physics-hands-no-changes = []
+# Issue #213: physics.cast@1 sorting each request's hits by ID before distance, which the service's
+# conformance fixture refuses at the seal.
+test-cast-sorts-by-id = ["deep-physics-rapier/test-cast-sorts-by-id"]
 test-motion-reads-physics-array = []
 
 [dependencies]

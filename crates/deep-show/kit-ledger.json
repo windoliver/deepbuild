@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "61b8c2e7d377a485bd9cf2310a054ec67d4591228de9a85b6ce6f54c0686cc56",
+    "digest": "3e9a92723f6f3fda812fef9e042370363b0b7c84612943d9c3c368899ed14f8d",
     "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
@@ -50,7 +50,7 @@
   },
   "data": {
     "version": "1.0.0",
-    "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
+    "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -129,7 +129,7 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "caf3cb5a58ac2a30fe42d186b886d336cb219d63d8d5bee4fff01ecb98477554",
+    "digest": "6f34b6e8cf2e19f7a2bc6bfe04c0623e9ec1a516811cd0e76d48778f5757100e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -241,7 +241,7 @@
   },
   "physics": {
     "version": "1.0.0",
-    "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+    "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

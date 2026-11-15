@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "61b8c2e7d377a485bd9cf2310a054ec67d4591228de9a85b6ce6f54c0686cc56",
+  "set_digest": "4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -64,7 +64,7 @@
       }
     },
     "data@1": {
-      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
+      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "caf3cb5a58ac2a30fe42d186b886d336cb219d63d8d5bee4fff01ecb98477554",
+      "digest": "6f34b6e8cf2e19f7a2bc6bfe04c0623e9ec1a516811cd0e76d48778f5757100e",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -422,7 +422,7 @@
       }
     },
     "physics@1": {
-      "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+      "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
       "reference": "deep-physics-rapier",
       "kit": [
         "fixtures",
@@ -604,7 +604,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "7f54bcff64a6dcd286b8f8105b80fe7a82577c72a20f6374a84671e452e6e75d",
+      "digest": "57178f9f2bee8a60db6ec6429d4956fa8faa52d76080d17227f9fa1d0db05d92",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -867,6 +867,32 @@
         "writes": [
           "data.columns",
           "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.follow_stream",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.vector_field",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.vector_field"
         ],
         "per": "item"
       },
@@ -1381,6 +1407,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.vector_field",
       "marks2d.warp",
       "motion.fields",
       "motion.flip",
@@ -1393,6 +1420,7 @@
       "look.status"
     ],
     "core.transform": [
+      "data.follow",
       "motion.at",
       "motion.placed",
       "scene3d.rested"

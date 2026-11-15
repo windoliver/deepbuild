@@ -94,6 +94,15 @@
     "decide_by": "R4"
   },
   {
+    "method": "eval.report",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#2495",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "called_by": "scripts/config-eval.mjs run"
+  },
+  {
     "method": "numbers.read",
     "since": "R1",
     "stability": "preview",

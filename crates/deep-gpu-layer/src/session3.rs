@@ -24,6 +24,12 @@ pub use deep_scene3d_render::status::lock;
 pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
     Planted3 {
         forward_z: p == Some(Planted::ForwardZ),
+        ao: match p {
+            Some(Planted::AoMainLoop) => deep_scene3d_render::ao::Planted::Main,
+            Some(Planted::AoUniformHemisphere) => deep_scene3d_render::ao::Planted::Uniform,
+            Some(Planted::AoFullRadius) => deep_scene3d_render::ao::Planted::FullRadius,
+            _ => deep_scene3d_render::ao::Planted::None,
+        },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
@@ -46,6 +52,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
             ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
+        },
+        dof: deep_scene3d_render::dof::Planted {
+            linear_coc: p == Some(Planted::CocLinearInDistance),
         },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
@@ -558,6 +567,8 @@ pub struct Drawn {
     pub reflection: Option<Vec<u8>>,
     /// #268: the water's foam share, f32 a pixel.
     pub foam: Option<Vec<u8>>,
+    /// #468: the depth of field's signed circle of confusion in px, f32 a pixel.
+    pub coc: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -700,6 +711,11 @@ pub fn draw_on(
                 },
                 foam: if read_targets && !noop {
                     r.read_foam(&device)
+                } else {
+                    None
+                },
+                coc: if read_targets && !noop {
+                    r.read_coc(&device)
                 } else {
                     None
                 },

@@ -1192,12 +1192,23 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
-        // #465: an Effect item; scene3d draws `kind: flare` (Effect: flare).
+        // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
+        // (Effect: dof).
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p(
+                    "dof",
+                    "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
+                    "",
+                    Value::Null,
+                    S,
+                    json!({"focus": 2}),
+                    json!({"focus": 4}),
+                )
+                .takes("{focus: ID | m, coc?: physical, max_coc?: px, taps?: 64 | 96 | 128, rotate?: pixel_hash, far_over_near?: refuse, projection?: perspective | orthographic, ortho_coc?: f32, band?: {center: ID | px, width: px, feather?: px, angle?: deg, amount: px}}"),
                 p(
                     "flare",
                     "{from: lights | {emissive: EV100}, ghosts: u8 <= 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic}, halo: ratio, starburst: {blades: u8}, intensity, tint: role}",

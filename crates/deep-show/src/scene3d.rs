@@ -25,7 +25,20 @@ pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
         .get("camera")
         .and_then(Value::as_str)
         .and_then(|id| doc.get("items")?.get(id));
-    if let Some(ev) = camera.and_then(|c| c.pointer("/params/exposure")?.as_f64()) {
+    // #468: `from_lens` exposes from the lens's aperture, shutter and ISO at the frame rate.
+    let rate = doc
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .filter(|(p, q)| *p > 0 && *q > 0)
+        .map_or(60.0, |(p, q)| f64::from(p) / f64::from(q));
+    let ev = camera
+        .and_then(|c| c.get("params")?.as_object())
+        .and_then(|p| {
+            deep_canvas_scene3d::lens::read(p, "", false)
+                .ok()?
+                .ev100(rate)
+        });
+    if let Some(ev) = ev {
         look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
     }
     look

@@ -26,8 +26,8 @@ type Obj = Record<string, unknown>;
 const UNVERIFIED = new Set(['not verified', 'not run', 'not exercised', 'remaining proof gaps', 'remaining proof gap']);
 /** The most bytes of one untracked file read for placeholders. */
 const FILE_BYTES = 256 * 1024;
-const THREADS = `query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) {
-  number url body reviewThreads(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { id isResolved isOutdated path line
+const THREADS = `query($owner: String!, $repo: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) {
+  number url body reviewThreads(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } nodes { id isResolved isOutdated path line
   resolvedBy { login } comments(first: 1) { totalCount nodes { id databaseId author { login } body url createdAt } } } } } } }`;
 
 interface OpenItemsOptions {
@@ -170,9 +170,16 @@ export class OpenItems {
    * resolved closes its item.
    */
   private async threads(gh: { fetch: Fetch; graphql: Graphql }, pr: { owner: string; repo: string; number: number }, c: ClaimRead, found: Found[], closes: { item: string; text: string; by: string }[]): Promise<void> {
-    const read = await gh.graphql(THREADS, { owner: pr.owner, repo: pr.repo, number: pr.number }).catch((): Answer => ({ status: 599, headers: {}, body: undefined }));
-    const nodes = (read.body as { data?: { repository?: { pullRequest?: { reviewThreads?: { nodes?: unknown[] } } } } } | undefined)?.data?.repository?.pullRequest?.reviewThreads?.nodes;
-    if (read.status !== 200 || !Array.isArray(nodes)) return;
+    const nodes: unknown[] = [];
+    for (let after: string | null = null; ;) {
+      const read: Answer = await gh.graphql(THREADS, { owner: pr.owner, repo: pr.repo, number: pr.number, after }).catch((): Answer => ({ status: 599, headers: {}, body: undefined }));
+      const page = (read.body as { data?: { repository?: { pullRequest?: { reviewThreads?: { nodes?: unknown[]; pageInfo?: { hasNextPage?: unknown; endCursor?: unknown } } } } } } | undefined)?.data?.repository?.pullRequest?.reviewThreads;
+      if (read.status !== 200 || !page || !Array.isArray(page.nodes)) return;
+      nodes.push(...page.nodes);
+      if (page.pageInfo?.hasNextPage !== true) break;
+      if (typeof page.pageInfo.endCursor !== 'string') return;
+      after = page.pageInfo.endCursor;
+    }
     const me = await gh.fetch('/user', 1).catch((): Answer => ({ status: 599, headers: {}, body: undefined }));
     const own = me.status === 200 && isObj(me.body) && typeof me.body.login === 'string' ? me.body.login : null;
     for (const t of nodes.filter(isObj)) {
