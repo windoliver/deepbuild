@@ -2,7 +2,7 @@
 // recorded with its quote, due time, count and end; at its time a session with a waiter is woken through it; one
 // with none hears it at its next prompt, its row saying so meanwhile; and a fourth set is BLOCKED with its owner.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -147,7 +147,10 @@ describe('promised checks through the hub', () => {
     const claude = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     procs.push(claude);
     const id = '9e6f7081-1111-4222-8333-444455556666';
-    await withHub(async (root, home) => {
+    await withHub(async (root, home, hub) => {
+      // The BLOCKED promise's choice ask takes its deadline and default from your settings, as setup drafts them.
+      writeFileSync(join(root, 'config.json'), JSON.stringify({ asks: { deadline: { choice: '2d' }, default: { choice: 'recommended' } } }));
+      await hub.restart();
       const s = session(home, id);
       const hook = (event: string, extra: Record<string, unknown> = {}) => reply(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, s.payload(event, extra), { ppid: claude.pid }));
       await hook('SessionStart', { source: 'startup' });
@@ -184,7 +187,8 @@ describe('promised checks through the hub', () => {
       const blocked = await until(() => events(root, 'promise.blocked'), (e) => e.length > 0);
       expect(blocked).toHaveLength(1);
       expect(blocked[0]).toMatchObject({ promise: first.promise, cause: 'set_again', owner: 'service' });
-      expect(typeof blocked[0]!.ask === 'string' || blocked[0]!.ask === null).toBe(true);
+      // Its one ask is raised, not refused and dropped (#1829).
+      expect(blocked[0]!.ask).toMatch(/^ask:/);
       await sleep(3000);
       expect(events(root, 'promise.set')).toHaveLength(3);
       expect(events(root, 'promise.due')).toHaveLength(3);

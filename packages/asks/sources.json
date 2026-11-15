@@ -2349,5 +2349,41 @@
         "decision": "deny"
       }
     }
+  },
+  {
+    "source": "promise.blocked",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "The agent's promised check is BLOCKED (promised 4 times; owner: service): \"I'll check the deploy again in 20 minutes.\" Do the check yourself, or drop it?",
+        "options": [
+          {
+            "id": "take",
+            "label": "I will do the check",
+            "decision": "none"
+          },
+          {
+            "id": "drop",
+            "label": "Drop it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "drop",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "drop",
+        "provisional": false,
+        "owner": "you",
+        "key": "fa56ed024e2e676747057d7cfd8a7e69433b97d18b60297d060b0a7228349fc5",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
   }
 ]
