@@ -16,14 +16,14 @@
 test at tests/acceptance/2635/affected-cargo-missing.test.mjs:69:1
 ✖ AC1: crates(cwd) with no cargo on PATH throws an Error starting "cargo metadata failed:" naming the spawn code (313.315963ms)
   AssertionError [ERR_ASSERTION]: crates(cwd) threw a TypeError: TypeError: Cannot read properties of undefined (reading 'trim')
-      at crates (file:///home/jing/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/scripts/affected.mjs:51:80)
-      at cratesWithPath (file:///home/jing/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:52:16)
-      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:72:9)
+      at crates (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/scripts/affected.mjs:51:80)
+      at cratesWithPath (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:52:16)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:72:9)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
       at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
-      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:75:10)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:75:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
@@ -49,7 +49,7 @@ test at tests/acceptance/2635/affected-cargo-missing.test.mjs:80:1
   
   Node.js v24.22.0
   
-      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:84:10)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:84:10)
       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
       at async Test.run (node:internal/test_runner/test:1409:7)
       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
