@@ -617,6 +617,9 @@ timed.push('tests/acceptance/2197/budget.test.ts');
 alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
+// #2120's files each start their own hubs: #1523's and #84's worlds with played sessions, #1330's with a gated played
+// agent (one hub stopped and started again) and #996's with a kept run across a killed hub.
+alone.push('tests/acceptance/2120/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
 // #1335's files each start their own hubs, a played forge and played agents, and run a standing run over its rule.

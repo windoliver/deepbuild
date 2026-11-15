@@ -77,6 +77,20 @@ const exec = (file: string, args: string[], o: { cwd?: string; env?: NodeJS.Proc
   new Promise((done, fail) => execFile(file, args, { encoding: 'utf8', timeout: o.timeout ?? 30_000, ...o }, (error, stdout, stderr) => (error ? fail(Error(`${file} ${args.join(' ')}: ${String(stderr || error.message).trim()}`)) : done(stdout))));
 const tilde = (p: string): string => (p === '~' ? homedir() : p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 const real = (p: string): string => { try { return realpathSync(p); } catch { return p; } };
+/**
+ * The default branch's ref in a checkout: origin/HEAD, else origin's main or master as last fetched; a workspace with no
+ * remote and no forge (#1347) has its own main. '' when there is none.
+ */
+async function defaultRef(dir: string): Promise<string> {
+  const git = (...args: string[]) => exec('git', ['-C', dir, ...args]).then((o) => o.trim());
+  const head = await git('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD').catch(() => '');
+  if (head) return head;
+  const remote = await git('remote').catch(() => '');
+  for (const candidate of remote ? ['refs/remotes/origin/main', 'refs/remotes/origin/master'] : ['refs/heads/main']) {
+    if (await git('rev-parse', '--verify', '--quiet', candidate).then(() => true, () => false)) return candidate;
+  }
+  return '';
+}
 
 export class Starts {
   private readonly started = new Map<string, Started>();
@@ -106,8 +120,17 @@ export class Starts {
       // This supervisor has no exit to wait for on a run the last hub started: it lives while the process the
       // supervisor tracked for it does (#1332), read each time its liveness is asked.
       const [tracked] = status?.state === 'running' ? (await this.o.raw(`SELECT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = ? ORDER BY log_pos LIMIT 1`, [s.run])) as { pid: number }[] : [];
-      if (tracked && alive(tracked.pid)) { s.ended = false; s.adopted = tracked.pid; }
-      else this.endCredential(s);
+      if (tracked && alive(tracked.pid)) {
+        s.ended = false;
+        s.adopted = tracked.pid;
+        // One whose agent hasn't hooked yet waits for its first hook as at its start: linked by its agent's PID, ended
+        // as never started if none comes in 60 s. This hub heard nothing while it was down.
+        if (!s.session) {
+          const pid = this.agentPid(s);
+          if (pid !== undefined) s.pid = pid;
+          s.timer = setTimeout(() => void this.neverStarted(s).catch(() => undefined), FIRST_EVENT_MS);
+        }
+      } else this.endCredential(s);
     }
   }
   close(): void {
@@ -330,7 +353,7 @@ export class Starts {
   }
 
   private async launch(r: { ask?: string; repo: string; issue: number; agent: string; prompt: string; mode?: string; worktree?: { path: string; branch: string; base: string } }, caller: string): Promise<StartResult> {
-    const { repo, issue, agent, prompt } = r;
+    const { repo, issue, agent } = r;
     const about = { repo, issue, agent };
     const started = this.launchOf(agent);
     if (!started) return this.refused('agent', `${agent} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, caller, about);
@@ -348,16 +371,35 @@ export class Starts {
       outside ??= why;
     }
     if (!approval) return this.refused(outside!.bound, outside!.reason, caller, about);
+    // Its slot is taken before anything is waited for, so starts sent at once each count the ones before them; a later
+    // refusal or a throw frees it.
+    const s: Started = { run: `run:${ulid(this.o.now())}`, ask: approval.ask, agent, sandbox: NONE, ended: false };
+    this.started.set(s.run, s);
+    try {
+      const result = await this.begin(s, { ...r, mode }, approval, started, caller);
+      if (result.status === 'refused') this.started.delete(s.run);
+      return result;
+    } catch (error) {
+      s.ended = true;
+      this.started.delete(s.run);
+      throw error;
+    }
+  }
+  /** A start in the slot `s` holds: its version, worktree, credential and the agent in a terminal the hub hosts. */
+  private async begin(s: Started, r: { repo: string; issue: number; agent: string; prompt: string; mode: string; worktree?: { path: string; branch: string; base: string } }, approval: Approval, started: Obj, caller: string): Promise<StartResult> {
+    const { repo, issue, agent, prompt, mode } = r;
+    const { run } = s;
+    // A refusal frees the slot before it is recorded.
+    const refuse = (bound: string, reason: string): Promise<StartResult> => { s.ended = true; return this.refused(bound, reason, caller, { repo, issue, agent }); };
     const home = tilde(approval.homes[agent] ?? String(started.defaultHome));
     const used = this.o.windowUsed(agent, home);
-    if (used !== undefined && used >= approval.plan_share) return this.refused('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`, caller, about);
+    if (used !== undefined && used >= approval.plan_share) return refuse('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`);
     const found = await this.versionOf(agent).catch((error: Error) => error);
-    if (found instanceof Error) return this.refused('version', `${agent} can't start: ${found.message}`, caller, about);
+    if (found instanceof Error) return refuse('version', `${agent} can't start: ${found.message}`);
     const facts = this.factsOf(agent)!;
     if (!(facts.versions as string[]).includes(found.version)) {
-      return this.refused('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`, caller, about);
+      return refuse('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
     }
-    const run = `run:${ulid(this.o.now())}`;
     const tree = r.worktree ?? await this.worktree(repo, issue, run);
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);
     const argv = this.argvOf(started, entry, mode, approval, prompt, tree.path);
@@ -368,16 +410,14 @@ export class Starts {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     // Kept where a restarted hub finds it to revoke, under a folder the session's sandbox can't read.
     if (forge) writeFileSync(join(dir, 'credential'), JSON.stringify(forge), { mode: 0o600 });
-    const s: Started = { run, ask: approval.ask, agent, sandbox, ended: false, dir, worktree: tree.path, ...(forge ? { token: forge.token } : {}) };
-    this.started.set(run, s);
+    Object.assign(s, { sandbox, dir, worktree: tree.path }, forge ? { token: forge.token } : {});
     const launched = await this.o.supervisor().start({
       run, argv: [HELPER, 'pty', dir, '120', '40', String(TERMINAL_PROTOCOL), this.o.lock, '-', found.path, ...argv],
       cwd: tree.path, env, inherit: false, own_sandbox: true, keep: true, input: Buffer.from(`${ulid(this.o.now())}\n`),
     }).catch((error: Error) => error);
     if (launched instanceof Error || launched.status !== 'started') {
-      s.ended = true;
       this.endCredential(s);
-      return this.refused('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`, caller, about);
+      return refuse('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`);
     }
     s.pid = launched.pid;
     // The session's own credential ends with it: revoked as soon as its agent's process is gone.
@@ -413,13 +453,18 @@ export class Starts {
     const s = this.started.get(run);
     if (s && !s.ended) await this.end(s);
   }
+  /** The agent's PID, as its terminal's host wrote it in the run's folder; undefined before it has. */
+  private agentPid(s: Started): number | undefined {
+    let agent = NaN;
+    try { agent = s.dir ? Number(readFileSync(join(s.dir, 'pid'), 'utf8').trim()) : NaN; } catch { /* none written */ }
+    return Number.isSafeInteger(agent) && agent > 1 ? agent : undefined;
+  }
   private async end(s: Started): Promise<void> {
     s.ended = true;
     const sup = this.o.supervisor();
-    // The agent first, by the PID its terminal's host wrote: it runs in a session of its own under the host.
-    let agent = NaN;
-    try { agent = s.dir ? Number(readFileSync(join(s.dir, 'pid'), 'utf8').trim()) : NaN; } catch { /* none written */ }
-    if (Number.isSafeInteger(agent) && agent > 1) try { process.kill(agent, 'SIGTERM'); } catch { /* gone */ }
+    // The agent first: it runs in a session of its own under its terminal's host.
+    const agent = this.agentPid(s);
+    if (agent !== undefined) try { process.kill(agent, 'SIGTERM'); } catch { /* gone */ }
     await sup.signal(s.run, 'SIGTERM').catch(() => undefined);
     await sup.cleanup(s.run).catch(() => undefined);
   }
@@ -480,11 +525,10 @@ export class Starts {
       await this.o.appendCore('forge.refused', { run: s.run, session, action, target: f.target.slice(0, 8000), call: call ?? null }, { subject: s.run });
     }
   }
-  /** The default branch a started session's worktree came from, as its repo's origin names it. */
+  /** The default branch a started session's worktree came from, read as the start read it. */
   private async defaultBranch(s: Started): Promise<string | undefined> {
     if (!s.worktree) return undefined;
-    const head = await exec('git', ['-C', s.worktree, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).catch(() => '');
-    return head.trim().replace(/^origin\//, '') || undefined;
+    return (await defaultRef(s.worktree)).replace(/^refs\/(?:remotes\/origin|heads)\//, '') || undefined;
   }
 
   // ---- The session's own forge credential (#1325).
@@ -585,19 +629,13 @@ export class Starts {
    */
   private async worktree(repo: string, issue: number, run: string): Promise<{ path: string; branch: string; base: string }> {
     const git = (...args: string[]) => exec('git', ['-C', repo, ...args]).then((o) => o.trim());
-    const head = await git('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD').catch(() => '');
-    let ref = head;
-    // A workspace has no forge and no remote (#1347): its own main is the default branch.
-    const remote = await git('remote').catch(() => '');
-    for (const candidate of remote ? ['refs/remotes/origin/main', 'refs/remotes/origin/master'] : ['refs/heads/main']) {
-      if (ref) break;
-      if (await git('rev-parse', '--verify', '--quiet', candidate).then(() => true, () => false)) ref = candidate;
-    }
+    const ref = await defaultRef(repo);
     if (!ref) throw new Refused(refusal('not_found', '/params/repo', `${repo} has no remote-tracking default branch (origin/HEAD, main or master); fetch it first.`, repo));
     const base = await git('rev-parse', `${ref}^{commit}`);
     const id = letters(run);
     const path = join(this.o.root, 'worktrees', basename(repo), id);
-    const branch = `deep/${issue}-${id.slice(-6).toLowerCase()}`;
+    // Named as the session map reads a session's issue: issue-<n>.
+    const branch = `deep/issue-${issue}-${id.slice(-6).toLowerCase()}`;
     mkdirSync(join(this.o.root, 'worktrees', basename(repo)), { recursive: true });
     await git('worktree', 'add', '--quiet', '-b', branch, path, base);
     await this.o.appendCore('worktree.created', { path, branch, owner: `task:${id}`, base });
