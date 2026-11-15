@@ -1,5 +1,12 @@
+# #1879 by hand: one home, test/safe-probe (tests/acceptance/1879/fixtures/probe) installed, then started with and
+# without --safe. Run by docs/evidence/1879/e2e.sh on Linux arm64, Node v24.22.0, at this branch, 2026-11-15.
+# "package process starts" counts the record's process.starting events in the hub's run-* folders: each is a run
+# of the package's code (its conformance check or its load). The --safe start adds none. `deep install` on a --safe
+# hub runs the install's own conformance check (one start, in the sandbox, which you asked for) and then refuses
+# the load with the safe-mode reason.
+
 ## 1. deep hub run, then deep install of test/safe-probe
-ready: {"v":1,"ready":true,"pid":782896,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M7F5KXKKB4W8HRJ716VF5751"}
+ready: {"v":1,"ready":true,"pid":1201921,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M7F694PJ0741QVRGK4TTVR46"}
 Source: <tmp>/pkg
   test/safe-probe@1.0.0, digest d1:4356d0fe4caba3d65aca9fbb2c505513dff7950f82c386ade25c9c7eef2f8740, unsigned
 Permissions:
@@ -15,19 +22,22 @@ Permissions:
   hosts: none
 Installed test/safe-probe@1.0.0
 install exit 0
+package process starts in the record so far (its check and its load): 2
 
 ## 2. the same home: deep hub run --safe
-ready: {"v":1,"ready":true,"pid":793846,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M7F5M8P7MZ74W6XBH7CA7VB1","safe":true}
+ready: {"v":1,"ready":true,"pid":1206743,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M7F69G38MHGE04PDZBHQ7EBC","safe":true}
 hub stderr (not loaded lines):
 deep hub: extension test/safe-probe@1.0.0 not loaded: safe mode: the hub loads no extension
+package process starts in the record after the --safe start: 2
 deep install on the --safe hub:
   hosts: none
 Installed test/safe-probe@1.0.0
 It is not loaded: safe mode: the hub loads no extension
-install exit 0
+install exit 1
+package process starts in the record after deep install on the --safe hub: 3
 
 ## 3. the same home: deep hub run (no --safe)
-ready: {"v":1,"ready":true,"pid":808112,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M7F5MXW7R8BNHTA1BDTE7QVB"}
+ready: {"v":1,"ready":true,"pid":1217634,"socket":"<tmp>/h/.deepbuild/hub.sock","start":"01M7F6A739YRW0NKFF286V4ZAN"}
 hub stderr (not loaded lines):
 (none)
-process.starting under the run folders since this start: see the acceptance suite; deep status:
+package process starts in the record after the plain start: 4 (one more: its load)

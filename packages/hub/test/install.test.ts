@@ -1,6 +1,6 @@
 // `deep install <folder>` (#351) shows the package's source and permissions first, then installs it through the hub
 // once the OS confirms you: a cancelled prompt installs nothing, and the installer's refusal comes back named.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -99,6 +99,40 @@ describe('deep install', () => {
         await hub.restart();
         for (const until = Date.now() + 5000; Date.now() < until && leaseHolders(root).length < 3; await new Promise((r) => setTimeout(r, 50)));
         expect([leaseHolders(root).length, statSync(checked).mtimeMs], 'loaded again from the result kept, not checked again').toEqual([3, written]);
+      }, { DEEP_HUB_TEST_CONFIRM: confirm });
+    } finally {
+      rmSync(confirm, { force: true });
+    }
+  }, 120_000);
+
+  it('a --safe start runs no conformance for a package with no kept result, and loads nothing (#1879)', async () => {
+    const confirm = join('/tmp', `deep-install-safe-${process.pid}`);
+    writeFileSync(confirm, 'confirmed');
+    try {
+      await withHub(async (root, home, hub) => {
+        const from = pkg(home, 'acme/leaser', { conflicts: [], access: { words: [] }, leases: [{ name: 'acme.rig', match: 'exact', cap: 100, cooldown: 0, cost: 0 }], requires: { preview: ['deep.lease'] } });
+        writeFileSync(join(from, 'index.ts'), "export default async function (deep: any): Promise<void> {\n  await deep.lease({ kind: 'acme.rig', key: `rig-${Date.now()}` }, 'exclusive').catch(() => undefined);\n}\n");
+        const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
+        writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...m, digest: packageDigest(from) }));
+        const done = install(home, from);
+        expect(done.status, done.stderr).toBe(0);
+        expect(leaseHolders(root)).toEqual(['ext:acme/leaser']);
+        // No kept result, then a --safe start on the same home, while withHub's own hub is stopped: its conformance
+        // would run the package's code, so none runs. The ready line comes after the start's checks and loads.
+        const checked = join(root, 'extensions', 'checked.json');
+        let seen: [boolean, string[]] | undefined;
+        await hub.restart(undefined, async () => {
+          rmSync(checked, { force: true });
+          const safe = spawn(process.execPath, [CLI, 'hub', 'run', '--safe'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'inherit'] });
+          try {
+            await new Promise((resolve, reject) => { safe.stdout.once('data', resolve); safe.once('exit', () => reject(Error('the --safe hub exited before it was ready'))); });
+            seen = [existsSync(checked), leaseHolders(root)];
+          } finally {
+            safe.kill('SIGTERM');
+            if (safe.exitCode === null && safe.signalCode === null) await new Promise((resolve) => safe.once('exit', resolve));
+          }
+        });
+        expect(seen, 'the --safe start ran no conformance and loaded nothing').toEqual([false, ['ext:acme/leaser']]);
       }, { DEEP_HUB_TEST_CONFIRM: confirm });
     } finally {
       rmSync(confirm, { force: true });
