@@ -215,7 +215,8 @@ fn blurred(px: vec2<f32>) -> f32 {
     if ((u.kind.w & 2u) != 0u) {
         return 1.0;
     }
-    return textureSampleLevel(soft, clamped, px / u.size, 0.0).a;
+    // The layer's own size: a look drawn at a crop of the frame (#463) samples its own.
+    return textureSampleLevel(soft, clamped, px / vec2<f32>(textureDimensions(cover)), 0.0).a;
 }
 
 // How lit a pixel is, 0..1: a 2D item's dome under the look's light, or a 3D surface's own light.
