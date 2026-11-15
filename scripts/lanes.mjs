@@ -567,6 +567,8 @@ timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-red
 byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #540's files each build deep-show (most also #544's assembler), run logic programs, draw 3D and bake a world.
 alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
+// #542's files each build deep-show, deep-input or deep-logic and #544's assembler, run logic programs and draw the app's window.
+alone.push('tests/acceptance/542/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
