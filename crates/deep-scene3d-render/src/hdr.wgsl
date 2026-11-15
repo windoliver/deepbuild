@@ -42,6 +42,15 @@ fn hdr_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
         }
         return vec4<f32>(decoded, shown.a);
     }
+    // Only a pixel bright enough to reach the curve's shoulder changes with the headroom, so a
+    // darker one keeps the slot's value without reading the linear target: filmic never does,
+    // none only where the slot clipped, neutral above its knee, agx from just below mid grey.
+    let top = max(decoded.r, max(decoded.g, decoded.b));
+    let reaches = select(select(select(top >= 0.999, false, tone.map == 1u), top >= 0.5, tone.map == 3u),
+        top >= 0.05, tone.map == 2u);
+    if !reaches && hdr.plant != 2u {
+        return vec4<f32>(decoded, shown.a);
+    }
     let lit = textureLoad(linear_target, vec2<i32>(floor(p.xy * hdr.scale)), 0).rgb;
     // The SDR curve once: what the output wrote, and what lies above it at the headroom.
     let sdr_linear = finish_linear(lit, 1.0);

@@ -45,6 +45,11 @@ struct Scenario {
     captures: bool,
     posts: Vec<(u64, f32)>,
     read_peak: bool,
+    /// The shell's question card over the view, `{question, options: [{label}], rect}`.
+    card: Option<(String, Vec<String>, [f32; 4])>,
+    /// Captures divided by the frame's headroom, so an 8-bit picture shows what lies above
+    /// paper white (evidence pictures; paper white reads 1 ÷ headroom).
+    divide: bool,
 }
 
 fn floats<const N: usize>(v: &Value, what: &str) -> Result<[f64; N], String> {
@@ -97,6 +102,13 @@ impl Scenario {
             captures: s["captures"] == true,
             posts,
             read_peak: s["read_peak"] == true,
+            card: s.get("card").filter(|c| c.is_object()).map(|c| {
+                let options = c["options"].as_array().into_iter().flatten();
+                let options = options.filter_map(|o| o["label"].as_str().map(str::to_string));
+                let rect = floats::<4>(&c["rect"], "card.rect").unwrap_or_default();
+                (c["question"].as_str().unwrap_or_default().to_string(), options.collect(), rect.map(|v| v as f32))
+            }),
+            divide: s["divide_by_headroom"] == true,
         })
     }
 
@@ -288,6 +300,7 @@ struct Paint {
 struct Root {
     page: [u8; 3],
     paint: Rc<RefCell<Paint>>,
+    card: Option<(String, Vec<String>, [f32; 4])>,
 }
 
 impl Render for Root {
@@ -315,6 +328,27 @@ impl Render for Root {
             )
             .size_full(),
         )
+        .children(self.card.clone().map(|(question, options, [x, y, w, h])| {
+            let ink = Rgba { r: 0.08, g: 0.08, b: 0.08, a: 1. };
+            div()
+                .absolute()
+                .left(px(x))
+                .top(px(y))
+                .w(px(w))
+                .h(px(h))
+                .overflow_hidden()
+                .rounded(px(12.))
+                .bg(Rgba { r: 0.98, g: 0.98, b: 0.97, a: 1. })
+                .p(px(20.))
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .text_color(ink)
+                .child(div().text_size(px(18.)).child(question))
+                .child(div().flex().gap(px(12.)).children(options.into_iter().map(|o| {
+                    div().px(px(14.)).py(px(8.)).rounded(px(8.)).bg(Rgba { r: 0.91, g: 0.93, b: 0.94, a: 1. }).child(o)
+                })))
+        }))
     }
 }
 
@@ -346,6 +380,17 @@ fn half(h: u16) -> f32 {
 
 /// Runs the scenario at `path`.
 pub fn run(path: &str, cx: &mut App) {
+    // A window that gets no frames (a locked screen, a hidden window) would wait forever: after
+    // 20 s with none the run ends, saying why.
+    std::thread::spawn(|| loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let last = LAST_FRAME.load(std::sync::atomic::Ordering::SeqCst);
+        let now = START.elapsed().as_secs();
+        if now.saturating_sub(last) > 20 {
+            eprintln!("deep-app --hdr: no frame for 20 s: the screen is locked or the window is hidden");
+            std::process::exit(3);
+        }
+    });
     let sc = match Scenario::read(path) {
         Ok(s) => s,
         Err(e) => {
@@ -377,6 +422,7 @@ pub fn run(path: &str, cx: &mut App) {
         ..Default::default()
     };
     let page = sc.page;
+    let card = sc.card.clone();
     let run = Rc::new(RefCell::new(None::<Run>));
     let root_paint = paint.clone();
     open_window(options, cx, move |window, cx| {
@@ -412,6 +458,7 @@ pub fn run(path: &str, cx: &mut App) {
         cx.new(|_| Root {
             page,
             paint: root_paint,
+            card,
         })
     })
     .expect("open the window");
@@ -419,7 +466,12 @@ pub fn run(path: &str, cx: &mut App) {
 }
 
 /// Frame `k`: finishes frame k − 1's row, then asks for frame k and paints it.
+/// When the process started, and the second of it the last frame came in.
+static START: std::sync::LazyLock<Instant> = std::sync::LazyLock::new(Instant::now);
+static LAST_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 fn step(window: &mut Window, cx: &mut App, run: Rc<RefCell<Option<Run>>>, k: u64) {
+    LAST_FRAME.store(START.elapsed().as_secs(), std::sync::atomic::Ordering::SeqCst);
     let mut guard = run.borrow_mut();
     let r = guard.as_mut().expect("the run");
     let scale = window.scale_factor();
@@ -486,11 +538,14 @@ fn step(window: &mut Window, cx: &mut App, run: Rc<RefCell<Option<Run>>>, k: u64
         r.current = Some(posted.unwrap_or_else(|| hdr_layer::headroom(view).1));
     }
     let headroom = r.current.unwrap_or(1.0);
-    // The window's size this frame, and the view's rect in it.
-    let wsize = r.sc.window_at(k);
+    // The window's size this frame, and the view's rect in it: the size GPUI draws this frame at,
+    // which a resize reaches when the platform reports it, and the layer is placed for that.
     if r.sc.resize_to.is_some() {
-        window.resize(size(px(wsize[0]), px(wsize[1])));
+        let to = r.sc.window_at(k);
+        window.resize(size(px(to[0]), px(to[1])));
     }
+    let drawn = window.viewport_size();
+    let wsize = [f32::from(drawn.width), f32::from(drawn.height)];
     let rect = r.sc.view_at(wsize);
     let rect64 = rect.map(f64::from);
     let layer_rect = if shows {
@@ -515,13 +570,19 @@ fn step(window: &mut Window, cx: &mut App, run: Rc<RefCell<Option<Run>>>, k: u64
     }
     let device = rect.map(|v| (v * scale).round() as u32);
     let read = shows && (r.sc.captures || r.sc.read_peak);
-    let _ = r.asks.send(Ask {
-        n: k,
-        size: [device[2], device[3]],
-        headroom: shows.then_some(headroom),
-        read,
-    });
-    let done = r.dones.recv().unwrap_or(Done {
+    // A closed view draws nothing: its slots are never latched again.
+    let done = if r.open {
+        let _ = r.asks.send(Ask {
+            n: k,
+            size: [device[2], device[3]],
+            headroom: shows.then_some(headroom),
+            read,
+        });
+        r.dones.recv().ok()
+    } else {
+        None
+    }
+    .unwrap_or(Done {
         gpu_ms: 0.0,
         texels: None,
     });
@@ -572,7 +633,8 @@ fn finish_row(r: &mut Run, scale: f32) {
     }
     if r.sc.captures {
         if let Some(image) = layer_colorspace::take_frame() {
-            let composed = compose(image, row.texels.as_deref(), row.layer_rect, scale);
+            let divide = if r.sc.divide { row.headroom } else { 1.0 };
+            let composed = compose(image, row.texels.as_deref(), row.layer_rect, scale, divide);
             let file = r.sc.out.join(format!("capture-{}.png", row.frame));
             if composed.save(&file).is_ok() {
                 v["capture"] = json!(file.display().to_string());
@@ -589,6 +651,7 @@ fn compose(
     texels: Option<&[u8]>,
     rect: Option<[f64; 4]>,
     scale: f32,
+    divide: f32,
 ) -> image::RgbaImage {
     let s = f64::from(scale);
     let (w, h) = gpui.dimensions();
@@ -615,13 +678,15 @@ fn compose(
         for x in 0..w {
             let p = gpui.get_pixel_mut(x, y);
             let a = f32::from(p[3]) / 255.0;
-            if a >= 1.0 {
+            if a >= 1.0 && divide == 1.0 {
                 continue;
             }
-            let hdr = under(x, y);
+            let hdr = if a >= 1.0 { [0.0; 3] } else { under(x, y) };
+            let decode = |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
             for i in 0..3 {
-                let e = deep_canvas_marks::finish::srgb_encode(f64::from(hdr[i])) as f32 * 255.0;
-                p[i] = (f32::from(p[i]) + (1.0 - a) * e).round().clamp(0.0, 255.0) as u8;
+                let linear = (decode(p[i]) + (1.0 - a) * hdr[i]) / divide;
+                let e = deep_canvas_marks::finish::srgb_encode(f64::from(linear)) as f32 * 255.0;
+                p[i] = e.round().clamp(0.0, 255.0) as u8;
             }
             p[3] = 255;
         }
