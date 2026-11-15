@@ -67,7 +67,7 @@
     "vane-2-5": {"id":"vane-2-5","kind":"mark.box@1","name":"Compressor blade 3.6","order":"a047","params":{"size":[0.015,0.1,0.04],"paint":{"fill":{"role":"raised"}}},"at":{"pos":[-0.14,0,-0.12],"rot":[270,0,0]},"parent":"compressor"},
     "vane-2-6": {"id":"vane-2-6","kind":"mark.box@1","name":"Compressor blade 3.7","order":"a048","params":{"size":[0.015,0.1,0.04],"paint":{"fill":{"role":"raised"}}},"at":{"pos":[-0.14,0.0849,-0.0849],"rot":[315,0,0]},"parent":"compressor"},
     "vane-2-7": {"id":"vane-2-7","kind":"mark.box@1","name":"Compressor blade 3.8","order":"a049","params":{"size":[0.015,0.1,0.04],"paint":{"fill":{"role":"raised"}}},"at":{"pos":[-0.14,0.12,0],"rot":[360,0,0]},"parent":"compressor"},
-    "intake-path": {"id":"intake-path","kind":"curve@1","name":"Intake stream line","order":"a050","params":{"points":[[-1.6,0.36,0],[-1,0.33,0],[-0.6,0.3,0],[0,0.3,0],[0.6,0.34,0]]}},
+    "intake-path": {"id":"intake-path","kind":"curve@1","name":"Intake stream line","order":"a050","params":{"points":[[-1.6,0.36,0],[-1,0.33,0],[-0.6,0.3,0],[0,0.3,0],[0.35,0.32,0]]}},
     "plume": {"id":"plume","kind":"effect@1","name":"Exhaust plume","order":"a051","params":{"kind":"plume","anchor":"nozzle","axis":[1,0,0],"seed":508,"resolution":"half","plume":{"radius":0.14,"reach":1,"heat":1,"shock_cells":2,"turbulence":0.05,"seed":7,"haze":{"strength":2,"scale":0.3}}},"at":{"pos":[0.86,0,0]}},
     "airflow": {"id":"airflow","kind":"effect@1","name":"Airflow through the fan","order":"a052","params":{"kind":"airflow","axis":[1,0,0],"seed":508,"resolution":"half","airflow":{"paths":["intake-path"],"around":{"axis":[1,0,0],"copies":8,"span":[0,360]},"count":384,"speed":1,"length":0.3,"fade":{"in":0.2,"out":0.3}}},"at":{"pos":[0,0,0]}}
   },
