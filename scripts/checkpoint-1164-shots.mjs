@@ -91,14 +91,15 @@ const world = {
   processes: [{ pid: 1, ppid: 0, start: 0 }, { pid: 3001, ppid: 1, start: 110 }, { pid: 4100, ppid: 3001, start: 1000 },
     { pid: 4101, ppid: 4100, start: 1100 }, { pid: 4102, ppid: 4101, start: 1200 }],
   window: [1512, 982],
-  panels: { main: { rect: [0, 0, 1512, 982] } },
+  // The panel a square in the middle of the window, so the square board fills it.
+  panels: { main: { rect: [265, 0, 982, 982] } },
   docs: { [DOC]: { panel: 'main' } },
   clock: { refresh_hz: 120, lead: sec(0.002), check: sec(0.0005) },
   display: [1600, 900],
   calls: [
     { call: 'deep show', peer: panel, doc: DOC, document: game, at: 2 },
-    { call: 'input', panel: 'main', event: { type: 'down', pos: [1500, 970] }, at: sec(0.5) },
-    { call: 'input', panel: 'main', event: { type: 'up', pos: [1500, 970] }, at: sec(0.56) },
+    { call: 'input', panel: 'main', event: { type: 'down', pos: [700, 970] }, at: sec(0.5) },
+    { call: 'input', panel: 'main', event: { type: 'up', pos: [700, 970] }, at: sec(0.56) },
     ...keys.map(([key, s]) => ({ call: 'input', panel: 'main', event: { type: 'key', key }, at: sec(s) })),
   ],
 };
