@@ -37,6 +37,13 @@ pub(crate) fn services(sealed: &Sealed, form: &Value, track: &[Value], late: boo
     }
 }
 
+/// The services the logic module's `logic.step` binds for `doc`'s logic items: `physics.cast@1`
+/// on its worlds and its input track.
+pub(crate) fn bound(doc: &Value) -> Vec<Service> {
+    let track = doc.get("track").and_then(Value::as_array);
+    vec![service(doc, track.map_or(&[], Vec::as_slice), false)]
+}
+
 /// The physics module's entry in `logic.service@1`.
 pub(crate) fn register(r: &mut Registrar) {
     r.entry("logic.service@1", cast::NAME, cast::entry(), "R6");

@@ -2139,9 +2139,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_logic::module::module()
         };
-        // A build without physics refuses the logic items that need it (#533).
+        // A build without physics refuses the logic items that need it (#533); one with it binds
+        // physics.cast@1 for the items that ask it between steps (#213).
         out.push(match physics::module() {
-            Some(_) => logic,
+            Some(_) => {
+                deep_logic::module::bind_services(physics::cast::bound);
+                logic
+            }
             None => deep_logic::module::without_physics(logic),
         });
     }
