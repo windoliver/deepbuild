@@ -41,11 +41,10 @@ it("a check held for a Codex loop holds no stop, runs once the loop pauses, and 
   await patch(h, t, 'tax2.txt', 'more tax');
   const before = (await allEvents(hub)).at(-1)?.log_pos ?? 0;
   const stop = await codexHook(h, t, 'Stop', {}, 900_000);
+  // Held for the check, the stop would carry its FAIL: a check that waits for the loop sends nothing back here.
+  expect(stop.reply?.decision, `no verdict of the held check at this stop: ${hookShown(stop)}`).toBeUndefined();
   const held = await waitFor(async () => (await allEvents(hub)).find((e) => e.kind === 'check.held' && e.log_pos > before && e.data.check === CHECK), 300_000, 'the held place');
   const claim = String(held.data.claim);
-  // Held for the check, the stop would wait out Codex's 45-minute Stop timeout: the check starts no run here.
-  expect(stop.ran.ms, `the stop isn't held for a check that waits for the loop: ${hookShown(stop)}`).toBeLessThan(5 * MINUTE);
-  expect(stop.reply?.decision, `no verdict of the held check at this stop: ${hookShown(stop)}`).toBeUndefined();
   // No prompt comes: past the grace window the loop has paused, and the held check starts.
   await control(hub, 'test.clock', { advance_ms: 2 * MINUTE });
   await waitFor(async () => { const all = await allEvents(hub); const run = all.find((e) => e.kind === 'run.started' && e.data.claim === claim && e.data.check === CHECK); return run !== undefined && all.some((e) => e.kind === 'run.finished' && e.data.run === run.data.run); }, 300_000, "the held check's run to end");

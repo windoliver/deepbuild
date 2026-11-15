@@ -1,0 +1,39 @@
+
+ RUN  v5.0.5 ~/doneright-2118-blind
+
+ ❯ packages/hub/test/people.test.ts (3 tests | 1 failed | 2 skipped) 966ms
+   ❯ #1337 what a person's credential can do (3)
+     × a person's connection reads, and is refused every method of the owner's 822ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/people.test.ts > #1337 what a person's credential can do > a person's connection reads, and is refused every method of the owner's
+AssertionError: bob's hub.health: {"pid":24551,"start":"01M7FE3QAPXNV3GFT2C3ZF1B4K","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":null},"heavy":{"failing":null},"gone":{"failing":null},"states":{"failing":null},"unpushed":{"failing":null},"gates":{"failing":null},"agents-reach":{"failing":null},"transcripts":{"failing":null},"background":{"failing":null},"supervisor":{"failing":null},"rules":{"failing":null},"retention":{"failing":null},"staging":{"failing":null},"archived-threads":{"failing":null}},"packs":[{"folder":"blender-1.0.0","pack":"deepbuild/blender","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"chrome-fx-1.0.0","pack":"deepbuild/chrome-fx","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"composites-1.0.0","pack":"deepbuild/composites","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"explain-1.0.0","pack":"deepbuild/explain","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"familiar-1.0.0","pack":"deepbuild/familiar","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"fx-1.0.0","pack":"deepbuild/fx","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"godot-1.0.0","pack":"deepbuild/godot","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"unreal-1.0.0","pack":"deepbuild/unreal","version":"1.0.0","state":"not_checked","issues":[]},{"folder":"verbs-1.0.0","pack":"deepbuild/verbs","version":"1.0.0","state":"not_checked","issues":[]}],"process":{"openFiles":29,"rssBytes":133971968,"children":2}}: expected [ true, true ] to deeply equal [ false, false ]
+
+- Expected
++ Received
+
+  [
+-   false,
+-   false,
++   true,
++   true,
+  ]
+
+ ❯ packages/hub/test/people.test.ts:25:145
+     23|       // #2118: the settings readings name every session's files, so a…
+     24|       const read = (health as { result?: { claude?: object; codex?: ob…
+     25|       expect([read?.claude && 'readings' in read.claude, read?.codex &…
+       |                                                                                                                                                 ^
+     26|     } finally {
+     27|       conn.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  03:05:06
+   Duration  1.09s (tests 95%, import 2%, transform 2%, setup 1%)
+
+base people exit 1
