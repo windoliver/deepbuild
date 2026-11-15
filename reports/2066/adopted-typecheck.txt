@@ -1,0 +1,8 @@
+Command: node node_modules/typescript/bin/tsc -p tests/acceptance/2066/tsconfig.json
+Working directory: <issue-2066-worktree>
+Exit code: 0
+stdout/stderr: empty
+
+This checks the adopted acceptance test and its imported test infrastructure.
+The intentionally relocated wrong-program copy is excluded here; the before lane
+builds that copy after placing it over the real module in its separate twin run.
