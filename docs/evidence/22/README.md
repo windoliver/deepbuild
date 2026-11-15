@@ -330,3 +330,67 @@ minutes, and passed 8 of 8 in clean worktrees of the branch and 5 of 5 on main. 
 
 The probe's raw outputs were in a scratch folder the Spark's reboot at 14:52 on 2026-11-14 cleared; the counts above
 are from the agent's report. A fix belongs in `checks-command`, outside this change.
+
+## The second and third reviews, fixed test-first, and the Mac at each fix
+
+A separate agent reviewed the final diff at 2ed20aaf, then again at b51d52cd and at 6915a4fb. What each round found, and
+where it went:
+
+| Round | Found | Where |
+|---|---|---|
+| 1 (2ed20aaf) | asks held or folded were never shown when the core showed them; any core exception folded the next ask; panels lost the folded asks; a record with no batches never notified | fixed in b51d52cd, tests in 5be14fc0 and 321a4d5b |
+| 2 (b51d52cd) | the notification was lost when the hub's `row.set` came after the ask was due; a row stayed folded or held after the hub listed it | fixed in 6915a4fb, tests in 9cb02473 |
+| 3 (6915a4fb) | both fixed; no compile risk | three edge cases disclosed below |
+
+Disclosed, not changed: answering an ask and its decision are two writes (`Promise.all`), so one can land without the
+other; `batchDue()` rereads settings each second; FULL appends made in one turn share one commit; an `inbox.read`
+exception of any kind still folds the session's next ask; the count fold (after five) ignores the `fold` setting; a
+record replayed listed, unlisted, listed can notify twice; after a hub restart the app may notify at the next `row.set`;
+an ask released from a fold now notifies; `ask.batched` doesn't restart the delay.
+
+- **Failing first, on the Mac.** `mac-b51d52cd/0-failing-first.txt`, at 321a4d5b: 101 pass, the seven new tests fail
+  on their assertions. `mac-6915a4fb/0-failing-first.txt`, at 9cb02473: 108 pass, the two new tests fail
+  (`left: []`, `right: ["ask:a1"]`; `left: "folded"`, `right: "shown"`).
+- **After each fix.** `1-deep-app-lib.txt`: 108 of 108 at b51d52cd, 110 of 110 at 6915a4fb.
+- **The whole `cargo test -p deep-app`**, with main's #2474 merged in a scratch checkout (`2-deep-app-full.txt`):
+  every test passes except six, the same six as main with #2474 (`mac-b51d52cd/2b-main-full.txt`):
+  `acceptance_1141` ac2 and ac3, `acceptance_34` ac11, and `hub_client`'s three. 1141 ac2's message is byte for byte
+  main's.
+- **The app by hand** (`e2e/`): at b51d52cd, a separate agent's check (`mac-b51d52cd/SCREENSHOT-CHECK.md`) finds all
+  three pictures OK. At 6915a4fb the run passes again (Nothing, 8, 2).
+- **Three app suite files** that passed at b51d52cd (`mac-b51d52cd/3-suites.txt`) failed at 6915a4fb
+  (`mac-6915a4fb/3-suites.txt`): 1459/identifier, 1459/panel and 1172/rows. A small A/B of the same three files, one
+  head after the other (`mac-ab-b51d52cd-6915a4fb/`), doesn't follow the change: b51d52cd failed identifier and rows,
+  6915a4fb passed identifier and panel and failed rows. The Mac was in use throughout, load 13 to 46 with Windows App,
+  Chrome or WeChat in front (`exits.txt`), so this alone settles little; the four-round A/B at the merged head is below.
+- **Size.** `crates/deep-app/src/views.rs` is over its ceiling on main already (3938 against 3606); this change adds 76
+  lines to it, all in its `mod tests`.
+
+## The Mac at the merged head, adaa0e19 (part of 22p)
+
+`mac-adaa0e19/`: adaa0e19 is 6915a4fb with main 2252dfd6 merged in. The run stopped at 23:27 when the Mac's free disk
+fell under 20 GB (`exits.txt`), after its first A/B round.
+
+- **Unit tests:** `1-deep-app-lib.txt`, 110 of 110.
+- **The whole `cargo test -p deep-app`:** `2-deep-app-full.txt` fails six tests, and main at 2252dfd6 alone
+  (`2b-main-full.txt`) fails the same six (`2-failed-names.txt` and `2b-failed-names.txt` are identical): `acceptance_1141`
+  ac2 and ac3, `acceptance_34` ac11, `hub_client`'s three. No #2474 merge is needed any more; it is on main.
+- **A/B round A1, at b51d52cd** (`3-ab.txt`): 1459/identifier and 1459/panel pass; 1172/rows fails, its planted-row test
+  "BLOCKED: deep-app exited (SIGTERM) before its window". So 1172/rows has now failed at b51d52cd twice and at 6915a4fb
+  twice, and passed at b51d52cd once (22n): it doesn't follow the change.
+
+### The rest of 22p, rerun at adaa0e19 (`mac-adaa0e19/rerun/`)
+
+- **The A/B, two rounds per head, the temp binary folder cleared before each** (`3-ab.txt`, `exits.txt`): the merged head
+  passed all three files in both its rounds (B1, B2). b51d52cd failed all three in A1 and passed all three in A2. The
+  failures follow the machine, not the change. The Mac was in use (Windows App in front, load 7 to 38); the runner
+  can't move the pointer and records it at each step.
+- **The probe** (`probe/probe1459.txt`): the real app, launched plain and with `--panel asks`, keeps its window, and an
+  assistive client finds each ask's row by its question.
+- **The app by hand** (`e2e/`): passes. Before the batch Needs you is empty and says "Nothing needs you". After it there
+  are 8 rows, A1, B1, D1 to D5 and "This session keeps asking", with no row for D6. After the bulk answer, A1 and B1,
+  count 2. A separate agent's check of the pictures is `rerun/SCREENSHOT-CHECK.md`.
+- **1172/panel and 1460/cli** (`4-suites.txt`): pass.
+- **The judge** (`judge.txt`), from a copy that pins #22 to adaa0e19 and doesn't reopen issues: #318, #320 and #321
+  PASS; #319 (`#22.1f14a778`) INCONCLUSIVE. The Mac was on battery power at the judge's start and end, and #319's budgets
+  refuse to time off mains power (`tests/acceptance/319/helpers.ts:188`), so the part can't pass there by its own rule.

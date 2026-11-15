@@ -1,0 +1,86 @@
+== side b commit 6915a4fbd75c35e0bac7e8ba11f95478cc169ea7
+
+===== tests/acceptance/1459/identifier.test.ts  start 22:49:23 load { 19.44 76.93 86.41 } thermal 1 screen-lock flag 0 front app [WeChat]
+
+ RUN  v5.0.5 ~/private/dbc-22oab
+
+ ✓ tests/acceptance/1459/identifier.test.ts (1 test) 70201ms
+   ✓ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     ✓ AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 70068ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:49:24
+   Duration  70.51s (tests 100%)
+
+===== tests/acceptance/1459/identifier.test.ts exit=0 end 22:50:35 load { 14.80 63.76 80.70 } thermal 1 front app [WeChat]
+
+===== tests/acceptance/1459/panel.test.ts  start 22:50:35 load { 14.80 63.76 80.70 } thermal 1 screen-lock flag 0 front app [WeChat]
+
+ RUN  v5.0.5 ~/private/dbc-22oab
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 20738ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 20617ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:50:35
+   Duration  20.90s (tests 100%)
+
+===== tests/acceptance/1459/panel.test.ts exit=0 end 22:50:56 load { 13.09 60.21 79.03 } thermal 1 front app [WeChat]
+
+===== tests/acceptance/1172/rows.test.ts  start 22:50:56 load { 13.09 60.21 79.03 } thermal 1 screen-lock flag 0 front app [WeChat]
+
+ RUN  v5.0.5 ~/private/dbc-22oab
+
+ ❯ tests/acceptance/1172/rows.test.ts (2 tests | 2 failed) 77480ms
+   ❯ #1172 Needs you shows questions and presents their cards (2)
+     × AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 34626ms
+     × AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 42733ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window
+Error: BLOCKED: deep-app has no window: first-frame-ms 275.5
+
+ ❯ blocked tests/acceptance/1172/helpers.ts:34:56
+     32| });
+     33|
+     34| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     35| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     36| /** The 1-minute load average is above half the cores: a late reading …
+ ❯ App.mainWindow tests/acceptance/1172/helpers.ts:163:19
+ ❯ App.capture tests/acceptance/1172/helpers.ts:156:28
+ ❯ rowFailures tests/acceptance/1172/rows.test.ts:39:29
+ ❯ tests/acceptance/1172/rows.test.ts:50:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1172/rows.test.ts > #1172 Needs you shows questions and presents their cards > AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask
+AssertionError: expected 'Needs you has no row showing ask:01M7…' to match /by its handle/
+
+- Expected:
+/by its handle/
+
++ Received:
+"Needs you has no row showing ask:01M7EZKDMQYFME97B1ERKFYHX8's question \"Which header colour on the login page?\""
+
+ ❯ tests/acceptance/1172/rows.test.ts:59:33
+     57|     const failures = await rowFailures(world, ask, 'plant-handle-rows'…
+     58|     expect(failures.join('\n'), 'the row that shows a handle fails the…
+     59|     expect(failures.join('\n')).toMatch(/by its handle/);
+       |                                 ^
+     60|   }, 8 * MINUTES);
+     61| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:50:57
+   Duration  77.62s (tests 100%)
+
+===== tests/acceptance/1172/rows.test.ts exit=1 end 22:52:15 load { 21.67 51.35 73.92 } thermal 1 front app [Windows App]

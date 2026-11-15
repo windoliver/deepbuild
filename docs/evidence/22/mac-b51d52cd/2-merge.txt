@@ -1,0 +1,21 @@
+Merge made by the 'ort' strategy.
+ crates/deep-app/Cargo.toml                     |   9 +-
+ scripts/known-failures.json                    |   3 +-
+ tests/acceptance/995/redraft/README.md         | 124 ++++++
+ tests/acceptance/995/redraft/WRONG-PROGRAM.txt | 168 ++++++++
+ tests/acceptance/995/redraft/panel.rs          | 533 +++++++++++++++++++++++++
+ 5 files changed, 831 insertions(+), 6 deletions(-)
+ create mode 100644 tests/acceptance/995/redraft/README.md
+ create mode 100644 tests/acceptance/995/redraft/WRONG-PROGRAM.txt
+ create mode 100644 tests/acceptance/995/redraft/panel.rs
+Auto-merging scripts/known-failures.json
+Merge made by the 'ort' strategy.
+ crates/deep-app/Cargo.toml                     |   9 +-
+ scripts/known-failures.json                    |   3 +-
+ tests/acceptance/995/redraft/README.md         | 124 ++++++
+ tests/acceptance/995/redraft/WRONG-PROGRAM.txt | 168 ++++++++
+ tests/acceptance/995/redraft/panel.rs          | 533 +++++++++++++++++++++++++
+ 5 files changed, 831 insertions(+), 6 deletions(-)
+ create mode 100644 tests/acceptance/995/redraft/README.md
+ create mode 100644 tests/acceptance/995/redraft/WRONG-PROGRAM.txt
+ create mode 100644 tests/acceptance/995/redraft/panel.rs

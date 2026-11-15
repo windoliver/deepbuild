@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 ~/private/dbc-22n/target/e2e-22
+
+ ✓ app.test.ts (1 test) 263981ms
+   ✓ app 263981ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:37:55
+   Duration  264.12s (tests 100%)
+

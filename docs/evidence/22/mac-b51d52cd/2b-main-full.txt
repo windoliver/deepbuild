@@ -1,0 +1,242 @@
+== commit 7f0a9b83a02013c794091697ed4d307d2f4bb035
+== command: cargo test --locked --no-fail-fast -p deep-app --test acceptance_1141 --test acceptance_34 --test hub_client
+== start 2026-11-14 20:30:37 load { 31.08 72.09 59.99 } thermal 1
+   Compiling ctutils v0.4.8
+   Compiling tokio v1.54.1
+   Compiling rustix v1.1.6
+   Compiling deep-canvas v0.0.0 (~/private/dbc-22nm/crates/deep-canvas)
+   Compiling zstd-safe v7.4.0
+   Compiling rustls-webpki v0.103.16
+   Compiling deep-gpu v0.0.0 (~/private/dbc-22nm/crates/deep-gpu)
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling digest v0.11.3
+   Compiling crypto-bigint v0.7.11
+   Compiling sec1 v0.8.1
+   Compiling sha2 v0.11.1
+   Compiling hmac v0.13.0
+   Compiling signature v3.0.0
+   Compiling hkdf v0.13.0
+   Compiling universal-hash v0.6.1
+   Compiling polyval v0.7.3
+   Compiling rust-embed-utils v8.13.0
+   Compiling rustls v0.23.46
+   Compiling rust-embed v8.13.0
+   Compiling curve25519-dalek v5.0.0
+   Compiling tempfile v3.27.0
+   Compiling zstd v0.13.4
+   Compiling cbindgen v0.28.0
+   Compiling ghash v0.6.0
+   Compiling ed25519 v3.0.0
+   Compiling ed25519-dalek v3.0.0
+   Compiling x25519-dalek v3.0.0
+   Compiling aes-gcm v0.11.1
+   Compiling polling v3.11.0
+   Compiling rusty-fork v0.3.1
+   Compiling async-io v2.6.0
+   Compiling proptest v1.12.0
+   Compiling primefield v0.14.0
+   Compiling async-signal v0.2.14
+   Compiling llrt_utils v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling elliptic-curve v0.14.1
+   Compiling async-process v2.5.0
+   Compiling llrt_hooking v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_context v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_timers v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_async_hooks v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_events v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_exceptions v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wnaf v0.14.1
+   Compiling async-net v2.0.0
+   Compiling rfc6979 v0.6.0
+   Compiling smol v2.0.2
+   Compiling gpui-pre v0.3.9 (~/private/dbc-22nm/vendor/gpui-pre)
+   Compiling ecdsa v0.17.0
+   Compiling llrt_abort v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling primeorder v0.14.0
+   Compiling gpui-pre-apple v0.3.9 (~/private/dbc-22nm/vendor/gpui-pre-apple)
+   Compiling tokio-util v0.7.20
+   Compiling llrt_stream_web v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling crypto-primes v0.7.2
+   Compiling h2 v0.4.20
+   Compiling p384 v0.14.0
+   Compiling p521 v0.14.0
+   Compiling rsa v0.10.0-rc.18
+   Compiling llrt_buffer v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-canvas-seams v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-seams)
+   Compiling deep-canvas-drawn v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-drawn)
+   Compiling deep-text v0.0.0 (~/private/dbc-22nm/crates/deep-text)
+   Compiling hyper v1.12.0
+   Compiling p256 v0.14.0
+   Compiling deep-canvas-marks v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-marks)
+   Compiling hyper-util v0.1.21
+   Compiling tokio-rustls v0.26.6
+   Compiling llrt_json v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling fs-set-times v0.20.3
+   Compiling llrt_compression v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling md-5 v0.11.0
+   Compiling sha1 v0.11.0
+   Compiling pbkdf2 v0.13.0
+   Compiling llrt_crypto v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_zlib v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling hyper-rustls v0.27.10
+   Compiling cap-primitives v4.0.3
+   Compiling llrt_path v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_url v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling tokio-socks v0.5.3
+   Compiling tower v0.5.3
+   Compiling gpui-pre-reqwest v0.12.15
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+   Compiling cap-std v4.0.3
+   Compiling tungstenite v0.29.0
+   Compiling deep-canvas-cells v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-cells)
+   Compiling deep-images v0.0.0 (~/private/dbc-22nm/crates/deep-images)
+   Compiling deep-canvas-motion v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-motion)
+   Compiling gpui-pre-macos v0.3.9 (~/private/dbc-22nm/vendor/gpui-pre-macos)
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-pre-platform v0.3.9
+   Compiling deep-canvas-scene3d v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-scene3d)
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-canvas-effects v0.0.0 (~/private/dbc-22nm/crates/deep-canvas-effects)
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-scene3d-render v0.0.0 (~/private/dbc-22nm/crates/deep-scene3d-render)
+   Compiling deep-marks-gpui v0.0.0 (~/private/dbc-22nm/crates/deep-marks-gpui)
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-effects-render v0.0.0 (~/private/dbc-22nm/crates/deep-effects-render)
+   Compiling deep-text-gpui v0.0.0 (~/private/dbc-22nm/crates/deep-text-gpui)
+   Compiling deep-app v0.0.0 (~/private/dbc-22nm/crates/deep-app)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-app` (bin "deep-app") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5m 38s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running ../../tests/acceptance/1141/app/folded.rs (target/debug/deps/acceptance_1141-901930a1e32788de)
+
+running 4 tests
+test plant_drops_close_a_reader_that_drops_an_asks_close_fails_naming_the_ask ... ignored, the plant runs only in a build with --features plant-drops-close
+test plant_walks_events_a_reader_that_walks_every_event_per_render_fails_at_100000_events ... ignored, the plant runs only in a build with --features plant-walks-events
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+
+failures:
+
+---- ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases stdout ----
+
+thread 'ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases' (4456750) panicked at crates/deep-app/../../tests/acceptance/1141/app/folded.rs:632:63:
+FAIL: seed 1, after log_pos 313: the app's notifier posted [
+    "notice · session 5e550001-1141-4000-8000-000001000001 · \"DeepBuild · Task 10\" · \"DeepBuild · Task 10\\n! needs you — Question 286? If you don't answer: No, at 04:31.\" · sound None",
+    "ask:01KA0001000000000000000305 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 305? If you don't answer: No, at tomorrow 00:02.\" · sound Some(Question)",
+], the merge base's [
+    "notice · session 5e550001-1141-4000-8000-000001000001 · \"DeepBuild · Task 10\" · \"DeepBuild · Task 10\\n! needs you — Question 286? If you don't answer: No, at 04:31.\" · sound None",
+    "ask:01KA0001000000000000000304 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 304? If you don't answer: Yes, at 15:32.\" · sound Some(Question)",
+    "ask:01KA0001000000000000000305 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 305? If you don't answer: No, tomorrow at 00:02.\" · sound Some(Question)",
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count stdout ----
+
+thread 'ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count' (4456751) panicked at crates/deep-app/../../tests/acceptance/1141/app/folded.rs:925:39:
+INCONCLUSIVE: a reading only (loaded: a 1-minute load average of 51.5 on 8 cores): 20,000 events: sidebar 0.052 ms, tick 0.011 ms (medians); 100,000 events: sidebar 0.059 ms, tick 0.010 ms (medians); 200,000 events: sidebar 0.065 ms, tick 0.010 ms (medians); the sidebar's render at 200,000 events: 0.072, 0.068, 0.067, 0.067, 0.068 ms against 4 ms (margin 7%); a notifier tick at 200,000 events: 0.010, 0.009, 0.010, 0.010, 0.009 ms against 4 ms (margin 6%)
+
+
+failures:
+    ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases
+    ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count
+
+test result: FAILED. 0 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 3.58s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141`
+     Running ../../tests/acceptance/34/app/record_reader.rs (target/debug/deps/acceptance_34-815e56cb9a9c47a7)
+
+running 4 tests
+test ac5_cold_start_the_app_subscribes_after_800_and_shows_the_ask_appended_at_801 ... ok
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+test ac6_a_dropped_frame_at_701_is_refetched_from_700_before_702_applies_and_702_applies_once ... ok
+test ac10_an_app_at_700_that_gets_750_refetches_from_700_once_moves_to_750_and_refetches_nothing_for_751 ... ok
+
+failures:
+
+---- ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them stdout ----
+
+thread 'ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them' (4456841) panicked at crates/deep-app/../../tests/acceptance/34/app/record_reader.rs:586:33:
+BLOCKED: the hub printed no ready line: ""
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_34`
+     Running tests/hub_client.rs (target/debug/deps/hub_client-1bfd173cde9f7b47)
+
+running 3 tests
+test the_app_reads_the_hubs_health_and_log_as_the_app ... FAILED
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... FAILED
+test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... FAILED
+
+failures:
+
+---- the_app_reads_the_hubs_health_and_log_as_the_app stdout ----
+
+thread 'the_app_reads_the_hubs_health_and_log_as_the_app' (4456885) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+
+---- the_hub_takes_the_views_the_app_reports_shown_and_hidden stdout ----
+
+thread 'the_hub_takes_the_views_the_app_reports_shown_and_hidden' (4456886) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+
+---- a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app stdout ----
+
+thread 'a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app' (4456884) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app
+    the_app_reads_the_hubs_health_and_log_as_the_app
+    the_hub_takes_the_views_the_app_reports_shown_and_hidden
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p deep-app --test hub_client`
+error: 3 targets failed:
+    `-p deep-app --test acceptance_1141`
+    `-p deep-app --test acceptance_34`
+    `-p deep-app --test hub_client`
+== end 2026-11-14 20:36:21 load { 51.49 82.24 70.31 } thermal 1
+cargo exit=101

@@ -1,0 +1,363 @@
+== commit adaa0e19d08810370d6ba5bca9fa3563b41d1d2f
+== command: cargo test --locked --no-fail-fast -p deep-app
+== start 2026-11-14 23:00:40 load { 104.06 118.27 98.08 } thermal 1
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::r...
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<Str...
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling deep-app v0.0.0 (~/private/dbc-22pb/crates/deep-app)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-app` (bin "deep-app") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.99s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/deep_app-8d6e867e3dd28cda)
+
+running 110 tests
+test arming::tests::a_card_drawn_taller_than_its_slot_never_arms_until_it_fits ... ok
+test arming::tests::a_key_repeat_never_answers ... ok
+test arming::tests::a_down_at_450_and_an_up_at_700_answers_nothing ... ok
+test arming::tests::a_press_stamped_499_ms_after_presentation_answers_nothing_and_one_at_500_answers ... ok
+test arming::tests::a_relaunch_presents_again_unarmed ... ok
+test arming::tests::a_release_on_another_option_answers_nothing ... ok
+test arming::tests::a_synthetic_press_answers_only_once_the_os_confirms_you_and_once ... ok
+test arming::tests::a_slot_partly_outside_or_too_small_never_arms ... ok
+test address::tests::an_ask_handle_and_its_ulid_are_one_address ... ok
+test actions::tests::a_key_draws_as_a_menu_draws_it ... ok
+test address::tests::a_bad_part_refuses_the_whole_text ... ok
+test confirm::tests::the_reason_names_the_question_and_the_option ... ok
+test confirm::tests::a_long_question_is_cut_before_its_marks_so_none_is_cut_in_half ... ok
+test actions::tests::every_action_is_in_one_menu ... ok
+test address::tests::each_form_reads_back_as_written ... ok
+test device::tests::base64url_matches_the_hubs_reading_of_a_key ... ok
+test cells::tests::a_row_keeps_its_text_its_color_runs_and_its_cells_off_the_grids_background ... ok
+test cells::tests::the_caret_counts_every_character_a_cell_before_the_cursor_holds ... ok
+test device::tests::canonical_bytes_order_keys_by_utf16_with_no_spaces ... ok
+test cells::tests::a_screen_from_the_hubs_reply_keeps_each_rows_runs_and_its_fills_off_the_ground ... ok
+test empties::tests::the_three_empties_differ_in_words_and_mark_and_a_down_hub_never_reads_0 ... ok
+test events::tests::a_sessions_sixth_open_ask_folds ... ok
+test actions::tests::the_table_names_each_action_once_and_every_key_parses ... ok
+test events::tests::open_asks_are_listed_oldest_first_and_closed_ones_leave ... ok
+test device::tests::a_signature_covers_the_method_the_hub_the_time_the_once_and_the_params ... ok
+test kinds::tests::a_stalled_claim_is_a_choice_of_split_fund_or_accept_with_costs ... ok
+test kinds::tests::a_moved_choice_lists_each_run_on_the_new_commit_as_the_record_takes_it ... ok
+test kinds::tests::a_lone_approval_runs_its_whole_plan_and_says_so_on_its_button ... ok
+test kinds::tests::a_batch_member_runs_or_skips_whole_and_starts_off_with_a_step_that_cant_be_undone ... ok
+test kinds::tests::the_card_shows_the_batch_the_core_wrote_never_an_agents ... ok
+test kinds::tests::the_card_shows_the_plan_the_core_binds_never_a_later_one ... ok
+test kinds::tests::a_taste_call_says_how_many_checks_passed_on_its_commit_and_what_to_look_at ... ok
+test kinds::tests::the_receipt_lists_only_the_asks_the_card_counted ... ok
+test kinds::tests::a_taste_call_lists_past_calls_on_the_same_screen ... ok
+test kinds::tests::the_scope_counts_the_other_open_asks_with_the_same_key ... ok
+test list::tests::an_ask_row_says_its_kind_or_how_it_waits_in_its_word_and_value ... ok
+test list::tests::an_empty_record_lists_nothing_and_with_no_ask_the_window_opens_on_the_latest_project ... ok
+test list::tests::needs_you_comes_first_then_each_project_with_its_quiet_sessions_folded ... ok
+test kinds::tests::an_ask_batched_with_no_plan_of_its_own_is_still_among_the_steps_it_approves ... ok
+test list::tests::a_row_that_just_moved_drops_a_press_for_300_ms ... ok
+test list::tests::a_state_that_changes_shows_in_place_at_once ... ok
+test list::tests::an_answered_ask_keeps_its_slot_while_you_are_in_the_list_and_for_2_s_after ... ok
+test kinds::tests::a_repo_scoped_answer_counts_only_the_asks_of_that_project ... ok
+test list::tests::a_row_answered_elsewhere_waits_2_s_and_a_new_ask_lands_at_once ... ok
+test notify::tests::a_notification_held_from_before_the_app_started_stays_until_its_ask_closes ... ok
+test notify::tests::an_ask_in_a_record_with_no_batches_notifies_when_it_is_raised ... ok
+test notify::tests::an_ask_notifies_once_the_hubs_list_holds_it_though_it_came_due_before ... ok
+test notify::tests::a_notification_the_app_finds_after_a_relaunch_still_carries_its_marked_question ... ok
+test notify::tests::a_moved_deadline_posts_the_notification_again_with_the_time_it_moved_to ... ok
+test notify::tests::a_notification_says_when_the_default_applies_after_its_undo ... ok
+test notify::tests::a_notification_shows_a_direction_mark_as_the_card_does ... ok
+test notify::tests::an_ask_notifies_when_the_core_shows_it_not_when_it_is_raised ... ok
+test panel_module::tests::imports_are_read_with_their_lines_and_names ... ok
+test panel_values::tests::the_tree_gives_each_bound_element_and_no_file_gives_none ... ok
+test panel_values::tests::a_value_past_its_freshness_is_stale_with_its_age_and_one_within_it_is_neither ... ok
+test plain::tests::a_listed_word_is_found_whole_in_any_case_and_plural_and_named_with_its_plain_word ... ok
+test plain::tests::a_trace_is_found_by_its_lines_and_a_plain_line_is_not_one ... ok
+test question::tests::a_click_before_the_interval_is_refused_and_recorded_once_and_one_after_answers_the_drawn_option ... ok
+test question::tests::a_check_finishing_while_the_card_shows_changes_what_it_says_and_presents_it_again_unarmed ... ok
+test question::tests::a_batch_approvals_receipt_lists_the_other_members_it_ran ... ok
+test question::tests::a_batch_card_follows_a_member_closing_and_a_plan_landing_and_keeps_your_switches ... ok
+test question::tests::a_closed_ask_is_never_presented_and_one_closing_elsewhere_takes_its_card_down ... ok
+test question::tests::a_record_change_the_card_doesnt_show_leaves_it_armed_however_late_it_comes ... ok
+test question::tests::an_untrusted_press_waits_for_the_os_and_a_cancelled_prompt_leaves_the_card_armed ... ok
+test question::tests::an_approval_whose_own_step_cant_be_undone_waits_for_its_switch ... ok
+test question::tests::on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval ... ok
+test question::tests::switching_the_asks_own_steps_off_while_the_os_asks_sends_nothing ... ok
+test question::tests::tab_reaches_each_option_and_space_presses_the_focused_one ... ok
+test record::tests::a_hub_down_for_200_ms_never_reads_as_not_answering ... ok
+test question::tests::visible_marks_each_control_direction_and_invisible_character ... ok
+test record::tests::a_hub_down_for_a_second_says_so_within_2_s_and_for_at_least_400_ms ... ok
+test record::tests::a_panel_is_given_the_folded_asks_with_those_in_sight ... ok
+test panel_tree::tests::a_tree_reads_back_with_its_calls_text_and_nesting ... ok
+test record::tests::an_ask_folds_only_into_its_sessions_keeps_asking_exception ... ok
+test record::tests::a_sessions_sixth_open_ask_folds_in_a_record_with_no_exception ... ok
+test record::tests::an_ask_held_for_the_agents_step_is_shown_once_the_core_shows_it ... ok
+test question::tests::words_alone_answer_this_ask_only_and_a_typed_yes_never_runs_the_plan ... ok
+test record::tests::an_ask_the_hub_lists_is_shown_whatever_this_app_took_it_for ... ok
+test record::tests::needs_you_holds_the_asks_the_hubs_list_holds ... ok
+test record::tests::only_the_cores_later_moves_an_ask_to_later ... ok
+test record::tests::the_first_missed_reply_says_nothing ... ok
+test record::tests::asks_an_answered_exception_held_get_their_own_rows ... ok
+test rules::tests::reads_each_file_and_each_rule_with_its_enforcer ... ok
+test shown::tests::a_shown_window_reports_each_view_every_time_and_hidden_once_as_it_stops ... ok
+test record::tests::the_inbox_closes_an_ask_as_the_core_does ... ok
+test shown::tests::a_view_counts_as_shown_only_visible_unminimized_on_an_awake_display_unlocked ... ok
+test states::tests::a_hooks_word_that_the_session_works_again_is_its_attention ... ok
+test states::tests::a_job_row_counts_only_from_its_tools_counter ... ok
+test states::tests::a_decision_the_core_applied_closes_the_ask_it_names ... ok
+test states::tests::a_session_whose_asks_all_closed_no_longer_needs_you ... ok
+test states::tests::a_sessions_readings_show_beside_it_and_move_nothing ... ok
+test states::tests::every_hooks_attention_is_attention_as_the_whole_list_read_has_it ... ok
+test states::tests::no_agent_closes_an_ask ... ok
+test states::tests::an_age_changes_exactly_when_its_span_next_reads_differently ... ok
+test states::tests::the_menu_bar_shows_a_titles_controls_and_direction_marks ... ok
+test states::tests::the_cores_undo_of_a_default_opens_the_ask_again_with_its_new_deadline ... ok
+test states::tests::the_sidebar_row_keeps_its_stops_claim_past_the_turns_end_and_the_idle_prompt ... ok
+test unread::tests::a_page_open_a_second_while_you_are_present_reads_its_row ... ok
+test unread::tests::coming_back_starts_the_second_again ... ok
+test unread::tests::half_a_second_or_away_reads_nothing ... ok
+test views::tests::a_needs_you_row_shows_a_direction_mark_as_the_card_does ... ok
+test views::tests::a_record_no_batching_core_wrote_shows_its_asks_at_once ... ok
+test views::tests::the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move ... ok
+test views::tests::needs_you_shows_an_ask_once_the_core_shows_it_and_a_folded_one_only_through_its_exception ... ok
+test views::tests::a_name_that_is_not_a_shipped_view_is_refused - should panic ... ok
+test panel_module::tests::the_served_module_holds_every_catalog_name_once ... ok
+test views::tests::the_window_has_two_regions_and_nothing_docked_below ... ok
+test panel_tree::tests::what_it_cant_read_is_an_error ... ok
+test images::tests::a_thumbnail_is_the_level_it_draws_at_from_the_shared_service ... ok
+test states::tests::the_open_asks_read_in_one_pass_and_folded_are_those_each_asks_own_reading_leaves_open ... ok
+
+test result: ok. 110 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.95s
+
+     Running unittests src/main.rs (target/debug/deps/deep_app-74d38ef379c52425)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running ../../tests/acceptance/1141/app/folded.rs (target/debug/deps/acceptance_1141-901930a1e32788de)
+
+running 4 tests
+test plant_drops_close_a_reader_that_drops_an_asks_close_fails_naming_the_ask ... ignored, the plant runs only in a build with --features plant-drops-close
+test plant_walks_events_a_reader_that_walks_every_event_per_render_fails_at_100000_events ... ignored, the plant runs only in a build with --features plant-walks-events
+test ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases ... FAILED
+test ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count ... FAILED
+
+failures:
+
+---- ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases stdout ----
+
+thread 'ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases' (4920721) panicked at crates/deep-app/../../tests/acceptance/1141/app/folded.rs:632:63:
+FAIL: seed 1, after log_pos 313: the app's notifier posted [
+    "notice · session 5e550001-1141-4000-8000-000001000001 · \"DeepBuild · Task 10\" · \"DeepBuild · Task 10\\n! needs you — Question 286? If you don't answer: No, at 04:31.\" · sound None",
+    "ask:01KA0001000000000000000305 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 305? If you don't answer: No, at tomorrow 00:02.\" · sound Some(Question)",
+], the merge base's [
+    "notice · session 5e550001-1141-4000-8000-000001000001 · \"DeepBuild · Task 10\" · \"DeepBuild · Task 10\\n! needs you — Question 286? If you don't answer: No, at 04:31.\" · sound None",
+    "ask:01KA0001000000000000000304 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 304? If you don't answer: Yes, at 15:32.\" · sound Some(Question)",
+    "ask:01KA0001000000000000000305 · session 5e550005-1141-4000-8000-000001000005 · \"DeepBuild · Task 15\" · \"DeepBuild · Task 15\\n! needs you — Question 305? If you don't answer: No, tomorrow at 00:02.\" · sound Some(Question)",
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count stdout ----
+
+thread 'ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count' (4920722) panicked at crates/deep-app/../../tests/acceptance/1141/app/folded.rs:925:39:
+INCONCLUSIVE: a reading only (loaded: a 1-minute load average of 103.7 on 8 cores): 20,000 events: sidebar 0.053 ms, tick 0.014 ms (medians); 100,000 events: sidebar 0.057 ms, tick 0.021 ms (medians); 200,000 events: sidebar 0.068 ms, tick 0.027 ms (medians); the sidebar's render at 200,000 events: 0.074, 0.071, 0.069, 0.069, 0.069 ms against 4 ms (margin 7%); a notifier tick at 200,000 events: 0.030, 0.027, 0.027, 0.028, 0.028 ms against 4 ms (margin 11%)
+
+
+failures:
+    ac2_each_sessions_state_title_and_open_asks_and_the_notifiers_posts_and_withdrawals_equal_the_merge_bases
+    ac3_a_sidebar_render_and_a_notifier_tick_take_under_4_ms_with_200000_events_held_independent_of_the_count
+
+test result: FAILED. 0 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 3.25s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141`
+     Running ../../tests/acceptance/1141/app/memory.rs (target/debug/deps/acceptance_1141_memory-50f90e869f066e66)
+
+running 1 test
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.31s
+
+     Running ../../tests/acceptance/1510/app/card.rs (target/debug/deps/acceptance_1510-63a6714a0b6a0221)
+
+running 4 tests
+test ac2_6263c922_a_call_with_u202e_in_an_authority_card_shows_a_visible_mark_at_that_place ... ok
+test ac2_6263c922_a_question_with_u202e_shows_a_visible_mark_at_that_place_in_the_card ... ok
+test ac4_5fbd0a55_plain_chinese_and_emoji_questions_show_unchanged_in_the_card ... ok
+test ac2_6263c922_each_invisible_or_direction_changing_character_shows_a_visible_mark_at_its_place ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running ../../tests/acceptance/1606-redraft-ac5-ac9/app/card.rs (target/debug/deps/acceptance_1606-c4e6a097e5e485ef)
+acceptance_1606: no ask to answer (card.test.ts names one)
+     Running ../../tests/acceptance/1738/app/titles.rs (target/debug/deps/acceptance_1738-c8b84f364862db8c)
+
+running 9 tests
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_sidebar_row ... ok
+test ac3_7a00b50e_the_records_task_created_keeps_the_titles_original_bytes ... ok
+test ac2_e6a3db6d_the_verdict_line_to_the_sessions_chat_marks_the_hostile_titles_characters ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_notification_title ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_heading ... ok
+test ac4_f8a06717_a_plain_title_shows_unchanged_on_every_surface ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_line ... ok
+test ac4_f8a06717_a_chinese_title_shows_unchanged_on_every_surface ... ok
+test ac4_f8a06717_an_emoji_title_shows_unchanged_on_every_surface ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running ../../tests/acceptance/2117/app/panel.rs (target/debug/deps/acceptance_2117-3d5ed53b39a619a9)
+
+running 8 tests
+AC1 over the 60 s after the first frame: the window drew 0 frames; BoundPanel rendered its bound line `price` 0 times and was notified 0 times; the panel's script rendered 0 times and was notified 0; the window's content rendered 0 times and was notified 0
+test ac1_789c5dd8_a_still_bound_panel_held_60_s_renders_0_times_and_draws_0_frames_after_the_first ... ok
+AC2: frames drawn before 2.500 s: 0; the frame at 2.500 s drawn: true, showing `price` as "182.40 USD · 2 min old" in muted (#8b8f97)
+test ac2_ebc91643_the_frame_at_as_of_plus_stale_after_draws_it_muted_with_its_age_and_none_before_it ... ok
+AC3 over 180 s while stale: the age shown changed 3 times, at 29.700 s, 89.700 s, 149.700 s; the window drew 3 frames; BoundPanel rendered its bound line `price` 3 times and was notified 3 times; the panel's script rendered 3 times and was notified 0; the window's content rendered 3 times and was notified 0
+test ac3_426efcc0_while_stale_the_panel_renders_once_for_each_change_of_the_age_it_shows_never_between ... ok
+AC4: the new reading showed 1 frames (16 ms) after the reader held it; the window drew 1 frames; BoundPanel rendered its bound line `price` 1 times and was notified 1 times; the panel's script rendered 1 times and was notified 0; the window's content rendered 1 times and was notified 0
+test ac4_0504b71f_a_new_reading_shows_within_2_frames_of_the_reader_holding_it_no_other_view_notified ... ok
+AC5 over the 2 s after a reading equal to the one shown: the window drew 0 frames; BoundPanel rendered its bound line `price` 0 times and was notified 0 times; the panel's script rendered 0 times and was notified 0; the window's content rendered 0 times and was notified 0
+test ac5_2a24617a_a_reading_equal_to_the_one_shown_renders_0_views_and_draws_0_frames ... ok
+test plant_panel_ticks_ac1_789c5dd8_a_timer_that_notifies_every_second_fails_naming_the_view ... ignored, the plant runs only in a build with --features plant-panel-ticks
+test plant_panel_grays_on_reading_ac2_ebc91643_a_panel_that_waits_for_the_next_reading_fails_naming_the_element ... ignored, the plant runs only in a build with --features plant-panel-grays-on-reading
+test plant_panel_waits_for_redraw_ac4_0504b71f_a_panel_that_waits_for_another_views_redraw_fails_naming_the_source ... ignored, the plant runs only in a build with --features plant-panel-waits-for-redraw
+test result: ok. 5 passed; 0 failed; 3 ignored
+
+     Running ../../tests/acceptance/34/app/record_reader.rs (target/debug/deps/acceptance_34-815e56cb9a9c47a7)
+
+running 4 tests
+test ac5_cold_start_the_app_subscribes_after_800_and_shows_the_ask_appended_at_801 ... ok
+test ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them ... FAILED
+test ac6_a_dropped_frame_at_701_is_refetched_from_700_before_702_applies_and_702_applies_once ... ok
+test ac10_an_app_at_700_that_gets_750_refetches_from_700_once_moves_to_750_and_refetches_nothing_for_751 ... ok
+
+failures:
+
+---- ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them stdout ----
+
+thread 'ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them' (4921972) panicked at crates/deep-app/../../tests/acceptance/34/app/record_reader.rs:586:33:
+BLOCKED: the hub printed no ready line: ""
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ac11_after_a_power_cut_drops_900_to_905_the_app_sees_the_new_start_id_redoes_its_reads_and_no_longer_shows_them
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_34`
+     Running ../../tests/acceptance/995/redraft/panel.rs (target/debug/deps/acceptance_995-50ddcf488a34994b)
+
+running 3 tests
+the canvas panel's process held 136.2 MB after revision 10, 121.2 MB after revision 1000: 0.0 MB more
+test presenting_1000_revisions_each_with_a_new_1_mb_picture_leaves_memory_within_20_mb_of_its_level_after_the_first_10 ... ok
+test after_1000_revisions_the_panel_holds_only_the_pictures_a_shown_revision_uses ... ok
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... ok
+
+test result: ok. 3 passed; 0 failed
+
+     Running tests/chrome.rs (target/debug/deps/chrome-58deaa9ddb0b143d)
+
+running 2 tests
+test a_script_panels_theme_is_the_looks_light_roles ... ok
+test with_macos_in_dark_a_script_panels_theme_is_the_looks_dark_roles ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/headless.rs (target/debug/deps/headless-8358d22a94dec747)
+
+running 6 tests
+test a_panel_replaces_the_welcome_screen ... ok
+test mark_in_the_title_bar_and_the_welcome_screen ... ok
+test menu_bar_count ... ok
+test session_list_count_and_report ... ok
+test codex_stocks_panel ... ok
+test claude_code_stocks_panel ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running tests/hub_client.rs (target/debug/deps/hub_client-1bfd173cde9f7b47)
+
+running 3 tests
+test a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app ... FAILED
+test the_hub_takes_the_views_the_app_reports_shown_and_hidden ... FAILED
+test the_app_reads_the_hubs_health_and_log_as_the_app ... FAILED
+
+failures:
+
+---- a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app stdout ----
+
+thread 'a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app' (4924298) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+
+---- the_hub_takes_the_views_the_app_reports_shown_and_hidden stdout ----
+
+thread 'the_hub_takes_the_views_the_app_reports_shown_and_hidden' (4924300) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+
+---- the_app_reads_the_hubs_health_and_log_as_the_app stdout ----
+
+thread 'the_app_reads_the_hubs_health_and_log_as_the_app' (4924299) panicked at crates/deep-app/tests/hub_client.rs:60:53:
+the hub's ready line: Error("EOF while parsing a value", line: 1, column: 0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_wrong_token_is_refused_and_a_hook_method_is_refused_for_the_app
+    the_app_reads_the_hubs_health_and_log_as_the_app
+    the_hub_takes_the_views_the_app_reports_shown_and_hidden
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p deep-app --test hub_client`
+     Running lists_1477.rs (target/debug/deps/lists_1477-fb6ddd0878645d06)
+     Running screens.rs (target/debug/deps/screens-b16069004dc211ea)
+
+running 4 tests
+test window_screen ... ok
+test welcome_screen ... ok
+test claude_code_panel_screen ... ok
+test codex_panel_screen ... ok
+
+test result: ok. 4 passed; 0 failed
+     Running spike_402.rs (target/debug/deps/spike_402-748605e4eff9ea9a)
+{"p50":19.411791,"p95":25.816125000000003,"max":114.097667,"emulator_p50":0.129416}
+record: /var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-402-30561/record.json
+test spike_402 ... ok
+   Doc-tests deep_app
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 3 targets failed:
+    `-p deep-app --test acceptance_1141`
+    `-p deep-app --test acceptance_34`
+    `-p deep-app --test hub_client`
+== end 2026-11-14 23:02:45 load { 43.69 93.17 91.10 } thermal 1
+cargo exit=101

@@ -1,0 +1,10 @@
+== 20:58:07 gh issue view 22 and 319 (before the judge)
+{"number":22}
+exit=0
+{"number":319}
+exit=0
+== 21:04:17 gh issue view 22 and 319 (after the judge)
+{"number":22}
+exit=0
+{"number":319}
+exit=0

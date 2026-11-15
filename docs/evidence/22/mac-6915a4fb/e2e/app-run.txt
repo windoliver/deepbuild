@@ -1,0 +1,26 @@
+World: home /private/tmp/dh27-ObKOOv/h; deep-app pid 92842; machine Mac15,12
+
+$ deep inbox    # before the batch, 2026-11-15T05:59:10.981Z
+Nothing needs you
+   screenshot 0-before-batch.png (window 16233)
+
+$ deep inbox    # after the 2026-11-15T06:00:00.000Z batch
+A1: which header colour for this checkout screen?  taste  repoa576  aa0c37ef-a1d9-4688-bb85-034b2a24060b  58s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKD86MWDCK4BEX8BKQ942
+B1: which header colour for this checkout screen?  taste  repoa576  511d0b07-93de-4a9b-90bf-dc8516458c88  58s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKDG7JC7TPJFHKV35F613
+D1: which header colour for this checkout screen?  taste  repoa576  e38d31a9-266f-4506-94fb-6918fc39a47d  58s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKDSEQDYHEJT1ZNBA36YS
+D2: which header colour for this checkout screen?  taste  repoa576  e38d31a9-266f-4506-94fb-6918fc39a47d  58s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKDX83FAXM8YG3WQZ4WMN
+D3: which header colour for this checkout screen?  taste  repoa576  e38d31a9-266f-4506-94fb-6918fc39a47d  58s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKE3T32EQKDC9P94NZW2C
+D4: which header colour for this checkout screen?  taste  repoa576  e38d31a9-266f-4506-94fb-6918fc39a47d  57s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKEA6BRJBWNJG0J0HBSSC
+D5: which header colour for this checkout screen?  taste  repoa576  e38d31a9-266f-4506-94fb-6918fc39a47d  57s  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKEGPZ4CSQHXDQQ587JKN
+This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  exception  repoa576  e38d31a9-266f-4506-94fb-6918fc39a47d  57s  If you don't answer: Leave them to their defaults, on Tue 17 Nov at 21:59  ask:01M7EWKEQ7EX50VVZCDC9T7TMR
+8 asks need you
+   screenshot 1-needs-you.png (window 16233)
+
+$ deep inbox answer ask:01M7EWKEQ7EX50VVZCDC9T7TMR together
+ask:01M7EWKEQ7EX50VVZCDC9T7TMR answered together; no decision saved (exit 0)
+
+$ deep inbox
+A1: which header colour for this checkout screen?  taste  repoa576  aa0c37ef-a1d9-4688-bb85-034b2a24060b  1m  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKD86MWDCK4BEX8BKQ942
+B1: which header colour for this checkout screen?  taste  repoa576  511d0b07-93de-4a9b-90bf-dc8516458c88  1m  If you don't answer: Green header, on Tue 17 Nov at 21:59  ask:01M7EWKDG7JC7TPJFHKV35F613
+2 asks need you
+   screenshot 2-after-bulk-answer.png (window 16233)

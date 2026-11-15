@@ -1,0 +1,93 @@
+== head b51d52cd3e4b7fc226e8934e01a0fbbb6e391b21
+
+===== tests/acceptance/1459/identifier.test.ts  start 20:42:19 load { 24.88 50.98 59.19 } thermal 0 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1459/identifier.test.ts (1 test) 729794ms
+   ✓ AC7 #1459.73dd3590 On the real app, an assistive client reads `accessibilityIdentifier` equal to the snapshot's `id` on a row. If the platform can't carry it, the issue reports BLOCKED, naming where it stopped (1)
+     ✓ AC7 each Needs you row's accessibilityIdentifier in the real app equals that row's id in the replica's snapshot of the same record 729668ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:42:20
+   Duration  730.11s (tests 100%)
+
+===== tests/acceptance/1459/identifier.test.ts exit=0
+
+===== tests/acceptance/1459/panel.test.ts  start 20:54:30 load { 20.01 37.67 51.37 } thermal 1 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1459/panel.test.ts (1 test) 21579ms
+   ✓ AC5 #1459.6759f060 A panel that calls `deepbuild.needs_you()` in the real app gets the open asks from the hub, with no fixture (1)
+     ✓ AC5 in the real app, the panel reads the hub's three open asks, each by its question, and no fixture 21462ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:54:31
+   Duration  21.75s (tests 100%)
+
+===== tests/acceptance/1459/panel.test.ts exit=0
+
+===== tests/acceptance/1172/rows.test.ts  start 20:54:53 load { 17.33 35.68 50.25 } thermal 1 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1172/rows.test.ts (2 tests) 90362ms
+   ✓ #1172 Needs you shows questions and presents their cards (2)
+     ✓ AC3 each row shows its ask's question, and a click on it presents that ask's question card in the window 50881ms
+     ✓ AC3 wrong program: a planted row that shows the ask's handle fails, naming the ask 39341ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:54:53
+   Duration  90.51s (tests 100%)
+
+===== tests/acceptance/1172/rows.test.ts exit=0
+
+===== tests/acceptance/1172/panel.test.ts  start 20:56:24 load { 7.28 27.69 45.72 } thermal 1 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1172/panel.test.ts (1 test) 20621ms
+   ✓ #1172 a plug-in panel draws in the app (1)
+     ✓ AC4 a bound value past its freshness draws in the look's muted role with its age, and a fresh one neither, on the window's pixels 20503ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:56:25
+   Duration  20.79s (tests 100%)
+
+===== tests/acceptance/1172/panel.test.ts exit=0
+
+===== tests/acceptance/1460/cli.test.ts  start 20:56:46 load { 6.44 25.85 44.53 } thermal 1 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1460/cli.test.ts (3 tests) 23416ms
+   ✓ AC1 #1460.2a9c7aec On a fixture, a row click, ⌘K, a notification click, `deep open` and a `deepbuild://` link for one session each land on one page with the same address. A planted route that opens a page without `open` fails, naming the caller (1)
+     ✓ AC1 #1460.2a9c7aec deep open session/<id> lands the running app on that session's page, the address a row click gives 333ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:56:46
+   Duration  23.54s (tests 100%)
+
+===== tests/acceptance/1460/cli.test.ts exit=0
+
+===== tests/acceptance/1460/redraft-ac3/ac3.test.ts  start 20:57:10 load { 5.76 24.45 43.59 } thermal 1 screen-lock flag 0
+
+ RUN  v5.0.5 ~/private/dbc-22n
+
+ ✓ tests/acceptance/1460/redraft-ac3/ac3.test.ts (2 tests) 47643ms
+   ✓ AC3 #1460.e8743dab `open` on an ask presents its card unarmed, and the record gains no answer. A planted `open` that writes an event fails, naming the event (2)
+     ✓ AC3 #1460.e8743dab deep open ask/<id> presents the ask's card in the running app, the hub's record gains no event from it, and the ask stays open 3285ms
+     ✓ AC3 #1460.e8743dab (wrong program) plant-open-writes-event, an open that writes an event, fails, naming the event 28025ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:57:10
+   Duration  47.75s (tests 100%)
+
+===== tests/acceptance/1460/redraft-ac3/ac3.test.ts exit=0

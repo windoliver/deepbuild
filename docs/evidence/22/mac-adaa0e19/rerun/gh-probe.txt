@@ -1,0 +1,10 @@
+== 00:41:08 gh issue view 22 and 319 (before the judge)
+{"number":22,"state":"OPEN"}
+exit=0
+{"number":319,"state":"CLOSED"}
+exit=0
+== 00:47:18 gh issue view 22 and 319 (after the judge)
+{"number":22,"state":"OPEN"}
+exit=0
+{"number":319,"state":"CLOSED"}
+exit=0
