@@ -141,11 +141,13 @@ struct Phases {
     o0: vec2<f32>,
     o1: vec2<f32>,
     w0: f32,
+    // The flow's velocity there, m/s, read once for everything that rides it.
+    v: vec2<f32>,
 };
 
 fn phases(x: vec2<f32>, t: f32) -> Phases {
     if params.flow_dims.z == 0u {
-        return Phases(vec2<f32>(0.0), vec2<f32>(0.0), 1.0);
+        return Phases(vec2<f32>(0.0), vec2<f32>(0.0), 1.0, vec2<f32>(0.0));
     }
     let v = flow_at(x);
     let c = params.flow[0].w;
@@ -154,9 +156,9 @@ fn phases(x: vec2<f32>, t: f32) -> Phases {
     let b = h - c * floor(h / c);
     if params.flow_dims.w == 1u {
         // The planted single phase: one offset that jumps back at every wrap.
-        return Phases(v * a, v * a, 1.0);
+        return Phases(v * a, v * a, 1.0, v);
     }
-    return Phases(v * a, v * b, 1.0 - abs(2.0 * a / c - 1.0));
+    return Phases(v * a, v * b, 1.0 - abs(2.0 * a / c - 1.0), v);
 }
 
 // Each wave's amplitude's share at a distance d from the shore: mix(near, 1, smoothstep(0, far,
@@ -671,11 +673,12 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
         // frayed and its body mottled by foam's texture riding the flow. The fray moves the edge
         // by at most 0.04 m/s and the ramp spans 0.06 either side, so water 0.1 m/s slower than
         // foam's speed stays clear and water 0.1 m/s faster is covered.
-        let v = flow_at(rest);
-        let tex = streaks(rest, pixel, ph, v);
-        let speed = length(v) + 0.08 * (tex - 0.5);
-        let fast = smoothstep(params.flow[1].x - 0.06, params.flow[1].x + 0.06, speed);
-        if fast > 0.0 {
+        // Water slower than foam's speed by more than the fray and the ramp reach takes none, so
+        // its streaks aren't read.
+        let speed = length(ph.v);
+        if speed > params.flow[1].x - 0.1 {
+            let tex = streaks(rest, pixel, ph, ph.v);
+            let fast = smoothstep(params.flow[1].x - 0.06, params.flow[1].x + 0.06, speed + 0.08 * (tex - 0.5));
             foam = max(foam, fast * (0.7 + 0.3 * tex));
         }
     }
