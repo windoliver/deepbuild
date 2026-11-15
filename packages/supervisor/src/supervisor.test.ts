@@ -179,3 +179,34 @@ test.skipIf(process.platform !== 'darwin')('a process killed with its supervisor
     for (const pid of left.filter(running)) try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ }
   }
 }, 60_000);
+
+// A refusal of a run's egress filter is kept as seen only once the record holds it (#2399): one whose append failed
+// is recorded at the run's next try, where a set that kept it anyway would leave the record without it for good.
+test('a filter refusal the record did not take is recorded at the next try', async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
+  dirs.push(dir);
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  let failed = 0;
+  const failing = new Proxy(record, {
+    get: (store, key) => (key === 'append'
+      ? (writer: never, event: { kind: string }) => (event.kind === 'sandbox.denied' && !failed++ ? Promise.reject(Error('the record is away')) : store.append(writer, event as never))
+      : Reflect.get(store, key)),
+  });
+  const sup = await openSupervisor({ record: failing, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+  try {
+    // Three plain requests to its own filter, one after another: each is answered 403, and the first's append fails.
+    const script = `const http = require('node:http'); const u = new URL(process.env.HTTPS_PROXY);
+      const once = () => new Promise((done) => http.get({ host: u.hostname, port: u.port, path: 'http://again.invalid/', headers: { host: 'again.invalid' }, agent: false }, (res) => { res.resume(); res.on('end', done); }));
+      (async () => { for (let i = 0; i < 3; i++) { await once(); await new Promise((done) => setTimeout(done, 300)); } })();`;
+    const started = await sup.start({ run: 'run:AGAIN', argv: [process.execPath, '-e', script], cwd: dir, grant: { run_as_you: true }, credentials: [{ env: 'API_KEY', value: 'not-a-secret', hosts: ['127.0.0.1:9'] }] });
+    expect(started.status).toBe('started');
+    await sup.wait('run:AGAIN');
+    const denied = (await record.read({ after: 0, kinds: ['sandbox.denied'] })).map((e) => e.data as { run: string; operation: string; target: string }).filter((d) => d.operation === 'egress-plain-http');
+    expect(failed, 'the filter reported the refusals').toBeGreaterThan(0);
+    expect(denied.map((d) => `${d.run} ${d.target}`), 'the second try is recorded, and the third adds nothing').toEqual([expect.stringMatching(/^run:AGAIN again\.invalid/)]);
+  } finally {
+    await sup.close();
+    await record.close();
+  }
+}, 60_000);

@@ -116,6 +116,9 @@ export type Plant =
   // #1106's: the stand-in's value in the stack's environment too, an environment that loads by value, a filter that
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
+  // #2399's: a supervisor that records no refusal of a run's egress filter, one per operation whatever the target, or
+  // keeps what it recorded without the run.
+  | 'egress-refusals-unrecorded' | 'egress-refusal-once-per-operation' | 'egress-refusals-seen-without-run'
   | 'runs-disk-bytes'
   // #148's: a sync that writes each file as it plans it, replaces from the plan you were shown, keeps a file's original
   // again before each write, renames without flushing the folder, writes entries unchecked against the agent's facts, and
@@ -340,6 +343,7 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'egress-refusals-unrecorded', 'egress-refusal-once-per-operation', 'egress-refusals-seen-without-run',
   'waiting-first', 'ask-from-notification', 'waiting-as-working',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
