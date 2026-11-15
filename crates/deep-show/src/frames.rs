@@ -402,6 +402,8 @@ impl<'a> Hub<'a> {
         };
         // #507: the timeline position the frame at this clock time shows.
         reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
+        // #1968: each text diff's tokens at t, for the film block.
+        let diffs = e.film.then(|| diff_report(&self.sched, evaluated));
         let drawing = if e.pixels || e.film || e.texts {
             drawing_of(&self.sched, evaluated).map(|p| match &document {
                 // #466: the look's boil on the frame's lines.
@@ -411,8 +413,6 @@ impl<'a> Hub<'a> {
         } else {
             None
         };
-        // #1968: each text diff's tokens at t, for the film block.
-        let diffs = e.film.then(|| diff_report(&self.sched, evaluated));
         // #499: each video image item's frame at t, and its picture for the snapshot.
         if let Some(d) = &document {
             let (video, pictures) = self.videos_at(d, t, false);
