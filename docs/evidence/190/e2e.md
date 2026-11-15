@@ -715,3 +715,8 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
     by the run at load 40–199, never answered; `docker info` returned 500 from its socket
     (`mac/docker-info-e44890825.txt`). Criteria 4 and 5 have no Mac result at this head: criterion 4's last is at
     34f30ffd5 and criterion 5's at f55dc2e5a.
+- **Merge of main 2c1c8cacc (edac8c5e9, 2026-11-14)**, after a third conflict: main's #533 adds the `append` command
+  and two read-region plants to deep-logic's `lib.rs` where this change adds `query`, `pack_check`, `claim` and its
+  three linker plants; both are kept. On this host (`acceptance-linux-edac8c5e9.txt`): 20 pass, ac07 among them
+  against the merge base 2c1c8cacc, and the same 4 are BLOCKED. The Mac runs at e44890825 are of the head before
+  this merge; ac04 and ac05 are queued there at the merged head.
