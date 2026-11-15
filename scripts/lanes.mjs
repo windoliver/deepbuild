@@ -592,6 +592,8 @@ timed.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelop
 slow.push('tests/acceptance/173/budgets.test.ts', 'tests/acceptance/173/envelope.test.ts');
 // #2070's tests each start their own hub, paseo daemon stand-in and agent stand-in.
 alone.push('tests/acceptance/2070/', 'tests/acceptance/2070-gaps/');
+// #1851's files start real hubs and Claude Code stand-ins, and time the waiter's wake against 2 s.
+alone.push('tests/acceptance/1851/');
 // #1725's tests each start their own hub with two agent stand-ins, and play deep-show run beside it.
 alone.push('tests/acceptance/1725/');
 // #55's AC13 is its blind redraft's since #2070's dispute, settled by the owner (tests/acceptance/55-redraft-ac13/DISPUTE.md).
@@ -717,8 +719,6 @@ byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/h
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
-// #1851's files start real hubs and Claude Code stand-ins, and time the waiter's wake against 2 s.
-alone.push('tests/acceptance/1851/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
