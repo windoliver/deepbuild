@@ -1,0 +1,158 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2074/lane-failure.test.ts` runs unleased
+
+ RUN  v5.0.5 <BASE>
+
+deep hub: claim:01M7EB3MBY3QSE40ZCNB2VV85S's checks did not start: can't read the index
+xdeep hub: claim:01M7EB3NP4D1VCH0MDZRFSRNB7's checks did not start: can't read the index
+xdeep hub: claim:01M7EB3P93GJGM7K2NHS8K4791's checks did not start: can't copy node_modules into the checkout
+x·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7EB3MBY3QSE40ZCNB2VV85S: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:125:111
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:133:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7EB3MBY3QSE40ZCNB2VV85S: the verdict names you as owner of the missing prerequisite: expected '{"reasons":["its checks did not start…' to match /\byou\b/
+
+- Expected:
+/\byou\b/
+
++ Received:
+"{\"reasons\":[\"its checks did not start: can't read the index\"],\"why\":[{\"reason\":\"checks_not_started\",\"text\":\"its checks did not start: can't read the index\"}]}"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:127:184
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:133:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7EB3MBY3QSE40ZCNB2VV85S: the judged stop's chat line reads BLOCKED: expected 'INCONCLUSIVE 0/0 · next: DeepBuild · …' to match /\bBLOCKED\b/
+
+- Expected:
+/\bBLOCKED\b/
+
++ Received:
+"INCONCLUSIVE 0/0 · next: DeepBuild · session/9d162061/01M7EB3MBY3QSE40ZCNB2VV85S"
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:134:144
+    132|   const o = await observed(h);
+    133|   blocked(o, "can't read the index");
+    134|   expect.soft([reply.message, reply.block, reply.context].filter(Boole…
+       |                                                                                                                                                ^
+    135|   const status = await h.status();
+    136|   expect.soft(status.claims.find((c) => c.claim === o.claim)?.verdict?…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7EB3MBY3QSE40ZCNB2VV85S: deep_status exposes BLOCKED from the record: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:136:140
+    134|   expect.soft([reply.message, reply.block, reply.context].filter(Boole…
+    135|   const status = await h.status();
+    136|   expect.soft(status.claims.find((c) => c.claim === o.claim)?.verdict?…
+       |                                                                                                                                            ^
+    137|   const items = o.all.filter((e) => e.kind === 'open_item.opened' && e…
+    138|   expect.soft(items.length, `${o.claim}: its cause has a recorded open…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7EB3MBY3QSE40ZCNB2VV85S: its cause has a recorded open item on its task: expected 0 to be greater than 0
+ ❯ tests/acceptance/2074/lane-failure.test.ts:138:91
+    136|   expect.soft(status.claims.find((c) => c.claim === o.claim)?.verdict?…
+    137|   const items = o.all.filter((e) => e.kind === 'open_item.opened' && e…
+    138|   expect.soft(items.length, `${o.claim}: its cause has a recorded open…
+       |                                                                                           ^
+    139|   const text = items.map((e) => String(e.data.text)).join('\n').replac…
+    140|   // Semantic actions, not an invented exact sentence. An error repeat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7EB3MBY3QSE40ZCNB2VV85S: the open item names the action/evidence that would close it, beyond repeating the error: expected '' to match /\b(?:rerun|re-run|retry|run again|un…/i
+
+- Expected:
+/\b(?:rerun|re-run|retry|run again|unblock|restore|resolve|repair|fix|clear|remove|provide|succeed|successful|needs?|requires?|waits? for)\b/i
+
++ Received:
+""
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:141:124
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC2 #2074.5acbc1c9 monitor watch ends after the stop has replied: the deferred claim is BLOCKED
+AssertionError: claim:01M7EB3NP4D1VCH0MDZRFSRNB7: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:125:111
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:152:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC2 #2074.5acbc1c9 monitor watch ends after the stop has replied: the deferred claim is BLOCKED
+AssertionError: claim:01M7EB3NP4D1VCH0MDZRFSRNB7: the verdict names you as owner of the missing prerequisite: expected '{"reasons":["its checks did not start…' to match /\byou\b/
+
+- Expected:
+/\byou\b/
+
++ Received:
+"{\"reasons\":[\"its checks did not start: can't read the index\"],\"why\":[{\"reason\":\"checks_not_started\",\"text\":\"its checks did not start: can't read the index\"}]}"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:127:184
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:152:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > scope: checkout copy failure after a real snapshot records BLOCKED with cause and owner
+AssertionError: claim:01M7EB3P93GJGM7K2NHS8K4791: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:125:111
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:157:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > scope: checkout copy failure after a real snapshot records BLOCKED with cause and owner
+AssertionError: claim:01M7EB3P93GJGM7K2NHS8K4791: the verdict names you as owner of the missing prerequisite: expected '{"reasons":["its checks did not start…' to match /\byou\b/
+
+- Expected:
+/\byou\b/
+
++ Received:
+"{\"reasons\":[\"its checks did not start: can't copy node_modules into the checkout\"],\"why\":[{\"reason\":\"checks_not_started\",\"text\":\"its checks did not start: can't copy node_modules into the checkout\"}]}"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:127:184
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:157:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  16:53:14
+   Duration  12.54s (transform 59%, tests 36%, import 4%)

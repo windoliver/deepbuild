@@ -918,7 +918,8 @@ impl World {
                     continue;
                 }
                 q.extend(fresh);
-                let n = q.len().min(most);
+                // A text control's one commit a step; a second waits for the next (#542).
+                let n = q.len().min(if r.ty == "text" { 1 } else { most });
                 taken.insert(&r.name, q.drain(..n).collect());
             }
         }
@@ -943,8 +944,16 @@ impl World {
         for e in &item.layout.entries {
             let at = e.offset as usize;
             match &e.read {
-                // A text commit's bytes come with its control kind (#542).
-                Read::Control if e.ty == "text" => {}
+                // #542: a text commit's `u32` length and its bytes, then zero bytes to the next
+                // multiple of 8; with no commit this step, a length of 0.
+                Read::Control if e.ty == "text" => {
+                    if let Some(x) = taken[e.name.as_str()].first() {
+                        let v = x.value.bytes();
+                        if matches!(x.value, Given::Text(_)) && v.len() <= e.size as usize {
+                            region[at..at + v.len()].copy_from_slice(&v);
+                        }
+                    }
+                }
                 // #540: a point control's entries packed, each its 248 B record and, after a box
                 // release holding unit keys, their tail, so a step walks them by its flags.
                 Read::Control if e.ty == "point" => {
@@ -961,10 +970,38 @@ impl World {
                         o += 8 + v.len();
                     }
                 }
+                // #542: a scroll's entries, each `i32 position, i32 delta`, the delta from the
+                // entry before it on the track, or from the control's default.
+                Read::Control if e.ty == "scroll" => {
+                    let list = &taken[e.name.as_str()];
+                    let all = self.track.get(&e.name).map_or(&[][..], Vec::as_slice);
+                    let from = match piece.limits.get(&e.name) {
+                        Some(crate::piece::Limit::Scroll { from, .. }) => *from,
+                        _ => 0,
+                    };
+                    let pos = |x: &Entry| match x.value {
+                        Given::Number(n) => n as i32,
+                        _ => from,
+                    };
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    for (j, x) in list.iter().enumerate() {
+                        let k = all
+                            .partition_point(|y| (y.t, y.player, y.seq) < (x.t, x.player, x.seq));
+                        let before = k.checked_sub(1).map_or(from, |k| pos(&all[k]));
+                        let o = at + 8 + 16 * j;
+                        region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
+                        region[o + 8..o + 12].copy_from_slice(&pos(x).to_le_bytes());
+                        region[o + 12..o + 16].copy_from_slice(&(pos(x) - before).to_le_bytes());
+                    }
+                }
                 Read::Control => {
                     // Each entry a u32 player, 4 zero bytes, then its value as the control's
                     // form lays it out; a value of another form leaves its bytes zero.
-                    let list = &taken[e.name.as_str()];
+                    // A string value (a choice's option) is no entry of a number's slot.
+                    let list: Vec<&Entry> = taken[e.name.as_str()]
+                        .iter()
+                        .filter(|x| !matches!(x.value, Given::Text(_)))
+                        .collect();
                     let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, x) in list.iter().enumerate() {

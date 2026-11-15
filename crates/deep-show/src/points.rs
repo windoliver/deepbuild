@@ -29,6 +29,9 @@ use crate::hub::Hub;
 pub struct Gesture {
     pub button: Option<String>,
     pub mods: [bool; 4],
+    /// #542: a scroll's unit is a wheel's line, and the scroll is a gesture's momentum tail.
+    pub line: bool,
+    pub momentum: bool,
 }
 
 pub fn gesture(v: &Value) -> Gesture {
@@ -48,6 +51,8 @@ pub fn gesture(v: &Value) -> Gesture {
             has(&["alt", "option"]),
             has(&["meta", "cmd"]),
         ],
+        line: v.get("unit").and_then(Value::as_str) == Some("line"),
+        momentum: v.get("momentum").and_then(Value::as_bool) == Some(true),
     }
 }
 

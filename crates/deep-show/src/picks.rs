@@ -622,6 +622,8 @@ impl Hub<'_> {
     /// Writes the panel's viewer state for its pick controls into `form`, a live view's: each
     /// control's hovered cell as its `hover`, and the focused row's outline, never a fill.
     pub(crate) fn viewer_into(&self, panel: &str, form: &mut Value) {
+        // #542: its text fields.
+        self.fields_into(panel, form);
         let Some(v) = self.scopes.get(panel).map(|s| &s.picks) else {
             return;
         };

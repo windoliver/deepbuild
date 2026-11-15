@@ -237,7 +237,6 @@ impl<'a> Hub<'a> {
             .ok()
     }
 
-    /// One frame of a document's session (`eval`).
     /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
     /// through its groups' warps at their values then, each sub-path flattened to its points.
     pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
@@ -267,7 +266,33 @@ impl<'a> Hub<'a> {
         }
     }
 
+    /// One frame of a document's session (`eval`). #542: a golden pins each view setting to its
+    /// declared default (Scope and input classes), so the frame leaves the session's view-class
+    /// values out, and the live session gets them back after.
     pub fn eval(&mut self, e: &Eval) -> Value {
+        let held = self.take_view(&e.doc);
+        if held.is_some() {
+            self.replay(&e.doc, self.now);
+        }
+        let reply = self.eval_frame(e);
+        if let Some(view) = held {
+            if let Some(s) = self.session_state.get_mut(&e.doc) {
+                s["view"] = view;
+            }
+            self.replay(&e.doc, self.now);
+        }
+        reply
+    }
+
+    /// The document's view-class session values, taken out; none when it holds none.
+    fn take_view(&mut self, doc: &str) -> Option<Value> {
+        let view = self.session_state.get_mut(doc)?.get_mut("view")?;
+        view.as_object()
+            .is_some_and(|m| !m.is_empty())
+            .then(|| view.take())
+    }
+
+    fn eval_frame(&mut self, e: &Eval) -> Value {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
         }

@@ -10,13 +10,15 @@ use crate::point::Point;
 /// An entry's value: a number, the row a pick wrote (Control: picks on rows and grid focus):
 /// its set's index in `rows` and its key, an integer key column's value and 0, a grid's
 /// `(cx, cy)` or a fed instancer's `(slot, gen)`, or a point control's press, move or release
-/// (Control: point).
+/// (Control: point), or a text control's committed bytes (Control: text). A scroll control's
+/// position is a number (Control: scroll).
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Given {
     Number(f64),
     Pick { set: u32, key: [i64; 2] },
     Point(Point),
+    Text(String),
 }
 
 impl From<f64> for Given {
@@ -33,6 +35,9 @@ impl Given {
         if v.get("phase").is_some() {
             return Point::parse(v).map(Given::Point);
         }
+        if let Some(t) = v.as_str() {
+            return Some(Given::Text(t.to_string()));
+        }
         let set = v.get("set")?.as_u64().filter(|s| *s < 8)? as u32;
         match v.get("key")?.as_array()?.as_slice() {
             [a, b] => Some(Given::Pick {
@@ -47,10 +52,12 @@ impl Given {
             Given::Number(n) => json!(n),
             Given::Pick { set, key } => json!({"set": set, "key": key}),
             Given::Point(p) => p.to_json(),
+            Given::Text(t) => json!(t),
         }
     }
     /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
-    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B), or a point's record (248 B).
+    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B), a point's record (248 B), or a text
+    /// commit's `u32` length and its bytes.
     pub fn bytes(&self) -> Vec<u8> {
         match self {
             Given::Number(n) => n.to_le_bytes().to_vec(),
@@ -62,6 +69,11 @@ impl Given {
                 b
             }
             Given::Point(p) => p.bytes().to_vec(),
+            Given::Text(t) => {
+                let mut b = (t.len() as u32).to_le_bytes().to_vec();
+                b.extend(t.as_bytes());
+                b
+            }
         }
     }
 }
