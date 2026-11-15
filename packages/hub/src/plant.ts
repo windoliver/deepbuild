@@ -51,6 +51,8 @@ export type Plant =
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
   // #70's: a hub that starts kept runs and terminals with no user scope of their own, in its service's cgroup.
   | 'kept-in-service-cgroup'
+  // #2199's: a `deep inbox` that shows each ask's options by their labels, never the IDs `deep inbox answer` takes.
+  | 'inbox-labels-only'
   // #1359's: a CLI whose `deep backup` runs before it checks its arguments for help, as the merge base's did.
   | 'dispatches-before-help'
   // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
@@ -297,7 +299,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
