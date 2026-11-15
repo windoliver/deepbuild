@@ -694,6 +694,10 @@ timed.push('tests/acceptance/225/ac6-budgets.test.ts');
 // its failsNaming can't pass (tests/acceptance/225-oracle-redraft-ac7/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/225-oracle-redraft-ac7/');
 byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
+// #225's first-draft criterion 5 builds its second machine in a rust image with no C++ compiler or libclang, which the
+// full build needs (tests/acceptance/225-redraft-ac5/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/225-redraft-ac5/');
+byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
