@@ -186,6 +186,12 @@ describe('promised checks through the hub', () => {
       expect(blocked[0]).toMatchObject({ promise: first.promise, cause: 'set_again', owner: 'service' });
       // Its one ask is raised, not refused and dropped (#1829).
       expect(blocked[0]!.ask).toMatch(/^ask:/);
+      // It carries its own two-day deadline and default, so no settings decide whether it's raised.
+      const asked = events(root, 'ask.created');
+      expect(asked).toHaveLength(1);
+      expect(asked[0]).toMatchObject({ kind: 'choice', recommended: 'drop', default: 'drop' });
+      expect(Number(asked[0]!.deadline) - Date.now()).toBeGreaterThan(2 * 86_400_000 - 120_000);
+      expect(Number(asked[0]!.deadline) - Date.now()).toBeLessThanOrEqual(2 * 86_400_000);
       await sleep(3000);
       expect(events(root, 'promise.set')).toHaveLength(3);
       expect(events(root, 'promise.due')).toHaveLength(3);

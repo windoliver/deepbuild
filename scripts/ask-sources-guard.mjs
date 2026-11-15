@@ -104,6 +104,13 @@ const assigns = new Map();
 const names = new Map();
 const fields = new Map();
 const renamed = new Map();
+const patterns = new Map();
+/** The variables and properties a destructuring pattern or a loop sets, each with why its value can't be read. */
+const leaves = (n, why) => ts.isArrayLiteralExpression(n) ? n.elements.flatMap((e) => leaves(e, why))
+  : ts.isObjectLiteralExpression(n) ? n.properties.flatMap((p) => ts.isShorthandPropertyAssignment(p) ? [{ target: p, why }] : ts.isPropertyAssignment(p) ? leaves(p.initializer, why) : ts.isSpreadAssignment(p) ? leaves(p.expression, why) : [])
+  : ts.isSpreadElement(n) ? leaves(n.expression, why)
+  : ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken ? leaves(n.left, why)
+  : [{ target: n, why }];
 const index = (node) => {
   if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
     // A super(...) call is a call of the class it extends.
@@ -115,6 +122,11 @@ const index = (node) => {
   } else if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
     const name = nameOf(node.left);
     if (name) push(assigns, name, node);
+    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken && (ts.isArrayLiteralExpression(node.left) || ts.isObjectLiteralExpression(node.left))) {
+      for (const leaf of leaves(node.left, 'set by a destructuring assignment')) push(patterns, nameOf(leaf.target.name ?? leaf.target), leaf);
+    }
+  } else if (ts.isForInOrOfStatement(node) && !ts.isVariableDeclarationList(node.initializer)) {
+    for (const leaf of leaves(node.initializer, 'set by a loop')) push(patterns, nameOf(leaf.target.name ?? leaf.target), leaf);
   } else if (ts.isPropertyDeclaration(node) && ts.isIdentifier(node.name)) {
     push(fields, node.name.text, node);
   } else if ((ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) && node.propertyName) {
@@ -175,17 +187,14 @@ function template(expr, seen) {
 }
 /** What each assignment to a variable or property sets it to. */
 const targetOf = (left) => ts.isElementAccessExpression(left) ? checker.getTypeAtLocation(left.expression).getProperty(nameOf(left) ?? '') : symbolOf(left);
-/** Whether an identifier is set by a destructuring assignment, `[x] = ...` or `({ x } = ...)`. */
-const destructured = (id) => {
-  let n = id;
-  while (ts.isArrayLiteralExpression(n.parent) || ts.isObjectLiteralExpression(n.parent) || ts.isSpreadElement(n.parent) || ts.isShorthandPropertyAssignment(n.parent) || (ts.isPropertyAssignment(n.parent) && n.parent.initializer === n)) n = n.parent;
-  return n !== id && ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && n.parent.left === n;
-};
+// `=` and the logical assignments set the value to their right side or keep it; any other assignment computes it.
+const SETS = [ts.SyntaxKind.EqualsToken, ts.SyntaxKind.QuestionQuestionEqualsToken, ts.SyntaxKind.BarBarEqualsToken, ts.SyntaxKind.AmpersandAmpersandEqualsToken];
 /** What each assignment to a variable or property sets it to; a compound or destructuring one is unread. */
 const assigned = (symbol, seen) => [
   ...(assigns.get(symbol.name) ?? []).filter((a) => targetOf(a.left) === symbol)
-    .flatMap((a) => a.operatorToken.kind === ts.SyntaxKind.EqualsToken ? resolve(a.right, seen) : unread(a, `can't read the source ${a.left.getText()} after ${a.getText()}`)),
-  ...(names.get(symbol.name) ?? []).filter((id) => destructured(id) && symbolOf(id) === symbol).flatMap((id) => unread(id, `can't read the source ${id.text}, set by a destructuring assignment`)),
+    .flatMap((a) => SETS.includes(a.operatorToken.kind) ? resolve(a.right, seen) : unread(a, `can't read the source ${a.left.getText()} after ${a.getText()}`)),
+  ...(patterns.get(symbol.name) ?? []).filter(({ target }) => (ts.isShorthandPropertyAssignment(target) ? checker.getShorthandAssignmentValueSymbol(target) : targetOf(target)) === symbol)
+    .flatMap(({ target, why }) => unread(target, `can't read the source ${target.getText()}, ${why}`)),
 ];
 /** Whether an identifier is called, declared, or only named in a type, rather than passed on as a value. */
 const notValue = (id, fn) => {
@@ -209,15 +218,18 @@ function fromCallers(param, seen) {
   const own = ts.isPropertyAssignment(holder) ? undefined : holder.name && symbolOf(holder.name);
   const exported = own ? [...(renamed.get(name) ?? []), ...(ts.getCombinedModifierFlags(holder) & ts.ModifierFlags.Default ? ['default'] : [])] : [];
   const aliases = [name, ...exported, ...(exported.includes('default') ? renamed.get('default') ?? [] : [])];
-  for (const call of aliases.flatMap((n) => calls.get(n) ?? [])) {
+  // A constructor is followed to every `new` and super call that reaches it, a subclass's included, by any name.
+  const ctor = ts.isConstructorDeclaration(fn);
+  const callers = ctor ? [...calls.values()].flat().filter((c) => ts.isNewExpression(c) || c.expression.kind === ts.SyntaxKind.SuperKeyword) : aliases.flatMap((n) => calls.get(n) ?? []);
+  for (const call of callers) {
     const signature = checker.getResolvedSignature(call);
     const declared = signature?.declaration;
     const member = signature?.parameters[i]?.name === param.name.text;
     if (own ? declared !== fn && !(declared && !declared.body && member) : !member) continue;
-    out.push(...argument(call, call.arguments, i, seen));
+    out.push(...argument(call, call.arguments ?? [], i, seen));
   }
   // A class taken as a value is left to its type: its constructor's sources are read only from `new` and super calls.
-  if (own && !ts.isConstructorDeclaration(fn)) {
+  if (own && !ctor) {
     const passed = aliases.flatMap((n) => names.get(n) ?? []).find((id) => symbolOf(id) === own && !notValue(id, holder));
     if (passed) out.push(...unread(passed, `can't read the sources ${name} is given: it's passed on as a value here`));
   }

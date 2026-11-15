@@ -135,3 +135,26 @@ test('mutations, compound and destructuring assignments, constant keys, construc
     'FAIL ask source: packages/hub/src/y.ts:2: default.no has no row in packages/asks/sources.json (raised at packages/hub/src/x.ts:12)',
   ]);
 });
+
+test('a subclass\'s construction, defaults and properties in a pattern, a loop and logical assignments reach the source or fail', () => {
+  const { code, fails } = run([
+    'class C { constructor(readonly src: string) {} go() { return asks.raise({}, this.src, {}); } }',
+    'class D extends C {} void new C(\'a.yes\'); void new D(\'sub.no\');',
+    'class E { constructor(readonly src: string) {} go() { return asks.raise({}, this.src, {}); } } void new E;',
+    'let t = \'a.yes\'; [t = \'a.yes\'] = [\'dflt.no\']; void asks.raise({}, t, {});',
+    'const req = { source: \'a.yes\' }; [req.source] = [\'pat.no\']; void asks.raise({}, req.source, {});',
+    'let o = \'a.yes\'; ({ o } = { o: \'short.no\' }); void asks.raise({}, o, {});',
+    'let u = \'a.yes\'; for (u of [\'loop.no\']) void asks.raise({}, u, {});',
+    'declare let m: string | undefined; m ??= \'nn.no\'; void asks.raise({}, m, {});',
+  ]);
+  assert.equal(code, 1);
+  assert.deepEqual(fails, [
+    'FAIL ask source: packages/hub/src/x.ts:10: can\'t read the source u, set by a loop',
+    'FAIL ask source: packages/hub/src/x.ts:11: nn.no has no row in packages/asks/sources.json',
+    'FAIL ask source: packages/hub/src/x.ts:5: sub.no has no row in packages/asks/sources.json (raised at packages/hub/src/x.ts:4)',
+    'FAIL ask source: packages/hub/src/x.ts:6: can\'t read the source this.src',
+    'FAIL ask source: packages/hub/src/x.ts:7: can\'t read the source t, set by a destructuring assignment',
+    'FAIL ask source: packages/hub/src/x.ts:8: can\'t read the source req.source, set by a destructuring assignment',
+    'FAIL ask source: packages/hub/src/x.ts:9: can\'t read the source o, set by a destructuring assignment',
+  ]);
+});
