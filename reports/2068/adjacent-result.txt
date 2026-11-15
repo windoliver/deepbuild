@@ -1,0 +1,16 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ✓ packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours, ahead of the tool call that follows it 850ms
+ ✓ packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours when no hook follows it 3787ms
+ ✓ packages/hub/test/queued.test.ts > messages typed while the agent works > records a queued message as your prompt at the next hook, once, whether the queue or its UserPromptSubmit shows it first 1549ms
+ ✓ packages/hub/test/queued.test.ts > a message typed while the agent works > is acknowledged at a later call, never in place of a guard's block on the next one 1066ms
+ ✓ packages/hub/test/github-deadline.test.ts > cancels the real gh token child at the caller deadline without reading credentials 234ms
+ ✓ packages/hub/test/github-deadline.test.ts > cancels an unfinished JSON body with the same signal that reached the headers 110ms
+ ✓ packages/hub/test/github-source.test.ts > readIssue > reads every page of an issue's comments: a second page's comment is a reading too 5ms
+
+ Test Files  4 passed (4)
+      Tests  7 passed (7)
+   Start at  12:44:13
+   Duration  8.64s (tests 97%, transform 1%, import 1%)
+

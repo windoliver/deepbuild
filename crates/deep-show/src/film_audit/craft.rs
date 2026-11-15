@@ -123,16 +123,7 @@ struct Ctx {
 }
 
 fn kind_name(k: &Kind) -> String {
-    match k {
-        Kind::Cut => "cut".into(),
-        Kind::CrossFade => "cross_fade".into(),
-        Kind::Dip => "dip".into(),
-        Kind::Wipe { .. } => "wipe".into(),
-        Kind::Push { .. } => "push".into(),
-        Kind::ZoomThrough { .. } => "zoom_through".into(),
-        Kind::Whip { .. } => "whip".into(),
-        Kind::Other(s) => s.clone(),
-    }
+    k.name().to_string()
 }
 
 /// A time a brief writes: seconds as a number, or `"<n>s"` / `"<n>ms"`.

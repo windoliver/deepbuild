@@ -1,0 +1,142 @@
+# #2497 acceptance tests: the one run on the base
+
+Base a12be6c8c ("Merge pull request #2525 ..."; no implementation), 2026-11-14 21:20:38-21:34:06 UTC, Node 24.22.2,
+cargo 1.99.1. Run once from the checkout through the machine's throttle, whose one build slot came after 13 min 21 s
+in its queue, and the lease (unleased here: no deep CLI), at low priority; the suite itself took 6.5 s. target/ held
+deep-marks-render's lib tests from one `cargo test -p deep-marks-render --lib --locked --no-run` at the base just
+before (745 crates compiled into a new target/ in 2 min 49 s, after 4 min in the throttle's queue). The output below
+is the run's, whole; only the checkout's path is replaced, by <checkout>.
+
+$ export PATH=/opt/homebrew/opt/rustup/bin:$PATH
+$ git status --porcelain     # before the run
+?? tests/acceptance/2497/
+$ node scripts/throttle.mjs build --wait 60 -- scripts/lease nice -n 10 env CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node --test --test-reporter=spec tests/acceptance/2497/vello-cpu.test.mjs
+
+AC1 (#2497.aa0d6f96) FAILS, for the issue's reason, in 1.2 s: `cargo test -p deep-marks-render --lib --locked` exits
+101. Of the lib's 2 tests, gpu::tests::the_named_versions_are_the_locked_ones fails with the issue's assertion,
+`left: Some("0.0.8")`, `right: Some("0.3.0")`: its reader takes Cargo.lock's first vello_cpu, 0.0.8.
+
+AC2 (#2497.b8e58294) FAILS, for the issue's reason, in 5.3 s: cargo tree finds deep-marks-render resolving vello_cpu
+0.3.0 alone; with VELLO_CPU set to "0.0.8" (deep-marks-render recompiled, 4.40 s), the issue's test reads ok and
+cargo test exits 0. The reader takes the lockfile's first vello_cpu, 0.0.8, which is the planted constant, so the
+test accepts a version the crate doesn't resolve. raster.rs came back byte for byte, and git status after the run
+is as before.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `nice -n 10 env CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node --test --test-reporter=spec tests/acceptance/2497/vello-cpu.test.mjs` runs unleased
+✖ #2497.aa0d6f96 `cargo test -p deep-marks-render --lib` passes on main (1177.397334ms)
+✖ #2497.b8e58294 With `VELLO_CPU` set to a version the crate doesn't resolve, the test fails naming both versions (5284.276166ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6536.839292
+
+✖ failing tests:
+
+test at tests/acceptance/2497/vello-cpu.test.mjs:57:1
+✖ #2497.aa0d6f96 `cargo test -p deep-marks-render --lib` passes on main (1177.397334ms)
+  AssertionError [ERR_ASSERTION]: cargo test -p deep-marks-render --lib --locked fails:
+  exit 101
+  --- stdout
+  
+  running 2 tests
+  test arrays::tests::a_set_reading_logic_arrays_is_checked_as_far_as_the_document_fixes_it ... ok
+  test gpu::tests::the_named_versions_are_the_locked_ones ... FAILED
+  
+  failures:
+  
+  ---- gpu::tests::the_named_versions_are_the_locked_ones stdout ----
+  
+  thread 'gpu::tests::the_named_versions_are_the_locked_ones' (21121613) panicked at crates/deep-marks-render/src/gpu.rs:563:9:
+  assertion `left == right` failed
+    left: Some("0.0.8")
+   right: Some("0.3.0")
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  
+  
+  failures:
+      gpu::tests::the_named_versions_are_the_locked_ones
+  
+  test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  --- stderr, last 15 lines
+       |
+  1974 | pub struct RelocatableCode {
+       |            --------------- field in this struct
+  ...
+  1985 |     machine_disassembly: Option<String>,
+       |     ^^^^^^^^^^^^^^^^^^^
+       |
+       = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+  
+  warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+      Finished `test` profile [unoptimized] target(s) in 0.84s
+  warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+  note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+       Running unittests src/lib.rs (target/debug/deps/deep_marks_render-45501d78a5f09b03)
+  error: test failed, to rerun pass `-p deep-marks-render --lib`
+  
+  101 !== 0
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2497/vello-cpu.test.mjs:61:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 101,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2497/vello-cpu.test.mjs:67:1
+✖ #2497.b8e58294 With `VELLO_CPU` set to a version the crate doesn't resolve, the test fails naming both versions (5284.276166ms)
+  AssertionError [ERR_ASSERTION]: with VELLO_CPU = "0.0.8", a vello_cpu deep-marks-render doesn't resolve (it resolves 0.3.0), gpu::tests::the_named_versions_are_the_locked_ones reads ok, so it accepts a version the crate doesn't resolve:
+  exit 0
+  --- stdout
+  
+  running 1 test
+  test gpu::tests::the_named_versions_are_the_locked_ones ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+  --- stderr, last 15 lines
+       |
+  1974 | pub struct RelocatableCode {
+       |            --------------- field in this struct
+  ...
+  1985 |     machine_disassembly: Option<String>,
+       |     ^^^^^^^^^^^^^^^^^^^
+       |
+       = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+  
+  warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+     Compiling deep-marks-render v0.0.0 (<checkout>/crates/deep-marks-render)
+      Finished `test` profile [unoptimized] target(s) in 4.40s
+  warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+  note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+       Running unittests src/lib.rs (target/debug/deps/deep_marks_render-45501d78a5f09b03)
+  
+  'ok' !== 'FAILED'
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2497/vello-cpu.test.mjs:106:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'ok',
+    expected: 'FAILED',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 (ended 2026-11-14T21:34:06Z)
+$ git status --porcelain     # after the run
+?? tests/acceptance/2497/

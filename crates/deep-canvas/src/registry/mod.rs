@@ -162,6 +162,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("vector", "vector"),
     // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
     ("graph", "graph"),
+    // #533: the logic item keeps the logic module's name, as the cell grid does.
+    ("logic", "logic"),
     // R1's mark sets, scales and axes are the data module's, which marks2d draws.
     ("marks", "data"),
     ("axis", "data"),
@@ -635,7 +637,72 @@ pub struct Check {
     /// verdict judges it; its input then gets the assets the document's items name by hash under
     /// `assets`, each hash's bytes in base64.
     pub report: Option<ReportRun>,
+    /// A check that reads pixels (#1938): how many draws a checked time takes (the time, then
+    /// each next frame), and its run on the frames the host drew, in place of `report`. Its
+    /// result holds on the machine that drew them.
+    pub frames: Option<(u8, FramesRun)>,
 }
+
+/// One frame a host drew for a check that reads pixels (#1938), at the document's size, as
+/// render-back draws it: rows top-down.
+#[derive(Clone, Debug, Default)]
+pub struct Frame {
+    pub t: i64,
+    pub size: [u32; 2],
+    /// The linear image the output pass reads, before exposure: RGBA per px.
+    pub linear: Vec<f32>,
+    /// The exposure it was drawn at, a scale on `linear`.
+    pub exposure: f64,
+    /// The frame as shown: straight RGBA8, sRGB-encoded.
+    pub rgba: Vec<u8>,
+    /// The object-ID pass: each px's pick, 0 where no surface drew, and the item each pick is.
+    pub ids: Vec<u32>,
+    pub picks: BTreeMap<u32, String>,
+    /// The look's roles it was drawn in, sRGB.
+    pub roles: BTreeMap<String, [u8; 3]>,
+    /// #2513: the light of its px reduced on the GPU that drew it, which render.exposure reads in
+    /// place of `linear`, then left empty: a few KB cross to the CPU, never its px.
+    pub reduce: Option<Reduce>,
+}
+
+/// What render.exposure asks of a frame's px (#2513): those whose pick is one of `picks`
+/// (sorted; `None`, every px), each px's linear RGB times `exposure`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LightQuery {
+    pub picks: Option<Vec<u32>>,
+    pub exposure: f64,
+    /// A px is over when its brightest exposed channel is above `white`, under when below `black`.
+    pub white: f64,
+    pub black: f64,
+    /// Its luminance, `weights` over its exposed RGB, is floored at `floor` before its log2.
+    pub weights: [f64; 3],
+    pub floor: f64,
+}
+
+/// The px a [`LightQuery`] read, those over and under, and the sum of their luminances' log2.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LightSums {
+    pub px: u64,
+    pub over: u64,
+    pub under: u64,
+    pub log2: f64,
+}
+
+/// What a host's reduction runs: a query in, its sums out.
+pub type Reducing = dyn Fn(&LightQuery) -> Option<LightSums> + Send + Sync;
+
+/// A host's reduction of one frame it drew (#2513), run on the GPU that drew it.
+#[derive(Clone)]
+pub struct Reduce(pub std::sync::Arc<Reducing>);
+
+impl std::fmt::Debug for Reduce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reduce")
+    }
+}
+
+/// A pixel check's run: the lowered document, the check input and the frames drawn for it.
+pub type FramesRun = fn(&Value, &Value, &[Frame]) -> Report;
 
 /// A registered check kind's run over a document, given the check input that named it: each
 /// raised issue with the item it names.
@@ -1075,7 +1142,17 @@ impl Registrar {
             run,
             reads: Vec::new(),
             report: None,
+            frames: None,
         });
+        self
+    }
+
+    /// The last check registered reads pixels (#1938): `draws` frames a checked time, which the
+    /// host draws and hands to `run`.
+    pub fn check_frames(&mut self, draws: u8, run: FramesRun) -> &mut Self {
+        if let Some(last) = self.checks.last_mut() {
+            last.frames = Some((draws, run));
+        }
         self
     }
 
@@ -1134,6 +1211,9 @@ pub enum Fault {
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
+    /// Hashes each implementation's version into its interface's digest, so a patch release of
+    /// a bit, canonical implementation changes it (#533).
+    DigestCoversVersion,
     /// Opens `ease@1` with its entries renumbered, so a key's content key changes (#490).
     EaseRenumbered,
     /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
@@ -1647,6 +1727,10 @@ impl Sealed {
     /// The determinism class of what a check reads: the least exact of its reads' writers', and
     /// `exact` for one that reads only the lowered document (#411).
     pub fn check_determinism(&self, check: &Check) -> &'static str {
+        // #1938: pixels a GPU rasterized are same machine.
+        if check.frames.is_some() {
+            return "same_machine";
+        }
         let rank = |c: &str| CLASSES.iter().position(|x| *x == c).unwrap_or(0);
         check
             .reads
@@ -2924,6 +3008,15 @@ impl Registry {
             .collect();
         for (name, r) in &shapes {
             for c in &r.checks {
+                // #1938: pixels a GPU rasterized never hold on any machine.
+                if c.frames.is_some() && c.machines == "any" {
+                    return Err(SealError::new(
+                        "not_exact",
+                        &[name],
+                        &[],
+                        format!("check `{}` of `{name}` says machines any but reads pixels, which are same machine", c.kind),
+                    ));
+                }
                 for read in &c.reads {
                     let Some(class) = class_of.get(read.as_str()) else {
                         return Err(SealError::new(
@@ -3105,20 +3198,25 @@ impl Registry {
         ns: &mut u64,
     ) -> Result<(String, Option<SealedInterface>), Box<SealError>> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
-        // The planted digest that also covers the implementation's pins (#238).
+        // The planted digests that also cover the implementation's pins (#238) or its version
+        // (#533): the field each covers.
+        let covered = match self.fault {
+            Some(Fault::DigestCoversPins) => Some("pins"),
+            Some(Fault::DigestCoversVersion) => Some("version"),
+            _ => None,
+        };
         let pinned = |digest: String, m: &Manifest| -> Result<String, CanonError> {
-            if self.fault != Some(Fault::DigestCoversPins) {
+            let Some(field) = covered else {
                 return Ok(digest);
-            }
-            d1(&json!({"shapes": digest, "pins": m.implementation.to_json()["pins"]}))
+            };
+            d1(&json!({"shapes": digest, field: m.implementation.to_json()[field]}))
         };
         let (digest, mut listed) = module_shapes(shapes, lists, private).map_err(bad)?;
         let digest = pinned(digest, m).map_err(bad)?;
-        let covers = self.fault == Some(Fault::DigestCoversPins);
-        if covers {
+        if let Some(field) = covered {
             listed.insert(
-                "pins".into(),
-                d1(&m.implementation.to_json()["pins"]).map_err(bad)?,
+                field.into(),
+                d1(&m.implementation.to_json()[field]).map_err(bad)?,
             );
         }
         let started = self.clock.map(|c| c());
@@ -3126,16 +3224,21 @@ impl Registry {
         let reference = declared.map_or(&m.implementation.name, |i| {
             &i.reference.manifest.implementation.name
         });
-        if let Some(i) = declared.filter(|_| *reference != m.implementation.name) {
+        // Another implementation, or another release of the reference, hashes to its digest.
+        let other = |i: &&Interface| {
+            let r = &i.reference.manifest.implementation;
+            (&r.name, r.version) != (&m.implementation.name, m.implementation.version)
+        };
+        if let Some(i) = declared.filter(other) {
             let mut r = Registrar::default();
             (i.reference.register)(&mut r);
             let own = own_lists(&r);
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
-            if covers {
-                let pins =
-                    d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
-                want_listed.insert("pins".into(), pins);
+            if let Some(field) = covered {
+                let theirs =
+                    d1(&i.reference.manifest.implementation.to_json()[field]).map_err(bad)?;
+                want_listed.insert(field.into(), theirs);
             }
             if want != digest {
                 let differs = want_listed
@@ -3497,6 +3600,9 @@ fn module_shapes(
             let mut v = json!({"codes": c.codes, "kind": c.kind, "machines": c.machines});
             if !c.reads.is_empty() {
                 v["reads"] = json!(c.reads);
+            }
+            if let Some((draws, _)) = c.frames {
+                v["frames"] = json!(draws);
             }
             v
         })

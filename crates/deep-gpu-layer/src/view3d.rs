@@ -948,7 +948,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     for n in named.values_mut() {
         n.look.reduced_motion = reduced_motion;
     }
-    let timeline = crate::regions::Timeline::of(&args.doc, |n| named.get(n).map(|x| &x.json))?;
+    let mut timeline = crate::regions::Timeline::of(&args.doc, |n| named.get(n).map(|x| &x.json))?;
+    // #466: each operator transition's pass, checked and its reveal placed, before any frame.
+    let by_progress = app.planted == Some(Planted::MosaicRevealByProgress);
+    let op_passes = crate::op_transition::passes(call, &args.doc, timeline.as_mut(), by_progress)?;
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
     let packs = install(&args.packs)?;
@@ -1289,7 +1292,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             };
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423), and its videos' frames at t there (#503).
-            let (texels, made) = crate::textures::prepare(app, &scene, &map_paths)?;
+            let (texels, made) = crate::textures::prepare(app, &composed, &scene, &map_paths)?;
             scene.texels = videos.at(app, &composed, n, &scene, texels)?;
             videos.clouds(app, &fx, &scene)?;
             // Over a window's flat page the view shows the page where nothing draws, so what it
@@ -1964,7 +1967,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 "settling": settling_now && drawn_samples < looks.export,
             });
             // #462: the frame mixed from its looks' renders by their coverage, on the device.
-            if let (Some(tl), Some(sides), Some(bytes)) = (&timeline, &sides, drawn.bytes.as_mut())
+            let operator = timeline
+                .as_ref()
+                .and_then(|tl| tl.operator_at(t))
+                .and_then(|(w, p)| Some((op_passes.get(&w.id)?, p)));
+            if let (Some((pass, p)), Some(sides), Some(bytes)) =
+                (operator, &sides, drawn.bytes.as_mut())
+            {
+                // #466: the pass over the outgoing side's finished render and the incoming one's.
+                let incoming = sides
+                    .get(1)
+                    .and_then(|s| others.iter().find(|(k, _)| k.as_deref() == s.look))
+                    .map(|(_, b)| b.clone())
+                    .unwrap_or_else(|| bytes.clone());
+                *bytes = crate::op_transition::draw(pass, bytes, &incoming, p, size)?;
+            } else if let (Some(tl), Some(sides), Some(bytes)) =
+                (&timeline, &sides, drawn.bytes.as_mut())
             {
                 if !others.is_empty() {
                     let seen = crate::regions::Seen::Camera(scene.camera.clone());
