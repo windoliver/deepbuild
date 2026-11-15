@@ -815,3 +815,9 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   - ac10 2 of 2 (`mac/ac10-b88135a36.txt`, `mac/ac10-gate-b88135a36.txt`), no load wait by the owner's choice: load
     49.7 at its start and 39.7 at its end, thermal state 1. Its quiet-Mac pass stays the one at e44890825.
     Criterion 10.
+- **Merge of main 291d63af6 (ac42c15b1, 2026-11-14)**, after a fourth conflict, in the sandbox card alone: main's #223
+  adds `streams@1` to the card's line on data layouts where this change adds its line on the linker; both are kept,
+  and `cards` passes. Main's side changes no file of deep-logic and none of the linker; in deep-canvas-sandbox it
+  changes `src/layouts.rs` and `layouts/judged.json`. On this host (`acceptance-linux-ac42c15b1.txt`): 20 pass, ac07
+  among them against the merge base 291d63af6, and the same 4 are BLOCKED; `cargo test --locked -p deep-logic -p
+  deep-canvas-sandbox`: 27 passed, 0 failed. The Mac run at b88135a36 is of the head before this merge.
