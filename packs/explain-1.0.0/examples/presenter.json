@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "Points from the talk",
+  "description": "Points from the talk: explain@1's presenter.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "6s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.presenter@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "p1",
+            "kind": "fade_in",
+            "text": "Measure first",
+            "span": "0.5s",
+            "sub": "then guess"
+          },
+          {
+            "id": "p2",
+            "kind": "fade_in",
+            "text": "Change a thing",
+            "span": "0.5s"
+          },
+          {
+            "id": "p3",
+            "kind": "fade_in",
+            "text": "Write it down",
+            "span": "0.5s",
+            "sub": "the record wins"
+          },
+          {
+            "id": "p4",
+            "kind": "fade_in",
+            "text": "Questions?",
+            "span": "0.5s",
+            "data": {
+              "section": true
+            }
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}
