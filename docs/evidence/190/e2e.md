@@ -720,3 +720,17 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   three linker plants; both are kept. On this host (`acceptance-linux-edac8c5e9.txt`): 20 pass, ac07 among them
   against the merge base 2c1c8cacc, and the same 4 are BLOCKED. The Mac runs at e44890825 are of the head before
   this merge; ac04 and ac05 are queued there at the merged head.
+- **`node scripts/affected.mjs` at 4b10b58f1** (2026-11-14, Linux arm64, a cold `target/debug`, an isolated HOME so
+  the run had its own throttle table; `affected-linux-4b10b58f1.txt`):
+  `FAIL affected: 510 new, 48 already failing on main, 122 inconclusive or blocked, 0 listed skips, 910 passed, in
+  3791 s at load 9`. WIDE: no line. INCONCLUSIVE: 33 timed files and 9 slow files were not run, and 50 tests read
+  INCONCLUSIVE (#1116 and #1874's Mac-only windows, skips with no note in #313 and #1348). #190's own tests: none
+  fails; ac04's Mac leg, ac05 and ac10's two read BLOCKED, as in the suite run.
+  - In files this change adds or edits: `deps` names `tests/acceptance/190/wat/Cargo.toml`'s `wasmparser` and `wat`
+    as not in `scripts/repo-rules.json` (main's `tests/acceptance/533/wat` reads the same); `size` names deep-logic's
+    `lib.rs` (1648 lines; 1614 at the merge base) and `piece.rs` (2003; 1931), both over 1500 at the merge base
+    already. `fmt` reports the merge base's own hunk counts in `lib.rs` (5) and `piece.rs` (12) and none in the files
+    this change adds. `clippy`'s 4 findings in deep-logic are in `module.rs`, `piece.rs` and `world.rs`.
+  - The other new lines are in files this change doesn't touch: about 390 lint lines (fmt, size, deps, vendor, code,
+    color) and about 110 tests. Not compared with main in this run. Several read as the isolated HOME's doing (`git
+    commit` failing in fixtures, `cargo-fmt is not installed`), which makes this run a weaker reading for them.
