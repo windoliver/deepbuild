@@ -597,6 +597,23 @@ pub fn draw(
     )
 }
 
+/// #463: the view depth of the frame the session drew last, read back alone: what a look region's
+/// coverage reads, without the frame's other targets.
+pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
+    if app.backend == Backend::Noop {
+        return Ok(None);
+    }
+    app.worker
+        .call(move |state| -> Result<Option<Vec<u8>>, String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let shared = lock(&s.shared);
+            let r = shared.renderer.as_ref().ok_or("no renderer")?;
+            Ok(r.read_view_depth(&device))
+        })
+        .map_err(|e| refused("render_failed", e))
+}
+
 /// [`draw`] on `on`.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_on(
