@@ -1,0 +1,75 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 (detached, already installed and built), with nothing changed but
+this folder. November 14, 2026, 08:17 PST. Node 24.22.0, macOS, 18 cores, on a Mac shared with many other sessions
+(1-minute load 257.98 at the start, 288.23 at the end). One run of the folder, both files, from the checkout's root:
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/823-redraft-2073 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+Summary: Test Files 2 passed (2), Tests 3 passed (3), in 39.50 s (40 s by the clock, the throttle's grant included);
+exit 0. No test ended FAIL, BLOCKED or INCONCLUSIVE.
+
+Per test:
+
+- stop.test.ts > #823.d60a913c a deep_wait waiting when the hub stops is answered unavailable, never with a success:
+  PASS (4.6 s). Carried over as written. Answered unavailable, 81 ms before the hub's exit.
+- stop.test.ts > #823.d60a913c a deep_run waiting on its run when the hub stops is answered unavailable, never with a
+  success (redraft 2073): PASS (8.6 s). In the trusted repo, deep_run of long (node checks/wait.mjs 60) started its
+  run, no reply came in 1.5 s, and when the hub stopped the call was answered unavailable, 5.1 s before the hub's exit.
+- run.test.ts > #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20
+  runs) (redraft 2073): PASS (24.0 s). All 22 runs of pause (node checks/wait.mjs 0.2 0.3) passed; p95 10 ms over 20
+  runs (median 3 ms, max 18 ms), at 1-minute load 291.75 at its start and 288.23 at its end on 18 cores. The load rule
+  makes a reading over the limit INCONCLUSIVE on a machine loaded past its cores; this one is within the limit. One
+  reading at that load, not repeated.
+
+Why they pass here: on the base deep_run asks no trust and runs the check with /bin/sh -c in the live worktree, which
+holds what the claim's commit holds; the base has #823's change (deep_run wakes on the run's event) and destroys its
+connections before its core stops.
+
+Each test's folder under /tmp/dh823-* was gone after the run and no process it started was left.
+
+Type check, clean (exit 0, no output); it covers helpers.ts, run.test.ts and stop.test.ts here and 823/helpers.ts:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/823-redraft-2073/tsconfig.json
+
+One scratch run on this base, 08:16 PST, 36.0 s, its files not kept (this folder's helpers.ts with the plant passed to
+startHub, and the redrafted deep_run stop test's body), through the same throttle command with the scratch folder as
+--root:
+
+- The fixture's two check lines on the command check kind, as a claim's checks run (runCommandCheck of
+  packages/checks-command, on a supervisor of its own, HOME a temporary folder, in a copy of the fixture repo):
+    node checks/wait.mjs 0.2 0.3, three runs: each outcome passed, testsRun 1, mask null,
+      exit {"code":0,"signal":null,"cause":"exit"}, read ["checks/wait.mjs"]
+    node checks/wait.mjs 60, stopped after 2.5 s: outcome stopped, mask null,
+      exit {"code":null,"signal":"SIGKILL","cause":"stop"}
+  Neither was uncounted, and the long one's process had started.
+- The redrafted deep_run stop test on a hub started with DEEP_HUB_PLANT=stop-answers-waiting (#823's twin): FAIL at
+  its assertion,
+    AssertionError: deep_run must not succeed when the hub stops while it waits: {"jsonrpc":"2.0","id":"tools/call#6",
+    "result":{"content":[...],"isError":false,"structuredContent":{"run":"run:<id>","claim":"claim:<id>",
+    "outcome":"running","evidence":[]}}}: expected false to be true
+
+Not run: any implementation of #2073 (none exists in this checkout); the frozen originals; a hub that polls for
+run.finished; a second run of either file.
+
+==== The run (the checkout written <repo>, each test's own folder <tmp>)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/823-redraft-2073
+
+stdout | stop.test.ts > #823.d60a913c a deep_wait waiting when the hub stops is answered unavailable, never with a success
+deep_wait with the hub stopping: {"jsonrpc":"2.0","id":"tools/call#3","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (it closed the connection); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}; -81 ms after the hub exited
+
+ ✓ stop.test.ts > #823.d60a913c a deep_wait waiting when the hub stops is answered unavailable, never with a success 4559ms
+stdout | stop.test.ts > #823.d60a913c a deep_run waiting on its run when the hub stops is answered unavailable, never with a success (redraft 2073)
+deep_run with the hub stopping: {"jsonrpc":"2.0","id":"tools/call#7","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (it closed the connection); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}; -5133 ms after the hub exited
+
+ ✓ stop.test.ts > #823.d60a913c a deep_run waiting on its run when the hub stops is answered unavailable, never with a success (redraft 2073) 8638ms
+stdout | run.test.ts > #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20 runs) (redraft 2073)
+deep_run, run.finished to the agent: p95 10 ms over 20 runs (median 3 ms, max 18 ms); 1-minute load 288.23 on 18 cores at the end, 1-minute load 291.75 on 18 cores at the start; delays 1, 6, 1, 18, 10, 3, 2, 3, 2, 4, 3, 2, 8, 4, 1, 4, 3, 3, 5, 2
+
+ ✓ run.test.ts > #823.da880762 a run's result reaches a waiting deep_run within 20 ms of run.finished (p95 over 20 runs) (redraft 2073) 23951ms
+
+ Test Files  2 passed (2)
+      Tests  3 passed (3)
+   Start at  08:17:40
+   Duration  39.50s (tests 96%, transform 3%, import 1%)
+
+exit 0

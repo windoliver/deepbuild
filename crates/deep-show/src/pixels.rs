@@ -47,7 +47,35 @@ fn linear(rgba: &[u8]) -> Vec<f32> {
         .collect()
 }
 
+/// An object-ID target's bytes as each px's pick.
+fn ids_of(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32::from_le_bytes(*b))
+        .collect()
+}
+
 impl Hub<'_> {
+    /// #1939: the light of `doc`'s kept subject in the 3D frame just drawn of it at `t`, read by
+    /// render.exposure's own measure on the reduction its check runs (#2513): `{clipped,
+    /// crushed, key_ev}`, readings that pass or fail nothing; `None` where it keeps no subject,
+    /// or the frame shows none of it.
+    pub(crate) fn light3d(&mut self, doc: &Value, t: i64) -> Option<Value> {
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
+        let exposure = crate::scene3d::look_of(doc, &self.look.light).exposure;
+        let whole = self.scenario.planted == Some(Planted::LightFromWholeFrame);
+        let short = self.planted(Planted::ReductionLeavesOutLastRows);
+        let gpu = self.gpu3()?;
+        // Nothing is reduced for a frame that draws none of the subject.
+        let picks = deep_canvas_loop::exposure::kept_drawn(doc, &gpu.picks())?;
+        let q = deep_canvas_loop::exposure::query((!whole).then_some(picks), exposure);
+        let r = deep_canvas_loop::exposure::reading(gpu.light(&q, short)?)?;
+        Some(json!({"clipped": r.clipped, "crushed": r.crushed, "key_ev": r.key_ev}))
+    }
+
     /// For each requirement whose check kind reads pixels, each deliverable's frames:
     /// requirement ID → document → what was drawn.
     pub(crate) fn pixel_runs(&mut self, c: &Claim) -> BTreeMap<String, BTreeMap<String, Drawn>> {
@@ -97,9 +125,7 @@ impl Hub<'_> {
         let (_, fingerprint) = crate::kit::goldens::environment(self, "gpu");
         let size =
             crate::snapshot::px([0, 1].map(|i| document["size"][i].as_f64().unwrap_or(1.0)));
-        let evidence = self.scenario.evidence.clone();
-        let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-        let palette = self.look.light.clone();
+        let short = self.planted(Planted::ReductionLeavesOutLastRows);
         let Some(gpu) = self.gpu3() else {
             return Drawn::Blocked(json!({"code": "gpu_unavailable",
                 "ask": "run the check on a machine with a GPU to draw its frames on"}));
@@ -116,7 +142,8 @@ impl Hub<'_> {
         for &t in at {
             // #493: a shot writes the camera's pose the frame is drawn through.
             let doc = crate::film::posed(document, t).unwrap_or_else(|| document.clone());
-            let (scene, look) = match gpu.evaluate(&doc, t, &palette, size, &read) {
+            // #1729: its assets and maps from the evidence store, as render-back reads them.
+            let (scene, look) = match self.evaluate3d(&doc, t, size) {
                 Ok(s) => s,
                 Err(u) => {
                     return Drawn::Blocked(
@@ -124,10 +151,14 @@ impl Hub<'_> {
                     )
                 }
             };
+            let Some(gpu) = self.gpu3() else {
+                return Drawn::Blocked(json!({"code": "gpu_unavailable", "t": t}));
+            };
+            // #2513: the frame's light stays on the GPU, reduced there when the check reads it.
             let drawn = gpu
                 .draw_scene(&scene, &look, false)
-                .and_then(|(rgba, targets)| Some((rgba, targets, gpu.pre_tone()?)));
-            let Some((rgba, targets, linear)) = drawn else {
+                .and_then(|(rgba, targets)| Some((rgba, targets, gpu.kept_light(short)?)));
+            let Some((rgba, targets, reduce)) = drawn else {
                 return Drawn::Blocked(
                     json!({"code": "not_presented", "reason": "unsupported_platform", "t": t}),
                 );
@@ -135,18 +166,13 @@ impl Hub<'_> {
             frames.push(Frame {
                 t,
                 size: targets.size,
-                linear,
+                linear: Vec::new(),
                 exposure: look.exposure,
                 rgba,
-                ids: targets
-                    .ids
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .map(|b| u32::from_le_bytes(*b))
-                    .collect(),
+                ids: ids_of(&targets.ids),
                 picks: targets.picks,
-                roles: palette.clone(),
+                roles: self.look.light.clone(),
+                reduce: Some(reduce),
             });
         }
         Drawn::Frames(frames, fingerprint)
@@ -261,6 +287,7 @@ impl Hub<'_> {
                 ids,
                 picks,
                 roles: self.look.light.clone(),
+                reduce: None,
             });
         }
         Drawn::Frames(frames, fingerprint)

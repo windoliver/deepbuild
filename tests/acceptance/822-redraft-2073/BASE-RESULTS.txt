@@ -1,0 +1,83 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17, the blind checkout, with nothing changed but this folder.
+November 13, 2026, PST. Node 24.22.0, macOS, on a Mac shared with other sessions and heavily loaded (1-minute load 121
+at the start of the first run, 56 at the start of the last). No implementation of #2073 was run: none exists here.
+
+Commands, from the checkout's root, with Node 24.22.0 first on PATH:
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run tests/acceptance/822-redraft-2073/hub.test.ts --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/822-redraft-2073/tsconfig.json
+
+Summary of the last run, of the file as it is (SHA-256 3b4416c1947755bec53de0edfd868aaf5d944a4b46c09a2d0b821d8c16bf2e47):
+Tests 6 passed (6), in 24.93 s (25.4 s by the clock, the throttle's grant included); exit 0. The type check is clean
+(exit 0, no output), and the file is in its program (--listFiles).
+
+Per test, on the base, which asks no trust and runs deep_run in the live worktree, as you, with /bin/sh:
+
+- AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at
+  30 days (redraft 2073): PASS, 19.9 s. As the original's expectation has it on a base that holds #822: the run was
+  going just after its start and at 24.8 days and a minute, hadn't ended a minute before 30 days, ended `overran` once
+  30 days and a minute had passed, and its process was gone.
+- AC3 hub deep_run: a check with deadline: 0m is refused before its run starts, naming deadline and 0m (redraft 2073):
+  PASS, 0.94 s.
+- … deadline: -5m … (redraft 2073): PASS, 0.95 s.
+- … deadline: 1.5h … (redraft 2073): PASS, 0.95 s.
+- … deadline: soon … (redraft 2073): PASS, 0.95 s.
+- … deadline: .inf … (redraft 2073): PASS, 0.94 s.
+  Each as the original's expectation has it: deep_run refused at once, no run.started and no run.finished for the
+  check, the refusal naming `deadline` and the value as done.yaml writes it.
+
+No test ended BLOCKED or INCONCLUSIVE in the last run. No `/tmp/dh822-*` folder and no process of the tests was left.
+
+The three runs of the file (the brief's limit):
+
+1. 14:34, load 121. INCONCLUSIVE for the 30d test: it ran out of its 600 s (below), still moving the fake clock with the
+   frozen helpers' `advance`. The five refusal tests PASS, about 1 s each. 605.93 s, user 3 m 5 s, sys 6 m 11 s.
+   Not load: REDRAFT.md, The fake clock's steps.
+2. 14:51, load 41. The 30d test moves the fake clock with this file's `move`: 6 PASS, 24.40 s (the 30d test 19.5 s).
+3. 14:57, load 56. The 30d test's readings tied to the fake clock before deep_run and after the run's process was
+   seen (comments reworded): 6 PASS, 24.93 s. This is the file as it is.
+
+Scratch checks on this base, with scripts and copies kept outside the checkout and removed (REDRAFT.md has what each
+shows):
+
+- One fake minute with the 30d run's process live, moved by the frozen `advance`: 93 ms and 59 ms of real time in two
+  probes, with a `setInterval` of 100 ms armed by the supervisor on the fake clock; the same minute by `move`: 0 and
+  1 ms. At 59 to 93 ms a fake minute, 30 days take 42 to 67 minutes.
+- The file, byte for byte, against a copy of the hub's build with the hub before #822 planted (one setTimeout for a
+  run's deadline; a deadline it can't read taken as none): 6 failed of 6, in 66.58 s. The 30d test at "a 30-day
+  deadline ended the run at its start" (outcome overran), each refusal test at "a run started for a check with
+  deadline: …".
+- The same against clamp only with a refusal that names no value (the deadline's timer armed with at most 2³¹ − 1 ms;
+  the refusal's text and value without what done.yaml wrote): 6 failed of 6, in 23.17 s. The 30d test at "ended before
+  30 days, after 24.8", each refusal test at "the refusal names the value … as written".
+- The 30d test with its deep_run call replaced by a run the base's hub starts as a claim's checks run (`run.start`
+  with `command: "node hold.mjs dh822month"` and `deadline_ms` of 30 days, in a folder holding hold.mjs): PASS, 23.6 s.
+  Every reading of the test holds on the command check kind's run.
+- A run started the same way with no deadline: still running a minute before a day on the fake clock, and ended
+  `overran` once a day and a minute had passed; its run.started records `deadline_ms: null`.
+
+==== Run 3 (the checkout written <repo>)
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline of 30d in done.yaml waits its full time > AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at 30 days (redraft 2073) 19880ms
+ ✓ tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: 0m is refused before its run starts, naming deadline and 0m (redraft 2073) 936ms
+ ✓ tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: -5m is refused before its run starts, naming deadline and -5m (redraft 2073) 949ms
+ ✓ tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: 1.5h is refused before its run starts, naming deadline and 1.5h (redraft 2073) 946ms
+ ✓ tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: soon is refused before its run starts, naming deadline and soon (redraft 2073) 950ms
+ ✓ tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline in done.yaml that is not a positive whole number of ms is refused before the run starts, naming it > AC3 hub deep_run: a check with deadline: .inf is refused before its run starts, naming deadline and .inf (redraft 2073) 936ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  14:57:40
+   Duration  24.93s (tests 99%)
+
+==== Run 1, its first failure (the 30d test then moved the fake clock with the frozen `advance`)
+
+ × tests/acceptance/822-redraft-2073/hub.test.ts > AC3 #822 a check run's deadline of 30d in done.yaml waits its full time > AC3 hub deep_run: a check with deadline: 30d is still running after 24.8 days on a fake clock, and ends overran at 30 days (redraft 2073) 600263ms
+   → Test timed out in 600000ms.
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  14:34:52
+   Duration  605.93s (tests 100%)
