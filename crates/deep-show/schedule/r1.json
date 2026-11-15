@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "b12857d4486079d9285a9bc357a5b547a13f6ff000eac565fe2a1105c328c565",
+  "set_digest": "56178254c258884a4d2864ba8f488159f873e92f3f15cf82c4b7dba836d049b7",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
@@ -93,7 +93,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
+      "digest": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -353,6 +353,19 @@
         ],
         "writes": [
           "look.finish"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
         ],
         "per": "item"
       },
@@ -669,6 +682,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "marks2d.warp",
       "motion.fields",
       "motion.flip",
       "text.columns"

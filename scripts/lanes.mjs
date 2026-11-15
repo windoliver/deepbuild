@@ -670,6 +670,9 @@ byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/accept
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
+alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
+timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views

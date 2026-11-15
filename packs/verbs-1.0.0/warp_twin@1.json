@@ -1,0 +1,29 @@
+{
+  "id": "verbs.warp_twin",
+  "version": "1.0",
+  "title": "Warp, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of warp: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "warp": {
+      "type": "ID",
+      "default": "",
+      "about": "the group whose warp comes in"
+    }
+  },
+  "steps": {
+    "mix": {
+      "op": "cue",
+      "params": {
+        "on": "warp",
+        "from": {
+          "params/warp/mix": 0
+        },
+        "set": {
+          "params/warp/mix": 0.5
+        }
+      }
+    }
+  }
+}
