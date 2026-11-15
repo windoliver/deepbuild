@@ -2,7 +2,7 @@
 // is in the event catalogue (canvas-primitives.md, The event catalogue). It reads the open issues once a
 // run (scripts/open-issues.mjs); without them the lane is INCONCLUSIVE, never PASS. A name that is no event kind,
 // such as a planned check, passes while scripts/not-event-kinds.txt holds it beside an open issue that names it (#2063).
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { catalogueDrift } from '../packages/contracts/dist/index.js';
 import { openIssues } from './open-issues.mjs';
 
@@ -20,14 +20,8 @@ const named = catalogueDrift([...docs, ...issues.map(({ number, body }) => ({ wh
 // the name is one the lane would fail, and no line above holds it.
 const listed = new Set();
 const stale = [];
-let lines;
-try {
-  lines = readFileSync(LIST, 'utf8').split(/\r?\n/);
-} catch (error) {
-  console.log(`FAIL ${LIST} can't be read (${error.code})`);
-  process.exit(1);
-}
-for (const [i, raw] of lines.entries()) {
+// A missing list holds no entries, as a missing scripts/planned-names.txt holds none (scripts/design-links.mjs).
+for (const [i, raw] of (existsSync(LIST) ? readFileSync(LIST, 'utf8').split(/\r?\n/) : []).entries()) {
   const line = raw.trim();
   if (!line || line.startsWith('#')) continue;
   const [, name, issue] = line.match(/^(\S+)\s+#(\d+)$/) ?? [];

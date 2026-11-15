@@ -1,6 +1,6 @@
 // What #2063's blind suite leaves out of scripts/not-event-kinds.txt's reading: an entry the lane has no use for, a name
-// listed twice and a missing list each fail the lane in one FAIL line. The real script runs in a scratch folder that
-// holds two docs, a list and the open issues.
+// listed twice and a malformed line each fail the lane in one FAIL line, and a missing list holds no entries. The real
+// script runs in a scratch folder that holds two docs, a list and the open issues.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -55,6 +55,10 @@ test('a name listed twice fails the lane, naming it, though each issue names it'
   failsNaming(lane(t, ['plan.overlay #1', 'plan.overlay #2']), 'plan.overlay', 'twice');
 });
 
-test('a missing list fails the lane in a FAIL line that names the list, not a stack', (t) => {
-  failsNaming(lane(t, null), 'scripts/not-event-kinds.txt');
+test('a missing list reads as no entries, as a missing scripts/planned-names.txt does: the unlisted check fails the lane, named', (t) => {
+  failsNaming(lane(t, null), 'plan.overlay (#1)');
+});
+
+test('a line of another shape fails the lane, naming its line', (t) => {
+  failsNaming(lane(t, ['plan.overlay #1', 'plan.overlay']), 'line 2');
 });

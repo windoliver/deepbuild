@@ -26,3 +26,15 @@ test at tests/catalogue-drift-list.test.mjs:46:1
   AssertionError [ERR_ASSERTION]: the lane printed more than its FAIL line:
   node:fs:483
       return binding.readFileUtf8(path, stringToFlags(options.flag));
+# tests/catalogue-drift-list.test.mjs's missing-list test against 4e1f83bf3's scripts/catalogue-drift.mjs, which failed a missing list
+# instead of reading it as empty, 2026-11-15, linux/arm64.
+✔ the check listed once, beside the issue that defines it, passes the lane
+✔ an entry for a catalogued event kind fails the lane, naming it, though its issue names it
+✔ an entry for a name of no event family fails the lane, naming it, though its issue names it
+✔ a name listed twice fails the lane, naming it, though each issue names it
+✖ a missing list reads as no entries, as a missing scripts/planned-names.txt does: the unlisted check fails the lane, named
+✔ a line of another shape fails the lane, naming its line
+ℹ pass 5
+ℹ fail 1
+AssertionError [ERR_ASSERTION]: the FAIL line doesn't name plan.overlay (#1):
+FAIL scripts/not-event-kinds.txt can't be read (ENOENT)
