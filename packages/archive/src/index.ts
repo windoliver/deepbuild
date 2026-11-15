@@ -197,8 +197,10 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     const sha = sha256(bytes);
     const put = await writer.put({ bytes, kind, source, redaction: complete ? 'complete' : 'incomplete', license: LICENSE });
     if (put.status !== 'stored') throw Error(`the evidence store refused the copy of ${source}: ${put.reason}`);
-    const back = await options.evidence.read(put.evidence.sha256);
-    if (put.evidence.sha256 !== sha || back.length !== bytes.length || sha256(back) !== sha) throw Error(`the copy of ${source} didn't read back as written`);
+    let size = 0;
+    const hash = createHash('sha256');
+    for await (const chunk of options.evidence.chunks(put.evidence.sha256)) { size += chunk.length; hash.update(chunk); }
+    if (put.evidence.sha256 !== sha || size !== bytes.length || hash.digest('hex') !== sha) throw Error(`the copy of ${source} didn't read back as written`);
     return sha;
   };
 

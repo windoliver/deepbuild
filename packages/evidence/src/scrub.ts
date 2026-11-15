@@ -92,7 +92,7 @@ export function scrub(text: Buffer, values: readonly string[], patterns = true):
  * field masks can extend beyond that window, so an unfinished one keeps its opening line until more text arrives.
  * `end` is a byte offset in the UTF-8 input. Zero asks the caller for more complete lines, never an unsafe cut.
  */
-export function scrubPrefix(text: Buffer, values: readonly string[], target: number, final: boolean): { end: number; bytes: Buffer } {
+export function scrubPrefix(text: Buffer, values: readonly string[], target: number, final: boolean): { end: number; bytes: Buffer; matches: { at: number; match: string; field: boolean }[] } {
   const lookahead = Math.max(MULTILINE_WINDOW, ...values.map((v) => Buffer.byteLength(v) * 3));
   const ceiling = final ? text.length : Math.max(0, text.length - lookahead);
   let end = text.lastIndexOf(10, Math.min(target, ceiling) - 1) + 1;
@@ -101,9 +101,10 @@ export function scrubPrefix(text: Buffer, values: readonly string[], target: num
     const newline = text.indexOf(10);
     if (newline >= 0 && newline < ceiling) end = newline + 1;
     else if (final) end = text.length;
-    else return { end: 0, bytes: Buffer.alloc(0) };
+    else return { end: 0, bytes: Buffer.alloc(0), matches: [] };
   }
   const { latin, masks, fields, matches } = masksOf(text, values, true);
+  const found = matched(text, fields, matches);
   const ranges = merge([...masks, ...fields, ...matches]);
   for (const [from, to] of ranges) if (from < end && to >= end && end < text.length) {
     const before = text.lastIndexOf(10, from - 1) + 1;
@@ -111,19 +112,25 @@ export function scrubPrefix(text: Buffer, values: readonly string[], target: num
     const after = text.indexOf(10, to);
     if (after >= 0 && after < ceiling) end = after + 1;
     else if (final) end = text.length;
-    else return { end: 0, bytes: Buffer.alloc(0) };
+    else return { end: 0, bytes: Buffer.alloc(0), matches: [] };
   }
   let out = '', at = 0;
   for (const [from, to, replacement = MASK] of ranges) {
     if (from >= end) break;
     out += latin.slice(at, from) + replacement; at = to;
   }
-  return { end, bytes: Buffer.from(out + latin.slice(at, end), 'latin1') };
+  return { end, bytes: Buffer.from(out + latin.slice(at, end), 'latin1'), matches: found.flatMap(([match, field]) => {
+    const at = match.byteOffset - text.byteOffset;
+    return at + match.length <= end ? [{ at, match: match.toString('utf8'), field }] : [];
+  }) };
 }
 
 /** Each pattern rule's match in `text`, in order and once, as printed, and whether a field rule's mask covers part of it too. */
 export function patternMatches(text: Buffer): [match: Buffer, field: boolean][] {
   const { fields, matches } = masksOf(text, [], true);
+  return matched(text, fields, matches);
+}
+function matched(text: Buffer, fields: Range[], matches: Range[]): [match: Buffer, field: boolean][] {
   // The field masks as disjoint ranges in order, so each match finds the first that may overlap it by halving.
   const covered = merge(fields);
   const found: [Buffer, boolean][] = [];

@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { createZstdDecompress, zstdCompress, zstdDecompress } from 'node:zlib';
 import { detect, missingEnd, type MediaType } from './intake.js';
-import { patternMatches as matchesOf, scrub, scrubList, type Run } from './scrub.js';
-export { scrubPrefix } from './scrub.js';
+import { scrub, scrubList, type Run } from './scrub.js';
+export { scrubText, patternMatches, scrubValues, scrubPrefix } from './scrubbing.js';
 import { continueDigest } from './continuation.js';
 import { Digest, type DigestState } from './digest.js';
 
@@ -127,30 +127,6 @@ export class EvidenceError extends Error {
     super(message);
     this.name = 'EvidenceError';
   }
-}
-
-/**
- * Text scrubbed as the store's text sink scrubs it: by the run's held and secret-looking env values, in
- * every printed form, and then by pattern. The record scrubs a hook payload's text fields with it before
- * it cuts them (#14, Privacy).
- */
-export function scrubText(text: string, run?: Run): string {
-  return scrub(Buffer.from(text, 'utf8'), scrubList(run)).toString('utf8');
-}
-/**
- * Each pattern rule's match in `scrubText(text)`, once, with its UTF-8 byte offset, and whether a field name's mask
- * covers part of it: the archive asks to rotate the keys among them (#20).
- */
-export function patternMatches(text: string): { match: string; at: number; field: boolean }[] {
-  const bytes = Buffer.from(text, 'utf8');
-  return matchesOf(bytes).map(([match, field]) => ({ match: match.toString('utf8'), at: match.byteOffset - bytes.byteOffset, field }));
-}
-/**
- * Text scrubbed by value alone, in every printed form, with no pattern pass: a check run's output before its
- * digest (#30), whose pattern pass is the store's when it is stored.
- */
-export function scrubValues(text: string, run: Run): string {
-  return scrub(Buffer.from(text, 'utf8'), scrubList(run), false).toString('utf8');
 }
 
 const DAY = 86_400_000;

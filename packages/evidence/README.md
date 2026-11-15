@@ -7,7 +7,7 @@ The evidence store (#15): files kept by hash, intake checks on media, redaction,
 ## Where new code goes
 
 - `src/index.ts`: the store (`openEvidenceStore`) and the public entry. A job's `writer.file` intake (#1820) hashes a private disk copy, optionally against its listed sha256, before atomically keeping it; `verify` checks cached binary bytes without holding the entire file in memory. These are store operations, not extensions: only the store owns its hash paths and journal.
-- `src/scrub.ts`: the scrub pass and complete-line prefix cuts that keep masks whole; `src/patterns.ts`: reading the gitleaks rules; `src/fields.ts`: field-name, header and auth-scheme rules; `src/intake.ts`: media type and whole-file checks.
+- `src/scrubbing.ts`: the pure-text public entry (`@deepbuild/evidence/scrubbing`), also re-exported by the main entry. The archive worker uses it without loading storage, zstd and the digest worker. `src/scrub.ts`: the scrub pass and complete-line prefix cuts, with the matches from that same scan; `src/patterns.ts`: reading the gitleaks rules; `src/fields.ts`: field-name, header and auth-scheme rules; `src/intake.ts`: media type and whole-file checks.
 - A parts-backed transcript retains its ordinary concatenated-byte SHA-256. `chunks` verifies it without materializing the whole copy; retention follows its ordered parts. `src/digest.ts`, `src/digest-worker.ts` and `src/continuation.ts` keep and resume the verified digest state off the hub's event loop, so reopening need not decompress every preceding part. This storage logic is core-owned; an extension cannot provide evidence integrity or retention from a private archive folder.
 - Tests: `test/`; the acceptance suites are `tests/acceptance/15/` and `tests/acceptance/761/`.
 
