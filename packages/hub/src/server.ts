@@ -65,7 +65,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -81,7 +81,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).

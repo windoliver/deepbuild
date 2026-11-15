@@ -207,6 +207,10 @@ pub enum Planted {
     ExpandsInHashOrder,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
+    /// #1959: the loader takes one saved major for the whole document.
+    MigrationOneMajor,
+    /// #1959: the migrator at load reads a param set to 0 as left out.
+    MigrationZeroAsLeftOut,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -372,6 +376,8 @@ pub enum Planted {
     TargetWritesBakedChannel,
     /// #501: media fills export.target@1's `png` with a reader that is its own writer.
     TargetReaderIsWriter,
+    /// #2085: effects sealed with an operator check that trusts a compute write's index.
+    TrustsWriteIndex,
     /// #501: the mixer's Linux build adds one 16-bit step to every sample.
     MixerLinuxOneStep,
     /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
@@ -732,6 +738,17 @@ pub enum Call {
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
+    /// #225: a vector field's integrated streams, each its points from its start.
+    Streams {
+        doc: String,
+        item: String,
+    },
+    /// #225: a vector field's streams, arrows and flow windows at its frame.
+    VectorField {
+        doc: String,
+        item: String,
+        t: Option<EvalTime>,
+    },
     Path {
         doc: String,
         item: String,
@@ -1341,6 +1358,8 @@ impl<'a> Hub<'a> {
             rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
             kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
+            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
@@ -1930,6 +1949,22 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
+            Call::Streams { doc, item } => {
+                let reply = self.vector_field(doc, item, &EvalTime::Flicks(0));
+                match reply["outcome"].as_str() {
+                    Some("answered") => json!({
+                        "item": item,
+                        "streams": reply["streams"].as_array().into_iter().flatten()
+                            .map(|s| json!({"id": s["id"], "points": s["points"]}))
+                            .collect::<Vec<_>>(),
+                    }),
+                    _ => reply,
+                }
+            }
+            Call::VectorField { doc, item, t } => {
+                let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                self.vector_field(doc, item, &t)
+            }
             Call::Path { doc, item, t } => match self.current(doc) {
                 // #142: a derived item answers as the frame draws it, as a warped one does.
                 Some(row)
