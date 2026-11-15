@@ -44,10 +44,11 @@ describe('statusAnswer', () => {
     const four = [1, 2, 3, 4].map((n) => ({ req: `req:D#R${n}`, outcome: 'PASS' as const, smallest: null, points_to: null }));
     const watch = answer({ outcome: 'PASS', requirements: four, running: [], tests: 12, watch: { why: "hooks don't reach DeepBuild", unsent: false } });
     expect(watch).toBe('watch-only · PASS 4/4 · 12 tests · next: you (for 1m) · needs you: 3');
-    // Narrower than what it never drops, the line keeps it whole, as #83's does, and still ends in the count.
+    // Narrower than what it never drops, the line keeps it whole, as #83's does, with its reasons, since dropping them
+    // wouldn't make it fit, and still ends in the count.
     const twelve = Array.from({ length: 12 }, (_, n) => ({ req: `req:D#R${n + 1}`, outcome: 'INCONCLUSIVE' as const, smallest: null, points_to: null }));
     const inconclusive = answer({ outcome: 'INCONCLUSIVE', requirements: twelve, running: [], watch: { why: "hooks don't reach DeepBuild", unsent: false } });
-    expect(inconclusive).toBe(`watch-only · not verified: ${twelve.map((_, n) => `R${n + 1}`).join(', ')} · INCONCLUSIVE 0/12 (for 1m) · needs you: 3`);
+    expect(inconclusive).toBe(`watch-only: hooks don't reach DeepBuild · not verified: ${twelve.map((_, n) => `R${n + 1}`).join(', ')} · INCONCLUSIVE 0/12 (for 1m) · needs you: 3`);
   });
 });
 

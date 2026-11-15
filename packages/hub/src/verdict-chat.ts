@@ -114,10 +114,11 @@ export function statusAnswer(claim: ClaimState | undefined, f: StatusFacts): str
   const room = LINE_WIDTH - [...tail].length;
   let first = claim ? verdictLine(claim.state, room) : `${state} · next: ${state === 'working' || state === 'unknown' || state === 'failed' ? 'agent' : 'you'}`;
   // Still too wide once the verdict line gave what it gives: the held checks' and the watch's reasons give way to
-  // their counts. What wasn't verified and the outcome never do (#83).
+  // their counts, if that fits. What wasn't verified and the outcome never do (#83).
   if (claim && [...first].length > room) {
     const s = claim.state;
-    first = verdictLine({ ...s, ...(s.held ? { held: s.held.map((h) => ({ ...h, reason: '' })) } : {}), ...(s.watch ? { watch: { ...s.watch, why: '' } } : {}) }, room);
+    const short = verdictLine({ ...s, ...(s.held ? { held: s.held.map((h) => ({ ...h, reason: '' })) } : {}), ...(s.watch ? { watch: { ...s.watch, why: '' } } : {}) }, room);
+    if ([...short].length <= room) first = short;
   }
   const resume = f.agent === 'codex' ? `codex resume ${f.session}` : `claude --resume ${f.session}`;
   return [
