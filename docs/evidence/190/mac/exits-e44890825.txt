@@ -1,0 +1,10 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 15:38:07 load { 142.74 143.99 101.33 } thermal 1 free KB 43271844
+head e44890825e18978ee6731e08d6c90ea69e5913b4 local main fcd8c385246acdac30011b43dd22e8d3e5dc2f58 has 06b6e6d7a: yes merge-base 06b6e6d7a505eb4f746ef2b8fd0000e0150ff672 15:38:15 load { 126.01 140.38 100.55 } thermal 1 free KB 40429160
+setup exit=0 15:39:20 load { 54.24 116.32 94.42 } thermal 1 free KB 41359152
+opened Docker Desktop 15:39:53 load { 40.31 106.96 91.79 } thermal 1 free KB 40802940
+ac04/ac05 BLOCKED: Docker not answering or hanging 15:49:34 load { 199.24 140.35 107.53 } thermal 1 free KB 39625836
+asked Docker Desktop (started by this run) to quit before the timed files 15:49:35 load { 195.62 140.58 107.81 } thermal 1 free KB 39619488
+ac07-no-links.test.ts exit=0 16:00:21 load { 258.65 242.16 187.69 } thermal 1 free KB 34675592
+ac10 gate: load 3.96 thermal 0 after a 811 s wait 16:13:52 load { 3.96 32.92 95.52 } thermal 0 free KB 38379912
+ac10-budgets.test.ts exit=0 16:14:10 load { 3.88 31.48 93.91 } thermal 0 free KB 38408252
+secret scan hits=0 16:14:10 load { 3.88 31.48 93.91 } thermal 0 free KB 38408196

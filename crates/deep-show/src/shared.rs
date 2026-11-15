@@ -23,7 +23,7 @@ use std::time::Instant;
 
 use deep_canvas::document::{
     apply_ops, canonical_in, check_packed, pack_kinds, recheck_with, rollback, store_migrations,
-    touched_in, Issue, Packs, Patched, Referrers, Writing, ID_MAPS,
+    touched_in, Issue, Notice, Packs, Patched, Referrers, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
@@ -116,6 +116,9 @@ pub struct Rev {
     pub envelope_before: Option<(Map<String, Value>, Owners)>,
     /// The issues the check found in it.
     pub issues: Rc<Vec<Issue>>,
+    /// The notices its check raised, `migrated` among them: kept when a check of the stored
+    /// revision made it, else taken the first time `read` asks (#1959).
+    pub notices: OnceCell<Vec<Notice>>,
     /// The revision hash, taken the first time it is asked for: a pure function of the document.
     pub hash: OnceCell<String>,
     /// The latch it became current at, on the clock.
@@ -586,7 +589,8 @@ impl Hub<'_> {
             if let Some(fields) = doc.as_object_mut() {
                 fields.insert("id".into(), json!(id.to_ascii_lowercase()));
             }
-            let mut issues = check_packed(&doc, &self.startup.sealed, &self.packs).issues;
+            let checked = check_packed(&doc, &self.startup.sealed, &self.packs);
+            let mut issues = checked.issues;
             // #407: a film a claim's definition audits holds the film audit's issues too.
             if let Some(found) = self.admission_issues(id, &doc) {
                 issues.extend(found);
@@ -606,6 +610,7 @@ impl Hub<'_> {
                     paths: Paths::new(),
                     envelope_before: None,
                     issues: Rc::new(issues),
+                    notices: OnceCell::from(checked.notices),
                     hash: OnceCell::new(),
                     current_at: None,
                 }],
@@ -1099,6 +1104,9 @@ impl Hub<'_> {
                 })
             }),
             issues: Rc::new(issues),
+            // The check ran before the writer's layer was migrated and stored: `read` takes the
+            // stored revision's notices when asked.
+            notices: OnceCell::new(),
             hash: OnceCell::new(),
             current_at,
         };
@@ -1526,6 +1534,7 @@ impl Hub<'_> {
             paths,
             envelope_before,
             issues: Rc::new(result.issues),
+            notices: OnceCell::from(result.notices.clone()),
             hash: OnceCell::new(),
             current_at: None,
         };
@@ -1606,6 +1615,11 @@ impl Hub<'_> {
             reply.insert("draws".into(), json!(draws(&shown)));
         }
         reply.insert("issues".into(), json!(issues));
+        // The notices of the revision's check, `migrated` among them (#1959).
+        let notices = self.shared[doc].revs[k]
+            .notices
+            .get_or_init(|| check_packed(&shown, &self.startup.sealed, &self.packs).notices);
+        reply.insert("notices".into(), json!(self.notices_reply(doc, notices)));
         reply.insert("files".into(), json!(files(doc, &shown, &owners)));
         reply.insert("document".into(), shown.into_owned());
         if let Some(w) = reader {
@@ -2252,6 +2266,7 @@ fn restore(
             .collect();
         let paths = paths_of(&before, &shared.doc);
         let rev = shared.current().rev;
+        let checked = check_packed(&shared.doc, sealed, packs);
         shared.revs.push(Rev {
             rev: event["data"]["rev"].as_u64().unwrap_or(rev + 1),
             base_rev: rev,
@@ -2262,7 +2277,8 @@ fn restore(
             before,
             paths,
             envelope_before,
-            issues: Rc::new(check_packed(&shared.doc, sealed, packs).issues),
+            issues: Rc::new(checked.issues),
+            notices: OnceCell::from(checked.notices),
             hash: OnceCell::new(),
             current_at: None,
         });
