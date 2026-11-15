@@ -933,7 +933,7 @@ impl Program {
                 }
                 _ => [owner; 2],
             };
-            let table = match &c.kind {
+            let mut table = match &c.kind {
                 Kind::FollowPath {
                     points, fraction, ..
                 } => Some(crate::constraint::PathRead::compile(
@@ -944,6 +944,18 @@ impl Program {
                 )?),
                 _ => None,
             };
+            // #1960: a fraction read at a path takes that field's slot, as a driver's var does.
+            if let Kind::FollowPath {
+                fraction: crate::constraint::Fraction::Path(t),
+                ..
+            } = &c.kind
+            {
+                let slot = program.slot(items_json, &t.owner, t, 1);
+                table = table.map(|read| crate::constraint::PathRead {
+                    from: Some(slot),
+                    ..read
+                });
+            }
             program.constraints.push(Compiled {
                 owner,
                 other,

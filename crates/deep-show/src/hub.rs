@@ -211,6 +211,12 @@ pub enum Planted {
     MigrationOneMajor,
     /// #1959: the migrator at load reads a param set to 0 as left out.
     MigrationZeroAsLeftOut,
+    /// #1960: the migrator at load renames params only, and carries no path that names one.
+    MigrationRenamesParamsOnly,
+    /// #1960: the migrator at load carries channel targets, and no other path that names a param.
+    MigrationRewritesChannelTargetsOnly,
+    /// #1960: a writer's patch stores its items' migrated params under the major they were saved at.
+    StoreMigratedParamsUnderSavedMajor,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -1360,6 +1366,9 @@ impl<'a> Hub<'a> {
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
             migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
+            migrate_params_only: scenario.planted == Some(Planted::MigrationRenamesParamsOnly),
+            migrate_channels_only: scenario.planted
+                == Some(Planted::MigrationRewritesChannelTargetsOnly),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
