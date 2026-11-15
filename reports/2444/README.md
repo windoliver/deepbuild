@@ -1,5 +1,11 @@
 # #2444 — Part of, not Closes
 
+## Continued prerequisite work
+
+The branch is now based on main `031292bf15c0b9a32260413793f3b2d17e87115b` (merged without changing main's tests). Two stale #1622 entries were removed only after unchanged tests passed on clean main. The missing 20 `timed` classifications and 11 automated `alone` classifications were corrected, with unchanged #1114 and blind #1624 AC2 checks passing. The Cargo reader now retains custom harness BLOCKED rows rather than letting a listed target hide them; its reproduced regression and four related checks pass.
+
+There are still **five** listed entries, not seven. The confirmed check-policy conflicts, independent drafts, exact approval requests and required manual accessibility proof are collected in [approval-needed.md](approval-needed.md). No existing acceptance test has been edited, skipped or retired; proposed replacements are unadopted. The full preflight budget is unchanged. The first workspace setup waited 60 minutes and exited 3 without a build grant; a resumed setup is waiting, not passing. The older status below is retained as history, not a claim of completion.
+
 ## Closeout attempt, 2026-11-15
 
 The follow-up uses isolated worktrees based on freshly fetched main `f989212187f28d65ab7e80c3a22545d5edaee37e`. The original dirty checkout was not reset, cleaned or committed. Tests were committed before implementation; the runner changes are their own approval-eligible commit `33ad71d38`. The same blind acceptance files remain byte-identical.
