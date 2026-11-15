@@ -5,13 +5,12 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:
 import { availableParallelism, loadavg } from 'node:os';
 import { join } from 'node:path';
 import net from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { fingerprint, judgeLimit } from '../../../scripts/benchmark.mjs';
 import { build } from './build.mjs';
 
-const mode = process.argv[2];
-if (!['--check', '--measure'].includes(mode) || process.argv.length !== 3) {
-  console.error('BLOCKED: use --check (no timing) or --measure (authorized quiet-window readings only)');
-  process.exit(3);
-}
+// Importing the approved reusable scenario/oracle starts no build or process.
+export function builder() {
 const now = () => Number(process.hrtime.bigint()) / 1e6;
 const folder = mkdtempSync('/tmp/a2330-'); // Short enough for Unix sockets on macOS.
 const children = new Set(), hubs = new Set();
@@ -146,8 +145,52 @@ async function sample(cli, kind) {
     await until(() => children.size === 0);
   }
 }
+function close() {
+  for (const child of children) child.kill('SIGKILL');
+  for (const pid of hubs) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+  rmSync(folder, { recursive: true, force: true });
+}
 try {
   const cli = build(folder);
+  return { cli, folder, sample: kind => sample(cli, kind), close };
+} catch (error) { close(); throw error; }
+}
+
+export function qualifiedMachine() {
+  const machine = fingerprint();
+  const gate = judgeLimit({ limit: 1, runs: [1, 1, 1, 1, 1], fingerprint: machine,
+    loads: Array.from({ length: 5 }, () => ({ start: loadavg()[0], end: loadavg()[0] })) });
+  assert(gate.status === 'PASS' && loadavg()[0] < availableParallelism(), `INCONCLUSIVE: no quiet reference Mac: ${gate.reason}`);
+  return machine;
+}
+
+export async function measureScenario(sample, kind, machine) {
+  const rows = [];
+  if (kind !== 'stubborn') await sample(kind); // declared warm-up, never retry a failed run
+  for (let i = 0; i < (kind === 'stubborn' ? 1 : 5); i++) rows.push(await sample(kind));
+  const after = fingerprint();
+  const environmentLoads = Array.from({ length: 5 }, () => ({ start: loadavg()[0], end: loadavg()[0] }));
+  return { kind, rows, machine, after, environmentLoads };
+}
+
+export function judgeScenario({ kind, rows, machine, after, environmentLoads }) {
+  const judge = key => judgeLimit({ limit: rows[0].limit, runs: rows.map(r => r[key]), fingerprint: machine,
+    loads: rows.map(r => ({ start: r.loads[0], end: r.loads[1] })) });
+  const environment = judgeLimit({ limit: 1, runs: [1, 1, 1, 1, 1], fingerprint: after, loads: environmentLoads });
+  return environment.status !== 'PASS' || rows.some(r => r.loads.some(v => !Number.isFinite(v) || v < 0 || v >= availableParallelism())) ? 'INCONCLUSIVE'
+    : kind === 'stubborn' ? 'PASS' : judge('upper').status === 'PASS' ? 'PASS' : judge('lower').status === 'FAIL' ? 'FAIL' : 'INCONCLUSIVE';
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+const mode = process.argv[2];
+if (!['--check', '--measure'].includes(mode) || process.argv.length !== 3) {
+  console.error('BLOCKED: use --check (no timing) or --measure (authorized quiet-window readings only)');
+  process.exit(3);
+}
+let fixture;
+try {
+  fixture = builder();
+  const { cli, folder, sample } = fixture;
   if (mode === '--check') {
     const env = { HOME: folder, PATH: '/usr/bin:/bin' };
     for (const args of [[cli, 'hub', '--help'], ['--input-type=module', '-e', "await import('@deepbuild/hub/hub')"]]) {
@@ -156,24 +199,13 @@ try {
     }
     console.log('CHECKED: disposable transpilation, real CLI help and public hub entry load; acceptance UNRUN');
   } else {
-    const { fingerprint, judgeLimit } = await import('../../../scripts/benchmark.mjs');
-    const machine = fingerprint();
-    const gate = judgeLimit({ limit: 1, runs: [1, 1, 1, 1, 1], fingerprint: machine,
-      loads: Array.from({ length: 5 }, () => ({ start: loadavg()[0], end: loadavg()[0] })) });
-    assert(gate.status === 'PASS' && loadavg()[0] < availableParallelism(), `INCONCLUSIVE: no quiet reference Mac: ${gate.reason}`);
+    const machine = qualifiedMachine();
     for (const [kind, criterion] of [['start', '#2330.c6939f4f'], ['stop', '#2330.c4ac049d'],
       ['early-close', '#2330.c4ac049d'], ['never', '#2330.61815fcc'], ['stubborn', '#2330.c4ac049d']]) {
       try {
-        const rows = [];
-        if (kind !== 'stubborn') await sample(cli, kind); // declared warm-up, never retry a failed run
-        for (let i = 0; i < (kind === 'stubborn' ? 1 : 5); i++) rows.push(await sample(cli, kind));
-        const judge = key => judgeLimit({ limit: rows[0].limit, runs: rows.map(r => r[key]), fingerprint: machine,
-          loads: rows.map(r => ({ start: r.loads[0], end: r.loads[1] })) });
-        const after = fingerprint();
-        const environment = judgeLimit({ limit: 1, runs: [1, 1, 1, 1, 1], fingerprint: after,
-          loads: Array.from({ length: 5 }, () => ({ start: loadavg()[0], end: loadavg()[0] })) });
-        const verdict = environment.status !== 'PASS' || rows.some(r => r.loads.some(v => !Number.isFinite(v) || v < 0 || v >= availableParallelism())) ? 'INCONCLUSIVE'
-          : kind === 'stubborn' ? 'PASS' : judge('upper').status === 'PASS' ? 'PASS' : judge('lower').status === 'FAIL' ? 'FAIL' : 'INCONCLUSIVE';
+        const reading = await measureScenario(sample, kind, machine);
+        const { rows, after } = reading;
+        const verdict = judgeScenario(reading);
         console.log(JSON.stringify({ criterion, kind, verdict, rows, machine, after }));
       } catch (error) { console.log(JSON.stringify({ criterion, kind, verdict: 'NOT PASS', reason: error.message })); }
     }
@@ -182,8 +214,5 @@ try {
     process.exitCode = 3;
   }
 } catch (error) { console.error(error.message); process.exitCode = 3; }
-finally {
-  for (const child of children) child.kill('SIGKILL');
-  for (const pid of hubs) { try { process.kill(pid, 'SIGKILL'); } catch {} }
-  rmSync(folder, { recursive: true, force: true });
+finally { fixture?.close(); }
 }
