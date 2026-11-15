@@ -1,0 +1,37 @@
+#1810's acceptance suite, run once at the base c740dede7 (clean worktree, no implementation), on this Linux arm64 box
+(spark), Node v24.22.0. Load average 118 / 87 / 58 at the start (other sessions' runs); no test here is timed.
+Prerequisites: npm run build --workspaces (exit 0); cargo build --locked -q -p deep-hook (exit 0).
+
+Command (2026-11-15T08:09:59Z to 08:11:02Z):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1810 --no-file-parallelism --silent=false
+Result: Test Files 3 failed | 1 passed (4); Tests 3 failed | 4 passed (7); exit 1.
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1810/tsconfig.json   exit 0
+
+Per test:
+
+AC1 #1810.eebcb4a2 (count.test.ts)
+  - "two asks answered and one open ... say 1 at one log position": PASSES at the base. The issue's "on the merge base
+    the answer says 3" does not hold at c740dede7. #1463 already changed statusReply (packages/hub/src/core.ts) to count
+    the list's ask rows (session-state rows, built from the asks core's inbox minus closed asks). The answer read:
+      "says done · next: DeepBuild · session/6be36a9e/01M7F44G57NYWNXRMETV4BKTH9 (for 11s) · needs you: 1"
+    deep printed "1 ask needs you", and the folded row.set list at deep status --json's log_pos held only the open ask.
+    No failure was faked. This part of the criterion acts as a regression guard here.
+  - "the replica's list (the app itself, on macOS)": BLOCKED, "the replica draws on macOS only; this is linux". Unrun.
+
+AC2 #1810.a646c123 (defaulted.test.ts)
+  - "an ask that took its default and can still be undone isn't counted": PASSES at the base. The answer read
+    "needs you: 1", deep printed "1 ask needs you", and the folded list held no row for the defaulted ask. After that,
+    deep inbox undo <handle> exited 0, which proves the ask could still be undone.
+  - "(wrong program) ... DEEP_HUB_PLANT=needs-you-counts-defaulted fails, naming the ask": fails (BLOCKED) at the base.
+    "the hub didn't start with DEEP_HUB_PLANT=needs-you-counts-defaulted (README, Pinned 1): ... Error:
+    DEEP_HUB_PLANT=needs-you-counts-defaulted names no planted program". The base has no such plant (README, Pinned 1).
+
+AC3 #1810.1a3e8cda (width.test.ts)
+  - fails, naming the width:
+    "the status answer's line is 98 columns wide, over #83's width of 80: \"says done · next: DeepBuild ·
+    session/7acfed27/01M7F43DAP7ZEKHAY9XC4KB939 (for 16s) · needs you: 3\"". verdictLine (74 columns, within the width)
+    is followed by " (for 16s) · needs you: 3", appended after the line was fitted.
+
+judges.test.ts (no criterion tag): both tests pass at the base, as intended.
+
+An earlier run at 08:07:41Z gave the same results (answer counts 1 and 1, width 98 columns).

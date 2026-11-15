@@ -1,0 +1,17 @@
+[
+  {
+    "n": 1,
+    "id": "#1810.eebcb4a2",
+    "text": "With two asks answered and one open, \"anything for me?\" answers \"needs you: 1\", and `deep` and the app's list say 1 at the same log position. On the merge base the answer says 3, and the test fails, naming the count"
+  },
+  {
+    "n": 2,
+    "id": "#1810.a646c123",
+    "text": "A defaulted ask that can still be undone isn't counted. A planted reader that counts it fails, naming the ask"
+  },
+  {
+    "n": 3,
+    "id": "#1810.1a3e8cda",
+    "text": "A status answer for a session with a 90-character title and 3 open asks is no wider than #83's width and still ends in the count. On the merge base the count is appended after the cut and the test fails, naming the width"
+  }
+]
