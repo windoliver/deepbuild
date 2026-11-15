@@ -53,4 +53,3 @@ AssertionError: ps invocations over ten compactions in the held process: expecte
       Tests  1 failed | 7 passed (8)
    Start at  11:33:54
    Duration  17.98s (tests 98%, transform 1%)
-

@@ -24,4 +24,3 @@ Error: ENOTEMPTY, Directory not empty: '/private/tmp/hub-315-fz3BYd'
       Tests  1 failed | 4 passed (5)
    Start at  12:03:52
    Duration  15.25s (tests 98%, transform 1%)
-

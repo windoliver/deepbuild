@@ -53,4 +53,3 @@ AssertionError: a failed lookup is retried at the next start: expected +0 to be 
       Tests  2 failed (2)
    Start at  11:52:38
    Duration  21.78s (tests 100%)
-
