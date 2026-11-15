@@ -31,7 +31,7 @@ import { Confirmer } from './confirm.js';
 import { keychain } from './keychain.js';
 import { recordedHome, saveTrust } from './codex-settings.js';
 
-import { listRows } from './rows.js';
+import { listRows, needsYou as countNeedsYou } from './rows.js';
 import { addGuards, blocksCall } from './guards.js';
 import { captureRejected, repoFolders, syncRejected } from './memory.js';
 import { AskTasks } from './ask-tasks.js';
@@ -2480,9 +2480,11 @@ export class Core {
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.judging.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
-    // The list's one count (#1463): its ask rows, as deep and the app count them.
+    // The list's one count (#1463, #1810): its ask rows, as deep and the app count them. #1810's planted reader counts
+    // an ask that took its default, which can still be undone, as open too.
     await this.state.statesSettled();
-    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length;
+    const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
+    const needsYou = countNeedsYou([...this.state.rows.values()].map((p) => p.row)) + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 

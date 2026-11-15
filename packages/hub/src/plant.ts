@@ -102,6 +102,8 @@ export type Plant =
   // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
   // session's asks into an agent's deep_status.
   | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'inbox-adds-unread' | 'status-row-leak'
+  // #1810's: a status answer that counts an ask that took its default, which can still be undone, as open.
+  | 'needs-you-counts-defaulted'
   // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
   // reading that tries the stale row before needs you.
   | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
@@ -302,7 +304,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only', 'needs-you-counts-defaulted',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
