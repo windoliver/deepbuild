@@ -112,6 +112,9 @@ pub struct Scope {
     pub also: usize,
 }
 
+/// What proves an agent's sign-in task (#1349), after the agent's id: its own sign-in probe, as the asks core names it.
+const SIGN_IN_PROBE: &str = " sign-in probe";
+
 /// The card's content for one ask.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Model {
@@ -139,6 +142,8 @@ pub struct Model {
     pub plan_hash: Option<String>,
     pub past: Vec<PastCall>,
     pub scope: Option<Scope>,
+    /// On an agent's sign-in task (#1349): its steps, the plan line among them, under its one button.
+    pub sign_in: Option<Vec<String>>,
 }
 
 /// Whether a plan step can be undone: its `undo` names how, unless it says it can't.
@@ -371,6 +376,23 @@ impl Model {
             Kind::Taste => past_calls(events, ask),
             _ => Vec::new(),
         };
+        let sign_in = matches!(kind, Kind::Unblock)
+            .then(|| text(&data["proves"]))
+            .and_then(|proves| proves.strip_suffix(SIGN_IN_PROBE).map(str::to_owned))
+            .filter(|agent| {
+                !agent.is_empty()
+                    && agent
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            })
+            .map(|_| {
+                data["steps"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(text)
+                    .collect()
+            });
         Some(Model {
             ask: handle.to_owned(),
             kind,
@@ -392,6 +414,7 @@ impl Model {
             plan_hash,
             past,
             scope: scope(events, ask),
+            sign_in,
         })
     }
 
