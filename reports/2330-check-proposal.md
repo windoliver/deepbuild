@@ -1,6 +1,11 @@
-# #2330 — proposed proof repairs (not applied)
+# #2330 — approved proof repairs
 
-**Needs the owner's approval.** The issue's limits stay **30 ms readiness,
+**Approved in the owner's follow-up request to close these gaps.** The isolated
+proposal commit `d7b423dec` applies items 1–3; item 4 is the separate benchmark
+integration. The original draft is preserved in parent commit `eca90a7f5` and
+the original external drafting workspace. No signed approval tag is fabricated.
+
+The issue's limits stay **30 ms readiness,
 60 ms start return, 30 ms stop return, 15 s timeout**, with unchanged ordinary
 messages and exit codes. No change below waives a product assertion or allows a
 missing measurement to pass. The original draft and one permitted blind redraft
@@ -87,9 +92,12 @@ criteria; it cannot truthfully say Closes based on controlled-clock tests alone.
 
 ## Approval boundary
 
-This is one collected request, not edits to protected tests. The following stay
-unapproved/unapplied: both builder repairs, first-draft fixture repairs, the
-existing stop fixture's shutdown repair, and the benchmark integration. No
-check, skip list, known-failure baseline, timing threshold or scheduled tool has
-been changed. A changed protected check must be its own approved proposal
-commit/tag as `scripts/proof-guard.mjs` requires, separate from production fixes.
+The owner approved the collected repairs after this proposal was presented.
+The dedicated harness-repair commit contains only the five named fixture/test
+files, with every original acceptance assertion unchanged. The benchmark
+integration extracts the sealed sample and oracle without changing its assertion
+multiset; all 133 previously registered budget tasks retain their definitions.
+No skip list, known-failure baseline, timing threshold or scheduled tool changes.
+A protected-check approval still needs the owner's signed tag if the proof guard
+requires it; chat authorization is recorded, not forged into a machine signature.
+Production fixes are separate from these proposal commits.
