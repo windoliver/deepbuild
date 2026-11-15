@@ -107,8 +107,27 @@ impl Gpu3 {
     }
 
     /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
+    /// Its readouts and card lines lay over the frame as the view lays them (#419, #504); their
+    /// draw goes first, so the targets and light the frame leaves are the frame's own.
     pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
+        let over = if scene.readouts.is_empty() {
+            None
+        } else {
+            let mut sc = scene.clone();
+            deep_scene3d_render::readouts_as_labels(&mut sc);
+            Some(draw_offscreen(
+                &self.device,
+                &mut self.renderer,
+                &sc,
+                look,
+                None,
+            )?)
+        };
         let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
+        if let Some(over) = over {
+            let plain = bytes.clone();
+            deep_scene3d_render::lay_over(&mut bytes, &over, &plain);
+        }
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }

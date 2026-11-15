@@ -1891,14 +1891,7 @@ fn run_view(
             let mut drawn_over = None;
             if overlay {
                 let mut sc = (*sub_scene(0)).clone();
-                let readouts = std::mem::take(&mut sc.readouts);
-                match sc.layers.first_mut() {
-                    Some(l) => l.labels.extend(readouts),
-                    None => sc.layers.push(deep_canvas_scene3d::scene::Layer3 {
-                        labels: readouts,
-                        ..Default::default()
-                    }),
-                }
+                deep_scene3d_render::readouts_as_labels(&mut sc);
                 let plain = lock(&fx).settings.clone();
                 let mut with = plain.clone();
                 with.selection = effects::settings(
@@ -2225,17 +2218,7 @@ fn run_view(
                 (&drawn_over, &plain0, drawn.bytes.as_mut())
             {
                 if let Some(ob) = &over.bytes {
-                    for ((o, p), b) in ob
-                        .as_chunks::<4>()
-                        .0
-                        .iter()
-                        .zip(plain.as_chunks::<4>().0)
-                        .zip(bytes.as_chunks_mut::<4>().0)
-                    {
-                        if o != p {
-                            *b = *o;
-                        }
-                    }
+                    deep_scene3d_render::lay_over(bytes, ob, plain);
                 }
             }
             // #506: each view overlay's frame over its rect; a view overlay's own run keeps its
