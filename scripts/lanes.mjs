@@ -675,6 +675,10 @@ alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
 timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
+// #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
+// deep-show in release and deep-gpu for the frame budget.
+alone.push('tests/acceptance/142/', 'tests/acceptance/142-redraft-ac9/', 'tests/acceptance/142-redraft-ac10/');
+timed.push('tests/acceptance/142/ac6-budgets.test.ts');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views
 // frame by frame, draw the app's window and time the logic module's budgets on the reference Mac.
 alone.push('tests/acceptance/548/');
