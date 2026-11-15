@@ -402,6 +402,14 @@ alone.push('tests/acceptance/1935/');
 // decides anything (tests/acceptance/1938-redraft-contrast/DISPUTE.md); the blind redraft runs in their place.
 alone.push('tests/acceptance/1938/machines.test.ts', 'tests/acceptance/1938-redraft-contrast/');
 byHand.push('tests/acceptance/1938/faults.test.ts', 'tests/acceptance/1938-oracle/');
+// #1939's files each build deep-show and draw on the GPU; ac2-budget judges the readings' added time on the reference
+// Mac (building deep-show for release where it times).
+alone.push('tests/acceptance/1939/');
+timed.push('tests/acceptance/1939/ac2-budget.test.ts');
+// #2513's files each build deep-show and draw on the GPU; ac2-budget times the readings on a reference Mac (building
+// deep-show for release there).
+alone.push('tests/acceptance/2513/');
+timed.push('tests/acceptance/2513/ac2-budget.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
@@ -518,6 +526,8 @@ alone.push('tests/acceptance/1163/');
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
 alone.push('tests/acceptance/1401/');
+// #1729's files each build deep-show and deep-gpu and draw 3D revisions on the GPU.
+alone.push('tests/acceptance/1729/');
 // #1958's files each build deep-show, and its budgets build the merge base and time saves.
 alone.push('tests/acceptance/1958/');
 timed.push('tests/acceptance/1958/budgets.test.ts');
@@ -675,6 +685,19 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
+// after, so nothing else may build deep-marks-render in the checkout while it runs.
+alone.push('tests/acceptance/2497/');
+// #2073's file starts a real hub and an agent stand-in with its deep mcp for each test.
+alone.push('tests/acceptance/2073/');
+// #2073 has deep_run ask the project's trust first and run on the claim's commit as a claim's checks run, so the older
+// tests that call it in a fixture no trust record covers are their blind redrafts' since (each folder's REDRAFT.md);
+// the first drafts are kept as written, by hand only.
+alone.push('tests/acceptance/26-redraft-2073/', 'tests/acceptance/19-redraft-2073/', 'tests/acceptance/823-redraft-2073/', 'tests/acceptance/27-redraft-2073/', 'tests/acceptance/1942-redraft-2073/');
+timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
+slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
+byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
+  'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

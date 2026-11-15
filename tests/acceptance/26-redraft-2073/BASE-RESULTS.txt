@@ -1,0 +1,65 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17, with nothing changed but this folder (the frozen
+tests/acceptance/26/ is imported as it is). November 13, 2026, 14:26 PST. Node 24.22.0, macOS, on a Mac shared with
+many other sessions (1-minute load 226 at the start, 211 at the end). One run of the redraft, from the checkout's
+root, on the checkout as installed and built (`npm ci`, `npm run build --workspaces`):
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run tests/acceptance/26-redraft-2073/contradiction.test.ts --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+Summary: Tests 1 passed (1), in 12.69 s (43 s by the clock, the throttle's wait included); exit 0.
+
+Per test:
+
+- PASS  contradiction.test.ts > #26.done-when a prediction deep_claim recorded that its run disagrees with shows in
+  deep_status as a contradiction; one it agrees with doesn't (redraft 2073)   11.3 s
+  Why: the base's deep_run asks no trust and runs `/bin/sh -c "node checks/fails.mjs"` in the live worktree, which
+  nothing edited since the claim, so each run exits 1 and finishes failed, as `false` does there. deep_status then
+  shows unit's run as a contradiction of "passed" and no contradiction for lint. The trust decision the fixture now
+  records changes nothing on the base, which never reads it for deep_run.
+
+No test ended FAIL, BLOCKED or INCONCLUSIVE. No folder under /tmp/dh26-* and no process the test started was left.
+
+Type check, clean (exit 0, no output; the program holds this file, the frozen helpers and the record's entry):
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/26-redraft-2073/tsconfig.json
+
+For comparison, the frozen original, one run the same way at 14:28 PST (load 184):
+
+  ... vitest.mjs run tests/acceptance/26/contradiction.test.ts --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  PASS  #26.done-when a prediction deep_claim recorded that its run disagrees with shows in deep_status as a
+  contradiction; one it agrees with doesn't   11.1 s
+
+So on the base the redraft gives what the original gives.
+
+That each assertion can fail, seen once on the base with two scratch copies of the redraft that are not kept, each
+differing from it in one prediction (these are the test's own mutants on a correct hub, not wrong hubs):
+
+- unit predicted failed, so no run disagrees: FAIL after the 60 s poll, at
+  "deep_status shows unit's run run:<id> as a contradiction of the prediction that it passes: expected [] to deep
+  equally contain { check: 'unit', ... }"   71.4 s
+- lint predicted passed, so lint's run disagrees: FAIL at
+  "lint's run run:<id> agrees with its prediction, so it is no contradiction: expected [ { check: 'lint', late: false,
+  outcome: 'failed', predicted: 'passed', run: 'run:<id>' } ] to deeply equal []"   11.0 s
+
+The two commands on the hermetic runner, checked once on this base with a scratch script that is not kept: the command
+check kind (`runCommandCheck` of packages/checks-command, on a supervisor of its own, HOME a temporary folder), in a
+folder holding checks/fails.mjs:
+
+- `false`: outcome uncounted, exit 1, mask "evidence altered reads" ("reads: no trailer"), no failure recorded.
+- `node checks/fails.mjs`: outcome failed, exit 1, "the command exited 1", read set checks/fails.mjs.
+
+So `node checks/fails.mjs` gives failed both as the base's deep_run runs it and as a claim's checks run, and `false`
+gives failed only the first way.
+
+Not run: any implementation of #2073; none exists in this checkout. The redraft's pass on a hub that refuses an
+untrusted project and runs a trusted one's check on the claim's commit is unverified until one exists.
+
+==== The run (the checkout written <repo>)
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/26-redraft-2073/contradiction.test.ts > #26.done-when a prediction deep_claim recorded that its run disagrees with shows in deep_status as a contradiction; one it agrees with doesn't (redraft 2073) 11331ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:26:52
+   Duration  12.69s (tests 92%, transform 7%, import 1%)

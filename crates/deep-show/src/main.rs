@@ -44,6 +44,7 @@ mod kinds;
 mod kit;
 mod lengths;
 mod logic;
+mod maps;
 mod media;
 mod mixdown;
 mod modes;
@@ -1352,6 +1353,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
                 "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
                 "pixel_checks_hold_anywhere" => Planted::PixelChecksHoldAnywhere,
+                "light_from_whole_frame" => Planted::LightFromWholeFrame,
+                "reduction_leaves_out_last_rows" => Planted::ReductionLeavesOutLastRows,
+                "regression_asks_every_verdict" => Planted::RegressionAsksEveryVerdict,
+                "loop_checks_cached_by_doc" => Planted::LoopChecksCachedByDoc,
+                "stale_fix_never_rebases" => Planted::StaleFixNeverRebases,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,
@@ -1393,6 +1399,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "resolver_closes_task" => Planted::ResolverClosesTask,
                 "probe_from_depth" => Planted::ProbeFromDepth,
                 "probe_nearest_item" => Planted::ProbeNearestItem,
+                "skips_missing_mesh_asset" => Planted::SkipsMissingMeshAsset,
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
