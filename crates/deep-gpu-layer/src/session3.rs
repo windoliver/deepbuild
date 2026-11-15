@@ -31,6 +31,12 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Some(Planted::StatusOverPaperWhite) => 4,
             _ => 0,
         },
+        ao: match p {
+            Some(Planted::AoMainLoop) => deep_scene3d_render::ao::Planted::Main,
+            Some(Planted::AoUniformHemisphere) => deep_scene3d_render::ao::Planted::Uniform,
+            Some(Planted::AoFullRadius) => deep_scene3d_render::ao::Planted::FullRadius,
+            _ => deep_scene3d_render::ao::Planted::None,
+        },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
