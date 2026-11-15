@@ -91,24 +91,16 @@ async function install(cli: string, quiet = false): Promise<Said> {
   const deepbuild = version(cli);
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
-  // Every file is planned before any is written: one that won't parse refuses the whole setup.
-  const planned = new Map<string, Obj>();
+  // Every file is read before any is written: one that won't parse refuses the whole setup.
   for (const file of [settingsFile, userFile]) {
-    const real = target(file);
-    if (!existsSync(real)) {
-      planned.set(file, {});
-      continue;
-    }
-    const text = readFileSync(real, 'utf8');
-    const read = plant() === 'setup-last-duplicate-wins' ? lenient(text) : strictObject(text);
+    const read = agentFile(file);
     if ('refused' in read) {
-      const copy = join(root, 'originals', createHash('sha256').update(text).digest('hex'));
+      const copy = join(root, 'originals', createHash('sha256').update(read.text).digest('hex'));
       mkdirSync(dirname(copy), { recursive: true, mode: 0o700 });
-      writeFileSync(copy, text, { mode: 0o600 });
+      writeFileSync(copy, read.text, { mode: 0o600 });
       process.stderr.write(`deep setup: ${file} ${read.refused}, so setup left it byte-for-byte as it was and wrote nothing; a copy is at ${copy}. Fix it, then run deep setup again.\n`);
       return said(stopped(root, 1, `${file} ${read.refused}`, 'Fix the file, then Set up again.', done));
     }
-    planned.set(file, read.value);
   }
   const rows = plannedRows();
   const record = setupRecord(root);
@@ -130,12 +122,13 @@ async function install(cli: string, quiet = false): Promise<Said> {
     // Each row's step. Codex's or paseo's failing leaves that agent out, and Claude Code's goes on.
     const steps: Record<string, () => Promise<void> | void> = {
       'hooks:claude-code': () => {
-        const settings = withStatusLine(root, withHooks(root, planned.get(settingsFile)!, groups), `${q(hook)} statusline`);
+        // Each file is read again just before its write, so what a running session wrote since the read above stays.
+        const settings = withStatusLine(root, withHooks(root, current(settingsFile), groups), `${q(hook)} statusline`);
         writeJson(settingsFile, settings);
         noteWritten(record, settingsFile);
         // The planted wrong program writes its entries into the repo it runs in too.
         if (plant() === 'setup-writes-project-settings') writeJson(join(process.cwd(), '.claude', 'settings.json'), withHooks(root, {}, groups));
-        const user = planned.get(userFile)!;
+        const user = current(userFile);
         const servers = isObj(user.mcpServers) ? user.mcpServers : {};
         // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
         // serves it, so a session runs one Node server, not two (#824's memory per session).
@@ -264,6 +257,20 @@ async function builtHook(): Promise<string> {
   const built = join(REPO, 'target', 'debug', 'deep-hook');
   if (serves(built) === false) throw Error(`${built} doesn't serve deep-actions after cargo build -p deep-hook`);
   return built;
+}
+/** An agent file as setup reads it: strictly, refusing a duplicate key; {} while there is none. */
+function agentFile(file: string): { value: Obj } | { refused: string; text: string } {
+  const real = target(file);
+  if (!existsSync(real)) return { value: {} };
+  const text = readFileSync(real, 'utf8');
+  const read = plant() === 'setup-last-duplicate-wins' ? lenient(text) : strictObject(text);
+  return 'refused' in read ? { refused: read.refused, text } : read;
+}
+/** The file as it is now, for a write to merge into; one that no longer parses is left as it is. */
+function current(file: string): Obj {
+  const read = agentFile(file);
+  if ('refused' in read) throw Error(`${file} ${read.refused}, so setup left it as it was`);
+  return read.value;
 }
 function lenient(text: string): { value: Obj } | { refused: string } {
   try {

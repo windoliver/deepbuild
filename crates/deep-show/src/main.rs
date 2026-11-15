@@ -20,6 +20,7 @@ mod evidence;
 mod export;
 mod extended;
 mod familiar;
+mod fields;
 mod caption_design;
 mod film;
 mod film_operator;
@@ -48,6 +49,8 @@ mod maps;
 mod media;
 mod mixdown;
 mod modes;
+#[cfg(target_os = "macos")]
+mod momentum;
 mod narration;
 mod over3d;
 mod net;
@@ -1296,6 +1299,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
+                // #542's in the text field and the scroll control's router.
+                || deep_canvas_input::text::PLANTED.contains(p)
+                || deep_canvas_input::scroll::PLANTED.contains(p)
                 || deep_canvas_scene3d::pointer::PLANTED.contains(p)
                 // #538's in the cells, text and motion modules.
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
@@ -2139,9 +2145,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_logic::module::module()
         };
-        // A build without physics refuses the logic items that need it (#533).
+        // A build without physics refuses the logic items that need it (#533); one with it binds
+        // physics.cast@1 for the items that ask it between steps (#213).
         out.push(match physics::module() {
-            Some(_) => logic,
+            Some(_) => {
+                deep_logic::module::bind_services(physics::cast::bound);
+                logic
+            }
             None => deep_logic::module::without_physics(logic),
         });
     }
@@ -2615,7 +2625,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
                 name: "kind@1".into(),
                 entries: entries.into_iter().map(Value::from).collect(),
                 rules: vec!["sheet_cap".into()],
-                passes: Vec::new(),
+                ..Default::default()
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
@@ -3329,6 +3339,9 @@ fn main() {
                 line["registry"] = json!(r.name);
                 line["entries"] = json!(r.entries);
                 line["rules"] = json!(r.rules);
+                for (k, v) in &r.report {
+                    line[k.as_str()] = v.clone();
+                }
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }

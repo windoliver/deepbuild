@@ -50,8 +50,22 @@ fn baked(world: &World, rec: &Record) -> Value {
             o.remove("ns");
         }
     }
-    let stored = json!({"steps": rec.steps_json(piece), "checkpoints": checkpoints,
-        "ranges": rec.ranges_json(piece), "occurrences": rec.occurrences(piece)});
+    let mut steps = rec.steps_json(piece, None);
+    // #213: a step's mirror and service times are readings, never the bake's bytes.
+    for s in steps.as_array_mut().into_iter().flatten() {
+        for row in s["items"]
+            .as_object_mut()
+            .into_iter()
+            .flat_map(|m| m.values_mut())
+        {
+            if let Some(o) = row.as_object_mut() {
+                o.remove("mirror_ns");
+                o.remove("service_ns");
+            }
+        }
+    }
+    let stored = json!({"steps": steps, "checkpoints": checkpoints,
+        "ranges": rec.ranges_json(piece, None), "occurrences": rec.occurrences(piece)});
     let bytes = serde_json::to_vec(&stored).unwrap_or_default();
     json!({"ok": true, "track": world.track_entries(), "steps": stored["steps"], "checkpoints": rec.checkpoints,
         "bake": crate::B64.encode(bytes)})

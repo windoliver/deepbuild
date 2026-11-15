@@ -655,7 +655,7 @@ pub fn open(
     let saves = written(&mut w)?;
     let frames = crate::frames(&piece, frames, &rec, Some((k, &at_open)))?;
     Ok(json!({
-        "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece),
+        "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
         "checkpoints": rec.checkpoints, "traps": rec.traps, "saves": saves, "frames": frames,
     }))
 }
