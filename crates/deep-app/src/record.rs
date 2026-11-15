@@ -193,6 +193,11 @@ impl View {
             .collect()
     }
 
+    /// The asks a panel's `needs_you()` names.
+    pub fn panel_asks(&self) -> Vec<&Value> {
+        self.needs_you()
+    }
+
     /// Applies one event the view doesn't have yet.
     pub fn apply(&mut self, event: Value) {
         self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
@@ -931,5 +936,97 @@ mod tests {
         view.apply(later("a2", "core"));
         assert_eq!(row(&view, "ask:a1").0, "shown");
         assert_eq!(row(&view, "ask:a2").0, "later");
+    }
+
+    fn handles(rows: Vec<&Value>) -> Vec<&str> {
+        rows.into_iter()
+            .map(|row| row["ask"].as_str().unwrap())
+            .collect()
+    }
+
+    /// The exception the core raises when a session's asks fold, keyed on its thread as the core keys it.
+    fn fold(id: &str, session: &str) -> Value {
+        use sha2::{Digest, Sha256};
+        let key = format!(
+            "{:x}",
+            Sha256::digest(format!("asks.fold:{session}").as_bytes())
+        );
+        json!({"kind": "ask.created", "id": id, "session": session, "writer": "core",
+               "data": {"kind": "exception", "key": key}})
+    }
+
+    #[test]
+    fn needs_you_holds_the_asks_the_hubs_list_holds() {
+        // An ask the hub's inbox read gave as held for the agent's next step, and one this app took for folded: the
+        // core shows both, the hub lists them, and the app has them in sight as the hub does (#1463).
+        let mut view = View::default();
+        view.inbox.push(json!({"ask": "ask:h1", "kind": "authority", "session": "s1", "status": "held", "outcome": "unanswered"}));
+        view.inbox.push(json!({"ask": "ask:f1", "kind": "taste", "session": "s1", "status": "folded", "outcome": "unanswered"}));
+        view.inbox.push(json!({"ask": "ask:q1", "kind": "taste", "session": "s2", "status": "shown", "outcome": "unanswered"}));
+        let listed = |id: &str| json!({"kind": "row.set", "writer": "core", "data": {"id": id, "listed": true, "order": id}});
+        view.apply(listed("session:s1"));
+        view.apply(listed("ask:h1"));
+        view.apply(listed("ask:f1"));
+        assert_eq!(handles(view.needs_you()), ["ask:h1", "ask:f1"]);
+    }
+
+    #[test]
+    fn an_ask_held_for_the_agents_step_is_shown_once_the_core_shows_it() {
+        let mut view = View::default();
+        view.inbox.push(json!({"ask": "ask:h1", "kind": "authority", "session": "s1", "status": "held", "outcome": "unanswered"}));
+        view.apply(
+            json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:h1"}]}}),
+        );
+        assert_eq!(row(&view, "ask:h1").0, "shown");
+    }
+
+    #[test]
+    fn an_ask_folds_only_into_its_sessions_keeps_asking_exception() {
+        // Another exception of the core's, a guard's override say, holds no asks: the next ask waits for its batch.
+        let mut view = View::default();
+        view.apply(
+            json!({"kind": "ask.created", "id": "g1", "session": "s1", "writer": "core",
+                          "data": {"kind": "exception", "key": "guard.overridden:s1"}}),
+        );
+        view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a1").0, "queued");
+
+        view.apply(fold("x1", "s1"));
+        view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a2").0, "folded");
+    }
+
+    #[test]
+    fn asks_an_answered_exception_held_get_their_own_rows() {
+        // "Answer them together" closes the exception: an ask it held that the core had shown is in sight again, and
+        // one it hadn't waits for its batch. Left to their defaults, they stay inside it.
+        let closed_by = |answer: &str| {
+            let mut view = View::default();
+            view.apply(fold("x1", "s1"));
+            view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+            view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+            view.apply(json!({"kind": "ask.batched", "writer": "core", "data": {"asks": [{"ask": "ask:x1"}, {"ask": "ask:a1"}]}}));
+            assert_eq!(row(&view, "ask:a1").0, "folded");
+            view.apply(json!({"kind": "ask.answered", "writer": "core", "subject": "ask:x1", "data": {"answer": answer}}));
+            (row(&view, "ask:a1").0, row(&view, "ask:a2").0)
+        };
+        assert_eq!(
+            closed_by("together"),
+            ("shown".to_owned(), "queued".to_owned())
+        );
+        assert_eq!(
+            closed_by("defaults"),
+            ("folded".to_owned(), "folded".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_panel_is_given_the_folded_asks_with_those_in_sight() {
+        // #338: `needs_you()` names an ask folded into an exception among its rows, and as folded.
+        let mut view = View::default();
+        view.apply(json!({"kind": "ask.created", "id": "a0", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        view.apply(fold("x1", "s1"));
+        view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(handles(view.panel_asks()), ["ask:a0", "ask:x1", "ask:a1"]);
     }
 }

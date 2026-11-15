@@ -215,7 +215,7 @@ pub fn deepbuild_module() -> HostModule {
 fn needs_you() -> Result<HostValue, HostError> {
     // The rows are those Needs you draws: an ask waiting for its batch isn't one (#22).
     let (log_pos, inbox, open) = record::with_view(|view| {
-        let open: Vec<serde_json::Value> = view.needs_you().into_iter().cloned().collect();
+        let open: Vec<serde_json::Value> = view.panel_asks().into_iter().cloned().collect();
         (view.log_pos, view.inbox.clone(), open)
     })
     .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;

@@ -682,4 +682,18 @@ mod tests {
         let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
         assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
     }
+
+    #[test]
+    fn an_ask_in_a_record_with_no_batches_notifies_when_it_is_raised() {
+        // A fixture's record, or an older hub's: nothing shows its asks, the list draws them at once, and so each notifies.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
+            "question": "Push?", "default": "no", "deadline": 99_000_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&View::default(), Vec::new());
+        notifier.saw(&ask, 1_000);
+        let posted = notifier.due(&view(std::slice::from_ref(&ask)), 5_000, None, false);
+        let asks: Vec<Option<&str>> = posted.iter().map(|n| n.ask.as_deref()).collect();
+        assert_eq!(asks, [Some("ask:a1")], "{posted:?}");
+    }
 }
