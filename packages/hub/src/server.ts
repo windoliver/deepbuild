@@ -110,6 +110,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
   ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
+  // A sign-in task's one button (#1349): the agent's own sign-in command, started from the app alone.
+  ['signin.open', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).

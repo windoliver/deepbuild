@@ -120,6 +120,16 @@ pub(crate) fn page(
         )
         .on_click(cx.listener(|this, _, _, cx| start(this, cx)))
     });
+    // #1349's planted screen: an install button of its own beside Set up, where the one press installs the agent.
+    let install = (offered && !running && planted("install-button-beside-set-up")).then(|| {
+        control(
+            "install-agent",
+            Control::Plain,
+            "Install Claude Code",
+            chrome,
+        )
+        .on_click(cx.listener(|this, _, _, cx| start(this, cx)))
+    });
     // What stopped the last Set up, and what to do: setup's own reason and fix, or its own plain line.
     let reason = (!running && offered)
         .then(|| {
@@ -188,6 +198,20 @@ pub(crate) fn page(
                             .justify_between()
                             .gap(s.space(4))
                             .child(name.clone())
+                            // An agent Set up installs (#1349) says so on its row, before the click.
+                            .children(
+                                steps
+                                    .iter()
+                                    .any(|(step, _)| step.starts_with("install:"))
+                                    .then(|| {
+                                        label(
+                                            ElementId::Name(
+                                                format!("setup-installs:{agent}").into(),
+                                            ),
+                                            "Set up installs it",
+                                        )
+                                    }),
+                            )
                             .child(div().flex().gap(s.space(1)).children(marks))
                     })),
             )
@@ -209,6 +233,7 @@ pub(crate) fn page(
         })
         .children(button)
         .children(second)
+        .children(install)
         .children(hidden.then(|| label("set-up-working", format!("{SETTING_UP}…"))))
         // #1461's planted first-launch page draws the box beside Set up.
         .children(

@@ -1,9 +1,10 @@
 // Installs and updates (#41): each version in a folder of its own under <home>/versions/, checked against a manifest
 // signed with an offline key, unpacked, then switched in atomically through the `current` link, with the newest three
 // versions kept for rollback. Nothing under <home> changes until the signature and the archive's sha256 both check.
+// The app's own runtime folder (#1349) installs the same way, copied from the signed app it ships in.
 import { spawnSync } from 'node:child_process';
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync } from 'node:fs';
+import { constants, cpSync, existsSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Where an injected failure stops the install: tests only. */
@@ -50,6 +51,25 @@ export async function installVersion({ home, archive, manifest, signature, publi
   const digest = createHash('sha256').update(archive).digest('hex');
   if (digest !== meta.sha256) throw Error(`refused: the download's sha256 ${digest} is not the manifest's ${String(meta.sha256)}, so nothing was installed`);
 
+  return place(home, version, (staging) => {
+    const untar = spawnSync('tar', ['-xzf', '-', '-C', staging], { input: archive, stdio: ['pipe', 'ignore', 'pipe'] });
+    if (untar.status !== 0) throw Error(`the archive won't unpack: ${untar.stderr.toString().trim()}`);
+  }, failAt);
+}
+
+/**
+ * The app's runtime folder (#1349) as a version: copied, links kept as links, into <home>/versions/<version>/ and
+ * switched in through `current`. The app's signature is its check. Nothing changes when `current` already names it.
+ */
+export function installShipped(home: string, tree: string, version: string): { version: string; installed: boolean } {
+  if (!NAME.test(version) || version === 'current') throw Error(`refused: ${JSON.stringify(version)} names no version folder`);
+  if (currentVersion(join(home, 'versions')) === version) return { version, installed: false };
+  place(home, version, (staging) => cpSync(tree, staging, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE }));
+  return { version, installed: true };
+}
+
+/** Fills a staging folder, renames it into place and switches `current` to it in one rename; then keeps the newest three. */
+function place(home: string, version: string, fill: (staging: string) => void, failAt?: FailAt): { version: string } {
   const versions = join(home, 'versions');
   mkdirSync(versions, { recursive: true });
   const previous = currentVersion(versions);
@@ -60,8 +80,7 @@ export async function installVersion({ home, archive, manifest, signature, publi
   let placed = false;
   try {
     mkdirSync(staging);
-    const untar = spawnSync('tar', ['-xzf', '-', '-C', staging], { input: archive, stdio: ['pipe', 'ignore', 'pipe'] });
-    if (untar.status !== 0) throw Error(`the archive won't unpack: ${untar.stderr.toString().trim()}`);
+    fill(staging);
     if (failAt === 'after-unpack') throw Error('injected failure after the unpack');
     rmSync(folder, { recursive: true, force: true });
     renameSync(staging, folder);
