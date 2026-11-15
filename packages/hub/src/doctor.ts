@@ -22,9 +22,10 @@ import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
 import { claudeHomes, denyHolds, homeMods, managedSettings, overrideWords } from './mods.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
+export interface Item { item: string; agent: string; code: DoctorItem['code']; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -92,7 +93,7 @@ async function firstFree(from: number, to: number): Promise<number | undefined> 
 export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> {
   const root = installedRoot();
   const items: Item[] = [];
-  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
 
   // The hub and its disk.
   let socket = '';
@@ -195,7 +196,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
  */
 function serviceItem(root: string): Item {
   const file = serviceFile();
-  const item = (code: string, level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
+  const item = (code: Item['code'], level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
   let text: string;
   try { text = readFileSync(file, 'utf8'); } catch { return item('not_checked', 'skip', `no login service for the hub at ${file}`, 'Run `deep setup`, which installs it.'); }
   const unxml = (v: string) => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -229,7 +230,7 @@ function serviceItem(root: string): Item {
 export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
   const root = installedRoot();
   const items: Item[] = [];
-  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
   const file = claudeSettings();
   const settings = readJson(file);
   const record = installed(root);
@@ -265,7 +266,7 @@ export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
   return items;
 }
 
-async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
   const range = facts(agent).versions;
   if (!claude) {
@@ -316,7 +317,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
  * each that can approve a call past a PreToolUse deny or submit prompts, unless the setup holds the deny; OK
  * when none can; not checked when the home's plugins can't be read.
  */
-async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
   for (const [i, home] of claudeHomes(env).entries()) {
     // The sign-in already read is the first home's, the one `claude auth status` reads with this environment.
@@ -334,7 +335,7 @@ async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, a
     if (!risky.length) add('claude.mods', agent, 'healthy', 'ok', read.mods.length ? `${home} loads ${read.mods.map((m) => m.name).join(', ')}, none of which handles a tool or prompt event` : `${home} loads no mods`, 'Nothing to do.');
   }
 }
-async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
   for (const i of hookItems(env, '').filter((h) => h.agent === agent)) add(i.item, agent, i.code, i.level, i.evidence, i.fix);
   if (!codex) return;
@@ -349,7 +350,7 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   billing(agent, 'Codex', env, add);
 }
 /** A billing key set where your sessions start makes them bill an API account; never shows its value. */
-function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): void {
+function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): void {
   const set = (facts(agent).billing?.apiKeyVariables ?? []).filter((k) => env[k]);
   for (const key of set) add(`${agent === 'codex' ? 'codex' : 'claude'}.billing`, agent, 'billing_api_key', 'warn', `${key} is set in the shell your sessions start from, so ${name} sessions bill an API account, not your plan`, `Unset ${key} where you start sessions if you mean to use your plan.`);
   if (!set.length) add(`${agent === 'codex' ? 'codex' : 'claude'}.billing`, agent, 'healthy', 'ok', `no API billing variable is set, so ${name} sessions use your plan`, 'Nothing to do.');

@@ -44814,6 +44814,9 @@ pub enum DoctorItemCode {
     ServiceUnpromoted,
     StatuslineShadowed,
     PackRefused,
+    PolkitActionMissing,
+    HooksModified,
+    ModOverridesGuard,
     Unknown,
 }
 
@@ -44849,6 +44852,9 @@ impl Contract for DoctorItemCode {
             "service_unpromoted" => Ok(Self::ServiceUnpromoted),
             "statusline_shadowed" => Ok(Self::StatuslineShadowed),
             "pack_refused" => Ok(Self::PackRefused),
+            "polkit_action_missing" => Ok(Self::PolkitActionMissing),
+            "hooks_modified" => Ok(Self::HooksModified),
+            "mod_overrides_guard" => Ok(Self::ModOverridesGuard),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -44884,6 +44890,9 @@ impl Contract for DoctorItemCode {
             Self::ServiceUnpromoted => "service_unpromoted",
             Self::StatuslineShadowed => "statusline_shadowed",
             Self::PackRefused => "pack_refused",
+            Self::PolkitActionMissing => "polkit_action_missing",
+            Self::HooksModified => "hooks_modified",
+            Self::ModOverridesGuard => "mod_overrides_guard",
             Self::Unknown => "unknown",
         }.to_string())
     }

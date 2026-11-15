@@ -29,6 +29,7 @@ import { changes, doing, key, onPath, planned as plannedRows, saying, setUpLine,
 import { Devices } from './trusted.js';
 import { shellQuote as q } from './shell.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
@@ -507,11 +508,11 @@ function editedCodex(file: string, without: (text: string) => string, what: stri
 }
 
 /** deep doctor's item for each timing relation our entries keep, with both values: broken is a failed item. */
-export function relationItems(): { item: string; agent: string; code: string; level: 'ok' | 'fail'; evidence: string; fix: string }[] {
+export function relationItems(): { item: string; agent: string; code: DoctorItem['code']; level: 'ok' | 'fail'; evidence: string; fix: string }[] {
   const codex = codexRelations(installedRoot()).map((r) => ({
     item: `timing.codex_${r.name.replaceAll(' ', '_')}`,
     agent: 'codex',
-    code: r.holds ? 'healthy' : 'timing_relation_broken',
+    code: r.holds ? 'healthy' as const : 'timing_relation_broken' as const,
     level: r.holds ? 'ok' as const : 'fail' as const,
     evidence: r.text,
     fix: r.holds ? 'Nothing to do.' : `Put the value back as the reading says; setup never changes it, since Codex asks for trust again when an entry's timeout changes.`,
@@ -519,7 +520,7 @@ export function relationItems(): { item: string; agent: string; code: string; le
   return [...codex, ...relations(installedRoot()).map((r) => ({
     item: `timing.${r.name.replaceAll(' ', '_')}`,
     agent: 'claude-code',
-    code: r.holds ? 'healthy' : 'timing_relation_broken',
+    code: r.holds ? 'healthy' as const : 'timing_relation_broken' as const,
     level: r.holds ? 'ok' as const : 'fail' as const,
     evidence: r.text,
     fix: r.holds ? 'Nothing to do.' : `Run deep setup, which writes the entry's timeout again, or raise it in ${claudeSettings()}.`,
