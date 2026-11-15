@@ -9,7 +9,7 @@ import { StaleHub } from './generations.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
-import { needsYou, type Row, type Why } from './rows.js';
+import type { Row, Why } from './rows.js';
 import { SECTION } from './sections.js';
 import { visible } from './visible.js';
 
@@ -106,8 +106,8 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   if (!sessions.length) out.push('Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.');
   else out.push(`${sessions.length} session${sessions.length === 1 ? '' : 's'}`);
   // The planted wrong program counts the open asks a second time, itself, one too many.
-  if (activePlant() === 'deep-second-count') out.push(asksNeedYou(needsYou(asks) + 1));
-  out.push(asksNeedYou(needsYou(asks)));
+  if (activePlant() === 'deep-second-count') out.push(asksNeedYou(asks.length + 1));
+  out.push(asksNeedYou(asks.length));
   // Each line names sessions, asks and readings from the record, so each prints through `visible` (#1510).
   return `${out.map(visible).join('\n')}\n`;
 }

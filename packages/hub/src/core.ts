@@ -31,7 +31,7 @@ import { Confirmer } from './confirm.js';
 import { keychain } from './keychain.js';
 import { recordedHome, saveTrust } from './codex-settings.js';
 
-import { listRows, needsYou as countNeedsYou } from './rows.js';
+import { listRows } from './rows.js';
 import { addGuards, blocksCall } from './guards.js';
 import { captureRejected, repoFolders, syncRejected } from './memory.js';
 import { AskTasks } from './ask-tasks.js';
@@ -2484,7 +2484,7 @@ export class Core {
     // an ask that took its default, which can still be undone, as open too.
     await this.state.statesSettled();
     const defaulted = this.options.plant === 'needs-you-counts-defaulted' ? Number(((await this.record.raw(`SELECT COUNT(*) AS n FROM asks WHERE status = 'defaulted'`)) as { n: number }[])[0]?.n ?? 0) : 0;
-    const needsYou = countNeedsYou([...this.state.rows.values()].map((p) => p.row)) + defaulted;
+    const needsYou = [...this.state.rows.keys()].filter((id) => id.startsWith('ask:')).length + defaulted;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
 

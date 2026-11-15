@@ -111,7 +111,10 @@ export function statusAnswer(claim: ClaimState | undefined, f: StatusFacts): str
   const state = f.state ?? 'working';
   // The time in the state and the count are part of the line #83's width fits (#1810), so the line gives way, never them.
   const tail = ` (for ${elapsed(f.now - at)}) · needs you: ${f.needsYou}`;
-  const first = claim ? verdictLine(claim.state, LINE_WIDTH - [...tail].length) : `${state} · next: ${state === 'working' || state === 'unknown' || state === 'failed' ? 'agent' : 'you'}`;
+  const room = LINE_WIDTH - [...tail].length;
+  const line = claim ? verdictLine(claim.state, room) : `${state} · next: ${state === 'working' || state === 'unknown' || state === 'failed' ? 'agent' : 'you'}`;
+  // Parts the verdict line never drops can still pass the room left: then the line is cut there, marked, before the tail.
+  const first = [...line].length <= room ? line : `${[...line].slice(0, room - 1).join('').trimEnd()}…`;
   const resume = f.agent === 'codex' ? `codex resume ${f.session}` : `claude --resume ${f.session}`;
   return [
     `${first}${tail}`,

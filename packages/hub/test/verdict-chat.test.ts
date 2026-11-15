@@ -35,6 +35,15 @@ describe('statusAnswer', () => {
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 7_200_000 })).toContain('(for 2h)');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 2 * 86_400_000 })).toContain('(for 2d)');
   });
+  it("a line whose parts the verdict line never drops is cut, so it stays within #83's width and ends in the count (#1810)", () => {
+    const held = { outcome: null, requirements: [], running: [], held: [{ check: 'e2e', reason: 'the pool is full, its lease is held by another run' }, { check: 'unit', reason: 'the pool is full, its lease is held by another run' }] };
+    const watch = { outcome: 'PASS' as const, requirements: [1, 2, 3, 4].map((n) => ({ req: `req:D#R${n}`, outcome: 'PASS' as const, smallest: null, points_to: null })), running: [], tests: 12, watch: { why: "hooks don't reach DeepBuild", unsent: false } };
+    for (const state of [held, watch]) {
+      const [line] = statusAnswer({ task: 'task:T', session: facts.session, created: 10_000, checks: [], verdictAt: 40_000, state }, { ...facts, needsYou: 3 }).split('\n');
+      expect([...line!].length, line).toBeLessThanOrEqual(80);
+      expect(line).toMatch(/… \(for 1m\) · needs you: 3$/);
+    }
+  });
 });
 
 describe('claimState', () => {

@@ -36,8 +36,6 @@ export interface Row {
 export type RowFlag = Omit<Flag, 'facts'>;
 /** The row.set version a session's or an ask's row needs: @4 with a flag, @3 with what its turn is doing, else @1. */
 export const rowVersion = (row: Row): number => (row.flag ? 4 : row.doing ? 3 : 1);
-/** The one count of what needs you (#1810): the list's ask rows, which every surface reads, so no second count can drift. */
-export const needsYou = (rows: Iterable<Row>): number => [...rows].filter((r) => r.id.startsWith('ask:')).length;
 /** A row with its place in the list: every reader sorts by `order`'s bytes. */
 export interface Placed { order: string; row: Row }
 
