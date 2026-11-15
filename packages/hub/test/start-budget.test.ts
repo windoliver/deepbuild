@@ -2,11 +2,12 @@
 // whose lock stays held (a hung hub, or `deep restore`) and where no hub answers fails within it, with today's
 // message and exit 3, not after a 15 s wait for the lock and another 15 s for a new hub.
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, expect, it } from 'vitest';
 import { takeLock } from '../src/lock.js';
+import { control } from '../src/service.js';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
 const dir = realpathSync(mkdtempSync('/tmp/d2570b-'));
@@ -16,7 +17,7 @@ it('#2570 a start beside a root whose lock stays held and where no hub answers f
   const root = join(dir, 'root');
   mkdirSync(root, { recursive: true });
   // Another holder of the root's lock for the whole test: the CLI is another process, so its takeLock is refused.
-  const lock = takeLock(join(root, 'hub-lock.sqlite'));
+  let lock = takeLock(join(root, 'hub-lock.sqlite'));
   expect(lock, 'the test must hold the lock').toBeDefined();
   try {
     const started = Date.now();
@@ -31,7 +32,16 @@ it('#2570 a start beside a root whose lock stays held and where no hub answers f
     expect(stderr).toContain(`deep hub start: no hub answered at unix:${join(root, 'hub.sock')} within 15 s; see ${join(root, 'logs', 'hub.log')}`);
     // 15 s and the margin a loaded machine needs to start Node, never a second wait.
     expect(seconds, `deep hub start took ${seconds.toFixed(1)} s`).toBeLessThan(20);
+    // A start that has failed leaves nothing behind. It spawned no hub: a dev hub's start opens the root's hub.log
+    // for it, in the CLI, before it spawns. And none comes up once the lock frees.
+    expect(existsSync(join(root, 'logs', 'hub.log')), 'the failed start spawned a hub beside the held lock').toBe(false);
+    lock?.release();
+    lock = undefined;
+    await new Promise((done) => setTimeout(done, 5_000));
+    expect(existsSync(join(root, 'ledger.db')), 'a hub the failed start spawned ran on the root once the lock freed').toBe(false);
   } finally {
     lock?.release();
+    // Should one have come up, stop it, so no hub outlives the test.
+    await control(join(root, 'hub.sock'), join(root, 'control.token'), 'hub.stop').catch(() => undefined);
   }
 }, 90_000);
