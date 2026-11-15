@@ -102,6 +102,9 @@ pub struct Record {
     /// When asked for: each step's services region of each item that asks services, as the step
     /// read it, in hex, by step and item (`{services}`).
     pub regions: Option<BTreeMap<i64, Map<String, Value>>>,
+    /// When asked for (#184's play): each step's time by item, as `(item, ns)`, so a bot's steps
+    /// are timed apart from the piece's. A reading, never part of a run.
+    pub ns: Option<Vec<(usize, u64)>>,
 }
 
 impl Record {
@@ -751,7 +754,11 @@ impl World {
             let mut held = Vec::new();
             self.seen += 1;
             for i in group {
+                let started = rec.ns.is_some().then(std::time::Instant::now);
                 self.step(i, &snapshot, rec, &mut held);
+                if let (Some(ns), Some(s)) = (rec.ns.as_mut(), started) {
+                    ns.push((i, s.elapsed().as_nanos() as u64));
+                }
                 self.published[i] = self.lives[i].arrays.clone();
                 // Right after the step, before any checkpoint or step k + 1 (Logic: between-step
                 // services); the planted module answers after the next checkpoint instead.

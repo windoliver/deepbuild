@@ -303,6 +303,14 @@
         "crc32fast": {
           "spec": "^1",
           "why": "Issue #124: the chunk checksums of a deep_drive recording's animated PNG, assembled from its frames. Already in the png crate's tree."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #184: the replica's play mode steps a piece's logic items and a logic bot's, as the logic module does (deep_logic::play)."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #184: a play's programs arrive inline, base64 by their hash. Already in the workspace tree through deep-logic."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {

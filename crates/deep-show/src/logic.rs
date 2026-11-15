@@ -333,30 +333,12 @@ impl Hub<'_> {
 /// `form`'s logic items as one piece, as the logic module checks one: its seed, controls and
 /// items; none when it has no logic item.
 pub(crate) fn piece_json(form: &Value) -> Option<Value> {
-    let items: Map<String, Value> = form
-        .get("items")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-        .map(|(id, i)| {
-            // Without the program the hub inlined as `wasm` for the module's steps (#533): the
-            // check reads it from the store by `program`.
-            let mut params = i.get("params").cloned().unwrap_or(json!({}));
-            if let Some(p) = params.as_object_mut() {
-                p.remove("wasm");
-            }
-            (id.clone(), json!({"kind": "logic@1", "params": params}))
-        })
-        .collect();
-    if items.is_empty() {
-        return None;
-    }
-    Some(json!({
-        "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
-        "controls": form.get("controls").cloned().unwrap_or(json!({})),
-        "items": items,
-    }))
+    // Without the program the hub inlined as `wasm` for the module's steps (#533): the check
+    // reads it from the store by `program`. The core's reads judge as figure, as they did before
+    // a play (#184) carried the document's class.
+    let mut piece = deep_logic::play::piece_of(form)?;
+    piece.as_object_mut()?.remove("class");
+    Some(piece)
 }
 
 /// #538: each array a text's lookup or a group's flip names, resolved through the core's view:

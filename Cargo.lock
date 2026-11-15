@@ -2686,8 +2686,10 @@ dependencies = [
 name = "deep-replica"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "crc32fast",
  "deep-app",
+ "deep-logic",
  "gpui-kit",
  "gpui-shell",
  "image",
