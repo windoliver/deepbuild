@@ -743,6 +743,9 @@ byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
 // #184's files start replicas and hosts and play mazes for minutes; budgets.test.ts times release replicas.
 alone.push('tests/acceptance/184/');
 timed.push('tests/acceptance/184/budgets.test.ts');
+// #184's criterion 7 went to a blind redraft (tests/acceptance/184-redraft-ac7/DISPUTE.md); both drafts run until the
+// owner's call.
+alone.push('tests/acceptance/184-redraft-ac7/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
