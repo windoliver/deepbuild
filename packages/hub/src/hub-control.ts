@@ -265,6 +265,7 @@ export class HubControl {
       case 'host.plan': return this.options.services.hosts.plan(params.ask);
       case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
       case 'host.changes': return this.options.services.hosts.changes(params.host);
+      case 'host.remove': return this.options.services.hosts.remove(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
