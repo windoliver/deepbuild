@@ -206,13 +206,15 @@ export const tasteBlock = (tastes: readonly Taste[]): string | undefined =>
 
 const USAGE = 'Usage: deep memory [--json]\n       deep memory keep <lesson>\n       deep memory remove <lesson>\n       deep memory overrule <decision>';
 /** `deep memory`: the ranked list and your rejections; keep, remove or overrule one once the OS confirms you. Exit 0 done, 1 refused, 2 usage, 3 not decided. */
-export async function memoryCommand(args: readonly string[]): Promise<number> {
+export async function memoryCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const overruling = args[0] === 'overrule';
   const acting = args[0] === 'keep' || args[0] === 'remove' || overruling;
-  if (acting ? args.length !== 2 : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
+  if (acting ? args.length !== 2 || args[1]!.startsWith('-') : args.length > 1 || (args.length === 1 && args[0] !== '--json')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   let reply: Reply;
   try {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();

@@ -297,27 +297,21 @@ function unsupported(word: string): void {
 // The first `deep` command sets everything up, as the app's Set up click does (#326): in a home with nothing of
 // DeepBuild, or one where a setup started and didn't finish (#1002, setup.ts), the commands you run yourself first run
 // setup's steps without asking. The hub's modules load only then, so a set-up home starts as fast as before (#24's
-// budget). deep env with --root names a dev hub and acts on it alone (#331), or is a usage error, so it sets nothing up
-// in the home.
-const yours = ['', 'status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guard', 'memory'];
-const devHub = args[0] === 'env' && args.includes('--root');
+// budget). Setup runs only for a command whose arguments read (#2200): each of these runs it after its own usage check,
+// so a command that can't run sets nothing up. Its exit code, 0 to go on, else the command's.
 const installed = join(homedir(), '.deepbuild');
 const unfinished = !existsSync(join(installed, 'setup-finished.json')) && (!existsSync(installed) || existsSync(join(installed, 'setup-stopped.json')));
-if (!help && yours.includes(args[0] ?? '') && !devHub && unfinished) {
-  const { setUpFirst } = await import('@deepbuild/hub');
-  const code = await setUpFirst(fileURLToPath(import.meta.url));
-  if (code !== 0) process.exit(code);
-}
+const setUp = async (): Promise<number> => (unfinished ? (await import('@deepbuild/hub')).setUpFirst(fileURLToPath(import.meta.url)) : 0);
+const yours = { status: 'statusCommand', inbox: 'inboxCommand', secret: 'secretCommand', env: 'envCommand', install: 'installCommand', guard: 'guardCommand', memory: 'memoryCommand' } as const;
 
 const hubCommands = {
-  env: 'envCommand', gate: 'gateCommand', start: 'startCommand', inbox: 'inboxCommand', secret: 'secretCommand', race: 'raceCommand', fix: 'fixCommand',
+  gate: 'gateCommand', start: 'startCommand', race: 'raceCommand', fix: 'fixCommand',
   // Landing in turn (#1331).
   land: 'landCommand', work: 'workCommand',
-  workspace: 'workspaceCommand', numbers: 'numbersCommand', show: 'showCommand', export: 'exportCommand', status: 'statusCommand', install: 'installCommand',
+  workspace: 'workspaceCommand', numbers: 'numbersCommand', show: 'showCommand', export: 'exportCommand',
   undo: 'undoCommand',
   // A project's hub on another machine, joined with the repo link and an invite (#1338).
   join: 'joinCommand',
-  guard: 'guardCommand', memory: 'memoryCommand',
 } as const;
 
 if (help) {
@@ -325,7 +319,7 @@ if (help) {
 } else if (args.length === 0) {
   // `deep` alone is the list (#1463): the rows and the one count the app shows, and nothing after them.
   const { listCommand } = await import('@deepbuild/hub');
-  process.exitCode = await listCommand([]);
+  process.exitCode = await listCommand([], setUp);
 } else if (args[0] === 'doctor') {
   const { doctorCommand } = await import('@deepbuild/hub');
   process.exitCode = await doctorCommand(args.slice(1), telemetryItems);
@@ -342,6 +336,9 @@ if (help) {
   // Its own entry, so a leased command starts without the hub's module graph.
   const { leaseCommand } = await import('@deepbuild/hub/lease');
   process.exitCode = await leaseCommand(args.slice(1));
+} else if (Object.hasOwn(yours, args[0]!)) {
+  const hub = await import('@deepbuild/hub');
+  process.exitCode = await hub[yours[args[0] as keyof typeof yours]](args.slice(1), setUp);
 } else if (Object.hasOwn(hubCommands, args[0]!)) {
   const hub = await import('@deepbuild/hub');
   process.exitCode = await hub[hubCommands[args[0] as keyof typeof hubCommands]](args.slice(1));
@@ -354,7 +351,7 @@ if (help) {
   process.exitCode = await setupCommand(fileURLToPath(import.meta.url), args.slice(1));
 } else if (args.length === 1 && (args[0] === 'off' || args[0] === 'on')) {
   const { gatesCommand } = await import('@deepbuild/hub');
-  process.exitCode = await gatesCommand(args[0] === 'off');
+  process.exitCode = (await setUp()) || (await gatesCommand(args[0] === 'off'));
 } else if (args[0] === 'kinds' && (args[1] === '--dump' || args[1] === '--diff')) {
   const { kindsCommand } = await import('@deepbuild/hub');
   process.exitCode = await kindsCommand(args.slice(1));
@@ -376,7 +373,7 @@ if (help) {
   // Its own entry, as deep mcp's: an agent starts it for each synced server that takes secrets (#148).
   const { mcpExecCommand } = await import('@deepbuild/hub/mcp-exec');
   process.exitCode = await mcpExecCommand(args.slice(1));
-} else if (args[0] === 'open' && args.length === 2) {
+} else if (args[0] === 'open' && args.length === 2 && !args[1]!.startsWith('-')) {
   // Issue #1460: the address goes to the running app over its own socket, so the hub records nothing.
   const { connect } = await import('node:net');
   process.exitCode = await new Promise<number>((done) => {
@@ -402,7 +399,7 @@ if (help) {
   process.exitCode = await debugBundle();
 } else if (args[0] === 'run' && args[1] === '--result' && args[2] && args.length === 3) {
   process.exitCode = await run(args[2]);
-} else if (args[0] === 'run' && args[1] === 'follow' && args[2] && args.length === 3) {
+} else if (args[0] === 'run' && args[1] === 'follow' && args[2] && !args[2].startsWith('-') && args.length === 3) {
   const { followCommand } = await import('@deepbuild/hub');
   process.exitCode = await followCommand(args[2]);
 } else if (args[0] === 'host') {

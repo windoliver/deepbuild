@@ -166,8 +166,8 @@ export function writeRejected(dir: string, rejected: Obj): void {
 const USAGE = 'Usage: deep guard add <file>';
 
 /** `deep guard add <file>`: exit 0 added, 1 refused, 2 a usage error, 3 not decided. */
-export async function guardCommand(args: readonly string[]): Promise<number> {
-  if (args.length !== 2 || args[0] !== 'add') {
+export async function guardCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
+  if (args.length !== 2 || args[0] !== 'add' || args[1]!.startsWith('-')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
@@ -179,6 +179,8 @@ export async function guardCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep guard add: ${from} isn't readable JSON (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   const result = await callAsYou('guard.add', { guards }, 'nothing was added');
   if (typeof result === 'number') return result;
   process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);

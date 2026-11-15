@@ -20,7 +20,8 @@ const FOLDERS = ['evidence', 'wiki'] as const;
 
 /** `deep backup <folder>`: through the running hub, into an empty folder. */
 export async function backupCommand(args: readonly string[]): Promise<number> {
-  if (args.length !== 1 || !args[0]) {
+  // A flag where the folder goes is a usage error, never a folder named for it (#2200).
+  if (args.length !== 1 || !args[0] || args[0].startsWith('-')) {
     process.stderr.write('Usage: deep backup <folder>\n');
     return 2;
   }

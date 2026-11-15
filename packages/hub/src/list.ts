@@ -195,7 +195,7 @@ async function fromDatabase(ledger: string, detail: boolean, why?: string): Prom
  * `deep` (`detail` false) and `deep status` (true), each with `--json`: 0 read from the hub, 3 from its database or not
  * at all. `deep status <session> --why` prints why that session reads as it does (#2018), 2 when no session has that ID.
  */
-export async function listCommand(args: readonly string[], detail: boolean): Promise<number> {
+export async function listCommand(args: readonly string[], detail: boolean, setUp: () => Promise<number> = async () => 0): Promise<number> {
   const name = detail ? 'deep status' : 'deep';
   const named = args.filter((a) => !a.startsWith('--'));
   const asked = args.includes('--why');
@@ -203,6 +203,8 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
     process.stderr.write(detail ? 'Usage: deep status [--json] | deep status <session> --why [--json]\n' : `Usage: ${name} [--json]\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   const session = asked ? named[0]! : undefined;
   const [method, params] = session === undefined ? ['rows.read', { detail }] as const : ['row.why', { session }] as const;
   const json = args.includes('--json');

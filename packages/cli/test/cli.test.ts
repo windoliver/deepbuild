@@ -118,6 +118,21 @@ describe('deep <command> --help', () => {
     }
   }, 70_000);
 
+  // #2200: a file its argument names that can't be read is exit 2 as well, so the first command's setup hasn't run.
+  it.each([[['guard', 'add', 'missing.json']], [['install', 'missing']]])('deep %j, naming a file that isn\'t there, exits 2 and leaves a fresh home byte-identical', (args) => {
+    const { home, env } = fresh();
+    try {
+      const before = snapshot(home);
+      const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      const after = snapshot(home);
+      const written = [...after].find(([path, state]) => before.get(path) !== state)?.[0];
+      expect(written, `deep ${args.join(' ')} wrote ${written} (${result.stderr.trim().slice(0, 300)})`).toBeUndefined();
+      expect(result.status).toBe(2);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
+
   // The usage a command prints for arguments it can't read is the one that is right; its help names every flag in it.
   it.each([['start'], ['rules'], ['session', 'rules'], ['show'], ['read'], ['find'], ['hub']])('deep %s --help names every flag the command says it takes', (command, ...rest) => {
     const { home, env } = fresh();

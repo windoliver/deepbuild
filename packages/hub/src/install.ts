@@ -21,7 +21,7 @@ interface Manifest {
 const list = (values: readonly string[] | undefined): string => (values?.length ? values.join(', ') : 'none');
 
 /** `deep install [--trust-key] <folder>`: exit 0 installed, 2 a usage error, 3 not decided, 1 refused. */
-export async function installCommand(args: readonly string[]): Promise<number> {
+export async function installCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const trustKey = args[0] === '--trust-key';
   const folders = trustKey ? args.slice(1) : args;
   if (folders.length !== 1 || folders[0]!.startsWith('--')) {
@@ -30,6 +30,8 @@ export async function installCommand(args: readonly string[]): Promise<number> {
   }
   const from = resolve(folders[0]!);
   if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
+    const stopped = await setUp();
+    if (stopped) return stopped;
     try {
       const pack = readPack(from);
       process.stdout.write(`Source: ${from}\n  ${pack.ref}, digest ${pack.digest}\n  Assets fetch only on first use after an authority ask or your standing rule.\n`);
@@ -47,6 +49,8 @@ export async function installCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep install: ${from} has no readable deepbuild.json (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   process.stdout.write([
     `Source: ${from}`,
     `  ${m.id}@${m.version}, digest ${m.digest}, ${m.publisher_key ? `signed by ${m.publisher_key}` : 'unsigned'}`,

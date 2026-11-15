@@ -554,7 +554,7 @@ export async function hostCommand(args: string[]): Promise<number> {
     await say(JSON.stringify(reply.result));
     return 0;
   }
-  if (args[0] !== 'run' || args.length !== 2) {
+  if (args[0] !== 'run' || args.length !== 2 || args[1]!.startsWith('-')) {
     await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host list\n       deep host facts <host> [--refresh]', process.stderr);
     return 2;
   }

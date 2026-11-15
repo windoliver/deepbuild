@@ -10,7 +10,7 @@ const USAGE = 'Usage: deep env up|down [--root <folder>] [--json]';
 type Obj = Record<string, unknown>;
 
 /** `deep env <up|down>` in the current folder, the worktree; exit 0 ready or clean, 1 when something is left, 3 when BLOCKED. */
-export async function envCommand(args: readonly string[]): Promise<number> {
+export async function envCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const [command, ...rest] = args;
   let root: string | undefined;
   let json = false;
@@ -25,6 +25,9 @@ export async function envCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
+  // --root names a dev hub and acts on it alone (#331), so it sets nothing up in the home.
+  const stopped = root ? 0 : await setUp();
+  if (stopped) return stopped;
   const at = rootOf(root ?? installedRoot());
   const socket = root ? at.socket : hubAddress().path;
   const worktree = realpathSync(process.cwd());
