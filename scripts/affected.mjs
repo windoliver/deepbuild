@@ -48,6 +48,8 @@ const folders = (path) => path.split('/').slice(0, -1).map((_, index, parts) => 
 /** The workspace's crates from cargo metadata: folders, path dependencies, the names they run by, and test targets. */
 export function crates(cwd) {
   const result = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+  // A cargo that can't start (not on PATH) leaves no stderr, only the spawn error, which names it (#2635).
+  if (result.error) throw Error(`cargo metadata failed: ${result.error.message}`);
   if (result.status !== 0) throw Error(`cargo metadata failed: ${result.stderr.trim().split('\n').at(-1)}`);
   // cargo names paths as the disk resolves them, as /private/var for /var.
   const repo = (path) => relative(realpathSync(cwd), path).split(sep).join('/');
