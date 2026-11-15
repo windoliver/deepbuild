@@ -63,8 +63,7 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
 const answers = (path: string) => connect(path).then((c) => { c.close(); return true; }, () => false);
 /** The hub's hello at `path`, which names its start ID and contract; undefined when no hub answers. */
 export const helloAt = (path: string): Promise<Obj | undefined> => connect(path).then((c) => { c.close(); return c.hello; }, () => undefined);
-async function waitForHub(path: string): Promise<boolean> {
-  const deadline = Date.now() + WAIT_MS;
+async function waitForHub(path: string, deadline: number): Promise<boolean> {
   while (Date.now() < deadline) {
     if (await answers(path)) return true;
     await new Promise((done) => setTimeout(done, STEP_MS));
@@ -75,13 +74,14 @@ async function waitForHub(path: string): Promise<boolean> {
  * Waits for a hub that is still exiting (#2570), for as long as a hub gets to answer: one told to stop closes its
  * socket before its process ends, and holds the root's lock until then. A start asked for in between starts nothing:
  * a dev hub refuses on the lock, and a service manager does nothing for a job that still runs, then leaves one that
- * exits 0 stopped. Whether a hub answers meanwhile: one that is starting holds the lock too.
+ * exits 0 stopped. Whether a hub answers meanwhile: one that is starting holds the lock too. It spends the start's one
+ * budget (`deadline`), which the new hub's wait gets what is left of: the owner's reading of #2570's second criterion.
  */
-async function exiting(root: { lock: string; socket: string }): Promise<boolean> {
+async function exiting(root: { lock: string; socket: string }, deadline: number): Promise<boolean> {
   // No lock file: no hub ever ran on this root, so none is exiting. SQLite loads only past here.
   if (!existsSync(root.lock)) return false;
   const { takeLock } = await import('./lock.js');
-  for (const deadline = Date.now() + WAIT_MS; Date.now() < deadline;) {
+  while (Date.now() < deadline) {
     let lock;
     // A lock file that can't be opened is the hub's to report, as before: it says why in its log.
     try { lock = takeLock(root.lock); } catch { return false; }
@@ -231,8 +231,9 @@ export const serviceFile = (): string => definition([], '').file;
 /** `deep hub start [--root <folder>]`: exits 0 once a hub answers on the root's socket, started now or already running. */
 export async function startHub(options: { root?: string; cli: string }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
+  const deadline = Date.now() + WAIT_MS;
   if (await answers(root.socket)) return 0;
-  if (await exiting(root)) return 0;
+  if (await exiting(root, deadline)) return 0;
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
@@ -249,7 +250,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
       return 3;
     }
   }
-  if (await waitForHub(root.socket)) return 0;
+  if (await waitForHub(root.socket, deadline)) return 0;
   process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
   return 3;
 }
