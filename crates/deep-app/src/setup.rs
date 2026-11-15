@@ -355,6 +355,9 @@ pub fn assume_finished() {
 pub fn assume_unfinished() {
     ASSUMED.with(|assumed| assumed.set(false));
     DISK.with(|disk| disk.set(Some(Disk::NotStarted)));
+    // A replica has no tick that reads the plan again once the login shell's PATH comes in, so it reads it first, as
+    // the app's window shows it a tick after that read (#1349's install row is decided on it).
+    let _ = LOGIN.set(login_path().unwrap_or_else(|_| std::env::var("PATH").unwrap_or_default()));
     PLAN.with(|plan| *plan.borrow_mut() = read_plan());
 }
 
