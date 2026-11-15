@@ -1,0 +1,4 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `sh -c npm run build --workspace=@deepbuild/pi && cargo build --locked --offline -q -p deep-hook --features env-plants && node node_modules/typescript/bin/tsc -p tests/acceptance/2084/tsconfig.json` runs unleased
+
+> @deepbuild/pi@0.1.0 build
+> tsc -p tsconfig.json && node tools.mjs

@@ -1,0 +1,160 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `sh -c npm run build --workspaces && cargo build --locked --offline -q -p deep-hook --features env-plants && node node_modules/typescript/bin/tsc -p tests/acceptance/2084/tsconfig.json` runs unleased
+
+> @deepbuild/adapters@0.0.0 build
+> tsc -b tsconfig.json
+
+
+> @deepbuild/archive@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/asks@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/briefs@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/budget@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/buying@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-command@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-journey@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-numbers@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-review@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-work@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/cli@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/config-eval@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/conformance@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/env-local@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/evidence@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/extension-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/gate@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/github@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+
+> @deepbuild/leases@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/otlp@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/paseo@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/pi@0.1.0 build
+> tsc -p tsconfig.json && node tools.mjs
+
+dyld[94593]: Library not loaded: @rpath/libnode.137.dylib
+  Referenced from: <2DC30B18-6700-3DD7-B5A3-5972E6E78CAF> <node-fixture>/bin/node
+  Reason: tried: '<node-fixture>/bin/libnode.137.dylib' (no such file), '<node-fixture>/bin/../lib/libnode.137.dylib' (no such file), '<node-fixture>/bin/libnode.137.dylib' (no such file), '<node-fixture>/bin/../lib/libnode.137.dylib' (no such file)
+sh: line 1: 94593 Abort trap: 6           tsc -p tsconfig.json
+npm error Lifecycle script `build` failed with error:
+npm error code 134
+npm error path <checkout>/packages/pi
+npm error workspace @deepbuild/pi@0.1.0
+npm error location <checkout>/packages/pi
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json && node tools.mjs
+
+
+> @deepbuild/proof@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/reading@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/readings@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/record@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/resolver-decisions@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/routing-replay@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/runner@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/supervisor@0.0.0 build
+> tsc -p tsconfig.json && node build-helper.mjs
+
+
+> @deepbuild/verdicts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/wiki@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/workspaces@0.0.0 build
+> tsc -p tsconfig.json

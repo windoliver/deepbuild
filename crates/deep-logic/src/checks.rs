@@ -55,6 +55,23 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
                         "ray": {"origin": [x, 10.0, z + 10.0], "dir": down}});
                     Given::Point(Point::parse(&press).expect("a seeded press is a point"))
                 }
+                // A commit and a position the control may hold.
+                Some((_, "text")) => {
+                    let max = match piece.limits.get(&control) {
+                        Some(crate::piece::Limit::Text { max, .. }) => *max as usize,
+                        _ => 0,
+                    };
+                    let mut t = format!("{:x}", h & 0xffff);
+                    t.truncate(max);
+                    Given::Text(t)
+                }
+                Some((_, "scroll")) => match piece.limits.get(&control) {
+                    Some(crate::piece::Limit::Scroll { range, .. }) => {
+                        let span = i64::from(range[1]) - i64::from(range[0]) + 1;
+                        Given::Number((i64::from(range[0]) + (h % span as u64) as i64) as f64)
+                    }
+                    _ => Given::Number(0.0),
+                },
                 _ => Given::Number(((h >> 11) as f64 + 1.0) / (1u64 << 53) as f64),
             };
             let entry = Entry {
@@ -64,6 +81,8 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
                 value,
                 writer: "you".into(),
                 player: 1,
+                as_of: None,
+                arrived: 0,
             };
             (control, vec![entry])
         })

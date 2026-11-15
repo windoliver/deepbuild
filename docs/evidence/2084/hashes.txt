@@ -1,0 +1,7 @@
+639c6979da791b2e4eedf0bf5bd14151cd049bfc6afda9038c96539ce3e7ca0f  tests/acceptance/2084/closure/closure.test.ts
+30ab921cb079782ba103b2762ae2c2fd71d42b4f9e06d169bc0a5fdd964bb094  tests/acceptance/2084/closure/held-reply.test.ts
+067f036bd9b5cd800cd327ec545b3c6af833ec7043d07dc7c76cf032395e5c11  tests/acceptance/2084/closure/README.md
+4a60d4cd1b702c9ea4e846c00c7f2bf56043748d4b6a7d79d46c2c8c77b2d05c  tests/acceptance/2084/held.test.ts
+119910d9e062b9643327cd0ca15d243985ae59d4c4f36735df2af9439bbbfa63  tests/acceptance/2084/helpers.ts
+1d7b1aae683eaa1a372ec8e64681d6a94a3db4f2b3af959e5e23636b0f44edf3  tests/acceptance/1015/claude.test.ts
+62856728966f0552e1444a13eb3eb9f2c9ec65dcc6a2c4df746d5804f2826b54  tests/acceptance/1015/focused.test.ts

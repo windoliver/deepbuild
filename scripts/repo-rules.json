@@ -510,6 +510,10 @@
           "spec": "0.0.0",
           "why": "Issue #1537: the service, data, document and message check kinds (#68), held in the hub's kind table where a definition's drafted check names one."
         },
+        "@deepbuild/config-eval": {
+          "spec": "0.0.0",
+          "why": "Issue #2077: the outer knowledge provider freezes and runs a removal lesson's configuration eval; only its recorded adopt permits the line to leave."
+        },
         "@deepbuild/conformance": {
           "spec": "0.0.0",
           "why": "Issue #1537: the check.kind@1 spec, context and result types the hub's kind table holds, and #67's state-source@1 item and source types its workspaces pin; type imports only."
@@ -1667,6 +1671,10 @@
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #464: the look's print fields the print pass draws."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2513: render.exposure's query and sums, which its GPU reduction answers; already in the tree."
         }
       },
       "dev-dependencies": {
