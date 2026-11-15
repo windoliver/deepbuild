@@ -3,7 +3,7 @@
 // adapter its agent names. No rule here reads an agent's name: the shipped adapters are facts files
 // plus the parts that aren't data (caps, what they can't do, doctor, usage reading).
 import { readFileSync } from 'node:fs';
-import { ContractError, validate } from '@deepbuild/contracts';
+import { ContractError, validate } from '@deepbuild/contracts/runtime';
 import type { ContractIssue, JsonValue, Schema } from '@deepbuild/contracts';
 import { mapHook as mapByFacts } from '../../../adapters/index.mjs';
 import { claudeParts, codexParts, paseoParts, piParts } from './shipped.js';

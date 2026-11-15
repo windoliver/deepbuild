@@ -1,0 +1,79 @@
+{
+  "base": "d8c46f0d58162ff0a4a483544149316aec960637",
+  "candidate": "c5b6ac163",
+  "status": "BLOCKED",
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "battery",
+    "lowPowerMode": false,
+    "thermalState": "fair",
+    "macosBuild": "26B8119"
+  },
+  "affected": {
+    "summary": "FAIL: 92 new, 0 known, 11 inconclusive/blocked, 0 passed",
+    "WIDE": [],
+    "inconclusive": [
+      "INCONCLUSIVE packages/hub/test/startup-memory.test.ts \u203a (file): no test grant came within 30 min",
+      "INCONCLUSIVE lint scripts/vendor-rebase.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/canvas-lint.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/size-ratchet.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/render-lint.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/plant-lint.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/blocking-call-guard.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/keymap-guard.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/panel-catalog.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/known-failures-check.mjs job: no grant",
+      "INCONCLUSIVE lint scripts/fetch-lock.mjs job: no grant"
+    ]
+  },
+  "hubTypecheck": 0,
+  "products": {
+    "before": {
+      "reads": 1,
+      "status": "FAIL"
+    },
+    "after": {
+      "reads": 0,
+      "status": "PASS"
+    }
+  },
+  "kindsAtReady": {
+    "before": "FAIL",
+    "after": "PASS"
+  },
+  "strictBaseSanity": {
+    "side": "previous-base",
+    "result": {
+      "atReady": 5292533143,
+      "settledTotal": 5980590876,
+      "readySettled": true,
+      "steps": [
+        {
+          "event": "SessionStart",
+          "instructions": 1067615512,
+          "settled": false
+        },
+        {
+          "event": "UserPromptSubmit",
+          "instructions": 392839293,
+          "settled": false
+        },
+        {
+          "event": "PreToolUse",
+          "instructions": 313873667,
+          "settled": false
+        }
+      ],
+      "replies": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "updatedMainBuild": "INCONCLUSIVE: no grant",
+  "memory": "INCONCLUSIVE: battery, thermal fair",
+  "comparison": "UNRUN on updated base"
+}
