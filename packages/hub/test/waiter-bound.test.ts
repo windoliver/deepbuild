@@ -143,6 +143,9 @@ it('tells the waiter of a session that ended it is done, and binds none in a pro
     const ended = await ending;
     expect(ended.lines[1], 'bound to C while it ran').toMatchObject({ role: `waiter:${c}` });
     expect(ended.lines[2], `done once C ended: ${JSON.stringify(ended.lines[2])}`).toMatchObject({ result: { exit: `session ${c} has ended.` } });
+    // One that says hello only after C ended is told so too, rather than refused and asking again.
+    const late = await rawWaiter(sock, c, c);
+    expect(late.lines[2], `a late waiter is done: ${JSON.stringify(late.lines)}`).toMatchObject({ result: { exit: `session ${c} has ended.` } });
     // A Codex thread, whose process may run others: no waiter binds to it by that process.
     const work = join(home, 'work');
     await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', { session_id: x, transcript_path: null, cwd: work, hook_event_name: 'SessionStart', source: 'startup', model: 'gpt-5' }, { agent: 'codex', ppid: process.pid }));

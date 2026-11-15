@@ -927,7 +927,7 @@ export class AnswerDelivery {
     if (this.options.settings.plant === 'waiter-gives-up-at-600s' && this.options.services.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
     // deep-hook's waiter waits only on the session its connection is bound to (#1851), while that binding holds.
     if (context.role.startsWith('waiter:')) {
-      if (context.session !== session) throw refuse('role', '/params/session', `This waiter is bound to session ${context.session} by its agent, process ${context.parent?.pid} started ${context.parent?.start}; it waits only on that session's answers, not on ${session}'s.`, session);
+      if (context.session !== session) throw refuse('role', '/params/session', `This waiter is bound to session ${context.session}${context.parent ? ` by its agent, process ${context.parent.pid} started ${context.parent.start}` : ', which has ended'}; it waits only on that session's answers, not on ${session}'s.`, session);
       const unbound = this.options.state().waiterUnbound(session, context.parent);
       // A session that ended needs no waiter: it is told it is done, and exits without waking anything.
       if (unbound?.ended) return { exit: unbound.why };

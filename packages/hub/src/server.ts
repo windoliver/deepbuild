@@ -1303,7 +1303,7 @@ class Hub {
         return conn.end();
       }
       const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
-      const bound = (await this.core.request({ op: 'waiter-hello', fd, session, at: conn.at }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error), retryable: true }))) as { session: string; parent: { pid: number; start: string } } | { refused: string; retryable?: true };
+      const bound = (await this.core.request({ op: 'waiter-hello', fd, session, at: conn.at }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error), retryable: true }))) as { session: string; parent?: { pid: number; start: string } } | { refused: string; retryable?: true };
       if ('refused' in bound) {
         // Said once in the hub's output too: the waiter asks again quietly, and its stderr becomes a wake's prompt.
         if (!this.waiterRefusals.has(bound.refused)) {

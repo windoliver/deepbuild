@@ -2633,7 +2633,7 @@ export class Core {
   waiterGone(key: number): void { return this.delivery.waiterGone(key); }
 
   mcpHello(fd: number | undefined, claimed: { pid: number; start: string } | undefined, paseo?: string): Promise<{ session: string | null; parent?: { pid: number; start: string } }> { return this.state.mcpHello(fd, claimed, paseo); }
-  waiterHello(fd: number | undefined, session: string, at: number): Promise<{ session: string; parent: { pid: number; start: string } } | { refused: string }> { return this.state.waiterHello(fd, session, at); }
+  waiterHello(fd: number | undefined, session: string, at: number): Promise<{ session: string; parent?: { pid: number; start: string } } | { refused: string }> { return this.state.waiterHello(fd, session, at); }
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 
