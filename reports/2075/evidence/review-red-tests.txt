@@ -1,0 +1,59 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/late-fast-lane.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/work
+
+······xx·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > keeps spec checks running while the definition is pending, without passing the claim
+AssertionError: the slow spec check finishes while the definition waits: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ until packages/hub/test/late-fast-lane.test.ts:25:30
+     23| async function until(ok: () => boolean | Promise<boolean>, reason: str…
+     24|   for (const end = Date.now() + 15_000; Date.now() < end;) { if (await…
+     25|   expect(await ok(), reason).toBe(true);
+       |                              ^
+     26| }
+     27|
+ ❯ packages/hub/test/late-fast-lane.test.ts:153:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/late-fast-lane.test.ts > #2075 late fast-lane handoff > cancels placement when a prompt arrives while the loop queue wait is being read
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "data": "{\"session\":\"session:late\",\"claim\":\"claim:late\",\"check\":\"slow.test.mjs\",\"snapshot\":\"ae93c6caf84beb9d219587c3b017967ba1bc573f\",\"held_at\":0,\"reason\":\"no prompt foreseen\",\"started_at\":null,\"started_by\":null,\"replaced_by\":null}",
++   },
++   {
++     "data": "{\"session\":\"session:late\",\"claim\":\"claim:late\",\"check\":\"slow.test.mjs\",\"snapshot\":\"ae93c6caf84beb9d219587c3b017967ba1bc573f\",\"held_at\":0,\"reason\":\"no prompt foreseen\",\"started_at\":60000,\"started_by\":\"loop_paused\",\"replaced_by\":null}",
++   },
++ ]
+
+ ❯ packages/hub/test/late-fast-lane.test.ts:165:28
+    163|     w.at(60_000); await sleep(100);
+    164|     expect(w.slow(), 'the earlier reply cannot create a grace timer af…
+    165|     expect(await w.held()).toEqual([]);
+       |                            ^
+    166|     await w.end([], 'person'); await w.passed();
+    167|   }, 30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  17:06:15
+   Duration  117.01s (tests 99%, transform 1%)

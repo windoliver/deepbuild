@@ -31,9 +31,64 @@ pub const WITH_AT_END: &str = "cue_with_at_previous_end";
 /// A planted twin, `cue_twin:<verb>`: the verb expands as the wrong twin its entry names.
 pub const TWIN: &str = "cue_twin:";
 
+/// #142's planted film recipe: each cue starts at an absolute time read from its place in the
+/// list, k seconds for the k-th, whatever the spans and gaps before it; an `at` cue at its time.
+pub const STARTS_ABSOLUTE: &str = "film_cue_starts_absolute";
+
 /// Whether `name` is a planted program of cue lists.
 pub fn planted(name: &str) -> bool {
-    name == WITH_AT_END || name.strip_prefix(TWIN).is_some_and(|v| !v.is_empty())
+    name == WITH_AT_END
+        || name == STARTS_ABSOLUTE
+        || name.strip_prefix(TWIN).is_some_and(|v| !v.is_empty())
+}
+
+/// A film recipe's cue list (#142): the derived items each cue's `text`, `sub` and `data` draw,
+/// at `<text>.<k>`, `<sub>.<k>` and `<data>.<k>` for the k-th cue, from the list's `words`, each
+/// a step of the recipe that wrote the list (`{text: "word"}` names `<instance>.word.<k>`).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Words {
+    text: Option<String>,
+    sub: Option<String>,
+    data: Option<String>,
+    /// Whether a target must name an item of the document; a rule's reading of the list's
+    /// times doesn't need the items.
+    items: bool,
+}
+
+impl Words {
+    fn of(id: &str, item: &Value) -> Words {
+        let w = item.pointer("/params/words");
+        // The list's own instance: its ID less its last part.
+        let instance = id.rsplit_once('.').map_or("", |(i, _)| i);
+        let prefix = |k: &str| {
+            let step = w.and_then(|w| w.get(k)).and_then(Value::as_str)?;
+            Some(if instance.is_empty() {
+                step.to_string()
+            } else {
+                format!("{instance}.{step}")
+            })
+        };
+        Words {
+            text: prefix("text"),
+            sub: prefix("sub"),
+            data: prefix("data"),
+            items: true,
+        }
+    }
+
+    /// The items cue `index`'s own words draw.
+    fn own(&self, index: usize, c: &Map<String, Value>) -> Vec<String> {
+        let mut out = Vec::new();
+        for (field, prefix) in [("text", &self.text), ("sub", &self.sub)] {
+            if let (Some(p), Some(Value::String(_))) = (prefix, c.get(field)) {
+                out.push(format!("{p}.{index}"));
+            }
+        }
+        if let (Some(p), Some(Value::Object(_))) = (&self.data, c.get("data")) {
+            out.push(format!("{p}.{index}"));
+        }
+        out
+    }
 }
 
 /// The default span of a cue, one second.
@@ -167,6 +222,18 @@ fn time(
     item: &Value,
     planted: Option<&str>,
 ) -> Result<Vec<Cue>, Refusal> {
+    time_with(doc, items, id, item, planted, &Words::of(id, item))
+}
+
+/// [`time`], with the list's words given.
+fn time_with(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    id: &str,
+    item: &Value,
+    planted: Option<&str>,
+    words: &Words,
+) -> Result<Vec<Cue>, Refusal> {
     let at = format!("items/{id}/params/cues");
     // #1974: `cues` left out is its listed default, no cues.
     let none = Vec::new();
@@ -195,6 +262,8 @@ fn time(
     let seed = seed_of(doc);
     let mut out: Vec<Cue> = Vec::with_capacity(list.len());
     let mut seen = std::collections::BTreeSet::new();
+    // Each earlier cue's own words, by its ID: a later cue's target may name it (#142).
+    let mut said: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (index, c) in list.iter().enumerate() {
         let path = format!("{at}/{index}");
         let bad = |field: &str, what: &str| {
@@ -238,7 +307,52 @@ fn time(
         if d < 0 {
             return Err(bad("span", "a span is not negative"));
         }
-        let targets = targets_of(c.get("targets"), items).map_err(|what| bad("targets", &what))?;
+        // A word no step drew, such as a bar for a cue without a value, is left out.
+        let own: Vec<String> = words
+            .own(index, c)
+            .into_iter()
+            .filter(|w| !words.items || items.contains_key(w))
+            .collect();
+        let targets = match c.get("targets") {
+            // A cue with words and no targets plays on its own words (#142).
+            None if !own.is_empty() && (c.contains_key("kind") || c.contains_key("set")) => {
+                own.clone()
+            }
+            v => {
+                // A target that names an earlier cue's ID means that cue's words (#142).
+                let named = v.map(|v| match v {
+                    Value::Array(list) => Value::Array(
+                        list.iter()
+                            .flat_map(|t| match t.as_str().and_then(|t| said.get(t)) {
+                                Some(w) if !items.contains_key(t.as_str().unwrap_or("")) => {
+                                    w.iter().map(|w| json!(w)).collect()
+                                }
+                                _ => vec![t.clone()],
+                            })
+                            .collect(),
+                    ),
+                    Value::String(one) => match said.get(one) {
+                        Some(w) if !items.contains_key(one) => json!(w),
+                        _ => v.clone(),
+                    },
+                    other => other.clone(),
+                });
+                if words.items {
+                    targets_of(named.as_ref(), items).map_err(|what| bad("targets", &what))?
+                } else {
+                    named
+                        .as_ref()
+                        .and_then(Value::as_array)
+                        .map(|l| {
+                            l.iter()
+                                .filter_map(|t| t.as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                }
+            }
+        };
+        said.insert(cue_id.to_string(), own);
         let (lag, order) = match (c.get("lag"), c.get("order")) {
             (None, None) => (Lag::Ratio(0.0), Order::Index),
             _ => {
@@ -266,6 +380,10 @@ fn time(
         let total = (n as i64 - 1) * step + d;
         let prev = out.last().map(|p| (p.start, p.end));
         let start = match c.get("when") {
+            // Planted (#142): a cue's start read as an absolute time, k seconds for the k-th.
+            w if planted == Some(STARTS_ABSOLUTE) && !w.is_some_and(|w| w.get("at").is_some()) => {
+                index as i64 * FLICKS_PER_SECOND
+            }
             None => prev.map_or(0, |p| p.1) + gap,
             Some(Value::String(w)) if w == "after" => prev.map_or(0, |p| p.1) + gap,
             Some(Value::String(w)) if w == "with" => match (prev, planted) {
@@ -716,7 +834,17 @@ impl<'a> Writer<'a> {
                     .enumerate()
                     .map(|(n, &i)| {
                         let key = &keys[i];
-                        let mut k = json!({"t": key.t, "value": key.value, "interp": key.interp});
+                        // A spring's starting rate rides on its interp until it is written on
+                        // its key (#142): a component's own when the channel is split.
+                        let mut interp = key.interp.clone();
+                        let rate = interp.as_object_mut().and_then(|o| o.remove("velocity"));
+                        let mut k = json!({"t": key.t, "value": key.value, "interp": interp});
+                        if let Some(v) = rate {
+                            k["velocity"] = match (comp, &v) {
+                                (Some(i), Value::Array(a)) => a.get(i).cloned().unwrap_or(json!(0)),
+                                _ => v,
+                            };
+                        }
                         if let Some(travel) = &key.travel {
                             k["travel"] = travel.clone();
                         }
@@ -843,17 +971,32 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: vec![Param {
-                    name: "cues",
-                    ty: ParamType::Json("[{id?, when?, gap?, span?, ease?, lag?, order?, targets?, set?, kind?, params?}] ≤ 512"),
-                    unit: "",
-                    default: json!([]),
-                    min: None,
-                    max: None,
-                    minor: 0,
-                    module: "",
-                    operator: "",
-                }],
+                params: vec![
+                    Param {
+                        name: "cues",
+                        ty: ParamType::Json("[{id?, when?, gap?, span?, ease?, lag?, order?, targets?, set?, kind?, params?}] ≤ 512"),
+                        unit: "",
+                        default: json!([]),
+                        min: None,
+                        max: None,
+                        minor: 0,
+                        module: "",
+                        operator: "",
+                    },
+                    // #142: a film recipe's list: the steps that draw each cue's text, sub
+                    // and data, so a cue plays on its own words.
+                    Param {
+                        name: "words",
+                        ty: ParamType::Json("{text?, sub?, data?}"),
+                        unit: "",
+                        default: json!({}),
+                        min: None,
+                        max: None,
+                        minor: 0,
+                        module: "",
+                        operator: "",
+                    },
+                ],
             }],
             migrations: Vec::new(),
         },
@@ -864,10 +1007,88 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
     def.moves = Some(kit::moves);
     r.registry(def);
     r.expands(KIND, expand);
+    r.cue_rows(rows);
     r.code(
         "cue_overlap",
         "Two cues of a cue list write one path over overlapping spans; only a pulse or an add placement adds.",
         "Start the second cue after the first ends, or write it as a pulse.",
         false,
     );
+}
+
+/// #142: a cue list's rows, for a pack kind's rule over a film recipe's cues (Pack: kind rules
+/// and the kind kit): each cue's ID, index, start, end and span in seconds from the list's
+/// start, its verb's class (`wait` for a span alone, `move` for a `set` alone), what it plays on
+/// (its own words, `text.<k>` and `sub.<k>`, or an earlier cue's, by that cue's ID), the sizes
+/// its `data` gives its word and sub-line, how far its end lies from the nearest beat of the
+/// document's tempo map (0 without one), and the start of its section: the list's start, or
+/// the latest cue whose `data.section` is set.
+pub fn rows(
+    req: &deep_canvas::document::expands::RowsRequest<'_>,
+) -> Result<Vec<Map<String, Value>>, Refusal> {
+    let empty = Map::new();
+    let doc_map = req.doc.as_object().unwrap_or(&empty);
+    let item = json!({"params": {"cues": req.cues}});
+    let words = Words {
+        text: Some("text".into()),
+        sub: Some("sub".into()),
+        data: None,
+        items: false,
+    };
+    let cues = time_with(doc_map, req.items, "cues", &item, req.planted, &words)?;
+    let transport = doc_map.get("transport").and_then(Value::as_object);
+    let frame_rate = doc::frame_rate_of(transport).unwrap_or((60, 1));
+    let ctx = Ctx::timeline(doc_map, frame_rate).ok();
+    let tempo = ctx.as_ref().and_then(|c| c.tempo.as_ref());
+    let list = req.cues.as_array();
+    let secs = |f: i64| f as f64 / FLICKS_PER_SECOND as f64;
+    let mut section = 0i64;
+    let mut out = Vec::with_capacity(cues.len());
+    for c in &cues {
+        let data = list
+            .and_then(|l| l.get(c.index))
+            .and_then(|r| r.get("data"));
+        let size = |k: &str| {
+            data.and_then(|d| d.get(k))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+        };
+        if data
+            .and_then(|d| d.get("section"))
+            .is_some_and(|s| !matches!(s, Value::Null | Value::Bool(false)))
+        {
+            section = c.start;
+        }
+        let class = match &c.kind {
+            Some(k) => req
+                .entries
+                .get(REGISTRY, k)
+                .and_then(|(v, _)| v.get("class"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string(),
+            None if !c.set.is_empty() => "move".into(),
+            None => "wait".into(),
+        };
+        let off_beat = tempo
+            .and_then(|t| t.nearest_beat(c.end))
+            .map_or(0.0, |b| secs((b - c.end).abs()));
+        let mut row = Map::new();
+        row.insert("id".into(), json!(c.id));
+        row.insert("index".into(), json!(c.index));
+        row.insert("start".into(), json!(secs(c.start)));
+        row.insert("end".into(), json!(secs(c.end)));
+        row.insert("span".into(), json!(secs(c.end - c.start)));
+        row.insert("class".into(), json!(class));
+        row.insert(
+            "targets".into(),
+            json!(c.targets.iter().map(|(t, _)| t).collect::<Vec<_>>()),
+        );
+        row.insert("size".into(), json!(size("size")));
+        row.insert("sub_size".into(), json!(size("sub_size")));
+        row.insert("off_beat".into(), json!(off_beat));
+        row.insert("section".into(), json!(secs(section)));
+        out.push(row);
+    }
+    Ok(out)
 }

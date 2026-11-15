@@ -1,7 +1,7 @@
 import type { HubEvents, HubRuntime } from './hub-capabilities.js';
 import type { AnswerDeliveryPort, SessionStatePort, McpOperationsPort } from './hub-ports.js';
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 
 import { join } from 'node:path';
 
@@ -10,10 +10,13 @@ import { type Asks } from '@deepbuild/asks';
 import { sha256Hex } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 
-import { type RecordStore } from '@deepbuild/record';
+import { openRecordReader, type RecordStore } from '@deepbuild/record';
+import type { Runner } from '@deepbuild/runner';
 import type { DecisionsProvider } from './decisions-port.js';
 
 import { Confirmer } from './confirm.js';
+import { RemovalApplication } from './removal-application.js';
+import type { Durable } from './vfs.js';
 
 import { addGuards, provenGuards, writeStanding } from './guards.js';
 import { decisionKey, guardOf, keepLesson, lessonsOf, repoFolders, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
@@ -37,6 +40,7 @@ import { TYPED_RULE, RULES_HEAD, letters, rulePieces, FOREIGN, type Obj, isObj }
 export interface SessionMemoryOptions {
   decisions: Pick<DecisionsProvider, 'evidence' | 'judge'>;
   cwdOf: KnowledgeProvider['cwdOf'];
+  removal: KnowledgeProvider['removal'];
   settings: CoreOptions;
   services: {
     readonly record: RecordStore;
@@ -47,6 +51,8 @@ export interface SessionMemoryOptions {
     readonly store: EvidenceStore;
     readonly wikiBuild: WikiBuild;
     readonly confirmer: Confirmer;
+    readonly runner: Runner;
+    readonly durable: Durable;
   };
   delivery: () => Pick<AnswerDeliveryPort, "routes">;
   mcp: () => Pick<McpOperationsPort, "propose">;
@@ -58,7 +64,9 @@ kernel: Pick<HubRuntime, "config">;
 
 /** SessionMemory: owns its domain state; services are resolved only when used. */
 export class SessionMemory {
-  constructor(private readonly options: SessionMemoryOptions) {}
+  private readonly application: RemovalApplication;
+  constructor(private readonly options: SessionMemoryOptions) { this.application = new RemovalApplication(() => this.options.services); }
+  recoverRemovals(): Promise<void> { return this.application.recover(); }
 
   /** The taste calls each session was given since it started, and the sessions whose first prompt was read for its screen (#111). */
   tasted = new Map<string, Set<string>>();
@@ -265,32 +273,101 @@ export class SessionMemory {
         if (!reach.sessions.length) why = `Its scope ${r.scope} matched ${reach.sessions.length} sessions' tool calls in the last 60 days.`;
       }
       if (!why) continue;
-      const id = `lesson-${sha256Hex(new TextEncoder().encode(`removal ${ruleHandle(r)} ${r.repo ?? ''}`)).slice(0, 12)}`;
+      const id = this.removalId(r);
       if (!decided.has(decisionKey(id))) out.push({ id, kind: 'removal', text: r.text, rank: 0, claim: ruleHandle(r), scope: 'all', sources: [{ at: null, path: r.file, quote: r.text }], why });
     }
     return out;
   }
 
-  /**
-   * Taking a rule's removal lesson: a configuration eval (#112) first; the line leaves its file only if that eval doesn't
-   * read as a regression. With no eval run, nothing changes (BLOCKED).
-   */
-  async removeRule(lesson: Lesson): Promise<Obj> {
+  private removalId(rule: Rule): string {
+    return `lesson-${sha256Hex(new TextEncoder().encode(`removal ${ruleHandle(rule)} ${rule.repo ?? ''}`)).slice(0, 12)}`;
+  }
+
+  /** Repeated takes of a still-listed lesson join its eval, including while its plan is being frozen. */
+  private removals = new Map<string, Promise<Obj>>();
+  private confirmingRemovals = new Map<string, Promise<Obj>>();
+
+  /** Taking a removal starts one eval; only a recorded adopt may change the file. */
+  removeRule(lesson: Lesson): Promise<Obj> {
+    const pending = this.removals.get(lesson.id);
+    if (pending) return pending;
+    const started = this.startRemoval(lesson);
+    this.removals.set(lesson.id, started);
+    void started.then((reply) => {
+      if (reply.status === 'pending') return this.options.services.runner.wait(String(reply.job));
+      return undefined;
+    }).finally(() => this.removals.delete(lesson.id)).catch(() => undefined);
+    return started;
+  }
+
+  /** The box's approved removal waits for its eval, rather than reporting a queued change as applied. */
+  async removeRuleAndWait(lesson: Lesson): Promise<string | undefined> {
+    const reply = await this.removeRule(lesson);
+    if (reply.status === 'refused') return String(reply.reason);
+    if (reply.status !== 'pending') return;
+    const ended = await this.options.services.runner.wait(String(reply.job));
+    return (await this.lessons()).some((l) => l.id === lesson.id) ? ended.result ?? ended.refused ?? `INCONCLUSIVE: ${ended.job}` : undefined;
+  }
+
+  private async startRemoval(lesson: Lesson): Promise<Obj> {
     const { rules } = await this.allRules([]);
-    const rule = rules.find((r) => ruleHandle(r) === lesson.claim && r.repo);
+    const rule = rules.find((r) => ruleHandle(r) === lesson.claim && r.repo && lesson.id === this.removalId(r));
     if (!rule?.repo) return { status: 'refused', reason: `${lesson.claim} is no rule in a repo file now; nothing changed.` };
     const path = join(rule.repo, rule.file);
+    const original = lstatSync(path);
+    if (!original.isFile() || realpathSync(path) !== join(realpathSync(rule.repo), rule.file)) return { status: 'refused', reason: `${rule.file} is not a regular rule file in its repo; nothing changed.` };
+    const before = readFileSync(path, 'utf8');
+    const unchanged = (): boolean => {
+      try { const current = lstatSync(path); return current.isFile() && current.dev === original.dev && current.ino === original.ino && realpathSync(path) === join(realpathSync(rule.repo!), rule.file) && readFileSync(path, 'utf8') === before; }
+      catch { return false; }
+    };
+    const lines = before.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+    const front = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(before)?.[0].length ?? 0;
+    let offset = 0, fenced = false;
+    const at = lines.findIndex((line) => {
+      const inFront = offset < front; offset += line.length;
+      if (inFront) return false;
+      if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; return false; }
+      const m = fenced ? null : /^\s*[-*+]\s+(.+?)\s*$/.exec(line);
+      return m !== null && sameRule(m[1]!) === sameRule(rule.text);
+    });
+    if (at < 0) return { status: 'refused', reason: `${rule.file} no longer holds “${rule.text}”; nothing changed.` };
+    lines.splice(at, 1);
+    const after = lines.join('');
     const given = process.env.DEEP_HUB_TEST_EVAL;
-    if (!given) return { status: 'refused', reason: `BLOCKED: removing “${rule.text}” from ${rule.file} needs a configuration eval, and none ran; ${rule.file} is unchanged.` };
+    if (!given) {
+      const { root, store, runner } = this.options.services;
+      const job = await runner.submit({ kind: 'eval', agent: 'claude-code', prompt: `Remove ${lesson.id}: ${rule.text}`, deadline_ms: 110 * 60_000 }, async (context) => {
+        const reader = openRecordReader({ path: root.ledger, evidence: store });
+        let input: Awaited<ReturnType<KnowledgeProvider['removal']>>;
+        try { input = await this.options.removal(reader, (sha) => store.read(sha), { id: context.job, repo: rule.repo!, file: rule.file, before, after }); }
+        finally { reader.close(); }
+        // Prove inactivity from the 60 days BEFORE the frozen score cohort, never from its held-out tasks.
+        // A guard-backed lesson is selected by its planted check, not by the replay history.
+        if (!lesson.why?.startsWith('The guard ')) {
+          const cutoff = input.plan.cutoff;
+          const earlier: RecordStore['raw'] = (sql, params = []) => this.options.services.record.raw(sql.replace("WHERE e.kind = 'tool.before'", "WHERE e.ts <= ? AND e.kind = 'tool.before'"), [cutoff, ...params]);
+          const learned = await ruleReach(earlier, rule.repo!, rule.scope, reachSince(cutoff, 60));
+          if (learned.sessions.length) throw Error(`${rule.file}'s removal was not justified before the replay cutoff; collect a later held-out cohort, nothing removed`);
+        }
+        await this.application.keep(context.job, input.plan, 'configuration-plan');
+        const result = await input.evaluate(context);
+        const evidence = await this.application.keep(context.job, result, 'configuration-result');
+        context.signal.throwIfAborted();
+        const answer = `${context.job}: ${result.after.outcome}: ${result.after.reason}`;
+        if (result.after.outcome !== 'adopt') return `${answer}; ${rule.file} is unchanged.`;
+        if (!unchanged()) return `${answer}; BLOCKED: ${rule.file} changed during the eval; nothing removed.`;
+        const applied = await this.application.apply({ job: context.job, lesson, repo: rule.repo!, file: rule.file, before, after, original: { dev: original.dev, ino: original.ino }, report: evidence }, context.signal);
+        this.ruleFiles.delete(rule.repo!);
+        return `${answer}; ${applied}`;
+      });
+      return { status: 'pending', job: job.job, state: job.state };
+    }
     const evaluated = JSON.parse(readFileSync(given, 'utf8')) as { outcome?: string; broke?: string[] };
     if (evaluated.outcome !== 'adopt') {
       return { status: 'refused', reason: `the configuration eval reads removing “${rule.text}” as a regression (${evaluated.outcome ?? 'no outcome'}) on ${(evaluated.broke ?? []).join(', ') || 'no named task'}; ${rule.file} is unchanged.` };
     }
-    const lines = readFileSync(path, 'utf8').split('\n');
-    const at = lines.findIndex((l) => { const m = /^\s*[-*+]\s+(.+?)\s*$/.exec(l); return m !== undefined && m !== null && sameRule(m[1]!) === sameRule(rule.text); });
-    if (at < 0) return { status: 'refused', reason: `${rule.file} no longer holds “${rule.text}”; nothing changed.` };
-    lines.splice(at, 1);
-    writeFileSync(path, lines.join('\n'));
+    writeFileSync(path, after);
     this.ruleFiles.delete(rule.repo);
     return { decision: `removed “${rule.text}” from ${rule.file}` };
   }
@@ -315,11 +392,15 @@ export class SessionMemory {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A lesson is kept or removed from the CLI, once the OS confirms you.', 'memory.act'));
     const lesson = (await this.lessons()).find((l) => l.id === params.lesson);
     if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
-    // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
-    const agent = await this.options.state().agentAbove(context.peer);
-    const why = await this.options.services.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim, process: context.peer });
-    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
-    if (verb === 'remove' && lesson.claim.startsWith('wiki:rules#') && lesson.why) return this.removeRule(lesson);
+    if (verb === 'remove' && lesson.claim.startsWith('wiki:rules#') && lesson.why) {
+      const pending = this.confirmingRemovals.get(lesson.id) ?? this.removals.get(lesson.id);
+      if (pending) return pending;
+      const taking = this.confirmLesson(lesson, verb, context).then(() => this.removeRule(lesson));
+      this.confirmingRemovals.set(lesson.id, taking);
+      void taking.finally(() => this.confirmingRemovals.delete(lesson.id)).catch(() => undefined);
+      return taking;
+    }
+    await this.confirmLesson(lesson, verb, context);
     if (verb === 'remove') return { decision: await this.options.services.wikiBuild.forget(lesson.claim) };
     const guard = guardOf(lesson);
     if (guard) {
@@ -327,6 +408,13 @@ export class SessionMemory {
       if (added.status === 'refused') return added;
     }
     return { decision: await keepLesson(this.options.services.record, this.options.events.connection('cli'), this.options.services.now, lesson) };
+  }
+
+  private async confirmLesson(lesson: Lesson, verb: unknown, context: CallContext): Promise<void> {
+    // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
+    const agent = await this.options.state().agentAbove(context.peer);
+    const why = await this.options.services.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim, process: context.peer });
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
   }
 
   /** Copies your standing rules for cloud resources into rules.json, so deep-hook honours them with the hub down (#23). */

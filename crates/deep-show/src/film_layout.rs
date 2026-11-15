@@ -506,11 +506,11 @@ pub(crate) fn camera(
     }
 }
 
-/// Each match morph between two items: both items, keyed by the morph.
+/// Each match morph or (#1968) text diff between two items: both items, keyed by the morph.
 fn morphs(drawn: &Value) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for (id, tr) in drawn["transitions"].as_object().into_iter().flatten() {
-        if tr["kind"] != "match_morph" {
+        if tr["kind"] != "match_morph" && tr["kind"] != "text_diff" {
             continue;
         }
         for end in ["from", "to"] {

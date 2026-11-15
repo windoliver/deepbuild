@@ -1,0 +1,1073 @@
+{
+  "name": "explain",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "The first-party film recipes (#142; canvas primitives: Pack: explain@1 film recipes): ten explainer grammars that turn a cue list into shots on a 2D or a 3D stage, each a pack kind carrying its grammar's rules with a planted twin per rule, and the explain verbs their cue lists play.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "motion": ">=0.0.0",
+      "marks2d": ">=0.0.0"
+    },
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ]
+  },
+  "recipes": {
+    "explain.dark_math@1": "dark_math@1.json",
+    "explain.keynote_ui@1": "keynote_ui@1.json",
+    "explain.chart_story@1": "chart_story@1.json",
+    "explain.infographic@1": "infographic@1.json",
+    "explain.evidence_board@1": "evidence_board@1.json",
+    "explain.whiteboard@1": "whiteboard@1.json",
+    "explain.storytime@1": "storytime@1.json",
+    "explain.kinetic_type@1": "kinetic_type@1.json",
+    "explain.presenter@1": "presenter@1.json",
+    "explain.linear_map@1": "linear_map@1.json",
+    "explain.slam@1": "verb.slam@1.json",
+    "explain.apply@1": "verb.apply@1.json",
+    "explain.inverse@1": "verb.inverse@1.json",
+    "explain.transpose@1": "verb.transpose@1.json",
+    "explain.warp@1": "verb.warp@1.json",
+    "explain.add_vector@1": "verb.add_vector@1.json",
+    "explain.write_coordinates@1": "verb.write_coordinates@1.json",
+    "explain.to_coordinates@1": "verb.to_coordinates@1.json",
+    "explain.label@1": "verb.label@1.json"
+  },
+  "kinds": {
+    "explain.dark_math@1": {
+      "minor": 0,
+      "recipe": "explain.dark_math@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.still_once_landed",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(touches && other.class == enter && cue.start >= other.end && (cue.class == move || cue.class == change))",
+          "fix": "Leave a landed word still: move it before it lands, or let it exit."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "78a4ef2f77725418eb1aaa13b1502d6ff67b62ebca31658ab4641884eebc8a09",
+        "6c1b713ddc3a0ba22affd40328a02626973f687baef6fae4e78963f60c2233d3"
+      ],
+      "twins": [
+        {
+          "example": "ebd821b3b9f0d05877fd3a41eed4ccd3294038b0896c82c9ab8030a1e83b9413",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "af6fcbe5adfd599679e89c9ea413ae50ff46dc19c33f0de3babe9c8aea948704",
+          "expect": "explain.still_once_landed"
+        },
+        {
+          "example": "720581d3443dcf9765b95bccf67f93f01e6d838fd2d4cb92cbc83899e68f4ae4",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.keynote_ui@1": {
+      "minor": 0,
+      "recipe": "explain.keynote_ui@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.exit_faster",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(touches && cue.class == exit && other.class == enter && cue.span >= other.span)",
+          "fix": "Make each exit shorter than the entrance it undoes."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "5414beea60388301c525301b3bf0e74a72f10b769938ed105cfd5d03fb942d53",
+        "f905f5d7421bb7e010294c5225d978c3ef5e7c701abb38529150d9cf4a0b4d6c"
+      ],
+      "twins": [
+        {
+          "example": "f12c8f8f5a690f404c6e7f7e5814715717dbbf8345d503746ed50436d5155e97",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "9b0d1ec2f63138aff75be18c0f78aa65d56802595a7f44d7427a798679cc6611",
+          "expect": "explain.exit_faster"
+        },
+        {
+          "example": "2469704902d79b9a29e71757ed76a9c67d695ec1fccd0427f02008ce22236247",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.chart_story@1": {
+      "minor": 0,
+      "recipe": "explain.chart_story@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "555735ce79b14eb377d477a9773bbb101371c9c1360c06be9a211464e7e0ea9d",
+        "74f69a3debdeff92387faa15d3ae711f1ac03db2818012d0ee56fbec567fd642"
+      ],
+      "twins": [
+        {
+          "example": "59f93707b9dd4b7df035e0c6ec68f728e9a0f9c62c761a282a8fe47d511dc6fd",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "e7bafce67871f95d92db5560eb13231bf05adccb989acbfdf363cfc7603d7f64",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.infographic@1": {
+      "minor": 0,
+      "recipe": "explain.infographic@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.main_word_size",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.sub_size == 0 || cue.size >= 3 * cue.sub_size",
+          "fix": "Set the main word at least three times its sub-line's size."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "46f538069bf5fd8ec32a8d788a6dbf430389603059f0d7ea29cac056d623e5cf",
+        "8e251354ffe6a83298e6292610e0e81ed59cb198cc0a9dae90c8f0539e7e88af"
+      ],
+      "twins": [
+        {
+          "example": "2034ecd1731694c9ef045fba45bca92c9d6cfedb2b07220cd90bf4ec0c5f2733",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "dda394967b3e24091ab78d6680d8ede79458754e2109cc8b60258a0719783c98",
+          "expect": "explain.main_word_size"
+        },
+        {
+          "example": "f125e01bf5bfd727db91c556992f0d605a00118aaff50a6082c443291f820786",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.evidence_board@1": {
+      "minor": 0,
+      "recipe": "explain.evidence_board@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.still_once_landed",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(touches && other.class == enter && cue.start >= other.end && (cue.class == move || cue.class == change))",
+          "fix": "Leave a landed word still: move it before it lands, or let it exit."
+        }
+      ],
+      "examples": [
+        "78853730eca4536a196c4d7121492a2bc61f83c3dde3ba8f62c525e4cfd5467d",
+        "75124e78cc2c65df237b744a594827cea79bc47b73b0e91d62d54a19fc5aec3b"
+      ],
+      "twins": [
+        {
+          "example": "a55f0652987a784133048ff4828cf024814fc6cde74e7348f3ce943028314eee",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "f2f06a48fad8ed1510b04b86e7b8854af51a59ec1effc2b961f71f5ffb330ac8",
+          "expect": "explain.still_once_landed"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.whiteboard@1": {
+      "minor": 0,
+      "recipe": "explain.whiteboard@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "117411a61a2e348db02009cefad445903b768773d6ab8db0b6a92f300db0235d",
+        "67d9a0685c50db7f9e689aace320fd9260634087ed60d585a3b16c9fb03449f5"
+      ],
+      "twins": [
+        {
+          "example": "2b5eab97d2ef8ad0ea21f6833735cfc29b7e797b76dc7a3f7309d31a59c184f6",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "8f17ed2d7cd475ff15efe7c9f8ec0ee5f94d6908eb635439b0f58f134e23937d",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.storytime@1": {
+      "minor": 0,
+      "recipe": "explain.storytime@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "662239dc2539a45fad8a5e50f4c81e3824d7ade61ff5314c105e209dd22204f9",
+        "83a43846fb6a58022d11fd06aaaf481b5ff8bfce90b9c147062cc790ff4a8acc"
+      ],
+      "twins": [
+        {
+          "example": "c33d6589420be3fd0131412f5d27c39975fe33d7f1aa8177600d443b68944074",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "b2592df070fc9a019d59b6d92ad2752d6cd21fbdf23ba2803be56e4496874c8e",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.kinetic_type@1": {
+      "minor": 0,
+      "recipe": "explain.kinetic_type@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.main_word_size",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.sub_size == 0 || cue.size >= 3 * cue.sub_size",
+          "fix": "Set the main word at least three times its sub-line's size."
+        },
+        {
+          "code": "explain.on_beat",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.class != enter || cue.off_beat < 0.0005",
+          "fix": "Land each entrance on a beat of the tempo map: change its span or its gap."
+        },
+        {
+          "code": "explain.still_once_landed",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(touches && other.class == enter && cue.start >= other.end && (cue.class == move || cue.class == change))",
+          "fix": "Leave a landed word still: move it before it lands, or let it exit."
+        },
+        {
+          "code": "explain.exit_faster",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(touches && cue.class == exit && other.class == enter && cue.span >= other.span)",
+          "fix": "Make each exit shorter than the entrance it undoes."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "6fcb1be190a4910b81bbb491a125402b715539ab6aeb48836ef9dad83f98ee5f",
+        "c99161a30124be450cb3bf228eb2de08e09631c906e1bec1326557a6b531e1cf"
+      ],
+      "twins": [
+        {
+          "example": "9237c1d071249a50e57f945e47cfd876a78752a7deb6a517c95c833d121d9454",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "657ddbf024ae92bda3523f2ad0aae024739e22aa51a332c4fd84e4f4429b0d83",
+          "expect": "explain.main_word_size"
+        },
+        {
+          "example": "5fb23107e40f6575f792da55b8ef87ce34cf01abc4848673ed2580c1ced45cd1",
+          "expect": "explain.on_beat"
+        },
+        {
+          "example": "57d37c84ff56773f6f7cc3b60270bbd0511e292d218d4028808b94a9358e13a6",
+          "expect": "explain.still_once_landed"
+        },
+        {
+          "example": "f5fb955ac065e5becb890577a59464cf4203d53b1cbaca0d9f596d77f72fa3e1",
+          "expect": "explain.exit_faster"
+        },
+        {
+          "example": "9b569d56bacd4118da5e599e3df11412c3e34978c40a83ac532ddd5f88aa0c1a",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 3
+        }
+      }
+    },
+    "explain.presenter@1": {
+      "minor": 0,
+      "recipe": "explain.presenter@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        },
+        {
+          "code": "explain.section_length",
+          "over": "cues",
+          "at": "rest",
+          "expr": "cue.end - cue.section <= 8",
+          "fix": "Keep each section to 8 s: start a new one with a cue whose data sets section."
+        }
+      ],
+      "examples": [
+        "fc5cf7a31d0c9e75101163dedfabc20675d5043d13f8027024eb7ce1f6363d37",
+        "43126f76a1b1976b3fa3d830d0b41bfa560de5e4550b1df493cac56aea6375e7"
+      ],
+      "twins": [
+        {
+          "example": "56fff3b1a5555f1dd6522bd12c08271d480975f5812bcd8d32d1c9a993daaeb4",
+          "expect": "explain.one_entrance"
+        },
+        {
+          "example": "348d7832750f4c6d3217d06464afe6dedbdc6970751ecd9a51dd97a204d473a5",
+          "expect": "explain.section_length"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.05,
+          "gpu_ms": 0.02,
+          "items": 4.0
+        }
+      }
+    },
+    "explain.linear_map@1": {
+      "minor": 0,
+      "recipe": "explain.linear_map@1",
+      "children": [],
+      "capabilities": {
+        "pickable": false,
+        "snap": false
+      },
+      "rules": [
+        {
+          "code": "explain.one_entrance",
+          "over": "cues",
+          "at": "rest",
+          "expr": "!(cue.class == enter && other.class == enter && other.start < cue.end && cue.start < other.end)",
+          "fix": "Start each entrance once the one before it has landed."
+        }
+      ],
+      "examples": [
+        "1ba5c4a4fb55f239cd911fac2719e9d25f600a2d14122a6c38c50e7b505efc8c",
+        "4f3347add6a400f166143421e714a574c1f1d91e372e4b5ffa56a6d75978c37a"
+      ],
+      "twins": [
+        {
+          "example": "57c3f4dd85f956f378a56959d55e7aae0cffb39dcb74e3bafce558bb6d202cb0",
+          "expect": "explain.one_entrance"
+        }
+      ],
+      "migrate": {},
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.1358,
+          "gpu_ms": 0.02,
+          "items": 10.0
+        }
+      }
+    }
+  },
+  "entries": {
+    "cue.kind@1": [
+      {
+        "name": "explain.slam",
+        "class": "enter",
+        "recipe": "explain.slam@1",
+        "description": "An enter: the main word appears at 1.7 times its size and springs to it along 1 - e^(-10t) cos(2 pi 2.2 t); a second target, its sub-line, rises into place over 0.33 s."
+      },
+      {
+        "name": "explain.apply",
+        "class": "change",
+        "recipe": "explain.apply@1",
+        "description": "A change: the moving plane's matrix becomes M times itself, each entry keyed so the matrix itself mixes, (1 - u) M0 + u M M0; with ghosts, its rows are held at the cue's start for the old tips.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ],
+          "params": {
+            "matrix": [
+              [
+                1,
+                1
+              ],
+              [
+                0,
+                1
+              ]
+            ]
+          }
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.inverse",
+        "class": "change",
+        "recipe": "explain.inverse@1",
+        "description": "A change: the moving plane's matrix becomes its inverse; a singular matrix has none and is refused.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ]
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.transpose",
+        "class": "change",
+        "recipe": "explain.transpose@1",
+        "description": "A change: the moving plane's matrix becomes its transpose.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ]
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.warp",
+        "class": "change",
+        "recipe": "explain.warp@1",
+        "description": "A change: the moving plane takes the formulas x and y, of x and y, the matrix entries a, b, c and d and the warp's progress u, which runs from 0 to 1 over the cue, so a formula that reads a x + b y at u = 0 bends in from the matrix.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ]
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.add_vector",
+        "class": "enter",
+        "recipe": "explain.add_vector@1",
+        "description": "An enter: the vector `vec` names grows from the origin.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ],
+          "params": {
+            "vec": "q"
+          }
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.write_coordinates",
+        "class": "enter",
+        "recipe": "explain.write_coordinates@1",
+        "description": "An enter: the vector's coordinates are written beside it.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ],
+          "params": {
+            "coord": "n"
+          }
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.to_coordinates",
+        "class": "enter",
+        "recipe": "explain.to_coordinates@1",
+        "description": "An enter: the path along the vector's coordinates, x then y, comes in.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ],
+          "params": {
+            "path": "p"
+          }
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      },
+      {
+        "name": "explain.label",
+        "class": "emphasis",
+        "recipe": "explain.label@1",
+        "description": "An emphasis: the vector's label takes its new text and pulses.",
+        "kit": {
+          "targets": [
+            "a",
+            "b"
+          ],
+          "params": {
+            "label": "t"
+          }
+        },
+        "joins": [
+          "vec",
+          "coord",
+          "path",
+          "label",
+          "bend",
+          "moving",
+          "g0",
+          "g1"
+        ]
+      }
+    ]
+  },
+  "assets": [
+    {
+      "path": "examples/dark_math.json",
+      "sha256": "78a4ef2f77725418eb1aaa13b1502d6ff67b62ebca31658ab4641884eebc8a09",
+      "size": 1924,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/dark_math.clean.json",
+      "sha256": "6c1b713ddc3a0ba22affd40328a02626973f687baef6fae4e78963f60c2233d3",
+      "size": 1254,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/dark_math.one_entrance.json",
+      "sha256": "ebd821b3b9f0d05877fd3a41eed4ccd3294038b0896c82c9ab8030a1e83b9413",
+      "size": 1003,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/dark_math.still_once_landed.json",
+      "sha256": "af6fcbe5adfd599679e89c9ea413ae50ff46dc19c33f0de3babe9c8aea948704",
+      "size": 1088,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/dark_math.section_length.json",
+      "sha256": "720581d3443dcf9765b95bccf67f93f01e6d838fd2d4cb92cbc83899e68f4ae4",
+      "size": 919,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/keynote_ui.json",
+      "sha256": "5414beea60388301c525301b3bf0e74a72f10b769938ed105cfd5d03fb942d53",
+      "size": 1729,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/keynote_ui.clean.json",
+      "sha256": "f905f5d7421bb7e010294c5225d978c3ef5e7c701abb38529150d9cf4a0b4d6c",
+      "size": 1258,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/keynote_ui.one_entrance.json",
+      "sha256": "f12c8f8f5a690f404c6e7f7e5814715717dbbf8345d503746ed50436d5155e97",
+      "size": 1007,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/keynote_ui.exit_faster.json",
+      "sha256": "9b0d1ec2f63138aff75be18c0f78aa65d56802595a7f44d7427a798679cc6611",
+      "size": 1016,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/keynote_ui.section_length.json",
+      "sha256": "2469704902d79b9a29e71757ed76a9c67d695ec1fccd0427f02008ce22236247",
+      "size": 923,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/chart_story.json",
+      "sha256": "555735ce79b14eb377d477a9773bbb101371c9c1360c06be9a211464e7e0ea9d",
+      "size": 1886,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/chart_story.clean.json",
+      "sha256": "74f69a3debdeff92387faa15d3ae711f1ac03db2818012d0ee56fbec567fd642",
+      "size": 1262,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/chart_story.one_entrance.json",
+      "sha256": "59f93707b9dd4b7df035e0c6ec68f728e9a0f9c62c761a282a8fe47d511dc6fd",
+      "size": 1011,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/chart_story.section_length.json",
+      "sha256": "e7bafce67871f95d92db5560eb13231bf05adccb989acbfdf363cfc7603d7f64",
+      "size": 927,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/infographic.json",
+      "sha256": "46f538069bf5fd8ec32a8d788a6dbf430389603059f0d7ea29cac056d623e5cf",
+      "size": 1763,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/infographic.clean.json",
+      "sha256": "8e251354ffe6a83298e6292610e0e81ed59cb198cc0a9dae90c8f0539e7e88af",
+      "size": 1262,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/infographic.one_entrance.json",
+      "sha256": "2034ecd1731694c9ef045fba45bca92c9d6cfedb2b07220cd90bf4ec0c5f2733",
+      "size": 1011,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/infographic.main_word_size.json",
+      "sha256": "dda394967b3e24091ab78d6680d8ede79458754e2109cc8b60258a0719783c98",
+      "size": 1126,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/infographic.section_length.json",
+      "sha256": "f125e01bf5bfd727db91c556992f0d605a00118aaff50a6082c443291f820786",
+      "size": 927,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/evidence_board.json",
+      "sha256": "78853730eca4536a196c4d7121492a2bc61f83c3dde3ba8f62c525e4cfd5467d",
+      "size": 1784,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/evidence_board.clean.json",
+      "sha256": "75124e78cc2c65df237b744a594827cea79bc47b73b0e91d62d54a19fc5aec3b",
+      "size": 1274,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/evidence_board.one_entrance.json",
+      "sha256": "a55f0652987a784133048ff4828cf024814fc6cde74e7348f3ce943028314eee",
+      "size": 1023,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/evidence_board.still_once_landed.json",
+      "sha256": "f2f06a48fad8ed1510b04b86e7b8854af51a59ec1effc2b961f71f5ffb330ac8",
+      "size": 1108,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/whiteboard.json",
+      "sha256": "117411a61a2e348db02009cefad445903b768773d6ab8db0b6a92f300db0235d",
+      "size": 1507,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/whiteboard.clean.json",
+      "sha256": "67d9a0685c50db7f9e689aace320fd9260634087ed60d585a3b16c9fb03449f5",
+      "size": 1258,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/whiteboard.one_entrance.json",
+      "sha256": "2b5eab97d2ef8ad0ea21f6833735cfc29b7e797b76dc7a3f7309d31a59c184f6",
+      "size": 1007,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/whiteboard.section_length.json",
+      "sha256": "8f17ed2d7cd475ff15efe7c9f8ec0ee5f94d6908eb635439b0f58f134e23937d",
+      "size": 923,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/storytime.json",
+      "sha256": "662239dc2539a45fad8a5e50f4c81e3824d7ade61ff5314c105e209dd22204f9",
+      "size": 1409,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/storytime.clean.json",
+      "sha256": "83a43846fb6a58022d11fd06aaaf481b5ff8bfce90b9c147062cc790ff4a8acc",
+      "size": 1254,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/storytime.one_entrance.json",
+      "sha256": "c33d6589420be3fd0131412f5d27c39975fe33d7f1aa8177600d443b68944074",
+      "size": 1003,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/storytime.section_length.json",
+      "sha256": "b2592df070fc9a019d59b6d92ad2752d6cd21fbdf23ba2803be56e4496874c8e",
+      "size": 919,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/kinetic_type.json",
+      "sha256": "6fcb1be190a4910b81bbb491a125402b715539ab6aeb48836ef9dad83f98ee5f",
+      "size": 1685,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.clean.json",
+      "sha256": "c99161a30124be450cb3bf228eb2de08e09631c906e1bec1326557a6b531e1cf",
+      "size": 1266,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.one_entrance.json",
+      "sha256": "9237c1d071249a50e57f945e47cfd876a78752a7deb6a517c95c833d121d9454",
+      "size": 1015,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.main_word_size.json",
+      "sha256": "657ddbf024ae92bda3523f2ad0aae024739e22aa51a332c4fd84e4f4429b0d83",
+      "size": 1130,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.on_beat.json",
+      "sha256": "5fb23107e40f6575f792da55b8ef87ce34cf01abc4848673ed2580c1ced45cd1",
+      "size": 979,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.still_once_landed.json",
+      "sha256": "57d37c84ff56773f6f7cc3b60270bbd0511e292d218d4028808b94a9358e13a6",
+      "size": 1100,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.exit_faster.json",
+      "sha256": "f5fb955ac065e5becb890577a59464cf4203d53b1cbaca0d9f596d77f72fa3e1",
+      "size": 1024,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/kinetic_type.section_length.json",
+      "sha256": "9b569d56bacd4118da5e599e3df11412c3e34978c40a83ac532ddd5f88aa0c1a",
+      "size": 931,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/presenter.json",
+      "sha256": "fc5cf7a31d0c9e75101163dedfabc20675d5043d13f8027024eb7ce1f6363d37",
+      "size": 1386,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/presenter.clean.json",
+      "sha256": "43126f76a1b1976b3fa3d830d0b41bfa560de5e4550b1df493cac56aea6375e7",
+      "size": 1254,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/presenter.one_entrance.json",
+      "sha256": "56fff3b1a5555f1dd6522bd12c08271d480975f5812bcd8d32d1c9a993daaeb4",
+      "size": 1003,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/presenter.section_length.json",
+      "sha256": "348d7832750f4c6d3217d06464afe6dedbdc6970751ecd9a51dd97a204d473a5",
+      "size": 919,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "examples/linear_map.json",
+      "sha256": "1ba5c4a4fb55f239cd911fac2719e9d25f600a2d14122a6c38c50e7b505efc8c",
+      "size": 1954,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/linear_map.clean.json",
+      "sha256": "4f3347add6a400f166143421e714a574c1f1d91e372e4b5ffa56a6d75978c37a",
+      "size": 1040,
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "twins/linear_map.one_entrance.json",
+      "sha256": "57c3f4dd85f956f378a56959d55e7aae0cffb39dcb74e3bafce558bb6d202cb0",
+      "size": 1442,
+      "license": "Apache-2.0"
+    }
+  ]
+}
