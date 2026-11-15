@@ -17,7 +17,13 @@ const HUNK_BUDGET = 8; // lines, added and removed
 const FILE_BUDGET = 40; // lines added
 const MARK = /DeepBuild patch \(windoliver\/deepbuild#(\d+)\)/g;
 // A crate pinned to a commit, not a crates.io release: the commit is the `rev` in its manifest.
-const FROM_GIT = { 'quickjs-jit-runtime': { repo: 'longbridge/quickjs-jit', folder: 'jit' } };
+const FROM_GIT = {
+  'quickjs-jit-runtime': { repo: 'longbridge/quickjs-jit', folder: 'jit' },
+  // #2359: the held dependents are unreleased; compare with their exact upstream source, not a registry release.
+  llrt_crypto: { repo: 'awslabs/llrt', folder: 'modules/llrt_crypto' },
+  'mitex-spec': { repo: 'mitex-rs/mitex', folder: 'crates/mitex-spec' },
+  'mitex-spec-gen': { repo: 'mitex-rs/mitex', folder: 'crates/mitex-spec-gen' },
+};
 
 const say = (line) => console.log(line);
 const toPosix = (path) => path.split('\\').join('/');

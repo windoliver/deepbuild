@@ -235,6 +235,14 @@ alone.push('tests/acceptance/533/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
+alone.push('tests/acceptance/177/');
+alone.push('tests/acceptance/177-redraft-ac3/');
+// AC3 runs as its blind redraft, on the owner's ruling ("Yes, swap it", Nov 15): the first draft's golden and snapshot
+// can't pass the base's blank guard, so it is kept by hand (177-redraft-ac3/DISPUTE.md).
+byHand.push('tests/acceptance/177/ac3-sdr-outputs.test.ts');
+byHand.push('tests/acceptance/177/ac4-layers.live.test.ts', 'tests/acceptance/177/ac5-envelope.live.test.ts', 'tests/acceptance/177/ac6-budgets.live.test.ts');
+timed.push('tests/acceptance/177/ac6-budgets.live.test.ts');
 // #1436's files build deep-replica and drive the GPU; its live window files (reduced motion's frames, the budgets) open the
 // app's window on this Mac's screen, and its budgets are a timed file.
 alone.push('tests/acceptance/1436/');
@@ -418,6 +426,9 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #456's files each build deep-show and draw on the GPU; shots.test.ts writes docs/evidence/456/ and waits on your
+// taste call in tests/acceptance/456/TASTE.json.
+alone.push('tests/acceptance/456/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
@@ -513,6 +524,8 @@ alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 alone.push('tests/acceptance/1956/');
 // #1959's files each build deep-show (r1); the mixed-version scene's test restarts a hub on the same state folder.
 alone.push('tests/acceptance/1959/');
+// #1960's files each build deep-show (r1); the lifecycle test restarts a hub twice on the same state folder.
+alone.push('tests/acceptance/1960/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
@@ -534,6 +547,8 @@ timed.push('tests/acceptance/1700/budgets.test.ts');
 alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
 alone.push('tests/acceptance/1163/');
+// #1164's files build deep-show, deep-sandbox and a Rust program for wasm32, and play a game through the hub.
+alone.push('tests/acceptance/1164/');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
@@ -658,6 +673,8 @@ alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
 // #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
 alone.push('tests/acceptance/450/');
+// #451's suite builds deep-gpu and deep-canvas-render and draws on the GPU.
+alone.push('tests/acceptance/451/');
 // #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU, and its
 // look-type regression builds deep-show; seek-play,
 // budget and off-reference read this machine's fingerprint, budget its load too. exports (289 s) and checks (151 s)
@@ -762,6 +779,13 @@ timed.push('tests/acceptance/213/ac8-budgets.test.ts');
 // (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
 alone.push('tests/acceptance/213-redraft-ac3/');
 byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
+// #184's files start replicas and hosts and play mazes for minutes; budgets.test.ts times release replicas.
+alone.push('tests/acceptance/184/');
+timed.push('tests/acceptance/184/budgets.test.ts');
+// #184's criterion 7 went to a blind redraft (tests/acceptance/184-redraft-ac7/DISPUTE.md). On the owner's ruling that the
+// replica's refusal before a play's first step is "before any run", its third draft runs; the first two by hand.
+alone.push('tests/acceptance/184-redraft-ac7-2/');
+byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/184-redraft-ac7/ac7-bots-refused.test.ts');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');

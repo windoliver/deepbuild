@@ -467,12 +467,16 @@ impl deep_canvas::schedule::Canonical for Limit {
     }
 }
 /// A fixed fraction keeps the bytes it had as a bare number; a data value's, which no finite
-/// fraction can write, is infinity then its name (#162).
+/// fraction can write, is infinity then its name (#162), and a path's, negative infinity then
+/// the path (#1960).
 impl Canonical for crate::constraint::Fraction {
     fn encode(&self, out: &mut Vec<u8>) {
         match self {
             crate::constraint::Fraction::Fixed(f) => f.encode(out),
             crate::constraint::Fraction::Data(name) => (f64::INFINITY, name).encode(out),
+            crate::constraint::Fraction::Path(t) => {
+                (f64::NEG_INFINITY, &t.owner, &t.field).encode(out);
+            }
         }
     }
 }

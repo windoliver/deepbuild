@@ -20,6 +20,9 @@ describe('#1337 what a person\'s credential can do', () => {
       }
       const health = await conn.call('hub.health', {}, 30_000);
       expect('result' in health, `bob's hub.health: ${JSON.stringify(health)}`).toBe(true);
+      // #2118: the settings readings name every session's files, so a person's health carries none of them.
+      const read = (health as { result?: { claude?: object; codex?: object } }).result;
+      expect([read?.claude && 'readings' in read.claude, read?.codex && 'readings' in read.codex], `bob's hub.health: ${JSON.stringify(read)}`).toEqual([false, false]);
     } finally {
       conn.close();
     }
