@@ -1036,6 +1036,24 @@ mod tests {
     }
 
     #[test]
+    fn an_ask_the_hub_lists_is_shown_whatever_this_app_took_it_for() {
+        // The hub lists an ask only once it is in sight: a row this app had folded by its own count, or held, is shown,
+        // and one put off with Later stays so.
+        let mut view = View::default();
+        for (ask, status) in [
+            ("ask:f1", "folded"),
+            ("ask:h1", "held"),
+            ("ask:l1", "later"),
+        ] {
+            view.inbox.push(json!({"ask": ask, "kind": "taste", "session": "s1", "status": status, "outcome": "unanswered"}));
+            view.apply(json!({"kind": "row.set", "writer": "core", "data": {"id": ask, "listed": true, "order": ask}}));
+        }
+        assert_eq!(row(&view, "ask:f1").0, "shown");
+        assert_eq!(row(&view, "ask:h1").0, "shown");
+        assert_eq!(row(&view, "ask:l1").0, "later");
+    }
+
+    #[test]
     fn an_ask_held_for_the_agents_step_is_shown_once_the_core_shows_it() {
         let mut view = View::default();
         view.inbox.push(json!({"ask": "ask:h1", "kind": "authority", "session": "s1", "status": "held", "outcome": "unanswered"}));

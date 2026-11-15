@@ -695,6 +695,38 @@ mod tests {
     }
 
     #[test]
+    fn an_ask_notifies_once_the_hubs_list_holds_it_though_it_came_due_before() {
+        // The hub lists an ask a moment after the core shows it (#1463): one that came due in between still notifies.
+        let row = |event: &str, id: &str| {
+            json!({"kind": "row.set", "id": event, "writer": "core",
+            "data": {"id": id, "listed": true, "order": event, "session": "s1"}})
+        };
+        let (session, listed) = (row("r0", "session:s1"), row("r1", "ask:a1"));
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
+            "question": "Push?", "default": "no", "deadline": 99_000_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let shown = json!({"kind": "ask.batched", "id": "b1", "writer": "core", "data": {"asks": [{"ask": "ask:a1"}]}});
+        let asks = |posted: &[Notification]| -> Vec<String> {
+            posted.iter().filter_map(|n| n.ask.clone()).collect()
+        };
+        let mut notifier = Notifier::new(Duration::from_secs(1));
+        notifier.start(&view(std::slice::from_ref(&session)), Vec::new());
+        notifier.saw(&ask, 1_000);
+        notifier.saw(&shown, 1_500);
+        let before = view(&[session.clone(), ask.clone(), shown.clone()]);
+        let early = notifier.due(&before, 2_100, None, false);
+        assert_eq!(
+            asks(&early),
+            Vec::<String>::new(),
+            "before the hub listed it"
+        );
+
+        notifier.saw(&listed, 2_300);
+        let posted = notifier.due(&view(&[session, ask, shown, listed]), 3_400, None, false);
+        assert_eq!(asks(&posted), ["ask:a1"], "{posted:?}");
+    }
+
+    #[test]
     fn an_ask_in_a_record_with_no_batches_notifies_when_it_is_raised() {
         // A fixture's record, or an older hub's: nothing shows its asks, the list draws them at once, and so each notifies.
         let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {
