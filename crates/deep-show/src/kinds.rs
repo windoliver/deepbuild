@@ -1122,7 +1122,7 @@ impl Hub<'_> {
         let rows = kind_rows(sealed, planted);
         let Some(e) = rows.iter().map(|r| &r.entry).find(|e| e["name"] == kind) else {
             let close =
-                deep_canvas::document::kind_names(kind, &sealed.kinds(), sealed.close_fault);
+                deep_canvas::document::kind_names(kind, &sealed.kinds(), &[], sealed.close_fault);
             return field_miss(path, &format!("{kind} is no kind this build lists"), &close);
         };
         let mut fields: Vec<&Value> = e["fields"].as_array().into_iter().flatten().collect();
@@ -1162,7 +1162,14 @@ impl Hub<'_> {
             deep_canvas::kinds::Lookup::Known { entry, .. } => {
                 let fault = sealed.close_fault;
                 let owners = deep_canvas::document::owners(name, entry, &registry, fault);
-                deep_canvas::document::field_names(name, entry, entry.current(), &owners, fault)
+                deep_canvas::document::field_names(
+                    name,
+                    entry,
+                    entry.current(),
+                    &owners,
+                    &[],
+                    fault,
+                )
             }
             _ => Vec::new(),
         };
@@ -1264,11 +1271,12 @@ impl Hub<'_> {
     }
 
     /// A word from a familiar-names pack installed here: the kind it maps to and the conversion
-    /// the pack states, or `no_match`; never a mapping by spelling.
+    /// the pack states, as `mapped`; else its state in a pack's census, `refused` with its
+    /// reason or `open` (#1493); or `no_match`. Never a mapping by spelling.
     fn kinds_word(&self, word: &str) -> Value {
         for p in self.packs.all() {
             if let Some(alias) = p.aliases.get(word) {
-                let mut out = json!({"word": word, "target": alias["target"],
+                let mut out = json!({"word": word, "state": "mapped", "target": alias["target"],
                                      "conversion": alias["conversion"], "pack": p.id.text()});
                 if let Some(old) = alias.get("renamed_from") {
                     out["renamed_from"] = old.clone();
@@ -1276,7 +1284,30 @@ impl Hub<'_> {
                 return out;
             }
         }
-        json!({"word": word, "code": "no_match"})
+        // A pack that decided the word answers before one that left it open.
+        let rows = || {
+            self.packs
+                .all()
+                .flat_map(|p| p.census.iter().map(move |r| (p, r)))
+                .filter(|(_, r)| r.word == word)
+        };
+        let Some((p, row)) = rows()
+            .find(|(_, r)| r.state != "open")
+            .or_else(|| rows().next())
+        else {
+            return json!({"word": word, "code": "no_match"});
+        };
+        let mut out = json!({"word": word, "state": row.state, "pack": p.id.text()});
+        for (key, value) in [
+            ("reason", &row.reason),
+            ("target", &row.target),
+            ("of", &row.of),
+        ] {
+            if let Some(v) = value {
+                out[key] = json!(v);
+            }
+        }
+        out
     }
 
     /// Hits for every word of `query`, best first: the gallery's examples, the guides, then the

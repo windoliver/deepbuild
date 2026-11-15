@@ -258,7 +258,7 @@ fn check_by(
             for item in items.values() {
                 if let Some(text) = kind_text(item) {
                     if !facts.contains_key(text) {
-                        let f = KindFacts::of(text, sealed, kinds, &resolved);
+                        let f = KindFacts::of(text, sealed, kinds, &resolved, packs);
                         facts.insert(text.to_string(), f);
                     }
                 }
@@ -281,6 +281,8 @@ fn check_by(
                 sealed,
                 kinds,
                 facts: &facts,
+                packs,
+                resolved: &resolved,
             };
             // Each item checks on its own, so a big document's items check in chunks across the
             // cores, and the chunks' findings join in item order, as one pass would list them.
@@ -696,22 +698,38 @@ pub fn recheck(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, Reach::Scan)
+    recheck_by(
+        doc,
+        prev_issues,
+        changed,
+        sealed,
+        Reach::Scan,
+        &Packs::default(),
+    )
 }
 
 /// [`recheck`], finding the items that hang from the changed ones or name one by `referrers`
 /// rather than by passes over every item (#896: "the patch path checks and records only what the
 /// patch touches"). `referrers` describes the document the patch was applied to, or the result:
 /// an item the patch left alone names and hangs from the same items in both, and every item it
-/// changed is checked again whatever names it.
+/// changed is checked again whatever names it. An unknown field is looked up in `packs`'
+/// census, as a full check looks it up (#1493).
 pub fn recheck_with(
     doc: &Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
     sealed: &Sealed,
     referrers: &Referrers,
+    packs: &Packs,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, Reach::Index(referrers))
+    recheck_by(
+        doc,
+        prev_issues,
+        changed,
+        sealed,
+        Reach::Index(referrers),
+        packs,
+    )
 }
 
 /// Each string an item's params hold, at any depth, with the items that hold it, and each
@@ -776,7 +794,14 @@ pub fn recheck_skipping_referrers(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
-    recheck_by(doc, prev_issues, changed, sealed, Reach::ChangedOnly)
+    recheck_by(
+        doc,
+        prev_issues,
+        changed,
+        sealed,
+        Reach::ChangedOnly,
+        &Packs::default(),
+    )
 }
 
 fn recheck_by(
@@ -785,6 +810,7 @@ fn recheck_by(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
     reach: Reach<'_>,
+    packs: &Packs,
 ) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
     let maps_empty = ID_MAPS.iter().all(|m| {
@@ -907,7 +933,7 @@ fn recheck_by(
         .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
         .collect();
     reduced.insert("items".into(), Value::Object(subset));
-    let fresh = check_in(&Value::Object(reduced), sealed).issues;
+    let fresh = check_packed(&Value::Object(reduced), sealed, packs).issues;
     let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
     let mut out: Vec<Issue> = prev_issues
         .iter()
@@ -1340,6 +1366,10 @@ struct ItemContext<'a> {
     kinds: &'a Registry,
     /// What the build says about each kind text the lowered items write.
     facts: &'a BTreeMap<String, KindFacts<'a>>,
+    /// The installed packs, whose census an unknown field is looked up in (#1493), and those the
+    /// document names.
+    packs: &'a Packs,
+    resolved: &'a Resolved<'a>,
 }
 
 /// The canvas modules whose kinds a document uses without naming the module in
@@ -1365,7 +1395,13 @@ struct KindFacts<'a> {
 }
 
 impl<'a> KindFacts<'a> {
-    fn of(text: &str, sealed: &'a Sealed, kinds: &'a Registry, resolved: &Resolved<'_>) -> Self {
+    fn of(
+        text: &str,
+        sealed: &'a Sealed,
+        kinds: &'a Registry,
+        resolved: &Resolved<'_>,
+        packs: &Packs,
+    ) -> Self {
         let instance = resolved.recipe(text).is_some();
         let name = parse_kind(text).filter(|_| !instance).map(|(name, _)| name);
         let lookup = lookup(kinds, text);
@@ -1380,7 +1416,8 @@ impl<'a> KindFacts<'a> {
             },
             close: match lookup {
                 Lookup::UnknownKind if !instance => {
-                    super::close::kind_names(text, kinds, sealed.close_fault)
+                    let census = super::close::census(text, packs, sealed.close_fault);
+                    super::close::kind_names(text, kinds, &census, sealed.close_fault)
                 }
                 _ => Vec::new(),
             },
@@ -1671,8 +1708,8 @@ fn check_item(
             entry,
             version,
             required_minor,
-            ctx.sealed,
-            ctx.kinds,
+            (ctx.sealed, ctx.kinds),
+            (ctx.packs, ctx.resolved),
             issues,
             notices,
         );
@@ -1930,8 +1967,8 @@ fn check_params(
     entry: &Entry,
     version: &Version,
     required_minor: Option<u32>,
-    sealed: &Sealed,
-    kinds: &Registry,
+    (sealed, kinds): (&Sealed, &Registry),
+    (packs, resolved): (&Packs, &Resolved<'_>),
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
@@ -1959,18 +1996,33 @@ fn check_params(
                 dropped.push(name.clone());
             } else {
                 // A field another kind defines names that kind after any rename, in the close
-                // names, and first in the fix when no rename comes before it (#1970).
-                let owners = super::close::owners(name, entry, kinds, sealed.close_fault);
+                // names, and first in the fix when no rename comes before it (#1970); an
+                // installed pack whose census maps or refuses it follows, and is never taken for
+                // its target (#1493).
+                let fault = sealed.close_fault;
+                let owners = super::close::owners(name, entry, kinds, fault);
+                let census = super::close::census(name, packs, fault);
+                if fault == Some(registry::Fault::CensusAccepted)
+                    && census.iter().any(|c| c.get("maps").is_some())
+                {
+                    continue;
+                }
                 let close =
-                    super::close::field_names(name, entry, version, &owners, sealed.close_fault);
-                let fix = if close.first().is_some_and(|c| c.get("defines").is_some()) {
-                    format!(
+                    super::close::field_names(name, entry, version, &owners, &census, fault);
+                let first = |key: &str| close.first().is_some_and(|c| c.get(key).is_some());
+                let mut fix = Vec::new();
+                if first("defines") {
+                    fix.push(format!(
                         "`{name}` is a field of {}: give the item that kind, or remove the field.",
                         owners.join(" or ")
-                    )
-                } else {
-                    super::fix_for("unknown_field")
-                };
+                    ));
+                }
+                let by_packs = super::close::census_fix(&close, resolved);
+                if fix.is_empty() && (by_packs.is_empty() || first("renamed_in")) {
+                    fix.push(super::fix_for("unknown_field"));
+                }
+                fix.extend(by_packs);
+                let fix = fix.join(" ");
                 issues.push(Issue {
                     close,
                     fix,

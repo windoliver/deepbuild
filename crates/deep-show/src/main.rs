@@ -3223,6 +3223,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
+        "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
+        "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,

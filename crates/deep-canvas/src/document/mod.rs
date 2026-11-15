@@ -683,6 +683,7 @@ mod tests {
                 &changed,
                 &crate::registry::core(),
                 &referrers,
+                &Packs::default(),
             )
             .expect("items only");
             assert_eq!(
