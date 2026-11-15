@@ -1162,6 +1162,8 @@ pub struct Hub<'a> {
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
     pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
+    /// #506: each inset's picture its 3D frames drew last, by key.
+    pub(crate) inset_pictures: BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
@@ -1361,6 +1363,7 @@ impl<'a> Hub<'a> {
             session_state: BTreeMap::new(),
             tracks: BTreeMap::new(),
             forms: BTreeMap::new(),
+            inset_pictures: BTreeMap::new(),
             renderer: Renderer::new().turning_about_corner(
                 scenario.module_planted.as_deref() == Some("turns_about_corner"),
             ),
@@ -1578,17 +1581,10 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        // #493: a shot writes the camera's pose the 3D frame is drawn through.
-        let posed = crate::film::posed(doc, t);
-        let doc = posed.as_ref().unwrap_or(doc);
-        // #1729: its assets and maps from the evidence store, as render-back reads them.
-        let (scene, look) = self.evaluate3d(doc, t, size)?;
-        let rgba = self.gpu3().and_then(|g| g.draw(&scene, &look));
-        let rgba = rgba.ok_or_else(|| Unfit {
-            code: "unsupported_platform",
-            path: String::new(),
-        })?;
-        Ok((rgba, size, scene.boxes()))
+        // #493: a shot writes the camera's pose the 3D frame is drawn through; #1729: its assets
+        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs).
+        self.painted3d(doc, t, size)
+            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.

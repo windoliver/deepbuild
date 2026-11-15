@@ -663,19 +663,16 @@ impl<'a> Hub<'a> {
         drawing: &Painted,
         size: Option<[u16; 2]>,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
-        let drawn = self
-            .renderer
-            .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|u| match u.code {
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        // #506: with its insets' pictures, its overlay frames at their anchors and its view
+        // overlays (over3d.rs).
+        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
             "unsupported_platform" => Unfit {
                 code: "gpu_unavailable",
                 path: "snapshots".into(),
             },
             _ => u,
         })?;
-        let over = self.renderer.raster(&drawn, size, None);
-        snapshot::over(&mut rgba, &over);
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
