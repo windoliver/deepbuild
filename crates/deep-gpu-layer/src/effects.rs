@@ -554,11 +554,11 @@ pub fn operators(app: &App) -> Value {
                 .filter_map(|g| check::read_and_check(g).ok().map(|c| c.class))
                 .max()
                 .unwrap_or(Class::SameMachine);
-            // #508: a film effect's operator carries its kind's fixture document.
+            // #508: a film effect's operator names its kind's fixture document, by its path.
             let fixture = match s.name {
-                "wave_field@1" => effect::fixture("wave_field"),
-                "arc@1" => effect::fixture("arc"),
-                "plume.haze@1" => effect::fixture("plume"),
+                "wave_field@1" => fixture_path("wave_field"),
+                "arc@1" => fixture_path("arc"),
+                "plume.haze@1" => fixture_path("plume"),
                 _ => None,
             };
             json!({
@@ -591,10 +591,15 @@ pub fn operators(app: &App) -> Value {
                     .map(|(_, c)| *c)
             });
             json!({"kind": k, "operator": operator, "preset_of": preset,
-                   "cost": {"ns_per_px": ns}, "fixture": effect::fixture(k)})
+                   "cost": {"ns_per_px": ns}, "fixture": fixture_path(k)})
         })
         .collect();
     json!({"operators": list, "effects": kinds})
+}
+
+/// #508: a film kind's fixture document, as its path from the checkout's root.
+fn fixture_path(kind: &str) -> Option<String> {
+    effect::fixture(kind).map(|_| format!("crates/deep-canvas-effects/fixtures/{kind}.json"))
 }
 
 /// Records a frame for the reference call's inputs, asking for the shadow map when the sun casts.
