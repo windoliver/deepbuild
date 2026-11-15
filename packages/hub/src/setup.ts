@@ -112,6 +112,7 @@ async function install(cli: string, quiet = false): Promise<Said> {
     if (existsSync(join(REPO, 'runtime', 'node')) && !REPO.startsWith(join(root, 'versions'))) installShipped(root, REPO, deepbuild);
     await draftAskSettings(root);
     recordLoginPath(root);
+    gitRuns();
     blocking = installRules(root);
     await enrollConfirm(root, tell);
     // An installed version's fixed programs, which every update keeps (#41); a checkout's own build otherwise.
@@ -480,6 +481,21 @@ async function installAgent(root: string, agent: string): Promise<void> {
   }
   if (!existsSync(program)) throw Error(`${facts.name}'s own installer finished, but there is no ${program}`);
   recordLoginPath(root, [dirname(program)]);
+}
+/**
+ * Workspaces keep their history with git (#1349): Set up makes one throwaway repo before the hub starts, so a machine
+ * whose git can't run stops Set up here, naming the call that failed, never later at your first topic or quietly.
+ */
+function gitRuns(): void {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-git-'));
+  try {
+    execFileSync('git', ['init', '-q', dir], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
+  } catch (error) {
+    const said = String((error as { stderr?: unknown }).stderr ?? '').trim().split('\n').at(-1) || (error as Error).message;
+    throw Error(`git init failed, so workspaces can't keep their history: ${said}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 /** An installer's script from its maker's address: HTTPS only, within a minute. */
 async function fetchInstaller(url: string): Promise<string> {
