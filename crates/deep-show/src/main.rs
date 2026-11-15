@@ -651,6 +651,21 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "registries" => return Some(Call::Registries),
         // #490: the closed function list's point and interval forms, and their search.
         "fn" => return Some(Call::Fn(Box::new(c.clone()))),
+        // #225: a vector field's integrated streams alone.
+        "streams" => {
+            return Some(Call::Streams {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
+        // #225: a vector field's streams, arrows and flow windows at t.
+        "vector_field" => {
+            return Some(Call::VectorField {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+                t: optional(c.get("t"), |t| crate::time::eval_time(Some(t)))?,
+            })
+        }
         "path" => {
             return Some(Call::Path {
                 doc: doc()?,
@@ -1309,6 +1324,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
+                // #225's in the data module's integrator.
+                || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
@@ -1435,6 +1452,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
+                "migration_one_major_per_document" => Planted::MigrationOneMajor,
+                "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -2022,6 +2041,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-logic",
     feature = "test-data-reads-logic-array",
     feature = "test-leave-out-data",
+    feature = "test-follow-stream-in-motion",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
     feature = "test-prog-registry",
@@ -2335,6 +2355,12 @@ fn modules(set: BuildSet) -> Vec<Module> {
     for m in &mut out {
         if m.manifest.name == "motion" {
             *m = deep_canvas_motion::module::declaring_eases();
+        }
+    }
+    #[cfg(feature = "test-follow-stream-in-motion")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = test_registries::motion_filling_follow_stream();
         }
     }
     #[cfg(feature = "test-ease-renumbered")]
@@ -3284,7 +3310,15 @@ fn coefficients(path: Option<&str>) -> Result<Coefficients, cost::Refused> {
     Coefficients::read(&text)
 }
 
+/// Milliseconds on a monotonic clock, which times a vector field's integration (#225).
+fn clock_ms() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+}
+
 fn main() {
+    // #225: the check times each vector field's integration by this host's clock.
+    deep_canvas_marks::vector_field::time_with(Some(clock_ms));
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().cloned().unwrap_or_default();
     // #402: the terminal side on the wall clock, and a terminal's panel host; neither seals.

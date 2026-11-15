@@ -353,6 +353,9 @@ timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall
 // #1945's files each start a hub on this Mac's Lima VMs and make a throwaway user there, cut every SSH connection of
 // that user for a minute, and run root plans with its sudo password: one file at a time.
 alone.push('tests/acceptance/1945/');
+// #1946's files each start a hub on this Mac's Lima VMs, make a throwaway user there and set up then remove its user
+// services, a package and sudo rules: one file at a time.
+alone.push('tests/acceptance/1946/');
 // #1943's files restart user services on this Mac's Lima VMs and judge check runs against deadlines there: one file at
 // a time.
 alone.push('tests/acceptance/1943/');
@@ -508,6 +511,8 @@ alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
+// #1959's files each build deep-show (r1); the mixed-version scene's test restarts a hub on the same state folder.
+alone.push('tests/acceptance/1959/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
@@ -691,6 +696,18 @@ byHand.push('tests/acceptance/222/budgets.test.ts');
 // #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
 alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
 timed.push('tests/acceptance/223/ac7-budgets.test.ts');
+// #225's files each build deep-show (full, without data, the planted motion, and for linux/amd64 in Docker) and read
+// vector fields through it; ac6 times 1,000 streams' integration in release.
+alone.push('tests/acceptance/225/', 'tests/acceptance/225-oracle/');
+timed.push('tests/acceptance/225/ac6-budgets.test.ts');
+// #225's first-draft Oracle port for criterion 7 holds a twin that lands on a full turn, so it passes every program and
+// its failsNaming can't pass (tests/acceptance/225-oracle-redraft-ac7/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/225-oracle-redraft-ac7/');
+byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
+// #225's first-draft criterion 5 builds its second machine in a rust image with no C++ compiler or libclang, which the
+// full build needs (tests/acceptance/225-redraft-ac5/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/225-redraft-ac5/');
+byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds

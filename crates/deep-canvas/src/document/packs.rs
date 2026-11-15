@@ -59,6 +59,10 @@ pub struct Planted {
     pub each_per_triangle: bool,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     pub migration_first_fault: bool,
+    /// #1959: the loader takes one saved major, the lowest a pack-kind item holds, for the whole document.
+    pub migrate_one_major: bool,
+    /// #1959: the migrator treats a param set to 0 as one the document leaves out.
+    pub migrate_zero_as_absent: bool,
     /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
@@ -1672,9 +1676,11 @@ impl Packs {
             deps::cycle(self, &pack)?;
             if !pack.kinds.is_empty() || !pack.census.is_empty() {
                 let mut alone = deps::store(self, &pack);
-                // A pack's kit checks its kinds as shipped: a planted cue-list expander is a
-                // document's wrong program, never the kit's (#142).
+                // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
+                // load migrator (#1959) is a document's wrong program, never the kit's.
                 alone.planted.expander = None;
+                alone.planted.migrate_one_major = false;
+                alone.planted.migrate_zero_as_absent = false;
                 // #1493: a parameter a pack's census maps must reach the frame, so each meets
                 // field.effect on its recipe as a kind's field does.
                 super::pack_kinds::alias_effect(&pack, sealed, &alone)?;

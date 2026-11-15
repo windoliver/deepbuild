@@ -183,6 +183,15 @@ pub fn evaluated(
         let seconds = t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
         deep_canvas_marks::warp::bind(&mut items, seconds, &values(doc, &program, t, ctx));
     }
+    // #225: a vector field's frame fields, and each item a follow_stream carries, at t.
+    if deep_canvas_marks::vector_field::any(&items) {
+        let seconds = t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        let read = values(doc, &program, t, ctx);
+        let value = |p: &str| if p == "time" { Some(seconds) } else { read(p) };
+        deep_canvas_marks::vector_field::bind(&mut items, seconds, &value);
+        let whole = Value::Object(doc.clone());
+        deep_canvas_marks::vector_field::place_followers(&whole, &mut items, seconds);
+    }
     if !has_formulas(doc) {
         return Ok((items, None));
     }

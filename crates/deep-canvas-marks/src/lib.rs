@@ -52,4 +52,5 @@ pub mod scene;
 pub mod story;
 pub mod terrain;
 pub mod turn;
+pub mod vector_field;
 pub mod warp;
