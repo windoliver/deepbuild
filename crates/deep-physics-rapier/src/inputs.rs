@@ -130,6 +130,9 @@ impl Rapier {
                         rb.set_angvel(Vector::ZERO, true);
                     }
                 }
+                // #191: the body and its colliders leave the world's steps; a sensor it was in
+                // writes its exit on this step.
+                "deactivate" => self.world.bodies[h].set_enabled(false),
                 other => {
                     let what = format!("the input {other} isn't run by this backend interface");
                     return Err(Box::new(refusal(
