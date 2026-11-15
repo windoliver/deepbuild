@@ -483,7 +483,7 @@ On the Linux Spark, in memory-capped user units with an isolated home; load as n
   50 ms). It is load flake on both sides, not this change.
 - **The Linux-only cargo failures** (`7-cargo-alone.txt`): deep-app `acceptance_995`, `acceptance_1141_memory`,
   `spike_402` and deep-show `recipe_frames`, `render_back_pipeline`, each run alone, fail the same tests at the same
-  lines on main 2252dfd6 and at head (deep-app's 995, 1141_memory and spike_402 are among main's six on the Mac too).
+  lines on main 2252dfd6 and at head.
 
 So no failure in `affected.mjs` at 5388f2c9 is this change's.
 
