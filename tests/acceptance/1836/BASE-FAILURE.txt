@@ -1,0 +1,60 @@
+Base run of tests/acceptance/1836 at c740dede7 (origin/main), 2026-11-15, Linux arm64, Node 24.22.0.
+Built: npm ci; npm run build --workspaces; env -u CARGO_TARGET_DIR cargo build --locked -q -p deep-hook --target-dir target.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/1836 --no-file-parallelism
+tsc -p tests/acceptance/1836/tsconfig.json: exit 0. Paths redacted to <repo>.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1836
+
+ ❯ proceed-subagent.test.ts (2 tests | 2 failed) 1552ms
+   ❯ #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask (2)
+     × #1836.76416703 in the turn a proceed started, after a Claude Code subagent's stop, `gh pr merge 12` is held at PreToolUse with one authority ask naming the proceed 1395ms
+     × #1836.76416703 (wrong program) a hub whose proceed-turn query counts a child's stop (DEEP_HUB_PLANT=proceed-ends-at-child-stop) lets the merge run and fails this test, naming the call 156ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 in the turn a proceed started, after a Claude Code subagent's stop, `gh pr merge 12` is held at PreToolUse with one authority ask naming the proceed
+Error: #1836.76416703 `gh pr merge 12` ran in the turn the proceed started, after the subagent's stop, with no authority ask: deep-hook allowed it at PreToolUse with nothing held (exit 0 after 21 ms, stdout "", stderr "")
+ ❯ notRun helpers.ts:436:9
+
+ ❯ heldBy proceed-subagent.test.ts:25:5
+ ❯ scenario proceed-subagent.test.ts:51:17
+ ❯ verdict helpers.ts:52:5
+ ❯ proceed-subagent.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 (wrong program) a hub whose proceed-turn query counts a child's stop (DEEP_HUB_PLANT=proceed-ends-at-child-stop) lets the merge run and fails this test, naming the call
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=proceed-ends-at-child-stop did not start: file://<repo>/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=proceed-ends-at-child-stop names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://<repo>/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<repo>/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:198:45
+    196|     sleep(120_000).then(() => undefined),
+    197|   ]);
+    198|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    199|   return { pid: Number(ready.pid), socket: String(ready.socket), root:…
+    200| }
+ ❯ scenario proceed-subagent.test.ts:40:15
+ ❯ failureOf helpers.ts:61:5
+ ❯ proceed-subagent.test.ts:74:19
+ ❯ verdict helpers.ts:52:5
+ ❯ proceed-subagent.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  00:01:58
+   Duration  1.67s (tests 98%, import 1%)
+
