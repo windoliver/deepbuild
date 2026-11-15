@@ -1,0 +1,9 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": "../../../.."
+  },
+  "include": ["./**/*.ts", "../../418/helpers.ts", "../../379/helpers.ts"]
+}

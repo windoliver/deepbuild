@@ -1,0 +1,15 @@
+{
+  "issue": 2516,
+  "criterion": "AC7",
+  "verdict": "looks_right",
+  "who": "owner",
+  "when": "2026-11-15T07:41:02Z",
+  "screenshots": {
+    "room-main.png": "204d54bafd9587824f7e0487e2222520996592987bcf97ca465dcf1dbca4a25f",
+    "room-after.png": "ff92aa5206e60f0d9cbb8ae2cdcd1367e82fc4785b1f6afd5aeeecfd5c728293",
+    "castle-main.png": "01faceed3304adffe44d3f0fa4c21232337c661fc19d507eda10ec3e2712cd22",
+    "castle-after.png": "706f8df0eaa0761fdfacc42847cb64ab2e6115319353fee2652306ebe81c32fb"
+  },
+  "note": "Owner authorized the recommendation to retain default radius 0.5 m and strength 1 after these exact images were shown in the session and linked on PR #2578. Exact owner instruction: 'goea d do whatever you reockemnd to close the issue'. This records acceptance of the recommendation, not a claim that the owner supplied a detailed visual assessment; it approves no other images or goldens.",
+  "source": "owner message in the issue-2516 working session; approval provenance also recorded on issue #2516"
+}

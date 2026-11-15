@@ -1,0 +1,68 @@
+# Two mutants of the lines this change adds, laid over the change in a second checkout of b9131dbd9 (hub rebuilt), 2026-11-14:
+#   1. release.ts: unreadSpec without its no-file guard, so a repo with no done.yaml gets the file as a check.
+#   2. stop-judging.ts: every name the claim takes goes to cantRun, whether checks defines it with a run line or not.
+# Then: DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/2205/spec-checks.test.ts. The twins fail on them.
+
+## the mutants, as a diff against the change
+< +    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return [];
+< +      if (!check) return [cantRun(spec, name)];
+> +      if (!check || name.length > 0) return [cantRun(spec, name)];
+
+parallel vitest: tests/acceptance/2205/spec-checks.test.ts
+FAIL affected: 156 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 4 passed, in 337 s at load 30; logs in <logs>
+
+## test job log
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2205/spec-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+x··xxx··
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > AC1 #2205.a7438bd1 a name the done claim lists that checks doesn't define stands on the claim as BLOCKED, naming it > AC1 #2205.a7438bd1 with claims: {done: {checks: [unit, typechek]}} and unit and typecheck defined, a claim whose unit check passes is BLOCKED, naming typechek
+AssertionError: the done claim names unit, which checks defines with a run line, and the session's fix makes its test pass, so unit runs on the claim and passes: claim:01M7EG7TAEKHP8X5T8K6NVWQHY: verdict BLOCKED ["unit: missing nothing can run spec check unit: its entry has no run line and no check kind takes it, owner you","typechek: missing spec check typechek is not defined in checks, owner you"]; its runs: unit missing, typechek missing, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected [ 'missing' ] to include 'passed'
+ ❯ tests/acceptance/2205/spec-checks.test.ts:26:209
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > AC4 #2205.98714b31 the twin: defined checks with run lines are judged as today, and a repo with no done.yaml gets no spec check and no BLOCKED > AC4 #2205.98714b31 with claims: {done: {checks: [unit, typecheck]}}, both defined with run lines and unit with min_tests as the design writes it, each runs on the claim and passes, and the claim is PASS
+AssertionError: the done claim names unit, which checks defines with a run line, so unit runs on the claim and passes, as today: claim:01M7EGBKFVN1F04CPHY81CHRP9: verdict BLOCKED ["unit: missing nothing can run spec check unit: its entry has no run line and no check kind takes it, owner you","typecheck: missing nothing can run spec check typecheck: its entry has no run line and no check kind takes it, owner you"]; its runs: unit missing, typecheck missing, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected [ 'missing' ] to include 'passed'
+ ❯ tests/acceptance/2205/spec-checks.test.ts:58:185
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > AC4 #2205.98714b31 the twin: defined checks with run lines are judged as today, and a repo with no done.yaml gets no spec check and no BLOCKED > AC4 #2205.98714b31 in a repo with no done.yaml the claim runs its definition's check and no spec check, and is not BLOCKED
+AssertionError: a repo with no .deepbuild/done.yaml has no spec check, so the only runs on the claim are of its definition's check .deepbuild/checks/expired-rejected.sh: claim:01M7EGCVV2XX6Y1JV4JFN5BAZT: verdict BLOCKED [".deepbuild/done.yaml: missing .deepbuild/done.yaml can't be read: ENOENT: no such file or directory, open '<tmp>/repo/.deepbuild/done.yaml', owner you"]; its runs: .deepbuild/done.yaml missing, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected [ '.deepbuild/done.yaml' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   ".deepbuild/done.yaml",
++ ]
+
+ ❯ tests/acceptance/2205/spec-checks.test.ts:66:221
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no claims block: the claim takes every check, so unit runs and passes, and checks.checkout written as {type: journey, file: .deepbuild/journeys/checkout.yaml} makes the claim BLOCKED, naming checkout, with you as owner
+AssertionError: the spec has no claims block, so the claim takes every check checks holds: unit, which has a run line, runs on the claim and passes: claim:01M7EGE41KJWGK519V7JG5RGYQ: verdict BLOCKED ["unit: missing nothing can run spec check unit: its entry has no run line and no check kind takes it, owner you","checkout: missing nothing can run spec check checkout: its entry has no run line and no check kind takes it, owner you"]; its runs: unit missing, checkout missing, .deepbuild/checks/expired-rejected.sh passed, .deepbuild/checks/expired-rejected.sh failed: expected [ 'missing' ] to include 'passed'
+ ❯ tests/acceptance/2205/spec-checks.test.ts:78:196
+
+ ❯ verdict tests/acceptance/322/helpers.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 4 passed (8)
+   Start at  18:23:02
+   Duration  330.82s (tests 100%)

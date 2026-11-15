@@ -1,0 +1,641 @@
+# node scripts/affected.mjs at 4b10b58f1, origin/main 51e4a2b34, merge base 2c1c8cacc, linux/arm64
+# run with an isolated HOME (its own throttle table; the shared one had 11 test requests waiting at load 2), RUSTUP_HOME, CARGO_HOME, npm_config_cache, GH_CONFIG_DIR and GIT_CONFIG_GLOBAL pointing at the real ones
+ 19:01:07 up  4:08,  3 users,  load average: 1.83, 7.07, 19.99
+# the full log's NEW FAIL, BLOCKED, INCONCLUSIVE and result lines, in order; home and temp paths redacted
+BLOCKED packages/hub/test/acceptance-slots.test.ts › an issue keeps its slot through its attempt, and the attempt's end hands it to the next that waits: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED packages/hub/test/acceptance-slots.test.ts › a draft you take from the ask goes onto the branch unsigned, the dispute reads swapped, and the issue takes the slot back: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED packages/hub/test/acceptance-slots.test.ts › holding the issue keeps the test as it stands and leaves the slot to the next issue: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+INCONCLUSIVE tests/acceptance/1457/frame.test.ts › #1457 AC3 a frame does no file-system call › the preflight counted 0 file-system calls in a frame of the shell on the reference Mac (FS_CALLS_PER_FRAME): INCONCLUSIVE: FS_CALLS_PER_FRAME is not supplied by the local preflight; this is not a pass
+INCONCLUSIVE tests/acceptance/1457/budgets.test.ts › #1457 AC4 nothing a person sees changes › the real app's tree and window picture on #1172's fixtures equal the merge base's; any delta is listed: INCONCLUSIVE: BASE_BIN_DEBUG is not supplied by the local preflight (or names no file), so there is no merge-base number to compare with; this is not a pass
+INCONCLUSIVE tests/acceptance/1457/budgets.test.ts › #1457 AC5 budgets against the merge base › the release binary is smaller and the first frame not slower, both numbers reported: INCONCLUSIVE: BASE_BIN_RELEASE is not supplied by the local preflight (or names no file), so there is no merge-base number to compare with; this is not a pass
+BLOCKED tests/acceptance/1556/click.test.ts › #1556 the Set up click runs setup off the UI thread › #1556.784e6b2f with a planted deep that sleeps 3 s, the window draws a frame within 100 ms of the click and shows it's working, keeps drawing until setup ends, then shows the one line: BLOCKED: the app's window and its replica draw on macOS only; this is linux
+BLOCKED tests/acceptance/1556/click.test.ts › #1556 the Set up click runs setup off the UI thread › #1556.ff055ca3 a planted failing deep still shows its one-line error: BLOCKED: the app's window and its replica draw on macOS only; this is linux
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.3d839088 the view each panel registers in a slot draws the merge base's tree, byte for byte: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.782e7a69 a panel importing "gpui-kit" is refused at pack check, naming the module and line: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.782e7a69 a panel importing "gpui-kit" is refused at load, naming the module and line: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.782e7a69 planted: a host that skips the load check loads the gpui-kit panel, and the load judge fails it naming the panel: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.229fbfbb a panel using a name off the catalog is refused at pack check and at load, naming it and the closest catalog name: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.229fbfbb every catalog name renders in a replica in light and dark: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.711d0cb9 a panel whose list runs script per frame is refused at pack check, naming the component: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/1425/app.test.ts › #1425.711d0cb9 planted: a pack check that skips the per-frame check passes the panel, and the judge fails it naming the panel: BLOCKED: app/panels.rs didn't report this test
+BLOCKED tests/acceptance/546-redraft-ac2/ac2-data-view-web.test.ts › #546.232a6e07 logic.budget on [app, web] in the data view class: the web's ceiling from the bake's fuel alone, the player's timed run still owed › #546.232a6e07 a step between the data view class's web and app ceilings passes on the app and fails on the web, naming step, host web and ceiling, the same on macOS and Linux; a piece that fits both reads BLOCKED: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+BLOCKED tests/acceptance/1425/budgets.test.ts › #1425.30ab78a9 on a reference Mac, each of the 12 panels updates within 4 ms and the load check adds at most 1 ms to its load: BLOCKED: app/panels.rs didn't report its timing test
+BLOCKED tests/acceptance/546/ac02-web-ceiling.test.ts › #546.73b1f110 logic.budget on [app, web]: the web's ceiling from the bake's fuel alone, the timed run still owed › #546.73b1f110 a step between the ceilings fails on the web alone, naming the step, host web and the ceiling, the same on macOS and Linux; a piece that fits reads BLOCKED: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+INCONCLUSIVE tests/acceptance/1119/warm.test.mjs › #1119.a84127b8 a perf run from a second worktree of the same commit compiles 0 crates on its base side, in the kept copies per machine: INCONCLUSIVE no grant: perf got no timed grant within 10 min (1-minute load 78.9, 20 cores), so this test could not run
+INCONCLUSIVE tests/acceptance/1119/warm.test.mjs › #1119.a84127b8 perf's lock is the machine's: a perf from a second worktree, started while the first holds the kept copies, is blocked and checks nothing: INCONCLUSIVE no grant: perf got no timed grant within 10 min (1-minute load 62.8, 20 cores), so this test could not run
+BLOCKED tests/acceptance/1123/capture-redraft/origin.test.mjs › lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite: BLOCKED fixture command: <home>/.cargo/bin/cargo build --offline --locked -p deep-hook
+BLOCKED tests/acceptance/1123/capture-redraft/origin.test.mjs › affected.mjs hands its own executable to the consumer after a competing Cargo rewrite: BLOCKED fixture command: <home>/.cargo/bin/cargo build --offline --locked -p deep-hook
+BLOCKED tests/acceptance/1123/capture-redraft/origin.test.mjs › before keeps base and change origins separate during competing Cargo rewrites: BLOCKED fixture command: <home>/.cargo/bin/cargo build --offline --locked -p deep-hook
+BLOCKED tests/acceptance/1326/calls.test.mjs › #1326.7ee1e41b AC5 default signing and tag-push guards hold their plants, allow the signed-commit twin, and refuse an overbroad install: BLOCKED: fixture hub did not start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1404-redraft-1405/judge.test.mjs › a child with 3 times the merge base's work reads FAIL behind the same wrapper, and an unchanged one reads PASS: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404-redraft-1405/no-count.test.mjs › a budget that started a child still running when it ended reads INCONCLUSIVE, naming the budget, never PASS, and a budget that started none does not: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/child-count.test.mjs › a child a Node wrapper starts with spawnSync reads at least 95% of its instructions in the budget's: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/child-count.test.mjs › a child a Node wrapper starts with spawn reads at least 95% of its instructions in the budget's: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/child-count.test.mjs › a child a Node wrapper starts with execFileSync reads at least 95% of its instructions in the budget's: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/child-count.test.mjs › a child of a Node child, waited for at each step, reads at least 95% of its instructions in the budget's: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/no-count.test.mjs › perf reads FAIL on a budget whose child retires 3 times its merge base's behind the same Node wrapper: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/no-count.test.mjs › a budget whose shell started a child it reports no count for reads INCONCLUSIVE, naming the budget, never PASS: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/no-counter.test.mjs › perf on a host with no counter reads a budget with a child INCONCLUSIVE, naming it, with every count missing: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+BLOCKED tests/acceptance/1404/proof.test.mjs › a planted bench whose child does 3 times the work reads FAIL through measure: BLOCKED: the counter is read from macOS's /usr/bin/time -l, and a child retires nothing this test can read here
+INCONCLUSIVE tests/acceptance/1426/redraft/reverts.test.mjs › #1426.eb2029f7 each row's test passes as the tree stands and fails with that row's change reverted, for the sRGB layer tag, the exact gradient mode, the BGRA surface and the surface reports: INCONCLUSIVE:
+BLOCKED tests/acceptance/190/ac10-budgets.test.ts › #190.29b58f9e linking, fixtures and unlinked items keep their budgets › #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s: BLOCKED: the budgets' reference machine runs on macOS arm64 (the reference Mac); this host is linux/arm64
+BLOCKED tests/acceptance/190/ac10-budgets.test.ts › #190.29b58f9e linking, fixtures and unlinked items keep their budgets › #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base: BLOCKED: the budgets' reference machine runs on macOS arm64 (the reference Mac); this host is linux/arm64
+BLOCKED tests/acceptance/190/ac04-machines-browser.test.ts › #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host › #190.2d5bb5ea the two pieces' merged programs are byte for byte the same on macOS arm64 and Linux x86_64: BLOCKED: the first machine of the comparison runs on macOS arm64 (the reference Mac); this host is linux/arm64
+BLOCKED tests/acceptance/190/ac05-library-trap.test.ts › #190.99970527 a trap in library code names the library and its function › #190.99970527 a fuel trap inside grid_path on a grid too large for one step names the item, the step, the kind and find_route, at the same offset on two machines: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+BLOCKED tests/acceptance/531/ac01-fuel-stack.test.ts › #531.024523a2 a step that runs forever or recurses forever traps where the rewrite put it, the same on two machines › #531.024523a2 on Linux x86_64 the loop traps at the same step, function, offset and entries, and the recursion at the same place and depth, as on this Mac: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+BLOCKED tests/acceptance/531/ac05-checkpoints.test.ts › #531.50a7adee seeking equals playing for a table and memory.copy program, in the app and in headless Chrome › #531.50a7adee in headless Chrome's own WebAssembly engine, the same bake gives the app's full-state hashes, step hashes, restores and probes: BLOCKED: no headless Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome (set CHROME_BIN); the web player's engine runs there
+BLOCKED tests/acceptance/531/ac07-pages.test.ts › #531.8b2a1747 the rewrite's page bitmap marks the pages each step touches, and nothing hashes it › #531.8b2a1747 in headless Chrome's own WebAssembly engine each step marks the same pages as in wasmtime: BLOCKED: no headless Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome (set CHROME_BIN); the web player's engine runs there
+BLOCKED tests/acceptance/1983/ac03-same-arch.test.ts › #1983.10110411 a run on the reference Mac's own architecture never counts as cross_machine › #1983.10110411 a replay in a linux/arm64 container on this Mac is refused as cross_machine, naming aarch64, with machines: same: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac03-same-arch.test.ts › #1983.10110411 a run on the reference Mac's own architecture never counts as cross_machine › #1983.10110411 a native replay on this Mac is refused as cross_machine, naming aarch64, with machines: same: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac04-blocked.test.ts › #1983.ea54db89 the lane reads BLOCKED, with one ask, without its image or its runtime, and pulls nothing › #1983.ea54db89 with no linux/amd64 image of the pinned digest, cross_machine reads BLOCKED with one ask naming the pull command with that digest, and the image list is unchanged: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac04-blocked.test.ts › #1983.ea54db89 the lane reads BLOCKED, with one ask, without its image or its runtime, and pulls nothing › #1983.ea54db89 with the container runtime unreachable, cross_machine reads BLOCKED with one ask naming that: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac05-timings.test.ts › #1983.bc212c80 a timing or a budget taken in the lane never counts › #1983.bc212c80 logic.budget refuses the lane's step time, frame time and budget reading, as a timing or a budget, naming the lane and emulated: true: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac05-timings.test.ts › #1983.bc212c80 a timing or a budget taken in the lane never counts › #1983.bc212c80 a planted reader that counts a lane reading toward logic.budget (budget_counts_lane_reading) fails, naming the reading: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac06-network.test.ts › #1983.d39b413d the lane's replay has no network, and a replay with one is refused › #1983.d39b413d the lane runs the replay with no network, and its record says so: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac06-network.test.ts › #1983.d39b413d the lane's replay has no network, and a replay with one is refused › #1983.d39b413d a planted lane that runs the replay on the default network (default_network) is refused, naming the network: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac01-golden-pass.test.ts › #1983.156a4df2 a golden recorded on the reference Mac replays in the x86_64 lane, and cross_machine reads its record › #1983.156a4df2 the lane's replay passes, its record names the recording machine, x86_64, arm64, emulated: true, the image digest and the tree, cross_machine reads PASS, and a record missing any of those is refused naming the field: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac02-step-37.test.ts › #1983.ba96b4f2 a replay in the lane that differs at step 37 fails cross_machine › #1983.ba96b4f2 a planted replay that changes one value of tally.x at step 37 makes cross_machine FAIL, naming step 37, tally and x, never PASS: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/1983/ac07-merge.test.ts › #1983.bcb406af a lane's FAIL wins the merge with the Mac's records › #1983.bcb406af a lane record that FAILs a golden and a Mac record that passes the same tree merge to FAIL, naming the lane: BLOCKED: the lane runs on the reference Mac (macOS arm64); this host is linux/arm64
+BLOCKED tests/acceptance/534/ac01-dungeon-reopen.test.ts › #534.facb3458 the dungeon saved at step 1,800, quit and reopened plays on as a run that never quit › #534.facb3458 on the reference Mac, the reopened run's frames for the next 600 steps equal the never-quit run's bit for bit: BLOCKED: criterion 1's frames, bit for bit is pinned to the reference Mac; this host is linux/arm64
+BLOCKED tests/acceptance/532/ac02-budget-golden.test.ts › #532.635473e1 logic.budget holds each step to half its fuel, and the flock's golden holds on Linux x86_64 and in the web player › #532.635473e1 the flock's golden recorded on macOS verifies on Linux x86_64 step for step, under the same bake key: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+BLOCKED tests/acceptance/532/ac02-budget-golden.test.ts › #532.635473e1 logic.budget holds each step to half its fuel, and the flock's golden holds on Linux x86_64 and in the web player › #532.635473e1 the flock's golden recorded on macOS matches the web player's bake in headless Chrome step for step: BLOCKED: no headless Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome (set CHROME_BIN); the web player's engine runs there
+INCONCLUSIVE tests/acceptance/548/ac7-taste.test.ts › #548.7c091366 the check run's pictures of the previewed route, and the one taste call on them › #548.7c091366 the check run takes the screenshots and the recording from the app at the reference window, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS: INCONCLUSIVE: the window: hover.png: the app's window draws on macOS; this is linux; this is not a pass
+BLOCKED tests/acceptance/2324/ac2-kit.test.ts › #2324.2b0e7ae9 sandbox@1's kit gives #238's results on macOS arm64, Linux x86_64 and headless Chrome › #2324.2b0e7ae9 every kit fixture's result, trap kind and fuel count is the one #238 recorded, in deep-sandbox and the app on macOS arm64, on Linux x86_64 and in headless Chrome: BLOCKED: Linux x86_64: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+BLOCKED tests/acceptance/2324/ac3-fixtures.test.ts › #2324.c7dad014 every fixture of #531 reaches the full-state hashes it reached on the old engine › #2324.c7dad014 each of #531's fixtures reaches the old engine's step hashes, full-state hashes and traps on macOS arm64 and on Linux x86_64, under a bake key that isn't the old engine's: BLOCKED: Linux x86_64: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+BLOCKED tests/acceptance/544/ac2-trap-and-ties.test.ts › AC2 #544.c031896f a step over its cap traps rather than dropping a row, and tied rows keep the order they were written in › AC2 #544.c031896f the same tie reads 2.0 then 1.0 on Linux x86_64, played and after a seek: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm; this is not a pass
+BLOCKED tests/acceptance/87/gate/review-notes.test.ts › AC8 #87.85a2cd4f review notes on the PR are open items, and the PR says Closes only once each is fixed or you accept it › AC8 #87.85a2cd4f maya's note and the Codex review agent's note on PR 21 become open items; gh pr edit to "Closes #7" is refused naming both, then naming only the agent's once maya's is fixed, and allowed once you accept the agent's: BLOCKED: the hub did not start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 a redraft that also fails on the work raises no ask, starts no third draft and the test stands; it had the same inputs and the criterion, and nothing of the work or the dispute: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 a redraft and a third draft that pass on the work decide: the hub swaps the test from the gate identity with no ask, after exactly two redrafts: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 a redraft that passes and a third draft that fails on the work leave the two failing drafts deciding: the test stands with no ask: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 a planted redraft that passes on the base is refused, naming the test, and the third draft is kept: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 a planted third draft that passes on the base is refused, naming the test, and the redraft is kept: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 the guard takes the hub's swap on the gate identity, not without it, and not for a file outside the folder: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC4 #1328.1533f79d a dispute where the redraft also fails on the work raises no ask and the test stands; one where it passes starts a third draft, the two that agree decide and no ask is raised; a planted swap to a draft that passes on the base is refused, naming the test › AC4 (until #1325 lands) a hub with no gate identity makes no swap: the agreeing drafts go to one ask: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC5 #1328.3cf9c8d9 a dispute on a test already settled starts no job; when no draft meets the base rule, one ask carries the drafts, and the next ready issue runs in that slot › AC5 a dispute on a test that stood starts no job and raises no ask: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC5 #1328.3cf9c8d9 a dispute on a test already settled starts no job; when no draft meets the base rule, one ask carries the drafts, and the next ready issue runs in that slot › AC5 a dispute on a test its third draft settled starts no job and raises no ask: a test is redrafted at most twice: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/dispute.test.ts › AC5 #1328.3cf9c8d9 a dispute on a test already settled starts no job; when no draft meets the base rule, one ask carries the drafts, and the next ready issue runs in that slot › AC5 when the agreeing drafts meet no base rule, one ask carries the drafts, the issue gives up its slot, the next ready issue runs in it, and a further dispute asks nothing again: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC1 #1328.c53e7397 a job's record lists exactly its inputs, and a planted job that reads another branch or a session's transcript is refused, naming the read › AC1 the job record lists the issue body at that moment, the design documents and the base commit, and the job holds nothing of another branch or a transcript: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC1 #1328.c53e7397 a job's record lists exactly its inputs, and a planted job that reads another branch or a session's transcript is refused, naming the read › AC1 a planted job that reads a file of another branch's worktree is refused, naming the read: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC1 #1328.c53e7397 a job's record lists exactly its inputs, and a planted job that reads another branch or a session's transcript is refused, naming the read › AC1 a planted job that reads a session's transcript is refused, naming the read: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC2 #1328.0bdcba1d a planted job that writes outside its issue's folder gets nothing committed, naming the path › AC2 a job that writes src/widget.mjs beside its folder gets nothing committed, naming the path: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC2 #1328.0bdcba1d a planted job that writes outside its issue's folder gets nothing committed, naming the path › AC2 a job that writes a sibling folder sharing its folder's prefix gets nothing committed, naming the path: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC3 #1328.dfd2cdea a criterion whose test passes on the base, where the issue calls it new behavior, makes the job's result INVALID, naming the criterion, and it never starts an attempt › AC3 a new-behavior test that passes on the base makes the result INVALID naming the criterion, though the job recorded a base failure, and no attempt starts: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+BLOCKED tests/acceptance/1328/job.test.ts › AC3 #1328.dfd2cdea a criterion whose test passes on the base, where the issue calls it new behavior, makes the job's result INVALID, naming the criterion, and it never starts an attempt › AC3 (its twin) a new-behavior test failing on the base at its assertion, beside an unchanged criterion's test that passes there, is ready: the folder alone is the attempt's first commit: BLOCKED: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+INCONCLUSIVE tests/acceptance/140/gpu/validation.test.ts › AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS › AC21 the lane is a release lane named gpu validation, and runs with Metal's API and shader validation on and the translator's bounds checks off: INCONCLUSIVE: the GPU seam's macOS backend needs macOS with Metal; this is linux
+INCONCLUSIVE tests/acceptance/140/gpu/validation.test.ts › AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS › AC21 a planted operator reading one element past its storage buffer, its wrong pixels inside its golden's share, fails naming the pipeline and the binding; its clean twin passes: INCONCLUSIVE: the GPU seam's macOS backend needs macOS with Metal; this is linux
+INCONCLUSIVE tests/acceptance/140/gpu/validation.test.ts › AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS › AC21 a planted pass writing NaN into one texel of an rgba16float target fails naming the pass and the texel; its clean twin passes: INCONCLUSIVE: the GPU seam's macOS backend needs macOS with Metal; this is linux
+INCONCLUSIVE tests/acceptance/140/gpu/validation.test.ts › AC21 in the validation lane an out-of-bounds read and a NaN texel fail by name, their clean twins pass, and an uninstrumentable shader kind is BLOCKED, never PASS › AC21 a fixture whose shader kind the validation can't instrument is BLOCKED naming the kind, listed as uncovered, never PASS: INCONCLUSIVE: the GPU seam's macOS backend needs macOS with Metal; this is linux
+INCONCLUSIVE tests/acceptance/1427/ac7-shipped.test.ts › #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each › a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows: INCONCLUSIVE: the replica renders with GPUI's offscreen Metal renderer, on macOS only; this is not a pass
+INCONCLUSIVE tests/acceptance/1427/ac7-shipped.test.ts › #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each › the same shipped journeys in another process give the same recordings and findings, byte for byte: INCONCLUSIVE: the replica renders with GPUI's offscreen Metal renderer, on macOS only; this is not a pass
+INCONCLUSIVE tests/acceptance/1427/ac7-shipped.test.ts › #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each › a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey: INCONCLUSIVE: the replica renders with GPUI's offscreen Metal renderer, on macOS only; this is not a pass
+INCONCLUSIVE tests/acceptance/1427/ac7-shipped.test.ts › #1427 AC7 the lane › scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash: INCONCLUSIVE: the replica renders with GPUI's offscreen Metal renderer, on macOS only; this is not a pass
+INCONCLUSIVE tests/acceptance/1434/ac5-unchanged.test.ts › #1434 AC5 the #140 color check and the #377 handoff fixture still pass › AC5 tests/acceptance/377/handoff.test.ts passes unchanged, every test in it: INCONCLUSIVE: chrome layers run on macOS only (the issue: Runs on Mac only)
+INCONCLUSIVE tests/acceptance/1434/ac5-unchanged.test.ts › #1434 AC5 the #140 color check and the #377 handoff fixture still pass › AC5 tests/acceptance/140/gpu/color.live.test.ts passes unchanged on the live window, every test in it: INCONCLUSIVE: #140's color check opens the app's window on this Mac's screen; run with DEEP_1434_LIVE=1 (README: Run them)
+INCONCLUSIVE tests/acceptance/429/calibration.test.ts › #429.b460869b the release calibration run holds the op table's weights to measurement › #429.b460869b the run times every shipped operator and the fixture graphs in their own passes, five runs after warm-up, and passes with each estimate within 25% of its p95: INCONCLUSIVE: the GPU layer runs on macOS's Metal device, the reference platform; this is linux; this is not a pass
+INCONCLUSIVE tests/acceptance/429/calibration.test.ts › #429.b460869b the release calibration run holds the op table's weights to measurement › #429.b460869b a planted op table with the noise octave weight halved (--planted noise_weight_halved) fails the run, naming each graph that uses noise, and ships no composed graph: INCONCLUSIVE: the GPU layer runs on macOS's Metal device, the reference platform; this is linux; this is not a pass
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC8 the conformance suite ships as its own package that other tools can run › AC8 packages/conformance is a workspace package named @deepbuild/conformance with a public entry and a bin: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC8 the conformance suite ships as its own package that other tools can run › AC8 the bin prints its usage and exits 0 on --help, and 2 on a command it does not know: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC8 the conformance suite ships as its own package that other tools can run › AC8 another tool runs the kit on a fill module: the clean fill passes with exit 0, one line per case: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC8 the conformance suite ships as its own package that other tools can run › AC8 the same run on the duplicate-ID fake exits 1 and prints a FAIL line carrying its message: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC8 the conformance suite ships as its own package that other tools can run › AC8 a fill module that does not exist is a usage error: exit 2, nothing ran: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC7 deep run exits by the one exit-code table, 3 on a result that carries a code no enum lists › AC7 deep run --result on a run result whose outcome is the planted flaky_maybe prints INVALID naming the code, never PASS, and exits 3: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC7 deep run exits by the one exit-code table, 3 on a result that carries a code no enum lists › AC7 deep run exits 0 on a passed result, 1 on a failed one and 3 on one that ran nothing: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › AC7 deep run exits by the one exit-code table, 3 on a result that carries a code no enum lists › AC7 deep run with no result is a usage error, exit 2, and deep --help lists run: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › the local preflight runs the conformance lint: enum closures, code mappings, rule fakes and planted codes › the lint lane's commands include scripts/conformance-lint.mjs: skipped with no note
+INCONCLUSIVE tests/acceptance/313/packaging.test.ts › the local preflight runs the conformance lint: enum closures, code mappings, rule fakes and planted codes › the conformance lint passes on the checkout, printing one PASS line per check and no FAIL, INVALID or BLOCKED: skipped with no note
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/traps.test.mjs › a window that gets no grant at a load above the cores measures nothing, reopens, and leaves its commit for the next: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/traps.test.mjs › a window killed mid-sample reopens, closes nothing, and leaves its commit for the next: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/traps.test.mjs › budget-window.mjs run by hand, with a forged DEEP_THROTTLE, measures nothing and closes nothing: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/window.test.mjs › #1116.dead61b9 a planted 2× regression in one of three commits leaves only that issue open, naming that commit, with one budget follow-up: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/window.test.mjs › #1116.5aa02a5a a commit merged during a window is measured in the next one, and till then its issue stays open: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/guard.test.mjs › budget-window.mjs joins the guard regex: an unsigned change to it fails the guard: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/traps.test.mjs › a window off the reference Macs is a reading: its record is INCONCLUSIVE and its issue stays open: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/traps.test.mjs › a commit that raises its own margin to hide a 2× regression doesn't pass: budget numbers stay unchanged: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/window.test.mjs › #1116.8a08ae16 a window drains every slot before its first sample and reopens after its last: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/window.test.mjs › #1116.8e06730a three commits merged between windows get three records, each against its own merge base, with 20 samples a side: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/window.test.mjs › a pass leaves its issue open while another of its criteria isn't proven: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1116/window.test.mjs › #1116.96a59f57 an agent's build requested during a window starts within a minute of the window ending: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1874/window.test.mjs › #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1874/window.test.mjs › #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1874/window.test.mjs › #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1874/window.test.mjs › #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/budget-window.test.mjs › a build whose grant wait is shorter than the window still starts when the window ends: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/budget-window.test.mjs › a pass leaves its issue open while a later commit of that issue waits in the same window, and the miss keeps it open: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+INCONCLUSIVE tests/acceptance/1348/fixture.test.ts › the fixture run's strings › AC2 #1348.51e3c238: a fixture run's card, page, notifications and end notice hold no listed word in a dump of every string shown: skipped with no note
+INCONCLUSIVE tests/acceptance/1348/fixture.test.ts › the fixture run's strings › AC3 #1348.97af66a9: a planted failure with a stack trace reaches the page as one plain line and what happens next: skipped with no note
+INCONCLUSIVE tests/acceptance/1348/fixture.test.ts › the fixture run's strings › AC4 #1348.bf9fc2cc: each row still opens its detail, with the real names, in one click: skipped with no note
+NEW FAIL tests/acceptance/1425/budgets.test.ts › #1425.30ab78a9 the perf lane has the task panel-module-load, a #1425 first measurement, valid against the merge base's budgets, and it runs: Command failed: <home>/.local/opt/node-v24.22.0-linux-arm64/bin/node benchmarks/panel-module.mjs
+NEW FAIL tests/acceptance/1425/imports.test.ts › #1425.3d839088 each one's panel tree is byte-equal to the merge base's: claude-code: no tree: crates/deep-app/panels/claude-code: the host exited 2 after 0 trees
+NEW FAIL tests/acceptance/317/floor.test.ts › AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails › AC1 the floor denies all three writes of the spec, naming deep_propose, safe; an ordinary source edit is allowed: the hub didn't start (deep hub run --safe): deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+NEW FAIL tests/acceptance/317/floor.test.ts › AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails › AC1 (wrong program) a build whose floor leaves the .deepbuild/ guard to the done gate extension allows the Edit with the hub stopped and in safe mode, and fails: the hub didn't start (deep hub run --safe): deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+NEW FAIL tests/acceptance/546/ac01-grid-search.test.ts › #546.9988cce1 the guide's grid search: past the ceiling in one step, under it split across steps › #546.9988cce1 the one-step search fails logic.budget naming step 0, host app and the ceiling; the split search finds the same route under the ceiling, passes, and seeks into its middle as it plays: a step between 1.2 and 3 times the figure class's app ceiling (12000000) and under the fuel budget's 10000000 exists: expected false to be true // Object.is equality
+NEW FAIL tests/acceptance/546/ac01-grid-search.test.ts › #546.9988cce1 the guide's grid search: past the ceiling in one step, under it split across steps › #546.9988cce1 budget_holds_steps_to_fuel_budget passes the one-step search, and the criterion fails on it: a step between 1.2 and 3 times the figure class's app ceiling (12000000) and under the fuel budget's 10000000 exists: expected false to be true // Object.is equality
+NEW FAIL tests/acceptance/684/lanes.test.ts › AC8 without the pinned toolchain › AC8 the lane reports BLOCKED, naming the toolchain and its version, never a pass: Test timed out in 5000ms.
+NEW FAIL tests/acceptance/313/packaging.test.ts › (file): npm run build --workspaces failed:
+NEW FAIL tests/acceptance/1114/affected.test.mjs › #1114.9fc6be33 with no flag, a timed file in the affected set is not run and the summary is INCONCLUSIVE, listing it; with no timed file in the set, PASS remains possible: the timed file tests/acceptance/1555/budget-load.test.mjs ran without --timed
+NEW FAIL tests/acceptance/1114/affected.test.mjs › #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files: the timed file ran outside a timed grant: it ran under DEEP_THROTTLE=test:79c4ea73af17cb7e, not a timed grant
+NEW FAIL tests/acceptance/1114/timed-list.test.mjs › #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree: files that call environmentProblem, judgeTiming, judgeLimit, referenceMacProblem, notReference but are not in lanes.mjs's timed list:
+NEW FAIL tests/acceptance/1114/timed-list.test.mjs › #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file: no entry of the timed list covers tests/acceptance/1015/budgets.test.ts
+NEW FAIL tests/acceptance/1329/ac1-design-source.test.mjs › #1329.6069ef82 criterion 1: a design change committed in the repo is what the lanes read: an open issue naming `deep zorptangle` and its heading fails the drift lane before it, and the drift, design links and public-text lanes pass after it: after the design change, the drift lane (design links and names) doesn't pass:
+NEW FAIL tests/acceptance/1329/ac2-drift-lane.test.mjs › #1329.bbfb846d criterion 2, clean twin: 40 open issues naming only commands and tools the design holds, linking real headings, and #9601 naming `deep quuxify` and `deep_quuxify` from the planned-names list, pass the drift lane: the drift lane's verdict on clean issues is PASS:
+NEW FAIL tests/acceptance/1333/conflict.test.mjs › #1333.ed47bc1a a revert that conflicts starts an attempt and raises no ask; if that attempt ends with main still red, one ask is raised and landings stay paused: Command failed: git commit -qm r0: the watched repository
+NEW FAIL tests/acceptance/1333/flaky.test.mjs › #1333.aded8275 a test that fails once and passes on repeats reads INCONCLUSIVE, is filed, and pauses nothing: Command failed: git commit -qm r0: the watched repository
+NEW FAIL tests/acceptance/1333/known-failures.test.mjs › #1333.87ce4575 a known-failures.json entry with no open issue fails the lane, naming the entry: Command failed: git commit -qm fixture
+NEW FAIL tests/acceptance/1333/known-failures.test.mjs › every known-failures.json entry names an issue and the date it was added, and the lane fails one older than 14 days, naming it: Command failed: git commit -qm fixture
+NEW FAIL tests/acceptance/1333/schedule.test.mjs › the scheduled job runs the unit and lint lanes on main's head after 5 landings and not before, each run under the throttle's grant and the hub's lease: Command failed: git commit -qm r0: the watched repository
+NEW FAIL tests/acceptance/1333/watch.test.mjs › #1333.f14d14bc a planted landing that breaks a test is named by the job within one schedule, and landings stop; a job that reports only that main is red fails, naming the missing landing: Command failed: git commit -qm r0: the watched repository
+NEW FAIL tests/acceptance/1333/watch.test.mjs › #1333.747cd5ee the revert lands, the issue reopens naming the failure, and landings resume, with no ask raised: Command failed: git commit -qm r0: the watched repository
+NEW FAIL tests/acceptance/1333/watch.test.mjs › #1333.6c0af23f the job makes no model call and starts no hosted workflow: Command failed: git commit -qm r0: the watched repository
+NEW FAIL tests/acceptance/1432/ratchet.test.mjs › on this checkout the ratchet passes without changing git status, and the checked-in ceilings are the checkout's own: exit 1
+NEW FAIL tests/acceptance/2178/lint-lanes.test.mjs › #2178.0caa17d8 `node scripts/repo-rules.mjs` exits 0 on main, with no FAIL deps line: FAIL secrets: packages/contracts/fixtures/staged.undone@1/01.json:12:8: home path
+NEW FAIL tests/acceptance/246/redraft/deps.test.mjs › a new packages/x/package.json with a dependencies entry fails, and one with none passes: exit 1
+NEW FAIL tests/acceptance/246/redraft/deps.test.mjs › a Rust dependency fails in each section that declares it, and passes once listed with spec ^1: exit 1
+NEW FAIL tests/acceptance/246/redraft/deps.test.mjs › a path dependency is listed relative to its manifest, and no absolute path is printed or listed: the output holds the absolute path <tmp>
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › on this checkout, every check passes on one line saying what it read, and git status is unchanged: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › a .claude/settings.json with permissions and "disableAllHooks": false passes, and node_modules/ and target/ are not read: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › the clean twins pass: excluded paths, near misses, lockfiles, binary files and ignored files: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › an allowedFindings entry skips exactly its value in its file and is counted: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › with #12's three devDependencies listed, an unlisted, re-specified or undeclared one fails: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › a 450-line handwritten file beside a 1,000-line lockfile change is over the guideline, and the run still exits 0: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › committed, uncommitted and new untracked lines all count, under the guideline: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › without origin/main, size is not measured and the run still exits 0: exit 1
+NEW FAIL tests/acceptance/246/repo-rules.test.mjs › no dependency is added: manifests keep #12's sections and repo-rules.mjs imports only node: modules: crates/deep-app/Cargo.toml
+NEW FAIL tests/acceptance/246/secrets-property.test.mjs › property (seed 582): the same 1000 texts without the planted values report nothing: exit 1
+NEW FAIL tests/acceptance/326/panels/guard.test.mjs › #326.2ba76db1 a planted module that subscribes to the stream or calls the reads for its own view fails the guard, naming it; the app as it stands passes: Expected values to be strictly deep-equal:
+NEW FAIL tests/acceptance/326/panels/guard.test.mjs › #326.2ba76db1 the guard runs in the app's local preflight, on every change to the app's source, and passes the app: Expected values to be strictly deep-equal:
+NEW FAIL tests/acceptance/337/spike.test.mjs › #337.05b344ec Claude Code's and Codex's JavaScript panels, written from the docs alone, each pass the headless test within two rounds of fixes
+NEW FAIL tests/acceptance/338/spike.test.mjs › #338.ed0f5115 the fixture panel that replaces Needs you lists the inbox projection's rows, recomputed from the fixture's events, row for row, and passes needs-you@1; the planted views that cap at 20, drop the folded asks, list the superseded one or hide the newest each fail, naming the ask
+NEW FAIL tests/acceptance/338/spike.test.mjs › #338.78331b15 for Needs you, the sidebar and a session page, the replica's snapshot with bounds equals the live accessibility tree captured on the reference Mac, node for node, and a replica laid out at scale 1 fails, naming the first node that differs
+NEW FAIL tests/acceptance/338/spike.test.mjs › scope: gpui-shell's panel registry fills every slot of the app (a sidebar item, a home gadget, a tab in any panel, the line) and replaces the shipped Needs you, each from a tracked panel, and the decision says it covers them
+NEW FAIL tests/acceptance/594/build-dirs.test.mjs › a second preflight builds no dependency in either copy: each side reuses a build directory of its own, kept between runs, outside the working tree's target/: the first preflight failed:
+NEW FAIL tests/acceptance/594/margin.test.mjs › criteria 2 and 3: a change that only adds a dependency passes perf within the margin; the same change slowed by 3 s of CPU fails perf on cpuMs: perf failed a change that only adds a dependency:
+NEW FAIL tests/acceptance/594/warm.test.mjs › after warm(), the lint lane's cargo clippy --workspace --all-targets --locked compiles no dependency, and warm() linted the workspace itself: warm() never check-compiled a dependency, as clippy does; it compiled: dep_a --emit=dep-info,metadata,link -> <tmp>/repo/target/debug/deps; app --emit=dep-info,link -> <tmp>/repo/target/debug/deps; app --emit=dep-info,link -> <tmp>/repo/target/debug/deps
+NEW FAIL tests/acceptance/605/catalogue-311.test.mjs › criterion 3: tests/acceptance/311/catalogue.test.ts, its helpers and fixtures equal the base's, and it passes: tests/acceptance/311/catalogue.test.ts changed from f346706
+NEW FAIL tests/acceptance/605/drift.test.mjs › criterion 1: the real docs, with the five names rewritten, and 40 clean open issues pass the lane, which fetched them with gh issue list --state open --json number,body: the lane didn't pass:
+NEW FAIL tests/acceptance/689/preflight-env.test.mjs › criterion 3: with RUSTUP_HOME and CARGO_HOME unset, every lane's commands get the user's ~/.rustup and ~/.cargo: no lane ran tsc; preflight printed:
+NEW FAIL tests/acceptance/689/preflight-env.test.mjs › criterion 3: with RUSTUP_HOME and CARGO_HOME set, every lane's commands get the caller's own values: no lane ran vitest; preflight printed:
+NEW FAIL tests/acceptance/879/cards.test.mjs › AC2: a card without its deviations heading fails, naming the heading, and the same card with it passes (an exists-only check cannot do both): the same card with ## Deviations (and None. under it) should pass every check
+NEW FAIL tests/acceptance/879/cards.test.mjs › AC3: a deviation naming src/legacy-order.ts, which the package doesn't have, fails naming the package and the deviation's line; once the file exists it passes: the same deviation once src/legacy-order.ts exists should pass every check
+NEW FAIL tests/acceptance/879/cards.test.mjs › AC3: a crate's deviation naming a file the crate doesn't have fails naming the crate and the line; once the file exists it passes: the same deviation once src/legacy_order.rs exists should pass every check
+NEW FAIL tests/acceptance/879/cards.test.mjs › scope: a card's import section is never checked against what the package declares; the deps rule alone reads that: cards whose import sections differ from the packages' declared dependencies should pass every check
+NEW FAIL tests/acceptance/879/checkout.test.mjs › AC1: the lint rules pass the card check on this checkout, add no failure the base lacks, and leave git status unchanged: no PASS cards line
+NEW FAIL tests/acceptance/879/lane.test.mjs › AC2: a planted package without a card makes the lint lane FAIL, its summary naming the card check and the package: the lint summary is "FAIL lint: error: 'cargo-fmt' is not installed for the toolchain 'stable-aarch64-unknown-linux-gnu'.", not a cards line naming packages/tally
+NEW FAIL tests/acceptance/882/inventory.test.mjs › #882.c60566b1 the inventory's check passes on this branch, and the committed inventory has a row per shipped panel with its entry, roles and literals: FAIL inventory: deepbuild/welcome's row differs from the app: {"panel":"deepbuild/welcome","entry":"crates/deep-app/src/views.rs Shipped, Kind::Welcome","roles":["ink_primary"],"literals":[]}
+NEW FAIL tests/acceptance/882/inventory.test.mjs › #882.c60566b1 adding a panel without regenerating the inventory fails its check, naming the panel; regenerating passes it: Expected values to be strictly deep-equal:
+NEW FAIL tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the guard passes the app, and fails each planted literal naming its file and line (the views.rs one with the role to use); an exception at its place with a reason and a review date passes: Expected values to be strictly deep-equal:
+NEW FAIL tests/acceptance/882/lint.test.mjs › #882.f3bc7068 the lint lane runs the guard: a planted rgb(0x2563eb) in views.rs fails the lane, naming views.rs and the line: Expected values to be strictly deep-equal:
+NEW FAIL tests/acceptance/910/anchors.test.mjs › scope: links to GitHub slugs (punctuation dropped, a space each its own hyphen, `_` and Unicode letters kept, markdown reduced to text, duplicates numbered) and to <a id> and <a name> anchors pass: the lane's verdict is PASS when every link lands on a GitHub slug or an explicit anchor:
+NEW FAIL tests/acceptance/910/clean.test.mjs › clean: the real docs and 40 clean open issues pass the lane, and its output reports a count of links checked no lower than the distinct links there are: the lane's verdict on clean data is PASS:
+NEW FAIL tests/acceptance/910/clean.test.mjs › scope: run beside the catalogue drift lane, as the preflight runs them, the lane reuses its fetch: gh lists the open issues once: the lane's verdict on clean data is PASS:
+NEW FAIL tests/proof-binaries-shard-release.test.mjs › affected never removes another run’s replacement shard lock during final cleanup: exit 1
+NEW FAIL tests/shards.test.mjs › two alone folders run at once, each in a shard of its own at a path apart from the worktree, under one test grant: the two alone folders ran one after the other, not at once
+NEW FAIL cargo -p deep-show --test recipe_frames › an_export_draws_a_recipe_instance_like_the_items_it_derives
+NEW FAIL cargo -p deep-show --test render_back_pipeline › render_back_draws_the_sprite_as_the_base_commit_did
+NEW FAIL tests/acceptance/534/ac06-fixture-state.test.ts › #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played › #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps: the never-quit run baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"fixture","refusals":[{"rule":"field","what":"pages isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"pages"}]}: expected false to be true // Object.is equality
+NEW FAIL tests/acceptance/534/ac06-fixture-state.test.ts › #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played › #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame: deep-logic --planted save_drops_linear_previous on linux/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+NEW FAIL tests/acceptance/545/ac04-open-span.test.ts › #545.ef12c43a an open span plays live with no end, seeks only what was played, and an export takes a finite range › #545.ef12c43a a piece with span open, a logic item and a 10-minute recorded track plays past any authored end, seeks anywhere in what was played and lands a seek past it on the last step played; loop wrap is refused naming loop; an export with no range is refused naming span open, and one over the track's range exports 10 minutes: the export over the recorded track's range is exported: {"code":"writer_failed","frame":0,"reply":{"error":"no piped job export.part here"},"what":"the encode tool refused the part starting at frame 0","outcome":"refused","core":"core@0.0.0","set_digest":"f4f4d6f425c504af6a38dd8e166cdd0b15203c11941a51460b33e62a2e62b11f"}: expected 'refused' to be 'exported' // Object.is equality
+NEW FAIL tests/acceptance/544/ac1-shot-lab.test.ts › AC1 #544.090a698b a lab's shots: 10 rows at their steps and 10 voices at their steps' samples, played, seeked and exported › AC1 #544.090a698b a video export of the lab carries the same 10 voices: each frame's samples are the straight play's: the video export of the shot lab is exported: {"code":"writer_failed","frame":0,"reply":{"error":"no piped job export.part here"},"what":"the encode tool refused the part starting at frame 0","outcome":"refused","core":"core@0.0.0","set_digest":"f4f4d6f425c504af6a38dd8e166cdd0b15203c11941a51460b33e62a2e62b11f"}: expected 'refused' to be 'exported' // Object.is equality
+NEW FAIL tests/acceptance/140/platform/wasm.test.ts › #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight › #140.12 the local preflight has a lane named wasm32 running node scripts/wasm32.mjs; each of its commands exits 0, and it prints PASS for every canvas core crate: wasm32 lane: <home>/.local/opt/node-v24.22.0-linux-arm64/bin/node scripts/wasm32.mjs exits 0
+NEW FAIL tests/acceptance/140/platform/wasm.test.ts › #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight › #140.12 built here, apart from the lane, every canvas core crate compiles for wasm32-unknown-unknown with threads off (no atomics target feature, no flags that add it): cargo build --locked --target wasm32-unknown-unknown -p deep-canvas -p deep-canvas-cells -p deep-canvas-drawn -p deep-canvas-effects -p deep-canvas-export -p deep-canvas-graph -p deep-canvas-input -p deep-canvas-loop -p deep-canvas-marks -p deep-canvas-media -p deep-canvas-motion -p deep-canvas-physics -p deep-canvas-record -p deep-canvas-sandbox -p deep-canvas-scene3d -p deep-canvas-seams -p deep-canvas-sheet -p deep-canvas-vector -p deep-text exits 0
+NEW FAIL tests/acceptance/140/platform/wasm.test.ts › #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight › #140.12 a planted dependency that needs threads (it spawns a std thread) (--planted threads, the crate deep-planted-threads) fails the wasm32 lane's build, naming the crate, where the clean run passes: the clean run of scripts/wasm32.mjs passes first, so the planted run's failure is the dependency's
+NEW FAIL tests/acceptance/140/platform/wasm.test.ts › #140.12 the canvas core's crates build for wasm32-unknown-unknown with threads off in the local preflight › #140.12 a planted dependency that calls an API only native targets have (--planted native, the crate deep-planted-native) fails the wasm32 lane's build, naming the crate, where the clean run passes: the clean run of scripts/wasm32.mjs passes first, so the planted run's failure is the dependency's
+NEW FAIL tests/acceptance/1348/plants.test.ts › the lane that fails a listed word › AC1 #1348.d4f7c3ae: a planted card line holding "PR" fails the lane, naming the string and its plain word: the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (<tmp>/dump.json)
+NEW FAIL tests/acceptance/1348/plants.test.ts › the lane that fails a listed word › AC1 #1348.d4f7c3ae: the same word on a session's page passes: the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (<tmp>/dump.json)
+NEW FAIL tests/acceptance/1348/plants.test.ts › the lane that fails a listed word › AC3 #1348.97af66a9: a view that shows the trace fails, naming it: the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (<tmp>/dump.json)
+NEW FAIL tests/acceptance/1348/fixture.test.ts › (file): the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (<tmp>/dump.json)
+NEW FAIL tests/acceptance/33/bootstrap.test.ts › AC4 #33.6932417b with only the maintainer's bootstrap done.yaml, the repo is gated: tests pass, typecheck fails → FAIL naming the typecheck › AC4 #33.6932417b this checkout's .deepbuild/done.yaml runs the repo's test and typecheck commands, approved by the maintainer's signed tag: AC4 #33.6932417b the commit 1de9761f051b that last changed the bootstrap carries the maintainer's SSH-signed tag under refs/tags/deep/approved/ with "Approves: .deepbuild/done.yaml" (fetch the tags first): it approves []
+NEW FAIL tests/acceptance/33/bootstrap.test.ts › AC4 #33.6932417b with only the maintainer's bootstrap done.yaml, the repo is gated: tests pass, typecheck fails → FAIL naming the typecheck › AC4 #33.6932417b a repo gated on a hand-written bootstrap alone: tests pass and typecheck fails → sent back, FAIL, naming the typecheck: Command failed: /bin/cp -cR <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/node_modules/typescript <tmp>/repo/node_modules/typescript
+NEW FAIL tests/acceptance/33/bootstrap.test.ts › AC4 #33.6932417b with only the maintainer's bootstrap done.yaml, the repo is gated: tests pass, typecheck fails → FAIL naming the typecheck › AC4 #33.6932417b (wrong program) a gate that counts only a drafted spec as approved (DEEP_HUB_PLANT=drafted-spec-only) stays watch-only and fails the scenario: AC4 #33.6932417b the planted gate fails at one of the scenario's assertions: Command failed: /bin/cp -cR <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/node_modules/typescript <tmp>/repo/node_modules/typescript
+NEW FAIL tests/acceptance/33/spine.test.ts › AC8 #33.9c912eb7 the 25 spine tasks, each with its merged commit › AC8 #33.9c912eb7 node scripts/spine.mjs list names the 25 spine tasks, each with a merged commit of this checkout's history: AC8 #33.9c912eb7 #17's merged commit e774443e7ee5c01daec128161753675b073437bc is in this checkout's history
+NEW FAIL tests/acceptance/1015/redraft/own-repo.test.ts › #1015 AC7 (redraft): DeepBuild's own preflight and affected.mjs runs lease each block › AC7 #1015.d86f2d2a a preflight and two affected.mjs runs started together in three sessions: each block ran under a cpu.slot lease of its session: the hub didn't start: deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+NEW FAIL tests/acceptance/1015/redraft/own-repo.test.ts › #1015 AC7 (redraft): DeepBuild's own preflight and affected.mjs runs lease each block › AC7 #1015.d86f2d2a its wrong program: a planted scripts/lease that runs the command directly (DEEP_HUB_PLANT=lease-script-runs-directly) fails, naming the block: the hub didn't start with DEEP_HUB_PLANT=lease-script-runs-directly (the planted wrong program this test runs against): deep hub: the core stopped: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@deepbuild/briefs' imported from <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/packages/hub/dist/intake.js
+NEW FAIL tests/acceptance/139/corpus.test.ts › #139.9dd2cc13 before each release every extension, pack and document DeepBuild made or shipped runs against the candidate, and the report lists only the failures the previous release didn't have › AC8 the step runs every member of every group, and with the candidate unchanged it passes, listing the failure R1 already had apart: record R1 on the unmodified scratch tree
+NEW FAIL tests/acceptance/139/corpus.test.ts › #139.9dd2cc13 before each release every extension, pack and document DeepBuild made or shipped runs against the candidate, and the report lists only the failures the previous release didn't have › AC8 a planted break in one gallery document's kind fails it, naming the document and the first value that differs; the known failure stays listed apart: record R1 on the unmodified scratch tree
+NEW FAIL tests/acceptance/139/corpus.test.ts › #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file › AC14 the planted break leaves the release preflight failed, naming the document, until one of the two is recorded: record R1 on the unmodified scratch tree
+NEW FAIL tests/acceptance/139/corpus.test.ts › #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file › AC14 (wrong program) a release preflight that only reports it passes, and this test fails it: expected [Function] to throw error matching /a release preflight that only reports…/ but got 'record R1 on the unmodified scratch t…'
+NEW FAIL tests/acceptance/139/corpus.test.ts › #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file › AC14 accepted, with its break file quoting the exact line and the workaround, releases it; accepted with no break file does not: record R1 on the unmodified scratch tree
+NEW FAIL tests/acceptance/139/corpus.test.ts › #139.493afaff a new failure in the ecosystem corpus holds the release until the owner marks it fixed or accepted, an accepted one with its break file › AC14 marked fixed releases it only when the document passes again: the owner's word alone is not evidence: record R1 on the unmodified scratch tree
+NEW FAIL tests/acceptance/1454/lint.test.ts › #1454 `render` holds no branch on fixture state › AC5 #1454.cbcbeda8 the replica draws the app's tree over a fixture: the count and Pop out on Needs you, and the Terminal tab on a session's page: <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/target/debug/deep-replica --view needs-you --out <tmp>/replica: Command failed: <home>/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/target/debug/deep-replica --view needs-you --out <tmp>/replica
+NEW FAIL tests/acceptance/200/closures.test.ts › AC4 #200.be794a42 the closure lint and the reference table's drift test › AC4 the local preflight's lint lane runs the closure lint and the drift test, and both pass on the checkout: the drift test on the checkout: no FAIL drift line
+NEW FAIL tests/acceptance/349/slot-table.test.ts › AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill › AC5 the published contract passes the preflight's slot check, which the lint lane runs: FAIL slots: deep.registerEnvironment, - (planted leaves-grandchild): deep.registerEnvironment's kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown" not with its own message "left its process running after down"
+NEW FAIL tests/acceptance/377/noop.test.ts › #377.8131b7ba the noop lane runs the render-logic tests without a GPU › #377.8131b7ba render logic on the noop backend is the default backend's (declared resources, pipeline keys, frames and their sizes and settling), and the noop backend makes no pixels: the default backend draws the scene: expected [ …(3) ] to deeply equal [ …(3) ]
+NEW FAIL tests/acceptance/824/sessions/readings.test.ts › AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading › AC4 #824.85ef3d40 1, 10 and 30 sessions: every process DeepBuild runs for them read, summed, and the growth per added session computed from them: the benchmark prints its readings as one JSON line with "bench": "hub-sessions": exit 1; stdout: BLOCKED hub sessions: deep setup exited 4: deep setup: the wiki wasn't built: the hub closed the connection before it answered
+NEW FAIL tests/acceptance/824/sessions/readings.test.ts › AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own processes by under 25 MB. A planted MCP server that loads the whole hub package for each session fails, and so does a waiter that keeps a copy of its session's transcript, each naming the per-session growth and the process that grew: the per-session reading › AC4 #824.85ef3d40 the sessions it read were open and idle at the hub: started, stopped, not ended, as many as each reading says, each with its 32 MiB transcript: the benchmark prints its readings as one JSON line with "bench": "hub-sessions": exit 1; stdout: BLOCKED hub sessions: deep setup exited 4: deep setup: the wiki wasn't built: the hub closed the connection before it answered
+NEW FAIL tests/acceptance/2144/lint-on-main.test.mjs › #2144.35365960 node scripts/canvas-lint.mjs exits 0 on main, or every line it prints is one scripts/known-failures.json records with its issue: exit 1: 4 lines known-failures.json doesn't record, and 0 recorded lines whose entry names no issue (#<n>). The lint printed:
+NEW FAIL secrets: packages/contracts/fixtures/staged.undone@1/01.json: home path
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @stryker-mutator/core 10.0.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @types/better-sqlite3 7.6.13 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @types/node 24.19.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies fast-check 4.10.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies gpt-tokenizer 4.0.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies jest 30.5.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies typescript 5.9.3 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies vitest 5.0.5 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @stryker-mutator/core 10.0.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @types/better-sqlite3 7.6.13 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @types/node 24.19.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies fast-check 4.10.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies gpt-tokenizer 4.0.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies jest 30.5.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies typescript 5.9.3 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies vitest 5.0.5 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @stryker-mutator/core 10.0.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @types/better-sqlite3 7.6.13 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @types/node 24.19.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies fast-check 4.10.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies gpt-tokenizer 4.0.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies jest 30.5.2 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies typescript 5.9.3 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies vitest 5.0.5 is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie-reader/Cargo.toml dependencies thorvg =0.6.0 is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-show/Cargo.toml dependencies deep-canvas-export * path=../deep-canvas-export is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-show/Cargo.toml dependencies deep-lottie-reader * path=../deep-lottie-reader is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+NEW FAIL deps: crates/deep-lottie/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+NEW FAIL deps: spikes/2435/Cargo.toml dependencies blake3 ^1 is not in scripts/repo-rules.json
+NEW FAIL deps: spikes/2435/Cargo.toml dependencies bytemuck ^1 is not in scripts/repo-rules.json
+NEW FAIL deps: spikes/2435/Cargo.toml dependencies log ^0.4 is not in scripts/repo-rules.json
+NEW FAIL deps: spikes/2435/Cargo.toml dependencies pollster ^0.4 is not in scripts/repo-rules.json
+NEW FAIL deps: spikes/2435/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+NEW FAIL deps: spikes/2435/Cargo.toml dependencies wgpu =30.0.1 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/190/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/190/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/533/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+NEW FAIL deps: tests/acceptance/533/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+NEW FAIL cards: crates/deep-canvas-sandbox/README.md: a deviation names lib.interface@1, which crates/deep-canvas-sandbox doesn't have
+NEW FAIL vendor/gpui-pre/src/arena.rs: no row in the carried-patch table
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer/ycbcr_surface.rs: no row in the carried-patch table
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: a carried hunk with no mark
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: a carried hunk with no mark
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: a carried hunk with no mark
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 14 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 16 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 17 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 14 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 16 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: hunk of 17 lines, over the budget of 8
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL vendor/gpui-pre-apple/src/metal_renderer.rs: 79 added, over the budget of 40 a file
+NEW FAIL canvas-lint: crates/deep-canvas-graph/src/module.rs use of a disallowed method `f64::log2` (clippy::disallowed_methods)
+NEW FAIL canvas-lint: crates/deep-canvas-media/src/heard/mod.rs a static item, state a check could carry between runs
+NEW FAIL canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs a static item, state a check could carry between runs
+NEW FAIL canvas-lint: crates/deep-canvas/src/document/packs/tests.rs include_str! of a file the lint can't read: outside the crate, or not a literal path
+NEW FAIL size: benchmarks/canvas.mjs: 1521 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-app/src/views.rs: 3938 lines, over its ceiling of 3606
+NEW FAIL size: crates/deep-canvas-effects/src/check.rs: 2293 lines, over its ceiling of 2093
+NEW FAIL size: crates/deep-canvas-effects/src/emit.rs: 1690 lines, over its ceiling of 1636
+NEW FAIL size: crates/deep-canvas-effects/src/graph.rs: 1805 lines, over its ceiling of 1624
+NEW FAIL size: crates/deep-canvas-effects/src/interp.rs: 1567 lines, over its ceiling of 1559
+NEW FAIL size: crates/deep-canvas-input/src/session.rs: 1619 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-marks/src/animator.rs: 1937 lines, over its ceiling of 1797
+NEW FAIL size: crates/deep-canvas-marks/src/data.rs: 2608 lines, over its ceiling of 2562
+NEW FAIL size: crates/deep-canvas-marks/src/modules.rs: 2192 lines, over its ceiling of 2053
+NEW FAIL size: crates/deep-canvas-marks/src/scene.rs: 6544 lines, over its ceiling of 6202
+NEW FAIL size: crates/deep-canvas-media/src/mix.rs: 1524 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-motion/src/doc.rs: 3773 lines, over its ceiling of 3048
+NEW FAIL size: crates/deep-canvas-motion/src/program.rs: 4161 lines, over its ceiling of 3129
+NEW FAIL size: crates/deep-canvas-motion/src/shots.rs: 2353 lines, over its ceiling of 1675
+NEW FAIL size: crates/deep-canvas-physics/src/doc.rs: 1565 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-scene3d/src/builders.rs: 2627 lines, over its ceiling of 2600
+NEW FAIL size: crates/deep-canvas-scene3d/src/distribute.rs: 1613 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-canvas-scene3d/src/scene.rs: 4764 lines, over its ceiling of 3603
+NEW FAIL size: crates/deep-canvas-scene3d/src/spec.rs: 2611 lines, over its ceiling of 2281
+NEW FAIL size: crates/deep-canvas-scene3d/src/stack.rs: 1680 lines, over its ceiling of 1612
+NEW FAIL size: crates/deep-canvas-vector/src/svg.rs: 2557 lines, over its ceiling of 2537
+NEW FAIL size: crates/deep-canvas/src/document/check.rs: 3053 lines, over its ceiling of 2583
+NEW FAIL size: crates/deep-canvas/src/document/mod.rs: 1641 lines, over its ceiling of 1583
+NEW FAIL size: crates/deep-canvas/src/document/packs.rs: 3558 lines, over its ceiling of 3511
+NEW FAIL size: crates/deep-canvas/src/expr.rs: 2663 lines, over its ceiling of 2644
+NEW FAIL size: crates/deep-canvas/src/registry/mod.rs: 5001 lines, over its ceiling of 4794
+NEW FAIL size: crates/deep-canvas/src/schedule/mod.rs: 3594 lines, over its ceiling of 3548
+NEW FAIL size: crates/deep-canvas/src/scope.rs: 1742 lines, over its ceiling of 1527
+NEW FAIL size: crates/deep-canvas/src/steps.rs: 1518 lines, over its ceiling of 1513
+NEW FAIL size: crates/deep-effects-render/src/docops.rs: 2143 lines, over its ceiling of 1869
+NEW FAIL size: crates/deep-gpu-layer/src/groups.rs: 1564 lines, over its ceiling of 1525
+NEW FAIL size: crates/deep-gpu-layer/src/live.rs: 3211 lines, over its ceiling of 3146
+NEW FAIL size: crates/deep-gpu-layer/src/view3d.rs: 2601 lines, over its ceiling of 2208
+NEW FAIL size: crates/deep-hook/src/matcher.rs: 2768 lines, over its ceiling of 2589
+NEW FAIL size: crates/deep-logic/src/lib.rs: 1648 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-logic/src/piece.rs: 2003 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-logic/src/world.rs: 2028 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-marks-render/src/macos.rs: 2870 lines, over its ceiling of 2818
+NEW FAIL size: crates/deep-marks-render/src/raster.rs: 1906 lines, over its ceiling of 1865
+NEW FAIL size: crates/deep-replica/src/drive/mod.rs: 2344 lines, over its ceiling of 2299
+NEW FAIL size: crates/deep-scene3d-render/src/lib.rs: 9615 lines, over its ceiling of 9169
+NEW FAIL size: crates/deep-scene3d-render/src/scene3d.wgsl: 3386 lines, over its ceiling of 3163
+NEW FAIL size: crates/deep-show/src/export.rs: 1690 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-show/src/frames.rs: 1751 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-show/src/hub.rs: 3047 lines, over its ceiling of 2692
+NEW FAIL size: crates/deep-show/src/kinds.rs: 1994 lines, over 1500 with no ceiling
+NEW FAIL size: crates/deep-show/src/kit/modules.rs: 1542 lines, over its ceiling of 1523
+NEW FAIL size: crates/deep-show/src/main.rs: 3374 lines, over its ceiling of 3104
+NEW FAIL size: crates/deep-show/src/shared.rs: 2283 lines, over its ceiling of 2169
+NEW FAIL size: packages/asks/src/index.ts: 2064 lines, over its ceiling of 2059
+NEW FAIL size: packages/hub/src/server.ts: 1565 lines, over 1500 with no ceiling
+NEW FAIL code mappings: doctor service_unpromoted maps to no verdict
+NEW FAIL code mappings: verdict none maps to no verdict
+NEW FAIL code mappings: verdict queued maps to no verdict
+NEW FAIL code mappings: verdict working maps to no verdict
+NEW FAIL code mappings: verdict says done maps to no verdict
+NEW FAIL code mappings: verdict sent back maps to no verdict
+NEW FAIL code mappings: verdict needs you maps to no verdict
+NEW FAIL code mappings: verdict stale maps to no verdict
+NEW FAIL code mappings: verdict quiet maps to no verdict
+NEW FAIL code mappings: verdict stuck maps to no verdict
+NEW FAIL code mappings: verdict flagged maps to no verdict
+NEW FAIL code mappings: verdict finished maps to no verdict
+NEW FAIL code mappings: verdict running maps to no verdict
+NEW FAIL code mappings: verdict landed with the budget window open maps to no verdict
+NEW FAIL code mappings: verdict gave up its slot maps to no verdict
+NEW FAIL code mappings: verdict replaced by you maps to no verdict
+NEW FAIL code mappings: verdict sent back past its rounds maps to no verdict
+NEW FAIL code mappings: verdict stalled maps to no verdict
+NEW FAIL code mappings: verdict context full maps to no verdict
+NEW FAIL code mappings: verdict plan window or spend cap maps to no verdict
+NEW FAIL code mappings: verdict crashed or interrupted maps to no verdict
+NEW FAIL code mappings: verdict closed maps to no verdict
+NEW FAIL code mappings: verdict closed before the gate maps to no verdict
+NEW FAIL slot kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown" not with its own message "left its process running after down"
+NEW FAIL slots: deep.registerEnvironment, - (planted leaves-grandchild): deep.registerEnvironment's kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED "the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown" not with its own message "left its process running after down"
+NEW FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+NEW FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list
+NEW FAIL record reader: crates/deep-app/src/hub.rs: it names stream.subscribe, events.read, inbox.read, so it reads the record for itself; read it through crates/deep-app/src/record.rs's one reader (record::with_view) instead
+NEW FAIL color literal: crates/deep-app/panels/338-canvas/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-cap20/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-drop-folded/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-hide-newest/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-home/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-line/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-list-superseded/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-needs-you/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-sidebar/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL color literal: crates/deep-app/panels/338-tab/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+NEW FAIL known-failures.json: cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL known-failures.json: cargo -p deep-replica --test acceptance_327_card was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL known-failures.json: packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL known-failures.json: tests/acceptance/56/decision.test.mjs › #56 scope import("effect/Effect") is timed on Node 22, and the command that times it measures this Node was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL known-failures.json: tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL known-failures.json: tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL known-failures.json: tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+NEW FAIL fmt: crates/deep-app/src/states.rs
+NEW FAIL fmt: crates/deep-canvas/src/cost.rs
+NEW FAIL fmt: crates/deep-canvas/src/cost.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-cells/src/logic_grid.rs
+NEW FAIL fmt: crates/deep-canvas-input/src/point.rs
+NEW FAIL fmt: crates/deep-canvas-input/src/point.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/contrast.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/contrast.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/contrast.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/contrast.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/contrast.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/contrast.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/exposure.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/exposure.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/fixtures.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/fixtures.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/fixtures.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/fixtures.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/fixtures.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/framing.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/lib.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/noise.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/noise.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/noise.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/noise.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/noise.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/scale.rs
+NEW FAIL fmt: crates/deep-canvas-loop/src/scale.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/atlas.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/atlas.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/copy.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/noise_fill.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/noise_fill.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/plural.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/plural.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/plural.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/plural.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/plural.rs
+NEW FAIL fmt: crates/deep-canvas-marks/src/scene.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-motion/src/held.rs
+NEW FAIL fmt: crates/deep-canvas-scene3d/src/pointer.rs
+NEW FAIL fmt: crates/deep-canvas-scene3d/src/pointer.rs
+NEW FAIL fmt: crates/deep-gpu-layer/src/main.rs
+NEW FAIL fmt: crates/deep-gpu-layer/src/main.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/bindings.rs
+NEW FAIL fmt: crates/deep-logic/src/lib.rs
+NEW FAIL fmt: crates/deep-logic/src/lib.rs
+NEW FAIL fmt: crates/deep-logic/src/lib.rs
+NEW FAIL fmt: crates/deep-logic/src/lib.rs
+NEW FAIL fmt: crates/deep-logic/src/lib.rs
+NEW FAIL fmt: crates/deep-logic/src/live.rs
+NEW FAIL fmt: crates/deep-logic/src/live.rs
+NEW FAIL fmt: crates/deep-logic/src/live.rs
+NEW FAIL fmt: crates/deep-logic/src/live.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/module.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/piece.rs
+NEW FAIL fmt: crates/deep-logic/src/point.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-logic/src/world.rs
+NEW FAIL fmt: crates/deep-lottie-reader/src/lib.rs
+NEW FAIL fmt: crates/deep-lottie-reader/src/lib.rs
+NEW FAIL fmt: crates/deep-scene3d-render/src/lib.rs
+NEW FAIL fmt: crates/deep-scene3d-render/src/lib.rs
+NEW FAIL fmt: crates/deep-scene3d-render/src/lib.rs
+NEW FAIL fmt: crates/deep-scene3d-render/src/tint.rs
+NEW FAIL fmt: crates/deep-show/src/export/fidelity.rs
+NEW FAIL fmt: crates/deep-show/src/extended.rs
+NEW FAIL fmt: crates/deep-show/src/extended.rs
+NEW FAIL fmt: crates/deep-show/src/extended.rs
+NEW FAIL fmt: crates/deep-show/src/extended.rs
+NEW FAIL fmt: crates/deep-show/src/extended.rs
+NEW FAIL fmt: crates/deep-show/src/frames.rs
+NEW FAIL fmt: crates/deep-show/src/frames.rs
+NEW FAIL fmt: crates/deep-show/src/input.rs
+NEW FAIL fmt: crates/deep-show/src/kinds.rs
+NEW FAIL fmt: crates/deep-show/src/kinds.rs
+NEW FAIL fmt: crates/deep-show/src/kinds.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/logic.rs
+NEW FAIL fmt: crates/deep-show/src/main.rs
+NEW FAIL fmt: crates/deep-show/src/main.rs
+NEW FAIL fmt: crates/deep-show/src/main.rs
+NEW FAIL fmt: crates/deep-show/src/main.rs
+NEW FAIL fmt: crates/deep-show/src/main.rs
+NEW FAIL fmt: crates/deep-show/src/main.rs
+NEW FAIL fmt: crates/deep-show/src/pixels.rs
+NEW FAIL fmt: crates/deep-show/src/pixels.rs
+NEW FAIL fmt: crates/deep-show/src/pixels.rs
+NEW FAIL fmt: crates/deep-show/src/pixels.rs
+NEW FAIL fmt: crates/deep-show/src/pixels.rs
+NEW FAIL fmt: crates/deep-show/src/preview.rs
+NEW FAIL fmt: crates/deep-show/src/preview.rs
+NEW FAIL fmt: crates/deep-show/src/preview.rs
+NEW FAIL fmt: crates/deep-show/src/query.rs
+NEW FAIL fmt: crates/deep-show/src/snapshot.rs
+NEW FAIL fmt: crates/deep-show/src/terminal.rs
+NEW FAIL fmt: crates/deep-show/src/terminal.rs
+NEW FAIL fmt: crates/deep-show/src/timings.rs
+NEW FAIL fmt: crates/deep-show/src/timings.rs
+NEW FAIL fmt: crates/deep-show/src/timings.rs
+NEW FAIL fmt: crates/deep-show/src/timings.rs
+NEW FAIL fmt: crates/deep-show/src/verdict.rs
+NEW FAIL fmt: crates/deep-show/src/verdict.rs
+NEW FAIL fmt: crates/deep-show/tests/gallery.rs
+NEW FAIL fmt: crates/deep-show/tests/live_forms.rs
+NEW FAIL fmt: crates/deep-text/src/shape.rs
+NEW FAIL clippy: crates/deep-logic/src/module.rs you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+NEW FAIL clippy: crates/deep-logic/src/piece.rs very complex type used. Consider factoring parts into `type` definitions
+NEW FAIL clippy: crates/deep-logic/src/world.rs large size difference between variants
+NEW FAIL clippy: crates/deep-logic/src/world.rs this expression creates a reference which is immediately dereferenced by the compiler
+INCONCLUSIVE 33 timed files were not run; --timed runs them under a timed grant: tests/acceptance/1113/load.test.mjs tests/acceptance/120/budgets-idle-redraft.test.ts tests/acceptance/120/budgets.test.ts tests/acceptance/138/budgets.test.ts tests/acceptance/139/budgets.test.ts tests/acceptance/140/platform/budgets.test.ts tests/acceptance/1432/budgets.test.mjs tests/acceptance/1637/budgets.test.ts tests/acceptance/2017/ac3-budgets.test.ts tests/acceptance/226/ac7-budgets.test.ts tests/acceptance/246/lanes.test.mjs tests/acceptance/25/live/budgets.test.ts tests/acceptance/27/budgets.test.ts tests/acceptance/33/budget.test.ts tests/acceptance/46/budgets.test.ts tests/acceptance/534/ac04-budgets.test.ts tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts tests/acceptance/547/ac4-keyframes.test.ts tests/acceptance/548/ac3-budgets.test.ts tests/acceptance/568/fingerprint.test.mjs tests/acceptance/568/judge.test.mjs tests/acceptance/568/lane.test.mjs tests/acceptance/583/perf-added-tests.test.mjs tests/acceptance/724-redraft-1405/judge.test.mjs tests/acceptance/724-redraft-1405/loaded.test.mjs tests/acceptance/724/counter.test.mjs tests/acceptance/724/judge.test.mjs tests/acceptance/724/limits.test.mjs tests/acceptance/724/loaded.test.mjs tests/acceptance/724/missing.test.mjs tests/acceptance/83/budgets.test.ts tests/acceptance/85/budgets.test.ts tests/preflight.test.mjs
+INCONCLUSIVE 9 slow files were not run; --slow runs them: tests/acceptance/1113/before.test.mjs tests/acceptance/1114/lanes.test.mjs tests/acceptance/1117/proofs.test.mjs tests/acceptance/139/apisurface.test.ts tests/acceptance/48/harness.test.mjs tests/acceptance/824/cycles.test.ts tests/acceptance/910/ac1-issue-link.test.mjs tests/acceptance/910/ac2-renamed-heading.test.mjs tests/acceptance/910/ac3-offline.test.mjs
+FAIL affected: 510 new, 48 already failing on main, 122 inconclusive or blocked, 0 listed skips, 910 passed, in 3791 s at load 9; logs in <tmp>
+[exit 1]
+ 20:04:19 up  5:11,  3 users,  load average: 9.39, 17.10, 22.15
