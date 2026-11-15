@@ -479,15 +479,13 @@ impl<'a> Hub<'a> {
                "results": results, "switched": false})
     }
 
-    /// Your decision to switch `interface` to the trial's candidate: each input the trial found
-    /// changed moves once, naming the decision `id` as its cause, a corpus document's snapshot
-    /// accepted under the candidate's set; the same decision again moves nothing.
-    pub(crate) fn switch(&mut self, d: &Value, id: &str) -> Value {
-        let (Some(interface), Some(to), Some(trial)) = (
-            d["interface"].as_str(),
-            d["to"].as_str(),
-            d["trial"].as_str(),
-        ) else {
+    /// Your decision on a trial of `interface` (`kind` `switch`, `keep` or `drop`): a switch to the
+    /// trial's candidate moves each input the trial found changed once, naming the decision `id` as
+    /// its cause, a corpus document's snapshot accepted under the candidate's set; keeping the one
+    /// in use or dropping the candidate moves nothing. A trial takes one decision: a later one moves
+    /// nothing.
+    pub(crate) fn switch(&mut self, kind: &str, d: &Value, id: &str) -> Value {
+        let (Some(interface), Some(trial)) = (d["interface"].as_str(), d["trial"].as_str()) else {
             return refused("out_of_range");
         };
         let Some(path) = trial_path(&self.scenario.evidence, trial) else {
@@ -496,11 +494,16 @@ impl<'a> Hub<'a> {
         let Some(mut record) = read_json(&path) else {
             return refused("ref_unresolved");
         };
-        if record["interface"] != interface || record["candidate"] != to {
+        let to = record["candidate"].as_str().unwrap_or_default().to_string();
+        // A switch names the candidate it switches to; keep and drop name the trial alone.
+        if record["interface"] != interface || (kind == "switch" && d["to"] != to.as_str()) {
             return refused("out_of_range");
         }
-        if let Some(earlier) = record["decision"].as_str() {
-            return json!({"outcome": "decided", "decision": earlier, "moved": []});
+        if let Some(reply) = settled(&mut record, kind, id) {
+            if kind != "switch" && write_json(&path, &record).is_err() {
+                return refused("store_unwritable");
+            }
+            return reply;
         }
         let corpus = PathBuf::from(record["corpus"].as_str().unwrap_or(""));
         let mut moved = Vec::new();
@@ -518,17 +521,33 @@ impl<'a> Hub<'a> {
                 }
             }
             moved.push(
-                json!({"input": r["input"], "cause": id, "from": record["in_use"], "to": to,
+                json!({"input": r["input"], "cause": id, "from": record["in_use"], "to": to.as_str(),
                               "result": r["result"]}),
             );
         }
         record["decision"] = json!(id);
+        record["decided"] = json!(kind);
         record["moved"] = json!(moved);
         if write_json(&path, &record).is_err() {
             return refused("store_unwritable");
         }
-        json!({"outcome": "decided", "decision": id, "moved": moved})
+        json!({"outcome": "decided", "decision": id, "decided": kind, "moved": moved})
     }
+}
+
+/// A decision that moves nothing on trial `record`, or none for a first switch, which moves the
+/// changed inputs: an earlier decision's answer again, or a keep or a drop recorded as decision `id`.
+fn settled(record: &mut Value, kind: &str, id: &str) -> Option<Value> {
+    if let Some(earlier) = record["decision"].as_str() {
+        return Some(json!({"outcome": "decided", "decision": earlier, "moved": []}));
+    }
+    if kind == "switch" {
+        return None;
+    }
+    record["decision"] = json!(id);
+    record["decided"] = json!(kind);
+    record["moved"] = json!([]);
+    Some(json!({"outcome": "decided", "decision": id, "decided": kind, "moved": []}))
 }
 
 /// `{"call": "track_record"}`: the track kept in `store` by its hash, once each entry is a
@@ -547,5 +566,36 @@ fn track_record(store: &Path, document: &Value, steps: u64, entries: &[Value]) -
     match write_json(&store.join(format!("{hash}.json")), &track) {
         Ok(()) => json!({"ok": true, "track": hash, "steps": steps}),
         Err(e) => json!({"outcome": "refused", "code": "store_unwritable", "what": e.to_string()}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A trial takes one decision: keeping the one in use or dropping the candidate is recorded and
+    /// moves nothing, and a switch after either moves nothing either.
+    #[test]
+    fn keep_and_drop_move_nothing_and_close_the_trial() {
+        for kind in ["keep", "drop"] {
+            let mut record = json!({"trial": "trial-000000000000", "results": [{"input": {"track": "t"}, "result": {"differs": {}}}]});
+            let reply =
+                settled(&mut record, kind, "dec-1").expect("a keep or a drop is settled at once");
+            assert_eq!(reply["moved"], json!([]), "{kind}");
+            assert_eq!(
+                (record["decision"].as_str(), record["decided"].as_str()),
+                (Some("dec-1"), Some(kind))
+            );
+            let later = settled(&mut record, "switch", "dec-2")
+                .expect("a decided trial takes no other decision");
+            assert_eq!(
+                (later["decision"].as_str(), &later["moved"]),
+                (Some("dec-1"), &json!([]))
+            );
+        }
+        assert!(
+            settled(&mut json!({}), "switch", "dec-3").is_none(),
+            "a first switch moves the changed inputs"
+        );
     }
 }
