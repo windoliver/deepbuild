@@ -1,0 +1,108 @@
+
+== plain app: asks ask:01M7GPDXJ7AA7A1FSY0DWRX9WR "Which header colour on the login page?"; ask:01M7GPDXJA5C95SRETVEXDD1W7 "Which font for the printed receipt?"; ask:01M7GPDXJBN05D5FAB7EC1A6P0 "Which layout for the changelog?"
+t+0s exit null signal null windows [{"id":21869,"frame":[0,40,1470,850]}] nodes 54
+   texts [{"role":"AXGroup","label":"Tasks","value":null,"identifier":"list"},{"role":"AXStaticText","label":"Needs you","value":"3","identifier":"heading:needs-you"},{"role":"AXStaticText","label":"3 asks need you","value":"nothing","identifier":"sidebar-count"},{"role":"AXButton","label":"Pop out Needs you","value":null,"identifier":"needs-you-pop-out"},{"role":"AXButton","label":"Which header colour on the login page?","value":"needs_you","identifier":"ask:01M7GPDXJ7AA7A1FSY0DWRX9WR"},{"role":"AXStaticText","label":"!","value":"needs_you","identifier":"ask:01M7GPDXJ7AA7A1FSY0DWRX9WR:mark"},{"role":"AXStaticText","label":"Which header colour on the login page?","value":null,"identifier":"ask:01M7GPDXJ7AA7A1FSY0DWRX9WR:title"},{"role":"AXStaticText","label":"How it looks","value":null,"identifier":"ask:01M7GPDXJ7AA7A1FSY0DWRX9WR:word"},{"role":"AXStaticText","label":"tomorrow 14:49","value":null,"identifier":"ask:01M7GPDXJ7AA7A1FSY0DWRX9WR:time"},{"role":"AXStaticText","label":"tomorrow 14:49","value":null,"identifier":"ask:01M7GPDXJ7AA7A1FSY0DWRX9WR:applies"},{"role":"AXButton","label":"Which font for the printed receipt?","value":"needs_you","identifier":"ask:01M7GPDXJA5C95SRETVEXDD1W7"},{"role":"AXStaticText","label":"!","value":"needs_you","identifier":"ask:01M7GPDXJA5C95SRETVEXDD1W7:mark"},{"role":"AXStaticText","label":"Which font for the printed receipt?","value":null,"identifier":"ask:01M7GPDXJA5C95SRETVEXDD1W7:title"},{"role":"AXStaticText","label":"How it looks","value":null,"identifier":"ask:01M7GPDXJA5C95SRETVEXDD1W7:word"},{"role":"AXStaticText","label":"tomorrow 14:49","value":null,"identifier":"ask:01M7GPDXJA5C95SRETVEXDD1W7:time"},{"role":"AXStaticText","label":"tomorrow 14:49","value":null,"identifier":"ask:01M7GPDXJA5C95SRETVEXDD1W7:applies"},{"role":"AXButton","label":"Which layout for the changelog?","value":"needs_you","identifier":"ask:01M7GPDXJBN05D5FAB7EC1A6P0"},{"role":"AXStaticText","label":"!","value":"needs_you","identifier":"ask:01M7GPDXJBN05D5FAB7EC1A6P0:mark"},{"role":"AXStaticText","label":"Which layout for the changelog?","value":null,"identifier":"ask:01M7GPDXJBN05D5FAB7EC1A6P0:title"},{"role":"AXStaticText","label":"How it looks","value":null,"identifier":"ask:01M7GPDXJBN05D5FAB7EC1A6P0:word"},{"role":"AXStaticText","label":"tomorrow 14:49","value":null,"identifier":"ask:01M7GPDXJBN05D5FAB7EC1A6P0:time"},{"role":"AXStaticText","label":"tomorrow 14:49","value":null,"identifier":"ask:01M7GPDXJBN05D5FAB7EC1A6P0:applies"},{"role":"AXStaticText","label":"No project","value":null,"identifier":"heading:none"},{"role":"AXButton","label":"No project","value":null,"identifier":"project:none"},{"role":"AXButton","label":"! Cart totals · needs you","value":"needs_you","identifier":"session:6441e9eb-3eea-42d6-b67e-aa1c8e44a521"},{"role":"AXStaticText","label":"!","value":"needs_you","identifier":"session:6441e9eb-3eea-42d6-b67e-aa1c8e44a521:mark"},{"role":"AXStaticText","label":"Cart totals","value":null,"identifier":"session:6441e9eb-3eea-42d6-b67e-aa1c8e44a521:title"},{"role":"AXStaticText","label":"needs you","value":null,"identifier":"session:6441e9eb-3eea-42d6-b67e-aa1c8e44a521:word"},{"role":"AXStaticText","label":"19 s","value":null,"identifier":"session:6441e9eb-3eea-42d6-b67e-aa1c8e44a521:time"},{"role":"AXButton","label":"! Release notes · needs you","value":"needs_you","identifier":"session:05646fb0-20fb-44d5-a8ac-84912d1f0e6a"},{"role":"AXStaticText","label":"!","value":"needs_you","identifier":"session:05646fb0-20fb-44d5-a8ac-84912d1f0e6a:mark"},{"role":"AXStaticText","label":"Release notes","value":null,"identifier":"session:05646fb0-20fb-44d5-a8ac-84912d1f0e6a:title"},{"role":"AXStaticText","label":"needs you","value":null,"identifier":"session:05646fb0-20fb-44d5-a8ac-84912d1f0e6a:word"},{"role":"AXStaticText","label":"19 s","value":null,"identifier":"session:05646fb0-20fb-44d5-a8ac-84912d1f0e6a:time"},{"role":"AXGroup","label":null,"value":null,"identifier":"ask/01M7GPDXJ7AA7A1FSY0DWRX9WR"},{"role":"AXGroup","label":null,"value":null,"identifier":"lane"},{"role":"AXGroup","label":null,"value":"armed","identifier":"question-card"},{"role":"AXStaticText","label":"How it looks","value":null,"identifier":null},{"role":"AXStaticText","label":"Which header colour on the login page?","value":null,"identifier":null},{"role":"AXButton","label":"Blue header","value":null,"identifier":"card-option:one"},{"role":"AXButton","label":"Green header","value":null,"identifier":"card-option:two"},{"role":"AXStaticText","label":"Default: Blue header · at tomorrow 14:49","value":null,"identifier":null},{"role":"AXStaticText","label":"reference: the agent's","value":null,"identifier":null},{"role":"AXStaticText","label":"Answering saves it for this task","value":null,"identifier":null},{"role":"AXGroup","label":"Say a change in words","value":null,"identifier":"box"},{"role":"AXTextField","label":"Your words","value":null,"identifier":"box-draft"},{"role":"AXButton","label":"Answer","value":null,"identifier":"box-send"}]
+   "Which header colour on t…" label-starts 3 anywhere 3
+   "Which font for the print…" label-starts 2 anywhere 2
+   "Which layout for the cha…" label-starts 2 anywhere 2
+t+3s exit null signal null windows [{"frame":[0,40,1470,850],"id":21869}] nodes 53
+   "Which header colour on t…" label-starts 3 anywhere 3
+   "Which font for the print…" label-starts 2 anywhere 2
+   "Which layout for the cha…" label-starts 2 anywhere 2
+t+6s exit null signal null windows [{"frame":[0,40,1470,850],"id":21869}] nodes 54
+   "Which header colour on t…" label-starts 3 anywhere 3
+   "Which font for the print…" label-starts 2 anywhere 2
+   "Which layout for the cha…" label-starts 2 anywhere 2
+t+9s exit null signal null windows [{"id":21869,"frame":[0,40,1470,850]}] nodes 54
+   "Which header colour on t…" label-starts 3 anywhere 3
+   "Which font for the print…" label-starts 2 anywhere 2
+   "Which layout for the cha…" label-starts 2 anywhere 2
+t+12s exit null signal null windows [{"id":21869,"frame":[0,40,1470,850]}] nodes 54
+   "Which header colour on t…" label-starts 3 anywhere 3
+   "Which font for the print…" label-starts 2 anywhere 2
+   "Which layout for the cha…" label-starts 2 anywhere 2
+t+15s exit null signal null windows [{"frame":[0,40,1470,850],"id":21869}] nodes 54
+   "Which header colour on t…" label-starts 3 anywhere 3
+   "Which font for the print…" label-starts 2 anywhere 2
+   "Which layout for the cha…" label-starts 2 anywhere 2
+t+18s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+21s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+24s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+27s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+30s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+33s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+stderr: first-frame-ms 232.4
+
+
+== --panel asks: asks ask:01M7GPFNGM3GDC5B2N3ZF47YJA "Which header colour on the login page?"; ask:01M7GPFNGQY2RXZKK5QHZMTT2M "Which font for the printed receipt?"; ask:01M7GPFNGRA0Q1S47G0VZ2NA6R "Which layout for the changelog?"
+t+0s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+3s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+6s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+9s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+12s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+15s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+18s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+21s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+24s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+27s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+30s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+33s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+stderr: first-frame-ms 259.0
+

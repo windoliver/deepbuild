@@ -447,3 +447,12 @@ On AC power throughout (`exits.txt`).
   window list is empty), before the panel's content is read; b51d52cd ended BLOCKED the same way in 22p's rerun, and the
   head passed it in both rounds there. So at 5388f2c9 it passed once and was BLOCKED three times: unproven on this busy
   Mac, not failed. It is #1459's criterion, not #22's.
+- **Why 1459/panel was BLOCKED: the window left the Accessibility API's list, the app kept running** (`probe-22u/`, at
+  72f9bfef, the same code). Three rounds of the probe (exit, signal, windows and stderr every 3 s) and of 1459/panel:
+  deep-app's exit and signal were null at every tick, the system log had no crash, panic or terminate line for it,
+  and there was no crash report. Its window dropped out of the probe's list while the process lived (round 1's plain
+  app from 9 s, AX nodes 0 from 15 s; `--panel asks` from the start in every round), with the owner working in
+  Windows App in front. The probe lists only windows the Accessibility API serves (`tests/acceptance/1459/probe.swift`,
+  `windows`), and AX stops serving a window off the active Space. 1459/panel passed in rounds 2 and 3 and was BLOCKED
+  in round 1. So the BLOCKED runs are the Mac's state while in use, not this change's: at 5388f2c9 1459/panel has
+  passed 3 of 7 runs, never failed on its assertion, and BLOCKED only this way.

@@ -1,0 +1,108 @@
+
+== plain app: asks ask:01M7GP9MR0M2MXM1466ZQR8YAA "Which header colour on the login page?"; ask:01M7GP9MR3CW2RJJBJMW66KJ4K "Which font for the printed receipt?"; ask:01M7GP9MR4CAAF01255DSGA5PC "Which layout for the changelog?"
+t+0s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+3s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+6s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+9s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+12s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+15s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+18s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+21s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+24s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+27s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+30s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+33s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+stderr: first-frame-ms 233.7
+
+
+== --panel asks: asks ask:01M7GPBCZEVJSKPH2HH0AVPC5V "Which header colour on the login page?"; ask:01M7GPBCZG3Z5T85A7FJB5TC72 "Which font for the printed receipt?"; ask:01M7GPBCZJDPV5W8X9E6CM4KYD "Which layout for the changelog?"
+t+0s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+3s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+6s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+9s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+12s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+15s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+18s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+21s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+24s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+27s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+30s exit null signal null windows [] nodes 0
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+t+33s exit null signal null windows [] nodes 0
+   texts []
+   "Which header colour on t…" label-starts 0 anywhere 0
+   "Which font for the print…" label-starts 0 anywhere 0
+   "Which layout for the cha…" label-starts 0 anywhere 0
+stderr: first-frame-ms 263.8
+
