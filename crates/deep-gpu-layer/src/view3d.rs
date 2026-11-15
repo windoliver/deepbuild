@@ -137,8 +137,8 @@ struct Args {
     /// its band masks (#425).
     lod: bool,
     light_cut: bool,
-    /// #506: each frame reports where its anchored overlays draw; #468: and each callout's
-    /// place, whether it shows, and its leader's ends.
+    /// #506: each frame reports where its anchored overlays draw; #468: and where each one's
+    /// leader ends.
     overlays: bool,
     masks: bool,
     /// The view's class (#419): an export draws every frame with all of the look's export
@@ -889,6 +889,33 @@ pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, 
 
 /// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,
 /// each written as an 8-bit grayscale PNG of its alpha named by its SHA-256.
+/// #468: each overlay's leader over the frame `bgra` (`size` px, premultiplied BGRA), its straight
+/// RGBA picture laid on by its coverage.
+fn leaders_over(overlays: &[deep_canvas_scene3d::scene::Overlay], bgra: &mut [u8], size: [u32; 2]) {
+    for l in overlays.iter().filter_map(|o| o.leader.as_ref()) {
+        let Some(p) = deep_canvas_scene3d::overlay::leader_picture(l) else {
+            continue;
+        };
+        let w = i64::from(p.size[0]);
+        for (k, s) in p.rgba.as_chunks::<4>().0.iter().enumerate() {
+            let (dx, dy) = (p.at[0] + k as i64 % w, p.at[1] + k as i64 / w);
+            let a = u32::from(s[3]);
+            if a == 0 || dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
+                continue;
+            }
+            let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
+            let d = &mut bgra[o..o + 4];
+            let over = |src: u8, dst: u8| {
+                ((u32::from(src) * a + u32::from(dst) * (255 - a) + 127) / 255) as u8
+            };
+            d[0] = over(s[2], d[0]);
+            d[1] = over(s[1], d[1]);
+            d[2] = over(s[0], d[2]);
+            d[3] = over(255, d[3]);
+        }
+    }
+}
+
 fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     let mut labels = Vec::new();
     let mut sampled = BTreeSet::new();
@@ -1328,13 +1355,6 @@ fn run_view(
                     at,
                 )?)
             };
-            // #468: each callout's place, whether it shows, and its leader's ends in frame px.
-            let callouts: Vec<Value> = (scene.callouts.iter())
-                .map(|c| {
-                    let leader = c.leader.map(|[from, to]| json!({"from": from, "to": to}));
-                    json!({"id": c.id, "at": c.at, "shown": c.shown, "leader": leader})
-                })
-                .collect();
             // #468: the call's world points through the camera this frame draws.
             let projected = (!args.project.is_empty()).then(|| {
                 let at = |p: &[f64; 3]| scene.camera.project(*p).map(|q| json!([q[0], q[1]]));
@@ -1532,12 +1552,34 @@ fn run_view(
                     for px in bgra.as_chunks_mut::<4>().0 {
                         px.swap(0, 2);
                     }
-                    let Some(frame) = image::RgbaImage::from_raw(w, h, bgra) else { continue };
+                    let Some(frame) = image::RgbaImage::from_raw(w, h, bgra) else {
+                        continue;
+                    };
                     shown.push(OverlayPicture {
                         at,
                         size: [w.min(u32::from(u16::MAX)) as u16, h.min(u32::from(u16::MAX)) as u16],
                         image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
                     });
+                }
+                // #468: each overlay's leader over it.
+                for l in scene.overlays.iter().filter_map(|o| o.leader.as_ref()) {
+                    shown.extend(
+                        deep_canvas_scene3d::overlay::leader_picture(l).and_then(|p| {
+                            let mut bgra = p.rgba;
+                            for px in bgra.as_chunks_mut::<4>().0 {
+                                px.swap(0, 2);
+                            }
+                            let (w, h) = (u32::from(p.size[0]), u32::from(p.size[1]));
+                            let image = image::RgbaImage::from_raw(w, h, bgra)?;
+                            Some(OverlayPicture {
+                                at: p.at,
+                                size: p.size,
+                                image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(
+                                    image,
+                                )])),
+                            })
+                        }),
+                    );
                 }
                 let pictures = shown;
                 let mut p = win.paint.borrow_mut();
@@ -2169,6 +2211,7 @@ fn run_view(
             // frames for its host.
             if let Some(bytes) = drawn.bytes.as_mut() {
                 pictures.frames_over(&composed, &anchored, bytes, size)?;
+                leaders_over(&anchored, bytes, size);
                 views::composite(&shown, drawn_k, bytes, size);
                 if let Some(s) = sub.as_mut() {
                     s.keep(bytes)?;
@@ -2238,8 +2281,15 @@ fn run_view(
             if args.overlays {
                 let rows: Vec<Value> = anchored
                     .iter()
-                    .map(|o| json!({"id": o.id, "at": o.origin}))
-                    .chain(callouts)
+                    .map(|o| {
+                        let mut row = json!({"id": o.id, "at": o.origin});
+                        // #468: where its leader ends, or null while it hides.
+                        if let Some(l) = &o.leader {
+                            let to = l.points.as_ref().and_then(|p| p.last());
+                            row["leader"] = to.map_or(Value::Null, |to| json!({"to": to}));
+                        }
+                        row
+                    })
                     .collect();
                 frame.insert("overlays".into(), Value::Array(rows));
             }

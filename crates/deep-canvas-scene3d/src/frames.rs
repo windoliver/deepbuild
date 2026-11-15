@@ -376,10 +376,8 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     // A light's place and power (#421) and another module's items (#380) move with fields
     // this path doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
-        // #468: a depth of field's focus, a lens's field of view and a callout's leader follow
-        // the whole scene.
+        // #468: a depth of field's focus and a lens's field of view follow the whole scene.
         || scene.dof.is_some()
-        || !scene.callouts.is_empty()
         || scene.optics.focal_length.is_some()
         || scene.exposure.is_some()
         || !scene.lights.is_empty()

@@ -244,15 +244,25 @@ pub(crate) fn framed(
     json!(call.iter().chain(viewer.iter()).collect::<Vec<_>>())
 }
 
-/// The lines of `doc` whose points read a logic array.
+/// The lines of `doc` whose points read a logic array, or (#468) name an item's anchor.
 fn logic_lines(doc: &Value) -> impl Iterator<Item = &String> {
+    let anchored = |i: &Value| {
+        (i.pointer("/params/points")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten())
+        .any(|p| p.as_str().is_some_and(|h| h.contains('#')))
+    };
     (doc["items"].as_object().into_iter().flatten())
-        .filter(|(_, i)| i["kind"] == "mark.line@1" && i.pointer("/params/points/array").is_some())
+        .filter(move |(_, i)| {
+            i["kind"] == "mark.line@1"
+                && (i.pointer("/params/points/array").is_some() || anchored(i))
+        })
         .map(|(id, _)| id)
 }
 
-/// Each line of `scene` whose points read a logic array: its segments as the frame uploaded
-/// them, in world m, a hidden one null.
+/// Each line of `scene` whose points read a logic array, or name an item's anchor: its segments
+/// as the frame uploaded them, in world m, a hidden one null.
 pub(crate) fn segments(scene: &Scene, doc: &Value) -> Map<String, Value> {
     let ids: Vec<&String> = logic_lines(doc).collect();
     (scene.layers.iter().flat_map(|l| &l.lines))

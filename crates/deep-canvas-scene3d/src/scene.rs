@@ -489,6 +489,19 @@ pub struct Overlay {
     pub layer: String,
     pub origin: Option<[f64; 2]>,
     pub shapes: Vec<Shape2>,
+    /// #468: its leader to the part it names, when it has one.
+    pub leader: Option<Leader>,
+}
+
+/// An overlay's leader at t (#468; Overlay: `leader`): its line from the overlay's side nearest its
+/// target, less the gap, to the target's anchor projected through the camera at t, in frame px,
+/// `None` while the overlay hides; its width in px, its role's color and whether it ends in a dot.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Leader {
+    pub points: Option<Vec<[f64; 2]>>,
+    pub width: f64,
+    pub color: [u8; 3],
+    pub dot: bool,
 }
 
 /// How the depth target is laid out: reversed Z with an infinite far plane (the design's), or
@@ -789,18 +802,6 @@ pub struct MotionSolid {
     pub meshes: Option<(Arc<crate::geom::Mesh>, Arc<crate::geom::Mesh>)>,
 }
 
-/// An overlay anchored to the frame's edge or corner at t (#468; Overlay): whether it shows, and
-/// its leader from the label's nearest side, less the gap, to its target's anchor projected
-/// through the camera at t.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Callout {
-    pub id: String,
-    /// The label's centre in frame px.
-    pub at: [f64; 2],
-    pub shown: bool,
-    pub leader: Option<[[f64; 2]; 2]>,
-}
-
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -810,9 +811,6 @@ pub struct Scene {
     /// The 3D writer layers that draw something, in layer order.
     pub layers: Vec<Layer3>,
     pub overlays: Vec<Overlay>,
-    /// #468: each `overlay.text@1` anchored to the frame's edge or corner, with whether it shows
-    /// at t and its leader's ends in frame px.
-    pub callouts: Vec<Callout>,
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
     /// Every light, in layer and item order (#421): what shades the solids that name a material.
@@ -2361,10 +2359,11 @@ pub(crate) fn anchor_point(items: &Items<'_>, handle: &str) -> Option<Vec3> {
     let m = world(items, id);
     match anchor {
         None => Some(origin(&m)),
+        // The item's anchor `a` (`anchors: {a: {pos, rot}}` in its own space, #506's).
         Some(a) => {
             let local = items
                 .get(id)?
-                .pointer(&format!("/params/anchors/{a}"))
+                .pointer(&format!("/anchors/{a}/pos"))
                 .and_then(|v| vec3(Some(v)))?;
             Some(apply(&m, local))
         }
@@ -2534,7 +2533,12 @@ fn bound_hidden(map: &Map<String, Value>) -> Option<Map<String, Value>> {
         .values()
         .filter(|c| c.get("class").and_then(Value::as_str) == Some("view"))
         .filter(|c| c.get("default") == Some(&Value::Bool(false)))
-        .flat_map(|c| c.get("binds").and_then(Value::as_array).into_iter().flatten())
+        .flat_map(|c| {
+            c.get("binds")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+        })
         .filter_map(|b| b.as_str()?.strip_prefix("items/")?.strip_suffix("/visible"))
         .map(str::to_string)
         .collect();
@@ -3293,7 +3297,6 @@ pub(crate) fn evaluate_compiled(
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
     let mut readout_items: Vec<(String, Value)> = Vec::new();
-    let mut callout_items: Vec<(String, String, Value)> = Vec::new();
     // The document as builders read it (the curves they name), made once when one draws.
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
@@ -3793,13 +3796,6 @@ pub(crate) fn evaluate_compiled(
                 crate::inset::KIND | crate::views::KIND => {}
                 // #1183: an overlay whose `show` is false at t draws nothing.
                 "overlay.text@1" if params.get("show") == Some(&Value::Bool(false)) => {}
-                // #468: one anchored to the frame's edge or corner, or with a leader, is a callout.
-                "overlay.text@1"
-                    if params.get("anchor").is_some_and(Value::is_string)
-                        || params.get("leader").is_some_and(Value::is_object) =>
-                {
-                    callout_items.push((id.clone(), layer_id.to_string(), params.clone()))
-                }
                 "overlay.text@1" => readout_items.push((id.clone(), params.clone())),
                 "puff@1" => {
                     let m = world(&items, id);
@@ -4180,148 +4176,6 @@ pub(crate) fn evaluate_compiled(
         });
         top += quad[1] + 4.0;
     }
-    // #468: the callouts, each placed against the safe frame's edge or corner its anchor names.
-    let safe = map.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
-    let mut callouts = Vec::new();
-    for (id, layer_id, params) in &callout_items {
-        let path = format!("items/{id}/params");
-        let text = params.get("template").and_then(Value::as_str).unwrap_or("");
-        let size = num(params.get("size")).unwrap_or(13.0);
-        let (run_box, glyphs) = labels.run(text, Role::Body, size as f32);
-        let shaped_at = glyphs.first().map_or(size as f32, |g| g.size);
-        let quad = [
-            run_box[0] * size / f64::from(shaped_at),
-            run_box[1] * size / f64::from(shaped_at),
-        ];
-        let [w, h] = camera.size;
-        let frame = [safe, safe, w - safe, h - safe];
-        let anchor = params
-            .get("anchor")
-            .and_then(Value::as_str)
-            .unwrap_or("right");
-        let offset = xy(params.get("offset")).unwrap_or([0.0; 2]);
-        let (fx, fy) = match anchor {
-            "left" => (0.0, 0.5),
-            "right" => (1.0, 0.5),
-            "top" => (0.5, 0.0),
-            "bottom" => (0.5, 1.0),
-            "top_left" => (0.0, 0.0),
-            "top_right" => (1.0, 0.0),
-            "bottom_left" => (0.0, 1.0),
-            "bottom_right" => (1.0, 1.0),
-            _ => return refused("out_of_range", format!("{path}/anchor")),
-        };
-        // The label's box inside the safe frame, against the side its anchor names.
-        let centre = [
-            frame[0] + quad[0] / 2.0 + fx * (frame[2] - frame[0] - quad[0]) + offset[0],
-            frame[1] + quad[1] / 2.0 + fy * (frame[3] - frame[1] - quad[1]) + offset[1],
-        ];
-        let leader = params.get("leader").filter(|l| l.is_object());
-        let target = match leader.map(|l| l.get("to").and_then(Value::as_str)) {
-            None => None,
-            Some(Some(to)) => Some(anchor_point(&items, to).ok_or_else(|| Refused {
-                code: "ref_unresolved",
-                path: format!("{path}/leader/to"),
-            })?),
-            Some(None) => return refused("out_of_range", format!("{path}/leader/to")),
-        };
-        let at = target.and_then(|p| {
-            (!camera.perspective || camera.to_view(p)[2] > 0.0)
-                .then(|| camera.project(p))
-                .flatten()
-                .map(|q| [q[0], q[1]])
-        });
-        let inside = |p: [f64; 2]| {
-            p[0] >= frame[0] && p[0] <= frame[2] && p[1] >= frame[1] && p[1] <= frame[3]
-        };
-        let hides = match params.get("hide").and_then(Value::as_str) {
-            None | Some("off_frame") => target.is_some(),
-            Some("never") => false,
-            Some(_) => return refused("out_of_range", format!("{path}/hide")),
-        };
-        let shown = !hides || at.is_some_and(inside);
-        // From the label's side nearest the target, less the gap, to the target.
-        let segment = at.filter(|_| shown).map(|to| {
-            let gap = leader.and_then(|l| num(l.get("gap"))).unwrap_or(4.0);
-            let half = [quad[0] / 2.0 + gap, quad[1] / 2.0 + gap];
-            let d = [to[0] - centre[0], to[1] - centre[1]];
-            let from = if d[0].abs() * half[1] >= d[1].abs() * half[0] {
-                [centre[0] + half[0].copysign(d[0]), centre[1]]
-            } else {
-                [centre[0], centre[1] + half[1].copysign(d[1])]
-            };
-            [from, to]
-        });
-        callouts.push(Callout {
-            id: id.clone(),
-            at: centre,
-            shown,
-            leader: segment,
-        });
-        if !shown {
-            continue;
-        }
-        let depth = if camera.perspective {
-            2.0 * camera.near
-        } else {
-            camera.near + 0.01
-        };
-        let ink = look.role("ink").unwrap_or([255, 255, 255]);
-        readouts.push(Label {
-            id: id.clone(),
-            text: text.to_string(),
-            role: Role::Body,
-            glyphs,
-            bounds: run_box,
-            pos: camera.unproject(centre[0], centre[1], depth),
-            em: size,
-            quad,
-            world: false,
-            facing: Facing::Camera,
-            axes: [camera.right, camera.up],
-            color: look.role("stone").unwrap_or(ink),
-        });
-        if let (Some([from, to]), Some(l)) = (segment, leader) {
-            let width = num(l.get("width")).unwrap_or(1.5);
-            let color = match l.get("line").and_then(Value::as_str) {
-                None => ink,
-                Some(role) => look.role(role).ok_or_else(|| Refused {
-                    code: "ref_unresolved",
-                    path: format!("{path}/leader/line"),
-                })?,
-            };
-            let a = camera.unproject(from[0], from[1], depth);
-            let b = camera.unproject(to[0], to[1], depth);
-            let line = Line {
-                id: id.clone(),
-                segments: vec![Segment {
-                    a,
-                    b,
-                    wa: width,
-                    wb: width,
-                    hidden: false,
-                }],
-                world: false,
-                color,
-                edges: None,
-                over: true,
-                joined: false,
-                dash: [0.0; 2],
-                dash_world: false,
-                cap: Default::default(),
-                trail: None,
-                points: Vec::new(),
-            };
-            match layers.iter_mut().find(|l| &l.id == layer_id) {
-                Some(layer) => layer.lines.push(line),
-                None => layers.push(Layer3 {
-                    id: layer_id.clone(),
-                    lines: vec![line],
-                    ..Layer3::default()
-                }),
-            }
-        }
-    }
     // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
     // starts it over and places them all again.
     labels.begin();
@@ -4345,7 +4199,8 @@ pub(crate) fn evaluate_compiled(
 
     let mut overlays = Vec::new();
     for (layer, id) in overlay_items {
-        overlays.push(overlay(&items, &layer, &id, &camera, look)?);
+        let safe = map.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
+        overlays.push(overlay(&items, &layer, &id, (&camera, safe), look)?);
     }
     // Puffs past the document's cap are refused, never dropped (#422).
     let cap = map
@@ -4379,7 +4234,6 @@ pub(crate) fn evaluate_compiled(
         motion: None,
         velocity: None,
         readouts,
-        callouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
         cutaway: None,
@@ -4649,12 +4503,16 @@ fn puff(
     })
 }
 
-/// An `overlay.frame@1`: its frame's shapes, placed at its anchor's projection plus its offset.
+/// An `overlay.frame@1`: its frame's shapes, placed at its anchor's projection plus its offset, or
+/// (#468) against the safe frame's edge or corner its anchor names (`n`, `e`, `ne`, …), `margin`
+/// (the safe inset by default) in from it; with a `leader`, its line to the part it names, the
+/// overlay and its leader hiding while that part projects outside the safe frame
+/// (`hide: off_frame`, the default).
 fn overlay(
     items: &Items<'_>,
     layer: &str,
     id: &str,
-    camera: &Camera,
+    (camera, safe): (&Camera, f64),
     look: &Look3,
 ) -> Result<Overlay, Refused> {
     let path = format!("items/{id}/params");
@@ -4662,19 +4520,123 @@ fn overlay(
     let Some(frame) = params.get("frame").and_then(Value::as_str) else {
         return refused("out_of_range", format!("{path}/frame"));
     };
-    let anchor = params.get("anchor");
-    let Some(target) = anchor.and_then(|a| a.get("item")).and_then(Value::as_str) else {
-        return refused("out_of_range", format!("{path}/anchor"));
-    };
-    if !items.contains_key(target) || !items.contains_key(frame) {
-        return refused("ref_unresolved", format!("{path}/anchor"));
+    if !items.contains_key(frame) {
+        return refused("ref_unresolved", format!("{path}/frame"));
     }
-    let local_point = vec3(anchor.and_then(|a| a.get("point"))).unwrap_or([0.0; 3]);
-    let point = apply(&world(items, target), local_point);
+    let size = |k: usize| {
+        items[frame]["params"]
+            .get("box")
+            .and_then(|b| num(b.get(k)))
+            .unwrap_or(0.0)
+    };
+    let (fw, fh) = (size(2), size(3));
     let offset = xy(params.get("offset")).unwrap_or([0.0; 2]);
-    let origin = camera
-        .project(point)
-        .map(|p| [p[0] + offset[0], p[1] + offset[1]]);
+    let anchor = params.get("anchor");
+    let mut origin = match anchor {
+        Some(Value::String(edge)) => {
+            if !["n", "e", "s", "w", "ne", "nw", "se", "sw"].contains(&edge.as_str()) {
+                return refused("out_of_range", format!("{path}/anchor"));
+            }
+            let margin = num(params.get("margin")).unwrap_or(safe);
+            let [w, h] = camera.size;
+            let along = |near: char, far: char, side: f64, own: f64| {
+                if edge.contains(near) {
+                    margin
+                } else if edge.contains(far) {
+                    side - margin - own
+                } else {
+                    (side - own) / 2.0
+                }
+            };
+            Some([
+                along('w', 'e', w, fw) + offset[0],
+                along('n', 's', h, fh) + offset[1],
+            ])
+        }
+        _ => {
+            let Some(target) = anchor.and_then(|a| a.get("item")).and_then(Value::as_str) else {
+                return refused("out_of_range", format!("{path}/anchor"));
+            };
+            if !items.contains_key(target) {
+                return refused("ref_unresolved", format!("{path}/anchor"));
+            }
+            let local_point = vec3(anchor.and_then(|a| a.get("point"))).unwrap_or([0.0; 3]);
+            let point = apply(&world(items, target), local_point);
+            camera
+                .project(point)
+                .map(|p| [p[0] + offset[0], p[1] + offset[1]])
+        }
+    };
+    let leader = match params.get("leader").filter(|l| !l.is_null()) {
+        None => None,
+        Some(l) => {
+            let at = |k: &str| format!("{path}/leader/{k}");
+            let to = l.get("to").and_then(Value::as_str).ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: at("to"),
+            })?;
+            let p = anchor_point(items, to).ok_or_else(|| Refused {
+                code: "ref_unresolved",
+                path: at("to"),
+            })?;
+            let end = (!camera.perspective || camera.to_view(p)[2] > 0.0)
+                .then(|| camera.project(p))
+                .flatten()
+                .map(|q| [q[0], q[1]]);
+            let [w, h] = camera.size;
+            let inside = end.is_some_and(|q| {
+                q[0] >= safe && q[0] <= w - safe && q[1] >= safe && q[1] <= h - safe
+            });
+            let hides = match params.get("hide").and_then(Value::as_str) {
+                None | Some("off_frame") => true,
+                Some("never") => false,
+                Some(_) => return refused("out_of_range", format!("{path}/hide")),
+            };
+            if hides && !inside {
+                origin = None;
+            }
+            let dot = match l.get("end").and_then(Value::as_str) {
+                None | Some("dot") => true,
+                Some("none") => false,
+                Some(_) => return refused("out_of_range", at("end")),
+            };
+            let elbow = match l.get("elbow").and_then(Value::as_str) {
+                None | Some("horizontal") => true,
+                Some("none") => false,
+                Some(_) => return refused("out_of_range", at("elbow")),
+            };
+            let role = l.get("line").and_then(Value::as_str).unwrap_or("ink");
+            let color = look.role(role).ok_or_else(|| Refused {
+                code: "ref_unresolved",
+                path: at("line"),
+            })?;
+            let gap = num(l.get("gap")).unwrap_or(4.0);
+            // From the overlay's side nearest the target, less the gap; with `elbow: horizontal`
+            // it leaves the label level and turns once toward the part.
+            let points = origin.zip(end).map(|(o, to)| {
+                let c = [o[0] + fw / 2.0, o[1] + fh / 2.0];
+                let d = [to[0] - c[0], to[1] - c[1]];
+                let half = [fw / 2.0 + gap, fh / 2.0 + gap];
+                if elbow || d[0].abs() * half[1] >= d[1].abs() * half[0] {
+                    let from = [c[0] + half[0].copysign(d[0]), c[1]];
+                    let knee = [from[0] + (12.0f64).copysign(d[0]), c[1]];
+                    if elbow {
+                        vec![from, knee, to]
+                    } else {
+                        vec![from, to]
+                    }
+                } else {
+                    vec![[c[0], c[1] + half[1].copysign(d[1])], to]
+                }
+            });
+            Some(Leader {
+                points,
+                width: num(l.get("width")).unwrap_or(1.5),
+                color,
+                dot,
+            })
+        }
+    };
     let frame_box = xy(items[frame]["params"]
         .get("box")
         .and_then(|b| {
@@ -4724,6 +4686,7 @@ fn overlay(
         layer: layer.to_string(),
         origin,
         shapes,
+        leader,
     })
 }
 
