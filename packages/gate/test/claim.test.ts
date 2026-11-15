@@ -116,4 +116,18 @@ describe('claimVerdict (#30)', () => {
     expect(reading.outcome).toBe('INCONCLUSIVE');
     expect(said(reading)).toMatch(/a reading, not a timing: the change side ran on mac-2/);
   });
+  // A receipt line never shows a weaker proof as a stronger one (#1861): a clean exit no test tool counted is a static check.
+  it('a check whose runs counted no test tool\'s tests reads static_check; one a test tool\'s report counted, test_run', () => {
+    const R2 = 'req:30#R2';
+    const v = claimVerdict({
+      ...claimOf({ runs: [] }),
+      requirements: [{ req: REQ, depth: 'unit', oracle: 'code', on_base: 'passes' }, { req: R2, depth: 'unit', oracle: 'code', on_base: 'passes' }],
+      checks: [
+        { check: 'types', command: 'tsc --noEmit', source: 'spec', covers: [REQ], runs: [recorded('passed', { testsRun: 1, tested: false })] },
+        { check: 'cart', command: 'node_modules/.bin/vitest run', source: 'spec', covers: [R2], runs: [recorded('passed', { tested: true })] },
+      ],
+    });
+    expect(v.outcome).toBe('PASS');
+    expect(v.requirements.map((r) => [r.req, r.proof])).toEqual([[REQ, 'static_check'], [R2, 'test_run']]);
+  });
 });

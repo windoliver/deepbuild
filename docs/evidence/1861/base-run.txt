@@ -1,0 +1,28 @@
+
+ RUN  v5.0.5 <REPO>
+
+ ❯ tests/acceptance/1861/proof-label.test.ts (2 tests | 1 failed) 41960ms
+   ❯ #1861 a check that counts no test tool's tests is labelled static_check, one that does test_run (2)
+     × AC1 #1861.0f1b7e41 R1, covered only by tsc --noEmit over a clean file, passes and its row reads proof static_check 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1861/proof-label.test.ts > #1861 a check that counts no test tool's tests is labelled static_check, one that does test_run > AC1 #1861.0f1b7e41 R1, covered only by tsc --noEmit over a clean file, passes and its row reads proof static_check
+Error: AC1 #1861.0f1b7e41 R1 is covered only by .deepbuild/checks/types.sh (tsc --noEmit, which counts no test tool's tests), so its row reads proof static_check, not "test_run": {"req":"req:sessionfe0332f59af7439f8284c94e864961a30#R1","outcome":"PASS","check":".deepbuild/checks/types.sh","depth":"unit","oracle":"code","runs":{"clean":1,"needed":1,"counted":["run:01M7F3WPHASGE1C2AMRWTM124F"]},"smallest":null,"points_to":null,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"proof":"test_run"}
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/1861/proof-label.test.ts:127:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  00:06:24
+   Duration  42.64s (tests 99%, transform 1%)
+

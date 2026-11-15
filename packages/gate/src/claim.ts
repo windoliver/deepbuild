@@ -15,6 +15,11 @@ export interface RecordedRun {
   run: string;
   outcome: RunOutcome;
   testsRun: number;
+  /**
+   * Whether a test tool's report counted its tests (#1861): false when its exit status was its one result, as a
+   * typecheck's is; absent from a kind that doesn't say.
+   */
+  tested?: boolean;
   failures: RecordedFailure[];
   evidence: string[];
   read: string[];
@@ -168,8 +173,11 @@ export function claimVerdict(given: ClaimedRuns, options: { plant?: VerdictPlant
     const mask = exitOnly ? null : maskIn(c.command) ?? c.runs.map((r) => r.mask).find((m): m is string => m !== null && maskIn(m) !== null) ?? null;
     // A run whose report showed a control passed, or none at all, can't record a failure: its check can't fail (#1099).
     const unrecorded = exitOnly ? undefined : c.runs.map((r) => r.mask).find((m): m is string => m?.startsWith("the report can't record a failure") ?? false);
+    // A check whose runs no test tool's report counted proves by a static check, never a test run (#1861; design: a
+    // lower proof is never shown as a higher one); one with a run a test tool counted, or of a kind that doesn't say, a test run.
+    const proof: Proof = c.proof ?? (c.runs.some((r) => r.tested === false) && !c.runs.some((r) => r.tested) ? 'static_check' : 'test_run');
     checks.push({
-      check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof: c.proof ?? 'test_run', covers: [...c.covers],
+      check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof, covers: [...c.covers],
       ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(c.needed !== undefined ? { runs: c.needed } : {}),
       ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : unrecorded ? { cant_fail: unrecorded } : {}),
       ...(c.contract ? { contract: c.contract } : {}),

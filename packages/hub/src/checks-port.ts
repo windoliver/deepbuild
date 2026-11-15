@@ -25,6 +25,8 @@ export interface CommandCheck {
 /** Full command evidence, not just the check.kind result: retries, seeds and clock movement remain observable. */
 export interface CommandRun extends CheckResult {
   run: string;
+  /** Whether a test tool's report counted the run's tests (#1861); the gate labels a check none of whose runs one counted a static check. */
+  tested?: boolean;
   exit: { code: number | null; signal: NodeJS.Signals | null; cause: 'exit' | 'deadline' | 'stop' | 'limit' } | null;
   output: { stdout: string; stderr: string; sha256: { stdout: string; stderr: string } };
   env: string[];
