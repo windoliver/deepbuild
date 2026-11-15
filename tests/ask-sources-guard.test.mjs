@@ -146,6 +146,8 @@ test('a subclass\'s construction, defaults and properties in a pattern, a loop a
     'let o = \'a.yes\'; ({ o } = { o: \'short.no\' }); void asks.raise({}, o, {});',
     'let u = \'a.yes\'; for (u of [\'loop.no\']) void asks.raise({}, u, {});',
     'declare let m: string | undefined; m ??= \'nn.no\'; void asks.raise({}, m, {});',
+    // A library's constructor with a parameter of the same name passes nothing to this one.
+    'class Er { constructor(readonly message: string) {} go() { return asks.raise({}, this.message, {}); } } void new Er(\'a.yes\'); void new Error(\'lib.no\');',
   ]);
   assert.equal(code, 1);
   assert.deepEqual(fails, [

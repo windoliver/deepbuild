@@ -225,7 +225,8 @@ function fromCallers(param, seen) {
     const signature = checker.getResolvedSignature(call);
     const declared = signature?.declaration;
     const member = signature?.parameters[i]?.name === param.name.text;
-    if (own ? declared !== fn && !(declared && !declared.body && member) : !member) continue;
+    // A constructor is filled by no interface, so only calls that reach it count; a library's own `new` passes nothing here.
+    if (ctor ? declared !== fn : own ? declared !== fn && !(declared && !declared.body && member) : !member) continue;
     out.push(...argument(call, call.arguments ?? [], i, seen));
   }
   // A class taken as a value is left to its type: its constructor's sources are read only from `new` and super calls.
