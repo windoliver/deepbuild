@@ -868,7 +868,7 @@ export class SessionState {
    */
   waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): { why: string; ended?: true } | undefined {
     const known = this.sessions.get(session);
-    if (known ? known.ended : this.options.transcripts().cursors.get(session)?.ended) return { why: `session ${session} has ended.`, ended: true };
+    if (known?.ended) return { why: `session ${session} has ended.`, ended: true };
     const agent = known ? { pid: known.pid, start: known.start, agent: known.agent } : this.options.transcripts().cursors.get(session)?.watch;
     if (!agent) return { why: `the hub knows no live session ${session} to bind it to.` };
     if (!parent || parent.pid !== agent.pid || parent.start !== agent.start) return { why: `it isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${parent ? `process ${parent.pid} started ${parent.start}` : 'gone'}.` };
