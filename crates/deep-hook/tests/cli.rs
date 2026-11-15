@@ -1194,6 +1194,61 @@ fn runners_fetched_and_written_programs_meet_the_floor_with_the_hub_away() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+#[test]
+fn a_call_naming_links_that_loop_is_ruled_by_what_matches_with_the_hub_away() {
+    // #2174: the shipped entries and no hub. A path through a link that names itself, or two that name each other,
+    // is read as written, where the reader once recursed until the watchdog denied the call or the stack ran out.
+    use std::os::unix::fs::symlink;
+    let home = fresh_home(format!("/tmp/dh2174-{}", std::process::id()).into());
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        include_str!("../default-rules.json"),
+    )
+    .unwrap();
+    let work = home.join("w");
+    std::fs::create_dir_all(&work).unwrap();
+    symlink("self", work.join("self")).unwrap();
+    symlink("b", work.join("a")).unwrap();
+    symlink("a", work.join("b")).unwrap();
+    let decide = |tool: &str, input: &str| {
+        let payload = format!(
+            r#"{{"session_id":"s2174","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_input":{input}}}"#,
+            json_string(&work.to_string_lossy()),
+        );
+        let start = std::time::Instant::now();
+        let mut child = hook(&home, "PreToolUse");
+        feed(&mut child, payload.as_bytes());
+        let stderr = stderr_of(&mut child);
+        let status = child.wait().unwrap();
+        (status, start.elapsed(), stderr)
+    };
+    let mut wrong = Vec::new();
+    for link in ["self", "a"] {
+        let path = json_string(&work.join(link).to_string_lossy());
+        for (tool, input, code) in [
+            ("Bash", format!(r#"{{"command":"ls {link}"}}"#), 0),
+            ("Read", format!(r#"{{"file_path":{path}}}"#), 0),
+            // The link is read, and so is the rest of its line.
+            (
+                "Bash",
+                format!(r#"{{"command":"ls {link}; pkill -f node"}}"#),
+                2,
+            ),
+        ] {
+            let (status, took, stderr) = decide(tool, &input);
+            eprintln!("{tool} {input}: {status} after {took:?}");
+            // Exit code 2 is also the watchdog's, for a call still unread after its 500 ms.
+            if status.code() != Some(code) || stderr.contains("couldn't read this call") {
+                wrong.push(format!(
+                    "{tool} {input}: {status} after {took:?}, where exit code {code} is its ruling: {stderr}"
+                ));
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&home);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
 /// `deep-hook clone <from> <to>`, its exit code and stderr.
 #[cfg(target_os = "linux")]
 fn clone_tree(from: &std::path::Path, to: &std::path::Path) -> (Option<i32>, String) {
