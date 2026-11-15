@@ -1,0 +1,91 @@
+{
+  "id": "explain.write_coordinates",
+  "version": "1.0",
+  "title": "Write coordinates",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: the vector's coordinates are written beside it.",
+  "inputs": {
+    "matrix": {
+      "type": "records",
+      "default": [
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "about": "the matrix applied, by rows"
+    },
+    "x": {
+      "type": "text",
+      "default": "x",
+      "about": "a warp's x as a formula of x and y"
+    },
+    "y": {
+      "type": "text",
+      "default": "y",
+      "about": "a warp's y as a formula of x and y"
+    },
+    "text": {
+      "type": "text",
+      "default": "",
+      "about": "a label's new text"
+    },
+    "vec": {
+      "type": "ID",
+      "default": "none",
+      "about": "the vector's arrow"
+    },
+    "coord": {
+      "type": "ID",
+      "default": "none",
+      "about": "the vector's coordinates"
+    },
+    "path": {
+      "type": "ID",
+      "default": "none",
+      "about": "the vector's path along its coordinates"
+    },
+    "label": {
+      "type": "ID",
+      "default": "none",
+      "about": "the vector's label"
+    },
+    "bend": {
+      "type": "ID",
+      "default": "none",
+      "about": "where a warp's progress u runs from 0 to 1"
+    },
+    "moving": {
+      "type": "ID",
+      "default": "none",
+      "about": "the moving plane's group, whose formulas a warp sets"
+    },
+    "g0": {
+      "type": "ID",
+      "default": "none",
+      "about": "where the first row is held at the cue's start"
+    },
+    "g1": {
+      "type": "ID",
+      "default": "none",
+      "about": "where the second row is held at the cue's start"
+    }
+  },
+  "steps": {
+    "show": {
+      "op": "cue",
+      "when": "i == 0 && coord != none",
+      "params": {
+        "on": "coord",
+        "from": {
+          "adjust/opacity": 0
+        }
+      }
+    }
+  }
+}

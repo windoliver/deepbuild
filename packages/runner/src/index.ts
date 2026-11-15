@@ -3,5 +3,5 @@
 // acceptance job all start through it, and it starts every process of theirs through the supervisor's host@1, in the platform sandbox.
 export { openRunner } from './runner.js';
 export type {
-  Agent, Blocked, JobInput, JobKind, JobRecord, JobSpec, JobState, McpServer, Plant, Runner, RunnerOptions, StopCause, WindowReport,
+  Agent, Blocked, EvaluationWork, JobInput, JobKind, JobRecord, JobSpec, JobState, McpServer, Plant, Runner, RunnerOptions, StopCause, WindowReport,
 } from './types.js';

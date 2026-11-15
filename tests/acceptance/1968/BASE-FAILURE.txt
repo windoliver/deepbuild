@@ -1,0 +1,104 @@
+# The base run of tests/acceptance/1968, at a12be6c8 ("Merge pull request #2525 ..."), Nov 14, 2026, on this Mac.
+#
+#   PATH=<rust 1.99.1>:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease \
+#     npx vitest run --root tests/acceptance/1968 --no-file-parallelism --testTimeout=600000      -> exit 1
+#   npx tsc --noEmit -p tests/acceptance/1968                                                     -> exit 0
+#
+# deep-show built once (cargo build --locked --bin deep-show, the default and full build set). All 5 tests fail, each at
+# its own assertion for missing behaviour; every judge passed its clean model and failed its planted wrong programs
+# first (README: Wrong programs):
+# - ac1-text-diff.test.ts (3): deep_show refuses the film, transition_kind at transitions/td/kind ("motion.compile
+#   can't evaluate this"): a transition between two items lands only as a match_morph. The play is read once per file
+#   and its failure given to the other two tests (18 ms and 3 ms, their judges' plants run first).
+# - ac2-budgets.test.ts (1): the still code item's count passed (the same two films read by hand at the base: ran 16,
+#   5, 5, 5, 5, 5 with it and 5 every frame without it); benchmarks/budgets.json has no task canvas-code-film.
+# - ac3-taste.test.ts (1): the code item was shown; deep_show refuses the moving diff's film (transition_kind); no
+#   file was written.
+# The lease script found no deep and ran the command unleased (its first line below).
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1968 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1968
+
+ ❯ ac3-taste.test.ts (1 test | 1 failed) 4530ms
+   ❯ AC3 #1968.84837e9c one taste call on the canvas's own screenshots and recording (1)
+     × AC3 #1968.84837e9c the code item with token roles and a highlight on lines 3 to 5, the moving diff and the terminal recording, and a recording of the diff moving and the recording playing, from the canvas's own frames, and the recorded taste call says they look right 2600ms
+ ❯ ac1-text-diff.test.ts (3 tests | 3 failed) 3625ms
+   ❯ AC1 #1968.4bf4e5fe a text_diff from a 3-line function to a 4-line one (3)
+     × AC1 #1968.4bf4e5fe moves the kept tokens of the last two lines down by exactly one line height, 20 u times the linear progress (10 u at 0.5 s, 20 u at 1 s), never sideways, while the first line's kept tokens stay 2358ms
+     × AC1 #1968.4bf4e5fe fades in only the inserted line's tokens and cross-fades the one changed argument, while every kept token stays drawn whole 18ms
+     × AC1 #1968.4bf4e5fe seeking to any time inside the window equals playing: every time read last to first answers the same diffs as read in order, bit for bit 3ms
+ ❯ ac2-budgets.test.ts (1 test | 1 failed) 3519ms
+   ❯ AC2 #1968.161c44a9 the code film's budgets: recorded for the budget window, the still code item counted on any machine (1)
+     × AC2 #1968.161c44a9 a still code item costs no step per frame, counted on any machine; the task canvas-code-film records the issue's four numbers for this criterion; and on a reference Mac at rest its judge passes them 2335ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-text-diff.test.ts > AC1 #1968.4bf4e5fe a text_diff from a 3-line function to a 4-line one > AC1 #1968.4bf4e5fe moves the kept tokens of the last two lines down by exactly one line height, 20 u times the linear progress (10 u at 0.5 s, 20 u at 1 s), never sideways, while the first line's kept tokens stay
+ FAIL  ac1-text-diff.test.ts > AC1 #1968.4bf4e5fe a text_diff from a 3-line function to a 4-line one > AC1 #1968.4bf4e5fe fades in only the inserted line's tokens and cross-fades the one changed argument, while every kept token stays drawn whole
+ FAIL  ac1-text-diff.test.ts > AC1 #1968.4bf4e5fe a text_diff from a 3-line function to a 4-line one > AC1 #1968.4bf4e5fe seeking to any time inside the window equals playing: every time read last to first answers the same diffs as read in order, bit for bit
+AssertionError: the moving diff, played is presented: [{"check":"document.validate","code":"transition_kind","severity":"error","ids":[],"path":"transitions/td/kind","actual":null,"what":"motion.compile can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../535/helpers.ts:255:93
+    253| /** A `deep_show` reply that presented its document: the message lists…
+    254| export function presented(reply: JsonObject, what: string): void {
+    255|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    256| }
+    257| /** `eval` at `t` flicks on the document's live session (#387), with a…
+ ❯ filmsAt helpers.ts:162:3
+ ❯ ac1-text-diff.test.ts:41:30
+ ❯ helpers.ts:46:40
+ ❯ ac1-text-diff.test.ts:59:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  ac2-budgets.test.ts > AC2 #1968.161c44a9 the code film's budgets: recorded for the budget window, the still code item counted on any machine > AC2 #1968.161c44a9 a still code item costs no step per frame, counted on any machine; the task canvas-code-film records the issue's four numbers for this criterion; and on a reference Mac at rest its judge passes them
+AssertionError: benchmarks/budgets.json records canvas-code-film for the budget window:
+  benchmarks/budgets.json has no task canvas-code-film: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "benchmarks/budgets.json has no task canvas-code-film",
++ ]
+
+ ❯ none ../535/helpers.ts:87:73
+     85| /** No failures; the message lists them. */
+     86| export function none(failures: readonly string[], what: string): void {
+     87|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     88| }
+     89| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac2-budgets.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  ac3-taste.test.ts > AC3 #1968.84837e9c one taste call on the canvas's own screenshots and recording > AC3 #1968.84837e9c the code item with token roles and a highlight on lines 3 to 5, the moving diff and the terminal recording, and a recording of the diff moving and the recording playing, from the canvas's own frames, and the recorded taste call says they look right
+AssertionError: the moving diff is presented: [{"check":"document.validate","code":"transition_kind","severity":"error","ids":[],"path":"transitions/td/kind","actual":null,"what":"motion.compile can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../535/helpers.ts:255:93
+    253| /** A `deep_show` reply that presented its document: the message lists…
+    254| export function presented(reply: JsonObject, what: string): void {
+    255|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    256| }
+    257| /** `eval` at `t` flicks on the document's live session (#387), with a…
+ ❯ ac3-taste.test.ts:57:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed (5)
+   Start at  15:20:00
+   Duration  12.20s (tests 98%, transform 1%, import 1%)
+

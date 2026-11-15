@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import type { ReplayPlan } from '@deepbuild/record';
 import { bubblewrap, seatbelt, type Grant, type SandboxBackend } from '@deepbuild/supervisor';
-import type { AgentResult, AgentRun, Grade, JudgeRequest, Launcher, Made } from './index.js';
+import type { AgentResult, AgentRun, EvalOptions, Grade, JudgeRequest, Launcher, Made } from './index.js';
 import { openAnswering } from './recording.js';
 
 /** One agent run may take this long, and never past the eval's deadline, before it is stopped and counted failed. */
@@ -27,22 +27,26 @@ const DRAIN_MS = 2_000;
  * sandbox the process started is bubblewrap, which stays until every process in the sandbox is gone; the sandbox's
  * helper writes the program's own exit on fd 3, and that ends it too.
  */
-export function runCli(argv: string[], prompt: string, cwd: string, env: Record<string, string>, deadline: number): Promise<unknown[]> {
+export function runCli(argv: string[], prompt: string, cwd: string, env: Record<string, string>, deadline: number, signal?: AbortSignal): Promise<unknown[]> {
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn(argv[0]!, argv.slice(1), { cwd, env, stdio: ['pipe', 'pipe', 'ignore', 'pipe'], detached: true });
     let out = '';
     const stop = (signal: NodeJS.Signals) => { try { process.kill(-child.pid!, signal); } catch { /* the group is gone */ } };
     let hard: NodeJS.Timeout | undefined;
     let drain: NodeJS.Timeout | undefined;
-    const timer = setTimeout(() => { stop('SIGTERM'); hard = setTimeout(() => stop('SIGKILL'), 5_000); }, Math.max(0, Math.min(RUN_MS, deadline - Date.now())));
+    const abort = () => { stop('SIGTERM'); hard ??= setTimeout(() => stop('SIGKILL'), 5_000); };
+    const timer = setTimeout(abort, Math.max(0, Math.min(RUN_MS, deadline - Date.now())));
+    signal?.addEventListener('abort', abort, { once: true });
     const done = () => {
+      signal?.removeEventListener('abort', abort);
       for (const t of [timer, hard, drain]) clearTimeout(t);
       child.stdout!.destroy();
       child.stdio[3]?.destroy();
       resolve(out.split('\n').flatMap((line) => { try { return [JSON.parse(line) as unknown]; } catch { return []; } }));
     };
     child.stdout!.on('data', (chunk: Buffer) => { out += chunk.toString('utf8'); });
-    child.on('error', (error) => { for (const t of [timer, hard, drain]) clearTimeout(t); reject(error); });
+    child.on('error', (error) => { signal?.removeEventListener('abort', abort); for (const t of [timer, hard, drain]) clearTimeout(t); reject(error); });
     const exited = () => { drain ??= setTimeout(done, DRAIN_MS); };
     // The helper's log, a JSON value a line, which can arrive in any pieces.
     let log = '';
@@ -133,7 +137,7 @@ function oauthOf(given: Record<string, string>): Record<string, unknown> | undef
  * the same server, which answers one that reaches the network from the recording or refuses it; every other command
  * runs in the sandbox. Its environment holds its PATH, its homes, its locale, its sign-in and its model endpoint.
  */
-async function replayRun(run: AgentRun, deadline: number): Promise<{ lines: unknown[]; calls: Made[] }> {
+async function replayRun(run: AgentRun, deadline: number, signal?: AbortSignal, execute?: EvalOptions['execute']): Promise<{ lines: unknown[]; calls: Made[] }> {
   const given = run.env;
   const model = modelEndpoint(given);
   const box = realpathSync(mkdtempSync(join(tmpdir(), 'dr-')));
@@ -172,8 +176,9 @@ async function replayRun(run: AgentRun, deadline: number): Promise<{ lines: unkn
       hosts: [`127.0.0.1:${answering.port}`, ...(model.local ? [model.target] : [])],
     };
     const argv = [cli, '-p', '--output-format', 'stream-json', '--verbose', '--model', run.model, '--permission-mode', 'acceptEdits', '--strict-mcp-config', '--mcp-config', mcp];
-    const launch = await sandbox().confine({ argv, cwd: run.cwd, env }, grant, `run:replay-${box.slice(-6)}`);
-    const lines = await runCli(launch.argv, run.prompt, launch.cwd, launch.env, deadline);
+    const launch = { argv, cwd: run.cwd, env };
+    const confined = execute ? launch : await sandbox().confine(launch, grant, `run:replay-${box.slice(-6)}`);
+    const lines = execute ? await execute(launch, grant, run.prompt, deadline) : await runCli(confined.argv, run.prompt, confined.cwd, confined.env, deadline, signal);
     return { lines, calls: answering.calls };
   } finally {
     await answering.close();
@@ -187,7 +192,7 @@ async function replayRun(run: AgentRun, deadline: number): Promise<{ lines: unkn
  * window from what their runs report, and before the first run from one short probe; a reading of another window
  * than the first, or none, leaves the window unread.
  */
-export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, deadlines: { work: number; judge: number }): Launcher {
+export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, deadlines: { work: number; judge: number }, signal?: AbortSignal, execute?: EvalOptions['execute'], readJob?: EvalOptions['read']): Launcher {
   const agent = cliOf(plan.models.agent);
   const judge = cliOf(plan.models.judge);
   if (!agent) throw Error(`no agent CLI runs ${plan.models.agent}: the eval runs claude-* models on Claude Code and gpt-* ones on Codex`);
@@ -227,13 +232,14 @@ export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, d
   };
   return {
     async work(run) {
-      const { lines, calls } = await replayRun(run, deadlines.work);
+      const { lines, calls } = await replayRun(run, deadlines.work, signal, execute);
       return { ...resultOf(agent, note(lines)), calls };
     },
     async judge(request: JudgeRequest): Promise<Grade[]> {
       const prompt = `${request.prompt}\n\n${request.outputs.map((o) => `=== Output ${o.label} ===\n${o.text}`).join('\n\n')}\n\n`
         + `Answer with one line of JSON and nothing after it: {"grades":[{"label":"<label>","score":<0 to 1>}]}, one entry per output.`;
-      const answer = resultOf(judge, await inEmpty((dir) => runCli([judge, ...read[judge](request.model)], prompt, dir, env, deadlines.judge)));
+      const answer = resultOf(judge, readJob ? await readJob(judge === 'claude' ? 'claude-code' : 'codex', request.model, prompt, deadlines.judge)
+        : await inEmpty((dir) => runCli([judge, ...read[judge](request.model)], prompt, dir, env, deadlines.judge, signal)));
       const lastLine = (answer.result ?? '').trim().split('\n').at(-1) ?? '';
       const parsed = JSON.parse(lastLine.slice(lastLine.indexOf('{'))) as unknown;
       const grades = isObj(parsed) && Array.isArray(parsed.grades) ? parsed.grades : [];
@@ -242,7 +248,8 @@ export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, d
     },
     async planUsed() {
       if (agent !== 'claude') return null;
-      if (!first && !probed) await inEmpty((dir) => runCli([agent, ...read[agent](plan.models.agent)], 'Reply with the single word ok.', dir, env, deadlines.work)).then(note).finally(() => { probed = true; });
+      if (!first && !probed) await (readJob ? readJob('claude-code', plan.models.agent, 'Reply with the single word ok.', deadlines.work)
+        : inEmpty((dir) => runCli([agent, ...read[agent](plan.models.agent)], 'Reply with the single word ok.', dir, env, deadlines.work, signal))).then(note).finally(() => { probed = true; });
       return last && first && last.resets === first.resets ? last.used : null;
     },
   };

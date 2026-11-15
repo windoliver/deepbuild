@@ -790,6 +790,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::Bool(b)) => *b,
             Some(_) => return None,
         };
+        // #223: a line's warps are counted from here, so its first frame reports what the check,
+        // which draws the document first, mapped for it.
+        deep_canvas_marks::warp::take_mapped();
+        deep_canvas_marks::warp::time_with(timing.then_some(raster::clock_ms as fn() -> f64));
         let (checked, vectors) = check(
             &doc,
             look.as_ref().map(|(l, _)| l),
