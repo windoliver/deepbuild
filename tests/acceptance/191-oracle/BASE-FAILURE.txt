@@ -1,0 +1,156 @@
+The #191 Oracle-lane suite run once at the base this worktree stands on, dc9b4315 (no implementation of #191), on
+macOS arm64 (Mac17,10), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/191-oracle --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`).
+
+5 of 5 tests fail, each because the surface is absent:
+- restitution, combine rule and angular limits: the base's Rapier passes upstream's assertion on our bake (the first half
+  of each test), and the wrong program can't be built: `--features test-backends` is no feature of the crate;
+- ccd: the base passes both upstream assertions, and `--planted swept_collision_off` is refused at startup (exit 2);
+- pair filter: the base fails upstream's assertion itself: a kinematic ball inside a static sensor writes no row,
+  since the base wrapper is on the engine's default pair filter (criterion 10's planted wrapper is today's program).
+
+The type-check, `npx tsc -p tests/acceptance/191-oracle/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/191-oracle
+
+ ❯ combine-rule-rapier.test.ts (1 test | 1 failed) 1085ms
+   ❯ #191.8c7c5edf #191.7542a335 #191.5e3fd235 upstream coefficient_combine_rule.rs, run on deep-physics (1)
+     × #191.8c7c5edf #191.7542a335 #191.5e3fd235 geometric_mean_combine: 0.25 against 1.0 combines 0.5 and 0.7 against 0.0 combines 0.0, and friction_average is rejected 303ms
+ ❯ ccd-rapier.test.ts (1 test | 1 failed) 1525ms
+   ❯ #191.e5696c9f upstream ccd_default_vs_fixed.rs, run on deep-physics (1)
+     × #191.e5696c9f default_ccd_vs_fixed_no_tunnel and bullet_still_hits_dynamic hold, and the wrapper with swept collision off is rejected 263ms
+ ❯ angular-limits-rapier.test.ts (1 test | 1 failed) 5430ms
+   ❯ #191.8c7c5edf #191.5e3fd235 upstream issue_499_angular_limits.rs, run on deep-physics (1)
+     × #191.8c7c5edf #191.5e3fd235 angular limits within, past and straddling half a turn are reached by a motor driving either way, and no_joint_limits is rejected 4169ms
+ ❯ restitution-rapier.test.ts (1 test | 1 failed) 2423ms
+   ❯ #191.8c7c5edf #191.5e3fd235 upstream issue_974_restitution.rs, run on deep-physics (1)
+     × #191.8c7c5edf #191.5e3fd235 restitution_rebound_matches_e_squared: for e in 0.3, 0.5, 0.8, 0.95 the rebound fraction is within 0.05 of e², and restitution_min is rejected 926ms
+ ❯ pair-filter-rapier.test.ts (1 test | 1 failed) 1919ms
+   ❯ #191.9d50a1a7 upstream test_new_bindings.py: kinematic–fixed pairs, run on deep-physics (1)
+     × #191.9d50a1a7 test_active_collision_types_enables_kinematic_fixed_contact: a kinematic ball inside a fixed cuboid is a pair after one step, and the default pair filter is rejected 308ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  angular-limits-rapier.test.ts > #191.8c7c5edf #191.5e3fd235 upstream issue_499_angular_limits.rs, run on deep-physics > #191.8c7c5edf #191.5e3fd235 angular limits within, past and straddling half a turn are reached by a motor driving either way, and no_joint_limits is rejected
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin ../191/helpers.ts:118:84
+    116|     built.set(b, entry);
+    117|   }
+    118|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    119|   return entry.bin;
+    120| }
+ ❯ physics ../191/helpers.ts:140:15
+ ❯ limitFailures angular-limits-rapier.test.ts:39:19
+ ❯ angular-limits-rapier.test.ts:50:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  ccd-rapier.test.ts > #191.e5696c9f upstream ccd_default_vs_fixed.rs, run on deep-physics > #191.e5696c9f default_ccd_vs_fixed_no_tunnel and bullet_still_hits_dynamic hold, and the wrapper with swept collision off is rejected
+AssertionError: deep-physics --planted swept_collision_off exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readReplies ../191/helpers.ts:131:103
+    129|
+    130| function readReplies(status: number | null, stdout: string, stderr: st…
+    131|   expect(status, `${what} exits 0; stdout: ${stdout.slice(0, 1000)}; s…
+       |                                                                                                       ^
+    132|   const lines = stdout.split('\n').filter((l) => l !== '');
+    133|   expect(lines.length, `${what}: one reply per call; stdout: ${stdout.…
+ ❯ physics ../191/helpers.ts:146:10
+ ❯ ccdFailures ccd-rapier.test.ts:32:26
+ ❯ ccd-rapier.test.ts:49:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  combine-rule-rapier.test.ts > #191.8c7c5edf #191.7542a335 #191.5e3fd235 upstream coefficient_combine_rule.rs, run on deep-physics > #191.8c7c5edf #191.7542a335 #191.5e3fd235 geometric_mean_combine: 0.25 against 1.0 combines 0.5 and 0.7 against 0.0 combines 0.0, and friction_average is rejected
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin ../191/helpers.ts:118:84
+    116|     built.set(b, entry);
+    117|   }
+    118|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    119|   return entry.bin;
+    120| }
+ ❯ physics ../191/helpers.ts:140:15
+ ❯ combineFailures combine-rule-rapier.test.ts:32:24
+ ❯ combine-rule-rapier.test.ts:52:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  pair-filter-rapier.test.ts > #191.9d50a1a7 upstream test_new_bindings.py: kinematic–fixed pairs, run on deep-physics > #191.9d50a1a7 test_active_collision_types_enables_kinematic_fixed_contact: a kinematic ball inside a fixed cuboid is a pair after one step, and the default pair filter is rejected
+AssertionError: rapier3d:
+  no sensor_enter between ground and kin at step 1: none: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "no sensor_enter between ground and kin at step 1: none",
++ ]
+
+ ❯ none ../191/helpers.ts:73:73
+     71| /** No failures; the message lists them. */
+     72| export function none(failures: readonly string[], what: string): void {
+     73|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     74| }
+     75| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ pair-filter-rapier.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  restitution-rapier.test.ts > #191.8c7c5edf #191.5e3fd235 upstream issue_974_restitution.rs, run on deep-physics > #191.8c7c5edf #191.5e3fd235 restitution_rebound_matches_e_squared: for e in 0.3, 0.5, 0.8, 0.95 the rebound fraction is within 0.05 of e², and restitution_min is rejected
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin ../191/helpers.ts:118:84
+    116|     built.set(b, entry);
+    117|   }
+    118|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    119|   return entry.bin;
+    120| }
+ ❯ physics ../191/helpers.ts:140:15
+ ❯ reboundFailures restitution-rapier.test.ts:30:19
+ ❯ restitution-rapier.test.ts:44:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  5 failed (5)
+   Start at  11:58:05
+   Duration  13.53s (tests 97%, transform 1%, import 1%)
+

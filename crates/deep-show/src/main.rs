@@ -947,6 +947,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         _ => {}
     }
+    if let Some(t) = kit::trial::parse_call(name, c) {
+        return Some(Call::Trial(Box::new(t)));
+    }
     if let Some(r) = ring::parse_call(name, c) {
         return Some(Call::Ring(Box::new(r)));
     }
@@ -2027,6 +2030,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-public-renamed",
     feature = "test-sim-b-false-bit",
     feature = "test-sim-b-off",
+    feature = "test-sim-b-plus-one",
     feature = "test-sim-c",
     feature = "test-sim-a-1-0-1",
     feature = "test-sim-b-1-0-1",
@@ -2488,6 +2492,10 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             let mut parts = kit.clone();
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
+            }
+            // #191: physics@1's behavior part, its fixtures held by the interface's crate.
+            if interface == deep_canvas_physics::module::INTERFACE {
+                parts.push("behavior".to_string());
             }
             // #418, #399, #421: look@1's, data@1's, graph@1's, vector@1's and scene3d@1's
             // references are the shipped modules, whichever a test build holds.
