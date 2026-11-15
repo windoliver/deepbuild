@@ -1,0 +1,22 @@
+{
+ "criterion": "#223.85ce0afe",
+ "by": "you",
+ "who": "Claude, delegated by the owner in the session (\"validate for me\")",
+ "when": "2026-11-14T20:43:19Z",
+ "screenshots": [
+  "56811ee346d1d17b07d28b5f0726eee9978534131491825c144c89439540d4fe",
+  "cc2109a12cc5bc29d68a2f0adc7fbfe6f8dd4c81dfcfcefdfb4530a1bae27b96",
+  "4b5576688c9f679a9b5d4708739e3f34106ee0b2ad8c3ed89d17883853ee7c94"
+ ],
+ "named": {
+  "grid-z-squared": "56811ee346d1d17b07d28b5f0726eee9978534131491825c144c89439540d4fe",
+  "homotopy-line": "cc2109a12cc5bc29d68a2f0adc7fbfe6f8dd4c81dfcfcefdfb4530a1bae27b96",
+  "arrow-shear": "4b5576688c9f679a9b5d4708739e3f34106ee0b2ad8c3ed89d17883853ee7c94",
+  "homotopy-mix": "3beb4785613a8f39bf58f18b43be6f1f2f4b96abbeeb37763c871e4d408d661f"
+ },
+ "recordings": [
+  "3beb4785613a8f39bf58f18b43be6f1f2f4b96abbeeb37763c871e4d408d661f"
+ ],
+ "call": "looks_right",
+ "note": "Checked by pixel against each formula before the call. Grid: all 2,406 sampled points of z²'s image of the 21 x 21 grid inked within 2 px, nothing drawn farther than 3 px off it, the lens's corners at 1, -1 and ±2i; an earlier set was wrong (the two axis lines, folded by z², drew nothing) and this set is after the fix. Homotopy line: all 301 sampled points of y = 1.5u sin(2x - 6u) at u = 0.75 inked, nothing stray, the stroke 3.98-4.01 px across. Arrow: the shaft on the sheared line (300, 400)-(500, 200), nothing left on the unsheared line, the head at the sheared end pointing along it. Recording: 30 frames, a flat 4 px line at mix 0 growing every frame to the full wave. The owner may overturn this call."
+}

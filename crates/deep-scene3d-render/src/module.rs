@@ -1,7 +1,7 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, history, local, lock, read_texture, texture2d, After, Planted, Post,
+    ao, clouds, cull, history, inset, local, lock, read_texture, texture2d, After, Planted, Post,
     Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS, MSAA,
     OUTLINE_PASS, OUTPUT_PASS, PYRAMID_NS_PER_PX, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS,
     WATER_PASS,
@@ -12,7 +12,99 @@ use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+
+/// What one frame's preparation did (Render worker; Object; Dirty classes).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Counts {
+    /// Each batch encoded this frame, with every item it draws.
+    pub encoded: Vec<(String, Vec<String>)>,
+    /// Batches replayed from an earlier encoding.
+    pub replayed: u32,
+    pub instances_written: u32,
+    /// #1921: per instancer, the element IDs whose records this frame wrote to the GPU.
+    pub element_uploads: BTreeMap<String, Vec<u32>>,
+    /// #537: per line, its segments (by place) whose records this frame wrote to the GPU.
+    pub segment_uploads: BTreeMap<String, Vec<u32>>,
+    /// Compute culls run this frame: one per batch and view that changed (#484).
+    pub culls: u32,
+    /// Whether this frame built the camera's depth pyramid (#1637).
+    pub pyramid: bool,
+    /// Indexed indirect draws this frame, one per batch and view drawn (#484).
+    pub indirect_draws: u32,
+    /// Elements the CPU tested for a view this frame: only ever the reference's (#484).
+    pub cpu_culled: u32,
+    /// Counts read back to the CPU this frame: only ever the planted program's (#484).
+    pub counts_read_back: u32,
+    /// Each indirect draw this frame: its instancer, its view and its batch (#484).
+    pub indirect: Vec<(String, String, String)>,
+    pub meshes_built: u32,
+    /// The lights the light policy left out of this frame's view, by ID (#421).
+    pub lights_left_out: Vec<String>,
+    /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
+    pub shadows_dropped: Vec<String>,
+    /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
+    /// their material's own values, and a caller refuses the frame (#429).
+    pub operators_refused: Vec<(String, String)>,
+    /// Each material operator whose light response returned a negative or non-finite value
+    /// this frame, with the time it drew at, once per operator and time (#485:
+    /// `light_response.range`).
+    pub light_response_range: Vec<(String, f64)>,
+    /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
+    pub cascades_drawn: Vec<u32>,
+    /// How many environment cubes the renderer has prefiltered (#422).
+    pub env_builds: u32,
+    /// This frame's cascade split distances along the view axis, from the near plane to the
+    /// last cascade's far end (#422).
+    pub cascade_splits: Vec<f64>,
+    /// The fragments this frame's per-pixel items wrote, and whether they ran out of room at
+    /// the class's cap, so they drew sorted (#424: `fragments_capped`).
+    pub fragments: u64,
+    pub fragments_capped: bool,
+    /// Each shadow map the key sun draws from this frame: its key and its texel in m (#424).
+    pub shadow_maps: Vec<(u64, f64, [f64; 16])>,
+    /// Each shadowed local light's map this frame (#446).
+    pub local_maps: Vec<local::Report>,
+    /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
+    pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
+    /// #538: per instancer fed by logic and per plate with overlays, the CPU time in ms from the
+    /// start of writing this frame's changed slot records (or overlay cells) to the return of the
+    /// queue's write of them: a proof reading of the upload's cost.
+    pub upload_ms: BTreeMap<String, f64>,
+}
+
+/// What a frame hands the passes another render module adds between scene3d's geometry and its
+/// output (issue #380: the effects chain and bloom): the 3D targets, the camera, and the key
+/// light's shadow map when that module asked for it.
+pub struct PostFrame<'a> {
+    pub size: [u32; 2],
+    pub linear: &'a wgpu::TextureView,
+    pub depth: &'a wgpu::TextureView,
+    pub ids: &'a wgpu::TextureView,
+    pub shadow: Option<&'a wgpu::TextureView>,
+    /// World to clip, column-major (reversed Z, no far plane).
+    pub clip: [f64; 16],
+    pub eye: [f64; 3],
+    pub near: f64,
+    /// World to the shadow map's clip space, column-major (depth 0 nearest the light).
+    pub light_clip: Option<[f64; 16]>,
+    /// Each item's pick ID.
+    pub picks: &'a BTreeMap<String, u32>,
+    /// The core's velocity and emission targets this frame, where something reads them (#431).
+    pub core: Vec<(&'static str, &'a wgpu::TextureView)>,
+}
+
+/// What a frame hands the passes after the finish (issue #382: the status guard and the status
+/// colors): the finished frame, display-referred and sRGB-encoded in f32, and the slot they write.
+pub struct AfterFrame<'a> {
+    pub size: [u32; 2],
+    pub finished: &'a wgpu::TextureView,
+    /// What the guard writes: the slot, or below scale 1 the internal frame the upscale reads
+    /// (#386).
+    pub guarded: &'a wgpu::TextureView,
+    pub slot: &'a wgpu::TextureView,
+}
 
 /// What the GPU-layer view and the driver share: the next frame's scene and look, and the
 /// renderer, which the render module builds on the view's device.
@@ -117,6 +209,15 @@ impl RenderModule for Module3 {
             vec!["slot"],
             0.4,
             Determinism::LiveOnly,
+        ));
+        // #506: the unlit projected insets, under the outlines and labels.
+        passes.push(pass(
+            inset::UNLIT_PASS,
+            2,
+            vec!["depth", "ids"],
+            vec!["slot"],
+            0.05,
+            Determinism::SameMachine,
         ));
         passes.push(pass(
             OUTLINE_PASS,
@@ -283,6 +384,17 @@ impl Module3 {
                 reads: vec!["ids"],
                 writes: vec!["linear"],
                 resolution: Resolution::Half,
+                ns_per_px: 0.5,
+                determinism: Determinism::SameMachine,
+            },
+            // #506: each view inset's own view, drawn before the geometry reads it.
+            Pass {
+                name: inset::VIEW_PASS.into(),
+                place: "shadows",
+                order: 3,
+                reads: Vec::new(),
+                writes: Vec::new(),
+                resolution: Resolution::Full,
                 ns_per_px: 0.5,
                 determinism: Determinism::SameMachine,
             },

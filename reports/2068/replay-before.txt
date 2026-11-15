@@ -1,0 +1,35 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ↓ packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent
+ × packages/hub/test/prompt-items.test.ts > does not read the forge again for a spooled copy of a prompt whose live read is still pending 2413ms
+   → a duplicate of an in-flight prompt must join its read, not start another forge wait: expected [ { …(3) }, { …(3) } ] to have a length of 1 but got 2
+ ↓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/prompt-items.test.ts > does not read the forge again for a spooled copy of a prompt whose live read is still pending
+AssertionError: a duplicate of an in-flight prompt must join its read, not start another forge wait: expected [ { …(3) }, { …(3) } ] to have a length of 1 but got 2
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ packages/hub/test/prompt-items.test.ts:52:111
+     50|     expect(w.events.some((e) => e.id === later.id), 'the hook triggeri…
+     51|     expect(w.events.filter((e) => e.id === sent.id), 'live and spool r…
+     52|     expect(f.requests, 'a duplicate of an in-flight prompt must join i…
+       |                                                                                                               ^
+     53|   } finally { await w?.stop(); await f.close(); }
+     54| }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  12:28:25
+   Duration  2.67s (tests 97%, transform 2%, import 1%)
+

@@ -208,6 +208,9 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
     if kind == "mesh.asset@1" {
         return Some(mesh_asset());
     }
+    if kind == "mesh.sequence@1" {
+        return Some(mesh_sequence());
+    }
     let mut spec = base_scene3d(kind)?;
     spec.params.extend(extras(kind));
     if crate::builders::KINDS.contains(&kind) {
@@ -392,6 +395,44 @@ fn mesh_asset() -> Spec {
         ],
         reads: None,
         fixture: json!({"it": item("mesh.asset@1", json!({"sha256": a, "node": 0, "paint": {"fill": {"role": "accent"}}}))}),
+    }
+}
+
+/// `mesh.sequence@1 {frames: [sha256 (glTF)], frame_rate, start, interpolate}`: frame
+/// ⌊(t − start) × frame_rate⌋ of its per-frame meshes from the asset store (#419's form; #1729
+/// registers it, so a check keeps it).
+fn mesh_sequence() -> Spec {
+    let a = "a".repeat(64);
+    let b = "b".repeat(64);
+    Spec {
+        kind: "mesh.sequence@1",
+        module: "scene3d",
+        params: vec![
+            p(
+                "frames",
+                "[sha256]",
+                "",
+                Value::Null,
+                G,
+                json!([a]),
+                json!([b]),
+            ),
+            p("frame_rate", "f32", "", json!(24), G, json!(24), json!(30)),
+            p("start", "s | text", "", json!(0), G, json!(0), json!(1)),
+            p(
+                "interpolate",
+                "none | linear",
+                "",
+                json!("none"),
+                G,
+                json!("none"),
+                json!("linear"),
+            ),
+            shade(),
+            paint(),
+        ],
+        reads: None,
+        fixture: json!({"it": item("mesh.sequence@1", json!({"frames": [a], "paint": {"fill": {"role": "accent"}}}))}),
     }
 }
 
@@ -1986,7 +2027,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 26] = [
+pub const SCENE3D: [&str; 27] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -2013,6 +2054,7 @@ pub const SCENE3D: [&str; 26] = [
     "surface@1",
     "curve@1",
     "mesh.asset@1",
+    "mesh.sequence@1",
 ];
 
 /// scene3d's kinds' schemas.

@@ -1,0 +1,29 @@
+
+ RUN  v5.0.5 <job>/redraft/tests/acceptance/2075
+
+ × slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC1 starts once the fast check passes, with no new prompt, and the claim reaches a verdict 48992ms
+   → the slow check .deepbuild/checks/slow.sh has no run in the record: the claim claim:01M7E13B86K226BJVVCDY90AB9 is left pending (.deepbuild/checks/fast.sh ended passed at log 36; claim verdicts so far: []; runs of .deepbuild/checks/slow.sh: 0): expected [] to have a length of 1 but got +0
+ ✓ slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC2 starts none when the fast check fails after the hold, and the verdict is FAIL 32137ms
+ ✓ slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC3 starts none of the old snapshot when a new prompt comes before the fast check ends 32156ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC1 starts once the fast check passes, with no new prompt, and the claim reaches a verdict
+AssertionError: the slow check .deepbuild/checks/slow.sh has no run in the record: the claim claim:01M7E13B86K226BJVVCDY90AB9 is left pending (.deepbuild/checks/fast.sh ended passed at log 36; claim verdicts so far: []; runs of .deepbuild/checks/slow.sh: 0): expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ slow-checks.test.ts:21:125
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  13:58:27
+   Duration  113.50s (tests 100%)

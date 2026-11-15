@@ -38,6 +38,7 @@ mod sway;
 pub mod targets;
 mod ties;
 mod tint;
+pub mod inset;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -60,7 +61,7 @@ use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
-pub use crate::module::{draw_offscreen, Module3, Shared};
+pub use crate::module::{draw_offscreen, AfterFrame, Counts, Module3, PostFrame, Shared};
 pub use crate::planted::Planted;
 use crate::mesh::Mesh;
 use crate::set::Set;
@@ -84,7 +85,9 @@ const SHADER: &str = concat!(
     include_str!("ao_shade.wgsl"),
     include_str!("ambient.wgsl"),
     include_str!("tint.wgsl"),
-    include_str!("caps.wgsl")
+    include_str!("caps.wgsl"),
+    include_str!("inset_lit.wgsl"),
+    include_str!("inset.wgsl")
 );
 const MASK_DUMP: &str = include_str!("mask_dump.wgsl");
 /// The line that plants #425's per-band mask keys.
@@ -139,89 +142,9 @@ pub use deep_canvas_scene3d::module::{
     CASCADE_PASS, CULL_PASS, FLARE_PASS, MIRROR_PASS, WATER_PASS,
 };
 
-/// What one frame's preparation did (Render worker; Object; Dirty classes).
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Counts {
-    /// Each batch encoded this frame, with every item it draws.
-    pub encoded: Vec<(String, Vec<String>)>,
-    /// Batches replayed from an earlier encoding.
-    pub replayed: u32,
-    pub instances_written: u32,
-    /// #1921: per instancer, the element IDs whose records this frame wrote to the GPU.
-    pub element_uploads: BTreeMap<String, Vec<u32>>,
-    /// #537: per line, its segments (by place) whose records this frame wrote to the GPU.
-    pub segment_uploads: BTreeMap<String, Vec<u32>>,
-    /// Compute culls run this frame: one per batch and view that changed (#484).
-    pub culls: u32,
-    /// Whether this frame built the camera's depth pyramid (#1637).
-    pub pyramid: bool,
-    /// Indexed indirect draws this frame, one per batch and view drawn (#484).
-    pub indirect_draws: u32,
-    /// Elements the CPU tested for a view this frame: only ever the reference's (#484).
-    pub cpu_culled: u32,
-    /// Counts read back to the CPU this frame: only ever the planted program's (#484).
-    pub counts_read_back: u32,
-    /// Each indirect draw this frame: its instancer, its view and its batch (#484).
-    pub indirect: Vec<(String, String, String)>,
-    pub meshes_built: u32,
-    /// The lights the light policy left out of this frame's view, by ID (#421).
-    pub lights_left_out: Vec<String>,
-    /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
-    pub shadows_dropped: Vec<String>,
-    /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
-    /// their material's own values, and a caller refuses the frame (#429).
-    pub operators_refused: Vec<(String, String)>,
-    /// Each material operator whose light response returned a negative or non-finite value
-    /// this frame, with the time it drew at, once per operator and time (#485:
-    /// `light_response.range`).
-    pub light_response_range: Vec<(String, f64)>,
-    /// The key sun's cascades drawn this frame, by index; a cached one isn't (#422).
-    pub cascades_drawn: Vec<u32>,
-    /// How many environment cubes the renderer has prefiltered (#422).
-    pub env_builds: u32,
-    /// This frame's cascade split distances along the view axis, from the near plane to the
-    /// last cascade's far end (#422).
-    pub cascade_splits: Vec<f64>,
-    /// The fragments this frame's per-pixel items wrote, and whether they ran out of room at
-    /// the class's cap, so they drew sorted (#424: `fragments_capped`).
-    pub fragments: u64,
-    pub fragments_capped: bool,
-    /// Each shadow map the key sun draws from this frame: its key and its texel in m (#424).
-    pub shadow_maps: Vec<(u64, f64, [f64; 16])>,
-    /// Each shadowed local light's map this frame (#446).
-    pub local_maps: Vec<local::Report>,
-    /// #537: per terrain overlay (`<plate>/<layer>`), the runs of rows this frame wrote.
-    pub overlay_rows: BTreeMap<String, Vec<[u32; 2]>>,
-    /// #538: per instancer fed by logic and per plate with overlays, the CPU time in ms from the
-    /// start of writing this frame's changed slot records (or overlay cells) to the return of the
-    /// queue's write of them: a proof reading of the upload's cost.
-    pub upload_ms: BTreeMap<String, f64>,
-}
-
 /// The key light's direction, toward the light: what the solids are shaded by and what casts the
 /// shadow map.
 pub const LIGHT: [f64; 3] = [0.35, 0.8, 0.5];
-
-/// What a frame hands the passes another render module adds between scene3d's geometry and its
-/// output (issue #380: the effects chain and bloom): the 3D targets, the camera, and the key
-/// light's shadow map when that module asked for it.
-pub struct PostFrame<'a> {
-    pub size: [u32; 2],
-    pub linear: &'a wgpu::TextureView,
-    pub depth: &'a wgpu::TextureView,
-    pub ids: &'a wgpu::TextureView,
-    pub shadow: Option<&'a wgpu::TextureView>,
-    /// World to clip, column-major (reversed Z, no far plane).
-    pub clip: [f64; 16],
-    pub eye: [f64; 3],
-    pub near: f64,
-    /// World to the shadow map's clip space, column-major (depth 0 nearest the light).
-    pub light_clip: Option<[f64; 16]>,
-    /// Each item's pick ID.
-    pub picks: &'a BTreeMap<String, u32>,
-    /// The core's velocity and emission targets this frame, where something reads them (#431).
-    pub core: Vec<(&'static str, &'a wgpu::TextureView)>,
-}
 
 /// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
 pub type Profiler = Arc<Mutex<wgpu_profiler::GpuProfiler>>;
@@ -243,17 +166,6 @@ pub fn timed(
         }
         None => f(encoder, None),
     }
-}
-
-/// What a frame hands the passes after the finish (issue #382: the status guard and the status
-/// colors): the finished frame, display-referred and sRGB-encoded in f32, and the slot they write.
-pub struct AfterFrame<'a> {
-    pub size: [u32; 2],
-    pub finished: &'a wgpu::TextureView,
-    /// What the guard writes: the slot, or below scale 1 the internal frame the upscale reads
-    /// (#386).
-    pub guarded: &'a wgpu::TextureView,
-    pub slot: &'a wgpu::TextureView,
 }
 
 /// The outline pass's draws, ready to record into a target: thin lines and strokes, and the
@@ -1609,6 +1521,11 @@ pub struct Renderer {
     ies: local::Tables,
     /// The terrain overlays' cells (#537).
     tints: tint::Store,
+    /// The projected insets (#506), and the unlit ones' pass with the clip-to-world matrix it
+    /// reads, made when one draws.
+    insets: inset::Store,
+    unlit: Option<inset::Unlit>,
+    to_world: Option<[f32; 16]>,
     /// The light grid this frame, and the buffer its cells are in (#446).
     clusters: Option<clusters::Grid>,
     cluster_buffer: wgpu::Buffer,
@@ -1708,6 +1625,9 @@ pub struct Renderer {
     /// #465: the mirror's pass, made when a frame first has a mirror, and whether this frame has.
     mirrorer: Option<Box<mirror::Mirrorer>>,
     mirroring: bool,
+    /// #506: each view inset's own renderer, by the inset's ID, drawn whole before this view's
+    /// geometry, one level deep.
+    views: BTreeMap<String, Box<Renderer>>,
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     flarer: Option<Box<flare::Flarer>>,
     flaring: bool,
@@ -2060,7 +1980,7 @@ fn lights_bind(
     locals: &wgpu::TextureView,
     ies: &local::Tables,
     grid: &wgpu::Buffer,
-    tints: &wgpu::Buffer,
+    [tints, insets]: [&wgpu::Buffer; 2],
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -2090,6 +2010,7 @@ fn lights_bind(
             wgpu::BindingResource::TextureView(env.bg[0].as_ref().map_or(&env.stub, |c| &c.view)),
             wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
             tints.as_entire_binding(),
+            insets.as_entire_binding(),
         ],
     )
 }
@@ -2761,6 +2682,7 @@ impl Renderer {
                     count: None,
                 },
                 tint::entry(),
+                inset::entry(),
             ],
         });
         let oit = oit::Oit::new(d);
@@ -2816,6 +2738,7 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let tints = tint::Store::new(d);
+        let insets = inset::Store::new(d);
         let lights_bind = lights_bind(
             d,
             &lights_layout,
@@ -2827,7 +2750,7 @@ impl Renderer {
             &cascade_stub(d),
             &ies,
             &cluster_buffer,
-            &tints.buffer,
+            [&tints.buffer, &insets.buffer],
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -3116,6 +3039,9 @@ impl Renderer {
             shadow_mark,
             ies,
             tints,
+            insets,
+            unlit: None,
+            to_world: None,
             clusters: None,
             cluster_buffer,
             env,
@@ -3182,6 +3108,7 @@ impl Renderer {
             print_source: None,
             mirrorer: None,
             mirroring: false,
+            views: BTreeMap::new(),
             flarer: None,
             flaring: false,
             waterer: None,
@@ -3447,6 +3374,13 @@ impl Renderer {
     }
 
     /// Plants the upscale's wrong programs (#386).
+    /// #506's planted cores: the next frames draw with the backdrop copy and the mirror's
+    /// picture the frame before left, never their own.
+    pub fn keep_first(&mut self, backdrop: bool, mirror: bool) {
+        self.planted.keeps_backdrop = backdrop;
+        self.planted.keeps_mirror = mirror;
+    }
+
     pub fn plant_upscale(&mut self, planted: surface::Planted) {
         self.planted.upscale = planted;
     }
@@ -3765,7 +3699,7 @@ impl Renderer {
             locals,
             &self.ies,
             &self.cluster_buffer,
-            &self.tints.buffer,
+            [&self.tints.buffer, &self.insets.buffer],
         );
         self.lights_generation += 1;
     }
@@ -4346,6 +4280,7 @@ impl Renderer {
             self.ensure_rows(device);
         }
         self.prepare_frame(device, scene, look);
+        self.prepare_views(device, scene, look);
         // #166: view3d's `reflection` target, made while a frame asks for it.
         let internal = self.internal();
         self.reflection = match self.reflection.take() {
@@ -4434,7 +4369,8 @@ impl Renderer {
         }
         // #537: the terrain overlays' changed rows, before the batches bind the lights' group.
         let keep = self.planted.overlay_keeps_grid_on_seek;
-        if self.tints.upload(device, &scene.tints, keep) {
+        let remade = self.insets.ensure(device, &scene.projected, &scene.texels);
+        if self.tints.upload(device, &scene.tints, keep) | remade {
             self.rebind_lights(device);
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
@@ -4443,6 +4379,11 @@ impl Renderer {
         }
         self.sways.move_all(device, scene);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
+        self.insets
+            .write(device, &scene.projected, &scene.texels, &self.picks);
+        if self.insets.unlit && self.unlit.is_none() {
+            self.unlit = Some(inset::Unlit::new(&device.device));
+        }
         if !self.adjusts.is_empty() {
             deep_gpu::alloc::outside(|| {
                 device.queue.write_buffer(
@@ -4491,7 +4432,9 @@ impl Renderer {
                     .water
                     .as_ref()
                     .is_none_or(|w| w.material != m.material);
-                mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                if !self.planted.keeps_mirror {
+                    mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
+                }
                 true
             }
             None => {
@@ -4659,6 +4602,27 @@ impl Renderer {
     /// The core targets this frame reads (#431), made at the internal size, and their draws:
     /// velocity from the scene's evaluations at t ± s/2 (no travel where it has none), emission
     /// from every opaque solid's set.
+    /// #506: each view inset's view at t from its own camera, by a renderer of its own, so its
+    /// levels, light cut, backdrop copy and mirror are its own; its picture is what the window's
+    /// maps read this frame.
+    fn prepare_views(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.views
+            .retain(|id, _| scene.views.iter().any(|v| &v.id == id));
+        let mut pictures = BTreeMap::new();
+        for v in &scene.views {
+            let planted = self.planted;
+            let r = self
+                .views
+                .entry(v.id.clone())
+                .or_insert_with(|| Box::new(Renderer::new(device, planted)));
+            r.prepare(device, &deep_canvas_scene3d::views::seen(scene, v), look);
+            if let Some((_, view)) = r.linear() {
+                pictures.insert(deep_canvas_scene3d::inset::view_key(&v.id), view.clone());
+            }
+        }
+        self.maps.set_views(pictures);
+    }
+
     fn prepare_core(&mut self, device: &Device, scene: &Scene) {
         let Some((size, linear)) = self
             .targets
@@ -5408,6 +5372,8 @@ impl Renderer {
             rows[0][c] += jx * wc;
             rows[1][c] += jy * wc;
         }
+        // #506: what the unlit insets' pass unprojects the resolved depth through.
+        self.to_world = inset::inverse_columns(rows);
         self.maps.texels.clone_from(&scene.texels);
         self.filter_taps = look.filter_taps;
         let mut clip = [[0f32; 4]; 4];
@@ -7158,6 +7124,7 @@ impl Renderer {
             _ => None,
         };
         let copy_late = self.planted.backdrop_after_see_through;
+        let keeps_backdrop = self.planted.keeps_backdrop;
         let glass_copy = glass.as_ref().and(self.glass.clone());
         // The subsurface share and spread after the resolve (#481).
         let subsurface = self.subsurface.clone().map(|sub| {
@@ -7301,7 +7268,9 @@ impl Renderer {
                         );
                         return;
                     }
-                    copy.record(encoder, &linear_texture);
+                    if !keeps_backdrop {
+                        copy.record(encoder, &linear_texture);
+                    }
                     let late: Vec<LateDraw> = late.iter().map(|(d, _)| d.clone()).collect();
                     glass_pass(
                         encoder,
@@ -7354,6 +7323,15 @@ impl Renderer {
                 Box::new(move |encoder| ao.record(&profiler, encoder)),
             ));
         }
+        // #506: each view inset's view up to its output, before the geometry reads its picture.
+        for r in self.views.values_mut() {
+            jobs.extend(
+                r.jobs(device, slot, None, None)
+                    .into_iter()
+                    .take_while(|(name, _)| name != OUTPUT_PASS)
+                    .map(|(_, job)| (inset::VIEW_PASS.to_string(), job)),
+            );
+        }
         jobs.push((GEOMETRY_PASS.into(), geometry));
         // #465: the mirror's view and its picture over the mirror's parts, before the effects.
         if let (true, Some(m), Some(t)) = (
@@ -7363,7 +7341,8 @@ impl Renderer {
         ) {
             let (linear, ids) = (t.linear_view.clone(), t.ids_view.clone());
             let reflection = self.reflection.as_ref().map(|r| r.1.clone());
-            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler));
+            let keep = self.planted.keeps_mirror;
+            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler, keep));
         }
         // #166: the water over the bed the geometry left, under the mirror's picture.
         if let (true, Some(w), Some(t)) =
@@ -7581,6 +7560,26 @@ impl Renderer {
                     })
                 }),
             ));
+        }
+        // #506: the unlit projected insets, at display size after the upscale, under the
+        // outlines, labels and status colors.
+        if let (true, Some(u), Some(to_world), Some(t)) = (
+            self.insets.unlit,
+            self.unlit.as_ref(),
+            self.to_world,
+            self.targets.as_ref(),
+        ) {
+            let job = u.job(
+                &device.device,
+                &self.insets,
+                to_world,
+                t.size,
+                self.size,
+                &t.drawn.ids,
+                &t.drawn.depth,
+                slot,
+            );
+            jobs.push((inset::UNLIT_PASS.into(), job));
         }
         // Status outlines draw as the status colors, where the frame has them, over the labels.
         let (outlines, statuses) = match self.outline_draw(false).map(after) {

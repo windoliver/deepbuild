@@ -7,6 +7,9 @@ use crate::{ao, cull, flare, local, surface, water};
 pub struct Planted {
     /// Depth cleared to 1, compared less, with a finite far plane at 10 km.
     pub forward_z: bool,
+    /// #506: keep the preceding view's backdrop or mirror (see [`crate::Renderer::keep_first`]).
+    pub keeps_backdrop: bool,
+    pub keeps_mirror: bool,
     /// #2516: the main loop, uniform directions, or endpoints alone instead of visibility.
     pub ao: ao::Planted,
     /// #431: the emission target is the color target's excess over 1, never the emitted radiance.
