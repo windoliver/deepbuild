@@ -83,6 +83,20 @@ pub enum Planted {
     LoopChecksCachedByDoc,
     /// #1941: a stale patch is a conflict even when no ID it touches changed since its base.
     StaleFixNeverRebases,
+    /// #456: a render.review requirement passes when its model agrees and finds nothing.
+    ReviewPassesOnYes,
+    /// #456: the review's context also holds its session's name, messages and patch reasons.
+    ReviewSeesSession,
+    /// #456: an observation with no number, or one the ID view doesn't list, is kept.
+    KeepsBadObservation,
+    /// #456: the ID view's colors are salted by a value each process draws afresh.
+    IdViewVariesByRun,
+    /// #456: the taste ask is keyed by the reading's words, not the revision's hash.
+    AskKeyedByWords,
+    /// #456: a revision whose taste ask you answered is asked again.
+    AsksAgainAfterAnswer,
+    /// #456: the reading keeps every finding the model returns.
+    KeepsAllFindings,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.
@@ -1146,6 +1160,8 @@ pub struct Scenario {
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
     pub background: Vec<Job>,
+    /// #456: the stub model render.review asks, `{name, replies}`, each call the next reply.
+    pub review_model: Option<Value>,
 }
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
@@ -1226,6 +1242,8 @@ pub struct Hub<'a> {
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
     /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
     pub audit_asks: BTreeMap<String, Option<bool>>,
+    /// #456: render.review's model calls and the findings its readings kept.
+    pub review: crate::review::State,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1418,6 +1436,7 @@ impl<'a> Hub<'a> {
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
+            review: Default::default(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
