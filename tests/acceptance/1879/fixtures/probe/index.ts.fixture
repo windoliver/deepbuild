@@ -1,0 +1,4 @@
+// The one installed package of the #1879 acceptance tests (README, The package). A plain TypeScript package from a
+// folder, built by no agent, so the extension host runs it sandboxed: each load starts its own process, which the
+// record shows (process.starting, in a run folder of the hub's). It registers nothing and asks for nothing.
+export default function (_deep: unknown): void {}
