@@ -1454,6 +1454,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "migration_one_major_per_document" => Planted::MigrationOneMajor,
                 "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
+                "migration_renames_params_only" => Planted::MigrationRenamesParamsOnly,
+                "migration_rewrites_channel_targets_only" => {
+                    Planted::MigrationRewritesChannelTargetsOnly
+                }
+                "store_migrated_params_under_saved_major" => {
+                    Planted::StoreMigratedParamsUnderSavedMajor
+                }
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
