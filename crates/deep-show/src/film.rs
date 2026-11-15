@@ -470,7 +470,7 @@ fn morphs(program: &Program, doc: &Value, t: i64) -> (Map<String, Value>, Map<St
             paths.insert(c.target.owner.clone(), morph::value_of(&shape));
         }
     }
-    for b in &program.betweens {
+    for b in program.betweens.iter().filter(|b| b.diff.is_none()) {
         let side = |id: &str| {
             items
                 .get(id)

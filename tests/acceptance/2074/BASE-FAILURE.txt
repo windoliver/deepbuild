@@ -1,0 +1,340 @@
+#2074 base proof — finalized suite, not scratch
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Command (invoked ONCE): node scripts/affected.mjs tests/acceptance/2074/lane-failure.test.ts
+Frozen SHA-256: 4227c9f789037004a30ea41baf4b271ade01adf56bf24c8795d90c9c8d1b1d85
+
+Test block finished: 3 failed, 1 passed; all failures are named assertions.
+The base records INCONCLUSIVE, not no verdict. AC3 is a passing regression guard.
+Overall affected command still running; global lints remain pending under shared grants.
+No runner/lint was changed or skipped; no process was killed to release a grant.
+No WIDE or INCONCLUSIVE coordinator lines emitted as of handoff.
+Coordinator PID: 40864; wrapper PID: 40803.
+Raw coordinator log: /tmp/deep2074-affected.log
+Raw test log: /private/var/folders/nc/jmp2w2vj46gg_dcwvxj_4msh0000gn/T/deep-affected-B6J5Cn/vitest.log
+Redacted output follows. Synthetic claim/session IDs retained for correlation.
+
+=== coordinator ===
+parallel vitest: tests/acceptance/2074/lane-failure.test.ts
+
+=== completed Vitest test block ===
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2074/lane-failure.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+deep hub: claim:01M7E7MP42GE6FGS0SS6PZYHGE's checks did not start: can't read the index
+xdeep hub: claim:01M7E7MQ5WFB603B40HNE6QXYV's checks did not start: can't read the index
+xdeep hub: claim:01M7E7MQW750N5S9Q37GS5X4AZ's checks did not start: can't copy node_modules into the checkout
+x·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:125:111
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:133:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: the verdict names you as owner of the missing prerequisite: expected '{"reasons":["its checks did not start…' to match /\byou\b/
+
+- Expected:
+/\byou\b/
+
++ Received:
+"{\"reasons\":[\"its checks did not start: can't read the index\"],\"why\":[{\"reason\":\"checks_not_started\",\"text\":\"its checks did not start: can't read the index\"}]}"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:127:184
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:133:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: the judged stop's chat line reads BLOCKED: expected 'INCONCLUSIVE 0/0 · next: DeepBuild · …' to match /\bBLOCKED\b/
+
+- Expected:
+/\bBLOCKED\b/
+
++ Received:
+"INCONCLUSIVE 0/0 · next: DeepBuild · session/71196b38/01M7E7MP42GE6FGS0SS6PZYHGE"
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:134:144
+    132|   const o = await observed(h);
+    133|   blocked(o, "can't read the index");
+    134|   expect.soft([reply.message, reply.block, reply.context].filter(Boole…
+       |                                                                                                                                                ^
+    135|   const status = await h.status();
+    136|   expect.soft(status.claims.find((c) => c.claim === o.claim)?.verdict?…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: deep_status exposes BLOCKED from the record: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:136:140
+    134|   expect.soft([reply.message, reply.block, reply.context].filter(Boole…
+    135|   const status = await h.status();
+    136|   expect.soft(status.claims.find((c) => c.claim === o.claim)?.verdict?…
+       |                                                                                                                                            ^
+    137|   const items = o.all.filter((e) => e.kind === 'open_item.opened' && e…
+    138|   expect.soft(items.length, `${o.claim}: its cause has a recorded open…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: its cause has a recorded open item on its task: expected 0 to be greater than 0
+ ❯ tests/acceptance/2074/lane-failure.test.ts:138:91
+    136|   expect.soft(status.claims.find((c) => c.claim === o.claim)?.verdict?…
+    137|   const items = o.all.filter((e) => e.kind === 'open_item.opened' && e…
+    138|   expect.soft(items.length, `${o.claim}: its cause has a recorded open…
+       |                                                                                           ^
+    139|   const text = items.map((e) => String(e.data.text)).join('\n').replac…
+    140|   // Semantic actions, not an invented exact sentence. An error repeat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item
+AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: the open item names the action/evidence that would close it, beyond repeating the error: expected '' to match /\b(?:rerun|re-run|retry|run again|un…/i
+
+- Expected:
+/\b(?:rerun|re-run|retry|run again|unblock|restore|resolve|repair|fix|clear|remove|provide|succeed|successful|needs?|requires?|waits? for)\b/i
+
++ Received:
+""
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:141:124
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC2 #2074.5acbc1c9 monitor watch ends after the stop has replied: the deferred claim is BLOCKED
+AssertionError: claim:01M7E7MQ5WFB603B40HNE6QXYV: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:125:111
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:152:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > AC2 #2074.5acbc1c9 monitor watch ends after the stop has replied: the deferred claim is BLOCKED
+AssertionError: claim:01M7E7MQ5WFB603B40HNE6QXYV: the verdict names you as owner of the missing prerequisite: expected '{"reasons":["its checks did not start…' to match /\byou\b/
+
+- Expected:
+/\byou\b/
+
++ Received:
+"{\"reasons\":[\"its checks did not start: can't read the index\"],\"why\":[{\"reason\":\"checks_not_started\",\"text\":\"its checks did not start: can't read the index\"}]}"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:127:184
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:152:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > scope: checkout copy failure after a real snapshot records BLOCKED with cause and owner
+AssertionError: claim:01M7E7MQW750N5S9Q37GS5X4AZ: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "INCONCLUSIVE"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:125:111
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:157:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/acceptance/2074/lane-failure.test.ts > scope: checkout copy failure after a real snapshot records BLOCKED with cause and owner
+AssertionError: claim:01M7E7MQW750N5S9Q37GS5X4AZ: the verdict names you as owner of the missing prerequisite: expected '{"reasons":["its checks did not start…' to match /\byou\b/
+
+- Expected:
+/\byou\b/
+
++ Received:
+"{\"reasons\":[\"its checks did not start: can't copy node_modules into the checkout\"],\"why\":[{\"reason\":\"checks_not_started\",\"text\":\"its checks did not start: can't copy node_modules into the checkout\"}]}"
+
+ ❯ blocked tests/acceptance/2074/lane-failure.test.ts:127:184
+
+ ❯ tests/acceptance/2074/lane-failure.test.ts:157:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  15:52:45
+   Duration  5.68s (tests 73%, transform 18%, import 8%, setup 1%)
+
+
+=== machine-readable proof report ===
+{"type":"fail","file":"<checkout>/tests/acceptance/2074/lane-failure.test.ts","name":"AC1 #2074.f6cc7fe2 snapshot failure: recorded BLOCKED, actual stop chat reply and deep_status; actionable open item","error":{"name":"AssertionError","message":"claim:01M7E7MP42GE6FGS0SS6PZYHGE: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality","stack":"AssertionError: claim:01M7E7MP42GE6FGS0SS6PZYHGE: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality\n    at blocked (<checkout>/tests/acceptance/2074/lane-failure.test.ts:125:111)\n    at <checkout>/tests/acceptance/2074/lane-failure.test.ts:133:3\n    at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"}}
+{"type":"fail","file":"<checkout>/tests/acceptance/2074/lane-failure.test.ts","name":"AC2 #2074.5acbc1c9 monitor watch ends after the stop has replied: the deferred claim is BLOCKED","error":{"name":"AssertionError","message":"claim:01M7E7MQ5WFB603B40HNE6QXYV: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality","stack":"AssertionError: claim:01M7E7MQ5WFB603B40HNE6QXYV: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality\n    at blocked (<checkout>/tests/acceptance/2074/lane-failure.test.ts:125:111)\n    at <checkout>/tests/acceptance/2074/lane-failure.test.ts:152:3\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at listOnTimeout (node:internal/timers:644:9)\n    at process.processTimers (node:internal/timers:618:7)\n    at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"}}
+{"type":"fail","file":"<checkout>/tests/acceptance/2074/lane-failure.test.ts","name":"scope: checkout copy failure after a real snapshot records BLOCKED with cause and owner","error":{"name":"AssertionError","message":"claim:01M7E7MQW750N5S9Q37GS5X4AZ: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality","stack":"AssertionError: claim:01M7E7MQW750N5S9Q37GS5X4AZ: a lane that could not start is BLOCKED, not a budget overrun: expected 'INCONCLUSIVE' to be 'BLOCKED' // Object.is equality\n    at blocked (<checkout>/tests/acceptance/2074/lane-failure.test.ts:125:111)\n    at <checkout>/tests/acceptance/2074/lane-failure.test.ts:157:3\n    at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"}}
+{"type":"pass","file":"<checkout>/tests/acceptance/2074/lane-failure.test.ts","name":"AC3 #2074.f387c8cd regression twin: OverBudget remains INCONCLUSIVE with 37 untracked files"}
+{"type":"end"}
+
+=== repository lint output available at handoff (not final coordinator classification) ===
+
+--- lint-scripts-blocking-call-guard-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-canvas-closures-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs drift` runs unleased
+FAIPASS closures: 19 lists in 3 canvas schemas each carry a closure
+ojection@1, and the closure data holds no such list
+
+--- lint-scripts-canvas-lint-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-color-literal-guard-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/color-literal-guard.mjs` runs unleased
+PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles
+PASS size literal: crates/deep-app/src reads every size from the look's roles
+
+--- lint-scripts-conformance-lint-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/conformance-lint.mjs` runs unleased
+PASS enum closures: every enum carries its closure
+FAIL code mappings: doctor service_unpromoted maps to no verdict
+FAIL code mappings: verdict none maps to no verdict
+FAIL code mappings: verdict queued maps to no verdict
+FAIL code mappings: verdict working maps to no verdict
+FAIL code mappings: verdict says done maps to no verdict
+FAIL code mappings: verdict sent back maps to no verdict
+FAIL code mappings: verdict needs you maps to no verdict
+FAIL code mappings: verdict stale maps to no verdict
+FAIL code mappings: verdict quiet maps to no verdict
+FAIL code mappings: verdict stuck maps to no verdict
+FAIL code mappings: verdict flagged maps to no verdict
+FAIL code mappings: verdict finished maps to no verdict
+FAIL code mappings: verdict running maps to no verdict
+PASS kit adapter@1: 28 fakes killed, 68 planted codes raised alone
+PASS slot kit check.kind@1: 7 rules, each refusing its one planted fill
+PASS slot kit index@1: 4 rules, each refusing its one planted fill
+PASS slot kit environment@1: 4 rules, each refusing its one planted fill
+PASS slot kit source@1: 4 rules, each refusing its one planted fill
+PASS slot kit reading.source@1: 3 rules, each refusing its one planted fill
+PASS slot kit resolver@1: 4 rules, each refusing its one planted fill
+PASS slot kit panel@1: 5 rules, each refusing its one planted fill
+PASS slot kit route@1: 3 rules, each refusing its one planted fill
+PASS slot kit action@1: 3 rules, each refusing its one planted fill
+FAIL slot kit channel@1: rule planted answers-in-shape: rule answers-in-shape ("deliver says delivered, stalled, timed_out or conflict; receive returns answers, seen and conflict.") has 0 planted fills; it needs exactly one that breaks it alone
+FAIL slot kit channel@1: clean fill choice-delivered-then-answered: the kit's reference fill reads BLOCKED on choice-delivered-then-answered: the fill answered with a promise, which the preflight's synchronous kit check can't await
+FAIL slot kit channel@1: clean fill task-delivered-then-done: the kit's reference fill reads BLOCKED on task-delivered-then-done: the fill answered with a promise, which the preflight's synchronous kit check can't await
+FAIL slot kit channel@1: planted proof delivered-without-ack: planted fill delivered-without-ack is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "reported delivered with no acknowledgement from its provider, so it is recorded stalled"
+FAIL slot kit channel@1: planted proof signed-without-signature: planted fill signed-without-signature is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "returned an answer marked as signed or linked that its provider never carried"
+PASS slot kit state-source@1: 3 rules, each refusing its one planted fill
+PASS slot kit job.kind@1: 2 rules, each refusing its one planted fill
+
+--- lint-scripts-fetch-lock-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-guide-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/guide.mjs --check` runs unleased
+PASS guide: docs/extension-guide.md has one entry per published method (42) and slot (16), each as the contract has it
+
+--- lint-scripts-keymap-guard-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-known-failures-check-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-panel-catalog-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-plant-lint-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-record-reader-guard-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/record-reader-guard.mjs` runs unleased
+FAIL record reader: crates/deep-app/src/hub.rs: it names stream.subscribe, events.read, inbox.read, so it reads the record for itself; read it through crates/deep-app/src/record.rs's one reader (record::with_view) instead
+
+--- lint-scripts-render-lint-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-repo-rules-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/repo-rules.mjs` runs unleased
+FAIL secrets: tests/acceptance/1575-redraft-ac1/BASE-FAILURE.txt:11:14: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL deps: crates/deep-codecs/Cargo.toml dependencies deep-canvas-cells * path=../deep-canvas-cells is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-app/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-app/Cargo.toml target.'cfg(target_os = "macos")'.dependencies accesskit_macos ^0.26 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-images/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-images/Cargo.toml dependencies image ^0.25 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-images/Cargo.toml dependencies sha2 ^0.10 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-canvas-physics * path=../deep-canvas-physics is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-logic * path=../deep-logic is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-gpu-layer/Cargo.toml dependencies deep-physics-rapier * path=../deep-physics-rapier is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-marks-render/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-physics-rapier/Cargo.toml dev-dependencies simba =0.10.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-show/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies mitex * git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies mitex-spec-gen * git+https://github.com/mitex-rs/mitex?rev=51f7210e026ab05d037125247e92d4d023d8a80d is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies ttf-parser ^0.25 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies typst =0.15.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-typeset/Cargo.toml dependencies typst-layout =0.15.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/544/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/544/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/545/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/545/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL cards: crates/deep-canvas-physics/README.md:29: a deviation names budget, which crates/deep-canvas-physics doesn't have
+  Fix: Correct the deviation to the file it is about, or remove it if the file is gone.
+FAIL cards: crates/deep-images has no README.md card
+  Fix: Give the folder a README.md with the headings What it is for, Where new code goes, What it may import and Deviations.
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +166 -0 handwritten lines against merge base 1c4d1f0e2, lockfiles and binary files excluded (guideline: about 400)
+
+--- lint-scripts-size-ratchet-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.
+
+--- lint-scripts-slots-check-mjs.log ---
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/slots-check.mjs` runs unleased
+FAIL slots: deep.registerSource, library: deep.registerSource, library declares no kit; a slot needs the kit that holds its fills to the interface
+FAIL slots: deep.registerChannel, -: deep.registerChannel's kit channel@1: rule planted answers-in-shape: rule answers-in-shape ("deliver says delivered, stalled, timed_out or conflict; receive returns answers, seen and conflict.") has 0 planted fills; it needs exactly one that breaks it alone
+FAIL slots: deep.registerChannel, -: deep.registerChannel's kit channel@1: clean fill choice-delivered-then-answered: the kit's reference fill reads BLOCKED on choice-delivered-then-answered: the fill answered with a promise, which the preflight's synchronous kit check can't await
+FAIL slots: deep.registerChannel, -: deep.registerChannel's kit channel@1: clean fill task-delivered-then-done: the kit's reference fill reads BLOCKED on task-delivered-then-done: the fill answered with a promise, which the preflight's synchronous kit check can't await
+FAIL slots: deep.registerChannel, - (planted delivered-without-ack): deep.registerChannel's kit channel@1: planted proof delivered-without-ack: planted fill delivered-without-ack is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "reported delivered with no acknowledgement from its provider, so it is recorded stalled"
+FAIL slots: deep.registerChannel, - (planted signed-without-signature): deep.registerChannel's kit channel@1: planted proof signed-without-signature: planted fill signed-without-signature is first refused on choice-delivered-then-answered as BLOCKED "the fill answered with a promise, which the preflight's synchronous kit check can't await" not with its own message "returned an answer marked as signed or linked that its provider never carried"
+
+--- lint-scripts-vendor-rebase-mjs.log ---
+PENDING: no output yet; shared-grant wait, not a pass.

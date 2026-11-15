@@ -1,0 +1,18 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `cargo build --locked -p deep-hook` runs unleased
+   Compiling find-msvc-tools v0.1.15
+   Compiling shlex v2.0.1
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling zeroize v1.9.1
+   Compiling untrusted v0.9.0
+   Compiling rustls v0.23.46
+   Compiling once_cell v1.21.4
+   Compiling subtle v2.6.1
+   Compiling deep-contracts v0.0.0 (<head-checkout>/crates/deep-contracts)
+   Compiling cc v1.9.0
+   Compiling rustls-pki-types v1.15.1
+   Compiling ring v0.17.14
+   Compiling getrandom v0.2.17
+   Compiling rustls-webpki v0.103.16
+   Compiling deep-hook v0.0.0 (<head-checkout>/crates/deep-hook)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.07s
