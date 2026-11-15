@@ -288,7 +288,10 @@ export class AnswerDelivery {
       const question = `The agent's promised check is BLOCKED (${blockedCause(p) === 'set_again' ? `promised ${p.set} times` : 'promised past its end'}; owner: ${owner}): "${p.quote}" Do the check yourself, or drop it?`;
       const options = [{ id: 'take', label: 'I will do the check', decision: 'none' }, { id: 'drop', label: 'Drop it', decision: 'none' }];
       const raised = { kind: 'choice', question, options, recommended: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.options.mcp().pinOf(cwd, question) };
-      ask = await this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'promise.blocked', raised).catch(() => null);
+      ask = await this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'promise.blocked', raised).catch((error: unknown) => {
+        process.stderr.write(`deep hub: the ask for BLOCKED promise ${p.id} was not raised: ${error instanceof Error ? error.message : String(error)}\n`);
+        return null;
+      });
     }
     await this.options.events.appendSession(session, agent, 'promise.blocked', { promise: p.id, status: 'BLOCKED', quote: p.quote, cause: blockedCause(p), owner, ask });
     await this.options.events.appendReading(session, agent, blockedReading(p, owner));
