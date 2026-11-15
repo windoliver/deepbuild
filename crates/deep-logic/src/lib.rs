@@ -233,6 +233,17 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
             .map(Entry::parse)
             .collect::<Option<_>>()?,
     };
+    // #542: a text or scroll control's entry holds only what the control may (Control: text,
+    // Control: scroll); any other refuses the track.
+    let fits = |e: &Entry| {
+        piece
+            .limits
+            .get(&e.control)
+            .is_none_or(|l| l.admits(&e.value))
+    };
+    if !entries.iter().all(fits) {
+        return None;
+    }
     let tour = piece
         .tour
         .as_ref()
@@ -1352,7 +1363,7 @@ mod tests {
                 seed: 0,
                 class: deep_canvas::budget::Class::Figure,
                 controls: Default::default(),
-                scroll_from: Default::default(),
+                limits: Default::default(),
                 tour: Some(json!({"idle_after": 0, "keys": {"a": [[-1, 1]]}})),
                 items: Vec::new(),
                 machine: Vec::new(),

@@ -345,6 +345,10 @@ impl Hub<'_> {
         // The router's serial, your latest input for the card's display, and the gesture a
         // pop-out needs (#400, #401). A key goes to the panel that holds keyboard focus.
         let (serial, reached) = self.route(panel, event);
+        // #542: any key press of yours ends a scroll's momentum tail, wherever the key goes.
+        if matches!(event, Event::Key { .. }) {
+            self.key_ends_tails();
+        }
         // #507: present mode takes its keys first, Esc included.
         if let Some(reply) = self.present_key(panel, event, serial) {
             return reply;
@@ -385,6 +389,12 @@ impl Hub<'_> {
             Ok((false, appended)) => appended,
             Err(e) => return e,
         };
+        if matches!(event, Event::Down { .. }) {
+            match self.press_leaves_fields(panel, serial) {
+                Ok(c) => fielded.extend(c),
+                Err(e) => return e,
+            }
+        }
         // #540: a press of a point control's button, and the drag and release it starts, are the
         // control's entries and never the scope's pan or turn.
         match self.point_pointer(panel, &doc, event, g, serial) {

@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::scope::{Event, Phase};
-use deep_canvas_input::scroll::{self, Gesture as Steps, Spec as ScrollSpec};
+use deep_canvas_input::scroll::{self, Gesture as Steps, Route, Router, Spec as ScrollSpec};
 use deep_canvas_input::text::{Did, Field, Spec as TextSpec};
 use serde_json::{json, Value};
 use unicode_normalization::UnicodeNormalization;
@@ -34,16 +34,8 @@ pub(crate) struct Viewer {
     fields: BTreeMap<String, Field>,
     /// Each scroll control's gesture under way.
     steps: BTreeMap<String, Steps>,
-    /// The trackpad gesture under way.
-    latch: Option<Latch>,
-}
-
-/// A trackpad gesture: the scroll control it began over (none: the camera's), the modifiers it
-/// began with, and whether its tail has ended: by a key press, or a modifier change.
-struct Latch {
-    target: Option<String>,
-    mods: [bool; 4],
-    ended: bool,
+    /// Where the trackpad gesture under way goes.
+    router: Router,
 }
 
 /// The document's controls of `kind`.
@@ -89,6 +81,27 @@ fn page_size(doc: &Value) -> [f64; 2] {
     [n(0).unwrap_or(480.0), n(1).unwrap_or(240.0)]
 }
 
+/// Whether `value` is one control `c` may hold: a text control's string within its `max_bytes`,
+/// its line ends LF and, in a one-line field, none; a scroll control's whole position within its
+/// range. Any other kind takes any value here.
+pub(crate) fn admits(c: &Value, value: &Value) -> bool {
+    match c.get("kind").and_then(Value::as_str) {
+        Some("text") => match (TextSpec::of(c), value.as_str()) {
+            (Some(spec), Some(t)) => {
+                t.len() <= spec.max_bytes as usize
+                    && !t.contains('\r')
+                    && (spec.many || !t.contains('\n'))
+            }
+            _ => false,
+        },
+        Some("scroll") => match (ScrollSpec::of(c), value.as_i64()) {
+            (Some(spec), Some(p)) => spec.clamp(p) as i64 == p,
+            _ => false,
+        },
+        _ => true,
+    }
+}
+
 impl Hub<'_> {
     fn field_planted(&self, name: &str) -> bool {
         self.scenario.module_planted.as_deref() == Some(name)
@@ -105,6 +118,58 @@ impl Hub<'_> {
         ])
     }
 
+    /// Your key press, wherever it goes: every momentum tail under way ends (planted: they go on).
+    pub(crate) fn key_ends_tails(&mut self) {
+        let survives = self.field_planted("scroll_tail_survives_keys");
+        for s in self.scopes.values_mut() {
+            s.fields.router.key(survives);
+        }
+    }
+
+    /// Your press in `panel`: a text field being edited in any other panel is left, which commits
+    /// its edit to that panel's document, as part of this gesture.
+    pub(crate) fn press_leaves_fields(
+        &mut self,
+        panel: &str,
+        serial: u64,
+    ) -> Result<Vec<Value>, Value> {
+        let mut commits = Vec::new();
+        let others: Vec<String> = self
+            .scopes
+            .keys()
+            .filter(|p| p.as_str() != panel)
+            .cloned()
+            .collect();
+        for other in others {
+            let Some(doc) = self.panel_document(&other).map(|(d, _)| d) else {
+                continue;
+            };
+            let Some(s) = self.scopes.get_mut(&other) else {
+                continue;
+            };
+            let Some(id) = s.scope.focused_control().map(str::to_string) else {
+                continue;
+            };
+            let Some(spec) = doc
+                .pointer(&format!("/controls/{id}"))
+                .filter(|c| c.get("kind").and_then(Value::as_str) == Some("text"))
+                .and_then(TextSpec::of)
+            else {
+                continue;
+            };
+            let Some(field) = s.fields.fields.get_mut(&id) else {
+                continue;
+            };
+            let did = field.leave(spec);
+            s.scope.blur();
+            if let Did::Commit(text) = did {
+                let doc_id = self.panel_doc(&other).unwrap_or_default();
+                commits.extend(self.enter(&doc_id, &id, json!(text), self.now, serial)?);
+            }
+        }
+        Ok(commits)
+    }
+
     /// An input to a panel's text or scroll controls, before its scope takes it: whether one of
     /// them took it whole, and the entries it wrote.
     pub(crate) fn field_input(
@@ -115,19 +180,6 @@ impl Hub<'_> {
         g: &Gesture,
         serial: u64,
     ) -> Result<(bool, Vec<Value>), Value> {
-        // A key press ends a momentum tail under way (planted: the tail goes on).
-        if let (Event::Key { .. }, Some(s)) = (event, self.scopes.get_mut(panel)) {
-            if !self
-                .scenario
-                .module_planted
-                .as_deref()
-                .is_some_and(|p| p == "scroll_tail_survives_keys")
-            {
-                if let Some(l) = s.fields.latch.as_mut() {
-                    l.ended = true;
-                }
-            }
-        }
         if let Event::Scroll { phase, pos, delta } = event {
             return self.scroll_input(panel, doc, *phase, *pos, *delta, g, serial);
         }
@@ -172,17 +224,27 @@ impl Hub<'_> {
                 .is_some_and(|p| within(&field_box(page_size(doc), index), p)),
             _ => false,
         };
+        let last = self
+            .panel_doc(panel)
+            .and_then(|d| self.tracks.get(&d)?.last_at(id, self.now))
+            .and_then(|e| e.value.as_str().map(str::to_string))
+            .unwrap_or_default();
         let Some(s) = self.scopes.get_mut(panel) else {
             return Ok((false, Vec::new()));
         };
-        let field = s.fields.fields.entry(id.to_string()).or_default();
+        // A field first shows its control's last commit.
+        let field = s
+            .fields
+            .fields
+            .entry(id.to_string())
+            .or_insert_with(|| Field::committed(&last));
         let (took, did) = match event {
             Event::Text(t) => (true, field.typed(spec, t)),
             Event::Paste(t) => (true, field.paste(spec, t)),
             Event::Ime(m) => (true, field.compose(m)),
             Event::Key { key, cmd, .. } => match key.as_str() {
                 // Tab commits and moves: the scope moves the focus.
-                "Tab" => (false, field.leave()),
+                "Tab" => (false, field.leave(spec)),
                 "Escape" => (true, field.escape()),
                 "Enter" | "Return" => (true, field.enter(spec, *cmd, ime_commits)),
                 "z" | "Z" if *cmd && g.mods[0] => (true, field.redo()),
@@ -192,7 +254,7 @@ impl Hub<'_> {
             },
             // A press off the field leaves it, which commits an edit; the scope takes the press.
             Event::Down { .. } if !on_field => {
-                let did = field.leave();
+                let did = field.leave(spec);
                 s.scope.blur();
                 (false, did)
             }
@@ -232,7 +294,7 @@ impl Hub<'_> {
         } else {
             self.tracks
                 .get(doc)
-                .and_then(|t| t.last_at(id, i64::MAX))
+                .and_then(|t| t.last_at(id, self.now))
                 .and_then(|e| e.value.as_i64())
         };
         spec.clamp(
@@ -251,9 +313,14 @@ impl Hub<'_> {
     ) -> Result<Vec<Value>, Value> {
         let doc = self.panel_doc(panel).unwrap_or_default();
         let mut appended = Vec::new();
-        for p in to {
-            appended.extend(self.enter(&doc, id, json!(p), self.now, serial)?);
+        if to.is_empty() {
+            return Ok(appended);
         }
+        // Each step one value; the session replays once, after the last.
+        for p in to {
+            appended.extend(self.enter_quiet(&doc, id, json!(p), self.now, serial)?);
+        }
+        self.replay(&doc, self.now);
         Ok(appended)
     }
 
@@ -325,49 +392,14 @@ impl Hub<'_> {
         let Some(s) = self.scopes.get_mut(panel) else {
             return Ok((false, Vec::new()));
         };
-        let latch = &mut s.fields.latch;
-        let target = if g.line {
-            over
-        } else if g.momentum {
-            match latch {
-                // The tail stays with its gesture; once ended, it drops whole.
-                Some(l) => {
-                    if l.mods != g.mods {
-                        l.ended = true;
-                    }
-                    if l.ended {
-                        if phase == Phase::End {
-                            *latch = None;
-                        }
-                        return Ok((true, Vec::new()));
-                    }
-                    let t = l.target.clone();
-                    if phase == Phase::End {
-                        *latch = None;
-                    }
-                    t
-                }
-                None => over,
-            }
-        } else {
-            if phase == Phase::Begin || latch.is_none() {
-                *latch = Some(Latch {
-                    target: over.clone(),
-                    mods: g.mods,
-                    ended: false,
-                });
-            }
-            let l = latch.as_mut().expect("set above");
-            if l.mods != g.mods {
-                l.ended = true;
-            }
-            if l.ended {
-                return Ok((true, Vec::new()));
-            }
-            l.target.clone()
-        };
-        let Some(id) = target else {
-            return Ok((false, Vec::new()));
+        let id = match s
+            .fields
+            .router
+            .route(phase, g.line, g.momentum, g.mods, over.as_deref())
+        {
+            Route::To(id) => id,
+            Route::Camera => return Ok((false, Vec::new())),
+            Route::Drop => return Ok((true, Vec::new())),
         };
         let Some(c) = doc.get("controls").and_then(|c| c.get(&id)).cloned() else {
             return Ok((false, Vec::new()));
@@ -382,6 +414,10 @@ impl Hub<'_> {
             let sc = &self.scopes[panel].scope;
             spec.step * sc.rect()[2] / sc.pose().view_width
         };
+        // A snapping control turned its page when the touch lifted; the tail moves it no further.
+        if g.momentum && spec.snap.is_some() {
+            return Ok((true, Vec::new()));
+        }
         let d = if spec.axis_x { delta[0] } else { delta[1] };
         let s = self.scopes.get_mut(panel).expect("looked up above");
         let steps = s.fields.steps.entry(id.clone()).or_default();

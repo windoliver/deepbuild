@@ -983,7 +983,10 @@ impl World {
                 Read::Control if e.ty == "scroll" => {
                     let list = &taken[e.name.as_str()];
                     let all = self.track.get(&e.name).map_or(&[][..], Vec::as_slice);
-                    let from = piece.scroll_from.get(&e.name).copied().unwrap_or(0);
+                    let from = match piece.limits.get(&e.name) {
+                        Some(crate::piece::Limit::Scroll { from, .. }) => *from,
+                        _ => 0,
+                    };
                     let pos = |x: &Entry| match x.value {
                         Given::Number(n) => n as i32,
                         _ => from,
@@ -1002,7 +1005,11 @@ impl World {
                 Read::Control => {
                     // Each entry a u32 player, 4 zero bytes, then its value as the control's
                     // form lays it out; a value of another form leaves its bytes zero.
-                    let list = &taken[e.name.as_str()];
+                    // A string value (a choice's option) is no entry of a number's slot.
+                    let list: Vec<&Entry> = taken[e.name.as_str()]
+                        .iter()
+                        .filter(|x| !matches!(x.value, Given::Text(_)))
+                        .collect();
                     let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, x) in list.iter().enumerate() {

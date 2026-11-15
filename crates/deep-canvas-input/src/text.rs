@@ -38,6 +38,38 @@ impl Spec {
     }
 }
 
+/// The document's text controls at check: `max_bytes` up to 16,384, `lines` one or many, and
+/// class document, each refusal naming the control.
+pub fn check(doc: &serde_json::Value) -> Vec<deep_canvas::document::Issue> {
+    let controls = doc.get("controls").and_then(|c| c.as_object());
+    let texts = controls
+        .into_iter()
+        .flatten()
+        .filter(|(_, c)| c.get("kind").and_then(|k| k.as_str()) == Some("text"));
+    let mut out = Vec::new();
+    for (id, c) in texts {
+        if Spec::of(c).is_none() {
+            out.push(deep_canvas::document::Issue::error(
+                "out_of_range",
+                id,
+                format!("controls/{id}/text"),
+                c.get("text").cloned().unwrap_or_default(),
+                "a text control takes max_bytes up to 16,384 and lines one or many",
+            ));
+        }
+        if c.get("class").is_some_and(|k| k != "document") {
+            out.push(deep_canvas::document::Issue::error(
+                "out_of_range",
+                id,
+                format!("controls/{id}/class"),
+                c["class"].clone(),
+                "a text control is class document: its commits are on the input track",
+            ));
+        }
+    }
+    out
+}
+
 /// What an input to the field did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Did {
@@ -64,6 +96,15 @@ pub struct Field {
 }
 
 impl Field {
+    /// A field showing `text`, its last commit.
+    pub fn committed(text: &str) -> Field {
+        Field {
+            text: text.to_string(),
+            kept: text.to_string(),
+            ..Field::default()
+        }
+    }
+
     /// Line ends as LF: a CR LF or a lone CR becomes LF.
     pub fn lf(s: &str) -> String {
         s.replace("\r\n", "\n").replace('\r', "\n")
@@ -165,9 +206,8 @@ impl Field {
     /// commits too); in a one-line field it commits; in a many-line field it adds a line.
     pub fn enter(&mut self, spec: Spec, cmd: bool, planted_commit: bool) -> Did {
         if let Some(c) = self.composing.take() {
-            if self.fits(spec, &c) {
-                self.push(&c);
-            }
+            // The candidate goes in as typed text: its line ends as LF, under the cap.
+            self.typed(spec, &c);
             return if planted_commit {
                 self.commit()
             } else {
@@ -193,7 +233,11 @@ impl Field {
     }
 
     /// Leaving the field: a commit of an edit, and nothing for a field as it was committed.
-    pub fn leave(&mut self) -> Did {
+    pub fn leave(&mut self, spec: Spec) -> Did {
+        // A candidate being composed goes in, as the input method confirms it on leaving.
+        if let Some(c) = self.composing.take() {
+            self.typed(spec, &c);
+        }
         if self.edited() {
             self.commit()
         } else {
@@ -202,8 +246,11 @@ impl Field {
         }
     }
 
-    /// Esc: the edit discarded, back to the last commit.
+    /// Esc: a composition cancelled, or else the edit discarded, back to the last commit.
     pub fn escape(&mut self) -> Did {
+        if self.composing.take().is_some() {
+            return Did::Edited;
+        }
         self.text = self.kept.clone();
         self.composing = None;
         self.undo.clear();
@@ -226,6 +273,28 @@ mod tests {
     };
 
     #[test]
+    fn the_check_refuses_a_cap_past_16_kib_and_a_text_control_not_of_class_document() {
+        let doc = |text: serde_json::Value, class: &str| serde_json::json!({"controls": {"name": {"kind": "text", "class": class, "text": text}}});
+        assert!(check(&doc(
+            serde_json::json!({"max_bytes": 16_384, "lines": "many"}),
+            "document"
+        ))
+        .is_empty());
+        let over = check(&doc(serde_json::json!({"max_bytes": 16_385}), "document"));
+        assert_eq!(
+            over.iter().map(|i| i.path.as_str()).collect::<Vec<_>>(),
+            ["controls/name/text"]
+        );
+        let lines = check(&doc(serde_json::json!({"lines": "two"}), "document"));
+        assert_eq!(lines.len(), 1);
+        let view = check(&doc(serde_json::json!({}), "view"));
+        assert_eq!(
+            view.iter().map(|i| i.path.as_str()).collect::<Vec<_>>(),
+            ["controls/name/class"]
+        );
+    }
+
+    #[test]
     fn a_paste_past_the_cap_is_refused_whole_and_the_field_keeps_its_text() {
         let mut f = Field::default();
         f.typed(MANY, "abc");
@@ -234,6 +303,9 @@ mod tests {
         assert_eq!(f.text, "abc");
         f.paste(MANY, "a\r\nb\rc");
         assert_eq!(f.text, "abca\nb\nc");
+        let mut one = Field::default();
+        assert!(matches!(one.paste(ONE, "a\r\nb"), Did::Refused(_)));
+        assert_eq!(one.text, "");
     }
 
     #[test]
@@ -252,6 +324,14 @@ mod tests {
         f.compose("にほん");
         assert_eq!(f.enter(ONE, false, false), Did::Edited);
         assert_eq!(f.enter(ONE, false, false), Did::Commit("にほん".into()));
+        // Esc cancels a composition and keeps the edit; leaving confirms the candidate.
+        let mut f = Field::default();
+        f.typed(ONE, "ab");
+        f.compose("に");
+        assert_eq!(f.escape(), Did::Edited);
+        assert_eq!(f.text, "ab");
+        f.compose("に\r\n");
+        assert_eq!(f.leave(ONE), Did::Commit("abに".into()));
         let mut planted = Field::default();
         planted.compose("にほん");
         assert_eq!(
@@ -280,8 +360,8 @@ mod tests {
     fn leaving_commits_an_edit_and_esc_goes_back_to_the_last_commit() {
         let mut f = Field::default();
         f.typed(ONE, "ab");
-        assert_eq!(f.leave(), Did::Commit("ab".into()));
-        assert_eq!(f.leave(), Did::Edited);
+        assert_eq!(f.leave(ONE), Did::Commit("ab".into()));
+        assert_eq!(f.leave(ONE), Did::Edited);
         f.typed(ONE, "c");
         assert_eq!(f.escape(), Did::Discarded);
         assert_eq!(f.text, "ab");

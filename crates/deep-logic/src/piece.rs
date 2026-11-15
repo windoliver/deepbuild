@@ -614,6 +614,59 @@ impl Item {
 /// The fixture canvas module whose carried state is of the `same_machine` class (#534).
 pub const MACHINE: &str = "same_machine.counter@1";
 
+/// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
+/// ends and, with `many` false, none (Control: text); a scroll control's position within its
+/// range, `from` its default clamped there, which its first entry's delta counts from (Control:
+/// scroll).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Limit {
+    Text { max: u32, many: bool },
+    Scroll { range: [i32; 2], from: i32 },
+}
+
+impl Limit {
+    fn of(control: &Value) -> Option<Limit> {
+        let i32_at = |p: &str| {
+            control
+                .pointer(p)
+                .and_then(Value::as_i64)
+                .and_then(|n| i32::try_from(n).ok())
+        };
+        match control.get("kind").and_then(Value::as_str)? {
+            "text" => Some(Limit::Text {
+                max: control
+                    .pointer("/text/max_bytes")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(256)
+                    .min(16_384) as u32,
+                many: control.pointer("/text/lines").and_then(Value::as_str) == Some("many"),
+            }),
+            "scroll" => {
+                let (a, b) = (i32_at("/scroll/range/0")?, i32_at("/scroll/range/1")?);
+                let range = [a.min(b), a.max(b)];
+                let from = control.get("default").and_then(Value::as_i64).unwrap_or(0);
+                let from = from.clamp(range[0].into(), range[1].into()) as i32;
+                Some(Limit::Scroll { range, from })
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether an entry's value is one the control may hold.
+    pub fn admits(&self, value: &crate::world::Given) -> bool {
+        use crate::world::Given;
+        match (self, value) {
+            (Limit::Text { max, many }, Given::Text(t)) => {
+                t.len() <= *max as usize && !t.contains('\r') && (*many || !t.contains('\n'))
+            }
+            (Limit::Scroll { range, .. }, Given::Number(n)) => {
+                n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
+            }
+            _ => false,
+        }
+    }
+}
+
 /// A piece: its seed, controls, tour and checked logic items in order.
 #[derive(Clone, Debug)]
 pub struct Piece {
@@ -622,8 +675,8 @@ pub struct Piece {
     pub class: Class,
     /// Each control by ID, with its slot's size and type in a read region ([`form`]).
     pub controls: BTreeMap<String, (u32, &'static str)>,
-    /// #542: each scroll control's default position, which its first entry's delta counts from.
-    pub scroll_from: BTreeMap<String, i32>,
+    /// #542: what each text and scroll control's entries may hold.
+    pub limits: BTreeMap<String, Limit>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
     /// The `same_machine.counter@1` items, by ID.
@@ -1596,22 +1649,18 @@ pub fn check_in(
             )],
         ));
     }
-    let scroll_from = piece
+    let limits = piece
         .get("controls")
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .filter(|(_, c)| c.get("kind").and_then(Value::as_str) == Some("scroll"))
-        .map(|(id, c)| {
-            let d = c.get("default").and_then(Value::as_i64).unwrap_or(0);
-            (id.clone(), d.clamp(i32::MIN.into(), i32::MAX.into()) as i32)
-        })
+        .filter_map(|(id, c)| Some((id.clone(), Limit::of(c)?)))
         .collect();
     Ok(Piece {
         seed,
         class,
         controls,
-        scroll_from,
+        limits,
         tour: piece.get("tour").cloned(),
         items,
         machine,

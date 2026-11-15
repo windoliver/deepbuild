@@ -241,7 +241,7 @@ impl<'a> Hub<'a> {
     /// declared default (Scope and input classes), so the frame leaves the session's view-class
     /// values out, and the live session gets them back after.
     pub fn eval(&mut self, e: &Eval) -> Value {
-        let held = e.track.is_none().then(|| self.take_view(&e.doc)).flatten();
+        let held = self.take_view(&e.doc);
         if held.is_some() {
             self.replay(&e.doc, self.now);
         }
