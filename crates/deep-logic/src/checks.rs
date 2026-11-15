@@ -55,6 +55,8 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
                         "ray": {"origin": [x, 10.0, z + 10.0], "dir": down}});
                     Given::Point(Point::parse(&press).expect("a seeded press is a point"))
                 }
+                Some((_, "text")) => Given::Text(format!("{:x}", h & 0xffff)),
+                Some((_, "scroll")) => Given::Number((h & 0xff) as f64),
                 _ => Given::Number(((h >> 11) as f64 + 1.0) / (1u64 << 53) as f64),
             };
             let entry = Entry {

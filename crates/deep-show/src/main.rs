@@ -20,6 +20,7 @@ mod evidence;
 mod export;
 mod extended;
 mod familiar;
+mod fields;
 mod caption_design;
 mod film;
 mod film_operator;
@@ -48,6 +49,8 @@ mod maps;
 mod media;
 mod mixdown;
 mod modes;
+#[cfg(target_os = "macos")]
+mod momentum;
 mod narration;
 mod net;
 mod packs;
@@ -1293,6 +1296,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
+                // #542's in the text field and the scroll control's router.
+                || deep_canvas_input::text::PLANTED.contains(p)
+                || deep_canvas_input::scroll::PLANTED.contains(p)
                 || deep_canvas_scene3d::pointer::PLANTED.contains(p)
                 // #538's in the cells, text and motion modules.
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX

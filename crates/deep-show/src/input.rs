@@ -47,6 +47,8 @@ pub struct PanelScope {
     pub(crate) points: crate::points::Viewer,
     /// #548: the world its logic previews run on.
     pub(crate) preview: Option<crate::preview::Previewer>,
+    /// #542: its text fields and the scroll gesture under way.
+    pub(crate) fields: crate::fields::Viewer,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -95,6 +97,9 @@ pub fn event(v: &Value) -> Option<Event> {
             alt: mods()?.contains(&"alt"),
         },
         "text" => Event::Text(v.get("text")?.as_str()?.to_string()),
+        // #542: a paste, and the input seam's test backend's input method.
+        "paste" => Event::Paste(v.get("text")?.as_str()?.to_string()),
+        "ime" => Event::Ime(v.get("marked")?.as_str()?.to_string()),
         "control" => Event::Control {
             control: v.get("control")?.as_str()?.to_string(),
             value: v.get("value")?.clone(),
@@ -208,6 +213,7 @@ impl Hub<'_> {
                     picks: Default::default(),
                     points: Default::default(),
                     preview: None,
+                    fields: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -369,6 +375,16 @@ impl Hub<'_> {
                 };
             }
         }
+        // #542: the focused text field takes the keys, and a scroll control the wheel over its
+        // area; a press off the field commits it before the scope takes the press.
+        let mut fielded = match self.field_input(panel, &doc, event, g, serial) {
+            Ok((true, appended)) => {
+                return json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                    "commits": [], "appended": appended})
+            }
+            Ok((false, appended)) => appended,
+            Err(e) => return e,
+        };
         // #540: a press of a point control's button, and the drag and release it starts, are the
         // control's entries and never the scope's pan or turn.
         match self.point_pointer(panel, &doc, event, g, serial) {
@@ -385,6 +401,8 @@ impl Hub<'_> {
             Ok(a) => a,
             Err(e) => return e,
         };
+        fielded.append(&mut appended);
+        let mut appended = fielded;
         let picked: Vec<String> = crate::picks::pickers(&doc)
             .into_iter()
             .flat_map(|p| p.sets)

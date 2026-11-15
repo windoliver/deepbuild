@@ -34,8 +34,9 @@ pub const fn slot(value: u32) -> u32 {
 /// A read control's slot in a read region and its type there, by the form of its entries'
 /// values: a pick on rows' `{set, key}` in 24 B (Control: picks on rows and grid focus), a
 /// point's 248 B (Control: point), an action's, a stick's or a look's 16 B (Control: actions,
-/// key repeat and gamepads), else a number's f64. A text control's one commit a step reserves
-/// its `u32` length and up to `max_bytes`, rounded up to a multiple of 8 (Control: text).
+/// key repeat and gamepads), a scroll's 8 B (Control: scroll), else a number's f64. A text
+/// control's one commit a step reserves its `u32` length and up to `max_bytes`, rounded up to a
+/// multiple of 8 (Control: text).
 pub fn form(control: &Value) -> (u32, &'static str) {
     let rows = control.get("verb").and_then(Value::as_str) == Some("pick")
         && control.get("rows").is_some();
@@ -45,6 +46,8 @@ pub fn form(control: &Value) -> (u32, &'static str) {
         // and up to 256 × 8 B), entries packed end to end.
         Some("point") => (slot(248 + 8 + 8 * crate::point::MAX_UNITS as u32), "point"),
         Some("actions") => (slot(16), "action"),
+        // #542: a scroll's `i32 position, i32 delta`.
+        Some("scroll") => (slot(8), "scroll"),
         Some("text") => {
             let max = control
                 .pointer("/text/max_bytes")
@@ -619,6 +622,8 @@ pub struct Piece {
     pub class: Class,
     /// Each control by ID, with its slot's size and type in a read region ([`form`]).
     pub controls: BTreeMap<String, (u32, &'static str)>,
+    /// #542: each scroll control's default position, which its first entry's delta counts from.
+    pub scroll_from: BTreeMap<String, i32>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
     /// The `same_machine.counter@1` items, by ID.
@@ -1591,10 +1596,22 @@ pub fn check_in(
             )],
         ));
     }
+    let scroll_from = piece
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, c)| c.get("kind").and_then(Value::as_str) == Some("scroll"))
+        .map(|(id, c)| {
+            let d = c.get("default").and_then(Value::as_i64).unwrap_or(0);
+            (id.clone(), d.clamp(i32::MIN.into(), i32::MAX.into()) as i32)
+        })
+        .collect();
     Ok(Piece {
         seed,
         class,
         controls,
+        scroll_from,
         tour: piece.get("tour").cloned(),
         items,
         machine,

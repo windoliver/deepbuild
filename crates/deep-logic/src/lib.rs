@@ -1352,6 +1352,7 @@ mod tests {
                 seed: 0,
                 class: deep_canvas::budget::Class::Figure,
                 controls: Default::default(),
+                scroll_from: Default::default(),
                 tour: Some(json!({"idle_after": 0, "keys": {"a": [[-1, 1]]}})),
                 items: Vec::new(),
                 machine: Vec::new(),
