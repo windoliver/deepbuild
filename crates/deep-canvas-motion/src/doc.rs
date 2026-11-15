@@ -1646,8 +1646,8 @@ fn rest_on_of(c: &Map<String, Value>, path: &str) -> Result<RestOn, Refused> {
     })
 }
 
-/// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
-/// may lack; every other kind motion doesn't fill is refused as unknown.
+/// A constraint of any kind but `limit` and those the core gives another module; every other
+/// kind motion doesn't fill is refused as unknown.
 fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
     let path = format!("constraints/{id}");
     let owner = id_of(c, "owner", &path)?;
@@ -1766,7 +1766,6 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
                 Some(_) => Some(rest_on_of(c, &path)?),
             },
         },
-        Some("follow_stream") => return refuse("module_missing", at("kind")),
         _ => return refuse("unknown_kind", at("kind")),
     };
     Ok(Constraint {
@@ -2638,9 +2637,15 @@ pub fn read_with(
     let mut limits = Vec::new();
     let mut constraints = Vec::new();
     for (id, c) in section(doc, "constraints")? {
+        // #225: a kind the core gives another module is that module's to solve.
+        let other = c
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(deep_canvas::registry::core_lists::constraint_owner)
+            .is_some();
         if let Some(limit) = limit_of(id, c)? {
             limits.push(limit);
-        } else {
+        } else if !other {
             constraints.push(constraint_of(id, c)?);
         }
     }

@@ -1842,6 +1842,8 @@ fn has_warp(doc: &Map<String, Value>) -> bool {
             items
                 .values()
                 .any(|i| i.pointer("/params/warp").is_some_and(|w| !w.is_null()))
+                // #225: a vector field's frame fields are bound at t the same way.
+                || deep_canvas_marks::vector_field::any(items)
         })
 }
 

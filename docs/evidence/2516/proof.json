@@ -1,0 +1,47 @@
+{
+  "issue": 2516,
+  "code_commit": "b85c4522b39ce1ff97be0933bd6d2365a1b82891",
+  "renderer_sha256": "16b8a262fbf59cf700feaa3f68217c7ac019dda91ac2cac8b1f76bcb90d588db",
+  "acceptance": {
+    "command": "node node_modules/vitest/vitest.mjs run --root tests/acceptance/2516 --no-file-parallelism --exclude **/timing.test.ts --reporter=verbose --silent=false",
+    "exit_code": 0,
+    "output": "acceptance-final.txt",
+    "cases": 29,
+    "passed": 29,
+    "skipped": 0
+  },
+  "types": {
+    "command": "node node_modules/typescript/bin/tsc -p tests/acceptance/2516/tsconfig.json",
+    "exit_code": 0,
+    "output_bytes": 0
+  },
+  "cost_line_and_contention": {
+    "command": "node node_modules/vitest/vitest.mjs run --root tests/acceptance/2516 timing.test.ts --testNamePattern 'AC6 a run timed while another|AC6 the design' --reporter=verbose --silent=false",
+    "exit_code": 0,
+    "output": "cost-line-and-lease.txt",
+    "cases_selected": 2,
+    "passed": 2,
+    "measurement_case": "Previously qualified; timings-803322230a66.json; not retried in this assertion-only run"
+  },
+  "approved_check_sha256": {
+    "timing.test.ts": "6d0a75d075ef3f3252ee370e081764d2c9535ae7edb86acece70392ea538004e",
+    "helpers.ts": "a1a39f51c001b5619afe10aeac7b36ed8748f0ef80b2d75769123a1f43338bac",
+    "cube.test.ts": "4a0722f85eee4c7d364c2e34139ce1ab3da3d04a1062b2ea92e0e06902a968a8",
+    "reference.test.ts": "815dc75afa3901a1956bf3d75de255c0526a4a4799e5a195fa6806e077030278",
+    "README.md": "5061c691fdc9d0947c352b921b05df213bd0f6370d2470fa2767b0641a80b87c",
+    "unedited-418.test.ts": "cc9045f9fc122be220e5bcde1ce0598ff6f8376d5eb0ba8a0a955d77ce5ea447",
+    "slab.test.ts": "cc0be70393e3f46c397f6b59009caa15e14b26c3d283b4ccd9d6bbf46f49edbf",
+    "APPROVED.md": "f2a74eb15f6a3bd5fd72382a7024495e689a8ab7ece752106cff34a92280fd62",
+    "tsconfig.json": "c5b0031dc2191959d86202363d79087b03e941d881587792b08e308dc9e69c0a",
+    "wall.test.ts": "0b2c0d60379e0ae566fe1bc2175e27913dfe3e77644577273899505974e597be",
+    "taste.test.ts": "aff654f179ba81ed671b3acfe1afb3f7ba8e7482f9d421ecb6955b71e6bf208d",
+    "redraft-ac4/fixtures.ts": "f27650ea87a3f024c38663db088e24d7076be39f871268ff7bd4d76079a935ab",
+    "redraft-ac4/cube.test.ts": "ab27ffb7f1c677f79f584b4ac2e801b0106c6898b5bf48b80a1f7edfdb5f175a",
+    "redraft-ac4/reference.ts": "cbc5a8f9dbc7912f9eec1488e135318d7ff76149101bb1393e09b8f12746f067",
+    "redraft-ac4/reference.test.ts": "8d3c0e7efc40ca68ddccf6f72ba6040fa46d0edf4b242a1e0d288da41648e25e",
+    "redraft-ac4/README.md": "c79cde2e60954f8586197b3a9183db9fa0d0925bfc427ed1cefee6f20bb6ba0a",
+    "redraft-ac4/tsconfig.json": "95e40ce027ea1a1182ce9f76881959441f7a8de45afe42035cfa59b0892d7639"
+  },
+  "publication_redaction": "Machine paths only; assertions, outcome words, measured values and test counts unchanged",
+  "global_verdict": "Not PASS. See reports/2516-closure.md for global lint failures, baseline comparison and unrun work."
+}
