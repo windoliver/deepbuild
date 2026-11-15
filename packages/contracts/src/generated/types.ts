@@ -4365,6 +4365,7 @@ export interface BuildRolledBack {
     restored: string;
     why: string;
   };
+  evidence?: Array<string>;
 }
 
 /** call.overrun@1 */

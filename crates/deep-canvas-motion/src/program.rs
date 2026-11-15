@@ -191,6 +191,12 @@ pub enum Planted {
     PerLoopRoundsPeriod,
     /// A transition that restarts from its old target, not from where the value is.
     TransitionRestarts,
+    /// #466: a dip that cross-fades its two sides under its color at half weight.
+    DipCrossFadesUnderInk,
+    /// #466: an iris centred where its item stood at the window's first flick.
+    IrisCenterAtWindowStart,
+    /// #466: a motif's rate in beats counted at the tempo map's first segment's BPM throughout.
+    MotifBeatsAtFirstTempo,
     /// #490: a table's interval form from 8 samples between its range's ends.
     TableFormSamples8,
     /// #1646: cells takes its seed with the time, so a still point's outputs move.
@@ -3141,7 +3147,10 @@ impl Program {
                 }
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));
-                    let range = c.and_then(|c| c.get("range")).and_then(Value::as_array);
+                    // #542: a scroll control's range is its `scroll.range`, in steps.
+                    let range = c
+                        .and_then(|c| c.get("range").or_else(|| c.pointer("/scroll/range")))
+                        .and_then(Value::as_array);
                     let (Some(c), Some([lo, hi])) = (c, range.map(Vec::as_slice)) else {
                         return Err(Refused {
                             code: "ref_unresolved",

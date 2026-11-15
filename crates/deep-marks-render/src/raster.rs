@@ -831,62 +831,13 @@ impl<C: Glyphs> Painter<'_, C> {
 /// The document's evaluated items at `t`, placed by their relations (#221), each vector item
 /// drawn as marks2d's items (#398), and each graph laid out and drawn as them (#399), with each
 /// graph's view.
-/// #1646: each revealed unit's reveal time, compiled from the document: the first whole flick at
-/// which the reveal's progress reaches the unit's level ([`animator::reveal_levels`]), searched
-/// through the program between the progress's key times (as a reveal's progress is keyed to run
-/// forward), never from the frame drawn. A unit the progress never reaches reveals at no time.
-///
-/// [`animator::reveal_levels`]: deep_canvas_marks::animator::reveal_levels
+/// #1646: each revealed unit's reveal time, compiled from the document (#466: the one rule
+/// motion compiles `<item>.reveal` by).
 fn reveal_times(doc: &Map<String, Value>, id: &str, levels: &[f64]) -> Result<Vec<i64>, Value> {
     let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-    let field = ["params", "reveal", "progress"].map(String::from);
-    let Some(slot) = program.slot_of(id, &field) else {
-        // An unkeyed progress is the same at every time: each unit revealed from the start, or
-        // never.
-        let p = doc
-            .get("items")
-            .and_then(|i| i.get(id))
-            .and_then(|i| i.pointer("/params/reveal/progress"))
-            .and_then(Value::as_f64)
-            .unwrap_or(0.0);
-        return Ok(levels
-            .iter()
-            .map(|l| if p >= *l { 0 } else { i64::MAX })
-            .collect());
-    };
-    let mut state = program.state();
-    let mut at = |t: i64| {
-        program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
-        state.slots[slot]
-    };
-    let mut keys = program.slot_key_times(slot);
-    keys.sort_unstable();
-    keys.dedup();
-    let (Some(&first), Some(&last)) = (keys.first(), keys.last()) else {
-        return Ok(vec![i64::MAX; levels.len()]);
-    };
-    let mut out = Vec::with_capacity(levels.len());
-    for level in levels {
-        if at(first) >= *level {
-            out.push(0);
-            continue;
-        }
-        if at(last) < *level {
-            out.push(i64::MAX);
-            continue;
-        }
-        let (mut lo, mut hi) = (first, last);
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            if at(mid) >= *level {
-                hi = mid;
-            } else {
-                lo = mid;
-            }
-        }
-        out.push(hi);
-    }
-    Ok(out)
+    Ok(deep_canvas_motion::emits::reveal_times(
+        &program, doc, id, levels,
+    ))
 }
 
 fn items_at(
@@ -1509,6 +1460,33 @@ pub(crate) fn picture(marks: &[&scene::Drawn], size: [u32; 2]) -> Result<image::
         .ok_or_else(|| refused("not_written", "picture"))
 }
 
+/// #506: `marks` over transparent black at `size` px and zoom 1, moved by `shift` px, their
+/// images read from `store` (flat: `<64 hex>`), as the raster draws them: premultiplied alpha.
+pub(crate) fn premultiplied(
+    marks: &[&scene::Drawn],
+    size: [u32; 2],
+    shift: [f64; 2],
+    store: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
+    let (Ok(w), Ok(h)) = (u16::try_from(size[0]), u16::try_from(size[1])) else {
+        return Err(refused("out_of_range", "size"));
+    };
+    let mut p = Painter::on(RenderContext::new_with(w, h, settings()));
+    p.store = store;
+    p.ctx.set_transform(Affine::translate((shift[0], shift[1])));
+    let new_ctx = || RenderContext::new_with(w, h, settings());
+    composite(&mut p, marks, &new_ctx, rasterizer())?;
+    let mut pixmap = Pixmap::new(w, h);
+    p.ctx
+        .render_with(&mut pixmap, &mut p.resources, rasterizer());
+    image::RgbaImage::from_raw(
+        size[0],
+        size[1],
+        pixmap.take_rgba8(ImageAlphaType::AlphaPremultiplied),
+    )
+    .ok_or_else(|| refused("not_written", "picture"))
+}
+
 /// Every look role a document names, in black: geometry needs the outline, never its colors.
 fn any_roles(value: &Value, palette: &mut scene::Palette) {
     match value {
@@ -1829,6 +1807,7 @@ pub fn planted_path(name: &str) -> Option<Planted> {
         "repeater",
     ];
     match name {
+        deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
         "merge_zero_fills" => Some(Planted::MergeZeroFills),
         "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
         _ => {
@@ -1836,6 +1815,27 @@ pub fn planted_path(name: &str) -> Option<Planted> {
             OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
         }
     }
+}
+
+/// Whether a group of `doc` carries a warp (#223).
+fn has_warp(doc: &Map<String, Value>) -> bool {
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| {
+            items
+                .values()
+                .any(|i| i.pointer("/params/warp").is_some_and(|w| !w.is_null()))
+        })
+}
+
+/// Milliseconds on a monotonic clock, for timing a frame's warps (#223).
+pub(crate) fn clock_ms() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+        * 1000.0
 }
 
 /// Answers a `path` line: one frame per time, in order; `built` holds the digests this process
@@ -1861,7 +1861,16 @@ pub fn path_answer(
         let (palette, ty) = (&palette, &ty);
         let mut frames = Vec::with_capacity(req.times.len());
         for &t in &req.times {
-            let placed = crate::place::evaluated(&req.doc, &program, t, &req.vectors)?;
+            // #223: what the warps map is counted until the frame reports it, the evaluation's
+            // placing pass included, which carries them first (the line's first frame from before
+            // its check, which draws the document); the scene's build then finds them kept.
+            deep_canvas_marks::warp::time_with(req.timing.then_some(clock_ms as fn() -> f64));
+            // #223: a path function lowered and each warp's vars bound at t, as a frame draws them.
+            let placed = if crate::formulas::has_formulas(&req.doc) || has_warp(&req.doc) {
+                crate::formulas::evaluated(&req.doc, t, &req.vectors, &Default::default())?.0
+            } else {
+                crate::place::evaluated(&req.doc, &program, t, &req.vectors)?
+            };
             let items = deep_canvas_vector::lower_items(
                 &placed,
                 &req.vectors,
@@ -1882,6 +1891,7 @@ pub fn path_answer(
                     .map_err(|r| refused(r.code, &r.path))?
                     .ok_or_else(|| refused("ref_unresolved", &format!("items/{}", req.item)))?;
             let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let mapped = deep_canvas_marks::warp::take_mapped();
             let rebuilt = built.insert(report.digest);
             let subpaths: Vec<Value> = report
                 .placed
@@ -1910,9 +1920,21 @@ pub fn path_answer(
             if !report.ends.is_empty() {
                 let mut ends = Map::new();
                 for h in &report.ends {
+                    // #223: the head's drawn outline, its corners in document u.
+                    let outline: Vec<[f64; 2]> = h
+                        .verbs
+                        .iter()
+                        .filter_map(|v| match *v {
+                            deep_canvas_marks::path::Verb::Move(p)
+                            | deep_canvas_marks::path::Verb::Line(p)
+                            | deep_canvas_marks::path::Verb::Quad(_, p)
+                            | deep_canvas_marks::path::Verb::Cubic(_, _, p) => Some(p),
+                            deep_canvas_marks::path::Verb::Close => None,
+                        })
+                        .collect();
                     ends.insert(
                         h.at.to_string(),
-                        json!({"kind": h.kind, "tip": h.tip, "angle": h.angle, "length": h.length, "width": h.width}),
+                        json!({"kind": h.kind, "tip": h.tip, "angle": h.angle, "length": h.length, "width": h.width, "outline": outline}),
                     );
                 }
                 frame["ends"] = Value::Object(ends);
@@ -1944,7 +1966,13 @@ pub fn path_answer(
             }
             if req.timing {
                 frame["build_ms"] = json!(if rebuilt { ms } else { 0.0 });
+                // #223: the points a warp over the item mapped this frame and the time it took.
+                if let Some((points, warp_ms)) = mapped {
+                    frame["warp_points"] = json!(points);
+                    frame["warp_ms"] = json!(warp_ms);
+                }
             }
+            deep_canvas_marks::warp::time_with(None);
             frames.push(frame);
         }
         Ok(json!({"ok": true, "frames": frames}))

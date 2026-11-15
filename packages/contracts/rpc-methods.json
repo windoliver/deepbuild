@@ -408,19 +408,25 @@
     "method": "work.approve",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1332"
+    "tracking": "#1332",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.pause",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1332"
+    "tracking": "#1332",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.show",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1332"
+    "tracking": "#1332",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "job.submit",

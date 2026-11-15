@@ -136,6 +136,10 @@ impl Canonical for Ease {
                 out.push(4);
                 [b.x1, b.y1, b.x2, b.y2].encode(out);
             }
+            Ease::Named(e) => {
+                out.push(5);
+                e.encode(out);
+            }
         }
     }
 }

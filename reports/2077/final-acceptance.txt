@@ -1,0 +1,19 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/removal-cancel.test.ts packages/hub/test/removal-crash.test.ts packages/hub/test/removal-cutoff.test.ts packages/hub/test/removal-provenance.test.ts tests/acceptance/2077/removal.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+··stdout | tests/acceptance/2077/removal.test.ts > AC1 #2077.c76c4641 AC2 #2077.d2415960: installed removal starts exactly one frozen eval, returns its handle, then adopt
+lesson lesson-19998922ccc9: {"code":0,"answer":"Configuration eval run:01M7ECT4EWRVZ138FWA5WAAYXP for lesson-19998922ccc9 is waiting; the rule is unchanged until it adopts.\n\n","jobs":[{"job":"run:01M7ECT4EWRVZ138FWA5WAAYXP","state":"waiting"}]}
+
+···stdout | tests/acceptance/2077/removal.test.ts > AC1 #2077.c76c4641 AC2 #2077.d2415960: installed removal starts exactly one frozen eval, returns its handle, then regresses
+lesson lesson-d3daef0c7b4e: {"code":0,"answer":"Configuration eval run:01M7ECTPBF7FWNN8VR36N26R54 for lesson-d3daef0c7b4e is waiting; the rule is unchanged until it adopts.\n\n","jobs":[{"job":"run:01M7ECTPBF7FWNN8VR36N26R54","state":"waiting"}]}
+
+··stdout | tests/acceptance/2077/removal.test.ts > AC1 #2077.c76c4641 AC3 #2077.c43a0799: installed removal starts exactly one frozen eval, returns its handle, then INCONCLUSIVE
+lesson lesson-e02ed49ae047: {"code":0,"answer":"Configuration eval run:01M7ECV7JPVWBBNXTF8DTW89EZ for lesson-e02ed49ae047 is waiting; the rule is unchanged until it adopts.\n\n","jobs":[{"job":"run:01M7ECV7JPVWBBNXTF8DTW89EZ","state":"waiting"}]}
+
+··
+
+ Test Files  5 passed (5)
+      Tests  9 passed (9)
+   Start at  17:23:08
+   Duration  54.79s (tests 100%)

@@ -12,14 +12,19 @@ use deep_canvas_marks::finish::{srgb_decode, srgb_encode, tone, ToneMap};
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::morph;
 use deep_canvas_motion::program::{Planted, Program};
-use deep_canvas_motion::shots::{At, Kind, Plan, Pose};
+use deep_canvas_motion::shots::{At, Kind, Plan, Pose, Under};
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::Affine;
 
 /// The motion module's compiled program for a session, where its document has one.
+/// #466: with each operator transition that aligns on its reveal placed there.
 pub(crate) fn program_of(sched: &Scheduler<'_>, session: &DocSession) -> Option<Arc<Program>> {
     let v = session.value(sched, "motion.program", None)?;
-    v.as_typed::<Arc<Program>>().map(|p| Arc::clone(&*p))
+    let program = v.as_typed::<Arc<Program>>().map(|p| Arc::clone(&*p))?;
+    Some(match session.document() {
+        Some(doc) => crate::film_operator::placed(program, doc),
+        None => program,
+    })
 }
 
 /// The plan of a 2D film with timeline shots, and the index of its document camera.
@@ -30,7 +35,14 @@ pub(crate) fn plan_of<'a>(program: &'a Program, doc: &Value) -> Option<(&'a Plan
         .as_deref()
         .filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some))?;
     let cam = plan.camera(doc.get("camera")?.as_str()?)?;
-    plan.cameras[cam].flat.then_some((plan, cam))
+    let camera = &plan.cameras[cam];
+    // #142: a perspective camera looking straight at the page, its eye on the target's normal,
+    // sees the page's plane as a flat view at its width through the target, so a 2D film's
+    // frames draw through it as through a flat one (a film recipe's 3D stage).
+    let straight = camera.own.is_some_and(|p| {
+        p.perspective() && p.position[0] == p.target[0] && p.position[1] == p.target[1]
+    });
+    (camera.flat || straight).then_some((plan, cam))
 }
 
 /// One side a frame draws: its camera and the look it is finished in.
@@ -42,9 +54,34 @@ pub(crate) struct Side {
 /// How two sides blend: the incoming side's share, and the kind's shape.
 pub(crate) enum Mix {
     Fade(f64),
-    Dip(f64),
-    Wipe { angle: f64, feather: f64, p: f64 },
-    Push { angle: f64, p: f64 },
+    /// #466: a look role's weight over what lies under it.
+    Dip {
+        weight: f64,
+        under: Under,
+        role: String,
+    },
+    Wipe {
+        angle: f64,
+        feather: f64,
+        p: f64,
+    },
+    Push {
+        angle: f64,
+        p: f64,
+    },
+    /// #466: a circle at `center` of `radius`, in the frame's units on a frame `frame` wide and
+    /// high: the outgoing side inside it, the incoming side around it.
+    Iris {
+        center: [f64; 2],
+        radius: f64,
+        frame: [f64; 2],
+    },
+    /// #466: a pack's pass over the two finished sides at the transition's progress.
+    Operator {
+        id: String,
+        op: deep_canvas_motion::shots::Operator,
+        p: f64,
+    },
 }
 
 /// What a frame draws: one side, or two blended, and the side whose status marks draw on top.
@@ -80,7 +117,21 @@ pub(crate) fn sides(program: &Program, doc: &Value, t: i64, reduced: bool) -> Op
         let p = tr.progress(t);
         let mix = match (&tr.kind, reduced) {
             (Kind::Cut | Kind::Whip { .. }, _) => continue,
-            (Kind::Dip, _) => Mix::Dip(p),
+            (Kind::Dip(d), _) => {
+                let cross = program.options.planted == Planted::DipCrossFadesUnderInk;
+                let (weight, under) = d.at(tr, t, cross);
+                Mix::Dip {
+                    weight,
+                    under,
+                    role: d.color.clone(),
+                }
+            }
+            (Kind::Iris(iris), false) => iris_mix(program, doc, plan, tr, iris, t, &at, &state),
+            (Kind::Operator(op), false) => Mix::Operator {
+                id: tr.id.clone(),
+                op: op.clone(),
+                p,
+            },
             (Kind::Wipe { angle, feather }, false) => Mix::Wipe {
                 angle: *angle,
                 feather: *feather,
@@ -129,10 +180,37 @@ pub(crate) fn sides(program: &Program, doc: &Value, t: i64, reduced: bool) -> Op
     })
 }
 
+/// An iris at t (canvas primitives: Transition: operator, iris and dip), in the frame's units.
+#[allow(clippy::too_many_arguments)]
+fn iris_mix(
+    program: &Program,
+    doc: &Value,
+    plan: &Plan,
+    tr: &deep_canvas_motion::shots::Transition,
+    iris: &deep_canvas_motion::shots::Iris,
+    t: i64,
+    at: &At,
+    state: &deep_canvas_motion::program::State,
+) -> Mix {
+    let frame = match doc.get("size").and_then(Value::as_array).map(Vec::as_slice) {
+        Some([w, h]) => [w.as_f64().unwrap_or(1920.0), h.as_f64().unwrap_or(1080.0)],
+        _ => [1920.0, 1080.0],
+    };
+    let empty = Map::new();
+    let map = doc.as_object().unwrap_or(&empty);
+    let i = iris.at(program, map, state, plan, tr, t, at, frame, false);
+    Mix::Iris {
+        center: i.center,
+        radius: i.radius,
+        frame,
+    }
+}
+
 /// A flat pose as the affine from the document's units to its pixels: the target at the frame's
 /// centre, the view width across it, turned by the roll.
 pub(crate) fn view(pose: &Pose, size: [f64; 2]) -> Affine {
-    let k = size[0] / pose.view_width;
+    // A straight-on perspective pose's width through its target (#142); a flat one's own.
+    let k = size[0] / pose.width();
     Affine::translate((size[0] / 2.0, size[1] / 2.0))
         * Affine::rotate(pose.roll.to_radians())
         * Affine::scale(k)
@@ -155,8 +233,19 @@ pub(crate) fn finish(rgba: &mut [u8], map: ToneMap) {
     }
 }
 
-/// Two finished sides blended by `mix` (Transition), per 8-bit channel; `ink` is a dip's color.
-pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3]) -> Vec<u8> {
+/// Two finished sides blended by `mix` (Transition), per 8-bit channel; `ink` is a dip's color,
+/// and `pass` an operator transition's output, drawn by its caller.
+pub(crate) fn blend(
+    a: &[u8],
+    b: &[u8],
+    mix: &Mix,
+    size: [u16; 2],
+    ink: [u8; 3],
+    pass: Option<&[u8]>,
+) -> Vec<u8> {
+    if let (Mix::Operator { .. }, Some(out)) = (mix, pass) {
+        return out.to_vec();
+    }
     let (w, h) = (usize::from(size[0]), usize::from(size[1]));
     let lerp =
         |x: u8, y: u8, p: f64| (f64::from(x) + (f64::from(y) - f64::from(x)) * p).round() as u8;
@@ -186,20 +275,49 @@ pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3])
                         o[c] = lerp(pa[c], pb[c], p);
                     }
                 }
-                Mix::Dip(p) => {
-                    let (from, to, q) = if p < 0.5 {
-                        (pa, None, p * 2.0)
-                    } else {
-                        (pb, Some(()), p * 2.0 - 1.0)
-                    };
+                Mix::Dip { weight, under, .. } => {
                     for c in 0..3 {
-                        o[c] = if to.is_none() {
-                            lerp(from[c], ink[c], q)
+                        let below = match under {
+                            Under::Outgoing => pa[c],
+                            Under::Incoming => pb[c],
+                            Under::Cross(q) => lerp(pa[c], pb[c], q),
+                        };
+                        o[c] = if weight >= 1.0 {
+                            ink[c]
                         } else {
-                            lerp(ink[c], from[c], q)
+                            lerp(below, ink[c], weight)
                         };
                     }
                     o[3] = 255;
+                }
+                Mix::Iris {
+                    center,
+                    radius,
+                    frame,
+                } => {
+                    let k = [w as f64 / frame[0], h as f64 / frame[1]];
+                    let (dx, dy) = (
+                        (x as f64 + 0.5) - center[0] * k[0],
+                        (y as f64 + 0.5) - center[1] * k[1],
+                    );
+                    let d = deep_canvas::ops::sqrt(dx * dx + dy * dy);
+                    // The share inside the circle, over a one-pixel edge.
+                    let inside = (radius * k[0] - d + 0.5).clamp(0.0, 1.0);
+                    let (inn, out) = (pa, pb);
+                    for c in 0..4 {
+                        o[c] = if inside >= 1.0 {
+                            inn[c]
+                        } else if inside <= 0.0 {
+                            out[c]
+                        } else {
+                            lerp(out[c], inn[c], inside)
+                        };
+                    }
+                }
+                Mix::Operator { p, .. } => {
+                    for c in 0..4 {
+                        o[c] = lerp(pa[c], pb[c], p);
+                    }
                 }
                 Mix::Wipe { angle, feather, p } => {
                     let (c, s, lo, len) = along(angle);
@@ -352,7 +470,7 @@ fn morphs(program: &Program, doc: &Value, t: i64) -> (Map<String, Value>, Map<St
             paths.insert(c.target.owner.clone(), morph::value_of(&shape));
         }
     }
-    for b in &program.betweens {
+    for b in program.betweens.iter().filter(|b| b.diff.is_none()) {
         let side = |id: &str| {
             items
                 .get(id)
@@ -419,47 +537,8 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
     }
 }
 
-/// A 3D document with its envelope camera posed as its shots write it at t (Shot: a shot alone
-/// writes its camera's pose), for the 3D frame; `None` when no timeline shot writes it.
+/// A 3D document with its envelope camera posed as its shots write it at t; `None` when no
+/// timeline shot writes it (the motion module's, which the loop's framing check reads too, #506).
 pub(crate) fn posed(doc: &Value, t: i64) -> Option<Value> {
-    let shots = doc.get("shots")?.as_object()?;
-    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
-    // an entry on the played form's track chooses from its entry.
-    let staged = doc
-        .get("controls")
-        .and_then(Value::as_object)
-        .is_some_and(|c| {
-            c.values().any(|c| {
-                c.get("stages")
-                    .and_then(Value::as_object)
-                    .is_some_and(|s| s.values().any(|s| s.get("shot").is_some()))
-            })
-        });
-    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
-        return None;
-    }
-    let program = Program::compile(doc.as_object()?).ok()?;
-    let plan = program.shots.as_deref()?;
-    let id = doc.get("camera")?.as_str()?;
-    let cam = plan.camera(id)?;
-    let mut state = program.state();
-    program.evaluate(t, Validity::Full, &mut state);
-    let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
-    let pose = plan.shown(cam, t, &at(false, &keyed)).pose;
-    let mut out = doc.clone();
-    let params = out
-        .pointer_mut(&format!("/items/{id}/params"))?
-        .as_object_mut()?;
-    for k in ["orbit", "view_width", "kick"] {
-        params.remove(k);
-    }
-    params.insert("position".into(), json!(pose.position));
-    params.insert("target".into(), json!(pose.target));
-    params.insert("roll".into(), json!(pose.roll));
-    if pose.perspective() {
-        params.insert("fov".into(), json!(pose.fov));
-    } else {
-        params.insert("view_width".into(), json!(pose.view_width));
-    }
-    Some(out)
+    deep_canvas_motion::shots::posed(doc, t)
 }

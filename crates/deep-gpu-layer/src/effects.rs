@@ -947,11 +947,16 @@ pub fn check_operator(app: &mut App, out: &str, call: &Value) -> Value {
         Ok(f) => f,
         Err(e) => return e,
     };
-    let op = match graph::inline_functions(
-        &call["operator"],
-        &functions,
-        !check_options.no_divergence_rule,
-    ) {
+    // #466: a pack's operator as its pack.json holds it carries `grow`, which the pack check
+    // takes off before the operator check reads the graph.
+    let mut operator = call["operator"].clone();
+    if operator["origin"] == "pack" {
+        if let Some(o) = operator.as_object_mut() {
+            o.remove("grow");
+        }
+    }
+    let op = match graph::inline_functions(&operator, &functions, !check_options.no_divergence_rule)
+    {
         Ok(op) => op,
         Err(issues) => {
             return json!({"outcome": "refused", "issues": issues.iter().map(graph::Issue::to_json).collect::<Vec<_>>(), "reached": {"naga": false, "pipeline": false, "gpu": false}})

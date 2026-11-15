@@ -1,0 +1,68 @@
+{
+  "id": "explain.slam",
+  "version": "1.0",
+  "title": "Slam",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "An enter: the main word appears at 1.7 times its size and springs to it along 1 - e^(-10t) cos(2 pi 2.2 t); a second target, its sub-line, rises into place over 0.33 s.",
+  "inputs": {},
+  "steps": {
+    "show": {
+      "op": "cue",
+      "params": {
+        "from": {
+          "adjust/opacity": 0
+        },
+        "until": "min(1, 0.04 / d)",
+        "ease": "linear"
+      }
+    },
+    "scale_x": {
+      "op": "cue",
+      "when": "i == 0",
+      "params": {
+        "from": {
+          "at/scale/0": "now * 1.7"
+        },
+        "ease": {
+          "spring": {
+            "decay": 10,
+            "omega": 13.823007675795091
+          },
+          "velocity": -7
+        }
+      }
+    },
+    "scale_y": {
+      "op": "cue",
+      "when": "i == 0",
+      "params": {
+        "from": {
+          "at/scale/1": "now * 1.7"
+        },
+        "ease": {
+          "spring": {
+            "decay": 10,
+            "omega": 13.823007675795091
+          },
+          "velocity": -7
+        }
+      }
+    },
+    "rise": {
+      "op": "cue",
+      "when": "i == 1",
+      "params": {
+        "from": {
+          "at/pos": [
+            "now[0]",
+            "now[1] + 28",
+            "now[2]"
+          ]
+        },
+        "until": "min(1, 0.33 / d)",
+        "ease": "out_cubic"
+      }
+    }
+  }
+}

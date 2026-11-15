@@ -1,0 +1,9 @@
+Command: node scripts/proof.mjs guard
+Working directory: <issue-2066-worktree>
+Result: INCONCLUSIVE — stopped after 8 minutes 54 seconds without a result line.
+Exit code: 143 (SIGTERM sent only to this task's guard process).
+stdout/stderr before termination: empty
+
+This is not PASS or a waiver. The independent `before trace` run completed and
+proved all four acceptance criteria; this separate repository approval-guard
+scan did not complete. No approval tag or signature was created by the agent.

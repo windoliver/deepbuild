@@ -995,8 +995,8 @@ pub(crate) fn ease_of(value: &Value, path: &str) -> Result<Ease, Refused> {
     let single = value.as_object().filter(|o| o.len() == 1);
     if let Some(Value::Object(e)) = single.and_then(|o| o.get("ease")) {
         let name = e.get("name").and_then(Value::as_str);
-        return match Ease::NAMES.iter().find(|(n, _)| Some(*n) == name) {
-            Some((_, ease)) => Ok(*ease),
+        return match name.and_then(Ease::named) {
+            Some(ease) => Ok(ease),
             None => refuse("bad_interp", format!("{path}/ease/name")),
         };
     }
@@ -1344,6 +1344,11 @@ fn follow_of(
     })
 }
 
+/// The keyed value an iris's radius channel writes, by its transition's ID.
+pub fn iris_radius(transition: &str) -> String {
+    format!("transitions/{transition}/iris/radius")
+}
+
 fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
     let parts: Vec<&str> = text.split('/').collect();
     let (owner, field) = if in_clip {
@@ -1359,6 +1364,14 @@ fn target_of(text: &str, in_clip: bool, path: &str) -> Result<Target, Refused> {
             ["data", name] if !name.is_empty() => {
                 return Ok(Target {
                     owner: format!("data/{name}"),
+                    field: vec!["value".into()],
+                })
+            }
+            // #466: an iris's radius, keyed as a value of its own (Transition: operator, iris
+            // and dip: `radius: channel`).
+            ["transitions", id, "iris", "radius"] if !id.is_empty() => {
+                return Ok(Target {
+                    owner: format!("data/{}", iris_radius(id)),
                     field: vec!["value".into()],
                 })
             }
@@ -2007,7 +2020,7 @@ fn modifier_of(
     Ok(Modifier { kind, influence })
 }
 
-fn channel_of(
+pub(crate) fn channel_of(
     id: &str,
     c: &Map<String, Value>,
     in_clip: bool,
@@ -2854,15 +2867,18 @@ fn cuts_of(
         if names_shot("from") || names_shot("to") {
             continue;
         }
-        // #494: a match morph between two items is the morph's (crate::morph).
+        // #494: a match morph between two items is the morph's (crate::morph), and so (#1968)
+        // is a text diff between two code items.
         let items = doc.get("items").and_then(Value::as_object);
         let names_item = |f: &str| {
             tr.get(f)
                 .and_then(Value::as_str)
                 .is_some_and(|n| items.is_some_and(|i| i.contains_key(n)))
         };
-        if tr.get("kind").and_then(Value::as_str) == Some("match_morph")
-            && (names_item("from") || names_item("to"))
+        if matches!(
+            tr.get("kind").and_then(Value::as_str),
+            Some("match_morph" | "text_diff")
+        ) && (names_item("from") || names_item("to"))
         {
             continue;
         }

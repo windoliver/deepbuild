@@ -596,16 +596,18 @@ impl Hub<'_> {
                 });
                 let rate = rate_of(t);
                 // The planted spawn starts each voice at the first block after its occurrence.
+                let sample = FLICKS
+                    / d.pointer("/transport/sample_rate")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(48_000)
+                        .max(1);
                 let start = if planted(LATE_VOICE) && t.synth.is_some() {
-                    let block = deep_canvas_media::mix::BLOCK
-                        * (FLICKS
-                            / d.pointer("/transport/sample_rate")
-                                .and_then(Value::as_i64)
-                                .unwrap_or(48_000)
-                                .max(1));
+                    let block = deep_canvas_media::mix::BLOCK * sample;
                     (v.start + block - 1).div_euclid(block) * block
                 } else {
-                    v.start
+                    // #466: a voice starts on the exact sample, the first at or after its
+                    // occurrence's flick (Spawn), never between two.
+                    (v.start + sample - 1).div_euclid(sample) * sample
                 };
                 let synth = match &t.synth {
                     Some((sy, gate, _)) => {
