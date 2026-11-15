@@ -450,6 +450,91 @@ fn a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too(
     }
 }
 
+/// A hub's hello, written to whoever connects.
+const HELLO: &[u8] = b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n";
+
+#[test]
+fn a_rules_json_removed_after_setup_is_denied_with_the_hub_away_and_read_again_once_a_hub_says_hello(
+) {
+    // Before setup a missing rules.json is no entries: the call runs.
+    let home = short_home("gone");
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    let (code, _, _) = pre_tool_use(&home, "pkill -f node");
+    assert_eq!(code, Some(0), "before setup, no rules.json: the call runs");
+
+    // After setup, with no hub, it is denied naming the file.
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "after setup, rules.json removed, no hub: `pkill -f node` is denied: {stderr}"
+    );
+    assert!(
+        stderr.contains("rules.json"),
+        "the denial names the file: {stderr}"
+    );
+
+    // A hub that puts the file back before its hello, as the running hub does: the call is matched against it. The
+    // hub then goes away, so the entry's own denial shows what deep-hook matched.
+    use std::io::Write;
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let rules = home.join(".deepbuild/rules.json");
+    let hub = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        std::fs::write(rules, RULES).unwrap();
+        let _ = stream.write_all(HELLO);
+    });
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "rules.json put back by the hub: `pkill -f node` is denied: {stderr}"
+    );
+    assert!(
+        stderr.contains("no-kill-by-name") && !stderr.contains("rules.json"),
+        "the denial is the entry's, read from the file the hub put back: {stderr}"
+    );
+}
+
+#[test]
+fn a_hub_that_never_says_hello_holds_a_call_for_a_removed_rules_json_no_longer_than_the_design_allows(
+) {
+    // After setup, rules.json removed, and a hub that takes connections and says nothing: deep-hook waits 250 ms for
+    // the hello, then the hub's 20 ms, and denies the call naming the file. A loaded machine can be slow to start the
+    // hook, so the fastest of five tries is the one read: a longer wait is in every one of them.
+    let home = short_home("mute");
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let mut fastest = std::time::Duration::MAX;
+    for _ in 0..5 {
+        let (code, took, _) = pre_tool_use(&home, "pkill -f node");
+        assert_eq!(code, Some(2), "the call is denied");
+        fastest = fastest.min(took);
+    }
+    drop(listener);
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        fastest >= std::time::Duration::from_millis(250),
+        "deep-hook gave the hub its 250 ms to say hello: {fastest:?}"
+    );
+    assert!(
+        fastest < std::time::Duration::from_millis(400),
+        "the wait for a hub's hello stays at 250 ms, with the 20 ms to acknowledge after it: {fastest:?}"
+    );
+}
+
 /// Runs deep-hook's PreToolUse for `command` against `home`, and returns its exit code, how long it took, and the spool.
 fn pre_tool_use(
     home: &std::path::Path,
