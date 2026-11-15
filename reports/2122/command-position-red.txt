@@ -1,0 +1,32 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/waits-command-position.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/waits-command-position.test.ts > does not mistake logical OR for a pipe supplying cat with finite input
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/waits-command-position.test.ts:5:37
+      3|
+      4| it('does not mistake logical OR for a pipe supplying cat with finite i…
+      5|   expect(neverEnds('false || cat')).toBe(true);
+       |                                     ^
+      6| });
+      7|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:27:04
+   Duration  166ms (tests 69%, transform 18%, setup 6%, import 3%, worker 3%)

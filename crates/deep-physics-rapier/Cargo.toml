@@ -45,6 +45,9 @@ test-reverse-pairs = []
 # Issue #1919 criterion 1's test backend (tests/acceptance/1919): Rapier with each query() call
 # counted by kind, which `backend_calls` answers.
 test-count-calls = []
+# Issue #213 criterion 4's planted service (tests/acceptance/213): physics.cast@1 sorting each
+# request's hits by ID before distance, which the service's fixture refuses at the seal.
+test-cast-sorts-by-id = []
 # Issue #524 criterion 3's test build (tests/acceptance/524): the soft-body solver swapped for a small
 # one of ours, in src/soft.rs alone, with no world document changed.
 test-swap-soft-solver = []

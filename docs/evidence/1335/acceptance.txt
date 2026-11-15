@@ -1,0 +1,15 @@
+# #1335 acceptance on this PR's change over a12be6c8c and the blind suite's commit 3abc6e325, before main was merged in (macOS arm64, 2026-11-15T00:44:13Z, load 240-286).
+# An earlier run stopped at AC4's first assertion, with no start in 15 minutes: the run breaker's SQL used the reserved word commit as a column alias, so every pass of a standing run threw. Fixed (the alias is sha); then each file ran once:
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/1335 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/greedy-munching-garden/tests/acceptance/1335
+
+ ✓ week.test.ts > AC4 #1335.adae4f21 The run goes on past 7 days with no ask, and its weekly notice lists landed, left and spent. At its plan share it starts nothing until the next window, and raises no ask 170912ms
+ ✓ rule.test.ts > AC1 #1335.d72bf6b5 On a fixture forge, an issue added after approval that meets the rule starts with no new approval, and one that doesn't starts nothing. A planted rule that reads the issue's text is refused at approval, naming the rule 66198ms
+ ✓ breaker.test.ts > AC5 #1335.846df82d A fifth attempt in a row ending in anything but PASS pauses the run with one ask 81412ms
+ ✓ authors.test.ts > AC2 #1335.4dced2b8 An issue with the rule's labels written by an outside author never joins, and neither does one a session opens 128762ms
+ ✓ criteria.test.ts > AC3 #1335.5396151b An issue with no acceptance criteria stays out, is named on the run's page and raises no ask 73069ms
+
+ Test Files  5 passed (5)
+      Tests  5 passed (5)
+   Start at  16:44:13
+   Duration  525.51s (tests 100%)
