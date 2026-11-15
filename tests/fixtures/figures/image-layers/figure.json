@@ -5,6 +5,8 @@
   "title": "How an image model splits a picture into layers",
   "description": "An explainer: six glass panes on an optical bench, one per layer of a picture, spread apart by one drag. Lazy tongs between the panes and a handwheel at the bench's end follow the same spread, live readouts show it, and five stages (split, parallax, swap subject, recolour, move title) each cut to a keyed shot on its own camera.",
   "size": [1920,1080],
+  "look": {"asset": "workshop@1", "theme": "dark"},
+  "assets": {"workshop": {"sha256": "393aca7e98fcde2a58831ba5c83e4a7b472a80eb25553355db0d25ae2fcfdc63", "license": {"id": "Apache-2.0", "terms": "Apache License 2.0.", "shareable": true, "credit": "A look made for the #508 fixture figures."}}},
   "camera": "cam-split",
   "seed": 508,
   "requires": {
