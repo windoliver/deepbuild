@@ -765,4 +765,16 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
     gap read from code, not run: `open_save`'s reply (`saves.rs`, main's #534) and the live view's frame reply
     (`live.rs`) report traps without the `library` field that `bake` adds (`libraries_in`), so a trap inside a
     linked library reached through those two replies would not name its library. Neither reply had traps at
-    34f30ffd5; criterion 5 and ac05 read the trap from `bake`. Open: not fixed in this change.
+    34f30ffd5; criterion 5 and ac05 read the trap from `bake`. Fixed in c34e1bff4 (next bullet).
+- **The trap replies' fix (c34e1bff4, 2026-11-14, on the owner's word to fix it here)**: `open_save`'s reply and the
+  live frame's reply now pass their traps through `libraries_in`, as `bake` does. Its test,
+  `crates/deep-logic/tests/library_trap.rs`, drives the suite's own turns piece (v = lib:turns.next_turn(k, 3), built
+  with `tests/acceptance/190/libs.ts`; 8 units of fuel run out inside `next_turn`) through a bake, a save opened and
+  played on, and a live frame, and expects turns@1 and `next_turn` from each. Before the fix it failed on the opened
+  save's trap, and with `saves.rs` fixed alone on the live frame's (`library-trap-failing-6da0649df.txt`); it passes
+  unchanged with both, and deep-logic's other 25 tests pass.
+  - `tests/acceptance/190/` on the fix (`acceptance-linux-c34e1bff4.txt`): 20 pass, the same 4 BLOCKED.
+  - The suites that call `open_save` or a live frame, #532, #534, #545, #546 and #548, with the fix and before it
+    (`open-save-live-suites-c34e1bff4.txt`): 57 pass and 17 fail on each side, the same 17 (budget and Mac-only
+    files among them), so the fix adds no failure there.
+  - The Mac runs at 4b10b58f1 are of the head before this fix.
