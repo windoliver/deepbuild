@@ -740,6 +740,9 @@ timed.push('tests/acceptance/213/ac8-budgets.test.ts');
 // (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
 alone.push('tests/acceptance/213-redraft-ac3/');
 byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
+// #184's files start replicas and hosts and play mazes for minutes; budgets.test.ts times release replicas.
+alone.push('tests/acceptance/184/');
+timed.push('tests/acceptance/184/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
