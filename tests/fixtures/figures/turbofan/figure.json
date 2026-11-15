@@ -6,7 +6,7 @@
   "description": "A 3D figure of a turbofan engine: the nacelle, the fan, a three-stage compressor and the shaft, the spools turning about the engine axis. One throttle slider sets the spool speeds and, through drivers, the exhaust plume's reach and heat and the airflow's speed.",
   "size": [1920,1080],
   "look": {"asset": "workshop@1", "theme": "dark"},
-  "assets": {"workshop": {"sha256": "393aca7e98fcde2a58831ba5c83e4a7b472a80eb25553355db0d25ae2fcfdc63", "license": {"id": "Apache-2.0", "terms": "Apache License 2.0.", "shareable": true, "credit": "A look made for the #508 fixture figures."}}},
+  "assets": {"workshop": {"sha256": "7c091895fcc6d7dc622be2020019ecd1e4a3a34cd50312a2a3cc73e3c76f31fe", "license": {"id": "Apache-2.0", "terms": "Apache License 2.0.", "shareable": true, "credit": "A look made for the #508 fixture figures."}}},
   "camera": "cam",
   "seed": 508,
   "requires": {

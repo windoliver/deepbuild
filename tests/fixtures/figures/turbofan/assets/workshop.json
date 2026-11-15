@@ -43,15 +43,15 @@
   }
  },
  "status": {
-  "pass": "#007429",
-  "fail": "#bf232b",
-  "invalid": "#8645b0",
-  "blocked": "#a44700",
-  "inconclusive": "#666600",
-  "running": "#0063b8",
-  "needs_you": "#8a5900",
-  "stale": "#326c6f",
-  "idle": "#636464"
+  "pass": "#3fbf6a",
+  "fail": "#ff6b6b",
+  "invalid": "#c58cf0",
+  "blocked": "#f08a3a",
+  "inconclusive": "#c9c94a",
+  "running": "#5aa8ff",
+  "needs_you": "#e0b04a",
+  "stale": "#5fc4c8",
+  "idle": "#a8a8a8"
  },
  "status_treatment": {
   "core_min_px": 4,
