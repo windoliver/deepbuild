@@ -157,7 +157,9 @@ const LOAD_POLL_MS = 1_000;
 const LOAD_WAIT_MS = 30 * 60_000;
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes }
+/** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
+interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
 /** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
 interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean }
 async function changesOf(cwd: string, base: string): Promise<Changes> {
@@ -190,6 +192,8 @@ async function hold(dir: string, files: Record<string, string>): Promise<void> {
 export class GateRunner {
   /** Each session's claims, oldest first. */
   private readonly claims = new Map<string, Claim[]>();
+  /** Turn-end replies waiting for their fast lanes, including claims still making their snapshots. */
+  private readonly turnEnds = new Map<string, TurnEnd>();
   /** The slow lane's queue: at most one place per session and check, the newest snapshot's. */
   private readonly queue = new Map<string, Entry>();
   /** The held places, at most one per session and check; and the place each newest record stands for, until it starts. */
@@ -619,6 +623,7 @@ export class GateRunner {
       repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
+    claim.ready = false;
     if (joined) {
       joined.requirements = r.requirements;
       joined.entries.delete(DEFINITION);
@@ -745,11 +750,17 @@ export class GateRunner {
       await e.readings;
     });
     for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: c.commit ?? snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: superseded.has(c.check) });
+    claim.ready = true;
+    // Either side of the handoff may arrive first: the reply or the fast lane's last result. Never await the runs
+    // in the reply, and never lose the reply when the hold ends before they do (#2075).
+    void Promise.allSettled(runs).then(async () => {
+      const end = this.turnEnds.get(r.claim);
+      if (end) await this.queueSlow(r.claim, end);
+    }).catch(() => undefined).finally(() => this.cleanup(claim));
     // The hold replies once: when every admitted check has ended, and the lock has landed or a check failed, or when the hold ends.
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([Promise.allSettled([...runs, ...(lockWait ? [lockWait] : [])]), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
     if (lockWait) void lockWait.then(() => { if (this.lockWaits.get(r.claim) === unlocked) this.lockWaits.delete(r.claim); });
-    void Promise.allSettled(runs).then(() => this.cleanup(claim));
     return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, readyAt, budgetCost, changed };
   }
 
@@ -899,7 +910,7 @@ export class GateRunner {
   }
 
   /**
-   * A stop's reply let the turn end, with its claim's fast lane green (or no claim to judge): its slow checks take
+   * A stop's reply let the turn end: once its fast lane has ended with none FAIL or INVALID, its slow checks take
    * their queued places, each the place an older snapshot's held for the same check; a reply that keeps the agent
    * working starts none of them. A looping session's are held there instead (#965) until the loop pauses for them:
    * its next automatic prompt can't come before a check would end, counting its queue wait and expected time, by the
@@ -908,10 +919,23 @@ export class GateRunner {
    * or your words, starts them and the session's held ones. Resolves once the held places are recorded.
    */
   async turnEnded(claim: string | null, background: string[] = [], stopAt = this.o.now(), reading?: LoopReading): Promise<void> {
-    const plant = this.o.plant;
-    const c = claim ? this.claimOf(claim) : undefined;
-    const session = reading?.session ?? c?.session;
+    const session = reading?.session ?? (claim ? this.claimOf(claim)?.session : undefined);
     if (!session) return;
+    const end = { session, background, stopAt, repliedAt: this.o.now(), reading };
+    if (claim) this.turnEnds.set(claim, end);
+    await this.queueSlow(claim, end);
+  }
+  private async queueSlow(claim: string | null, end: TurnEnd): Promise<void> {
+    const c = claim ? this.claimOf(claim) : undefined;
+    if (claim) {
+      // The definition placeholder is not a running check: spec checks still run while it drafts.
+      if (!c?.ready || [...c.entries.values()].some((e) => e.check.check !== DEFINITION && e.lane === 'fast' && (e.running || e.waiting))) return;
+      const fast = this.standing(claim).filter((e) => e.check !== DEFINITION && e.lane === 'fast');
+      if (fast.some((e) => e.result === 'pending')) return;
+      if (fast.some((e) => e.result === 'FAIL' || e.result === 'INVALID')) { this.turnEnds.delete(claim); return; }
+    }
+    const plant = this.o.plant;
+    const { session, background, stopAt, repliedAt, reading } = end;
     const loop = { origin: reading?.origin, due: reading?.due ?? null, background, starter: reading?.starter ?? null };
     const slow = c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.runs.length && !e.running && !e.waiting && !e.group && !e.stale) : [];
     const looping = AUTOMATIC.has(loop.origin ?? '') && plant !== 'starts-on-every-green-stop';
@@ -928,10 +952,13 @@ export class GateRunner {
     } else {
       const now = this.o.now();
       const unforeseen = !loop.due && UNFORESEEN.has(loop.origin ?? '');
-      const next = loop.due ? loop.due.at : unforeseen ? now + GRACE_MS : Infinity;
+      const next = loop.due ? loop.due.at : unforeseen ? repliedAt + GRACE_MS : Infinity;
       const free = await this.slotTimes(now);
-      for (const e of slow) {
-        const ms = e.check.expected_ms ?? (await this.expectedMs(e.check.check)) ?? 0;
+      const timed = await Promise.all(slow.map(async (e) => ({ e, ms: e.check.expected_ms ?? (await this.expectedMs(e.check.check)) ?? 0 })));
+      // Finish every queue-time read before placing any check: a prompt, newer reply or joining definition
+      // can intervene, but placement and consuming the turn-end reading must be one synchronous step.
+      if (claim && (this.turnEnds.get(claim) !== end || !c?.ready)) return;
+      for (const { e, ms } of timed) {
         free.sort((a, b) => a - b);
         const start = free[0] ?? Infinity;
         if (start + ms <= next && plant !== 'holds-every-loop-check') {
@@ -939,11 +966,14 @@ export class GateRunner {
           this.place(session, e, 'loop_paused', writes);
         } else this.hold(session, e, unforeseen ? 'grace' : 'due', loop.due?.what ?? 'no prompt foreseen', writes);
       }
-      if (unforeseen && plant !== 'no-grace-window' && [...this.heldOf(session)].some((h) => h.why === 'grace')) this.graces.set(session, now + GRACE_MS);
+      if (unforeseen && plant !== 'no-grace-window' && [...this.heldOf(session)].some((h) => h.why === 'grace')) this.graces.set(session, repliedAt + GRACE_MS);
     }
+    if (claim) this.turnEnds.delete(claim);
     const pumped = this.pump();
     await Promise.all(writes);
     await pumped;
+    // A late fast lane does not restart the reply's grace window or the stop's background cap.
+    this.tick();
   }
   /** A claim's slow checks as they were declared, each with the deadline a hold is measured by; null when it has none. */
   slowDeadlines(claim: string): { check: string; deadline_ms: number | null }[] {
@@ -1022,9 +1052,10 @@ export class GateRunner {
     const ts = this.o.now();
     return this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'check.held', ts, subject: record.claim, data: { ...record } });
   }
-  /** A prompt came: the grace window's loop didn't pause. */
+  /** A prompt came: neither a grace window nor an earlier reply may start checks for this new turn. */
   prompted(session: string): void {
     this.graces.delete(session);
+    for (const [claim, end] of this.turnEnds) if (end.session === session) this.turnEnds.delete(claim);
   }
   /**
    * The session is idle and its facts have emptied (#965): no background work and no cron job left, so what they held
@@ -1038,10 +1069,15 @@ export class GateRunner {
   /** The session ended, and its wake-ups and cron jobs with it: no prompt comes, so everything it held starts. */
   ended(session: string): void {
     this.graces.delete(session);
+    for (const end of this.turnEnds.values()) if (end.session === session) {
+      end.background = [];
+      end.reading = undefined;
+    }
     this.release(session, () => true, 'loop_paused');
   }
   /** The session's background work has ended: the checks it held take their queued places (#907). Returns them. */
   backgroundEnded(session: string): string[] {
+    for (const end of this.turnEnds.values()) if (end.session === session) end.background = [];
     return this.release(session, (h) => h.why === 'background', 'loop_paused');
   }
   /** Fires what came due on the hub's clock: background work's 30 minutes, and each grace window with no prompt in it. */

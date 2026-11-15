@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/runner/test/eval-fail-closed-2077.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+····
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  16:42:57
+   Duration  75.51s (tests 98%, transform 2%, import 1%)

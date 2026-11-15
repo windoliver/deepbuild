@@ -1,0 +1,72 @@
+
+> @deepbuild/adapters@0.0.0 build
+> tsc -b tsconfig.json
+
+
+> @deepbuild/archive@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/asks@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/briefs@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/budget@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/buying@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-command@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-journey@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-numbers@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-review@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-work@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/cli@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/config-eval@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/conformance@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/env-local@0.0.0 build
+> tsc -p tsconfig.json
+
+dyld[16431]: Library not loaded: @rpath/libnode.137.dylib
+  Referenced from: <2DC30B18-6700-3DD7-B5A3-5972E6E78CAF> <TMP>
+  Reason: tried: '<TMP>' (no such file), '<TMP>' (no such file), '<TMP>' (no such file), '<TMP>' (no such file)
+/bin/sh: line 1:  1611 Abort trap: 6           npm run build --workspaces
