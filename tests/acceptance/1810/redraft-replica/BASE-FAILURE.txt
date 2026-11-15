@@ -1,0 +1,24 @@
+Base c740dede7, Linux 7.0.0-1025-nvidia (x86_64), Node 24.22.0, 2026-11-15. Nothing was built: no CLI dist, no deep-hook,
+no deep-drive. node_modules for the typecheck: a real folder at the checkout root linking each package of a sibling
+install, with its @deepbuild links pointing into this checkout's own packages/.
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/1810/redraft-replica/tsconfig.json
+(no output) exit 0
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1810/redraft-replica --no-file-parallelism
+ ❯ list.test.ts (1 test | 1 failed) 5ms
+   ❯ #1810.eebcb4a2 (1)
+     × #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 3ms
+ ✓ judges.test.ts (5 tests) 3ms
+
+ FAIL  list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+Error: BLOCKED: the replica draws on macOS only; this is linux
+ ❯ blocked ../../1463/helpers.ts:54:56
+ ❯ driveBinaries ../../1463/helpers.ts:95:38
+ ❯ list.test.ts:15:5
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 5 passed (6)
+
+Not run here: list.test.ts on macOS, so neither its result at the base nor at a fix is known. The fixture (makeWorld on
+one session, deep inbox answer twice) was not exercised on Linux, since that needs the built CLI and deep-hook.
