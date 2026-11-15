@@ -324,22 +324,23 @@ pub fn lower(doc: &mut Value) {
     items.extend(added);
 }
 
-/// A plume's opacity over life: `heat` at birth, then each shock cell's dim and bright keys, and
-/// 0 at death.
+/// A plume puff's opacity at birth for each unit of heat: its puffs add up where they overlap,
+/// so each one is faint.
+const PLUME_GLOW: f64 = 0.25;
+
+/// A plume's opacity over life, as hot gas: `heat` × [`PLUME_GLOW`] at birth, thinning toward the
+/// tip as each puff grows (scaled by its size at birth over its size) and fading to 0 at death,
+/// with each shock cell's dim key at 0.45 of the bright ones about it.
 fn shock_keys(heat: f64, cells: usize) -> Value {
     let cells = cells.min(MAX_SHOCK_CELLS as usize);
-    if cells == 0 {
-        return json!([{"at": 0.0, "value": heat}, {"at": 1.0, "value": heat}]);
-    }
-    let n = 2 * cells + 1;
+    // Keys at each cell's bright and dim, or every quarter of life with none.
+    let n = if cells == 0 { 4 } else { 2 * cells + 1 };
     let keys: Vec<Value> = (0..=n)
         .map(|j| {
-            let value = match j {
-                _ if j == n => 0.0,
-                _ if j % 2 == 0 => heat,
-                _ => 0.45 * heat,
-            };
-            json!({"at": j as f64 / n as f64, "value": value})
+            let l = j as f64 / n as f64;
+            let grown = PLUME_SIZE[0] / (PLUME_SIZE[0] + (PLUME_SIZE[1] - PLUME_SIZE[0]) * l);
+            let dim = if cells > 0 && j % 2 == 1 { 0.45 } else { 1.0 };
+            json!({"at": l, "value": heat * PLUME_GLOW * dim * (1.0 - l) * grown})
         })
         .collect();
     json!(keys)
@@ -532,6 +533,31 @@ mod tests {
 
     fn turned_by_thirds(a: &[f64]) -> bool {
         a.len() == 3 && a.iter().zip([0.0, 120.0, 240.0]).all(|(x, w)| (x - w).abs() < 1e-9 || (x - w).abs() > 360.0 - 1e-9)
+    }
+
+    /// An airflow's streaks are gone once they run off their path: over 3 s no live streak stands
+    /// at the path's end, where one held there by the motion's clamp would pile up.
+    #[test]
+    fn airflow_streaks_never_stand_at_the_path_end() {
+        let a = json!({"paths": ["c"], "count": 64, "speed": 1.0, "length": 0.5});
+        let mut d = doc(json!({
+            "c": {"kind": "curve@1", "params": {"points": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]}},
+            "fl": effect("airflow", a),
+        }));
+        lower(&mut d);
+        let s = spec::read(&d, "fl.p0c0", &d["items"]["fl.p0c0"]["params"]).expect("the streaks read");
+        let mut b = eval::Baked::new("fl.p0c0", s, 11, [0.0; 3]);
+        b.curve = (0..16).map(|i| [f64::from(i) / 15.0, 0.0, 0.0]).collect();
+        b.curve_len = 1.0;
+        let (mut live, mut at_end) = (0, 0);
+        for k in 0..30 {
+            for row in eval::columns(&b, 0.1 * f64::from(k)).chunks(eval::FLOATS).filter(|r| r[3] >= 0.0) {
+                live += 1;
+                at_end += usize::from((row[0] - 1.0).abs() < 1e-9);
+            }
+        }
+        assert!(live > 0, "no streak lives");
+        assert_eq!(at_end, 0, "{at_end} of {live} live streaks stand at the path's end");
     }
 
     /// An airflow's three copies of a path stand at 0, 120 and 240° about its axis; the twin

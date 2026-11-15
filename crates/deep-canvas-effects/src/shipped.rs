@@ -990,6 +990,12 @@ pub fn particles() -> Value {
     let u = g.div(&sa, &len);
     let (p_along, tan) = curve_at(&mut g, &u);
     let v_along = g.mul(&tan, "speed");
+    // It's gone once it runs off its curve's end, never held there.
+    let past = g.s("gt@1", json!({"a": u, "b": 1.0}));
+    let on_along = is(&mut g, "motion", 1);
+    let ended = g.s("and@1", json!({"a": past, "b": on_along}));
+    let stays = g.s("not@1", json!({"x": ended}));
+    let alive = g.s("and@1", json!({"a": alive, "b": stays}));
 
     // An orbit about `axis` through the emitter at `spin` rad/s (Rodrigues' rotation).
     let k = g.s("normalize@1", json!({"x": "axis"}));

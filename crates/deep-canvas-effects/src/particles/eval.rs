@@ -298,6 +298,7 @@ pub(crate) fn particle(
     let r5 = draw(h, 5);
     let begin = start(b, birth);
     let start = begin.at;
+    let asked = age.is_some();
     let mut age = age.unwrap_or(life);
     let (pos, vel, contacts, resting) = match &spec.motion {
         Motion::Ballistic { gravity, drag, .. } => {
@@ -337,7 +338,16 @@ pub(crate) fn particle(
                 Shape::Along(_) => r5 * b.curve_len,
                 _ => 0.0,
             };
-            let (p, tan) = curve_at(&b.curve, (s0 + speed * age) / l);
+            // It ends where it runs off its curve: gone past either end, never held there.
+            let mut u = (s0 + speed * age) / l;
+            if !(0.0..=1.0).contains(&u) {
+                if asked {
+                    return None;
+                }
+                u = u.clamp(0.0, 1.0);
+                age = (u * l - s0) / speed;
+            }
+            let (p, tan) = curve_at(&b.curve, u);
             (p, scale(tan, *speed), 0, false)
         }
         Motion::Orbit { axis, spin } => {
