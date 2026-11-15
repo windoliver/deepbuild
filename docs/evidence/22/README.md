@@ -252,8 +252,18 @@ Then, at main b1a1ff86 (`5-main-13.txt`, load 34 to 74), the files so far only r
 | 1172/shown, 1172/popout | fail, `BLOCKED: deep-app has no window` |
 | 1172/shell | fails, 4 of 4 (2 of 4 at the head) |
 | 1457/budgets | fails, the same two INCONCLUSIVE tests for `BASE_BIN_*` |
-| 41/app/screens | **no result**: the runner stopped it when the Mac fell under 20 GB free |
-| 41/app/finder, 1454/commands, 1454/panel, 1454/panel-redraft/refused, 1454/canvas, 1459/voiceover | **not run** on main: read against the code only |
+| 41/app/screens | fails, the same `unknown argument --screenshot` (third run, below) |
+| 41/app/finder | fails, the same two AC17 tests and message |
+| 1454/commands | fails, the same three: two assertions on the board fixture, one SIGKILL before the window |
+| 1454/panel | fails, the same three: two SIGKILLs and the same assertion |
+| 1454/panel-redraft/refused | fails, 3 of 4: two SIGKILLs and a missing window |
+| 1454/canvas | fails, the same SIGKILL before the window |
+| 1459/voiceover | fails, 1 of 3: no buttons labelled with the fixture's rows (at the head, a SIGKILL before the window) |
+
+The last seven rows are a third run on main (`mac-b1a1ff86-main/7-more-suites.txt`, `7-more-exits.txt`, load 13 to
+76, thermal state 1 from the second file on). With it, each of the 19 files that failed at the head has a result on
+main: 17 fail there too, and 1459/identifier and 1459/panel pass on both. `deep-app exited (SIGKILL) before its window`
+happens on main as well, six times in this run; its cause isn't traced.
 
 ## #83's status file, redrafted
 
