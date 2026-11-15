@@ -686,6 +686,10 @@ byHand.push('tests/acceptance/222/budgets.test.ts');
 // #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
 alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
 timed.push('tests/acceptance/223/ac7-budgets.test.ts');
+// #225's files each build deep-show (full, without data, the planted motion, and for linux/amd64 in Docker) and read
+// vector fields through it; ac6 times 1,000 streams' integration in release.
+alone.push('tests/acceptance/225/', 'tests/acceptance/225-oracle/');
+timed.push('tests/acceptance/225/ac6-budgets.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
