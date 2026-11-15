@@ -1,0 +1,11 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/gate-stop.test.ts tests/acceptance/2075/slow-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/work
+
+··········
+
+ Test Files  2 passed (2)
+      Tests  10 passed (10)
+   Start at  17:18:16
+   Duration  84.52s (tests 100%)
+

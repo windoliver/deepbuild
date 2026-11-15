@@ -1,0 +1,180 @@
+
+> @deepbuild/adapters@0.0.0 build
+> tsc -b tsconfig.json
+
+
+> @deepbuild/archive@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/asks@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/briefs@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/budget@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/buying@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-command@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-journey@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-numbers@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-review@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-work@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/cli@0.0.0 build
+> tsc -p tsconfig.json
+
+../hub/src/intake.ts(14,122): error TS2307: Cannot find module '@deepbuild/briefs' or its corresponding type declarations.
+../hub/src/intake.ts(205,50): error TS7006: Parameter 'b' implicitly has an 'any' type.
+../hub/src/intake.ts(275,44): error TS2532: Object is possibly 'undefined'.
+../hub/src/intake.ts(331,27): error TS7006: Parameter 'p' implicitly has an 'any' type.
+../hub/src/intake.ts(331,59): error TS7006: Parameter 'l' implicitly has an 'any' type.
+../hub/src/intake.ts(332,23): error TS7006: Parameter 't' implicitly has an 'any' type.
+../hub/src/intake.ts(332,70): error TS7006: Parameter 's' implicitly has an 'any' type.
+../hub/src/intake.ts(332,90): error TS7006: Parameter 'l' implicitly has an 'any' type.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path <proof>/base/packages/cli
+npm error workspace @deepbuild/cli@0.0.0
+npm error location <proof>/base/packages/cli
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json
+
+
+> @deepbuild/config-eval@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/conformance@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/env-local@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/evidence@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/extension-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/gate@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/github@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+src/intake.ts(14,122): error TS2307: Cannot find module '@deepbuild/briefs' or its corresponding type declarations.
+src/intake.ts(205,50): error TS7006: Parameter 'b' implicitly has an 'any' type.
+src/intake.ts(275,44): error TS2532: Object is possibly 'undefined'.
+src/intake.ts(331,27): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/intake.ts(331,59): error TS7006: Parameter 'l' implicitly has an 'any' type.
+src/intake.ts(332,23): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/intake.ts(332,70): error TS7006: Parameter 's' implicitly has an 'any' type.
+src/intake.ts(332,90): error TS7006: Parameter 'l' implicitly has an 'any' type.
+npm error Lifecycle script `build` failed with error:
+npm error code 2
+npm error path <proof>/base/packages/hub
+npm error workspace @deepbuild/hub@0.0.0
+npm error location <proof>/base/packages/hub
+npm error command failed
+npm error command sh -c tsc -p tsconfig.json && node native/build.mjs
+
+
+> @deepbuild/leases@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/otlp@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/paseo@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/pi@0.1.0 build
+> tsc -p tsconfig.json && node tools.mjs
+
+
+> @deepbuild/proof@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/reading@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/readings@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/record@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/resolver-decisions@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/routing-replay@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/runner@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/supervisor@0.0.0 build
+> tsc -p tsconfig.json && node build-helper.mjs
+
+
+> @deepbuild/verdicts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/wiki@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/workspaces@0.0.0 build
+> tsc -p tsconfig.json
+

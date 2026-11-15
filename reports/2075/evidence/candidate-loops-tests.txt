@@ -1,0 +1,38 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/965/cron.test.ts tests/acceptance/965/loops.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/work
+
+stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 three scheduled turns: no journey on the first two snapshots, each line says it waits for the loop, the second takes the first's place, and the third stop starts it on its own snapshot
+AC1 stop 1: line "says done 1/1 · 1 check waits for the loop · wake-up · 1 test · next: DeepBuild"; journeys: none; held: .deepbuild/checks/journey.sh on 3649e1c held at 1794705633541 (wake-up): started never
+
+stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 three scheduled turns: no journey on the first two snapshots, each line says it waits for the loop, the second takes the first's place, and the third stop starts it on its own snapshot
+AC1 stop 2: line "says done 1/1 · 1 check waits for the loop · wake-up · 1 test · next: DeepBuild"; journeys: none; held: .deepbuild/checks/journey.sh on 3649e1c held at 1794705633541 (wake-up): started never, replaced by bf36731; .deepbuild/checks/journey.sh on bf36731 held at 1794705679808 (wake-up): started never
+
+stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 three scheduled turns: no journey on the first two snapshots, each line says it waits for the loop, the second takes the first's place, and the third stop starts it on its own snapshot
+AC1 stop 3: line "says done 1/2 · 1 check running · 1 test · next: DeepBuild"; journeys: .deepbuild/checks/journey.sh on S3 (slow lane) at 1794705735777; held: .deepbuild/checks/journey.sh on 3649e1c held at 1794705633541 (wake-up): started never, replaced by bf36731; .deepbuild/checks/journey.sh on bf36731 held at 1794705679808 (wake-up): started at 1794705735724 by loop_paused
+
+·stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 (wrong program) the merge base's rule, turnEnded at every green stop (DEEP_HUB_PLANT=starts-on-every-green-stop), starts the journey at stop 1 and fails, naming the stop
+AC1 stop 1: line "says done 1/1 · 1 test · next: DeepBuild"; journeys: .deepbuild/checks/journey.sh on S1 (slow lane) at 1794705666528; held: none
+
+·stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 (wrong program) a runner that holds every loop check (DEEP_HUB_PLANT=holds-every-loop-check) never starts the journey at stop 3 and fails, naming the stop
+AC1 stop 1: line "says done 1/1 · 1 check waits for the loop · wake-up · 1 test · next: DeepBuild"; journeys: none; held: .deepbuild/checks/journey.sh on 2a85696 held at 1794705686193 (wake-up): started never
+
+stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 (wrong program) a runner that holds every loop check (DEEP_HUB_PLANT=holds-every-loop-check) never starts the journey at stop 3 and fails, naming the stop
+AC1 stop 2: line "says done 1/1 · 1 check waits for the loop · wake-up · 1 test · next: DeepBuild"; journeys: none; held: .deepbuild/checks/journey.sh on 2a85696 held at 1794705686193 (wake-up): started never, replaced by c9519e5; .deepbuild/checks/journey.sh on c9519e5 held at 1794705732366 (wake-up): started never
+
+stdout | tests/acceptance/965/loops.test.ts > AC1 #965.2723aec9 a /loop session's journey waits in its held place until the loop pauses > AC1 #965.2723aec9 (wrong program) a runner that holds every loop check (DEEP_HUB_PLANT=holds-every-loop-check) never starts the journey at stop 3 and fails, naming the stop
+AC1 stop 3: line "says done 1/1 · 1 check waits for the loop · no prompt foreseen · 1 test"; journeys: none; held: .deepbuild/checks/journey.sh on 2a85696 held at 1794705686193 (wake-up): started never, replaced by c9519e5; .deepbuild/checks/journey.sh on c9519e5 held at 1794705732366 (wake-up): started never, replaced by dab37b2; .deepbuild/checks/journey.sh on dab37b2 held at 1794705788447 (no prompt foreseen): started never
+
+·stdout | tests/acceptance/965/cron.test.ts > AC3 #965.3dfb5f43 a cron job due in 15 minutes lets the 300 s journey start and holds a 20-minute check > AC3 #965.3dfb5f43 the stop starts the journey when its fast-lane check ends and holds the 20-minute check, whose line names the cron
+AC3: line "says done 1/2 · 1 check running · 1 check waits for the loop · cron · 1 test"; .deepbuild/checks/journey.sh: .deepbuild/checks/journey.sh on S1 (slow lane) at 1794705738624; .deepbuild/checks/soak.sh: none; held: .deepbuild/checks/soak.sh on a232671 held at 1794705738571 (cron): started never
+
+·stdout | tests/acceptance/965/cron.test.ts > AC3 #965.3dfb5f43 a cron job due in 15 minutes lets the 300 s journey start and holds a 20-minute check > AC3 #965.3dfb5f43 (wrong program) a runner that holds every loop check (DEEP_HUB_PLANT=holds-every-loop-check) leaves the journey unrun and fails, naming the check
+AC3: line "says done 1/1 · 2 checks wait for the loop · cron · 1 test · next: DeepBuild"; .deepbuild/checks/journey.sh: none; .deepbuild/checks/soak.sh: none; held: .deepbuild/checks/journey.sh on 8e38a04 held at 1794705758302 (cron): started never; .deepbuild/checks/soak.sh on 8e38a04 held at 1794705758302 (cron): started never
+
+·
+
+ Test Files  2 passed (2)
+      Tests  5 passed (5)
+   Start at  17:20:20
+   Duration  164.40s (tests 100%)
+

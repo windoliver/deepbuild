@@ -1,0 +1,11 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/late-fast-lane.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/work
+
+·········
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  17:11:27
+   Duration  99.24s (tests 99%, transform 1%)
+
