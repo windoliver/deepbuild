@@ -1,0 +1,17 @@
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/config-eval@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/cli@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+build exit 0

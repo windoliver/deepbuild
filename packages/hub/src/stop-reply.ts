@@ -95,10 +95,19 @@ export class StopReply {
     if (nudge) block = nudge;
     let proceeded = false;
     let questionMs = 0;
+    // The turn's end as the gate reads it, given once: at a stop held for its slow checks, which start with it (#39), or
+    // with the reply. Its loop reading and background work are the session's then (#965, #907).
+    let ended: Promise<void> | undefined;
+    const turnEnds = (): Promise<void> => ended ??= (async () => {
+      const live = this.options.state().live.get(meta.session);
+      const due = live?.due && live.due.at > this.options.services.now() ? live.due : null;
+      const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
+      await this.options.services.gate.turnEnded(judged?.claim ?? null, [...(live?.background.values() ?? [])].map((b) => b.what), stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
+    })();
     try {
       const questionHeld = judged?.claim ? await this.options.judging().questionHolds(meta.session) : false;
       if (lane && !lane.sendBack && !sized && judged?.claim && noWake(meta.agent) && lane.slow.length && !questionHeld) {
-        const failed = await this.options.judging().slowStop(meta, r, judged.claim, held);
+        const failed = await this.options.judging().slowStop(meta, r, judged.claim, held, turnEnds);
         if (failed) lane.sendBack = failed;
         // An answer that ended the hold is delivered below, with the wait an answer gets.
         until = Math.min(held, Date.now() + STOP_HOLD_MS);
@@ -156,9 +165,7 @@ export class StopReply {
     // or answer still needed (#82).
     if (!block && judged?.claim) await this.options.judging().stillNeeded(meta, judged.claim).catch(() => undefined);
     if (!block && !proceeded) {
-      const due = live?.due && live.due.at > this.options.services.now() ? live.due : null;
-      const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
-      await this.options.services.gate.turnEnded(judged?.claim ?? null, background, stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
+      await turnEnds();
       if (live) live.words = undefined;
       if (lane && judged?.claim && background.length && lane.slow.length) await this.options.events.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
     }

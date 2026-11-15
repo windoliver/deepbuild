@@ -1,0 +1,122 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2118/carried-inherited.test.ts tests/acceptance/2118/check-link.test.ts tests/acceptance/2118/closes-read.test.ts tests/acceptance/2118/codex-loop.test.ts tests/acceptance/2118/health-person.test.ts tests/acceptance/2118/never-started.test.ts tests/acceptance/2118/rerun-refused.test.ts tests/acceptance/2118/rule-allow.test.ts` runs unleased
+
+ RUN  v5.0.5 ~/doneright-2118-blind
+
+·xxxxxxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2118/carried-inherited.test.ts > AC1 #2118.b16df21c two sessions with equal keys for a spec check that fails on the head and on the merge base: the second session's claim reads the first's result as carried, and its verdict is BLOCKED naming the failure as also on the merge base
+AssertionError: AC1 #2118.b16df21c a failure carried from another session, which the merge base shares, is BLOCKED as inherited, never the claim's own FAIL; session B's verdict is FAIL (price: failed on every real run: total takes the discount off; price carried run:01M7FD9Z64ENFCT4MD41MZP2DB from claim:2118CA in session:carrieda); its check price is FAIL, inherited false (price: failed on every real run: total takes the discount off); session A's verdict was BLOCKED (price: inherited: also fails on the merge base: total takes the discount off); starts: price for claim:2118CA: run:01M7FD9Z64ENFCT4MD41MZP2DB failed; price for claim:2118CA on the merge base: run:01M7FD9ZASZK0HEZ7JH995RDBC failed: expected 'FAIL' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "FAIL"
+
+ ❯ tests/acceptance/2118/carried-inherited.test.ts:43:162
+
+ ❯ verdict tests/acceptance/2118/gate.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/2118/check-link.test.ts > AC5 #2118.fee60420 a claim whose snapshot holds the approved check's folder .deepbuild/checks as a symlink to a folder outside the checkout: when the check starts, nothing is written in that folder and the check is BLOCKED naming the path
+AssertionError: AC5 #2118.fee60420 nothing is written in the folder the link names: it holds your two files as they were, and no other; the approved bytes are "#!/bin/sh\n# Drafted check: an expired token is rejected with"...; the outside folder holds {"expired-token.sh":"#!/bin/sh\n# Drafted check: an expired token is rejected with 401.\nnode -e \"process.exit(require('./src/auth.js').rejectsExpired ? 0 : 1)\"\n","notes.txt":"kept outside the repo\n"}; claim:01M7FD9YYQG12YFR8P34VCFF7M's verdicts on .deepbuild/checks/expired-token.sh's requirement: [{"req":"req:session3da2f23540bc410194b38f1995d3c54a0#R1","outcome":"INCONCLUSIVE","check":".deepbuild/checks/expired-token.sh","depth":"unit","oracle":"code","runs":{"clean":0,"needed":1,"counted":[]},"smallest":null,"points_to":null,"evidence":[],"proof":"test_run","reasons":[".deepbuild/checks/expired-token.sh: 0 of 1 clean runs"],"claim_outcome":"INCONCLUSIVE"}]; every verdict of it: [{"outcome":"INVALID","reasons":["the definition's hash differs from the one locked for session:3da2f23540bc410194b38f1995d3c54a#0; changed: .deepbuild/checks/expired-token.sh"]},{"outcome":"INCONCLUSIVE","reasons":[".deepbuild/checks/expired-token.sh: 0 of 1 clean runs"]}]: expected { …(2) } to deeply equal { …(2) }
+
+- Expected
++ Received
+
+  {
+    "expired-token.sh": "#!/bin/sh
+- # Yours, outside the repo: never the approved check.
+- exit 3
++ # Drafted check: an expired token is rejected with 401.
++ node -e \"process.exit(require('./src/auth.js').rejectsExpired ? 0 : 1)\"
+  ",
+    "notes.txt": "kept outside the repo
+  ",
+  }
+
+ ❯ scene tests/acceptance/2118/check-link.test.ts:89:216
+
+ ❯ tests/acceptance/2118/check-link.test.ts:55:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/2118/codex-loop.test.ts > AC8 #2118.60587a8a a Codex session whose turn began from a continuation with an active goal stops green with one slow check: the check is held for the loop and no run of it starts at that stop
+AssertionError: AC8 #2118.60587a8a no run of the slow check starts at a looping session's stop: the next continuation is about to change the code; the stop's reply came at 1794739875557 (exit 0, stdout "{\"systemMessage\":\"PASS 1/1 · 1 test · next: you · session/4bfb8b6c/01M7FDA9X4WSE8X2H38ZZTAJY2\"}", stderr ""); runs of .deepbuild/checks/slow.sh on claim:01M7FDA9X4WSE8X2H38ZZTAJY2: run.started at 1794739874248 {"run":"run:01M7FDAAE1KG0KA7K8FSA8V7GF","check":".deepbuild/checks/slow.sh","claim":"claim:01M7FDA9X4WSE8X2H38ZZTAJY2","commit":"28454df54eae15462c4f886855090e75facaba9b","host":"local","needs":{"cores":1,"memory_mb":0,"stack_slot":0,"gpus":0,"expected_ms":1200000},"lane":"slow","argv":["/bin/sh","-; its held places: none: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run:01M7FDAAE1KG0KA7K8FSA8V7GF started at 1794739874248",
++ ]
+
+ ❯ scene tests/acceptance/2118/codex-loop.test.ts:99:203
+
+ ❯ tests/acceptance/2118/codex-loop.test.ts:52:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/2118/health-person.test.ts > AC6 #2118.6cbb26ce the owner has a session in maya/notes and one in acme/shop; bob, a person on acme/shop only, calls hub.health: its sessions list holds no session of maya/notes, and still holds the one in acme/shop
+AssertionError: AC6 #2118.6cbb26ce a person's hub.health holds no session of a repo that person isn't on; bob's hub.health names sessions ["b624728c-255f-477e-800f-f1831d50fe28","2a04ad79-d038-4030-b80b-014b94c37ba9"]; the owner's session in maya/notes is 2a04ad79-d038-4030-b80b-014b94c37ba9, the one in acme/shop is b624728c-255f-477e-800f-f1831d50fe28; bob's sessions.read shows ["b624728c-255f-477e-800f-f1831d50fe28"]: expected [ …(2) ] to not include '2a04ad79-d038-4030-b80b-014b94c37ba9'
+ ❯ tests/acceptance/2118/health-person.test.ts:51:110
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/2118/never-started.test.ts > AC2 #2118.bfff8439 a claim whose one check's start rejected is BLOCKED on a missing run; the session stops again on the same tree with the start working: the check has one real run on the new claim and the verdict is made from it
+AssertionError: AC2 #2118.bfff8439 the check has one real run on the new claim, since the run that never started says nothing of the tree; the new claim's verdict is BLOCKED (sum: missing sum couldn't start: its budget waits for your answer (the test refused this start), owner you); every start the gate asked for: sum for claim:2118N1: start rejected (its budget waits for your answer (the test refused this start)): expected [] to deeply equal [ 'sum passed' ]
+
+- Expected
++ Received
+
+- [
+-   "sum passed",
+- ]
++ []
+
+ ❯ tests/acceptance/2118/never-started.test.ts:36:187
+
+ ❯ verdict tests/acceptance/2118/gate.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/2118/rerun-refused.test.ts > AC3 #2118.a5258d6e a claim whose check ended; rerun() is called for that check and start rejects: verdictOf(claim) is BLOCKED and names the check as one that couldn't start
+AssertionError: AC3 #2118.a5258d6e after a rerun whose start rejected, the claim is BLOCKED, never pending; verdictOf(claim:2118R1) is pending (sum: runs still to come); its check sum is pending (sum: runs still to come); starts: sum for claim:2118R1: run:01M7FD9Z2W4HAFXDZZ6FRCR8AK passed; sum for claim:2118R1: start rejected (the claim's checkout is gone (the test refused this start)): expected 'pending' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "pending"
+
+ ❯ tests/acceptance/2118/rerun-refused.test.ts:39:113
+
+ ❯ verdict tests/acceptance/2118/gate.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/2118/rule-allow.test.ts > AC7 #2118.8efe3220 a loaded extension handles tool.before and denies nothing, and a standing rule approves a dependency install: a Claude Code session's npm install gets a hook reply with permissionDecision allow and the rule's words
+AssertionError: AC7 #2118.8efe3220 your standing rule's yes reaches the agent as Claude Code's explicit allow, with acme/open-notes handling tool.before too; the rule is decision:01M6DQSNPH1CPVA0ANZTBN8GSP; the PreToolUse reply to `npm install is-odd`: exit 0 after 29 ms, stdout "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"[acme/open-notes] 3 notes are open\"}}", stderr "": expected undefined to be 'allow' // Object.is equality
+
+- Expected:
+"allow"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/2118/rule-allow.test.ts:108:174
+    106|     const reads = [out.permissionDecisionReason, out.additionalContext…
+    107|     const seen = `the rule is ${rule}; the PreToolUse reply to \`npm i…
+    108|     expect(out.permissionDecision, `${AC7} your standing rule's yes re…
+       |                                                                                                                                                                              ^
+    109|     expect(reads, `${AC7} the reply carries the rule's words: what the…
+    110|   } finally {
+ ❯ verdict tests/acceptance/23/permissions/helpers.ts:70:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  7 failed | 1 passed (8)
+      Tests  7 failed | 1 passed (8)
+   Start at  02:51:01
+   Duration  26.08s (tests 94%, transform 5%, import 1%)
+

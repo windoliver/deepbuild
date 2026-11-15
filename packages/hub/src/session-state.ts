@@ -916,10 +916,12 @@ export class SessionState {
    * hooks established them. It decides whose session a deep command acts as, never whether an answer counts.
    */
   async agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
-    if (!peer || (await this.startOf(peer.pid, true)) !== peer.start) return undefined;
-    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read.
-    if (![...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid)) return undefined;
-    const up = await parents();
+    if (!peer) return undefined;
+    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read;
+    // with one, the caller's start and the table are read together, not one ps after the other (#2328).
+    const others = [...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid);
+    const [start, up] = await Promise.all([this.startOf(peer.pid, true), others ? parents() : undefined]);
+    if (start !== peer.start || !up) return undefined;
     const seen = new Set<number>();
     for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
       seen.add(pid);

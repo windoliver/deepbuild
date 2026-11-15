@@ -1,0 +1,40 @@
+[package]
+name = "mitex-spec-gen"
+description = "Guard to geneate specification files for dependent crates"
+authors.workspace = true
+version = "0.2.7" # DeepBuild patch (windoliver/deepbuild#2359): explicit pin for the carry checker.
+license.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+# DeepBuild patch (windoliver/deepbuild#2359): source of this standalone copy, including its license.
+[package.metadata]
+upstream = { git = "https://github.com/mitex-rs/mitex", rev = "51f7210e026ab05d037125247e92d4d023d8a80d" }
+
+[dependencies]
+mitex-spec.workspace = true
+
+once_cell.workspace = true
+
+[build-dependencies]
+mitex-spec.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+which.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# use prebuilt spec data
+prebuilt = []
+# generate spec data
+generate = []
+
+# DeepBuild patch (windoliver/deepbuild#2359): retain upstream inheritance in this standalone crate.
+[workspace]
+package = { authors = ["Myriad-Dreamin", "OrangeX4", "mgt"], license = "Apache-2.0", edition = "2021", homepage = "https://github.com/mitex-rs/mitex", repository = "https://github.com/mitex-rs/mitex" }
+dependencies = { mitex-spec = { version = "0.2.7", path = "../mitex-spec" }, once_cell = "1", serde = "1.0.188", serde_json = "1.0.106", anyhow = "1", which = "6" }
+lints = { rust = { missing_docs = "warn" }, clippy = { uninlined_format_args = "warn", missing_panics_doc = "warn", missing_safety_doc = "warn", undocumented_unsafe_blocks = "warn" } }

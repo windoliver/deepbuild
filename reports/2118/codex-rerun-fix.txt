@@ -1,0 +1,35 @@
+
+ RUN  v5.0.5 ~/doneright-2118
+
+ ❯ tests/acceptance/39/lanes.test.ts (6 tests | 1 failed | 3 skipped) 28940ms
+   ❯ AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test (2)
+     × AC25 #39.5981bf3b deadline 3 s before the timeout: not held, pending, and the verdict comes with your next message 1238ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/39/lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test > AC25 #39.5981bf3b deadline 3 s before the timeout: not held, pending, and the verdict comes with your next message
+AssertionError: AC25 #39.5981bf3b the check's run is in the slow lane: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/39/lanes.test.ts:107:77
+    105|     expect(r.reply?.decision, `${AC[25]} no verdict at this stop`).toB…
+    106|     const at = await allEvents(hub);
+    107|     expect(inSlowLane(at), `${AC[25]} the check's run is in the slow l…
+       |                                                                             ^
+    108|     expect(finished(at).length, `${AC[25]} pending at the reply`).toBe…
+    109|     await waitFor(async () => finished(await allEvents(hub)).length > …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 3 passed | 3 skipped (7)
+   Start at  02:58:31
+   Duration  46.66s (tests 100%)
+
+rerun exit 1

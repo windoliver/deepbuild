@@ -1,0 +1,10 @@
+
+ RUN  v5.0.5 ~/doneright-2118
+
+
+ Test Files  12 passed (12)
+      Tests  17 passed (17)
+   Start at  11:45:16
+   Duration  76.60s (tests 98%, transform 1%, import 1%)
+
+touched exit 0
