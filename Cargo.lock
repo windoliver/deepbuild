@@ -2771,6 +2771,7 @@ dependencies = [
  "raw-window-handle",
  "serde_json",
  "sha2 0.10.9",
+ "unicode-normalization",
  "vello_cpu 0.3.0",
  "wgpu 30.0.1",
 ]

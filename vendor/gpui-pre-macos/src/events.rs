@@ -18,6 +18,8 @@ use core_graphics::event::CGKeyCode;
 use objc::{msg_send, sel, sel_impl};
 use std::{borrow::Cow, ffi::c_void};
 
+pub mod momentum; // DeepBuild patch (windoliver/deepbuild#542)
+
 const BACKSPACE_KEY: u16 = 0x7f;
 const SPACE_KEY: u16 = b' ' as u16;
 const ENTER_KEY: u16 = 0x0d;
@@ -256,6 +258,7 @@ pub(crate) unsafe fn platform_input_from_native(
                 })
             }),
             NSEventType::NSScrollWheel => window_height.map(|window_height| {
+                momentum::note(native_event); // DeepBuild patch (windoliver/deepbuild#542)
                 let phase = match native_event.phase() {
                     NSEventPhase::NSEventPhaseMayBegin | NSEventPhase::NSEventPhaseBegan => {
                         TouchPhase::Started

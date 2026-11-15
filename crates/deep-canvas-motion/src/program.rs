@@ -3147,7 +3147,10 @@ impl Program {
                 }
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));
-                    let range = c.and_then(|c| c.get("range")).and_then(Value::as_array);
+                    // #542: a scroll control's range is its `scroll.range`, in steps.
+                    let range = c
+                        .and_then(|c| c.get("range").or_else(|| c.pointer("/scroll/range")))
+                        .and_then(Value::as_array);
                     let (Some(c), Some([lo, hi])) = (c, range.map(Vec::as_slice)) else {
                         return Err(Refused {
                             code: "ref_unresolved",

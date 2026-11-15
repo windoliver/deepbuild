@@ -36,11 +36,11 @@ impl Hub<'_> {
         let Some(base) = self.forms.get(doc).cloned().filter(previews) else {
             return;
         };
-        let Ok(Some(piece)) = self.logic_piece(&base) else {
+        let track = self.track_read(doc);
+        let Ok(Some(piece)) = self.logic_piece(&base, &track) else {
             return;
         };
         let piece = Rc::new(piece);
-        let track = self.track_read(doc);
         let read = track.iter().filter(|e| e.get("present").is_none());
         let Some(entries) = read.map(Entry::parse).collect::<Option<Vec<_>>>() else {
             return;
@@ -48,7 +48,7 @@ impl Hub<'_> {
         let key = format!(
             "{}|{}",
             piece.items.iter().map(|i| i.content.as_str()).collect::<Vec<_>>().join(","),
-            Value::Array(track).to_string()
+            Value::Array(track)
         );
         let len = piece.items.first().map_or(1, |i| i.step.max(1));
         let want = t.max(0) / len + 1;

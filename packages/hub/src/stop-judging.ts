@@ -1,5 +1,6 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import { StopReply } from './stop-reply.js';
+import { recordRefusal } from './claim-refusal.js';
 import type { AnswerDeliveryPort, TranscriptsPort, SessionFlagsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
 import { backgrounded } from './hub-shared.js';
 import type { Questions } from './questions.js';
@@ -13,7 +14,7 @@ import { basename, dirname, join } from 'node:path';
 import { duration, type Asks, type Delivery } from '@deepbuild/asks';
 import { type Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { type EvidenceStore } from '@deepbuild/evidence';
+import { scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
 import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
@@ -1129,14 +1130,19 @@ export class StopJudging {
       this.verdictWrites.set(r.claim, written);
       written.catch(() => undefined).finally(() => { if (this.verdictWrites.get(r.claim) === written) this.verdictWrites.delete(r.claim); });
       return { ...ran, findings };
-    })();
-    this.lanes.set(r.claim, lane);
-    // A claim whose checks could not start is INCONCLUSIVE, naming why, as one past its budget is: never left with no verdict.
-    lane.catch((error: unknown) => {
-      const why = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
-      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE', 'checks_not_started').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+    })().catch(async (error: unknown) => {
+      // The lane awaits setup's BLOCKED, at a held stop or watch end (#2074). Scrub before bounding the cause,
+      // leaving room for owner, remedy and the reading's claim prefix.
+      const why = scrubText(error instanceof Error ? error.message : String(error), { held: this.options.settings.held }).slice(0, 7000);
+      const reason = `its checks did not start: ${why}; owner: you`;
+      const session = { session: r.session, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd };
+      await this.options.services.openItems.stillNeeded(session, [`BLOCKED: ${reason}. Resolve the cause and run the checks again.`]);
+      await recordRefusal(this.options.events, this.options.services.now(), r.claim, r.commit, reason, 'BLOCKED', 'checks_not_started');
+      await this.options.events.appendReading(session.session, session.agent, `${r.claim} BLOCKED: ${reason}. Resolve the cause and run the checks again.`);
+      return { fast: [], slow: [], snapshot: r.commit, readyAt: this.options.services.now(), budgetCost: [], changed: false, findings: [] };
     });
+    this.lanes.set(r.claim, lane);
+    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s setup failure wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
 
   /**
@@ -1173,7 +1179,7 @@ export class StopJudging {
       const projects = isObj(user.projects) ? user.projects : {};
       for (const key of [cwd, real]) { const p = projects[key]; if (isObj(p) && p.hasTrustDialogAccepted === true) return true; }
     } catch { /* no Claude Code settings */ }
-    return codexTrusted([cwd, real]);
+    return codexTrusted(this.options.services.root.dir, [cwd, real]);
   }
 
   /**
@@ -1259,7 +1265,9 @@ export class StopJudging {
     }
     // What a pending claim waited for closes once its run ended or your answer came (#82), before open items are read.
     const [owner] = (await this.options.services.record.raw(`SELECT subject_ref, session_id FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null; session_id: string | null }[];
-    if (owner?.subject_ref) await this.options.services.openItems.settled({ session: owner.session_id ?? '', agent: this.options.state().live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
+    // An older run ending is not recovery evidence for a newer claim's setup failure (#2074).
+    const [latest] = owner?.subject_ref ? (await this.options.services.record.raw('SELECT id FROM claims WHERE subject_ref = ? ORDER BY created DESC, id DESC LIMIT 1', [owner.subject_ref])) as { id: string }[] : [];
+    if (owner?.subject_ref && latest?.id === claim.slice(6)) await this.options.services.openItems.settled({ session: owner.session_id ?? '', agent: this.options.state().live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
@@ -1434,17 +1442,9 @@ export class StopJudging {
     }
   }
 
-  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why, by its code when it has one (#2029). */
+  /** The validity floor's INVALID and snapshot budget's INCONCLUSIVE, recorded before checks count. */
   async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID', code?: string): Promise<void> {
-    const ts = this.options.services.now();
-    const id = ulid(ts);
-    await this.options.events.append(this.options.events.connection('core'), {
-      v: code ? 2 : 1, id, kind: 'verdict.made', ts, subject: claim,
-      data: {
-        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], ...(code ? { why: [{ reason: code, text: reason.slice(0, 8192) }] } : {}), requirements: [], smallest: null, points_to: null, commit,
-        key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
-      },
-    });
+    await recordRefusal(this.options.events, this.options.services.now(), claim, commit, reason, outcome, code);
   }
 
   /** The denied calls that ran anyway in a claim's session (#1033): as they arrived, and as the record holds them. */
