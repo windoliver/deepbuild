@@ -165,6 +165,8 @@ const INSTALLED: &[(&str, &str)] = &[
         "logic-counter.wat",
         include_str!("../gallery/logic-counter.wat"),
     ),
+    // #508: the figure the canvas skill embeds, its example of a 3D figure.
+    ("figure.json", include_str!("../gallery/figure.json")),
 ];
 
 /// The installed guide the patch schema prints (#1972), as the gallery index names its file.
