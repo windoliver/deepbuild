@@ -61,7 +61,7 @@ function about(seconds: number): string {
 /** The parts of the line, in order, before any shortening. */
 interface Parts { watch: string; unverified: string; outcome: string; cause: string; points: string; tests: string; running: string[]; owner: string; receipt: string }
 function parts(s: LineState): Parts {
-  const watch = s.watch ? `watch-only: ${s.watch.why}` : '';
+  const watch = s.watch ? (s.watch.why ? `watch-only: ${s.watch.why}` : 'watch-only') : '';
   const unverified = s.requirements.filter((r) => UNVERIFIED.has(r.outcome)).map((r) => name(r.req));
   const passed = s.requirements.filter((r) => r.outcome === 'PASS').length;
   const total = s.requirements.length;
