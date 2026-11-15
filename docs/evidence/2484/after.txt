@@ -19,8 +19,5 @@ PASS slots: 16 slots from the published API, each with one row, a frozen interfa
  Test Files  4 passed (4)
       Tests  40 passed (40)
 
-# the same three with -w taken out again, 2 runs
-2484-near-base1.txt: Test Files  3 failed | 1 passed (4)
-2484-near-base1.txt:      Tests  5 failed | 35 passed (40)
-2484-near-base2.txt: Test Files  3 failed | 1 passed (4)
-2484-near-base2.txt:      Tests  5 failed | 35 passed (40)
+# head 2743d337a + the folders() test, with -w on folders(): -t 'takes the working folders', 2 runs of 2 alike, 2026-11-15
+      Tests  1 passed | 24 skipped (25)

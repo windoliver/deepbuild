@@ -61,6 +61,27 @@ PATH=/bin:/usr/bin:/usr/sbin exec lsof "$@"
     }
   }, 60_000);
 
+  it('takes the working folders\' "found nothing" as an answer when lsof also warns of a mount it can\'t stat', async () => {
+    const k = kit();
+    const [fill] = cleanFills(k);
+    // The real lsof, but its working-folder reading finds nothing (status 1, as when the processes are gone) and
+    // warns unless -w asks it not to, as lsof does of such a mount.
+    const dir = mkdtempSync(join(tmpdir(), 'deep-env-lsof-'));
+    writeFileSync(join(dir, 'lsof'), `#!/bin/sh
+case " $* " in *" cwd "*) ;; *) PATH=/bin:/usr/bin:/usr/sbin exec lsof "$@" ;; esac
+case " $* " in *" -w "*) ;; *) printf '%s\\n' "lsof: WARNING: can't stat() nsfs file system /run/docker/netns/default" '      Output information may be incomplete.' >&2 ;; esac
+exit 1
+`);
+    chmodSync(join(dir, 'lsof'), 0o755);
+    process.env.PATH = `${dir}:/bin:/usr/bin:/usr/sbin`;
+    try {
+      const report = await runKit(k, fill!, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['PASS'], ['PASS']]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it('reads BLOCKED, not PASS, when ps starts and then hangs', async () => {
     const k = kit();
     const [fill] = cleanFills(k);
