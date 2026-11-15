@@ -1,0 +1,11 @@
+{
+  "method": "Compare raw unmodified affected-run findings from pinned merge base and head; never rewrite the known-failures list.",
+  "base": "FAIL affected: 161 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 22 passed, in 739 s at load 145; logs in <log-directory>",
+  "head": "FAIL affected: 151 new, 44 already failing on main, 0 inconclusive or blocked, 0 listed skips, 31 passed, in 440 s at load 137; logs in <log-directory>",
+  "inheritedLintFindings": 195,
+  "introducedLintFindings": [],
+  "headTestFailures": [],
+  "headWideOrUnrun": [],
+  "normalization": "Two canvas-closures jobs share one log path. Its raw lease/FAIL interleaving is normalized to the identical drift diagnostic on the base; original logs are retained.",
+  "result": "All 31 selected head tests passed; no new lint finding relative to the base. Inherited lint remains FAIL on both sides, not PASS."
+}

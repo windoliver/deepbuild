@@ -1,0 +1,2 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/canvas-closures.mjs drift` runs unleased
+FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list

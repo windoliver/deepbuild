@@ -1,0 +1,296 @@
+{
+  "issue": 2068,
+  "comparisonBase": "2baafea73726387c4fabe5057599be0831774f0a",
+  "headTreeBeforeDocs": "4fe072f32864040fe7fbf36a305cc17e233ea7aa plus source.sha256-pinned workspace-shutdown correction",
+  "method": "Fresh checkout-local builds, immutable acceptance files, same hermetic PATH, serial Vitest config, same expected values; no expected-failure wrappers or retries.",
+  "acceptance": {
+    "base": {
+      "passed": 7,
+      "failed": 3,
+      "skipped": 0
+    },
+    "head": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "requirements": [
+    {
+      "ordinal": 1,
+      "id": "#2068.3406ba1b",
+      "text": "With a planted forge that answers each request after 5 s, session A's prompt holds an issue link and session B's PostToolUse arrives 100 ms later. B's event is in the record before the forge's first answer. The merge base records it only after the whole read and fails this test, naming the wait",
+      "tests": [
+        {
+          "file": "tests/acceptance/2068/forge-wait.test.ts",
+          "name": "#2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait",
+          "head": "passed",
+          "base": "failed"
+        }
+      ]
+    },
+    {
+      "ordinal": 2,
+      "id": "#2068.b095ccdc",
+      "text": "With a planted forge that never answers, A's prompt is recorded and its task opens from your words within the read's deadline, and A's row says the issue couldn't be read. The merge base holds A's prompt and every later hook for 20 s and fails, naming the wait",
+      "tests": [
+        {
+          "file": "tests/acceptance/2068/forge-wait.test.ts",
+          "name": "#2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning",
+          "head": "passed",
+          "base": "failed"
+        },
+        {
+          "file": "tests/acceptance/2068/forge-wait.test.ts",
+          "name": "#2068 AC2: pages-forever forge wait ends within the prompt's acknowledged hold, with a words task despite continuing page answers",
+          "head": "passed",
+          "base": "failed"
+        }
+      ]
+    },
+    {
+      "ordinal": 3,
+      "id": "#2068.865fe586",
+      "text": "The twin: with a forge that answers at once, A's task opens with the issue's criteria and each author's role, as #322 has it",
+      "tests": [
+        {
+          "file": "tests/acceptance/2068/forge-wait.test.ts",
+          "name": "#2068 AC3: instant forge twin preserves issue criteria and every fixture author's membership role",
+          "head": "passed",
+          "base": "passed"
+        },
+        {
+          "file": "tests/acceptance/322/github.test.ts",
+          "name": "AC4 #322.fe8625c3 the GitHub source reads each comment author's role from the repo's collaborators AC4 #322.fe8625c3 drive-by's comment \"skip the e2e test\" on the recorded issue: the reading marks drive-by outside, R2 stays, R3 carries drive-by, and the definition locks only after your one answer",
+          "head": "passed",
+          "base": "passed"
+        },
+        {
+          "file": "tests/acceptance/322/github.test.ts",
+          "name": "AC4 #322.fe8625c3 the GitHub source reads each comment author's role from the repo's collaborators AC4 #322.fe8625c3 (wrong program) a reader that takes the role from the comment's text (DEEP_HUB_PLANT=role-from-comment-text) fails the kit on the comment signed \"the repo owner\", naming drive-by",
+          "head": "passed",
+          "base": "passed"
+        },
+        {
+          "file": "tests/acceptance/322/github.test.ts",
+          "name": "AC4 #322.fe8625c3 the GitHub source reads each comment author's role from the repo's collaborators AC4 #322.fe8625c3 (wrong program) a reader that marks every author a collaborator (DEEP_HUB_PLANT=every-author-collaborator) fails the kit, naming drive-by",
+          "head": "passed",
+          "base": "passed"
+        },
+        {
+          "file": "tests/acceptance/322/github.test.ts",
+          "name": "AC14 #322.3d2ab46d an app account's comment: automated, and its membership waives nothing AC14 #322.3d2ab46d octo-app[bot] (type Bot, write access) comments \"skip the e2e test\": the reading marks it automated, R2 stays, and the definition waits for your one answer as outside text does",
+          "head": "passed",
+          "base": "passed"
+        },
+        {
+          "file": "tests/acceptance/322/github.test.ts",
+          "name": "AC14 #322.3d2ab46d an app account's comment: automated, and its membership waives nothing AC14 #322.3d2ab46d (wrong program) a reader that takes the app's membership as collaborator (DEEP_HUB_PLANT=app-membership-as-collaborator) waives R2 and fails the kit, naming octo-app[bot]",
+          "head": "passed",
+          "base": "passed"
+        },
+        {
+          "file": "tests/acceptance/322/github.test.ts",
+          "name": "AC15 #322.43590a58 roles come only from a complete membership read AC15 #322.43590a58 with sam on page 2 of a complete read, sam's \"skip the e2e test\" waives R2 (control); with page 2 failing on the next read, sam is not marked collaborator from the earlier list: R2 stays and sam's text waits on one ask",
+          "head": "passed",
+          "base": "passed"
+        }
+      ]
+    }
+  ],
+  "timing": {
+    "base": [
+      {
+        "mode": "five-seconds",
+        "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+        "date": "2026-11-14T23:49:41.398Z",
+        "node": "v24.22.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "configured_b_after_a_ms": 100,
+        "b_sent_ms": 101.04824999999983,
+        "a_record": {
+          "absent_ms": 25070.909291999997,
+          "present_ms": 25083.903667,
+          "log_pos": 12
+        },
+        "b_record": {
+          "absent_ms": 25094.889792,
+          "present_ms": 25105.357792000003,
+          "log_pos": 16
+        },
+        "b_minus_first_forge_answer_ms": 20064.167833,
+        "forge_request_count": 5,
+        "first_forge": {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 38.91424999999981,
+          "answered_ms": 5041.189959,
+          "disconnected": false
+        },
+        "b_wait_ms": 25004.309542000003
+      },
+      {
+        "mode": "never",
+        "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+        "date": "2026-11-14T23:50:03.476Z",
+        "node": "v24.22.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "configured_b_after_a_ms": 100,
+        "b_sent_ms": 101.36954200000037,
+        "a_record": {
+          "absent_ms": 20006.171292000003,
+          "present_ms": 20016.411708999996,
+          "log_pos": 13
+        },
+        "b_record": {
+          "absent_ms": 20016.411708999996,
+          "present_ms": 20028.622709,
+          "log_pos": 14
+        },
+        "b_minus_first_forge_answer_ms": null,
+        "acknowledged_hold_ms": 2002,
+        "prompt_at_deadline": false,
+        "task_at_deadline": false,
+        "b_at_deadline": false,
+        "forge_request_count": 1,
+        "first_forge": {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 45.15558400000009,
+          "answered_ms": null,
+          "disconnected": null
+        },
+        "b_wait_ms": 19927.253167
+      },
+      {
+        "mode": "pages-forever",
+        "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+        "date": "2026-11-14T23:50:07.718Z",
+        "node": "v24.22.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "configured_b_after_a_ms": 100,
+        "b_sent_ms": 100.97137500000099,
+        "a_record": null,
+        "b_record": null,
+        "b_minus_first_forge_answer_ms": null,
+        "acknowledged_hold_ms": 2002,
+        "prompt_at_deadline": false,
+        "task_at_deadline": false,
+        "b_at_deadline": false,
+        "forge_request_count": 769,
+        "first_forge": {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 32.95104100000026,
+          "answered_ms": 34.44958300000144,
+          "disconnected": false
+        },
+        "b_wait_ms": null
+      }
+    ],
+    "head": [
+      {
+        "mode": "five-seconds",
+        "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+        "date": "2026-11-15T00:10:38.112Z",
+        "node": "v24.22.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "configured_b_after_a_ms": 100,
+        "b_sent_ms": 100.37841599999979,
+        "a_record": {
+          "absent_ms": 1011.403208,
+          "present_ms": 1021.861416,
+          "log_pos": 16
+        },
+        "b_record": {
+          "absent_ms": 96.34799999999996,
+          "present_ms": 107.15666599999986,
+          "log_pos": 13
+        },
+        "b_minus_first_forge_answer_ms": -4924.8850840000005,
+        "forge_request_count": 1,
+        "first_forge": {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 31.05291599999987,
+          "answered_ms": 5032.04175,
+          "disconnected": true
+        },
+        "b_wait_ms": 6.778250000000071
+      },
+      {
+        "mode": "never",
+        "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+        "date": "2026-11-15T00:10:40.993Z",
+        "node": "v24.22.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "configured_b_after_a_ms": 100,
+        "b_sent_ms": 100.34020799999962,
+        "a_record": {
+          "absent_ms": 1012.2137909999992,
+          "present_ms": 1022.4363329999996,
+          "log_pos": 15
+        },
+        "b_record": {
+          "absent_ms": 100.56074999999964,
+          "present_ms": 112.52629099999922,
+          "log_pos": 12
+        },
+        "b_minus_first_forge_answer_ms": null,
+        "acknowledged_hold_ms": 2001,
+        "prompt_at_deadline": true,
+        "task_at_deadline": true,
+        "b_at_deadline": true,
+        "forge_request_count": 1,
+        "first_forge": {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 29.718165999999655,
+          "answered_ms": null,
+          "disconnected": null
+        },
+        "b_wait_ms": 12.186082999999599
+      },
+      {
+        "mode": "pages-forever",
+        "baseline": "1c4d1f0e2aaad8c6a6573848823566d04ff73d17",
+        "date": "2026-11-15T00:10:44.103Z",
+        "node": "v24.22.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "configured_b_after_a_ms": 100,
+        "b_sent_ms": 100.6396249999998,
+        "a_record": {
+          "absent_ms": 1004.9832499999993,
+          "present_ms": 1015.942959,
+          "log_pos": 16
+        },
+        "b_record": {
+          "absent_ms": 104.68408400000044,
+          "present_ms": 110.14104199999929,
+          "log_pos": 13
+        },
+        "b_minus_first_forge_answer_ms": 79.464833,
+        "acknowledged_hold_ms": 2001,
+        "prompt_at_deadline": true,
+        "task_at_deadline": true,
+        "b_at_deadline": true,
+        "forge_request_count": 432,
+        "first_forge": {
+          "path": "/repos/fixture-2068/widgets/issues/7",
+          "page": 1,
+          "requested_ms": 29.23491699999977,
+          "answered_ms": 30.67620899999929,
+          "disconnected": false
+        },
+        "b_wait_ms": 9.501416999999492
+      }
+    ]
+  },
+  "note": "This is a machine-checked report mapping, not a claim that the repository static-tag trace lane ran. Raw Vitest JSON/results accompany it. No p95/reference-machine budget is claimed."
+}
