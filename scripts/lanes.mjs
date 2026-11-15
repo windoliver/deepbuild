@@ -712,7 +712,10 @@ byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/h
   'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
 // #468's files each build deep-gpu (AC7 deep-show too) and draw on the Metal GPU; ac5-budgets judges the lens and
 // focus task's budgets on the reference Mac.
+// AC3 runs as its blind redraft, on the owner's ruling: the first draft reads view3d's `overlays` as an object keyed
+// by ID, where #506's suite already reads it as an array, so it is kept by hand (468-redraft-ac3/DISPUTE.md).
 alone.push('tests/acceptance/468/', 'tests/acceptance/468-redraft-ac3/');
+byHand.push('tests/acceptance/468/ac3-leader.test.ts');
 timed.push('tests/acceptance/468/ac5-budgets.test.ts');
 // #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
 // Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
