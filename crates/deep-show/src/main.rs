@@ -71,6 +71,7 @@ mod query;
 mod data_hash;
 mod registries;
 mod retired;
+mod review;
 mod ring;
 mod runs;
 mod sandbox;
@@ -1382,6 +1383,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "regression_asks_every_verdict" => Planted::RegressionAsksEveryVerdict,
                 "loop_checks_cached_by_doc" => Planted::LoopChecksCachedByDoc,
                 "stale_fix_never_rebases" => Planted::StaleFixNeverRebases,
+                "review_passes_on_yes" => Planted::ReviewPassesOnYes,
+                "review_sees_session" => Planted::ReviewSeesSession,
+                "keeps_bad_observation" => Planted::KeepsBadObservation,
+                "id_view_varies_by_run" => Planted::IdViewVariesByRun,
+                "ask_keyed_by_words" => Planted::AskKeyedByWords,
+                "asks_again_after_answer" => Planted::AsksAgainAfterAnswer,
+                "keeps_all_findings" => Planted::KeepsAllFindings,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,
@@ -1688,6 +1696,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         installed,
         plugin_entries,
         gallery: optional(input.get("gallery"), |g| Some(PathBuf::from(g.as_str()?)))?,
+        review_model: optional(input.get("review_model"), |m| {
+            m.get("name")?.as_str()?;
+            m.get("replies")?.as_array()?;
+            Some(m.clone())
+        })?,
         corpus_runs,
         sessions,
         processes,
