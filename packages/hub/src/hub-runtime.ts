@@ -5,6 +5,7 @@ import { shipped } from '@deepbuild/adapters';
 import { cwdOf, openArchive } from '@deepbuild/archive';
 import { runCommandCheck } from '@deepbuild/checks-command';
 import { itemOutcomes } from '@deepbuild/checks-review';
+import { removalPlan, runEval } from '@deepbuild/config-eval';
 import { answers, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
 import { gateTokens, openGitHub, repoOf, revoke, sessionToken } from '@deepbuild/github';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
@@ -45,6 +46,10 @@ export function createCore(
     },
     decisions: { resolver: resolverDecisions, evidence, judge },
     knowledge: {
+      removal: async (reader, read, change) => {
+        const input = await removalPlan(reader, read, change);
+        return { plan: input.plan, evaluate: ({ folder, ...context }) => runEval({ ...input, ...context, root: folder }) };
+      },
       archive: ({ plant, ...o }) => openArchive({
         ...o, adapters: shipped(), transcripts: MEMORY_TRANSCRIPTS,
         projectOf: (cwd, agent) => projectOf(cwd, agent, plant),

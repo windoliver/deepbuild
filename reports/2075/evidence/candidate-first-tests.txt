@@ -1,0 +1,232 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/background-hold.test.ts packages/hub/test/codex-files.test.ts packages/hub/test/gate-queue.test.ts packages/hub/test/gate-runner.test.ts packages/hub/test/gate-stop.test.ts packages/hub/test/late-fast-lane.test.ts packages/hub/test/shared-runs.test.ts packages/hub/test/snapshot-sibling.test.ts tests/acceptance/2075/slow-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/work
+
+···stderr | packages/hub/test/gate-queue.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  36560 (node)
+
+································xx················xx······stderr | packages/hub/test/shared-runs.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  39788 (node)
+  39792 (node)
+
+·xx·xxxx············
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a claim citing a file the session never read goes back naming it, and no check runs
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:67:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a claim's check runs in a checkout of its snapshot, in the fast lane, through the command check kind, and its verdict is recorded
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:83:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a head with a commit no DeepBuild session recorded runs its checks only in the sandbox: none of your files
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:117:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a fix check proven by its run on the merge base, which fails there on its assertion, is PASS (#31)
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:141:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a fix check that passes on the merge base makes the claim INVALID, recorded for a person and never sent back, and its checkouts are gone (#31)
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:160:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a fast-lane check that fails sends the stop back in the same reply, naming the check
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:180:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  packages/hub/test/gate-stop.test.ts > the gate runner at a real stop > a later stop on the same claim counts only its own hold, not the lane's times again, and changes no code (#45)
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/29/h-d.ts:270:45
+    268|     sleep(120_000).then(() => undefined),
+    269|   ]);
+    270|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    271|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    272| }
+ ❯ world packages/hub/test/gate-stop.test.ts:47:15
+ ❯ packages/hub/test/gate-stop.test.ts:198:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/acceptance/2075/slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC1 starts once the fast check passes, with no new prompt, and the claim reaches a verdict
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/2075/helpers.ts:36:45
+     34|     sleep(120_000).then(() => undefined),
+     35|   ]);
+     36|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub di…
+       |                                             ^
+     37|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+     38| }
+ ❯ play tests/acceptance/2075/helpers.ts:68:15
+ ❯ tests/acceptance/2075/slow-checks.test.ts:13:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/acceptance/2075/slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC2 starts none when the fast check fails after the hold, and the verdict is FAIL
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/2075/helpers.ts:36:45
+     34|     sleep(120_000).then(() => undefined),
+     35|   ]);
+     36|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub di…
+       |                                             ^
+     37|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+     38| }
+ ❯ play tests/acceptance/2075/helpers.ts:68:15
+ ❯ tests/acceptance/2075/slow-checks.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/acceptance/2075/slow-checks.test.ts > a slow check after a fast check that runs past the hold > AC3 starts none of the old snapshot when a new prompt comes before the fast check ends
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <proof>/work/target; run cargo build -p deep-hook first
+    at deepHook (file://<proof>/work/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<proof>/work/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<proof>/work/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<proof>/work/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<proof>/work/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<proof>/work/packages/hub/dist/core.js:570:9)
+
+ ❯ startHub tests/acceptance/2075/helpers.ts:36:45
+     34|     sleep(120_000).then(() => undefined),
+     35|   ]);
+     36|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub di…
+       |                                             ^
+     37|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+     38| }
+ ❯ play tests/acceptance/2075/helpers.ts:68:15
+ ❯ tests/acceptance/2075/slow-checks.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  2 failed | 7 passed (9)
+      Tests  10 failed | 71 passed (81)
+   Start at  17:16:15
+   Duration  97.98s (tests 97%, transform 2%, import 1%)

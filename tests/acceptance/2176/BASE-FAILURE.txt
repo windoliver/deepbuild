@@ -1,0 +1,111 @@
+# Base run of tests/acceptance/2176 at 72fe11a11 (origin/main), no implementation; target/debug/deep-show built from this
+# commit with `cargo build --bin deep-show --locked`. The checkout's path reads <repo>.
+$ node --test --test-reporter=spec tests/acceptance/2176/kinds-no-core.test.mjs
+exit status: 1
+
+✖ #2176.86da3dfd with no canvas core built, `deep kinds --dump <folder>` prints one line naming what to build and exits with the status of a core that can't start (69.36452ms)
+✖ #2176.60aad2b6 `deep kinds --diff` reads the same (102.004277ms)
+✔ #2176.7d36198e with a canvas core built, both print what they print today (1916.017412ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2404.327354
+
+✖ failing tests:
+
+test at tests/acceptance/2176/kinds-no-core.test.mjs:74:1
+✖ #2176.86da3dfd with no canvas core built, `deep kinds --dump <folder>` prints one line naming what to build and exits with the status of a core that can't start (69.36452ms)
+  AssertionError [ERR_ASSERTION]: stderr holds no stack trace
+  exit 1
+  --- stdout
+  
+  --- stderr
+  file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33
+  export const refuse = (code, path, remediation, actual = '', retryable = false) => new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));
+                                                                                     ^
+  
+  Refused [Error]: No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.
+      at refuse (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33:84)
+      at canvasCore (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:32:15)
+      at file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:41:29
+      at new Promise (<anonymous>)
+      at kindsCommand (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:40:12)
+      at file:///tmp/deep-2176-YH5BP2/checkout/packages/cli/dist/main.js:368:30 {
+    refusal: {
+      code: 'unavailable',
+      retryable: true,
+      remediation: 'No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.',
+      path: '',
+      actual: 'deep-show',
+      evidence: []
+    },
+    whole: 'deep-show'
+  }
+  
+  Node.js v24.22.0
+  
+      at saysNoCore (file://<repo>/tests/acceptance/2176/kinds-no-core.test.mjs:67:10)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2176/kinds-no-core.test.mjs:75:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33\nexport const refuse = (code, path, remediation, actual = '', retryable = false) => new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));\n                                                                                   ^\n\nRefused [Error]: No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.\n    at refuse (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33:84)\n    at canvasCore (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:32:15)\n    at file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:41:29\n    at new Promise (<anonymous>)\n    at kindsCommand (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:40:12)\n    at file:///tmp/deep-2176-YH5BP2/checkout/packages/cli/dist/main.js:368:30 {\n  refusal: {\n    code: 'unavailable',\n    retryable: true,\n    remediation: 'No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.',\n    path: '',\n    actual: 'deep-show',\n    evidence: []\n  },\n  whole: 'deep-show'\n}\n\nNode.js v24.22.0\n",
+    expected: /^\s+at |^(?:file:\/\/)?\/.*\.js:\d+$|^\s*\^+\s*$|^Node\.js v\d|node:internal/m,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2176/kinds-no-core.test.mjs:78:1
+✖ #2176.60aad2b6 `deep kinds --diff` reads the same (102.004277ms)
+  AssertionError [ERR_ASSERTION]: stderr holds no stack trace
+  exit 1
+  --- stdout
+  
+  --- stderr
+  file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33
+  export const refuse = (code, path, remediation, actual = '', retryable = false) => new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));
+                                                                                     ^
+  
+  Refused [Error]: No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.
+      at refuse (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33:84)
+      at canvasCore (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:32:15)
+      at file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:41:29
+      at new Promise (<anonymous>)
+      at kindsCommand (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:40:12)
+      at file:///tmp/deep-2176-YH5BP2/checkout/packages/cli/dist/main.js:368:30 {
+    refusal: {
+      code: 'unavailable',
+      retryable: true,
+      remediation: 'No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.',
+      path: '',
+      actual: 'deep-show',
+      evidence: []
+    },
+    whole: 'deep-show'
+  }
+  
+  Node.js v24.22.0
+  
+      at saysNoCore (file://<repo>/tests/acceptance/2176/kinds-no-core.test.mjs:67:10)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/2176/kinds-no-core.test.mjs:81:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33\nexport const refuse = (code, path, remediation, actual = '', retryable = false) => new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));\n                                                                                   ^\n\nRefused [Error]: No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.\n    at refuse (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/wire.js:33:84)\n    at canvasCore (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:32:15)\n    at file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:41:29\n    at new Promise (<anonymous>)\n    at kindsCommand (file:///tmp/deep-2176-YH5BP2/checkout/packages/hub/dist/canvas.js:40:12)\n    at file:///tmp/deep-2176-YH5BP2/checkout/packages/cli/dist/main.js:368:30 {\n  refusal: {\n    code: 'unavailable',\n    retryable: true,\n    remediation: 'No canvas core is built under /tmp/deep-2176-YH5BP2/checkout/target; run cargo build --bin deep-show first.',\n    path: '',\n    actual: 'deep-show',\n    evidence: []\n  },\n  whole: 'deep-show'\n}\n\nNode.js v24.22.0\n",
+    expected: /^\s+at |^(?:file:\/\/)?\/.*\.js:\d+$|^\s*\^+\s*$|^Node\.js v\d|node:internal/m,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }
+
+# The same command before the core was built (no target/release/deep-show or target/debug/deep-show): AC1 and AC2
+# failed as above; AC3 did not pass, it failed BLOCKED:
+✖ #2176.7d36198e with a canvas core built, both print what they print today (0.313904ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: no canvas core is built under <repo>/target, so this criterion is unrun: run cargo build --bin deep-show --locked first

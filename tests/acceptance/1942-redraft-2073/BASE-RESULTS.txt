@@ -1,0 +1,44 @@
+Blind redraft of #1942's AC2 after #2073 (REDRAFT.md): the base run. NOT DONE; only the type check was run.
+
+Base commit: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 (the checkout's HEAD, detached), installed and built by the lead.
+Date: 2026-11-14 (02:00 local)  Node: v24.22.0
+Paths: <repo> is the checkout, <home> a test's home, <tmp> its temp folder. None appears below but <repo>.
+
+The test run: not done
+----------------------
+Why: survives.test.ts opens its world on this Mac's Lima VM deep-fedora (openWorld('deep-fedora')), and that VM is
+stopped. This job must not start, stop or change a VM, and was told not to run the test. So no vitest command was run,
+no hub, session or SSH link was started, and nothing was written under /tmp or on a VM.
+
+Command, not run (from <repo>):
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run tests/acceptance/1942-redraft-2073/ --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+Per test:
+  survives.test.ts (AC2 #1942.dd9b1b61)
+    NOT RUN  a download an agent starts on a host runs on as a user service named by its token after the session ends;
+             its claim gets no verdict, nor the run an end, until the download ends there (redraft 2073)
+
+NOT RUN is none of PASS, FAIL, BLOCKED or INCONCLUSIVE: there is no result. By the frozen helpers' code (openWorld,
+HostSide.open), a run with the VM stopped would end BLOCKED before any assertion ("BLOCKED: the VM deep-fedora can't
+be reached over SSH at its forwarded port"); that was not tried.
+
+What a base run should show once deep-fedora runs, from reading the base's code, unverified: the base's deep_run asks no
+trust, and the file the redraft adds (<home>/.claude.json with one projects entry) is read there by nothing that
+changes this run, so the redraft should give what tests/acceptance/1942/survives.test.ts gives at this base. That
+result is not recorded either: the frozen tests/acceptance/1942/BASE-FAILURE.txt is from d51be2c3, before #1942 was
+built. The redraft's test body differs from the original's by the import path, the test's name and one added call,
+trustInClaudeCode(w.home, repo), before the session starts (read with diff).
+
+The type check: run, passes
+---------------------------
+Commands (from <repo>):
+  export PATH="$HOME/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH"
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1942-redraft-2073/tsconfig.json
+Result: exit 0, no output, 5 s.
+
+Its program holds the redraft and the frozen helpers it imports (the same command with --listFilesOnly):
+  <repo>/tests/acceptance/1942/helpers.ts
+  <repo>/tests/acceptance/1942-redraft-2073/survives.test.ts
+A planted type error was not tried.
+
+Left behind: nothing. No process was started but node (tsc, twice), and no temp or scratch folder was made.

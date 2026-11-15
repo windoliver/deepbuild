@@ -1,0 +1,55 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/removal-cancel.test.ts packages/hub/test/removal-provenance.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/removal-cancel.test.ts > a cancellation at durable intent leaves the file and cannot apply on recovery
+AssertionError: expected '' to be '- rule\n' // Object.is equality
+
+- Expected
++ Received
+
+- - rule
+-
+
+ ❯ packages/hub/test/removal-cancel.test.ts:28:40
+     26|     expect(readFileSync(path, 'utf8')).toBe('- rule\n');
+     27|     await new RemovalApplication(() => ({ ...services, durable: disk }…
+     28|     expect(readFileSync(path, 'utf8')).toBe('- rule\n');
+       |                                        ^
+     29|     expect(await record.raw("SELECT 1 FROM events WHERE kind = 'decisi…
+     30|   } finally { await record.close(); rmSync(dir, { recursive: true, for…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/removal-provenance.test.ts > ignores a forged removal-intent attachment and its claimed adopt at startup
+Error: BLOCKED: installed hub could not start: deep hub: the core stopped: RecordError: type at /subject: Send the type the schema names at this path. (decision.created 01M7E9Y0PCMA31X5XGA2BPQ7H2)
+    at SqliteRecord.prepare (file://<checkout>/packages/record/dist/index.js:353:19)
+    at SqliteRecord.appendNow (file://<checkout>/packages/record/dist/index.js:402:31)
+    at file://<checkout>/packages/record/dist/index.js:382:102
+    at async SqliteRecord.append (file://<checkout>/packages/record/dist/index.js:385:34)
+    at async Proxy.<anonymous> (file://<checkout>/packages/hub/dist/hub-shared.js:255:23)
+    at async RemovalApplication.finish (file://<checkout>/packages/hub/dist/removal-application.js:93:9)
+    at async RemovalApplication.recover (file://<checkout>/packages/hub/dist/removal-application.js:106:13)
+    at async Core.openRunner (file://<checkout>/packages/hub/dist/core.js:816:9)
+    at async Core.init (file://<checkout>/packages/hub/dist/core.js:560:23)
+
+ ❯ start tests/acceptance/2077/helpers.ts:94:27
+     92|     })), exit.then(() => ({} as Line)), sleep(30000).then(() => ({} as…
+     93|   ]);
+     94|   if (!ready.ready) throw Error(`BLOCKED: installed hub could not star…
+       |                           ^
+     95|   return { pid: child.pid!, child, exit, socket: String(ready.socket),…
+     96| }
+ ❯ packages/hub/test/removal-provenance.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  16:32:48
+   Duration  3.58s (tests 67%, transform 27%, import 5%, setup 1%)

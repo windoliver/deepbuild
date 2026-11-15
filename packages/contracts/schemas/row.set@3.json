@@ -56,6 +56,7 @@
       "properties": {
         "id": {
           "type": "string",
+          "maxLength": 8192,
           "pattern": "^(session|ask|job):[0-9A-Za-z._-]+$",
           "description": "The row's ID, the id its node carries in the app's tree (#1459): ask:<ULID> for an ask, session:<ID> for a session, job:<key> for a running job by its key (#1925)."
         },
@@ -65,11 +66,12 @@
         },
         "order": {
           "type": "string",
-          "maxLength": 512,
+          "maxLength": 8192,
           "description": "Where the row sits in the list: every reader sorts the rows by this key's bytes, so the list has one order."
         },
         "address": {
           "type": "string",
+          "maxLength": 8192,
           "pattern": "^(session|ask)/[0-9A-Za-z._-]+$",
           "description": "The row's page: ask/<ULID> or session/<ID>; a running job's row has none."
         },
@@ -83,12 +85,12 @@
             "string",
             "null"
           ],
-          "maxLength": 1024,
+          "maxLength": 8192,
           "description": "The repo the row's session works in, by its folder's name; null when the record names none."
         },
         "session": {
           "type": "string",
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "The session the row is, or the session that raised the ask."
         },
         "agent": {
@@ -96,7 +98,7 @@
             "string",
             "null"
           ],
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "The session's agent."
         },
         "entry": {
@@ -155,7 +157,7 @@
             "string",
             "null"
           ],
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "Who the row waits on: you or the agent, and a person once the hub names people; null when nothing waits."
         },
         "since": {
@@ -175,7 +177,7 @@
             "properties": {
               "answer": {
                 "type": "string",
-                "maxLength": 256,
+                "maxLength": 8192,
                 "description": "The option an answer gives, as deep inbox answer takes it."
               },
               "label": {
@@ -209,7 +211,7 @@
         },
         "progress": {
           "type": "string",
-          "maxLength": 256,
+          "maxLength": 8192,
           "description": "A running job's count from its tool's own counter, such as 300 of 600 or 42%, with its time left once the job has run 30 s, such as 300 of 600 · 40 s left (#1925). Absent when its tool reports no counter: a reader shows how long it has run from since."
         },
         "doing": {

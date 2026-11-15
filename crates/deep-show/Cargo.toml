@@ -74,6 +74,11 @@ test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #533: the logic module's test builds (the #533 acceptance README: Test features of
+# deep-show): a patch release of the shipped logic implementation in its place, and a planted
+# logic module that requires physics; #1919's `test-leave-out-physics` is the full set without it.
+test-logic-patch = []
+test-logic-needs-physics = []
 # Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
 plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
@@ -212,6 +217,8 @@ test-scene3d-reads-vector = []
 test-mark = ["dep:deep-canvas-test-modules"]
 # Issue #202: the test canvas module test.weight, an item kind of 0.20 ms of CPU.
 test-weight = ["dep:deep-canvas-test-modules"]
+# Issue #223: the test canvas module test.swirl, a stream table in streams@1 for (−y, x).
+test-swirl = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
 # Issue #522 (tests/acceptance/522): the test canvas module test.launch, whose items fire a world's
@@ -269,6 +276,9 @@ test-gpu-output-in-effects = []
 # readings entry hands the column view no changed ranges, and a motion module with one more operator
 # that reads the physics module's occurrence list by its array name.
 test-physics-hands-no-changes = []
+# Issue #213: physics.cast@1 sorting each request's hits by ID before distance, which the service's
+# conformance fixture refuses at the seal.
+test-cast-sorts-by-id = ["deep-physics-rapier/test-cast-sorts-by-id"]
 test-motion-reads-physics-array = []
 
 [dependencies]
@@ -318,6 +328,8 @@ deep-text = { path = "../deep-text" }
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
+unicode-normalization = "0.1"
 sha2 = "0.10"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }

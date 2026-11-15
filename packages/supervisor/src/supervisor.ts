@@ -415,6 +415,21 @@ class LocalSupervisor implements Supervisor {
   }
 
   /**
+   * What a run's egress filter refused, recorded as the sandbox's refusals are: once for the run, operation and target,
+   * in the one set, so a request refused in a loop adds one event (#2399).
+   */
+  private filterRefused(run: string, { operation, target }: { operation: string; target: string }): void {
+    // The planted wrong programs: no refusal of the filter's recorded, one kept per operation, and a set without the run.
+    if (this.options.plant === 'egress-refusals-unrecorded') return;
+    const seen = this.options.plant === 'egress-refusal-once-per-operation' ? `${run} ${operation}`
+      : this.options.plant === 'egress-refusals-seen-without-run' ? `${operation} ${target}` : `${run} ${operation} ${target}`;
+    if (this.denied.has(seen)) return;
+    this.denied.add(seen);
+    // One the record didn't take isn't recorded: the next try is.
+    void this.append('sandbox.denied', { run, operation, target }, run).catch(() => void this.denied.delete(seen));
+  }
+
+  /**
    * What a Linux run's sandbox parent writes, one JSON line each: a refusal, recorded as a sandbox.denied for the run
    * once, or the program's own end, given to `exited` once every refusal before it is on the record. Resolves once
    * the parent is gone, the pipe with it, and what it refused is recorded.
@@ -624,7 +639,7 @@ class LocalSupervisor implements Supervisor {
     const creds = spec.credentials ?? [];
     // The egress filter, and node:http, https and tls with it, load only for a run that holds such a credential.
     const egress = creds.some((c) => c.hosts?.length)
-      ? await (await import('./egress.js')).openEgress(creds, (r) => void this.append('sandbox.denied', { run: spec.run, ...r }, spec.run).catch(() => undefined), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
+      ? await (await import('./egress.js')).openEgress(creds, (r) => this.filterRefused(spec.run, r), this.options.plant === 'standin-every-host' ? 'standin-every-host' : undefined)
       : undefined;
     const given = Object.fromEntries(creds.flatMap((c) => [
       [c.env, egress?.standIns[c.env] ?? c.value],
