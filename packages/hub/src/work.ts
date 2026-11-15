@@ -26,6 +26,7 @@ import type { Plant } from './plant.js';
 import type { Starts } from './starts.js';
 import type { WorkspaceService } from './workspaces-port.js';
 import { refusal, Refused } from './wire.js';
+import { authored, byMilestone, meets, ruleOf, whyOut, type Listed, type Rule } from './work-rule.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -38,6 +39,15 @@ const FORGE_MS = 30_000;
 const PR_MS = 5_000;
 /** Replaced attempts on one issue at which the run asks you instead of starting another. */
 const BREAKER = 3;
+/** A standing run's breaker (#1335): attempts in a row ending in anything but a landing, or reverted landings in a day. */
+const IN_A_ROW = 5;
+const REVERTS = 2;
+/** How often a standing run says what it landed, left and spent. */
+const WEEK = 7 * DAY;
+/** How long a candidate's blocked-by links stand unless the issue changed. */
+const LINKS_MS = 5 * 60_000;
+/** How an attempt ended with its change landed. */
+const LANDED = new Set(['PASS', 'landed with the budget window open']);
 /** The words GitHub reads as linking an issue, closing ones first, and `Part of`, which links without closing. */
 const LINKS = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+#(\d+)\b/i;
 /** The baseline of issues closed before the gate: the repo's file, as the commit that added it holds it. */
@@ -58,6 +68,10 @@ interface Issue { n: number; open: boolean; title: string; body: string; blocker
 interface Pull { pr: number; issue: number; login: string; open: boolean; merged: boolean; branch: string; head: string }
 interface Attempt { attempt: number; run: string; agent: string; model: string | null; worktree: string; branch: string; reason: string; ended: { cause: string; verdict: string | null; model: string | null } | null }
 interface OpenAsk { handle: string; session: string | null; key: string }
+/** A merged revert of a landing, by the landing's commit as its branch names it, and when it merged. */
+interface Revert { pr: number; landing: string; at: number }
+/** What a pass reads: the issues and pull requests, the run's set, a standing run's left-out issues with why, and its milestones. */
+interface Read { issues: Map<number, Issue>; pulls: Pull[]; reverts: Revert[]; set: number[]; out: Map<number, string>; milestones: Map<number, Listed['milestone']> }
 type Approval = NonNullable<Awaited<ReturnType<Starts['approvalOf']>>>;
 
 export interface WorkOptions {
@@ -86,7 +100,12 @@ const key = (o: Obj): string => sha256Hex(canonicalize(o as JsonValue));
 export class Work {
   private timer: NodeJS.Timeout | undefined;
   private passing: Promise<void> | undefined;
-  private readonly forge = new Map<string, { at: number; issues: Map<number, Issue>; pulls: Pull[] }>();
+  private readonly forge = new Map<string, { at: number; issues: Map<number, Issue>; pulls: Pull[]; reverts: Revert[] }>();
+  /** A standing run's open issues as the forge lists them, and each one's blocked-by links, read again once it changed (#1335). */
+  private readonly lists = new Map<string, { at: number; open: Map<number, Listed & { updated: string }> }>();
+  private readonly links = new Map<string, { updated: string; at: number; blockers: number[] | { unread: string } }>();
+  private readonly epics = new Map<string, { at: number; under: Set<number> }>();
+  private readonly docs = new Map<string, string | undefined>();
   /** The head of each PR a run last judged, and what held it: judged again only once its head moves. */
   private readonly judged = new Map<number, { head: string; held: string | null }>();
   /** The head of each workspace attempt's branch last judged, and what held it (#1347). */
@@ -134,8 +153,11 @@ export class Work {
     for (const r of runs) await this.o.appendCore('work.run', { ask: r.ask, step: 'paused', scope: r.scope }, { subject: r.ask });
     return { paused: runs.map((r) => r.ask) };
   }
-  /** `deep work show`: each issue's state word and what it waits for, as the record's `work.state` holds them. */
-  async show(params: Obj): Promise<{ runs: { ask: string; repo: string; paused: boolean; issues: Row[] }[] }> {
+  /**
+   * `deep work show`: each issue's state word and what it waits for, as the record's `work.state` holds them. A standing
+   * run's page (#1335) adds its rule, the issues that stay out with why, its weekly notices, and its breaker's pause.
+   */
+  async show(params: Obj): Promise<{ runs: ({ ask: string; repo: string; paused: boolean; issues: Row[] } & Obj)[] }> {
     const out = [];
     for (const r of await this.runs(params.repo)) {
       let rows = await this.rows(r.ask);
@@ -148,7 +170,17 @@ export class Work {
           return word ? { ...row, word } : row;
         }));
       }
-      out.push({ ask: r.ask, repo: r.repo, paused: r.paused, issues: rows });
+      const [approval] = (await this.o.raw(`SELECT json_extract(data, '$.rule') AS rule FROM events WHERE kind = 'start.approval' AND subject = ? LIMIT 1`, [r.ask])) as { rule: string | null }[];
+      const rule = approval?.rule ? (JSON.parse(approval.rule) as Rule) : undefined;
+      if (!rule) { out.push({ ask: r.ask, repo: r.repo, paused: r.paused, issues: rows }); continue; }
+      const left = await this.outOf(r.ask);
+      const breaker = await this.runBreakerOf(r.ask);
+      const notices = ((await this.o.raw(`SELECT data FROM events WHERE kind = 'work.notice' AND subject = ? ORDER BY log_pos`, [r.ask])) as { data: string }[]).map((n) => { const d = JSON.parse(n.data) as Obj; delete d.ask; return d; });
+      out.push({
+        ask: r.ask, repo: r.repo, paused: r.paused || breaker.raised !== null,
+        ...(breaker.raised ? { breaker: breaker.raised === 'open' ? `${breaker.handle} asks you whether it goes on` : `you kept it paused (${breaker.handle})` } : {}),
+        rule: rule.words, issues: rows.filter((row) => !left.has(row.issue)), left_out: [...left].map(([issue, why]) => ({ issue, why })), notices,
+      });
     }
     return { runs: out };
   }
@@ -247,14 +279,21 @@ export class Work {
    * The set's issues, with the issues they're blocked by (the forge's blocked-by links and the body's Depends on list),
    * and every PR that links an issue; read at most every 30 s unless the run changed something.
    */
-  private async read(repo: string, set: number[], fresh: boolean): Promise<{ issues: Map<number, Issue>; pulls: Pull[] }> {
+  private async read(repo: string, set: number[], fresh: boolean, known?: ReadonlyMap<number, Issue>): Promise<{ issues: Map<number, Issue>; pulls: Pull[]; reverts: Revert[] }> {
     const kept = this.forge.get(repo);
-    if (kept && !fresh && this.o.now() - kept.at < FORGE_MS) return kept;
+    if (kept && !fresh && this.o.now() - kept.at < FORGE_MS && set.every((n) => kept.issues.has(n))) return kept;
     const issues = new Map<number, Issue>();
     const want = [...set];
     for (let i = 0; i < want.length; i++) {
       const n = want[i]!;
       if (issues.has(n)) continue;
+      // A standing run's open issues come from the forge's list, their links from its cache (#1335).
+      const listed = known?.get(n);
+      if (listed) {
+        issues.set(n, listed);
+        if (Array.isArray(listed.blockers)) for (const b of listed.blockers) if (!want.includes(b)) want.push(b);
+        continue;
+      }
       const r = await this.get(`/repos/${repo}/issues/${n}`);
       if (r.status !== 200 || !isObj(r.body)) { issues.set(n, { n, open: true, title: '', body: '', blockers: { unread: `#${n}, which the forge answered ${r.status} for` } }); continue; }
       const body = String(r.body.body ?? '');
@@ -267,18 +306,22 @@ export class Work {
       if (Array.isArray(blockers)) for (const b of blockers) if (!want.includes(b)) want.push(b);
     }
     const pulls: Pull[] = [];
+    const reverts: Revert[] = [];
     for (let page = 1; ; page++) {
       const r = await this.get(`/repos/${repo}/pulls?state=all&per_page=100&page=${page}`);
       if (r.status !== 200 || !Array.isArray(r.body) || !r.body.length) break;
       for (const p of r.body.filter(isObj)) {
+        const head = isObj(p.head) ? p.head : {};
+        // Main watch's revert of a landing (#1333), merged: a standing run's breaker counts these.
+        const reverted = /^main-watch\/revert-([0-9a-f]{7,40})$/.exec(String(head.ref ?? ''));
+        if (reverted && typeof p.merged_at === 'string') reverts.push({ pr: Number(p.number), landing: reverted[1]!, at: Date.parse(p.merged_at) });
         const link = LINKS.exec(typeof p.body === 'string' ? p.body : '');
         if (!link) continue;
-        const head = isObj(p.head) ? p.head : {};
         pulls.push({ pr: Number(p.number), issue: Number(link[2]), login: isObj(p.user) ? String(p.user.login) : '', open: p.state === 'open', merged: Boolean(p.merged_at), branch: String(head.ref ?? ''), head: String(head.sha ?? '') });
       }
       if (r.body.length < 100) break;
     }
-    const read = { at: this.o.now(), issues, pulls };
+    const read = { at: this.o.now(), issues, pulls, reverts };
     this.forge.set(repo, read);
     return read;
   }
@@ -291,6 +334,160 @@ export class Work {
       const list = (JSON.parse(text) as { closed_before_gate?: unknown }).closed_before_gate;
       return new Set(Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []);
     } catch { return new Set(); }
+  }
+
+  // ---- A standing run's set (#1335).
+
+  /**
+   * A standing run's set: the open issues that meet its rule and are ready to join, with those that joined before.
+   * One that meets the rule but isn't ready stays out, with why, and no ask; one that joined and no longer meets the
+   * rule leaves. Each joined issue's milestone sets the order, earliest first.
+   */
+  private async readRule(ask: string, repo: string, checkout: string, rule: Rule, fresh: boolean): Promise<Read> {
+    const listed = await this.listOpen(repo, fresh);
+    const rows = await this.rows(ask);
+    const joined = new Set(rows.map((r) => r.issue));
+    const under = rule.epic !== null ? await this.underEpic(repo, rule.epic, fresh) : undefined;
+    const out = new Map<number, string>();
+    const set: number[] = [];
+    const known = new Map<number, Issue>();
+    const milestones = new Map<number, Listed['milestone']>();
+    for (const i of [...listed.values()].sort((a, b) => a.n - b.n)) {
+      // Outside the rule: its structure, its author (only you or a collaborator, never an outside author or an agent),
+      // or a Runs on: line this host can't serve. Such an issue isn't named, unless it had joined and left.
+      const machine = unserved(i.body);
+      if (!meets(rule, i, under) || !authored(rule, i, (login) => this.o.starts().isAgentLogin(login)) || machine) {
+        if (joined.has(i.n)) out.set(i.n, machine ? `#${i.n}'s Runs on: line names ${machine}, which this host can't serve` : `#${i.n} no longer meets the run's rule`);
+        continue;
+      }
+      const blockers = await this.linksOf(repo, i);
+      const why = joined.has(i.n) ? undefined : await whyOut(i, { repo, doc: (path) => this.doc(checkout, path), blockers });
+      if (why) { out.set(i.n, why); continue; }
+      set.push(i.n);
+      known.set(i.n, { n: i.n, open: true, title: i.title, body: i.body, blockers });
+      milestones.set(i.n, i.milestone);
+    }
+    // An issue that joined and has closed since keeps its place until its row reads landed or closed; then it's done
+    // with, and the forge isn't read for it again.
+    const final = new Set(['PASS', 'closed', 'closed before the gate']);
+    for (const r of rows) if (!listed.has(r.issue) && !set.includes(r.issue) && !final.has(r.word)) set.push(r.issue);
+    return { ...(await this.read(repo, set, fresh, known)), set, out, milestones };
+  }
+  /** The repo's open issues, pull requests left out, as the forge lists them a page at a time; read at most every 30 s. */
+  private async listOpen(repo: string, fresh: boolean): Promise<Map<number, Listed & { updated: string }>> {
+    const kept = this.lists.get(repo);
+    if (kept && !fresh && this.o.now() - kept.at < FORGE_MS) return kept.open;
+    const open = new Map<number, Listed & { updated: string }>();
+    for (let page = 1; ; page++) {
+      const r = await this.get(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+      if (r.status !== 200 || !Array.isArray(r.body)) throw Error(`the forge answered ${r.status} for ${repo}'s open issues, page ${page}`);
+      for (const x of r.body.filter(isObj)) {
+        if (x.pull_request !== undefined) continue;
+        const user = isObj(x.user) ? x.user : {};
+        const m = isObj(x.milestone) ? x.milestone : null;
+        open.set(Number(x.number), {
+          n: Number(x.number), title: String(x.title ?? ''), body: String(x.body ?? ''), updated: String(x.updated_at ?? ''),
+          labels: Array.isArray(x.labels) ? x.labels.map((l) => (isObj(l) ? String(l.name ?? '') : String(l))).filter(Boolean) : [],
+          milestone: m ? { number: Number(m.number), title: String(m.title ?? ''), due: typeof m.due_on === 'string' ? Date.parse(m.due_on) : null } : null,
+          author: String(user.login ?? ''), role: String(x.author_association ?? 'NONE'),
+          // An app's or a bot's issue is what an agent writes.
+          app: user.type === 'Bot' || isObj(x.performed_via_github_app),
+        });
+      }
+      if (r.body.length < 100) break;
+    }
+    this.lists.set(repo, { at: this.o.now(), open });
+    return open;
+  }
+  /** An issue's blocked-by links, the forge's and its Depends on list's, read again once the issue changed or after 5 minutes. */
+  private async linksOf(repo: string, i: Listed & { updated: string }): Promise<number[] | { unread: string }> {
+    const at = `${repo}#${i.n}`;
+    const kept = this.links.get(at);
+    if (kept && kept.updated === i.updated && this.o.now() - kept.at < LINKS_MS) return kept.blockers;
+    const links = await this.get(`/repos/${repo}/issues/${i.n}/dependencies/blocked_by`);
+    const blockers = links.status === 200 && Array.isArray(links.body)
+      ? [...new Set([...links.body.filter(isObj).map((b) => Number(b.number)), ...dependsOn(i.body)])].sort((a, b) => a - b)
+      : { unread: `#${i.n}'s blocked-by links, which the forge answered ${links.status} for` };
+    this.links.set(at, { updated: i.updated, at: this.o.now(), blockers });
+    return blockers;
+  }
+  /** The issues the forge lists under an epic as its sub-issues; none when it lists none. */
+  private async underEpic(repo: string, epic: number, fresh: boolean): Promise<Set<number>> {
+    const at = `${repo}#${epic}`;
+    const kept = this.epics.get(at);
+    if (kept && !fresh && this.o.now() - kept.at < FORGE_MS) return kept.under;
+    const under = new Set<number>();
+    for (let page = 1; ; page++) {
+      const r = await this.get(`/repos/${repo}/issues/${epic}/sub_issues?per_page=100&page=${page}`);
+      if (r.status !== 200 || !Array.isArray(r.body)) break;
+      for (const x of r.body.filter(isObj)) under.add(Number(x.number));
+      if (r.body.length < 100) break;
+    }
+    this.epics.set(at, { at: this.o.now(), under });
+    return under;
+  }
+  /** A file on the checkout's default branch as its remote holds it, for a design link to land in; undefined when it has none. */
+  private async doc(checkout: string, path: string): Promise<string | undefined> {
+    const ref = await git(checkout, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/HEAD^{commit}').catch(() => git(checkout, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main^{commit}')).catch(() => git(checkout, 'rev-parse', '--verify', '--quiet', 'refs/heads/main^{commit}')).catch(() => '');
+    if (!ref) return undefined;
+    const at = `${checkout}\n${ref}:${path}`;
+    // Kept for the default branch's head alone: a landing moves it, and the files are read again there.
+    if (!this.docs.has(at)) {
+      for (const k of this.docs.keys()) if (k.startsWith(`${checkout}\n`) && !k.startsWith(`${checkout}\n${ref}:`)) this.docs.delete(k);
+      this.docs.set(at, await git(checkout, 'show', `${ref}:${path}`).catch(() => undefined));
+    }
+    return this.docs.get(at);
+  }
+
+  /** A standing run's issues that stay out, each named with why whenever that changes: a reading on the run's page, never an ask. */
+  private async recordOut(ask: string, out: Map<number, string>): Promise<void> {
+    const kept = await this.outOf(ask);
+    for (const [issue, why] of out) if (kept.get(issue) !== why.slice(0, 2000)) await this.o.appendCore('work.left', { ask, issue, why: why.slice(0, 2000) }, { subject: ask });
+    for (const issue of kept.keys()) if (!out.has(issue)) await this.o.appendCore('work.left', { ask, issue, why: null }, { subject: ask });
+  }
+  /** The issues a standing run's page names as staying out, and why, as the record holds them. */
+  private async outOf(ask: string): Promise<Map<number, string>> {
+    const out = new Map<number, string>();
+    for (const row of (await this.o.raw(`SELECT data FROM events WHERE kind = 'work.left' AND subject = ? ORDER BY log_pos`, [ask])) as { data: string }[]) {
+      const d = JSON.parse(row.data) as { issue: number; why: string | null };
+      if (d.why === null) out.delete(d.issue); else out.set(d.issue, d.why);
+    }
+    return out;
+  }
+  /**
+   * A standing run's weekly notice (#1335): once a week from your yes, what it landed, what is left and what it spent,
+   * recorded for its page and needing no answer. A week the hub was down for comes as one notice, not one per week.
+   */
+  private async weekly(ask: string, repo: string): Promise<void> {
+    const [yes] = (await this.o.raw(`SELECT ts FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos LIMIT 1`, [ask])) as { ts: number }[];
+    if (!yes) return;
+    const [last] = (await this.o.raw(`SELECT json_extract(data, '$.to') AS until FROM events WHERE kind = 'work.notice' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [ask])) as { until: number }[];
+    const from = last?.until ?? yes.ts;
+    const weeks = Math.floor((this.o.now() - from) / WEEK);
+    if (weeks < 1) return;
+    const to = from + weeks * WEEK;
+    const rows = await this.rows(ask);
+    const landed = ((await this.o.raw(`SELECT DISTINCT json_extract(data, '$.issue') AS issue FROM events WHERE kind = 'landing.made' AND json_extract(data, '$.step') = 'landed' AND json_extract(data, '$.repo') = ? AND ts >= ? AND ts < ?`, [repo, from, to])) as { issue: number }[])
+      .map((r) => Number(r.issue)).filter((n) => rows.some((r) => r.issue === n)).sort((a, b) => a - b);
+    const left = rows.filter((r) => !['PASS', 'closed', 'closed before the gate'].includes(r.word)).map((r) => ({ issue: r.issue, word: r.word }));
+    // What it spent: the attempts it started in the week, and what their sessions' usage says they cost where priced.
+    const started = ((await this.o.raw(`SELECT json_extract(data, '$.run') AS run FROM events WHERE kind = 'work.attempt' AND subject = ? AND json_extract(data, '$.step') = 'started' AND ts >= ? AND ts < ?`, [ask, from, to])) as { run: string }[]).map((r) => r.run);
+    const sessions = started.map((run) => this.o.starts().sessionOfRun(run)).filter((s): s is string => Boolean(s));
+    let usd: number | null = null;
+    let tokens = 0;
+    if (sessions.length) {
+      const usage = (await this.o.raw(`SELECT session_id AS session, data FROM events WHERE kind = 'turn.usage' AND session_id IN (${sessions.map(() => '?').join(', ')}) ORDER BY log_pos`, sessions)) as { session: string; data: string }[];
+      const per = new Map<string, { usd: number | null; tokens: number }>();
+      for (const u of usage) {
+        const d = JSON.parse(u.data) as { covers: string; tokens?: { input: number; cached: number; output: number }; cost?: { usd?: number } };
+        const was = per.get(u.session) ?? { usd: null, tokens: 0 };
+        const t = d.tokens ? d.tokens.input + d.tokens.cached + d.tokens.output : 0;
+        // A session's reading covers it so far; a turn's adds to the ones before.
+        per.set(u.session, d.covers === 'session' ? { usd: d.cost?.usd ?? was.usd, tokens: t } : { usd: d.cost?.usd !== undefined ? (was.usd ?? 0) + d.cost.usd : was.usd, tokens: was.tokens + t });
+      }
+      for (const p of per.values()) { tokens += p.tokens; if (p.usd !== null) usd = (usd ?? 0) + p.usd; }
+    }
+    await this.o.appendCore('work.notice', { ask, from, to, landed, left, spent: { attempts: started.length, sessions: sessions.length, usd: usd === null ? null : Math.round(usd * 100) / 100, tokens } }, { subject: ask });
   }
 
   // ---- A workspace's tasks (#1347).
@@ -383,9 +580,17 @@ export class Work {
     // A workspace's run reads its tasks from the record, and never a forge.
     const space = this.o.spaces().idAt(approval.repo);
     const repo = space ?? await this.slugOf(approval.repo);
-    const readAll = (fresh: boolean) => (space ? this.readSpace(space, approval.issues) : this.read(repo, approval.issues, fresh));
+    // A standing run (#1335) takes its set from its rule each pass, as the forge holds the issues then.
+    const rule = space ? null : approval.rule ?? null;
+    const readAll = async (fresh: boolean): Promise<Read> => {
+      const none = { out: new Map<number, string>(), milestones: new Map<number, Listed['milestone']>() };
+      if (space) return { ...(await this.readSpace(space, approval.issues)), reverts: [], set: approval.issues, ...none };
+      if (rule) return this.readRule(run.ask, repo, approval.repo, rule, fresh);
+      return { ...(await this.read(repo, approval.issues, fresh)), set: approval.issues, ...none };
+    };
     let attempts = await this.attempts(run.ask);
-    let { issues, pulls } = await readAll(false);
+    let read = await readAll(false);
+    let { issues, pulls } = read;
     // An attempt whose turn ended may have just opened its PR: the forge is read again for it, at most every 5 s.
     const starts = this.o.starts();
     const opened = async (): Promise<boolean> => {
@@ -396,19 +601,20 @@ export class Work {
       }
       return false;
     };
-    if (!space && this.o.now() - (this.forge.get(repo)?.at ?? 0) >= PR_MS && (await opened())) ({ issues, pulls } = await this.read(repo, approval.issues, true));
+    if (!space && this.o.now() - (this.forge.get(repo)?.at ?? 0) >= PR_MS && (await opened())) ({ issues, pulls } = read = await readAll(true));
     let asks = await this.openAsks();
     // Each live attempt first: landed, waiting on you, replaced or ended, each with its cause.
     let changed = false;
     for (const [issue, list] of attempts) {
       const a = list.at(-1);
-      if (a && !a.ended) changed = (await (space ? this.settleSpace(run.ask, approval, space, issue, a, asks) : this.settle(run.ask, approval, issue, a, pulls, asks))) || changed;
+      if (a && !a.ended) changed = (await (space ? this.settleSpace(run.ask, approval, space, issue, a, asks) : this.settle(run.ask, approval, read.set, issue, a, pulls, asks))) || changed;
     }
     if (changed) {
       attempts = await this.attempts(run.ask);
-      ({ issues, pulls } = await readAll(true));
+      ({ issues, pulls } = read = await readAll(true));
       asks = await this.openAsks();
     }
+    const { set, out, milestones } = read;
     const landed = space ? await this.finishedIn(space) : await this.landed(repo);
     const baseline = space ? new Set<number>() : await this.baseline(approval.repo);
     const login = space ? undefined : await this.login();
@@ -429,7 +635,7 @@ export class Work {
     };
     const rows = new Map<number, Row>();
     const ready: number[] = [];
-    for (const n of approval.issues) {
+    for (const n of set) {
       const i = issues.get(n)!;
       const list = attempts.get(n) ?? [];
       const last = list.at(-1);
@@ -455,7 +661,7 @@ export class Work {
       // An open PR of yours from before the run joins as the issue's attempt (#1331): it's judged and landed, and no
       // second attempt starts beside it. One from another account keeps the issue waiting (#110).
       if (other && login && other.login === login) {
-        if (this.judged.get(other.pr)?.head !== other.head) { this.judged.set(other.pr, { head: other.head, held: null }); await this.o.landing().work(approval.repo, approval.issues).catch(() => undefined); }
+        if (this.judged.get(other.pr)?.head !== other.head) { this.judged.set(other.pr, { head: other.head, held: null }); await this.o.landing().work(approval.repo, set).catch(() => undefined); }
         row('working', `PR #${other.pr} to land`, `PR #${other.pr}, from before the run, is its attempt`);
         continue;
       }
@@ -470,27 +676,41 @@ export class Work {
       row(last?.ended?.cause === 'sent back past its rounds' ? 'sent back' : 'queued', 'a free slot', 'ready');
       ready.push(n);
     }
-    // The order: the ready issue that unblocks most in the set, then the lowest number.
-    const unblocks = (n: number): number[] => approval.issues.filter((m) => { const b = issues.get(m)?.blockers; return Array.isArray(b) && b.includes(n) && rows.get(m)?.word !== 'PASS'; });
-    ready.sort((a, b) => unblocks(b).length - unblocks(a).length || a - b);
+    // The order: a standing run's earliest milestone first (#1335), then the ready issue that unblocks most in the set,
+    // then the lowest number.
+    const unblocks = (n: number): number[] => set.filter((m) => { const b = issues.get(m)?.blockers; return Array.isArray(b) && b.includes(n) && rows.get(m)?.word !== 'PASS'; });
+    ready.sort((a, b) => byMilestone(milestones.get(a) ?? null, milestones.get(b) ?? null) || unblocks(b).length - unblocks(a).length || a - b);
     const live = [...attempts.values()].filter((list) => { const a = list.at(-1); return a && !a.ended && starts.live(a.run); }).length;
-    const stopped = run.paused ? "the run's pause" : approval.until !== null && this.o.now() >= approval.until ? `the run's end at ${new Date(approval.until).toISOString()}` : undefined;
+    // A standing run's breaker (#1335) stops new starts until you answer its one ask.
+    const tripped = rule ? await this.runBreaker(run.ask, repo, read.reverts) : undefined;
+    const stopped = run.paused ? "the run's pause" : tripped ?? (approval.until !== null && this.o.now() >= approval.until ? `the run's end at ${new Date(approval.until).toISOString()}` : undefined);
     let free = stopped ? 0 : Math.max(0, approval.at_once - live);
+    const before = new Map((await this.rows(run.ask)).map((r) => [r.issue, r]));
     for (const n of ready) {
       if (this.closed) return;
       if (stopped || free <= 0) { rows.set(n, { ...rows.get(n)!, waits_on: stopped ?? 'a free slot' }); continue; }
+      // At its plan share a run starts nothing until the next window, and asks nothing (#1335).
+      const list = attempts.get(n) ?? [];
+      const held = starts.planHeld(approval, approval.agents[list.length % approval.agents.length]!);
+      if (held) { rows.set(n, { ...rows.get(n)!, waits_on: held }); continue; }
       const blocked = unblocks(n);
-      const order = `${blocked.length ? `it unblocks ${blocked.map((m) => `#${m}`).join(', ')}` : 'it unblocks none in the set'}, then the lowest number`;
-      const r = await this.start(run.ask, approval, n, issues.get(n)!, attempts.get(n) ?? [], order, space !== undefined);
+      const milestone = milestones.get(n);
+      const order = `${rule ? (milestone ? `its milestone ${milestone.title} is the earliest ready; ` : 'it is in no milestone, so after those in one; ') : ''}${blocked.length ? `it unblocks ${blocked.map((m) => `#${m}`).join(', ')}` : 'it unblocks none in the set'}, then the lowest number`;
+      // A standing run's issue joins on the record before it starts: its start is checked against that.
+      if (rule && !before.has(n)) { const r = rows.get(n)!; await this.o.appendCore('work.state', { ask: run.ask, issue: n, word: r.word, waits_on: r.waits_on, why: r.why }, { subject: run.ask }); before.set(n, r); }
+      const r = await this.start(run.ask, approval, n, issues.get(n)!, list, order, space !== undefined);
       if (r.started) { rows.set(n, { issue: n, word: 'working', waits_on: null, why: r.why }); free--; }
       else rows.set(n, { ...rows.get(n)!, waits_on: r.why });
     }
     // Each row whose word or wait changed is recorded.
-    const before = new Map((await this.rows(run.ask)).map((r) => [r.issue, r]));
     for (const r of rows.values()) {
       const b = before.get(r.issue);
       if (b && b.word === r.word && b.waits_on === r.waits_on) continue;
       await this.o.appendCore('work.state', { ask: run.ask, issue: r.issue, word: r.word, waits_on: r.waits_on?.slice(0, 8192) ?? null, why: r.why.slice(0, 2000) }, { subject: run.ask });
+    }
+    if (rule) {
+      await this.recordOut(run.ask, out);
+      await this.weekly(run.ask, repo);
     }
   }
 
@@ -538,7 +758,7 @@ export class Work {
    * session stopped once that landed or once its issue waits on you, replaced when its turn ended with nothing changed or
    * with its change held, and ended with its cause once its session ended. Whether it ended.
    */
-  private async settle(ask: string, approval: Approval, issue: number, a: Attempt, pulls: Pull[], asks: OpenAsk[]): Promise<boolean> {
+  private async settle(ask: string, approval: Approval, set: number[], issue: number, a: Attempt, pulls: Pull[], asks: OpenAsk[]): Promise<boolean> {
     if (this.closed) return false;
     const starts = this.o.starts();
     const live = starts.live(a.run);
@@ -554,7 +774,7 @@ export class Work {
       return this.end(ask, issue, a, 'gave up its slot', 'its issue waits on your answer');
     }
     if (pr && this.judged.get(pr.pr)?.head !== pr.head) {
-      const round = await this.o.landing().work(approval.repo, approval.issues).catch(() => undefined);
+      const round = await this.o.landing().work(approval.repo, set).catch(() => undefined);
       const held = round?.held.find((h) => h.issue === issue)?.reason ?? (round?.sent_back.some((s) => s.issue === issue) ? 'its change no longer merges with main' : null);
       this.judged.set(pr.pr, { head: pr.head, held });
       const landed = round?.landed.find((l) => l.issue === issue);
@@ -597,9 +817,56 @@ export class Work {
     return `${await git(worktree, 'rev-parse', 'HEAD')}\n${await git(worktree, 'status', '--porcelain', '--untracked-files=all')}`;
   }
 
+  /**
+   * A standing run's breaker (#1335): five attempts in a row ending in anything but a landing, or two of its landings
+   * reverted within a day (#1333), pause the run with one ask. A wait on you is no attempt's end here. "Go on" starts
+   * the count again from the answer; "keep it paused", the default, leaves the run paused. Why it is paused, or
+   * undefined while it may start.
+   */
+  private async runBreaker(ask: string, repo: string, reverts: Revert[]): Promise<string | undefined> {
+    const state = await this.runBreakerOf(ask);
+    if (state.raised === 'open') return `its breaker: ${state.handle} asks you whether it goes on`;
+    if (state.raised === 'left') return `its breaker: you kept it paused (${state.handle})`;
+    const ended = (await this.o.raw(`SELECT log_pos AS at, data FROM events WHERE kind = 'work.attempt' AND subject = ? AND json_extract(data, '$.step') = 'ended' AND log_pos > ? ORDER BY log_pos`, [ask, state.since])) as { at: number; data: string }[];
+    const row: Obj[] = [];
+    for (const e of ended.map((x) => JSON.parse(x.data) as Obj).reverse()) {
+      if (LANDED.has(String(e.cause))) break;
+      if (e.cause !== 'gave up its slot') row.unshift(e);
+    }
+    const commits = (await this.o.raw(`SELECT json_extract(data, '$.commit') AS sha, json_extract(data, '$.issue') AS issue FROM events WHERE kind = 'landing.made' AND json_extract(data, '$.step') = 'landed' AND json_extract(data, '$.repo') = ?`, [repo])) as { sha: string | null; issue: number }[];
+    const joined = new Set((await this.rows(ask)).map((r) => r.issue));
+    const ours = commits.filter((c) => c.sha && joined.has(Number(c.issue)));
+    const reverted = reverts.filter((r) => r.at >= Math.max(this.o.now() - DAY, state.sinceTs) && ours.some((c) => c.sha!.startsWith(r.landing)));
+    if (row.length < IN_A_ROW && reverted.length < REVERTS) return undefined;
+    const why = row.length >= IN_A_ROW
+      ? `the last ${row.length} attempts in a row ended without a landing: ${row.map((e) => `#${String(e.issue)} attempt ${String(e.attempt)} in ${agentName(String(e.agent))}, ${String(e.cause)}`).join('; ')}`
+      : `${reverted.length} of its landings were reverted within a day: ${reverted.map((r) => `${r.landing.slice(0, 10)} by #${r.pr}`).join(', ')}`;
+    const pin = this.runBreakerKey(ask, state.level);
+    const handle = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'work.run_breaker', {
+      kind: 'exception', question: `The standing run ${ask} is paused: ${why}. Go on, or keep it paused?`.slice(0, 2000),
+      options: [{ id: 'resume', label: 'Go on', decision: 'none' }, { id: 'stay', label: 'Keep it paused', decision: 'none' }],
+      recommended: 'stay', deadline: this.o.now() + DAY, fallback: 'you', default: 'stay', provisional: false, owner: 'you', key: pin, pinned_to: { kind: 'evidence', ref: pin },
+    });
+    return `its breaker: ${why}; ${handle} asks you whether it goes on`;
+  }
+  /** Where a standing run's breaker stands: how often you said go on, since when it counts, and the current ask. */
+  private async runBreakerOf(ask: string): Promise<{ level: number; since: number; sinceTs: number; raised: 'open' | 'left' | null; handle: string | null }> {
+    const keys = Array.from({ length: 16 }, (_, level) => this.runBreakerKey(ask, level));
+    const rows = (await this.o.raw(`SELECT 'ask:' || c.id AS handle, json_extract(c.data, '$.key') AS key,
+      (SELECT json_extract(y.data, '$.answer') FROM events y WHERE y.subject = 'ask:' || c.id AND y.kind IN ('ask.answered', 'ask.defaulted') ORDER BY y.log_pos LIMIT 1) AS answer,
+      (SELECT y.log_pos FROM events y WHERE y.subject = 'ask:' || c.id AND y.kind IN ('ask.answered', 'ask.defaulted') ORDER BY y.log_pos LIMIT 1) AS at,
+      (SELECT y.ts FROM events y WHERE y.subject = 'ask:' || c.id AND y.kind IN ('ask.answered', 'ask.defaulted') ORDER BY y.log_pos LIMIT 1) AS ts
+      FROM events c WHERE c.kind = 'ask.created' AND json_extract(c.data, '$.key') IN (${keys.map(() => '?').join(', ')})`, keys)) as { handle: string; key: string; answer: string | null; at: number | null; ts: number | null }[];
+    const resumed = rows.filter((r) => r.answer === 'resume');
+    const level = resumed.length;
+    const current = rows.find((r) => r.key === keys[level]);
+    return { level, since: Math.max(0, ...resumed.map((r) => r.at ?? 0)), sinceTs: Math.max(0, ...resumed.map((r) => r.ts ?? 0)), raised: current ? (current.answer === null ? 'open' : 'left') : null, handle: current?.handle ?? null };
+  }
+  private runBreakerKey(ask: string, level: number): string { return key({ kind: 'work.run_breaker', ask, level }); }
+
   /** The breaker: one ask listing each attempt's agent, model, cause and verdict line, once per three replaced attempts. */
   private async breaker(ask: string, issue: number, list: Attempt[], level: number): Promise<void> {
-    const lines = list.map((x) => `attempt ${x.attempt}: ${x.agent === 'claude-code' ? 'Claude Code' : x.agent === 'codex' ? 'Codex' : x.agent} on ${x.model ?? 'a model it did not name'}, ${x.ended && !KEPT.has(x.ended.cause) ? `replaced (${x.ended.cause})` : x.ended?.cause ?? 'live'}${x.ended?.verdict ? `: ${x.ended.verdict}` : ''}`);
+    const lines = list.map((x) => `attempt ${x.attempt}: ${agentName(x.agent)} on ${x.model ?? 'a model it did not name'}, ${x.ended && !KEPT.has(x.ended.cause) ? `replaced (${x.ended.cause})` : x.ended?.cause ?? 'live'}${x.ended?.verdict ? `: ${x.ended.verdict}` : ''}`);
     const pin = this.breakerKey(ask, issue, level);
     await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'work.breaker', {
       kind: 'exception', question: `Issue #${issue}'s last ${BREAKER} attempts were replaced. ${lines.join('; ')}. Start another attempt, or leave it waiting?`.slice(0, 2000),
@@ -608,6 +875,9 @@ export class Work {
     });
   }
 }
+
+/** An agent by the name people know it by. */
+const agentName = (agent: string): string => (agent === 'claude-code' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent);
 
 /** The issues a body's `### Depends on` list names, one `- #<n>` a line. */
 function dependsOn(body: string): number[] {
@@ -629,16 +899,19 @@ function unserved(body: string): string | undefined {
  * A scope's words as #1330's bounds: the issues it names by number (`#12`, `#12-#15`), the agents in the order it names
  * them (Claude Code, Codex), how many at once (`two at a time`, `3 at once`), its plan share (`50% of each plan
  * window`) and its end (`until <ISO time>`). Bounds it doesn't say take defaults: Claude Code alone, one at a time, the
- * whole plan window, no end. A string says what's missing.
+ * whole plan window, no end. Words that name a rule instead of numbers (#1335: labels, a milestone, an epic, the
+ * author's role) make a standing run, with no set and no end. A string says what's missing or refused.
  */
 export function scopeOf(words: string, now: number): Obj | string {
+  const rule = ruleOf(words);
+  if (typeof rule === 'string') return rule;
   const issues = new Set<number>();
-  for (const m of words.matchAll(/#(\d+)(?:\s*(?:-|–|to|through)\s*#?(\d+))?/g)) {
+  if (!rule) for (const m of words.matchAll(/#(\d+)(?:\s*(?:-|–|to|through)\s*#?(\d+))?/g)) {
     const from = Number(m[1]);
     const to = m[2] ? Number(m[2]) : from;
     for (let n = from; n <= to && n - from < 1000; n++) issues.add(n);
   }
-  if (!issues.size) return 'Name the issues by number, such as "work through #12, #14 and #15 with Claude Code, two at a time".';
+  if (!rule && !issues.size) return 'Name the issues by number, such as "work through #12, #14 and #15 with Claude Code, two at a time", or a rule, such as "every issue labelled ready".';
   const agents = [...new Set([...words.matchAll(/\b(claude[ -]?code|claude|codex)\b/gi)].map((m) => (/codex/i.test(m[1]!) ? 'codex' : 'claude-code')))];
   const NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
   const once = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+at\s+(?:a\s+time|once)\b/i.exec(words);
@@ -647,7 +920,7 @@ export function scopeOf(words: string, now: number): Obj | string {
   const end = until ? Date.parse(until[1]!) : null;
   if (until && (end === null || Number.isNaN(end) || end <= now)) return `"${until[1]}" is no time still to come: give the end as an ISO time.`;
   return {
-    issues: [...issues].sort((a, b) => a - b), agents: agents.length ? agents : ['claude-code'],
+    issues: [...issues].sort((a, b) => a - b), ...(rule ? { rule } : {}), agents: agents.length ? agents : ['claude-code'],
     at_once: once ? (NUM[once[1]!.toLowerCase()] ?? Number(once[1])) : 1, plan_share: share ? Math.min(100, Number(share[1])) : 100,
     ...(end !== null ? { until: end } : {}),
   };
