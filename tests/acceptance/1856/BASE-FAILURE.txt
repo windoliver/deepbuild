@@ -1,0 +1,82 @@
+Base run: HEAD 72fe11a11 (origin/main), no change for #1856. November 14, 2026, Linux (the Spark), under load from other sessions.
+Command: npx vitest run --root tests/acceptance/1856 --no-file-parallelism
+Expected on the base: AC1 (1 test) and AC3 (3 tests) fail at their expect; AC2 (2 tests) passes.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1856
+
+ ❯ hub-running.test.ts (3 tests | 3 failed) 8243ms
+   ❯ #1856.074bdc1e the hub running, rules.json deleted (3)
+     × #1856.074bdc1e the next `pkill -f node` is denied naming no-kill-by-name 8211ms
+     × #1856.074bdc1e once that hook is answered, rules.json again holds every installed entry: each default and t-1856 5ms
+     × #1856.074bdc1e the record holds one event naming the removal of rules.json 12ms
+ ❯ hub-away.test.ts (3 tests | 1 failed) 1365ms
+   ❯ #1856.6023a4b7 after setup, rules.json deleted, the hub stopped (1)
+     × #1856.6023a4b7 setup-finished.json there, rules.json deleted, no hub: `pkill -f node` is denied and the denial names rules.json 1246ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hub-away.test.ts > #1856.6023a4b7 after setup, rules.json deleted, the hub stopped > #1856.6023a4b7 setup-finished.json there, rules.json deleted, no hub: `pkill -f node` is denied and the denial names rules.json
+AssertionError: after setup, with rules.json deleted and the hub stopped, the call `pkill -f node` must be denied, not let run: exit 0 after 8.7 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ hub-away.test.ts:30:148
+     28|     rmSync(rulesFile(home));
+     29|     const r = await hook(home, s, KILL);
+     30|     expect(decision(r), `after setup, with rules.json deleted and the …
+       |                                                                                                                                                    ^
+     31|     expect(said(r), `the denial of \`${KILL}\` must name rules.json: $…
+     32|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  hub-running.test.ts > #1856.074bdc1e the hub running, rules.json deleted > #1856.074bdc1e the next `pkill -f node` is denied naming no-kill-by-name
+AssertionError: with the hub running, after rules.json is deleted the next `pkill -f node` must be denied, not allowed: exit 0 after 15.1 ms, stdout "", stderr "": expected 'allow' to be 'deny' // Object.is equality
+
+Expected: "deny"
+Received: "allow"
+
+ ❯ hub-running.test.ts:70:150
+     68|   it(`${AC3} the next \`${KILL}\` is denied naming no-kill-by-name`, a…
+     69|     const { denied } = await observe();
+     70|     expect(decision(denied), `with the hub running, after rules.json i…
+       |                                                                                                                                                      ^
+     71|     expect(said(denied), `the denial of \`${KILL}\` must name no-kill-…
+     72|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  hub-running.test.ts > #1856.074bdc1e the hub running, rules.json deleted > #1856.074bdc1e once that hook is answered, rules.json again holds every installed entry: each default and t-1856
+AssertionError: rules.json must be there again, with its entries, once the hub has answered the next hook: expected undefined to be defined
+ ❯ hub-running.test.ts:76:112
+     74|   it(`${AC3} once that hook is answered, rules.json again holds every …
+     75|     const { installed, after } = await observe();
+     76|     expect(after, 'rules.json must be there again, with its entries, o…
+       |                                                                                                                ^
+     77|     expect(Object.keys(after!.entries).sort(), 'rules.json must again …
+     78|     expect(after!.entries, 'each installed entry must be back as it wa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  hub-running.test.ts > #1856.074bdc1e the hub running, rules.json deleted > #1856.074bdc1e the record holds one event naming the removal of rules.json
+AssertionError: the record must hold one new event naming rules.json's removal; new since the removal, past the call's own tool.before: ["row.set"]: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ hub-running.test.ts:84:206
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 2 passed (6)
+   Start at  15:21:09
+   Duration  10.30s (tests 97%, transform 2%, import 1%)
+

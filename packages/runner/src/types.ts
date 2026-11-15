@@ -3,13 +3,23 @@ import type { StopCause } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
 import type { Ledger } from '@deepbuild/budget';
 import type { RecordStore } from '@deepbuild/record';
-import type { Supervisor } from '@deepbuild/supervisor';
+import type { Grant, Launch, Supervisor } from '@deepbuild/supervisor';
 
 export type Agent = 'claude-code' | 'codex' | 'pi';
 /** draft: the drafting job; review: the review check's second model; read: wiki reads and reading by reference;
  *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet;
  *  acceptance: the blind acceptance job (#1328), the one kind that writes, and only its issue's test folder. */
-export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance';
+export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance' | 'eval';
+/** A trusted eval orchestrates sandboxed replays, not an agent asked to judge itself. Never accepted over RPC. */
+export type EvaluationWork = (context: {
+  job: string; folder: string; env: Record<string, string>; signal: AbortSignal;
+  /** Each model turn waits on that agent's account, including the judge's. */
+  checkpoint(agent: Agent): Promise<void>;
+  /** The replay's confined process, owned and reaped by the supervisor. */
+  execute(launch: Launch, grant: Grant, prompt: string, deadline: number): Promise<unknown[]>;
+  /** Probe/judge on the agent's ordinary isolated read-only launch, within this eval (no extra job). */
+  read(agent: Agent, model: string, prompt: string, deadline: number): Promise<unknown[]>;
+}) => Promise<string>;
 /** One thing a blind job reads, by handle: an issue's body, a design document or a criterion by its SHA-256, or the base commit. */
 export interface JobInput { kind: 'issue' | 'design' | 'base' | 'criterion'; ref: string; sha256?: string }
 /** A stdio MCP server, as Claude Code's mcpServers entries take it. */
@@ -127,7 +137,7 @@ export interface RunnerOptions {
 }
 export interface Runner {
   /** Records it, then starts it if it may; resolves once it is recorded and started, waiting or refused. */
-  submit(spec: JobSpec): Promise<JobRecord>;
+  submit(spec: JobSpec, evaluate?: EvaluationWork): Promise<JobRecord>;
   /** Its end: finished, stopped, refused or lost. */
   wait(job: string): Promise<JobRecord>;
   /** deep.runner.run(job): submit, then wait. */

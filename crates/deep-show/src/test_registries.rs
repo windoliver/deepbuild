@@ -31,6 +31,9 @@ pub fn modules() -> Vec<Module> {
     // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
     #[cfg(feature = "test-weight")]
     out.push(deep_canvas_test_modules::weight::module());
+    // Issue #223's test canvas module: an item that builds a streams@1 table.
+    #[cfg(feature = "test-swirl")]
+    out.push(deep_canvas_test_modules::swirl::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
     // Issue #522's test canvas module: an item that fires a world's launch input.

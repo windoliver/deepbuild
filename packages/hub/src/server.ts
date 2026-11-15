@@ -32,6 +32,7 @@ import { plantedStart } from './plant.js';
 import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import { writeSynced } from './vfs.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -152,8 +153,8 @@ function noticed<C extends object>(conn: C & { write(value: Obj): void }, id: un
     set: (target, key, value) => Reflect.set(target, key, value, target),
   });
 }
-/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
-const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
+/** A file's identity, size and times, so a change is read once, one to its mode alone included; 'none' while it is missing. */
+const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 /** A subscribe's scope (#1575): none, as the app subscribes; one session; or the list's rows. Anything else is refused, never read as none. */
@@ -473,6 +474,8 @@ class Hub {
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
+    // Read once before any hook, so a rules.json spoiled later can be written again as it was.
+    this.rules();
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
     this.server.on('error', (error: NodeJS.ErrnoException) => {
@@ -497,6 +500,8 @@ class Hub {
     this.hooks = new Set((await this.core.started).hooks);
     // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
     const checking = setInterval(() => {
+      // An entry installed since the last hook is in the copy a later rewrite of rules.json is made from (#2204).
+      this.rules(false);
       if (this.lost || this.lock.held() || this.plant === 'lock-never-rechecked') return;
       this.lost = true;
       clearInterval(checking);
@@ -601,6 +606,8 @@ class Hub {
       }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
+    // A rules.json removed since the last hook is back before the hello: the deep-hook that connects reads it then (#1856).
+    this.rules();
     sock.write(this.helloLine);
   }
 
@@ -749,6 +756,8 @@ class Hub {
     conn.done = true;
     // With its lock lost the hub acknowledges nothing: closed with no ack, deep-hook fails open and spools the hook.
     if (this.lost) return void conn.sock.end();
+    // A rules.json this hub can't read is written again before the hook is answered (#2204).
+    this.rules();
     // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); a
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
@@ -808,6 +817,10 @@ class Hub {
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
+    if (this.rulesRewritten && meta.session) {
+      this.core.post({ op: 'line', session: meta.session, agent: meta.agent, text: this.rulesRewritten });
+      this.rulesRewritten = undefined;
+    }
     if (prompted) void this.permissionReply(conn, meta, hold!);
     else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
     else if (before) void this.extensionReply(conn, meta, before.data, hold!, ruled);
@@ -1114,19 +1127,40 @@ class Hub {
     return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
   }
 
-  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined> };
-  /** The entries of rules.json, read again only when the file changes. */
-  private rules(): Record<string, Guard | undefined> {
+  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined>, text: undefined as string | undefined };
+  /** Why rules.json was written again, until a hook's session can record it. */
+  private rulesRewritten: string | undefined;
+  /**
+   * The entries of rules.json, read again only when the file changes. One that can't be read, cut short or written
+   * over by a command's child no guard saw (#2204), or removed by one (#1856), is written again as this hub last read
+   * it: deep-hook matches against that file alone, and denies every call while it can't read it. A file this hub
+   * never read stays as it is, and so does none.
+   * Without `rewrite`, a readable file is only kept: the copy stays whole between hooks.
+   */
+  private rules(rewrite = true): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    // No rules.json: no entries.
     const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
-      let entries: Record<string, Guard | undefined> = {};
+      let entries: Record<string, Guard | undefined> | undefined;
+      let text: string | undefined;
+      let why = key === 'none' ? 'was removed' : 'has no entries object';
       try {
-        const parsed = JSON.parse(readFileSync(file, 'utf8')) as { entries?: unknown };
-        if (typeof parsed.entries === 'object' && parsed.entries !== null) entries = parsed.entries as Record<string, Guard | undefined>;
-      } catch { /* unreadable: deep-hook names it; the hub decides nothing from it */ }
-      this.rulesSeen = { key, entries };
+        text = readFileSync(file, 'utf8');
+        const parsed = JSON.parse(text) as { entries?: unknown } | null;
+        if (isObj(parsed?.entries)) entries = parsed.entries as Record<string, Guard | undefined>;
+      } catch (error) {
+        if (key !== 'none') why = error instanceof SyntaxError ? "isn't JSON" : `can't be read (${(error as NodeJS.ErrnoException).code ?? 'error'})`;
+      }
+      const kept = this.rulesSeen.text;
+      if (entries) this.rulesSeen = { key, entries, text };
+      else if (kept !== undefined) {
+        if (!rewrite) return this.rulesSeen.entries;
+        try {
+          writeSynced(file, Buffer.from(kept));
+          this.rulesRewritten = `${file} ${why}, so deep-hook could match no call against its guards; the hub wrote it again as it last read it.`;
+        } catch { /* it can't be written either: deep-hook goes on naming it, and the next change to it is tried again */ }
+        this.rulesSeen.key = fileKey(file);
+      } else this.rulesSeen = { key, entries: {}, text: undefined }; // No rules.json this hub ever read: no entries.
     }
     return this.rulesSeen.entries;
   }

@@ -5,13 +5,15 @@
 // machine or in a lane you dispatch, never in hosted CI on push (design: The learned layer, How we know version 0 works).
 import { execFile } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { lstat, mkdir, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import { compareReplay, planHash, type Comparison, type ReplayPlan, type ReplayRun } from '@deepbuild/record';
 import { defaultLauncher } from './launcher.js';
+import type { Grant, Launch } from '@deepbuild/supervisor';
 
 export { archivedTasks } from './archive.js';
+export { removalPlan } from './removal.js';
 
 /** One outside call the original session made, with its result, as its transcript holds them (#1108). */
 export interface RecordedCall {
@@ -54,6 +56,12 @@ export interface EvalOptions {
   /** The environment it runs in, which each agent gets as it is. */
   env: Record<string, string | undefined>;
   launcher?: Launcher;
+  /** Hub jobs recheck the account's reserve before every model turn. Standalone evals use their own budget. */
+  checkpoint?: (agent: 'claude-code' | 'codex') => Promise<void>;
+  signal?: AbortSignal;
+  /** Supplied by an installed hub: all subprocesses retain supervisor ownership and per-agent sign-in isolation. */
+  execute?: (launch: Launch, grant: Grant, prompt: string, deadline: number) => Promise<unknown[]>;
+  read?: (agent: 'claude-code' | 'codex', model: string, prompt: string, deadline: number) => Promise<unknown[]>;
 }
 export interface EvalReport {
   plan: ReplayPlan;
@@ -111,6 +119,12 @@ async function checkout(task: ReplayTask, files: Record<string, string>, root: s
   await git(dir, ['checkout', '-q', '-b', 'main', 'FETCH_HEAD']);
   await rm(join(dir, '.git', 'FETCH_HEAD'), { force: true });
   for (const [path, text] of Object.entries(files)) {
+    const parts = path.split('/');
+    if (isAbsolute(path) || parts.some((p) => !p || p === '.' || p === '..' || p.toLowerCase() === '.git')) throw Error(`unsafe variant path ${path}`);
+    for (let i = 1; i <= parts.length; i++) {
+      const info = await lstat(join(dir, ...parts.slice(0, i))).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; return undefined; });
+      if (info?.isSymbolicLink()) throw Error(`a variant cannot follow the historical link ${path}`);
+    }
     await mkdir(dirname(join(dir, path)), { recursive: true });
     await writeFile(join(dir, path), text);
   }
@@ -169,12 +183,13 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
   let launcher: Launcher;
   // The agents' runs end by their share of the budget, and the judge's by the budget less the time to wrap up.
   const deadlines = { work: Date.now() + plan.budget.ms * AGENTS_SHARE, judge: Date.now() + plan.budget.ms - Math.min(WRAP_UP_MS, plan.budget.ms * 0.05) };
-  try { launcher = options.launcher ?? defaultLauncher(plan, env, deadlines); } catch (error) { return refusedWith(error instanceof Error ? error.message : String(error)); }
+  try { launcher = options.launcher ?? defaultLauncher(plan, env, deadlines, options.signal, options.execute, options.read); } catch (error) { return refusedWith(error instanceof Error ? error.message : String(error)); }
 
   const byId = new Map(options.tasks.map((t) => [t.id, t]));
+  await options.checkpoint?.('claude-code');
   const usedAtStart = (await launcher.planUsed?.()) ?? null;
   const spent = async (): Promise<boolean> => {
-    if (performance.now() - started >= plan.budget.ms * AGENTS_SHARE) return true;
+    if (options.signal?.aborted || performance.now() - started >= plan.budget.ms * AGENTS_SHARE) return true;
     if (usedAtStart === null || !launcher.planUsed) return false;
     const now = await launcher.planUsed();
     return now !== null && now - usedAtStart >= plan.budget.plan_share;
@@ -199,7 +214,7 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
       runs.push(r);
       try { await replay(job, r); } finally {
         left.set(job.task, left.get(job.task)! - 1);
-        if (graded && left.get(job.task) === 0) grading.push(grade(plan, byId.get(job.task)!, leads.get(job.task)!, runs, outputs, launcher));
+        if (graded && left.get(job.task) === 0) grading.push(grade(plan, byId.get(job.task)!, leads.get(job.task)!, runs, outputs, launcher, options.checkpoint));
       }
     }
   };
@@ -212,6 +227,8 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
     try {
       const out = await checkout(task, files, root);
       dir = out.dir;
+      await options.checkpoint?.('claude-code');
+      if (await spent()) return;
       const result = await launcher.work({ model: plan.models.agent, prompt: task.prompt, cwd: dir, env: { ...env }, ...(task.recording ? { recording: task.recording } : {}) });
       const made = (result.calls ?? []).map((c) => ({ task: job.task, side: job.side, repeat: r.repeat, tool: c.tool, input: c.input, answered: c.answered }));
       calls.push(...made);
@@ -245,7 +262,7 @@ export async function runEval(options: EvalOptions): Promise<EvalReport> {
  * Grades one task's outputs blind, in one request: both sides under labels that name no side, the side that leads
  * alternating over the tasks in a shuffled order. A grade the judge didn't give stays missing.
  */
-async function grade(plan: ReplayPlan, task: ReplayTask, lead: 'base' | 'change', runs: ReplayRun[], outputs: Map<ReplayRun, string>, launcher: Launcher): Promise<void> {
+async function grade(plan: ReplayPlan, task: ReplayTask, lead: 'base' | 'change', runs: ReplayRun[], outputs: Map<ReplayRun, string>, launcher: Launcher, checkpoint: EvalOptions['checkpoint']): Promise<void> {
   // The runs are in their shuffled start order.
   const shown = runs.filter((r) => r.task === task.id && outputs.has(r));
   if (!shown.length) return;
@@ -258,7 +275,7 @@ async function grade(plan: ReplayPlan, task: ReplayTask, lead: 'base' | 'change'
     outputs: shown.map((r, k) => ({ label: labels[k]!, text: outputs.get(r)! })),
   };
   let grades: Grade[] = [];
-  try { grades = await launcher.judge(request); } catch { grades = []; }
+  try { await checkpoint?.(/^claude/.test(request.model) ? 'claude-code' : 'codex'); grades = await launcher.judge(request); } catch { grades = []; }
   shown.forEach((r, k) => {
     const score = grades.find((g) => g.label === labels[k])?.score;
     r.metrics.grade = typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 1 ? score : null;

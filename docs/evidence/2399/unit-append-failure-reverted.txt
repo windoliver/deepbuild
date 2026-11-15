@@ -1,0 +1,30 @@
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5
+
+ ❯ packages/supervisor/src/supervisor.test.ts (7 tests | 1 failed | 6 skipped) 1478ms
+   × a filter refusal the record did not take is recorded at the next try 1384ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/supervisor/src/supervisor.test.ts > a filter refusal the record did not take is recorded at the next try
+AssertionError: the second try is recorded, and the third adds nothing: expected [] to deeply equal [ StringMatching{…} ]
+
+- Expected
++ Received
+
+- [
+-   StringMatching /^run:AGAIN again\.invalid/,
+- ]
++ []
+
+ ❯ packages/supervisor/src/supervisor.test.ts:207:113
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  15:37:16
+   Duration  2.07s (tests 78%, transform 12%, import 9%, setup 1%)
+

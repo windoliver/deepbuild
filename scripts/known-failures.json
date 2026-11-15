@@ -111,8 +111,7 @@
     "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,
     "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
     "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
-    "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1,
-    "clippy: tests/acceptance/995/app/panel.rs this method takes 2 arguments but 1 argument was supplied": 1
+    "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
@@ -439,6 +438,12 @@
       "note": "",
       "reason": "retired by #1802, whose first criterion fails a preview entry with no decide_by: 139-redraft-1802/preview.test.ts is its test",
       "approval": "#1802 criterion 1 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313/fakes.test.ts › AC12 the adapter rules are one numbered list in adapter.facts@1, each with one broken fake that fails the runner with that rule's message › AC12 adapter.facts@1 lists the ten rules in the design's order, each with an id",
+      "note": "",
+      "reason": "retired by #2551, which keeps the two rules #1296 added, so the design names twelve: 313-redraft-2551/fakes.test.ts is AC12's test",
+      "approval": "#2551, the owner's decision of 2026-11-14 (the owner's touch-key tag on this commit)"
     }
   ]
 }

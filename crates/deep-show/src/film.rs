@@ -35,7 +35,14 @@ pub(crate) fn plan_of<'a>(program: &'a Program, doc: &Value) -> Option<(&'a Plan
         .as_deref()
         .filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some))?;
     let cam = plan.camera(doc.get("camera")?.as_str()?)?;
-    plan.cameras[cam].flat.then_some((plan, cam))
+    let camera = &plan.cameras[cam];
+    // #142: a perspective camera looking straight at the page, its eye on the target's normal,
+    // sees the page's plane as a flat view at its width through the target, so a 2D film's
+    // frames draw through it as through a flat one (a film recipe's 3D stage).
+    let straight = camera.own.is_some_and(|p| {
+        p.perspective() && p.position[0] == p.target[0] && p.position[1] == p.target[1]
+    });
+    (camera.flat || straight).then_some((plan, cam))
 }
 
 /// One side a frame draws: its camera and the look it is finished in.
@@ -202,7 +209,8 @@ fn iris_mix(
 /// A flat pose as the affine from the document's units to its pixels: the target at the frame's
 /// centre, the view width across it, turned by the roll.
 pub(crate) fn view(pose: &Pose, size: [f64; 2]) -> Affine {
-    let k = size[0] / pose.view_width;
+    // A straight-on perspective pose's width through its target (#142); a flat one's own.
+    let k = size[0] / pose.width();
     Affine::translate((size[0] / 2.0, size[1] / 2.0))
         * Affine::rotate(pose.roll.to_radians())
         * Affine::scale(k)
@@ -529,47 +537,8 @@ fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
     }
 }
 
-/// A 3D document with its envelope camera posed as its shots write it at t (Shot: a shot alone
-/// writes its camera's pose), for the 3D frame; `None` when no timeline shot writes it.
+/// A 3D document with its envelope camera posed as its shots write it at t; `None` when no
+/// timeline shot writes it (the motion module's, which the loop's framing check reads too, #506).
 pub(crate) fn posed(doc: &Value, t: i64) -> Option<Value> {
-    let shots = doc.get("shots")?.as_object()?;
-    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
-    // an entry on the played form's track chooses from its entry.
-    let staged = doc
-        .get("controls")
-        .and_then(Value::as_object)
-        .is_some_and(|c| {
-            c.values().any(|c| {
-                c.get("stages")
-                    .and_then(Value::as_object)
-                    .is_some_and(|s| s.values().any(|s| s.get("shot").is_some()))
-            })
-        });
-    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
-        return None;
-    }
-    let program = Program::compile(doc.as_object()?).ok()?;
-    let plan = program.shots.as_deref()?;
-    let id = doc.get("camera")?.as_str()?;
-    let cam = plan.camera(id)?;
-    let mut state = program.state();
-    program.evaluate(t, Validity::Full, &mut state);
-    let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
-    let pose = plan.shown(cam, t, &at(false, &keyed)).pose;
-    let mut out = doc.clone();
-    let params = out
-        .pointer_mut(&format!("/items/{id}/params"))?
-        .as_object_mut()?;
-    for k in ["orbit", "view_width", "kick"] {
-        params.remove(k);
-    }
-    params.insert("position".into(), json!(pose.position));
-    params.insert("target".into(), json!(pose.target));
-    params.insert("roll".into(), json!(pose.roll));
-    if pose.perspective() {
-        params.insert("fov".into(), json!(pose.fov));
-    } else {
-        params.insert("view_width".into(), json!(pose.view_width));
-    }
-    Some(out)
+    deep_canvas_motion::shots::posed(doc, t)
 }

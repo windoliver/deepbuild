@@ -1,0 +1,86 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "Make it move",
+  "description": "Make it move: explain@1's kinetic_type.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "6s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.kinetic_type@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "t1",
+            "kind": "explain.slam",
+            "text": "MAKE",
+            "span": "0.5s",
+            "sub": "every word",
+            "data": {
+              "size": 110,
+              "sub_size": 32
+            }
+          },
+          {
+            "id": "t2",
+            "span": "1.5s"
+          },
+          {
+            "id": "t3",
+            "kind": "explain.slam",
+            "text": "IT",
+            "span": "0.5s",
+            "sub": "land on the beat",
+            "data": {
+              "size": 110,
+              "sub_size": 32,
+              "section": true
+            }
+          },
+          {
+            "id": "t4",
+            "span": "1.5s"
+          },
+          {
+            "id": "t5",
+            "kind": "explain.slam",
+            "text": "MOVE",
+            "span": "0.5s",
+            "sub": "then hold still",
+            "data": {
+              "size": 120,
+              "sub_size": 36,
+              "section": true
+            }
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}
