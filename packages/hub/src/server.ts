@@ -49,7 +49,7 @@ const BEHIND_BYTES = 8 << 20;
 const STALL_MS = 100;
 
 /** A person's connection (#1337) reads only what that person may see. */
-type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
+type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person' | 'waiter';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   // A promotion (#1334): the drain, the health check's fixture claim and the rollback's one notice.
@@ -105,7 +105,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['canvas.show', ['cli']], ['canvas.export', ['cli']], ['canvas.revisions', ['app', 'cli']], ['canvas.messages', ['app', 'cli']], ['canvas.user', ['app']], ['canvas.drawn', ['app']],
   // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
-  ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
+  ['session.wait', ['cli', 'mcp', 'waiter']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
@@ -338,6 +338,8 @@ class Conn {
   readonly subs = new Set<string>();
   /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
   readonly calls = new Set<string>();
+  /** When the connection was accepted: a waiter's peer must have started by then (#1851). */
+  readonly at = Date.now();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
     if (!this.done && this.sock.writable) this.sock.write(line(o));
@@ -374,6 +376,8 @@ interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unk
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
+  /** The waiter refusals the hub's output has said (#1851): each once, and at most a thousand kept. */
+  private readonly waiterRefusals = new Set<string>();
   /** The connection that last reported the app's notification setting. */
   private notifier: Conn | undefined;
   private readonly subs = new Map<string, Sub>();
@@ -1290,7 +1294,33 @@ class Hub {
       conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
-    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });
+    if (value.hello === 'waiter') {
+      // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
+      const session = typeof value.session === 'string' ? value.session : '';
+      // A session's ID as its hooks carry it, and short: nothing else costs the hub a look at processes.
+      if (!/^[\w.:-]{1,128}$/.test(session)) {
+        conn.write({ id: null, error: refusal('type', '/session', "Name the waiter's session by its ID, as its hooks carry it.") });
+        return conn.end();
+      }
+      const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
+      const bound = (await this.core.request({ op: 'waiter-hello', fd, session, at: conn.at }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error) }))) as { session: string; parent: { pid: number; start: string } } | { refused: string };
+      if ('refused' in bound) {
+        // Said once in the hub's output too: the waiter asks again quietly, and its stderr becomes a wake's prompt.
+        if (!this.waiterRefusals.has(bound.refused)) {
+          if (this.waiterRefusals.size >= 1000) this.waiterRefusals.clear();
+          this.waiterRefusals.add(bound.refused);
+          process.stderr.write(`deep hub: refused a waiter: ${bound.refused}\n`);
+        }
+        conn.write({ id: null, error: refusal('role', '/hello', bound.refused, session) });
+        return conn.end();
+      }
+      conn.role = 'waiter';
+      conn.session = bound.session;
+      conn.parent = bound.parent;
+      conn.name = `waiter:${bound.session}`;
+      return conn.write({ role: conn.name });
+    }
+    conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli, mcp or waiter.', value.hello) });
     conn.end();
   }
 
@@ -1378,7 +1408,7 @@ class Hub {
       }
       case 'session.wait':
         conn.waiter = true;
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
       default:
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
