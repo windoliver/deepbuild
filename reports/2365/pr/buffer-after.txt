@@ -1,0 +1,3 @@
+{"at":"start","pid":23741,"rss":37410360}
+{"at":"end"}
+{"at":"result","ms":13455.088042000001,"maxGapMs":25.418250000000626,"ticks":2035,"rssStart":37410360,"peakRss":155107328,"rise":117696968,"evidenceBefore":0,"evidenceAfter":8946562,"added":8946562,"error":null}
