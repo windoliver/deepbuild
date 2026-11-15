@@ -54,6 +54,7 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
+mod op_transition;
 mod regions;
 mod scene;
 mod seam;
@@ -93,6 +94,8 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #466: an operator transition aligned on its progress's half, not its output's coverage.
+    MosaicRevealByProgress,
     /// #432's wrong warm-ups (tests/acceptance/432/README.md: Planted programs): only the
     /// feature sets in use at t = 0; only each variant set's default option's fused chain; only
     /// the pipelines that draw into the view.
@@ -577,6 +580,7 @@ impl Planted {
             "stops_at_request" => Planted::StopsAtRequest,
             "strokes_from_previous_frame" => Planted::StrokesFromPreviousFrame,
             "region_sides_clip_independently" => Planted::RegionSidesClipIndependently,
+            "mosaic_reveal_by_progress" => Planted::MosaicRevealByProgress,
             "status_in_look" => Planted::StatusInLook,
             "motifs_write_document" => Planted::MotifsWriteDocument,
             "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,

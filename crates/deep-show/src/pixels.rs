@@ -156,18 +156,32 @@ impl Hub<'_> {
     /// item's box in draw order, and a text's own px are those its draw changes: the frame drawn
     /// again with the text hidden differs there.
     fn frames_2d(&mut self, document: &Value, at: &[i64]) -> Drawn {
+        // #466: a film draws in its own look, captions and all, as a show of it does.
+        let kept = self.with_look_of(document);
+        let drawn = self.frames_2d_in_look(document, at);
+        if let Some((look, def)) = kept {
+            self.look = look;
+            self.look_def = def;
+        }
+        drawn
+    }
+
+    fn frames_2d_in_look(&mut self, document: &Value, at: &[i64]) -> Drawn {
         let (_, fingerprint) = crate::kit::goldens::environment(self, "vello_cpu");
-        let shown = crate::shared::drawable(document);
+        let base = crate::shared::drawable(document);
         let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-        let texts: Vec<String> = shown["items"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter(|(_, i)| i["kind"] == deep_canvas_loop::contrast::TEXT_2D)
-            .map(|(id, _)| id.clone())
-            .collect();
+        // #466: each caption, as its layer draws it once it has entered, is read as a text of
+        // the frame too (Look `look@1`: captions: render.contrast still checks them).
+        let jobs = self.caption_frames(&base, at);
         let mut frames = Vec::new();
-        for &t in at {
+        for (t, shown) in jobs {
+            let texts: Vec<String> = shown["items"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter(|(_, i)| i["kind"] == deep_canvas_loop::contrast::TEXT_2D)
+                .map(|(id, _)| id.clone())
+                .collect();
             let draw = |hub: &mut Self, doc: &Value| {
                 let drawn = hub
                     .renderer

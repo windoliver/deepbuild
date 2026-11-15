@@ -2,8 +2,7 @@
 //! loop kinds): the loop's check kinds. Issue #453 lands its first, `geometry.shading`'s defect
 //! counts and quad ratio, on every `mesh.asset@1` item a document holds; #1935 its readings of
 //! each UV set, hidden faces, unused vertices and islands; #1938 lands `scene.scale` and
-//! `camera.framing` on evaluated data, and `render.exposure`, `render.contrast` and
-//! `render.noise` on frames the host draws.
+//! `camera.framing` on evaluated data.
 
 pub mod contrast;
 pub mod count;
@@ -28,8 +27,8 @@ use count::{Counts, Edge, Opts, Prim};
 pub const KIND: &str = "geometry.shading";
 
 /// The wrong programs #453's and #1935's criteria plant in geometry.shading, and #1938's in
-/// render.contrast, each reachable only through a proof surface's `planted`, which the hub puts
-/// in the check's input.
+/// render.contrast, each reachable only through a proof surface's `planted`, which the hub puts in
+/// the check's input.
 pub const PLANTED: [&str; 10] = [
     "no_weld",
     "one_winding_sum",

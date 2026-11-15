@@ -2427,6 +2427,8 @@ impl<'a> Hub<'a> {
             }
             issues.extend(self.inline_vectors(form));
             issues.extend(crate::picks::check(form));
+            // #466: an operator transition's pass, checked before any frame draws it.
+            issues.extend(crate::film_operator::check(form));
             issues.extend(deep_canvas_input::point::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.

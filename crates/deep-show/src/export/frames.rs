@@ -40,7 +40,7 @@ impl Hub<'_> {
             }
             let t = k * shard.frame;
             let (mut px, size) = self
-                .export_frame(&mut sched, &mut session, doc, t, shard.size, shard.opaque)
+                .exposed_frame(&mut sched, &mut session, doc, t, shard.size, shard.opaque)
                 .map_err(|u| {
                     stopped(
                         k,
@@ -139,8 +139,11 @@ impl Hub<'_> {
                     open: None,
                     done: Vec::new(),
                     encoder: Value::Null,
-                    ask: transfer(json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "quality": job.quality, "grain": grain,
-                        "keyframe_interval": job.keyframe_interval}), job),
+                    ask: transfer(
+                        json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "quality": job.quality, "grain": grain,
+                        "keyframe_interval": job.keyframe_interval}),
+                        job,
+                    ),
                     ext: if job.codec == "prores_4444" {
                         "mov"
                     } else {
