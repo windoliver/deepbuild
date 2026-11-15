@@ -3,7 +3,7 @@
 // promote, the socket, the played sessions, the readers, and the rollback's judgement (`rolledBack`, every assertion
 // of it). Two things are written here, and each stands in the place of the frozen one of the same name:
 //   watched        the frozen watched repository, and beside it the one package its copied lanes import
-//   rollbackScene  the frozen scene, its session's turns tied to the planted build's runs, never to a timer
+//   rollbackScene  the frozen scene; its session's timed turns start at the planted build's hub start, not at a look
 // Nothing here imports the code under test.
 import { existsSync, mkdirSync, symlinkSync, watch } from 'node:fs';
 import { join } from 'node:path';
@@ -34,17 +34,18 @@ export function watched(box) {
 
 // ---- The rollback scene AC1 and AC2 share, as the frozen suite's README has it (The scenes), step for step. Main
 // watch passes c1, and the good build of c1 is promoted; a session works a turn on it; five landings later main watch
-// passes c2, and a planted build of c2 is promoted. While that promotion runs, the hub is polled every 250 ms, and the
-// session works a turn at each run of the planted build's bin/deep, from its first, until the last good build answers
-// again. Then one more turn, the record read back, the hub restarted once through `deep hub start`, and the record
-// read again. Nothing here throws on what the product does: each observation is kept for the tests to judge.
+// passes c2, and a planted build of c2 is promoted. While that promotion runs, the hub is polled every 250 ms, and once
+// the planted build's hub has started, the session works a turn every 3 s, 12 at most, until the last good build
+// answers again. Then one more turn, the record read back, the hub restarted once through `deep hub start`, and the
+// record read again. Nothing here throws on what the product does: each observation is kept for the tests to judge.
 //
-// What differs from the frozen scene is the worker alone. The frozen one looked for the planted build's first run and
-// then slept 3 s, turn or no turn, so a build that was rolled back within 3 s of the look before its first run got no
-// turn at all (#2565: the misjudging build is in for under a second). Here the worker waits for an event: a new line
-// the planted build's bin/deep notes in <sandbox>/starts.jsonl before it does anything else. The file is watched, and
-// each pass of the poll looks again, so a change the watcher didn't report is still seen within one pass. The turn
-// starts at once, while that run of the planted build is the newest thing that happened.
+// What differs from the frozen scene is when the worker's first turn starts. The frozen worker looked for the planted
+// build's first run and, finding none, slept 3 s, so a build rolled back within 3 s of that look got no turn at all
+// (#2565: the misjudging build is in for under a second). Here the worker waits for an event: the first `hub run` line
+// the planted build's bin/deep notes in <sandbox>/starts.jsonl before it does anything else (its other runs, if any,
+// don't count). The file is watched, and each pass of the poll looks again before it asks the hub, so a change the
+// watcher didn't report is still seen within one pass. From that first turn on, the worker is the frozen one, line for
+// line: a turn, 3 s, a turn, while the good build isn't back, so calls made all through the outage are judged.
 export async function rollbackScene(t, kind) {
   const box = await sandbox(t);
   const fx = watched(box);
@@ -64,8 +65,8 @@ export async function rollbackScene(t, kind) {
   o.c2 = o.second.head;
   o.planted = makeBuild(box, kind, o.c2, kind);
   o.before = await events(box).catch(() => []);
-  // The planted build's runs so far: none yet, since its bin/deep was only now written.
-  const plantedRuns = () => starts(box).filter((s) => s.build === kind).length;
+  // The planted build's hub starts so far: none yet, since its bin/deep was only now written.
+  const plantedHubIn = () => hubStarts(box, kind).length > 0;
   let wake = () => undefined;
   let watcher;
   try { watcher = watch(join(box.dir, 'starts.jsonl'), () => wake()); } catch { /* the poll below looks at each pass */ }
@@ -79,30 +80,28 @@ export async function rollbackScene(t, kind) {
   // Polled until the promotion ends and, while the last good build isn't back, up to three times the bound after the
   // planted build first ran.
   const done = () => over && (!plantedAt() || o.backAt || Date.now() - plantedAt() > 3 * ROLLBACK_MS);
-  // The session's work while that runs: a turn at each run of the planted build, until the good one is back. `seen`
-  // is how many of its runs a turn has answered; the wait ends on a run past those, on the good build's return, or
-  // when the poll is over.
-  const settled = (seen) => new Promise((go) => {
-    const look = () => { if (closed || done() || o.backAt || plantedRuns() > seen) { wake = () => undefined; go(); } };
+  // The wait for the planted build's hub start; it also ends when the good build is back or the poll is over.
+  const plantedIn = () => new Promise((go) => {
+    const look = () => { if (closed || done() || o.backAt || plantedHubIn()) { wake = () => undefined; go(); } };
     wake = look;
     look();
   });
+  // The session's work while that runs: from the planted build's hub start, a turn every 3 s until the good one is back.
   const worker = (async () => {
-    for (let seen = 0; ;) {
-      await settled(seen);
-      if (closed || done() || o.backAt) return;
-      seen = plantedRuns();
+    await plantedIn();
+    while (!closed && !done() && !o.backAt) {
       if (o.during.length < 12) o.during.push(await turn(box, o.s, `during-${o.during.length + 1}`));
+      await wait(3000);
     }
   })();
   for (const deadline = Date.now() + 900_000; !done() && Date.now() < deadline;) {
+    wake();
     const p = { t: Date.now(), hello: await hello(box, 1000), commit: current(box)?.commit };
     o.polls.push(p);
     if (!o.backAt && plantedAt() && p.t > plantedAt() && back(p)) o.backAt = p.t;
-    wake();
     await wait(250);
   }
-  // The poll is over: the worker ends at its next look, after the turn it is in, if any.
+  // The poll is over: the worker ends after the turn or the 3 s it is in.
   closed = true;
   wake();
   o.promoted = await ended(child, 60_000);

@@ -1,5 +1,5 @@
 // Blind redraft for #2565 (REDRAFT.md): `../1334/misjudge.test.mjs` as written, its name and its assertions. Only this
-// folder's helpers differ: the fixture's lanes can load, and the scene's turns wait on the planted build's runs.
+// folder's helpers differ: the fixture's lanes can load, and the scene's timed turns start at the planted build's hub start.
 // #1334 AC2 on the rollback scene with a planted build that starts, answers and judges claims wrong (README: The
 // scenes): its bin/deep runs this checkout's CLI with DEEP_HUB_PLANT=judges-claims-wrongly.
 import { after, before, test } from 'node:test';

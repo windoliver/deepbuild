@@ -1,5 +1,5 @@
 // Blind redraft for #2565 (REDRAFT.md): `../1334/crash.test.mjs` as written, every name and assertion. Only this
-// folder's helpers differ: the fixture's lanes can load, and the scene's turns wait on the planted build's runs.
+// folder's helpers differ: the fixture's lanes can load, and the scene's timed turns start at the planted build's hub start.
 // #1334 AC1 on the rollback scene with a planted build that crashes at start (README: The scenes), and the Scope line
 // on where the hub runs from, read from the same scene's first promotion.
 import { after, before, test } from 'node:test';

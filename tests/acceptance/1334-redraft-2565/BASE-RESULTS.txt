@@ -1,185 +1,73 @@
-# #1334 blind redraft for #2565: the runs at the base and on the planted wrong programs
+# #1334 blind redraft for #2565 (the frozen timed turns): the runs at the base and on the planted wrong programs
 
-Base 2c1c8cacc (origin/main, detached). Linux arm64, 20 cores, shared with other jobs; Node v24.22.0. November 14,
-2026, 18:27 to 18:54 PST (02:27Z to 02:54Z on the 15th), and one run at 21:02 PST (05:02Z). Setup, in the checkout:
+Base afe996e03 (this branch's head, main as of that commit). Linux arm64, 20 cores, shared with other jobs and loaded
+far past its cores; Node v24.22.0. November 15, 2026, 09:11Z to 10:25Z. Each build and run in its own memory-capped
+systemd user unit (MemoryMax=24G), one at a time. Setup, in the checkout:
 
 $ npm ci --no-audit --no-fund && npm run build --workspaces --if-present && cargo build --locked -q -p deep-hook
 
-Outputs are as printed, with stack frames and the assertion's object dump cut, long lines folded, and paths redacted:
-~ is the home folder, <checkout> the checkout, <scratch> the job's scratch folder. Sandboxes are /tmp/d1334-*.
+Outputs are as printed, with stack frames and the assertion's object fields cut, long lines folded, and paths
+redacted: ~ is the home folder, <checkout> the checkout, <scratch> the twins' scratch copy. Sandboxes are /tmp/d1334-*.
+The scene's files (helpers.mjs and the three test files) were the same bytes, by sha256, for every run here and in
+the commit.
 
 Summary:
 
-| Run | Result |
-|---|---|
-| Frozen `1334/hold.test.mjs` at the base | 1 of 3; `BLOCKED unit: Cannot find package 'typescript'` (item 1) |
-| Frozen scene with typescript resolvable, `misjudge`, 4 runs | 3 fail at `worked no turn` (item 2); 1 INCONCLUSIVE |
-| The committed scene's restart, `crash`, a scratch run | `deep hub start` exit 3: asked 61 ms before the old hub's exit was seen |
-| Redraft at the base, run A (load 60 to 40) | 4 of 6; crash fails at the restart; misjudge INCONCLUSIVE |
-| Redraft at the base, run D (load 7 to 10), the last | 6 of 6 |
-| 10 twins on the redraft (not re-run, section 5) | each fails the test of its criterion at the assertion its fault names |
-| 3 of the frozen suite's own twins, compiled on the base | none compiles (section 6) |
+| Run | Load (1-min, start → end) | C1 crash | C2 versioned folder | M1 misjudge | H1, H2, H3 hold |
+|---|---|---|---|---|---|
+| Base, run 1 | 131.9 → 151.8 | INCONCLUSIVE (5 hook runs not spooled in 50 ms, load 157.0) | pass | INCONCLUSIVE (4, load 157.8) | pass, pass, pass |
+| Base, run 2 | 152.3 → 119.8 | INCONCLUSIVE (6, load 117.9) | pass | pass: back 2.7 s after the planted build first ran, 1 turn meanwhile | pass, pass, pass |
 
-| Twin | Test | Fails at |
-|---|---|---|
-| slow-rollback | crash `#1334.775c65d4` | `answered again 75.5 s after the planted build first ran; the bound is 60 s`|
-| two-notices | crash `#1334.775c65d4` | `one notice of the rollback … there are 2` |
-| notice-names-restored | crash `#1334.775c65d4` | `the rollback's notice must name the promoted commit` |
-| fresh-root-on-rollback | crash `#1334.775c65d4` | `an attempt lost: 4 of the session's 5 calls aren't in the record` |
-| pings-only | misjudge `#1334.14e4b3e9` | `the last good build … never came back: … only pings the hub passes it` |
-| judges-in-promote | misjudge `#1334.14e4b3e9` | the same assertion |
-| promotes-while-red | hold `#1334.a6dc45e5` (red) | `must be refused while main is red (exit 1 or 3): exit 0` |
-| no-drain | hold `#1334.a6dc45e5` (turn) | `started as the installed hub 0.9 s after the promotion was asked for` |
-| refuses-while-turn | hold `#1334.a6dc45e5` (turn) | `deep hub promote ended 0.3 s in, while the turn ran` |
-| promotes-any-commit | hold, Scope test | `a landing main watch hasn't run on, must be refused (exit 1 or 3): exit 0` |
+Neither run failed in setup, at "the session worked no turn", or at "the hub didn't come back from deep hub start"
+(#2570). C1 read INCONCLUSIVE both times by the frozen suite's own budget check, so C1 is unproven on this machine.
 
-Not run: the reference Mac; the frozen suite's other two files (`doctor.test.mjs`, `contract.test.mjs`), which this
-redraft doesn't touch; `scripts/proof-runs.mjs` itself over this folder's twins; `scripts/affected.mjs` on the folder
-as committed (its one run was made with the third change in, and is not kept here).
+| Twin | Test | Run | Load at start | First failure |
+|---|---|---|---|---|
+| loses-mid-outage | crash | 1 | 121.6 | INCONCLUSIVE (2 hook runs not spooled, load 74.5) |
+| loses-mid-outage | crash | 2 | 65.5 | `an attempt lost: 9 of the session's 11 calls aren't in the record after the rollback (by tool_use_id)` |
+| slow-rollback | crash | 1 | 74.5 | `the last good build answered again 75.7 s after the planted build first ran; the bound is 60 s` |
+| two-notices | crash | 1 | 78.3 | INCONCLUSIVE (5, load 92.0) |
+| two-notices | crash | 2 | 26.2 | `one notice of the rollback … there are 2` |
+| notice-names-restored | crash | 1 | 94.0 | INCONCLUSIVE (5, load 124.3) |
+| notice-names-restored | crash | 2 | 44.6 | `the rollback's notice must name the promoted commit … in data.commit, not {"commit":<the restored c1>,…}` |
+| fresh-root-on-rollback | crash | 1, 2, 3 | 125.7, 74.9, 41.3 | INCONCLUSIVE each time (3, 4, 5 hook runs; loads 80.7, 43.1, 41.6): its fault not reached |
+| pings-only | misjudge | 1 | 80.7 | `the last good build (c7b30e8) never came back: … only pings the hub passes it` |
+| judges-in-promote | misjudge | 1 | 70.4 | the same assertion |
+| promotes-while-red | hold | 1 | 67.4 | H1: `must be refused while main is red (exit 1 or 3): exit 0` |
+| no-drain | hold | 1 | 63.8 | H3: `the build of 743dc1c started as the installed hub 1.3 s after the promotion was asked for, while the session's turn ran` |
+| refuses-while-turn | hold | 1 | 56.1 | H3: `deep hub promote ended 0.5 s in, while the turn ran: a promotion waits for the drain` |
+| promotes-any-commit | hold | 1 | 58.2 | H1: `nothing is promoted: ~/.deepbuild/versions/current must not appear`; H2: `a landing main watch hasn't run on, must be refused (exit 1 or 3): exit 0` |
+
+Each twin was asked for once. A crash twin whose first run read INCONCLUSIVE was run again, since an INCONCLUSIVE run
+says nothing of its fault; fresh-root-on-rollback was run three times and read INCONCLUSIVE each time, so it is not
+shown to fail at its fault on this scene. In loses-mid-outage's run 2 each turn made one call: one turn before the promotion,
+9 while the crashing build was in, one after the rollback, 11 calls. The 9 lost are as many as the mid-outage turns;
+the output names the count, not which calls.
+
+Not run: the reference Mac; the frozen suite's doctor.test.mjs and contract.test.mjs; scripts/proof-runs.mjs and
+scripts/affected.mjs over this folder.
 
 
-## 1. The frozen suite at the base: item 1 (the fixture's lanes can't load)
+## 1. The redraft at the base, run 1
 
-$ node --test tests/acceptance/1334/hold.test.mjs
-(02:27Z, 1-minute load 53 on 20 cores; 6.7 s)
+$ node --test --test-concurrency=1 tests/acceptance/1334-redraft-2565/{crash,misjudge,hold}.test.mjs
 
+start 2026-11-15T09:14:42Z  01:14:42 up 10:22,  3 users,  load average: 131.85, 124.04, 138.17
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one 
+notice naming the commit (265626.925324ms)
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, 
+never a checkout or a temporary path (13.016342ms)
 ▶ main is red
-  ✖ #1334.a6dc45e5 no promotion happens while main is red (0.958418ms)
-  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (1.367587ms)
-✖ main is red (3984.600914ms)
+  ✔ #1334.a6dc45e5 no promotion happens while main is red (0.658865ms)
+  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming 
+the commit (0.127008ms)
+✔ main is red (29245.804022ms)
 ▶ a turn is running
-  ✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (2606.933432ms)
-✖ a turn is running (2607.360041ms)
-ℹ tests 3
-ℹ suites 2
-ℹ pass 1
-ℹ fail 2
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 6657.878749
-
-✖ failing tests:
-
-test at tests/acceptance/1334/hold.test.mjs:37:3
-✖ #1334.a6dc45e5 no promotion happens while main is red (0.958418ms)
-  AssertionError [ERR_ASSERTION]: main watch's run after the breaking landing must read main red (landings paused):
-      landings open
-  exit 0
-  stdout:
-  RUN main-watch: the unit and lint lanes on main at 680f2d2bca
-  RUN unit
-  RUN lint
-  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/var/tmp/deep40/node/bin/node -e ` runs
-      unleased
-  PASS lint (0.12 s)
-  BLOCKED unit: Cannot find package 'typescript' imported from
-      /tmp/d1334-Z6nFSF/h/.deepbuild/main-watch/fd39b948a0074cce/tree/scripts/proof-binaries.mjs
-    Fix: Repair the behavior named by the failing test.
-    Elapsed: 0.02 s
-  INCONCLUSIVE main-watch: BLOCKED unit on main at 680f2d2bca, so this run isn't a clean one
-  landings open
-
-  stderr:
-
-  'open' !== 'paused'
-
-test at tests/acceptance/1334/hold.test.mjs:60:3
-✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (2606.933432ms)
-  AssertionError [ERR_ASSERTION]: the first promotion, of a build of 3c975ae that main watch passed, must leave
-      versions/current on it and the hub answering: exit 1
-  stdout:
-
-  stderr:
-  deep hub promote: 3c975ae5957ad0bea9286a777a50426eb8e4cd57 isn't a commit main watch passed, so it isn't promoted:
-      its last clean run here is none yet
-
-exit 1
-
-
-## 2. The frozen scene with typescript resolvable: item 2 (no turn while the planted build is in)
-
-A scratch copy of the frozen helpers.mjs, fixtures/ and misjudge.test.mjs, not kept, with one line added to
-watched() (the link <sandbox>/node_modules/typescript) and nothing else changed, so the frozen rollbackScene ran
-past item 1. Four runs.
-
-$ node --test tests/acceptance/_scratch2565/misjudge.test.mjs
-
--- run 1 (02:27Z, load 53 to 70); ℹ duration_ms 218779.711703
-  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.14e4b3e9 deep-hook itself couldn't hand 1 of the session's
-      hook runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool
-      01M7EGG19CPWSR5PVXG94B4QSZ within the hook's 50 ms), at 1-minute load 69.8 on 20 cores, so no attempt can be
-      judged lost or kept; run it again on a quieter machine
-
--- run 2 (02:41Z, load 21); ℹ duration_ms 150651.407923
-  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the session worked no turn while the planted build was in, so
-      nothing shows an attempt survives it
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -6993 hub run; misjudge 0 hub
-      run; good 800 hub run
-
--- run 3; ℹ duration_ms 150323.833814
-  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the session worked no turn while the planted build was in, so
-      nothing shows an attempt survives it
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -6771 hub run; misjudge 0 hub
-      run; good 689 hub run
-
--- run 4 (load 27 at its end); ℹ duration_ms 19772.698082
-  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the session worked no turn while the planted build was in, so
-      nothing shows an attempt survives it
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -6925 hub run; misjudge 0 hub
-      run; good 700 hub run; good 5722 hub run
-
-
-## 3. The scene's restart: what the launchd stand-in saw
-
-A scratch test, not kept, that ran this folder's rollbackScene as committed (the frozen restart: stopHub, then
-deep hub start at once) and printed deep hub start's run and the stand-in's log. Times are ms from the launch of
-deep hub start; `load` is the stand-in called, `exit` is the stand-in seeing its job end.
-
-$ KIND=crash node --test tests/acceptance/_scratch2565/restart-debug.test.mjs      (02:36Z)
-
-RESTART exit 3
-deep hub start: no hub answered at unix:/tmp/d1334-sAeRzx/h/.deepbuild/hub.sock within 15 s; see
-      /tmp/d1334-sAeRzx/h/.deepbuild/logs/hub.log
-restarted false; deep hub start ran 15129 ms
-LAUNCHD (ms from deep hub start's launch): load pid - -37643; start pid 1703367 -37618; exit 0 pid 1703367 -29632;
-      load pid - -29428; start pid 1705654 -29409; exit 1 pid 1705654 -29401; start pid 1707185 -19409; exit 1 pid
-      1707185 -19403; start pid 1709150 -9405; exit 1 pid 1709150 -9398; load pid - -4272; start pid 1710245 -4270;
-      load pid - 94; exit 0 pid 1710245 155
-
-$ KIND=misjudge node --test tests/acceptance/_scratch2565/restart-debug.test.mjs   (02:36Z)
-RESTART exit 0
-restarted true; deep hub start ran 201 ms
-LAUNCHD (ms from deep hub start's launch): load pid - -14366; start pid 1703301 -14337; exit 0 pid 1703301 -6149;
-      load pid - -5985; start pid 1705622 -5980; exit 0 pid 1705622 -4311; load pid - -4176; start pid 1705875
-      -4173; exit 0 pid 1705875 62; load pid - 69; start pid 1706506 76
-
-
-## 4. The redraft at the base, the correct program
-
-$ node --test --test-concurrency=2 'tests/acceptance/1334-redraft-2565/*.test.mjs'
-
--- run A; 02:31:44Z to 02:35:27Z, load 60 to 40. helpers.mjs then was what is committed (the two changes, the frozen restart)
-Sat Nov 14 06:31:44 PM PST 2026
- 18:31:44 up  3:39,  3 users,  load average: 60.33, 54.64, 46.38
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (180700.428897ms)
-✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current,
-      never a checkout or a temporary path (0.578785ms)
-▶ main is red
-  ✔ #1334.a6dc45e5 no promotion happens while main is red (1.106291ms)
-  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (0.197584ms)
-✔ main is red (16109.122703ms)
-▶ a turn is running
-  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (40697.88573ms)
-✔ a turn is running (40702.993228ms)
-✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (163149.794314ms)
+  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, 
+then promotes and the run resumes (59950.556012ms)
+✔ a turn is running (59951.380621ms)
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a 
+health check that only pings the hub passes this plant and fails, naming the claim (35862.017779ms)
 ℹ tests 6
 ℹ suites 2
 ℹ pass 4
@@ -187,544 +75,351 @@ Sat Nov 14 06:31:44 PM PST 2026
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 223104.450021
+ℹ duration_ms 398632.575559
 
 ✖ failing tests:
 
 test at tests/acceptance/1334-redraft-2565/crash.test.mjs:15:1
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (180700.428897ms)
-  AssertionError [ERR_ASSERTION]: #1334.775c65d4 after the rollback the hub didn't come back from deep hub start:
-      exit 3
-  stdout:
-
-  stderr:
-  deep hub start: no hub answered at unix:/tmp/d1334-W5cAP2/h/.deepbuild/hub.sock within 15 s; see
-      /tmp/d1334-W5cAP2/h/.deepbuild/logs/hub.log
-
-test at tests/acceptance/1334-redraft-2565/misjudge.test.mjs:13:1
-✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (163149.794314ms)
-  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.14e4b3e9 deep-hook itself couldn't hand 1 of the session's
-      hook runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool
-      01M7EGT15V542KM0DMGMV7VQNM within the hook's 50 ms), at 1-minute load 39.7 on 20 cores, so no attempt can be
-      judged lost or kept; run it again on a quieter machine
-
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one 
+notice naming the commit (265626.925324ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 5 of the session's hook 
+runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F7TNQE33BFVA21A2P59B6F within 
+the hook's 50 ms), at 1-minute load 157.0 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+quieter machine
+  + actual - expected
+  
   + [
+  +   'PreToolUse',
+  +   'UserPromptSubmit',
+  +   'UserPromptSubmit',
+  +   'PostToolUse',
   +   'UserPromptSubmit'
   + ]
   - []
+  
+  }
 
+test at tests/acceptance/1334-redraft-2565/misjudge.test.mjs:13:1
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a 
+health check that only pings the hub passes this plant and fails, naming the claim (35862.017779ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.14e4b3e9 deep-hook itself couldn't hand 4 of the session's hook 
+runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F852QS19Y52KKRD0RX8CVH within 
+the hook's 50 ms), at 1-minute load 157.8 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+quieter machine
+  + actual - expected
+  
+  + [
+  +   'UserPromptSubmit',
+  +   'PostToolUse',
+  +   'UserPromptSubmit',
+  +   'PostToolUse'
+  + ]
+  - []
+  
+  }
 exit 1
-Sat Nov 14 06:35:27 PM PST 2026
- 18:35:27 up  3:42,  3 users,  load average: 39.69, 48.08, 45.68
+end 2026-11-15T09:21:21Z  01:21:21 up 10:28,  3 users,  load average: 151.83, 144.49, 142.27
 
--- run D, the folder as committed, the one run made after the third change was taken out; 05:02:21Z to 05:03:20Z
-Sun Nov 15 05:02:21 AM UTC 2026
- 21:02:21 up  6:09,  3 users,  load average: 6.64, 13.02, 14.41
-✔ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (40742.562935ms)
-ℹ the last good build answered 25.3 s after the planted build first ran, at 1-minute load 10.2 on 20 cores; 3 turns
-      worked meanwhile
-✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current,
-      never a checkout or a temporary path (0.781852ms)
+
+## 2. The redraft at the base, run 2
+
+$ node --test --test-concurrency=1 tests/acceptance/1334-redraft-2565/{crash,misjudge,hold}.test.mjs
+
+start 2026-11-15T09:21:53Z  01:21:53 up 10:29,  3 users,  load average: 152.31, 145.38, 142.64
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one 
+notice naming the commit (255286.933734ms)
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, 
+never a checkout or a temporary path (0.741969ms)
 ▶ main is red
-  ✔ #1334.a6dc45e5 no promotion happens while main is red (1.225307ms)
-  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (0.303182ms)
-✔ main is red (6648.421837ms)
+  ✔ #1334.a6dc45e5 no promotion happens while main is red (1.909075ms)
+  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming 
+the commit (4.666599ms)
+✔ main is red (27995.59508ms)
 ▶ a turn is running
-  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (35166.107013ms)
-✔ a turn is running (35166.411299ms)
-✔ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (14981.467586ms)
-ℹ the last good build answered 1.0 s after the planted build first ran, at 1-minute load 9.5 on 20 cores; 1 turns
-      worked meanwhile
+  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, 
+then promotes and the run resumes (46629.208864ms)
+✔ a turn is running (46629.874097ms)
+✔ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a 
+health check that only pings the hub passes this plant and fails, naming the claim (23484.043104ms)
+ℹ the last good build answered 2.7 s after the planted build first ran, at 1-minute load 119.8 on 20 cores; 1 turns 
+worked meanwhile
 ℹ tests 6
 ℹ suites 2
-ℹ pass 6
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 58562.113138
-exit 0
-Sun Nov 15 05:03:20 AM UTC 2026
- 21:03:20 up  6:10,  3 users,  load average: 9.52, 12.69, 14.21
-
-
-Two more runs, B (02:39Z) and C (02:52Z), were made while helpers.mjs held a third change, since taken out on the
-owner's decision: the restart waited for the stand-in to see the stopped hub's exit before deep hub start. Both
-read 6 of 6. They are not runs of the code as committed, and their output is not kept here.
-
-
-## 5. The twins, each in a scratch copy of the checkout at the base
-
-Each scratch tree: the checkout without .git, target/ and the other acceptance folders, with target/debug/deep-hook
-copied in; the twin's promote.ts laid over packages/hub/src/; packages/hub compiled; the test file run. Three trees
-at a time, 02:46Z to 02:53Z. None was run again after the third change (above) was taken out: helpers.mjs then
-held it. It changed only the scene's restart, which comes after everything these failures read. Each crash and
-misjudge twin fails at an assertion of rolledBack that comes before its restart assertion and reads what the scene
-kept before the restart; the hold twins' file never runs the rollback scene.
-
--- twin slow-rollback
-$ cp -R tests/acceptance/1334-redraft-2565/twins/slow-rollback/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
-tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/crash.test.mjs   # twin slow-rollback; 02:46:47Z; load average:
-      27.91, 29.03, 36.63
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (95861.976077ms)
-✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current,
-      never a checkout or a temporary path (1.334468ms)
-ℹ tests 2
-ℹ suites 0
-ℹ pass 1
+ℹ pass 5
 ℹ fail 1
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 97712.327154
+ℹ duration_ms 363957.65607
+
 ✖ failing tests:
 
 test at tests/acceptance/1334-redraft-2565/crash.test.mjs:15:1
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (95861.976077ms)
-  AssertionError [ERR_ASSERTION]: #1334.775c65d4 the last good build answered again 75.5 s after the planted build
-      first ran; the bound is 60 s
-  the planted promotion: exit 1
-  stdout:
-
-  stderr:
-  deep hub promote: bf2f6d9bb76de7c42e3842858faac0ea25fc60fa was rolled back: its hub didn't answer within 75 s; the
-      last good build, f49ef659cacbbdff3483e062723c2e19fa13f0d5, is back
-
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -11367 hub run; crash 0 hub run;
-      crash 10013 hub run; crash 20024 hub run; crash 30031 hub run; crash 40046 hub run; crash 50051 hub run; crash
-      60061 hub run; crash 70072 hub run; good 75280 hub run; good 79536 hub run
-  launchd stand-in (event, ms): load -11405; start -11373; exit 0 -44; load -9; start -3; exit 1 0; start 10007;
-      exit 1 10013; start 20018; exit 1 20024; start 30026; exit 1 30031; start 40038; exit 1 40048; start 50045;
-      exit 1 50051; start 60056; exit 1 60062; start 70066; exit 1 70072; load 75272; start 75274; exit 0 79429;
-      load 79529; start 79531
-  versions/current: {"link":"f49ef659cacbbdff3483e062723c2e19fa13f0d5","folder":"/tmp/d1334-3w6suK/h/.deepbuild/vers
-      ions/f49ef659cacbbdff3483e062723c2e19fa13f0d5","commit":"f49ef659cacbbdff3483e062723c2e19fa13f0d5","inVersions
-      ":true}
-exit 1
-done 02:48:25Z; load average: 32.19, 29.97, 36.21
-
--- twin two-notices
-$ cp -R tests/acceptance/1334-redraft-2565/twins/two-notices/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
-tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/crash.test.mjs   # twin two-notices; 02:46:40Z; load average:
-      26.62, 28.81, 36.64
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (44629.269218ms)
-✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current,
-      never a checkout or a temporary path (2.028566ms)
-ℹ tests 2
-ℹ suites 0
-ℹ pass 1
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 46560.019127
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/crash.test.mjs:15:1
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (44629.269218ms)
-  AssertionError [ERR_ASSERTION]: #1334.775c65d4 one notice of the rollback, a build.rolled_back event in the record
-      naming the promoted commit 0f84a11; there are 2: [{"commit":"0f84a1155940c88cd19d9c8cd06d9f30344b54c1","restor
-      ed":"8f355c772339add5275fc73570232c1b61a4ceb5","why":"its hub didn't answer within 25 s"},{"commit":"0f84a1155
-      940c88cd19d9c8cd06d9f30344b54c1","restored":"8f355c772339add5275fc73570232c1b61a4ceb5","why":"its hub didn't
-      answer within 25 s"}]
-  the planted promotion: exit 1
-  stdout:
-
-  stderr:
-  deep hub promote: 0f84a1155940c88cd19d9c8cd06d9f30344b54c1 was rolled back: its hub didn't answer within 25 s; the
-      last good build, 8f355c772339add5275fc73570232c1b61a4ceb5, is back
-
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -10679 hub run; crash 0 hub run;
-      crash 10012 hub run; crash 20021 hub run; good 25137 hub run; good 29592 hub run
-  launchd stand-in (event, ms): load -10705; start -10682; exit 0 -194; load -6; start -4; exit 1 4; start 10006;
-      exit 1 10012; start 20016; exit 1 20022; load 25127; start 25130; exit 0 29515; load 29584; start 29586
-  versions/current: {"link":"8f355c772339add5275fc73570232c1b61a4ceb5","folder":"/tmp/d1334-bXCK6O/h/.deepbuild/vers
-      ions/8f355c772339add5275fc73570232c1b61a4ceb5","commit":"8f355c772339add5275fc73570232c1b61a4ceb5","inVersions
-      ":true}
-
-  2 !== 1
-
-exit 1
-done 02:47:26Z; load average: 29.16, 29.28, 36.40
-
--- twin notice-names-restored
-$ cp -R tests/acceptance/1334-redraft-2565/twins/notice-names-restored/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
-tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/crash.test.mjs   # twin notice-names-restored; 02:46:48Z; load
-      average: 27.91, 29.03, 36.63
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (44452.732172ms)
-✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current,
-      never a checkout or a temporary path (1.583029ms)
-ℹ tests 2
-ℹ suites 0
-ℹ pass 1
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 47202.031206
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/crash.test.mjs:15:1
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (44452.732172ms)
-  AssertionError [ERR_ASSERTION]: #1334.775c65d4 the rollback's notice must name the promoted commit
-      11a40ed8d159fd8055fe7e7a6966f4b52cb2e640 in data.commit, not {"commit":"8d2fc10ca711c561d9f0dbf223c73472537147
-      0b","restored":"11a40ed8d159fd8055fe7e7a6966f4b52cb2e640","why":"its hub didn't answer within 25 s"}
-exit 1
-done 02:47:36Z; load average: 28.90, 29.22, 36.30
-
--- twin fresh-root-on-rollback
-$ cp -R tests/acceptance/1334-redraft-2565/twins/fresh-root-on-rollback/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
-tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/crash.test.mjs   # twin fresh-root-on-rollback; 02:47:38Z; load
-      average: 28.90, 29.22, 36.30
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (104208.956586ms)
-✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current,
-      never a checkout or a temporary path (0.90541ms)
-ℹ tests 2
-ℹ suites 0
-ℹ pass 1
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 106097.101943
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/crash.test.mjs:15:1
-✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one
-      notice naming the commit (104208.956586ms)
-  AssertionError [ERR_ASSERTION]: #1334.775c65d4 an attempt lost: 4 of the session's 5 calls aren't in the record
-      after the rollback (by tool_use_id)
-  the planted promotion: exit 1
-  stdout:
-
-  stderr:
-  deep hub promote: 5488f175af5c2b26464f167d4148bef6ff3a6d46 was rolled back: its hub didn't answer within 25 s; the
-      last good build, 35bdc91b1320d0beae112f351f168c6993e534d1, is back
-
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -8459 hub run; crash 0 hub run;
-      crash 10000 hub run; crash 20005 hub run; good 25127 hub run; good 91504 hub run
-  launchd stand-in (event, ms): load -8489; start -8464; exit 0 -346; load -113; start -5; exit 1 0; start 9996;
-      exit 1 10000; start 19999; exit 1 20005; load 25116; start 25120; exit 0 91376; load 91497; start 91498
-  versions/current: {"link":"35bdc91b1320d0beae112f351f168c6993e534d1","folder":"/tmp/d1334-o8hxk1/h/.deepbuild/vers
-      ions/35bdc91b1320d0beae112f351f168c6993e534d1","commit":"35bdc91b1320d0beae112f351f168c6993e534d1","inVersions
-      ":true}
-
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one 
+notice naming the commit (255286.933734ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 6 of the session's hook 
+runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F87PC3XA9K90CXT06FVSF2 within 
+the hook's 50 ms), at 1-minute load 117.9 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+quieter machine
+  + actual - expected
+  
   + [
-  +   'toolu_7dcc3d0dadc0c84d0ab2',
-  +   'toolu_2f24332563a4c6d13a36',
-  +   'toolu_ff38249f09f94af4813e',
-  +   'toolu_07be65bdb1494c061eef'
+  +   'UserPromptSubmit',
+  +   'PostToolUse',
+  +   'PreToolUse',
+  +   'UserPromptSubmit',
+  +   'UserPromptSubmit',
+  +   'UserPromptSubmit'
   + ]
   - []
-
+  
+  }
 exit 1
-done 02:49:24Z; load average: 35.37, 31.70, 36.44
+end 2026-11-15T09:27:57Z  01:27:57 up 10:35,  3 users,  load average: 119.75, 133.84, 139.25
 
--- twin pings-only
-$ cp -R tests/acceptance/1334-redraft-2565/twins/pings-only/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+
+## 3. The twins, in order of their runs
+
+Each in <scratch>, a copy of the checkout: the base promote.ts put back, the twin's copied over it (its diff's first
+lines shown), then
+
+$ node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+$ node --test --test-concurrency=1 tests/acceptance/1334-redraft-2565/<file>.test.mjs
+
+----- loses-mid-outage, run 1
+twin loses-mid-outage on crash; start 2026-11-15T09:28:11Z 01:28:11 up 10:35, 3 users, load average: 121.60, 133.55, 139.07
+82a83
+> /* TWIN loses-mid-outage: drops the session's calls spooled while the planted build was in */   rmSync(join(root.spool, 'spool.jsonl'), { force: true });
 tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/misjudge.test.mjs   # twin pings-only; 02:47:44Z; load average:
-      29.15, 29.26, 36.28
-✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (253842.819698ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 0
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 255589.637733
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/misjudge.test.mjs:13:1
-✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (253842.819698ms)
-  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the last good build (5de4098) never came back: the planted build
-      (DEEP_HUB_PLANT=judges-claims-wrongly) starts and answers, so a health check that only pings the hub passes
-      it. The fixture claim, judged by this build's gate, reads the opposite of what it should, and the health check
-      must judge it
-  the planted promotion: exit 0
-  stdout:
-  deep hub promote: 740da8da3aeded023f84eb4e6363de7947030941 is in: its hub judged the health check's fixture claim
-      PASS and stayed up
-
-  stderr:
-
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -6040 hub run; misjudge 0 hub
-      run; misjudge 243646 hub run
-  launchd stand-in (event, ms): load -6079; start -6047; exit 0 -46; load -9; start -5; exit 0 243579; load 243638;
-      start 243640
-  versions/current: {"link":"740da8da3aeded023f84eb4e6363de7947030941","folder":"/tmp/d1334-FmI9CQ/h/.deepbuild/vers
-      ions/740da8da3aeded023f84eb4e6363de7947030941","commit":"740da8da3aeded023f84eb4e6363de7947030941","inVersions
-      ":true}
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
 exit 1
-done 02:51:59Z; load average: 11.48, 24.18, 32.95
-
--- twin judges-in-promote
-$ cp -R tests/acceptance/1334-redraft-2565/twins/judges-in-promote/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+first failure:
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 2 of the session's hook 
+  runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F8KEEH6VFE0467Y47WCWHZ within 
+  the hook's 50 ms), at 1-minute load 74.5 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+  quieter machine
+end 2026-11-15T09:32:39Z 01:32:39 up 10:40, 3 users, load average: 74.45, 104.85, 126.32
+----- slow-rollback
+twin slow-rollback on crash; start 2026-11-15T09:32:39Z 01:32:39 up 10:40, 3 users, load average: 74.45, 104.85, 126.32
+16c16
+< const UP_MS = 25_000;
 tsc exit 0
-TWIN marks in dist/promote.js: 2
-$ node --test tests/acceptance/1334-redraft-2565/misjudge.test.mjs   # twin judges-in-promote; 02:48:34Z; load
-      average: 33.61, 30.32, 36.26
-✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (257419.717506ms)
-ℹ tests 1
-ℹ suites 0
-ℹ pass 0
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 259254.29639
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/misjudge.test.mjs:13:1
-✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a
-      health check that only pings the hub passes this plant and fails, naming the claim (257419.717506ms)
-  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the last good build (93f55aa) never came back: the planted build
-      (DEEP_HUB_PLANT=judges-claims-wrongly) starts and answers, so a health check that only pings the hub passes
-      it. The fixture claim, judged by this build's gate, reads the opposite of what it should, and the health check
-      must judge it
-  the planted promotion: exit 0
-  stdout:
-  deep hub promote: 9bc08bd7ee8178b1c442498e91107879f7b74c9d is in: its hub judged the health check's fixture claim
-      PASS and stayed up
-
-  stderr:
-
-  planted bin/deep runs (build, ms from the planted build's first run, args): good -9705 hub run; misjudge 0 hub
-      run; misjudge 243610 hub run
-  launchd stand-in (event, ms): load -9734; start -9711; exit 0 -209; load -10; start -7; exit 0 243547; load
-      243602; start 243604
-  versions/current: {"link":"9bc08bd7ee8178b1c442498e91107879f7b74c9d","folder":"/tmp/d1334-XSGsv5/h/.deepbuild/vers
-      ions/9bc08bd7ee8178b1c442498e91107879f7b74c9d","commit":"9bc08bd7ee8178b1c442498e91107879f7b74c9d","inVersions
-      ":true}
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
 exit 1
-done 02:52:54Z; load average: 6.65, 20.69, 31.25
-
--- twin promotes-while-red
-$ cp -R tests/acceptance/1334-redraft-2565/twins/promotes-while-red/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+first failure:
+  AssertionError [ERR_ASSERTION]: #1334.775c65d4 the last good build answered again 75.7 s after the planted build 
+  first ran; the bound is 60 s
+end 2026-11-15T09:35:48Z 01:35:48 up 10:43, 3 users, load average: 78.28, 88.71, 115.71
+----- two-notices, run 1
+twin two-notices on crash; start 2026-11-15T09:35:48Z 01:35:48 up 10:43, 3 users, load average: 78.28, 88.71, 115.71
+87a88
+> /* TWIN two-notices: records the rollback's notice twice */     await control(root.socket, root.token, 'build.rolled_back', { commit, restored: previous, why 
 tsc exit 0
-TWIN marks in dist/promote.js: 2
-$ node --test tests/acceptance/1334-redraft-2565/hold.test.mjs   # twin promotes-while-red; 02:49:34Z; load average:
-      32.64, 31.24, 36.24
-▶ main is red
-  ✖ #1334.a6dc45e5 no promotion happens while main is red (0.820098ms)
-  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (0.245872ms)
-✖ main is red (13605.396019ms)
-▶ a turn is running
-  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (36121.166247ms)
-✔ a turn is running (36121.424888ms)
-ℹ tests 3
-ℹ suites 2
-ℹ pass 2
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 49764.329159
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/hold.test.mjs:39:3
-✖ #1334.a6dc45e5 no promotion happens while main is red (0.820098ms)
-  AssertionError [ERR_ASSERTION]: deep hub promote of a build of 553f76f, main watch's last clean commit, must be
-      refused while main is red (exit 1 or 3): exit 0
-  stdout:
-  deep hub promote: 553f76f647b719900b6e8997cfeab6d7dc993532 is in: its hub judged the health check's fixture claim
-      PASS and stayed up
-
-  stderr:
-
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
 exit 1
-done 02:50:24Z; load average: 25.02, 29.38, 35.34
-
--- twin no-drain
-$ cp -R tests/acceptance/1334-redraft-2565/twins/no-drain/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+first failure:
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 5 of the session's hook 
+  runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F91MBAR9YHQTRHPH3XXSC0 within 
+  the hook's 50 ms), at 1-minute load 92.0 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+  quieter machine
+end 2026-11-15T09:36:56Z 01:36:56 up 10:44, 3 users, load average: 93.96, 90.88, 114.48
+----- notice-names-restored, run 1
+twin notice-names-restored on crash; start 2026-11-15T09:36:56Z 01:36:56 up 10:44, 3 users, load average: 93.96, 90.88, 114.48
+87c87
+<     await control(root.socket, root.token, 'build.rolled_back', { commit, restored: previous, why }, 30_000);
 tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/hold.test.mjs   # twin no-drain; 02:50:32Z; load average: 25.63,
-      29.35, 35.27
-▶ main is red
-  ✔ #1334.a6dc45e5 no promotion happens while main is red (1.19194ms)
-  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (0.280673ms)
-✔ main is red (8115.293412ms)
-▶ a turn is running
-  ✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (29326.405715ms)
-✖ a turn is running (29327.510182ms)
-ℹ tests 3
-ℹ suites 2
-ℹ pass 2
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 37513.246351
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/hold.test.mjs:62:3
-✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (29326.405715ms)
-  AssertionError [ERR_ASSERTION]: the build of 0e08d0f started as the installed hub 0.9 s after the promotion was
-      asked for, while the session's turn ran (its Stop came at 20.1 s)
-
-  + [
-  +   {
-  +     args: 'hub run',
-  +     build: 'next',
-  +     pid: 2008152,
-  +     t: 1794711048858
-  +   }
-  + ]
-  - []
-
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
 exit 1
-done 02:51:09Z; load average: 21.31, 27.86, 34.55
-
--- twin refuses-while-turn
-$ cp -R tests/acceptance/1334-redraft-2565/twins/refuses-while-turn/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+first failure:
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 5 of the session's hook 
+  runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F93DZ794WXQ425JBZCT9RP within 
+  the hook's 50 ms), at 1-minute load 124.3 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+  quieter machine
+end 2026-11-15T09:41:20Z 01:41:20 up 10:48, 3 users, load average: 125.72, 109.03, 116.10
+----- fresh-root-on-rollback, run 1
+twin fresh-root-on-rollback on crash; start 2026-11-15T09:41:20Z 01:41:20 up 10:48, 3 users, load average: 125.72, 109.03, 116.10
+82a83
+> /* TWIN fresh-root-on-rollback: rolls back to an empty record and spool */   for (const f of ['ledger.db', 'ledger.db-wal', 'ledger.db-shm', 'spool']) rmSync(
 tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/hold.test.mjs   # twin refuses-while-turn; 02:51:15Z; load average:
-      19.92, 27.46, 34.39
-▶ main is red
-  ✔ #1334.a6dc45e5 no promotion happens while main is red (0.732898ms)
-  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (0.129009ms)
-✔ main is red (6364.066571ms)
-▶ a turn is running
-  ✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (28917.230423ms)
-✖ a turn is running (28917.89084ms)
-ℹ tests 3
-ℹ suites 2
-ℹ pass 2
-ℹ fail 1
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 35321.841489
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/hold.test.mjs:62:3
-✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (28917.230423ms)
-  AssertionError [ERR_ASSERTION]: deep hub promote ended 0.3 s in, while the turn ran: a promotion waits for the
-      drain
-  exit 1
-  stdout:
-
-  stderr:
-  deep hub promote: 1 turn(s) are running, so nothing is promoted
-
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
 exit 1
-done 02:51:50Z; load average: 12.40, 24.78, 33.23
-
--- twin promotes-any-commit
-$ cp -R tests/acceptance/1334-redraft-2565/twins/promotes-any-commit/packages/. packages/ && node
-      node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json
+first failure:
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 3 of the session's hook 
+  runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7F9BT2E7ASGNFHMW84SXTCC within 
+  the hook's 50 ms), at 1-minute load 80.7 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+  quieter machine
+end 2026-11-15T09:46:00Z 01:46:00 up 10:53, 3 users, load average: 80.68, 98.75, 110.44
+----- pings-only
+twin pings-only on misjudge; start 2026-11-15T09:46:00Z 01:46:00 up 10:53, 3 users, load average: 80.68, 98.75, 110.44
+128c128
+<   if (!judge) return undefined;
 tsc exit 0
-TWIN marks in dist/promote.js: 1
-$ node --test tests/acceptance/1334-redraft-2565/hold.test.mjs   # twin promotes-any-commit; 02:51:56Z; load
-      average: 11.48, 24.18, 32.95
-▶ main is red
-  ✖ #1334.a6dc45e5 no promotion happens while main is red (1.269219ms)
-  ✖ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming
-      the commit (0.168576ms)
-✖ main is red (11273.796553ms)
-▶ a turn is running
-  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn,
-      then promotes and the run resumes (34824.4177ms)
-✔ a turn is running (34824.789844ms)
-ℹ tests 3
-ℹ suites 2
-ℹ pass 1
-ℹ fail 2
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 46135.050239
-✖ failing tests:
-
-test at tests/acceptance/1334-redraft-2565/hold.test.mjs:39:3
-✖ #1334.a6dc45e5 no promotion happens while main is red (1.269219ms)
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the last good build (c7b30e8) never came back: the planted build 
+  (DEEP_HUB_PLANT=judges-claims-wrongly) starts and answers, so a health check that only pings the hub passes it. The 
+  fixture claim, judged by this build's gate, reads the opposite of what it should, and the health check must judge it
+end 2026-11-15T09:52:52Z 01:52:52 up 11:00, 5 users, load average: 70.38, 85.85, 100.71
+----- judges-in-promote
+twin judges-in-promote on misjudge; start 2026-11-15T09:52:52Z 01:52:52 up 11:00, 5 users, load average: 70.38, 85.85, 100.71
+130c130
+<   try { check = await control(root.socket, root.token, 'hub.check', {}, 30_000); } catch (error) { return `its hub didn't judge the health check's fixture cla
+tsc exit 0
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: #1334.14e4b3e9 the last good build (7384a8d) never came back: the planted build 
+  (DEEP_HUB_PLANT=judges-claims-wrongly) starts and answers, so a health check that only pings the hub passes it. The 
+  fixture claim, judged by this build's gate, reads the opposite of what it should, and the health check must judge it
+end 2026-11-15T09:59:46Z 01:59:46 up 11:07, 3 users, load average: 67.39, 71.95, 88.21
+----- promotes-while-red
+twin promotes-while-red on hold; start 2026-11-15T09:59:46Z 01:59:46 up 11:07, 3 users, load average: 67.39, 71.95, 88.21
+10a11,12
+> import { createHash } from 'node:crypto';
+tsc exit 0
+  ✖ #1334.a6dc45e5 no promotion happens while main is red
+  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the commit
+✖ main is red
+  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+✔ a turn is running
+✖ #1334.a6dc45e5 no promotion happens while main is red
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: deep hub promote of a build of 68160a7, main watch's last clean commit, must be 
+  refused while main is red (exit 1 or 3): exit 0
+end 2026-11-15T10:01:09Z 02:01:09 up 11:08, 3 users, load average: 63.78, 70.36, 86.35
+----- no-drain
+twin no-drain on hold; start 2026-11-15T10:01:09Z 02:01:09 up 11:08, 3 users, load average: 63.78, 70.36, 86.35
+60c60
+<         if (!turns) break;
+tsc exit 0
+  ✔ #1334.a6dc45e5 no promotion happens while main is red
+  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the commit
+✔ main is red
+  ✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+✖ a turn is running
+✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: the build of 743dc1c started as the installed hub 1.3 s after the promotion was asked 
+  for, while the session's turn ran (its Stop came at 20.2 s)
+end 2026-11-15T10:02:14Z 02:02:14 up 11:09, 3 users, load average: 56.07, 67.13, 84.17
+----- refuses-while-turn
+twin refuses-while-turn on hold; start 2026-11-15T10:02:14Z 02:02:14 up 11:09, 3 users, load average: 56.07, 67.13, 84.17
+60a61
+> /* TWIN refuses-while-turn: exits at once while a turn runs, never promoting */         return refused(`${String(turns)} turn(s) are running, so nothing is pr
+tsc exit 0
+  ✔ #1334.a6dc45e5 no promotion happens while main is red
+  ✔ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the commit
+✔ main is red
+  ✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+✖ a turn is running
+✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: deep hub promote ended 0.5 s in, while the turn ran: a promotion waits for the drain
+end 2026-11-15T10:03:32Z 02:03:32 up 11:10, 4 users, load average: 58.19, 65.59, 82.24
+----- promotes-any-commit
+twin promotes-any-commit on hold; start 2026-11-15T10:03:32Z 02:03:32 up 11:11, 4 users, load average: 58.19, 65.59, 82.24
+45c45
+<   if (clean !== commit) return refused(`${commit} isn't a commit main watch passed, so it isn't promoted: its last clean run here is ${clean ?? 'none yet'}`);
+tsc exit 0
+  ✖ #1334.a6dc45e5 no promotion happens while main is red
+  ✖ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the commit
+✖ main is red
+  ✔ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+✔ a turn is running
+✖ #1334.a6dc45e5 no promotion happens while main is red
+✖ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the commit
+exit 1
+first failure:
   AssertionError [ERR_ASSERTION]: nothing is promoted: ~/.deepbuild/versions/current must not appear
-
-  + {
-  +   commit: '3096f0b6a734f95f28b6815babf99a1b3582f47c',
-  +   folder: '/tmp/d1334-Yxnuxe/h/.deepbuild/versions/3096f0b6a734f95f28b6815babf99a1b3582f47c',
-  +   inVersions: true,
-  +   link: '3096f0b6a734f95f28b6815babf99a1b3582f47c'
-  + }
-  - undefined
-
-test at tests/acceptance/1334-redraft-2565/hold.test.mjs:50:3
-✖ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the
-      commit (0.168576ms)
-  AssertionError [ERR_ASSERTION]: deep hub promote of a build of 3096f0b, a landing main watch hasn't run on, must
-      be refused (exit 1 or 3): exit 0
-  stdout:
-  deep hub promote: 3096f0b6a734f95f28b6815babf99a1b3582f47c is in: its hub judged the health check's fixture claim
-      PASS and stayed up
-
-  stderr:
-
+end 2026-11-15T10:04:53Z 02:04:53 up 11:12, 3 users, load average: 73.54, 69.34, 82.21
+----- loses-mid-outage, run 2
+twin loses-mid-outage on crash; start 2026-11-15T10:05:11Z 02:05:11 up 11:12, 3 users, load average: 65.50, 67.79, 81.42
+82a83
+> /* TWIN loses-mid-outage: drops the session's calls spooled while the planted build was in */   rmSync(join(root.spool, 'spool.jsonl'), { force: true });
+tsc exit 0
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
 exit 1
-done 02:52:42Z; load average: 7.52, 21.33, 31.56
-
-
-## 6. The frozen suite's twins on the base: they don't compile
-
-In a scratch tree at the base, for each of three frozen twins (the errors' first 220 columns):
-
-$ cp tests/acceptance/1334/twins/<name>/packages/hub/src/promote.ts packages/hub/src/promote.ts
-$ node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json --noEmit
-
-frozen twin two-notices:
-packages/hub/src/hub-command.ts(18,37): error TS2554: Expected 2 arguments, but got 1.
-packages/hub/src/promote.ts(10,10): error TS2459: Module '"./service.js"' declares 'answers' locally, but it is not
-      exported.
-frozen twin pings-only:
-packages/hub/src/hub-command.ts(18,37): error TS2554: Expected 2 arguments, but got 1.
-packages/hub/src/promote.ts(10,10): error TS2459: Module '"./service.js"' declares 'answers' locally, but it is not
-      exported.
-packages/hub/src/promote.ts(38,16): error TS6133: 'healthy' is declared but its value is never read.
-frozen twin slow-rollback:
-packages/hub/src/hub-command.ts(18,37): error TS2554: Expected 2 arguments, but got 1.
-packages/hub/src/promote.ts(10,10): error TS2459: Module '"./service.js"' declares 'answers' locally, but it is not
-      exported.
+first failure:
+  AssertionError [ERR_ASSERTION]: #1334.775c65d4 an attempt lost: 9 of the session's 11 calls aren't in the record 
+  after the rollback (by tool_use_id)
+end 2026-11-15T10:09:24Z 02:09:24 up 11:16, 3 users, load average: 26.15, 50.47, 71.76
+----- two-notices, run 2
+twin two-notices on crash; start 2026-11-15T10:09:24Z 02:09:24 up 11:16, 3 users, load average: 26.15, 50.47, 71.76
+87a88
+> /* TWIN two-notices: records the rollback's notice twice */     await control(root.socket, root.token, 'build.rolled_back', { commit, restored: previous, why 
+tsc exit 0
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: #1334.775c65d4 one notice of the rollback, a build.rolled_back event in the record 
+  naming the promoted commit 2808722; there are 2: 
+  [{"commit":"2808722ea5d8f858a335a8f2cb242a77a26bb952","restored":"7938a9e777a56cf8641b9ae2848a0a7e878a965a","why":"its
+   hub didn't answer within 25 
+  s"},{"commit":"2808722ea5d8f858a335a8f2cb242a77a26bb952","restored":"7938a9e777a56cf8641b9ae2848a0a7e878a965a","why":"
+  its hub didn't answer within 25 s"}]
+end 2026-11-15T10:12:41Z 02:12:41 up 11:20, 3 users, load average: 44.62, 47.02, 66.24
+----- notice-names-restored, run 2
+twin notice-names-restored on crash; start 2026-11-15T10:12:41Z 02:12:41 up 11:20, 3 users, load average: 44.62, 47.02, 66.24
+87c87
+<     await control(root.socket, root.token, 'build.rolled_back', { commit, restored: previous, why }, 30_000);
+tsc exit 0
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: #1334.775c65d4 the rollback's notice must name the promoted commit 
+  88988dcd0d39fc4840f68910f3aee4a80e5082ed in data.commit, not 
+  {"commit":"14b5e2949c50a49957edc9cace6efb86f7b42828","restored":"88988dcd0d39fc4840f68910f3aee4a80e5082ed","why":"its 
+  hub didn't answer within 25 s"}
+end 2026-11-15T10:15:50Z 02:15:50 up 11:23, 3 users, load average: 74.91, 55.19, 65.52
+----- fresh-root-on-rollback, run 2
+twin fresh-root-on-rollback on crash; start 2026-11-15T10:15:50Z 02:15:50 up 11:23, 3 users, load average: 74.91, 55.19, 65.52
+82a83
+> /* TWIN fresh-root-on-rollback: rolls back to an empty record and spool */   for (const f of ['ledger.db', 'ledger.db-wal', 'ledger.db-shm', 'spool']) rmSync(
+tsc exit 0
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 4 of the session's hook 
+  runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7FBAQKYRA2R27X7Z9PFKJJ7 within 
+  the hook's 50 ms), at 1-minute load 43.1 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+  quieter machine
+end 2026-11-15T10:20:09Z 02:20:09 up 11:27, 3 users, load average: 43.13, 49.62, 60.97
+----- fresh-root-on-rollback, run 3
+twin fresh-root-on-rollback on crash; start 2026-11-15T10:20:28Z 02:20:28 up 11:27, 3 users, load average: 41.32, 48.78, 60.45
+82a83
+> /* TWIN fresh-root-on-rollback: rolls back to an empty record and spool */   for (const f of ['ledger.db', 'ledger.db-wal', 'ledger.db-shm', 'spool']) rmSync(
+tsc exit 0
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+✔ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+exit 1
+first failure:
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: #1334.775c65d4 deep-hook itself couldn't hand 5 of the session's hook 
+  runs to the hub or its spool within its 50 ms budget (deep-hook: could not spool 01M7FBK057ZTC63TEGCJH6XYTA within 
+  the hook's 50 ms), at 1-minute load 41.6 on 20 cores, so no attempt can be judged lost or kept; run it again on a 
+  quieter machine
+end 2026-11-15T10:24:44Z 02:24:44 up 11:32, 3 users, load average: 41.56, 45.82, 56.54

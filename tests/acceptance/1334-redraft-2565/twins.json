@@ -1,5 +1,5 @@
 {
-  "#1334.775c65d4": ["slow-rollback", "two-notices", "notice-names-restored", "fresh-root-on-rollback"],
+  "#1334.775c65d4": ["slow-rollback", "two-notices", "notice-names-restored", "fresh-root-on-rollback", "loses-mid-outage"],
   "#1334.14e4b3e9": ["pings-only", "judges-in-promote"],
   "#1334.a6dc45e5": ["promotes-while-red", "no-drain", "refuses-while-turn"],
   "scope: promoted only from a passed commit": ["promotes-any-commit"]
