@@ -285,13 +285,17 @@ fn parse(call: &Value) -> Result<Args, Value> {
         };
         patches.push((frame, writer.to_string(), p["ops"].clone()));
     }
-    let targets = call["targets"]
+    let mut targets = call["targets"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
+    // #508: a capture that names no targets keeps each captured frame's final picture.
+    if call.get("targets").is_none() && call.get("capture").is_some() {
+        targets.insert("final".into());
+    }
     if targets.iter().any(|t| {
         !matches!(
             t.as_str(),
@@ -1504,10 +1508,12 @@ fn run_view(
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
                 Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
-                // #508's wrong program: the film effects' clock is the wall clock.
+                // #508's wrong program: the film effects' clock is the wall clock, its
+                // milliseconds read as seconds, so an effect that holds still between strikes
+                // (an arc at 12 a second) still moves between any two draws.
                 Some(Planted::EffectReadsWallClock) => {
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
-                    now.map_or(0.0, |d| (d.as_millis() % 3_600_000) as f64 / 1e3)
+                    now.map_or(0.0, |d| (d.as_millis() % 1_000_000) as f64)
                 }
                 _ => n as f64 / args.fps as f64,
             };
