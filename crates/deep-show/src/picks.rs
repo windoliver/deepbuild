@@ -216,9 +216,15 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
         w.run(until, &mut r, &mut |_, _| {});
         let k = until - 1;
         if k >= to {
-            let hash: Map<String, Value> = r.rows().get(&k).map(|(items, _)| {
-                ids.iter().filter_map(|id| Some((id.clone(), items.get(id)?.get("hash")?.clone()))).collect()
-            }).unwrap_or_default();
+            let hash: Map<String, Value> = r
+                .rows()
+                .get(&k)
+                .map(|(items, _)| {
+                    ids.iter()
+                        .filter_map(|id| Some((id.clone(), items.get(id)?.get("hash")?.clone())))
+                        .collect()
+                })
+                .unwrap_or_default();
             ran.push(json!({"step": k, "hash": hash, "arrays": arrays_of(&w, &piece)}));
         }
     }
@@ -244,7 +250,9 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
         json!({"step": k, "deep_hash": deep})
     });
     let read = r.regions.as_ref().and_then(|m| m.get(&to).cloned());
-    Ok(json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint, "steps": ran}))
+    Ok(
+        json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint, "steps": ran}),
+    )
 }
 
 /// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
@@ -519,7 +527,11 @@ impl Hub<'_> {
             .enter(doc, control, value, t, serial)?
             .into_iter()
             .collect();
-        if self.forms.get(doc).is_some_and(|f| read_by_logic(f, control)) {
+        if self
+            .forms
+            .get(doc)
+            .is_some_and(|f| read_by_logic(f, control))
+        {
             self.rebake(doc, t);
         }
         Ok(appended)

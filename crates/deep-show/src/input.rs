@@ -439,15 +439,29 @@ impl Hub<'_> {
         // track; every press control that binds it, in key order,
         // stamped at the playhead where the transport is paused there (Input track: a new entry
         // where later entries exist forks the track).
-        if let (Event::Key { key, cmd: false, alt: false }, Some(id)) = (event, doc_id.as_deref()) {
-            let at = self.scopes.get(panel).and_then(|s| s.scope.playhead()).unwrap_or(now);
+        if let (
+            Event::Key {
+                key,
+                cmd: false,
+                alt: false,
+            },
+            Some(id),
+        ) = (event, doc_id.as_deref())
+        {
+            let at = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.playhead())
+                .unwrap_or(now);
             let bound: Vec<(String, Value)> = doc
                 .get("controls")
                 .and_then(Value::as_object)
                 .into_iter()
                 .flatten()
                 .filter(|(_, c)| c.get("kind").and_then(Value::as_str) == Some("press"))
-                .filter_map(|(c, spec)| Some((c.clone(), spec.get("keys")?.get(key.as_str())?.clone())))
+                .filter_map(|(c, spec)| {
+                    Some((c.clone(), spec.get("keys")?.get(key.as_str())?.clone()))
+                })
                 .collect();
             if !bound.is_empty() {
                 let mut appended = Vec::new();

@@ -139,7 +139,13 @@ mod tests {
         assert_eq!([four.at(29), four.at(30), four.at(70)], [0.0, 2.0, 2.0]);
         let zero = Read::of_var(&arrays, "rules.board[0]").expect("an element");
         assert_eq!([zero.at(59), zero.at(60)], [0.0, 1.0]);
-        assert!(Read::of_var(&arrays, "rules.board[9]").is_none(), "past the end");
-        assert!(Read::of_var(&arrays, "rules.board").is_none(), "not a scalar f64");
+        assert!(
+            Read::of_var(&arrays, "rules.board[9]").is_none(),
+            "past the end"
+        );
+        assert!(
+            Read::of_var(&arrays, "rules.board").is_none(),
+            "not a scalar f64"
+        );
     }
 }

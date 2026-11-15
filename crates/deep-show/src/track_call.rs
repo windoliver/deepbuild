@@ -35,7 +35,10 @@ impl Hub<'_> {
 fn entry_of(v: &Value) -> Option<Entry> {
     let (control, value) = match v.get("present") {
         Some(p) => (String::new(), p.clone()),
-        None => (v.get("control")?.as_str()?.to_string(), v.get("value")?.clone()),
+        None => (
+            v.get("control")?.as_str()?.to_string(),
+            v.get("value")?.clone(),
+        ),
     };
     let pair = |p: Option<&Value>| -> Option<Option<[f64; 2]>> {
         match p {
@@ -94,6 +97,9 @@ mod tests {
             serial: Some(4),
         };
         assert_eq!(entry_of(&e.to_json()), Some(e));
-        assert_eq!(entry_of(&json!({"t": 1, "control": "c1", "value": 1, "writer": "nobody"})), None);
+        assert_eq!(
+            entry_of(&json!({"t": 1, "control": "c1", "value": 1, "writer": "nobody"})),
+            None
+        );
     }
 }

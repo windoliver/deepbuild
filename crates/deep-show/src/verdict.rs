@@ -990,7 +990,15 @@ impl<'a> Hub<'a> {
                         // #1164: a report reads the revision as played, its input track inlined.
                         (None, _) => check
                             .report
-                            .map(|run| run(&crate::played::with_track(&checked.lowered, &self.track_json(doc)), &input))
+                            .map(|run| {
+                                run(
+                                    &crate::played::with_track(
+                                        &checked.lowered,
+                                        &self.track_json(doc),
+                                    ),
+                                    &input,
+                                )
+                            })
                             .unwrap_or_default(),
                     };
                     for (id, r, actual) in out.raised {

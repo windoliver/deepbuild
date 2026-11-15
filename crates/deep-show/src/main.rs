@@ -85,7 +85,6 @@ mod spawn;
 mod stepped;
 mod terminal;
 mod terrain;
-mod track_call;
 #[cfg(feature = "test-machines")]
 mod test_machines;
 mod test_registries;
@@ -95,6 +94,7 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod track_call;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
@@ -454,7 +454,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
-        "track" => return Some(Call::Track { doc: doc()?, load: optional(c.get("load"), |l| l.as_array().cloned())? }),
+        "track" => {
+            return Some(Call::Track {
+                doc: doc()?,
+                load: optional(c.get("load"), |l| l.as_array().cloned())?,
+            })
+        }
         "session" => {
             return Some(Call::Session {
                 doc: doc()?,

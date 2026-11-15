@@ -704,7 +704,10 @@ pub enum Call {
     ByWriter(String),
     Revisions(String),
     /// #1164: a document's input track with its hash and fork; `load` replaces it first.
-    Track { doc: String, load: Option<Vec<Value>> },
+    Track {
+        doc: String,
+        load: Option<Vec<Value>>,
+    },
     /// The sealed set as the build holds it (#305).
     Registry,
     /// #420: an item's built mesh, or its count from its params.
