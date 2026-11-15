@@ -984,6 +984,8 @@ pub enum Call {
         actual: PathBuf,
         tolerance: Value,
     },
+    /// An interface trial's calls: a recorded input track, a trial and a replica's replay (#191).
+    Trial(Box<crate::kit::trial::TrialCall>),
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
     /// Terminals, streams and the session page's terminal tab (#402).
@@ -2128,6 +2130,7 @@ impl<'a> Hub<'a> {
                 actual,
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
+            Call::Trial(t) => self.trial_call(t),
             Call::Ring(r) => self.ring_call(r),
             Call::Capture(c) => self.capture_call(c),
             Call::Media(m) => self.media_call(m),

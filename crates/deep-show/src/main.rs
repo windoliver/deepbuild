@@ -931,6 +931,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         _ => {}
     }
+    if let Some(t) = kit::trial::parse_call(name, c) {
+        return Some(Call::Trial(Box::new(t)));
+    }
     if let Some(r) = ring::parse_call(name, c) {
         return Some(Call::Ring(Box::new(r)));
     }
@@ -1988,6 +1991,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-public-renamed",
     feature = "test-sim-b-false-bit",
     feature = "test-sim-b-off",
+    feature = "test-sim-b-plus-one",
     feature = "test-sim-c",
     feature = "test-sim-a-1-0-1",
     feature = "test-sim-b-1-0-1",

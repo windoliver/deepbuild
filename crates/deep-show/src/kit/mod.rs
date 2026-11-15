@@ -34,6 +34,7 @@ pub mod modules;
 mod order;
 mod repair;
 mod time_order;
+pub mod trial;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
