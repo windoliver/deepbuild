@@ -1582,6 +1582,17 @@ fn time_of(time: crate::list::Time, now: u64) -> String {
     }
 }
 
+/// An ask row's accessible name: its question, never its handle (#1172), then its state word, the word deep and the
+/// list's row say (#1463, #1810), while its state-word slot draws its kind (#1461 AC27); and whether macOS showed it.
+fn ask_name(title: &str, not_notified: bool) -> String {
+    let word = states::State::NeedsYou.word();
+    if not_notified {
+        format!("{title} · {word} · not notified")
+    } else {
+        format!("{title} · {word}")
+    }
+}
+
 /// One slot of a list row (#1461): a node of its own, `<row id>:<slot>`, with the slot's bounds.
 fn row_slot(row: &str, slot: &str, name: String) -> ObservedElement<Stateful<Div>> {
     observed(ElementId::Name(format!("{row}:{slot}").into()))
@@ -1636,11 +1647,7 @@ fn list_row(
         row.title.clone()
     };
     let name = if ask {
-        if reach.not_notified(&row.id) {
-            format!("{title} · not notified")
-        } else {
-            title.clone()
-        }
+        ask_name(&title, reach.not_notified(&row.id))
     } else if cfg!(feature = "plant-row-title-only") {
         title.clone()
     } else if ["BLOCKED", "INVALID", "INCONCLUSIVE"].contains(&row.word.as_str())
@@ -3934,5 +3941,12 @@ mod tests {
         );
         let open = read(&view, Kind::NeedsYou, None).open;
         assert_eq!(open[0].2, "Open invoice\\u{202e}txt.exe?");
+    }
+
+    #[std::prelude::v1::test]
+    fn an_ask_rows_name_says_its_question_then_its_state_word_as_deep_does() {
+        // #1810: deep and the list's row say the ask's state word, needs you; the slot draws its kind (#1461 AC27).
+        assert_eq!(ask_name("Which road?", false), "Which road? · needs you");
+        assert_eq!(ask_name("Which road?", true), "Which road? · needs you · not notified");
     }
 }
