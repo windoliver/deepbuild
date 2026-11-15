@@ -521,6 +521,10 @@ byHand.push('tests/acceptance/154/stems.test.ts');
 alone.push('tests/acceptance/155/', 'tests/acceptance/155-oracle/');
 timed.push('tests/acceptance/155/budgets.test.ts');
 slow.push('tests/acceptance/155/budgets.test.ts');
+// AC9's blind redraft runs the same way. The first draft's pack file is kept by hand: its planted pack and clean twin
+// keep the manifest's name under other IDs, which #306's pack check refuses (tests/acceptance/155-redraft-ac9/DISPUTE.md).
+alone.push('tests/acceptance/155-redraft-ac9/');
+byHand.push('tests/acceptance/155/pack.test.ts');
 // #1700's files each build deep-show; budgets.test.ts also builds it in release and times every geometry.shape
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
