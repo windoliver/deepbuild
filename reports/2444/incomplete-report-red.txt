@@ -1,0 +1,36 @@
+Trailing blank padding in captured output removed.
+Command: node --test --test-name-pattern="an unfinished Vitest report" tests/listed-failures.test.mjs
+Exit: 1 (before report-completeness correction)
+
+✖ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (6.008625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 550.244416
+
+✖ failing tests:
+
+test at tests/listed-failures.test.mjs:99:1
+✖ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (6.008625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'INCONCLUSIVE'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:105:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
