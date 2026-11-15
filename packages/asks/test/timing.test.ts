@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { JsonValue } from '@deepbuild/contracts';
-import { openRecord, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { openRecord, testStorage, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 import { AskRefused, askSources, draftAskSettings, openAsks, type AskKind, type Asks, type Delivery } from '../src/index.js';
 
 type Obj = { [key: string]: JsonValue };
@@ -628,5 +628,28 @@ describe('showings', () => {
     await record.append({ writer: 'core', ...team }, { v: 1, id: id(now), kind: 'ask.later', ts: now, subject: mine, data: { until: T0 + HOUR } });
     expect((await asks.inbox()).find((r) => r.ask === mine)?.status).toBe('shown');
     expect((await record.table('asks')).rows.find((r) => `ask:${String(r.id)}` === mine)?.status).toBe('open');
+  });
+});
+
+describe('a batch the record refused (#22)', () => {
+  it('is still due at the next beat, and shows then: a refused showing does not count as the batch shown', async () => {
+    await record.close();
+    const storage = testStorage();
+    record = await openRecord({ path: join(dir, 'refused.db'), now: () => now, storage });
+    asks = planned(await openAsks({ record, now: () => now, deliver: (d) => { deliveries.push(d); }, home }));
+    settings({ every: '1h', cap: 10 });
+    await start('S1');
+    now = T0 + 10 * 60_000;
+    const handle = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));
+    expect(await shown(), 'the ask waits for the 13:00 batch').toEqual([]);
+    now = T0 + HOUR + 1000;
+    expect(await asks.batchDue(), 'at 13:00 the batch is due').toBe(true);
+    storage.refuseWrites = true;
+    await expect(asks.tick(), 'the record refuses the batch').rejects.toThrow(/refuses writes/);
+    storage.refuseWrites = false;
+    now += 1000;
+    expect(await asks.batchDue(), 'the refused batch is still due at the next beat').toBe(true);
+    await asks.tick();
+    expect(await shown(), 'and the next tick shows it').toEqual([handle]);
   });
 });

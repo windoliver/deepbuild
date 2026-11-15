@@ -1227,7 +1227,12 @@ pub fn sidebar() -> Vec<(String, String, states::State)> {
 
 /// The one count, as the record the views draw stands: the window and the menu bar both read it (#1172).
 pub fn count() -> usize {
-    crate::record::with_view(|view| states::count(&view.table())).unwrap_or(0)
+    crate::record::with_view(count_of).unwrap_or(0)
+}
+
+/// The count of what needs you in this view: as many as Needs you draws.
+pub fn count_of(view: &crate::record::View) -> usize {
+    states::count(&view.table())
 }
 
 fn record(kind: Kind, opened: Option<&str>) -> Record {
@@ -3953,6 +3958,44 @@ mod tests {
         let handles: Vec<&str> = open.iter().map(|row| row.0.as_str()).collect();
         assert_eq!(handles, ["ask:a1", "ask:a2"]);
         assert_eq!(open.len(), states::count(&view.table()));
+    }
+
+    #[std::prelude::v1::test]
+    fn a_record_with_no_list_and_no_batching_core_draws_and_counts_every_open_ask() {
+        // #22: with no list and no batch of the core's, the sixth ask a fixture's session holds is folded by count
+        // (#338) with no exception to show through: it draws as on main, and the count says as many as the rows.
+        let mut view = crate::record::View::default();
+        for id in ["a1", "a2", "a3", "a4", "a5", "a6"] {
+            view.apply(serde_json::json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent",
+                                          "data": {"kind": "taste", "question": format!("{id}?")}}));
+        }
+        let open = read(&view, Kind::NeedsYou, None).open;
+        let handles: Vec<&str> = open.iter().map(|row| row.0.as_str()).collect();
+        assert_eq!(
+            handles,
+            ["ask:a1", "ask:a2", "ask:a3", "ask:a4", "ask:a5", "ask:a6"]
+        );
+        assert_eq!(count_of(&view), open.len());
+    }
+
+    #[std::prelude::v1::test]
+    fn a_batching_record_with_no_list_counts_only_the_asks_it_draws() {
+        // #22: a batching core's record that the hub hasn't listed yet: an ask waiting for its batch is neither drawn
+        // nor counted, so the window never says "1 ask needs you" over an empty list.
+        let mut view = crate::record::View::default();
+        let ask = |id: &str| {
+            serde_json::json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent",
+                                                "data": {"kind": "taste", "question": format!("{id}?")}})
+        };
+        view.apply(ask("a0"));
+        view.apply(
+            serde_json::json!({"kind": "ask.batched", "writer": "core", "data": {
+            "batch": "batch:1970-01-01T00:00:00.000Z", "asks": [{"ask": "ask:a0"}]}}),
+        );
+        view.apply(serde_json::json!({"kind": "ask.answered", "writer": "core", "subject": "ask:a0", "data": {}}));
+        view.apply(ask("a1"));
+        assert_eq!(read(&view, Kind::NeedsYou, None).open.len(), 0);
+        assert_eq!(count_of(&view), 0);
     }
 
     #[std::prelude::v1::test]
