@@ -132,6 +132,24 @@ test('cargo\'s ignored tests read as skips, with the reason cargo prints, and ne
   assert.deepEqual(skips, [{ id: 'cargo deep_x src/lib.rs › plain', note: '' }, { id: 'cargo deep_x src/lib.rs › reasoned', note: 'needs a GPU' }]);
 });
 
+test('#2179: a cargo target that says INCONCLUSIVE reads INCONCLUSIVE in the test lane, its rerun line no second failure', () => {
+  const ran = '     Running tests/busy_disk.rs (target/debug/deps/busy_disk-0123456789abcdef)\n\nrunning 1 tests\ntest late ... INCONCLUSIVE\n\ntest result: INCONCLUSIVE. late: the disk wasn\'t busy enough\n';
+  const rerun = 'error: test failed, to rerun pass `-p deep-hook --test busy_disk`\n\nCaused by:\n  process didn\'t exit successfully: `target/debug/deps/busy_disk-0123456789abcdef` (exit status: 3)\n';
+  // As the lane runs it, stopping at the first failed target, and with --no-fail-fast, which names it again at the end.
+  for (const output of [ran + rerun, `${ran}${rerun}error: 1 target failed:\n    \`-p deep-hook --test busy_disk\`\n`]) {
+    const run = readRun(testsOf(['cargo', 'test', '--workspace', '--locked'], '/nowhere', { output, status: 101 }), 101, '/nowhere', []);
+    assert.deepEqual(run.found, { state: 'INCONCLUSIVE', error: '1 test proved nothing' });
+    assert.equal(run.explained, true);
+  }
+  // A test of that target that failed still fails the lane.
+  const failed = ran.replace('test late ... INCONCLUSIVE', 'test slow ... FAILED\ntest late ... INCONCLUSIVE');
+  assert.equal(readRun(testsOf(['cargo', 'test', '--workspace'], '/nowhere', { output: failed + rerun, status: 101 }), 101, '/nowhere', []).explained, false);
+  // Two crates' tests/cli.rs share a Running key: the second one's crash is its own failure, not the first one's again.
+  const cli = (crate, body) => `     Running tests/cli.rs (target/debug/deps/cli-${crate === 'a' ? 'aa' : 'bb'})\n${body}error: test failed, to rerun pass \`-p ${crate} --test cli\`\n`;
+  const ids = testsOf(['cargo', 'test', '--workspace', '--no-fail-fast'], '/nowhere', { output: cli('a', 'test x ... FAILED\n') + cli('b', 'running 1 test\n'), status: 101 }).failures.map(({ id }) => id);
+  assert.deepEqual(ids, ['cargo cli tests/cli.rs › x', 'cargo -p b --test cli']);
+});
+
 test('the tree hash is what is on disk: HEAD\'s tree when clean, another for an edit or an untracked file, the index left as it was', (t) => {
   const root = repository(t, { 'a.txt': 'one\n' });
   const clean = exactTree(root);
