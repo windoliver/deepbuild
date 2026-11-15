@@ -98,9 +98,9 @@ function scriptOf(checkout: string, command: string): string | null {
   }
   if (tool !== 'make' && tool !== 'just') return null;
   const file = ['Makefile', 'makefile', 'justfile', 'Justfile'].find((f) => isFile(join(checkout, f)));
-  // The rule's recipe, without the line that names its targets.
-  const rule = file ? read(file, sub) : null;
-  return rule === null ? null : rule.split('\n').slice(1).map((l) => l.trim()).join('\n') || null;
+  // The recipe lines of the rules the reader found, without the lines that name their targets.
+  const rules = file ? read(file, sub) : null;
+  return rules === null ? null : rules.split('\n').filter((l) => l !== l.trimStart()).map((l) => l.trim()).join('\n') || null;
 }
 /** The mask a cited run's command, or the script it runs, hides its exit status with. */
 function maskOf(checkout: string, command: string): string | null {

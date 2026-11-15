@@ -38,11 +38,11 @@ describe('a claim with a fenced code block', () => {
 // #1888: the floor reads a Makefile rule through the gate's one script reader, whichever of the rule's targets is cited.
 describe('a cited make target on a rule with several targets (property)', () => {
   const name = fc.stringMatching(/^[a-z][a-z0-9_.-]{0,7}$/);
-  const masks = (target: string, makefile: string): string[] => {
+  const masks = (target: string, text: string, file = 'Makefile'): string[] => {
     const dir = mkdtempSync(join(tmpdir(), 'gate-floor-make-'));
     try {
-      writeFileSync(join(dir, 'Makefile'), makefile);
-      const command = `make ${target}`;
+      writeFileSync(join(dir, file), text);
+      const command = `${file === 'Makefile' ? 'make' : 'just'} ${target}`;
       return validityGate({ claim: { claim: 'claim:01K74G0A1B2C3D4E5F6G7H8J9K', message: `\`${command}\` exited 0.` }, checkout: dir, deliverables: [], session: { read: [], ran: ran(command) } })
         .filter((f) => f.kind === 'masked_exit').map((f) => f.mask ?? '');
     } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -56,5 +56,14 @@ describe('a cited make target on a rule with several targets (property)', () => 
       expect(masks(cited, makefile)).toEqual(['|| true']);
       expect(masks(other, makefile)).toEqual([]);
     }), { numRuns: 60 });
+  });
+  it('reads the recipe of a target that an earlier rule names without one, as make merges the two', () => {
+    expect(masks('lint', 'all lint: node_modules\n\nlint:\n\teslint . || true\n')).toEqual(['|| true']);
+    expect(masks('all', 'all lint: node_modules\n\nlint:\n\teslint . || true\n')).toEqual([]);
+  });
+  it('reads a justfile recipe by its name, never by a parameter of another recipe', () => {
+    const justfile = 'check lint:\n  eslint {{lint}} || true\n\nlint:\n  eslint .\n';
+    expect(masks('lint', justfile, 'justfile')).toEqual([]);
+    expect(masks('check', justfile, 'justfile')).toEqual(['|| true']);
   });
 });

@@ -52,21 +52,28 @@ export function ownChanges(changes: { changed: readonly string[]; configs: Reado
 export const runnerConfig = (path: string): boolean => LOADED_BY_TOOL.test(path) && !path.endsWith('conftest.py');
 
 /**
- * What a script target runs, from a file's text: a package.json script, or a Makefile or justfile rule, from the line
- * that names the target, alone or among several, to the end of its recipe. The gate's one reader of a command's script
- * (#1888): whose checks count reads it here, and the floor's mask reading in floor.ts.
+ * What a script target runs, from a file's text: a package.json script, or every Makefile or justfile rule that names
+ * the target, each from its header line to the end of its recipe. A Makefile rule names each word before its colon,
+ * and make merges the rules that name one target; a justfile recipe names its first word, the rest being parameters.
+ * The gate's one reader of a command's script (#1888): whose checks count reads it here, and the floor's mask reading
+ * in floor.ts.
  */
 export function targetBody(file: string, text: string | null, target: string): string | null {
   if (text === null) return null;
   if (file.endsWith('package.json')) {
     try { return (JSON.parse(text) as { scripts?: Record<string, string> }).scripts?.[target] ?? null; } catch { return null; }
   }
+  const just = /(^|\/)justfile$/i.test(file);
   const lines = text.split('\n');
-  const at = lines.findIndex((l) => l.replace(/\s*:.*$/, '').trim().split(/\s+/).includes(target) && /^[^\s#][^:=]*:(?!=)/.test(l));
-  if (at < 0) return null;
-  const body = [lines[at]!];
-  for (const l of lines.slice(at + 1)) { if (!/^\s/.test(l)) break; body.push(l); }
-  return body.join('\n').trimEnd();
+  const rules: string[] = [];
+  lines.forEach((header, at) => {
+    const names = header.replace(/\s*:.*$/, '').trim().split(/\s+/);
+    if (!(just ? names.slice(0, 1) : names).includes(target) || !/^[^\s#][^:=]*:(?!=)/.test(header)) return;
+    const body = [header];
+    for (const l of lines.slice(at + 1)) { if (!/^\s/.test(l)) break; body.push(l); }
+    rules.push(body.join('\n').trimEnd());
+  });
+  return rules.length ? rules.join('\n') : null;
 }
 
 export function checkSource(check: ApprovedCheck, diff: { repo: string; from: string; to: string }, options: { plant?: SourcePlant } = {}): 'approved' | 'own' {
