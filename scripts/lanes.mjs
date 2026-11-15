@@ -740,6 +740,10 @@ timed.push('tests/acceptance/213/ac8-budgets.test.ts');
 // (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
 alone.push('tests/acceptance/213-redraft-ac3/');
 byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
+// #463's files each build deep-gpu and draw the shared scene in art@1's twelve looks on the Metal GPU; ac2-budgets
+// runs the release canvas bench's art modes, hours of frames.
+alone.push('tests/acceptance/463/');
+timed.push('tests/acceptance/463/ac2-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
