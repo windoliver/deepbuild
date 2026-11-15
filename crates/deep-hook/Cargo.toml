@@ -45,3 +45,8 @@ plant-later-command-unread = []
 # The planted wrong program for #1848's AC3: a reader that counts every string an MCP call's arguments hold as a path,
 # spaces included, whatever the MCP servers' facts name.
 plant-every-string-a-path = []
+
+# busy_disk runs its tests in turn without libtest, so a run on a disk that wasn't busy enough reads INCONCLUSIVE (#2179).
+[[test]]
+name = "busy_disk"
+harness = false
