@@ -29,6 +29,10 @@ pub struct Baked {
     /// length.
     pub curve: Vec<V3>,
     pub curve_len: f64,
+    /// The curves a flow along many runs on (#451), as laid out at the time read.
+    pub flows: Vec<super::flows::Curve>,
+    /// A world-space emitter's anchor at each birth bucket (#451).
+    pub anchors: Option<Anchors>,
     /// The landing map, when the item lands.
     pub map: Option<heightmap::Map>,
     /// The bursts, when the item bursts rather than emitting at its rate.
@@ -53,6 +57,8 @@ impl Baked {
             origin,
             curve: Vec::new(),
             curve_len: 0.0,
+            flows: Vec::new(),
+            anchors: None,
             map: None,
             bursts: None,
             turbulence: None,
@@ -61,6 +67,28 @@ impl Baked {
             drawn: Vec::new(),
             planted: Planted::default(),
         }
+    }
+}
+
+/// A world-space emitter's anchor at each birth bucket: buckets fall on whole multiples of the
+/// document's frame interval `step`, bucket k's place `at[k]` (Particles `particles@1`: space and
+/// paths), so nothing is stored between frames.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Anchors {
+    pub step: f64,
+    pub at: Vec<V3>,
+}
+
+impl Anchors {
+    /// The bucket a birth at `born` falls in.
+    pub fn bucket(&self, born: f64) -> usize {
+        let k = (born / self.step + 1e-9).floor().max(0.0) as usize;
+        k.min(self.at.len().saturating_sub(1))
+    }
+
+    /// Where the anchor was at the bucket of a birth at `born`.
+    pub fn at(&self, born: f64) -> V3 {
+        self.at.get(self.bucket(born)).copied().unwrap_or([0.0; 3])
     }
 }
 
@@ -102,7 +130,7 @@ pub(crate) fn birth(b: &Baked, e: u32, t: f64) -> Option<Birth> {
                 generation,
                 born: t - age,
                 h: hash(&[b.seed, e, generation]),
-                at: b.origin,
+                at: b.anchors.as_ref().map_or(b.origin, |a| a.at(t - age)),
                 push: [0.0; 3],
                 age,
             })
@@ -331,6 +359,13 @@ pub(crate) fn particle(
                 (p.pos, p.vel, p.contacts, p.resting)
             }
         }
+        Motion::Along { many: Some(m), .. } => {
+            let c = super::flows::pick(&m.pick, b.flows.len(), h);
+            let (speed, off) = super::flows::seeded(m.speed, m.lateral, h);
+            let curve = b.flows.get(c)?;
+            let (p, v) = super::flows::place(curve, speed * age, off, speed);
+            (p, v, 0, false)
+        }
         Motion::Along { speed, .. } => {
             let l = b.curve_len.max(1e-6);
             let s0 = match spec.shape {
@@ -514,6 +549,8 @@ pub struct Record {
     pub rest: Option<(f64, V3)>,
     /// When it stops being live.
     pub ends: f64,
+    /// The curve it moves along, by its index among the flow's curves (#451).
+    pub curve: Option<usize>,
 }
 
 /// Every particle born by `until` (s), in order of birth, ties by row.
@@ -535,6 +572,12 @@ pub fn records(b: &Baked, until: f64) -> Vec<Record> {
             hits: Vec::new(),
             rest: None,
             ends: birth.born + life,
+            curve: match &spec.motion {
+                Motion::Along { many: Some(m), .. } => {
+                    Some(super::flows::pick(&m.pick, b.flows.len(), h))
+                }
+                _ => None,
+            },
         };
         if let Motion::Ballistic { gravity, drag, .. } = &spec.motion {
             let begin = self::start(b, &birth);
