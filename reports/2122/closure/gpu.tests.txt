@@ -1,0 +1,16 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/1015/gpu.test.ts` runs unleased
+
+ RUN  v5.0.5 <home>/deepbuild-shards/1
+
+stdout | tests/acceptance/1015/gpu.test.ts > AC6 #1015.289f0347 the gpu lease is shared by functional GPU work and exclusive for an export > AC6 #1015.289f0347 two kit runs hold the gpu lease shared at once; the export waits for both to end; a third kit run waits while the export runs
+AC6 as built: kit-1 +0..+3519 ms; kit-2 +0..+6804 ms; export +6904..+10292 ms; kit-3 +10544..+10832 ms; gpu leases while the kits ran: gpu gpu shared by session:9759b4ff02674bba94d376ffb4ee318c; gpu gpu shared by session:37798014a5c748779db110afb38ed3b6; while the export ran: gpu gpu exclusive by session:9ef3c75b3c344ee286fd0dcc62ba7acb
+
+·stdout | tests/acceptance/1015/gpu.test.ts > AC6 #1015.289f0347 the gpu lease is shared by functional GPU work and exclusive for an export > AC6 #1015.289f0347 (wrong program) a lease that grants the export alongside the kits (DEEP_HUB_PLANT=exclusive-beside-shared) fails this test, naming the kit run
+AC6 exclusive-beside-shared: kit-1 +1..+3779 ms; kit-2 +0..+7056 ms; export +587..+10287 ms; kit-3 +7185..+10304 ms; gpu leases while the kits ran: gpu gpu shared by session:5200427a995d4ed490185afcffec4488; gpu gpu shared by session:0dbd2cc39020446e86caf0d4ed39d100; while the export ran: gpu gpu shared by session:5200427a995d4ed490185afcffec4488; gpu gpu shared by session:8fbbae0cd99a4216a18a0fe6dccc38c7
+
+·
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:38:26
+   Duration  45.41s (tests 100%)

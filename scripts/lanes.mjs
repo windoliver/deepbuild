@@ -569,6 +569,8 @@ timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-red
 byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #540's files each build deep-show (most also #544's assembler), run logic programs, draw 3D and bake a world.
 alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
+// #542's files each build deep-show, deep-input or deep-logic and #544's assembler, run logic programs and draw the app's window.
+alone.push('tests/acceptance/542/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -617,6 +619,8 @@ alone.push('tests/acceptance/2144/');
 alone.push('tests/acceptance/1332/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
+// #1335's files each start their own hubs, a played forge and played agents, and run a standing run over its rule.
+alone.push('tests/acceptance/1335/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
 alone.push('tests/acceptance/1342/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
@@ -693,6 +697,10 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #1968's files build deep-show; the oracle lane builds deep-show; ac2-budgets judges the code film's budgets on the
+// reference Mac.
+alone.push('tests/acceptance/1968/', 'tests/acceptance/1968-oracle/');
+timed.push('tests/acceptance/1968/ac2-budgets.test.ts');
 // #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
 // after, so nothing else may build deep-marks-render in the checkout while it runs.
 alone.push('tests/acceptance/2497/');
@@ -711,6 +719,13 @@ byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/h
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
+alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
+timed.push('tests/acceptance/213/ac8-budgets.test.ts');
+// #213's criterion 3 went to a blind redraft once #548's logic replay began stopping at a trap
+// (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
+alone.push('tests/acceptance/213-redraft-ac3/');
+byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

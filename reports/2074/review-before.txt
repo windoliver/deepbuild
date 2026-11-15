@@ -1,0 +1,158 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/setup-failure-install.test.ts packages/hub/test/setup-failure-safety.test.ts` runs unleased
+
+ RUN  v5.0.5 <CHECKOUT>
+
+stderr | packages/hub/test/setup-failure-install.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  39038 (node)
+
+xxdeep hub: claim:01M7E8HCPYV0ED328B1XZSH4QF's setup failure wasn't recorded: length at /data/reading: Send a value within the field's length bounds. (session.reading 01M7E8HCQEBS0VPJZ517SN61KR)
+xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/setup-failure-install.test.ts > an invalid installed package blocks the claim without killing the hub while snapshotting
+AssertionError: setup failure must not crash the core: <anonymous_script>:1
+{malformed fixture
+ ^
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at version (file://<CHECKOUT>/packages/hub/dist/shared-runs.js:45:122)
+    at async installsOf (file://<CHECKOUT>/packages/hub/dist/shared-runs.js:45:29)
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ packages/hub/test/setup-failure-install.test.ts:8:91
+      6|   const env = { ...process.env }; delete env.NODE_OPTIONS;
+      7|   const ran = spawnSync(process.execPath, ['--unhandled-rejections=str…
+      8|   expect(ran.status, `setup failure must not crash the core: ${ran.std…
+       |                                                                                           ^
+      9|   const result = JSON.parse(ran.stdout);
+     10|   expect(result.lane).toBe('fulfilled');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  packages/hub/test/setup-failure-safety.test.ts > scrubs a setup error before recording its verdict, open item or session reading
+AssertionError: claim:01M7E8HCCQG8YMF3FTPRRTJM6E: no credential persisted: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/setup-failure-safety.test.ts:17:119
+     15|     expect(rows.map((r) => r.kind)).toEqual(expect.arrayContaining(['v…
+     16|     // Boolean assertions keep runtime-generated canaries out of faili…
+     17|     expect(rows.every((r) => !r.data.includes(held) && !r.data.include…
+       |                                                                                                                       ^
+     18|   } finally { await w.close(); }
+     19| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  packages/hub/test/setup-failure-safety.test.ts > a long setup error keeps owner and remedy, and the lane resolves with a recorded reading
+AssertionError: claim:01M7E8HCPYV0ED328B1XZSH4QF: publishing the failure does not fail its schema: expected 'rejected' to be 'fulfilled' // Object.is equality
+
+Expected: "fulfilled"
+Received: "rejected"
+
+ ❯ packages/hub/test/setup-failure-safety.test.ts:26:91
+     24|     w.ports.checkouts.snapshot = async () => { throw Error(`index unre…
+     25|     const { claim, lane } = await w.claim();
+     26|     expect.soft(lane.status, `${claim}: publishing the failure does no…
+       |                                                                                           ^
+     27|     const rows = await w.ports.record.raw("SELECT kind, data FROM even…
+     28|     const verdict = rows.find((r) => r.kind === 'verdict.made');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  packages/hub/test/setup-failure-safety.test.ts > a long setup error keeps owner and remedy, and the lane resolves with a recorded reading
+AssertionError: claim:01M7E8HCPYV0ED328B1XZSH4QF: owner survived the bound: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/setup-failure-safety.test.ts:30:102
+     28|     const verdict = rows.find((r) => r.kind === 'verdict.made');
+     29|     expect.soft(verdict && JSON.parse(verdict.data).outcome, claim).to…
+     30|     expect.soft(Boolean(verdict?.data.includes('owner: you')), `${clai…
+       |                                                                                                      ^
+     31|     expect.soft(rows.some((r) => r.kind === 'open_item.opened' && /res…
+     32|     expect.soft(rows.some((r) => r.kind === 'session.reading' && r.dat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  packages/hub/test/setup-failure-safety.test.ts > a long setup error keeps owner and remedy, and the lane resolves with a recorded reading
+AssertionError: claim:01M7E8HCPYV0ED328B1XZSH4QF: remedy survived the bound: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/setup-failure-safety.test.ts:31:149
+     29|     expect.soft(verdict && JSON.parse(verdict.data).outcome, claim).to…
+     30|     expect.soft(Boolean(verdict?.data.includes('owner: you')), `${clai…
+     31|     expect.soft(rows.some((r) => r.kind === 'open_item.opened' && /res…
+       |                                                                                                                                                     ^
+     32|     expect.soft(rows.some((r) => r.kind === 'session.reading' && r.dat…
+     33|   } finally { await w.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  packages/hub/test/setup-failure-safety.test.ts > a long setup error keeps owner and remedy, and the lane resolves with a recorded reading
+AssertionError: claim:01M7E8HCPYV0ED328B1XZSH4QF: reading was recorded: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/setup-failure-safety.test.ts:32:129
+     30|     expect.soft(Boolean(verdict?.data.includes('owner: you')), `${clai…
+     31|     expect.soft(rows.some((r) => r.kind === 'open_item.opened' && /res…
+     32|     expect.soft(rows.some((r) => r.kind === 'session.reading' && r.dat…
+       |                                                                                                                                 ^
+     33|   } finally { await w.close(); }
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  packages/hub/test/setup-failure-safety.test.ts > an older slow check ending cannot close a newer claim's setup failure item
+AssertionError: claim:01M7E8HD5GF4MQJ7RPFJ7KKXGH: only qualifying recovery may close its item: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/setup-failure-safety.test.ts:48:134
+     46|     expect(w.ports.gate.verdictOf(older.claim)?.outcome, `${older.clai…
+     47|     await w.ports.judging.judged(older.claim);
+     48|     expect((await open()).some((r) => r.text.includes('index held')), …
+       |                                                                                                                                      ^
+     49|   } finally { await w.close(); }
+     50| }, 30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Start at  16:08:25
+   Duration  14.07s (tests 98%, transform 1%, setup 1%)

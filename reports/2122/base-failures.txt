@@ -1,0 +1,937 @@
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2122/canvas.test.ts tests/acceptance/2122/heavy-queue.test.ts tests/acceptance/2122/never-ends.test.ts tests/acceptance/2122/product-index.test.ts tests/acceptance/2122/product-session.test.ts` runs unleased
+
+ RUN  v5.0.5 <base-checkout>
+
+xstdout | tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+closed-pipe: exit=1, signal=null
+FIRST {"answered":true}
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:138:10)
+    at writeGeneric (node:internal/stream_base_commons:126:10)
+    at Socket._writeGeneric (node:net:1324:11)
+    at Socket._write (node:net:1336:8)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10)
+    at Writable.write (node:internal/streams/writable:512:10)
+    at file://<base-checkout>/packages/hub/dist/canvas.js:183:25
+    at new Promise (<anonymous>)
+    at Canvas.send (file://<base-checkout>/packages/hub/dist/canvas.js:181:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.22.2
+
+spawn-failure: exit=1, signal=null
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on ChildProcess instance at:
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  path: '<tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  spawnargs: [ 'canvas' ]
+}
+
+Node.js v24.22.2
+
+
+xstdout | tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AC3 C poll: granted C held kinds: [ 'cpu.slot' ]
+
+stdout | tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AC3 unknown-ticket poll: granted
+
+xstdout | tests/acceptance/2122/product-index.test.ts > AC1: rebuilding the same commit replaces a product folder its lost index no longer names
+AC1 rebuild readings: [{"reading":"The store's build of bundle (out) from 650452142cf9 failed: ENOTEMPTY: directory not empty, rename '<tmp>/ac2122-products-KSjGsO/hub/products/.building/shopea864f8a-bundle-43d5b9a7' -> '<tmp>/ac2122-products-KSjGsO/hub/products/shopea864f8a/bundle@ba4c59637c9466bdb6ff7dfa'"}]
+
+xstdout | tests/acceptance/2122/product-session.test.ts > AC2: a PreToolUse from a live session after restart protects its old worktree product from reclamation
+AC2 worktree product retained after restart hook and low-disk reclaim: false
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: closed-pipe: exit=1, signal=null
+FIRST {"answered":true}
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:138:10)
+    at writeGeneric (node:internal/stream_base_commons:126:10)
+    at Socket._writeGeneric (node:net:1324:11)
+    at Socket._write (node:net:1336:8)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10)
+    at Writable.write (node:internal/streams/writable:512:10)
+    at file://<base-checkout>/packages/hub/dist/canvas.js:183:25
+    at new Promise (<anonymous>)
+    at Canvas.send (file://<base-checkout>/packages/hub/dist/canvas.js:181:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2122/canvas.test.ts:18:46
+     16|       console.log(diagnostic);
+     17|       if (mode === 'closed-pipe') expect(result.stdout, 'first call mu…
+     18|       expect.soft(result.status, diagnostic).toBe(0);
+       |                                              ^
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: closed-pipe: exit=1, signal=null
+FIRST {"answered":true}
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:138:10)
+    at writeGeneric (node:internal/stream_base_commons:126:10)
+    at Socket._writeGeneric (node:net:1324:11)
+    at Socket._write (node:net:1336:8)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10)
+    at Writable.write (node:internal/streams/writable:512:10)
+    at file://<base-checkout>/packages/hub/dist/canvas.js:183:25
+    at new Promise (<anonymous>)
+    at Canvas.send (file://<base-checkout>/packages/hub/dist/canvas.js:181:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.22.2
+: expected 'FIRST {"answered":true}\n' to contain 'RESULT unavailable'
+
+- Expected
++ Received
+
+- RESULT unavailable
++ FIRST {"answered":true}
++
+
+ ❯ tests/acceptance/2122/canvas.test.ts:19:46
+     17|       if (mode === 'closed-pipe') expect(result.stdout, 'first call mu…
+     18|       expect.soft(result.status, diagnostic).toBe(0);
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+       |                                              ^
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+     21|       expect.soft(result.stderr, diagnostic).not.toMatch(/Unhandled 'e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: closed-pipe: exit=1, signal=null
+FIRST {"answered":true}
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:138:10)
+    at writeGeneric (node:internal/stream_base_commons:126:10)
+    at Socket._writeGeneric (node:net:1324:11)
+    at Socket._write (node:net:1336:8)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10)
+    at Writable.write (node:internal/streams/writable:512:10)
+    at file://<base-checkout>/packages/hub/dist/canvas.js:183:25
+    at new Promise (<anonymous>)
+    at Canvas.send (file://<base-checkout>/packages/hub/dist/canvas.js:181:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.22.2
+: expected 'FIRST {"answered":true}\n' to contain 'HOST still running'
+
+- Expected
++ Received
+
+- HOST still running
++ FIRST {"answered":true}
++
+
+ ❯ tests/acceptance/2122/canvas.test.ts:20:46
+     18|       expect.soft(result.status, diagnostic).toBe(0);
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+       |                                              ^
+     21|       expect.soft(result.stderr, diagnostic).not.toMatch(/Unhandled 'e…
+     22|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: closed-pipe: exit=1, signal=null
+FIRST {"answered":true}
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:138:10)
+    at writeGeneric (node:internal/stream_base_commons:126:10)
+    at Socket._writeGeneric (node:net:1324:11)
+    at Socket._write (node:net:1336:8)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10)
+    at Writable.write (node:internal/streams/writable:512:10)
+    at file://<base-checkout>/packages/hub/dist/canvas.js:183:25
+    at new Promise (<anonymous>)
+    at Canvas.send (file://<base-checkout>/packages/hub/dist/canvas.js:181:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.22.2
+: expected 'node:events:505\n    throw er; // Unh…' not to match /Unhandled 'error' event|uncaughtExcep…/
+
+- Expected:
+/Unhandled 'error' event|uncaughtException|unhandledRejection/
+
++ Received:
+"node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:138:10)
+    at writeGeneric (node:internal/stream_base_commons:126:10)
+    at Socket._writeGeneric (node:net:1324:11)
+    at Socket._write (node:net:1336:8)
+    at writeOrBuffer (node:internal/streams/writable:574:12)
+    at _write (node:internal/streams/writable:503:10)
+    at Writable.write (node:internal/streams/writable:512:10)
+    at file://<base-checkout>/packages/hub/dist/canvas.js:183:25
+    at new Promise (<anonymous>)
+    at Canvas.send (file://<base-checkout>/packages/hub/dist/canvas.js:181:16)
+Emitted 'error' event on Socket instance at:
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -32,
+  code: 'EPIPE',
+  syscall: 'write'
+}
+
+Node.js v24.22.2
+"
+
+ ❯ tests/acceptance/2122/canvas.test.ts:21:50
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+     21|       expect.soft(result.stderr, diagnostic).not.toMatch(/Unhandled 'e…
+       |                                                  ^
+     22|     }
+     23|   } finally { rmSync(dir, { recursive: true, force: true }); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: spawn-failure: exit=1, signal=null
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on ChildProcess instance at:
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  path: '<tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  spawnargs: [ 'canvas' ]
+}
+
+Node.js v24.22.2
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2122/canvas.test.ts:18:46
+     16|       console.log(diagnostic);
+     17|       if (mode === 'closed-pipe') expect(result.stdout, 'first call mu…
+     18|       expect.soft(result.status, diagnostic).toBe(0);
+       |                                              ^
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: spawn-failure: exit=1, signal=null
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on ChildProcess instance at:
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  path: '<tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  spawnargs: [ 'canvas' ]
+}
+
+Node.js v24.22.2
+: expected '' to contain 'RESULT unavailable'
+
+- Expected
++ Received
+
+- RESULT unavailable
+
+ ❯ tests/acceptance/2122/canvas.test.ts:19:46
+     17|       if (mode === 'closed-pipe') expect(result.stdout, 'first call mu…
+     18|       expect.soft(result.status, diagnostic).toBe(0);
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+       |                                              ^
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+     21|       expect.soft(result.stderr, diagnostic).not.toMatch(/Unhandled 'e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: spawn-failure: exit=1, signal=null
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on ChildProcess instance at:
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  path: '<tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  spawnargs: [ 'canvas' ]
+}
+
+Node.js v24.22.2
+: expected '' to contain 'HOST still running'
+
+- Expected
++ Received
+
+- HOST still running
+
+ ❯ tests/acceptance/2122/canvas.test.ts:20:46
+     18|       expect.soft(result.status, diagnostic).toBe(0);
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+       |                                              ^
+     21|       expect.soft(result.stderr, diagnostic).not.toMatch(/Unhandled 'e…
+     22|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/34]⎯
+
+ FAIL  tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+AssertionError: spawn-failure: exit=1, signal=null
+
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on ChildProcess instance at:
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  path: '<tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  spawnargs: [ 'canvas' ]
+}
+
+Node.js v24.22.2
+: expected 'node:events:505\n    throw er; // Unh…' not to match /Unhandled 'error' event|uncaughtExcep…/
+
+- Expected:
+/Unhandled 'error' event|uncaughtException|unhandledRejection/
+
++ Received:
+"node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist ENOENT
+    at ChildProcess._handle.onexit (node:internal/child_process:316:19)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on ChildProcess instance at:
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'spawn <tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  path: '<tmp>/ac2122-canvas-t2Yg6H/does-not-exist',
+  spawnargs: [ 'canvas' ]
+}
+
+Node.js v24.22.2
+"
+
+ ❯ tests/acceptance/2122/canvas.test.ts:21:50
+     19|       expect.soft(result.stdout, diagnostic).toContain('RESULT unavail…
+     20|       expect.soft(result.stdout, diagnostic).toContain('HOST still run…
+     21|       expect.soft(result.stderr, diagnostic).not.toMatch(/Unhandled 'e…
+       |                                                  ^
+     22|     }
+     23|   } finally { rmSync(dir, { recursive: true, force: true }); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/34]⎯
+
+ FAIL  tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AssertionError: C must still wait, not receive a replacement cpu.slot-only grant or a lost-ticket refusal: expected 'granted' to be 'waiting' // Object.is equality
+
+Expected: "waiting"
+Received: "granted"
+
+ ❯ tests/acceptance/2122/heavy-queue.test.ts:56:123
+     54|     const kinds = (await table.leases()).filter((v) => v.lease.holder …
+     55|     console.log('AC3 C poll:', poll.status, 'C held kinds:', kinds);
+     56|     expect.soft(poll.status, 'C must still wait, not receive a replace…
+       |                                                                                                                           ^
+     57|     expect.soft(poll.line, 'the original GPU requirement must survive'…
+     58|     expect.soft(kinds, 'a GPU-blocked C must hold no partial cpu.slot …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/34]⎯
+
+ FAIL  tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AssertionError: the original GPU requirement must survive: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ tests/acceptance/2122/heavy-queue.test.ts:57:73
+     55|     console.log('AC3 C poll:', poll.status, 'C held kinds:', kinds);
+     56|     expect.soft(poll.status, 'C must still wait, not receive a replace…
+     57|     expect.soft(poll.line, 'the original GPU requirement must survive'…
+       |                                                                         ^
+     58|     expect.soft(kinds, 'a GPU-blocked C must hold no partial cpu.slot …
+     59|     const missing = await q.wait({ ticket: 'lease-wait:not-held', secr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/34]⎯
+
+ FAIL  tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AssertionError: a GPU-blocked C must hold no partial cpu.slot lease: expected [ 'cpu.slot' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "cpu.slot",
++ ]
+
+ ❯ tests/acceptance/2122/heavy-queue.test.ts:58:79
+     56|     expect.soft(poll.status, 'C must still wait, not receive a replace…
+     57|     expect.soft(poll.line, 'the original GPU requirement must survive'…
+     58|     expect.soft(kinds, 'a GPU-blocked C must hold no partial cpu.slot …
+       |                                                                               ^
+     59|     const missing = await q.wait({ ticket: 'lease-wait:not-held', secr…
+     60|       (reply) => ({ status: String(reply.status), message: '' }),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/34]⎯
+
+ FAIL  tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AssertionError: a ticket nothing holds must not start a new command: expected 'granted' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "granted"
+
+ ❯ tests/acceptance/2122/heavy-queue.test.ts:64:88
+     62|     );
+     63|     console.log('AC3 unknown-ticket poll:', missing.status);
+     64|     expect.soft(missing.status, 'a ticket nothing holds must not start…
+       |                                                                                        ^
+     65|     expect.soft(missing.message).toContain('this deep lease lost its p…
+     66|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/34]⎯
+
+ FAIL  tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AssertionError: expected '' to contain 'this deep lease lost its place in the…'
+
+- Expected
++ Received
+
+- this deep lease lost its place in the queue; run it again
+
+ ❯ tests/acceptance/2122/heavy-queue.test.ts:65:34
+     63|     console.log('AC3 unknown-ticket poll:', missing.status);
+     64|     expect.soft(missing.status, 'a ticket nothing holds must not start…
+     65|     expect.soft(missing.message).toContain('this deep lease lost its p…
+       |                                  ^
+     66|   } finally {
+     67|     openGate(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: tail -n 100 -f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: tail -100f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: sudo tail -n 100 -f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: exec tail -100f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: env FOO=1 tail -n 100 -f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: time tail -100f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: (tail -n 100 -f app.log): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: echo ready; tail -100f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: echo ready & tail -100f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: echo ready | tail -100f app.log: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:27:75
+     25|     'kubectl logs --tail=100 pod',
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+       |                                                                           ^
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: git commit -m "add more tests": expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:28:76
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+       |                                                                            ^
+     29| });
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: git checkout -b more-tests: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:28:76
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+       |                                                                            ^
+     29| });
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: git log | cat: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:28:76
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+       |                                                                            ^
+     29| });
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: grep -rn serve docs: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:28:76
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+       |                                                                            ^
+     29| });
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/34]⎯
+
+ FAIL  tests/acceptance/2122/never-ends.test.ts > AC5: never-ending commands are recognized by command words and tail follow flags after other options
+AssertionError: kubectl logs --tail=100 pod: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2122/never-ends.test.ts:28:76
+     26|   ];
+     27|   for (const command of follows) expect.soft(neverEnds(command), comma…
+     28|   for (const command of finishes) expect.soft(neverEnds(command), comm…
+       |                                                                            ^
+     29| });
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/34]⎯
+
+ FAIL  tests/acceptance/2122/product-index.test.ts > AC1: rebuilding the same commit replaces a product folder its lost index no longer names
+AssertionError: the rebuilt key must not report a failed rename/build: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "reading": "The store's build of bundle (out) from 650452142cf9 failed: ENOTEMPTY: directory not empty, rename '<tmp>/ac2122-products-KSjGsO/hub/products/.building/shopea864f8a-bundle-43d5b9a7' -> '<tmp>/ac2122-products-KSjGsO/hub/products/shopea864f8a/bundle@ba4c59637c9466bdb6ff7dfa'",
++   },
++ ]
+
+ ❯ tests/acceptance/2122/product-index.test.ts:26:84
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/34]⎯
+
+ FAIL  tests/acceptance/2122/product-index.test.ts > AC1: rebuilding the same commit replaces a product folder its lost index no longer names
+AssertionError: the same key and commit must be indexed again: expected [] to deeply equal [ { …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "commit": "650452142cf9564f2c9dd080f8e770172e7b4089",
+-     "key": "ba4c59637c9466bdb6ff7dfa",
+-   },
+- ]
++ []
+
+ ❯ tests/acceptance/2122/product-index.test.ts:27:165
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/34]⎯
+
+ FAIL  tests/acceptance/2122/product-index.test.ts > AC1: rebuilding the same commit replaces a product folder its lost index no longer names
+AssertionError: new build bytes replace orphan bytes: expected 'orphan' to be 'fresh' // Object.is equality
+
+Expected: "fresh"
+Received: "orphan"
+
+ ❯ tests/acceptance/2122/product-index.test.ts:28:110
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/34]⎯
+
+ FAIL  tests/acceptance/2122/product-index.test.ts > AC1: rebuilding the same commit replaces a product folder its lost index no longer names
+AssertionError: replacement removes files absent from the new build: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2122/product-index.test.ts:29:113
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/34]⎯
+
+ FAIL  tests/acceptance/2122/product-session.test.ts > AC2: a PreToolUse from a live session after restart protects its old worktree product from reclamation
+AssertionError: a live worktree must not be reclaimed as nobody working there: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2122/product-session.test.ts:31:88
+     29|     const kept = existsSync(join(top, 'out/value'));
+     30|     console.log('AC2 worktree product retained after restart hook and …
+     31|     expect.soft(kept, 'a live worktree must not be reclaimed as nobody…
+       |                                                                                        ^
+     32|     expect.soft(w.index().placed.map((p: { top: string }) => p.top), '…
+     33|   } finally { await w.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/34]⎯
+
+ FAIL  tests/acceptance/2122/product-session.test.ts > AC2: a PreToolUse from a live session after restart protects its old worktree product from reclamation
+AssertionError: placement remains indexed: expected [] to include '<tmp>/…'
+ ❯ tests/acceptance/2122/product-session.test.ts:32:99
+     30|     console.log('AC2 worktree product retained after restart hook and …
+     31|     expect.soft(kept, 'a live worktree must not be reclaimed as nobody…
+     32|     expect.soft(w.index().placed.map((p: { top: string }) => p.top), '…
+       |                                                                                                   ^
+     33|   } finally { await w.close(); }
+     34| }, 90_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/34]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  5 failed (5)
+   Start at  16:02:40
+   Duration  13.94s (tests 85%, transform 13%, import 1%)
