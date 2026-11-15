@@ -170,6 +170,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("scale", "data"),
     // #226: 3D axes are the data module's too, beside its scales and axes.
     ("axes3d", "data"),
+    // #225: a vector field is the data module's, beside its scales and 3D axes.
+    ("vector_field", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),

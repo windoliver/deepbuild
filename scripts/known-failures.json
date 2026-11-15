@@ -444,6 +444,18 @@
       "note": "",
       "reason": "retired by #2551, which keeps the two rules #1296 added, so the design names twelve: 313-redraft-2551/fakes.test.ts is AC12's test",
       "approval": "#2551, the owner's decision of 2026-11-14 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313/generator.test.ts › AC15 a generator draws valid instances and four mutations for every schema, at 1,000 cases from the recorded seed › AC15 each mutation names its kind, its code (required, enum, range, unlisted_field) and a JSON Pointer; every kind the schema affords is drawn",
+      "note": "",
+      "reason": "retired by #2560: vitest's default 5 s judges it, and its walk over every schema's 1,000 draws takes longer (13.3 s on the Linux dev machine): 313-redraft-2560/generator.test.ts is its test, with the neighbouring AC15 test's 600 s",
+      "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313/packaging.test.ts › the local preflight runs the conformance lint: enum closures, code mappings, rule fakes and planted codes › the conformance lint passes on the checkout, printing one PASS line per check and no FAIL, INVALID or BLOCKED",
+      "note": "",
+      "reason": "retired by #2560: vitest's default 5 s judges it, and one run of the whole conformance lint takes longer (6.6 s on the Linux dev machine): 313-redraft-2560/packaging.test.ts is its test, with suite 313's 600 s",
+      "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
     }
   ]
 }

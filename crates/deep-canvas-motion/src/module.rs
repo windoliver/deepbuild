@@ -336,14 +336,24 @@ pub fn rests_at_check(constraint: &Value) -> bool {
         && constraint.get("on").is_some()
 }
 
-/// A document with motion a frame's time can change: any section's entry but a rest solved at
-/// check, which alone gives a frame nothing to evaluate (Constraint: rest_on).
+/// A constraint motion solves each frame: not a rest solved at check, nor a kind the core gives
+/// another module (#225: `follow_stream`, the data module's), which that module solves.
+fn solves(constraint: &Value) -> bool {
+    !rests_at_check(constraint)
+        && constraint
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(deep_canvas::registry::core_lists::constraint_owner)
+            .is_none()
+}
+
+/// A document with motion a frame's time can change: any section's entry but a constraint
+/// motion doesn't solve each frame, which alone gives a frame nothing to evaluate.
 fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
     SECTIONS.iter().any(|s| {
-        doc.get(*s).and_then(Value::as_object).is_some_and(|m| {
-            m.values()
-                .any(|entry| *s != "constraints" || !rests_at_check(entry))
-        })
+        doc.get(*s)
+            .and_then(Value::as_object)
+            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || solves(entry)))
     })
 }
 
@@ -383,7 +393,7 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .any(|(_, c)| c.get("owner").and_then(Value::as_str) == Some(id) && !rests_at_check(c));
+        .any(|(_, c)| c.get("owner").and_then(Value::as_str) == Some(id) && solves(c));
     let bound = doc
         .get("placements")
         .and_then(Value::as_object)

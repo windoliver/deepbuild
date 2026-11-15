@@ -276,7 +276,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         draws.extend(world.previews());
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
-            "previews": previews, "blends": world.blends(t), "traps": traps,
+            "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
             "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
             "draws": draws, "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) },
             "drawn": hashes(at - 1, &world.arrays())});
