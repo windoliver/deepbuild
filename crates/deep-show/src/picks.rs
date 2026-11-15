@@ -519,13 +519,17 @@ impl Hub<'_> {
             .enter(doc, control, value, t, serial)?
             .into_iter()
             .collect();
-        let Some(mut form) = self
-            .forms
-            .get(doc)
-            .filter(|f| read_by_logic(f, control))
-            .cloned()
-        else {
-            return Ok(appended);
+        if self.forms.get(doc).is_some_and(|f| read_by_logic(f, control)) {
+            self.rebake(doc, t);
+        }
+        Ok(appended)
+    }
+
+    /// The document's logic baked again on its track, as an export bakes it, so the live
+    /// session draws what its rules make of the track; then shown at `t`.
+    pub(crate) fn rebake(&mut self, doc: &str, t: i64) {
+        let Some(mut form) = self.forms.get(doc).cloned() else {
+            return;
         };
         let track = self.track_json(doc);
         if self.inline_occurrences(&mut form, &track).is_ok() {
@@ -533,7 +537,6 @@ impl Hub<'_> {
             self.forms.insert(doc.to_string(), form);
             self.replay(doc, t);
         }
-        Ok(appended)
     }
 
     /// The roving focus on the stop the scope holds: a pick control with `focus` enters at its

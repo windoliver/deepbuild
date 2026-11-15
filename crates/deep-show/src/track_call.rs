@@ -9,7 +9,7 @@ use crate::hub::Hub;
 
 impl Hub<'_> {
     /// `doc`'s input track, its hash and its fork; with `load`, the track becomes exactly those
-    /// entries first, in their order, and the document replays on it.
+    /// entries first, in their order, and the document's logic bakes again and replays on it.
     pub(crate) fn track_call(&mut self, doc: &str, load: Option<&[Value]>) -> Value {
         if !self.forms.contains_key(doc) {
             return json!({"code": "no_revision"});
@@ -24,7 +24,7 @@ impl Hub<'_> {
             }
             self.tracks.insert(doc.to_string(), track);
             let now = self.now;
-            self.replay(doc, now);
+            self.rebake(doc, now);
         }
         let held = self.tracks.get(doc).cloned().unwrap_or_default();
         json!({"track": self.track_json(doc), "hash": held.hash(), "fork_at": held.fork_at})

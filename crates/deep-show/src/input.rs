@@ -435,7 +435,8 @@ impl Hub<'_> {
             }
         }
         // #1164: a key a press control binds in its `keys` presses it with the value bound, as
-        // the input module's key rule does; every press control that binds it, in key order,
+        // the input module's key rule does, and a logic item reading it bakes again on the
+        // track; every press control that binds it, in key order,
         // stamped at the playhead where the transport is paused there (Input track: a new entry
         // where later entries exist forks the track).
         if let (Event::Key { key, cmd: false, alt: false }, Some(id)) = (event, doc_id.as_deref()) {
@@ -451,7 +452,7 @@ impl Hub<'_> {
             if !bound.is_empty() {
                 let mut appended = Vec::new();
                 for (c, value) in bound {
-                    match self.enter(id, &c, value, at, serial) {
+                    match self.pick(id, &c, value, at, serial) {
                         Ok(entry) => appended.extend(entry),
                         Err(e) => return e,
                     }
