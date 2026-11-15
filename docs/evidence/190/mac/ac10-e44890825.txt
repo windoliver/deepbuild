@@ -1,0 +1,22 @@
+== git rev-parse HEAD: e44890825e18978ee6731e08d6c90ea69e5913b4
+== git merge-base HEAD main: 06b6e6d7a505eb4f746ef2b8fd0000e0150ff672 (local main fcd8c385246acdac30011b43dd22e8d3e5dc2f58)
+== uname -a: Darwin <mac-host> 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:43:44 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T8122 arm64
+== sw_vers: 27.2.1
+Now drawing from 'AC Power'
+== note: load 3.96 thermal 0 after a 811 s wait
+== start 2026-11-14 16:13:52 16:13  up 1 day,  9:15, 2 users, load averages: 3.96 32.92 95.52 thermalState 0
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s 7430ms
+ ✓ tests/acceptance/190/ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base 7353ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  16:13:53
+   Duration  16.63s (tests 100%)
+
+
+== end 2026-11-14 16:14:10 16:14  up 1 day,  9:16, 2 users, load averages: 3.88 31.48 93.91 thermalState 0
+vitest exit=0
