@@ -35,6 +35,8 @@ export type Plant =
   // #1342's: a flow that asks whether the work is a workspace or a repo before its card, one that makes the project
   // before its card is answered, a repo made public on an unchanged card, and a list with no row while the research runs.
   | 'asks-which-home' | 'creates-before-approval' | 'repo-public-by-default' | 'empty-list-while-researching'
+  // #1349's: a hub that closes an agent's sign-in task when the sign-in command `signin.open` started ends, with no probe.
+  | 'closes-on-return'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -364,6 +366,7 @@ const PLANTS: readonly string[] = [
   'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
   'workspace-calls-forge',
   'asks-which-home', 'creates-before-approval', 'repo-public-by-default', 'empty-list-while-researching',
+  'closes-on-return',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
