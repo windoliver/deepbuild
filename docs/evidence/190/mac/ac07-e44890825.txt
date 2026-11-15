@@ -1,0 +1,21 @@
+== git rev-parse HEAD: e44890825e18978ee6731e08d6c90ea69e5913b4
+== git merge-base HEAD main: 06b6e6d7a505eb4f746ef2b8fd0000e0150ff672 (local main fcd8c385246acdac30011b43dd22e8d3e5dc2f58)
+== uname -a: Darwin <mac-host> 27.2.0 Darwin Kernel Version 27.2.0: Wed Oct 14 23:43:44 PDT 2026; root:xnu-13432.41.4~25/RELEASE_ARM64_T8122 arm64
+== sw_vers: 27.2.1
+Now drawing from 'AC Power'
+== note: after Docker quit
+== start 2026-11-14 15:49:36 15:49  up 1 day,  8:51, 2 users, load averages: 195.62 140.58 107.81 thermalState 1
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac07-no-links.test.ts > #190.2d024832 a piece without links is untouched by the linker > #190.2d024832 a piece without links keeps the merge base's rewritten program hash, bake key and golden, and a planted linker that adds an empty linking section to every program changes that hash and fails, naming the piece 380943ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  15:49:41
+   Duration  638.32s (tests 100%)
+
+
+== end 2026-11-14 16:00:20 16:00  up 1 day,  9:02, 2 users, load averages: 258.65 242.16 187.69 thermalState 1
+vitest exit=0
