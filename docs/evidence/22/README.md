@@ -456,3 +456,47 @@ On AC power throughout (`exits.txt`).
   `windows`), and AX stops serving a window off the active Space. 1459/panel passed in rounds 2 and 3 and was BLOCKED
   in round 1. So the BLOCKED runs are the Mac's state while in use, not this change's: at 5388f2c9 1459/panel has
   passed 3 of 7 runs, never failed on its assertion, and BLOCKED only this way.
+
+## `affected.mjs` at 5388f2c9, compared with the merge base 2252dfd6 (`affected-5388f2c9/`)
+
+On the Linux Spark, in memory-capped user units with an isolated home; load as noted, so timings are INCONCLUSIVE.
+
+- **At 5388f2c9** (`1-head-full.txt`, 33157 s, load 9): `FAIL affected: 1081 new, 48 already failing on main, 910
+  inconclusive or blocked, 22 listed skips, 4883 passed`. No WIDE line. INCONCLUSIVE: 115 timed and 47 slow files not
+  run, per-test skips, and the Mac-only renderer and replica targets.
+- **The same failing files on the merge base 2252dfd6** (`2-main-2252dfd6.txt`, its own worktree with its own
+  `node_modules` and build, no ENOSPC): `FAIL affected: 719 new, 45 already failing on main, 307 inconclusive or
+  blocked, 651 passed`. Of the 554 test ids that failed new at head, 502 fail or block on main too; 52 ids in 35 files
+  didn't (`3-only-head-ids.txt`, `3-only-head-files.txt`).
+- **Those 35 files rerun at head** (`4-head-rerun-35-files.txt`, 555 s, load 18): 150 passed; still failing were
+  63/install, 63/quotes-redraft, hub claim-replay, codes, onboarding and codex-hub, 39/session, 882/lint, 340/flow/terminal
+  and 323/final-message.
+- **Each of them alone, at head and on main side by side** (`5-alone-head.txt`, `5-alone-main.txt`, load 22 to 30):
+  claim-replay, codes and 340/flow/terminal pass at head (340 fails on main). Every test still failing at head also
+  fails on main the same way: 63's two files (ENOENT `linux-vdso.so.1`), onboarding's setup line and its systemd link
+  (a leftover `deepbuild-hub.service` symlink in the machine's user units), 39/session AC2 and AC8, and 323/final-message
+  AC3. 882/lint fails on main identically (`node --test` on 2252dfd6): it names `crates/deep-app/src/cells.rs` and the
+  338 panels' `panel.js`, which this change doesn't touch.
+- **codex-hub, run again** (`6-codex-hub-again.txt`, load 41 to 46): the one test that failed alone only at head, "an
+  answer waiting before the stop starts no slow check", passed in both head reruns and timed out on main ("waiting for
+  the ask"). Its other failures move between runs on both sides (subagent stop across a restart, a spool sync past
+  50 ms). It is load flake on both sides, not this change.
+- **The Linux-only cargo failures** (`7-cargo-alone.txt`): deep-app `acceptance_995`, `acceptance_1141_memory`,
+  `spike_402` and deep-show `recipe_frames`, `render_back_pipeline`, each run alone, fail the same tests at the same
+  lines on main 2252dfd6 and at head (deep-app's 995, 1141_memory and spike_402 are among main's six on the Mac too).
+
+So no failure in `affected.mjs` at 5388f2c9 is this change's.
+
+## The fifth review, of the final diff at 5388f2c9
+
+A fresh agent reviewed `git diff 2252dfd6 5388f2c9` (outside `docs/evidence`), with 386fee81 and 5388f2c9 in focus,
+and ran `packages/asks/test` and `packages/hub/test/asleep.test.ts`: 78 of 78. It found no defect that blocks. Disclosed,
+not changed:
+
+- `deep-replica`'s menu bar and per-session counts still use `states::count`, so in a record with core batches and no
+  hub list the replica can count an ask waiting for its batch where the app now doesn't. A hub that batches also lists,
+  so only a fixture makes such a record.
+- A record that keeps refusing writes (a full disk) leaves the batch due, so the beat ticks every second until writes
+  succeed. That retry is the fix's point; an ask past its deadline already did the same.
+- With no batches declared, `show()` returns before setting `shownAt`; batches declared later while the hub runs cost one
+  extra tick. Harmless and untested.

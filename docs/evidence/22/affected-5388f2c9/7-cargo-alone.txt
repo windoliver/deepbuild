@@ -1,0 +1,56 @@
+start Sun Nov 15 03:22:14 PM PST 2026; load 28.82 25.26 27.12
+##### tree <main-2252dfd6> at 2252dfd6fd144f279f3944795602b1c7b3fc81c7
+=== deep-app acceptance_995
+exit 1
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+test result: FAILED. 2 passed; 1 failed
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+=== deep-app acceptance_1141_memory
+exit 101
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+thread 'ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb' (2353873) panicked at crates/deep-app/../../tests/acceptance/1141/app/memory.rs:219:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141_memory`
+=== deep-app spike_402
+exit 1
+error: test failed, to rerun pass `-p deep-app --test spike_402`
+=== deep-show recipe_frames
+exit 101
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+thread 'an_export_draws_a_recipe_instance_like_the_items_it_derives' (2530724) panicked at crates/deep-show/tests/recipe_frames.rs:123:9:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.97s
+error: test failed, to rerun pass `-p deep-show --test recipe_frames`
+=== deep-show render_back_pipeline
+exit 101
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED
+thread 'render_back_draws_the_sprite_as_the_base_commit_did' (2532871) panicked at crates/deep-show/tests/render_back_pipeline.rs:98:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+error: test failed, to rerun pass `-p deep-show --test render_back_pipeline`
+##### tree <worktree> at 1ee92de022408099bb3a53b95c2c26d6893ee29d
+=== deep-app acceptance_995
+exit 1
+test the_pictures_no_shown_revision_uses_are_freed_from_the_gpu ... FAILED
+test result: FAILED. 2 passed; 1 failed
+error: test failed, to rerun pass `-p deep-app --test acceptance_995`
+=== deep-app acceptance_1141_memory
+exit 101
+test ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb ... FAILED
+thread 'ac1_with_30_sessions_and_200000_streamed_events_the_apps_resident_memory_stays_under_300_mb' (2723333) panicked at crates/deep-app/../../tests/acceptance/1141/app/memory.rs:219:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-app --test acceptance_1141_memory`
+=== deep-app spike_402
+exit 1
+error: test failed, to rerun pass `-p deep-app --test spike_402`
+=== deep-show recipe_frames
+exit 101
+test an_export_draws_a_recipe_instance_like_the_items_it_derives ... FAILED
+thread 'an_export_draws_a_recipe_instance_like_the_items_it_derives' (2875219) panicked at crates/deep-show/tests/recipe_frames.rs:123:9:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.87s
+error: test failed, to rerun pass `-p deep-show --test recipe_frames`
+=== deep-show render_back_pipeline
+exit 101
+test render_back_draws_the_sprite_as_the_base_commit_did ... FAILED
+thread 'render_back_draws_the_sprite_as_the_base_commit_did' (2876138) panicked at crates/deep-show/tests/render_back_pipeline.rs:98:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+error: test failed, to rerun pass `-p deep-show --test render_back_pipeline`
+done Sun Nov 15 03:48:37 PM PST 2026; load 37.35 41.57 37.90
