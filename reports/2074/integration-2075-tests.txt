@@ -1,0 +1,14 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/checks-not-started.test.ts packages/hub/test/codex-files.test.ts packages/hub/test/floor.test.ts packages/hub/test/gate-queue.test.ts packages/hub/test/gate-runner.test.ts packages/hub/test/gate-stop.test.ts packages/hub/test/late-fast-lane.test.ts packages/hub/test/monitor-ends.test.ts packages/hub/test/setup-failure-install.test.ts packages/hub/test/setup-failure-safety.test.ts tests/acceptance/2074/lane-failure.test.ts tests/acceptance/2075/slow-checks.test.ts` runs unleased
+
+ RUN  v5.0.5 <PR-CHECKOUT>
+
+·······························stderr | packages/hub/test/checks-not-started.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  3678 (node)
+
+·····································
+
+ Test Files  12 passed (12)
+      Tests  68 passed (68)
+   Start at  22:34:00
+   Duration  99.38s (tests 97%, transform 2%)

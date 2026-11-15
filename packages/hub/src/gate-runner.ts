@@ -594,7 +594,9 @@ export class GateRunner {
     if (r.checks.length || r.joins) {
       try {
         installs = installsOf(r.cwd);
-        ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
+        // Both setup tasks belong to the lane: a dependency read rejecting while git runs must be caught too.
+        const [taken] = await Promise.all([this.o.checkouts().snapshot(r.cwd, budget), installs]);
+        ({ commit: snapshot, tree } = taken);
         tree = stated(tree);
         // A sibling claim may have landed while Git read the tree; compare against the last claim now.
         const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
