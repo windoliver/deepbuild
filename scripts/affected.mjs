@@ -21,7 +21,7 @@
 // until its timed files (queued, below).
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { availableParallelism, loadavg, tmpdir } from 'node:os';
+import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -341,6 +341,9 @@ export function classify(failures, findings, baseline, load = loadavg()[0]) {
 // class it queued behind a neighbour's cargo build for up to 30 minutes, and in the test class behind this run's own
 // blocks. It still runs under the session's cpu.slot. A shard's job runs in its shard.
 const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-closures|record-reader-guard|color-literal-guard|guide)\.mjs$/;
+// The jobs running now, so a run stopped by its PID stops them too (main): they pass through on its one grant, which is
+// free once it has stopped, so a job left running would run beside the next run uncounted.
+const live = new Set();
 function run(logs, label, command, args, env = {}, cwd = root) {
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const descriptor = openSync(log, 'w');
@@ -348,8 +351,9 @@ function run(logs, label, command, args, env = {}, cwd = root) {
   const leased = [join(root, 'scripts/lease'), command, ...args];
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
-    child.on('error', (error) => { closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
-    child.on('close', (status) => { closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
+    live.add(child);
+    child.on('error', (error) => { live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
+    child.on('close', (status) => { live.delete(child); closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
   });
 }
 
@@ -366,16 +370,17 @@ const WAIT = Number(process.env.DEEP_TEST_GRANT_WAIT) || 30;
  */
 async function queued(args, files, started) {
   const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', String(WAIT), '--', process.execPath, fileURLToPath(import.meta.url), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, DEEP_AFFECTED_HELD: process.env.DEEP_THROTTLE ?? '' } });
-  // A run stopped by its PID stops what it started, which gives the grant back; a terminal's SIGINT reaches them all.
-  const pass = (signal) => child.kill(signal);
-  for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, pass);
+  // A run stopped by its PID stops what it started, which gives the grant back. The throttle ignores SIGINT, which a
+  // terminal sends its whole group, so a SIGINT sent to this run alone goes on as SIGTERM.
+  const pass = (signal) => child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
+  for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, pass);
   let first = '';
   child.stdout.on('data', (chunk) => {
     if (first.length < 64) first += chunk;
     process.stdout.write(chunk);
   });
   const status = await new Promise((done) => child.on('close', (code) => done(code)));
-  for (const signal of ['SIGTERM', 'SIGHUP']) process.off(signal, pass);
+  for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.off(signal, pass);
   // The throttle's own outcomes, never the run's: no grant (3), and a table or ps it can't use (2), or its death.
   const state = status === 3 && first.startsWith('INCONCLUSIVE no grant') ? 'INCONCLUSIVE' : status === null || (status === 2 && first.startsWith('BLOCKED throttle')) ? 'BLOCKED' : null;
   if (!state) return status;
@@ -439,6 +444,11 @@ async function main(args) {
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
   if (held === undefined) return queued(args, files, started);
+  // Stopped, the run stops its jobs first, then itself, so none runs on once its grant is given back.
+  for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => {
+    for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
+    process.exit(128 + constants.signals[signal]);
+  });
 
   const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
   const binaries = new Map(), binRoot = join(logs, 'binaries');

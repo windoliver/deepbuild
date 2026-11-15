@@ -5,7 +5,7 @@
 // program: they run the alone block one file at a time, so its folders never overlap.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import test from 'node:test';
@@ -131,4 +131,43 @@ test('the merge base\'s scripts, the wrong program, run the two alone folders on
   assert.ok(s.at('a', 'start') && s.at('b', 'start'), `the merge base ran no probe\n${all}`);
   const overlap = s.at('a', 'start').t < s.at('b', 'end').t && s.at('b', 'start').t < s.at('a', 'end').t;
   assert.equal(overlap, false, `the merge base ran the alone folders at once, so this test can't tell it from the change\n${all}`);
+});
+
+// From the main checkout, whose ignored .claude/worktrees/ holds every other worktree with its own target/, a new
+// shard copied them all in full off macOS (#2574's review: 81 worktrees there). The merge base made no shard on Linux.
+test('a new shard leaves behind the other worktrees the checkout holds', async (t) => {
+  const s = scene(t);
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: s.tree, stdio: 'pipe' });
+  writeFileSync(join(s.tree, '.git/info/exclude'), '.claude/worktrees/\n');
+  git('worktree', 'add', '-q', '-b', 'other', '.claude/worktrees/other');
+  const run = await s.affected([`${A}shard-a.test.mjs`, `${B}shard-b.test.mjs`]);
+  const shards = join(s.home, 'deepbuild-shards');
+  const made = existsSync(shards) ? readdirSync(shards).filter((name) => /^\d+$/.test(name)) : [];
+  assert.ok(made.length, `no shard was made\n${run.out}`);
+  for (const k of made) assert.equal(existsSync(join(shards, k, '.claude/worktrees/other')), false, `shard ${k} holds a copy of another worktree\n${run.out}`);
+  assert.match(run.out, /^PASS affected: /m, run.out);
+});
+
+// A run stopped by its PID stops its jobs too: they ran on its one grant, which is free once it has stopped, so a job
+// left running would run beside the next run uncounted. The merge base gave each job a grant of its own.
+test('a run stopped by its PID stops the jobs it started', async (t) => {
+  const s = scene(t);
+  const file = `${A}shard-long.test.mjs`;
+  writeFileSync(join(s.tree, file), `import { appendFileSync } from 'node:fs';
+import test from 'node:test';
+test('long', async () => {
+  appendFileSync(process.env.T_SHARDS_EVENTS, JSON.stringify({ name: 'long', event: 'start', pid: process.pid, t: Date.now() }) + '\\n');
+  await new Promise((done) => setTimeout(done, 60000));
+});
+`);
+  const running = s.affected([file]);
+  const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end && !ok();) await new Promise((done) => setTimeout(done, 100)); return ok(); };
+  assert.ok(await until(() => s.at('long', 'start'), 60000), 'the long probe never started');
+  const { pid } = s.at('long', 'start');
+  const outer = Number(execFileSync('pgrep', ['-o', '-f', `scripts/affected.mjs ${file}`], { encoding: 'utf8' }).trim().split('\n')[0]);
+  t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  process.kill(outer, 'SIGTERM');
+  const run = await running;
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  assert.equal(await until(() => !alive(), 10000), true, `the run stopped and its job ran on\n${run.out}`);
 });

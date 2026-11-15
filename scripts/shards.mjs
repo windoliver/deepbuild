@@ -8,7 +8,7 @@
 // dead holder's is taken. `node shards.mjs <root> <k>` prepares shard k, as claimShards runs it, one child per shard.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,8 +90,11 @@ function prepare(root, k) {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     // Off macOS the worktree's target/ stays behind: with no copy-on-write it is a full copy of many GB a shard, so
-    // the shard builds its own, once.
-    for (const name of readdirSync(root).filter((name) => name !== '.git' && (name !== 'target' || process.platform === 'darwin'))) clone(join(root, name), join(dir, name));
+    // the shard builds its own, once. A folder holding another worktree of the repository's, as the main checkout's
+    // ignored .claude/worktrees/ holds them all, stays behind everywhere: the shard runs this tree, never theirs.
+    const own = realpathSync(root);
+    const others = git(root, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9)).filter((path) => path.startsWith(`${own}/`));
+    for (const name of readdirSync(root).filter((name) => name !== '.git' && (name !== 'target' || process.platform === 'darwin') && !others.some((path) => path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);
