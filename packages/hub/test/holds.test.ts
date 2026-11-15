@@ -176,6 +176,33 @@ describe('a held push (#1156)', () => {
     expect(seen).toEqual(['s1 with 0 asks']);
   });
 
+  it("holds a merge after a subagent's stop: a child's stop ends no turn a proceed started (#1836)", async () => {
+    dir = mkdtempSync(join(tmpdir(), 'holds-'));
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
+    let t = 1_760_000_000_000;
+    const now = () => (t += 1000);
+    const record = await openRecord({ path: join(dir, 'record.db'), now });
+    const asks = await openAsks({ record, now, deliver: () => undefined, home: dir });
+    const as = (writer: string, session: string): Connection => ({ writer, actor: 'you', scope: 'you', session, agent: 'claude-code' });
+    const holds = new Holds({
+      raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
+      append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      archived: async () => undefined, reading: async () => undefined,
+    });
+    const stop = (child?: string) => record.append(as('hook', 's1'), { v: 5, id: ulid(now()), kind: 'agent.stop', subject: 'session:s1', ts: now(), seq: String(BigInt(t) * 1_000_000n),
+      data: { turn: 1, did_work: true, claim: false, cause: 'unknown', usage: null, outcome: 'finished', ...(child ? { child } : {}) } });
+    const merge = () => holds.gate({ session: 's1', agent: 'claude-code', cwd: dir } as HookMeta, { label: 'gh pr merge 12', classes: ['merge'] });
+    await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Merge it?', rule: 'r' } });
+    await stop('a84d9054868905e4c');
+    const held = await merge();
+    expect(held, "the merge waits on an ask though a subagent stopped in the proceed's turn").toContain('ask:');
+    const raised = (await record.raw("SELECT question FROM asks WHERE kind = 'authority'")) as { question: string }[];
+    expect(raised.map((a) => a.question), 'one ask, naming the proceed').toEqual([expect.stringContaining('the turn a "proceed" started for "Merge it?"')]);
+    // The session's own stop does end the proceed's turn.
+    await stop();
+    expect(await merge(), 'past its own stop no proceed holds the merge').toBeUndefined();
+  });
+
   it('still raises its ask when the copy never ends, inside the gate\'s hold', async () => {
     dir = mkdtempSync(join(tmpdir(), 'holds-'));
     writeFileSync(join(dir, 'config.json'), JSON.stringify({ asks: { deadline: { authority: '1d' }, default: { authority: 'no' } } }));
