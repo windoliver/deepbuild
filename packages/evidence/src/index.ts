@@ -407,6 +407,9 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         await Promise.all([...folders, ...above].map(syncOne));
         for (const path of [...folders, ...above]) synced.set(path, '');
         for (const [i, path] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined) synced.set(path, stamp); }
+        // A file is found by its line in the journal, written before its put returned: that lasts once the journal is synced.
+        await journaled.catch(() => undefined);
+        await syncOne(journal);
       }
     },
 
