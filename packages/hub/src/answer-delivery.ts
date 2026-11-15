@@ -62,7 +62,7 @@ export interface AnswerDeliveryOptions {
     readonly transcriptReader: TranscriptReader;
     readonly holds: Holds;
   };
-  state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "startOf" | "turnsStarted">;
+  state: () => Pick<SessionStatePort, "acks" | "attention" | "live" | "midTurn" | "onScreen" | "projects" | "sessions" | "startOf" | "turnsStarted" | "waiterUnbound">;
   mcp: () => Pick<McpOperationsPort, "pinOf">;
   judging: () => Pick<StopJudgingPort, "delivery" | "landedLine" | "lineStanding" | "openedPr">;
   control: () => Pick<HubControlPort, "trusted" | "briefAnswered">;
@@ -925,9 +925,11 @@ export class AnswerDelivery {
     const since = typeof params.since === 'number' ? params.since : this.options.services.now();
     if (this.options.kernel.stopping) throw refuse('unavailable', '', 'The hub is stopping; ask again once it is back.', session, true);
     if (this.options.settings.plant === 'waiter-gives-up-at-600s' && this.options.services.now() - since > 600_000) return { exit: 'planted: gave up at 600 s' };
-    // deep-hook's waiter waits only on the session its connection is bound to (#1851).
-    if (context.role.startsWith('waiter:') && context.session !== session) {
-      throw refuse('role', '/params/session', `This waiter is bound to session ${context.session} by its agent, process ${context.parent?.pid} started ${context.parent?.start}; it waits only on that session's answers, not on ${session}'s.`, session);
+    // deep-hook's waiter waits only on the session its connection is bound to (#1851), while that binding holds.
+    if (context.role.startsWith('waiter:')) {
+      if (context.session !== session) throw refuse('role', '/params/session', `This waiter is bound to session ${context.session} by its agent, process ${context.parent?.pid} started ${context.parent?.start}; it waits only on that session's answers, not on ${session}'s.`, session);
+      const why = this.options.state().waiterUnbound(session, context.parent);
+      if (why) throw refuse('role', '/params/session', `This waiter's binding to session ${session} has ended: ${why}`, session);
     }
     const r = this.routesOf(session, typeof params.cwd === 'string' ? params.cwd : '');
     // paseo's plugin on deep-hook's behalf, for a session deep-hook gates inside paseo (#55).

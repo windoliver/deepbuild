@@ -1710,8 +1710,9 @@ enum Waited {
     Done,
     /// The hub is away, or went: ask again once it is back.
     Away,
-    /// The hub refused this waiter, saying why: ask again after a while.
-    Refused(String),
+    /// The hub refused this waiter, or took too long to say whether it binds it: ask again after a while. Why is
+    /// the hub's to say, in its output: the waiter's stderr becomes the prompt of the wake it carries.
+    Refused,
 }
 
 /// One wait on the hub's socket as its session's waiter (#1851): the hub binds the connection to the session by this
@@ -1733,14 +1734,15 @@ fn wait_once(session: &str, request: &str, gone: &dyn Fn() -> bool) -> Waited {
         return Waited::Away;
     }
     match read_line(&mut reader, soon()) {
-        // A hub that won't bind this process to the session (it hasn't met the session since it started, say) is
-        // asked again later, less often than one that is away.
+        // A hub that won't bind this process to the session (it hasn't met the session since it started, say), or
+        // that looks at processes too slowly to say in time, is asked again later, less often than one that is away.
         Got::Line(text) => match parse(text.trim_end()) {
             Ok(reply) if member(&reply, "error").is_some() => return refused(&reply),
             Ok(_) => {}
             Err(_) => return Waited::Away,
         },
-        _ => return Waited::Away,
+        Got::Timeout => return Waited::Refused,
+        Got::Closed => return Waited::Away,
     }
     if reader.get_mut().write_all(request.as_bytes()).is_err() {
         return Waited::Away;
@@ -1767,13 +1769,13 @@ fn wait_once(session: &str, request: &str, gone: &dyn Fn() -> bool) -> Waited {
     }
 }
 
-/// The hub's refusal of a waiter, by its remediation.
+/// What a waiter does with the hub's error: a retryable one, such as a hub stopping, is a hub away.
 fn refused(reply: &Value) -> Waited {
-    let why = member(reply, "error").and_then(|error| member(error, "remediation"));
-    Waited::Refused(match why {
-        Some(Value::String(text)) => text.clone(),
-        _ => "the hub refused this waiter".to_string(),
-    })
+    let error = member(reply, "error");
+    match error.and_then(|error| member(error, "retryable")) {
+        Some(Value::Bool(true)) => Waited::Away,
+        _ => Waited::Refused,
+    }
 }
 
 /// `deep-hook <agent> waiter`: waits, as long as Claude Code lets the entry run, for an answer to the session the
@@ -1819,8 +1821,6 @@ fn waiter() -> ExitCode {
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
     let watched = hub_plant().as_deref() != Some("waiter-outlives-session");
     let gone = || watched && (agent_pid() != agent || !alive(agent));
-    // Each refusal the hub gives is said once on stderr, which wakes nothing while the waiter doesn't exit 2.
-    let mut said = String::new();
     loop {
         std::hint::black_box(&kept);
         if gone() {
@@ -1833,13 +1833,7 @@ fn waiter() -> ExitCode {
             }
             Waited::Done => return ExitCode::SUCCESS,
             Waited::Away => std::thread::sleep(WAITER_LOOK),
-            Waited::Refused(why) => {
-                if why != said {
-                    eprintln!("deep-hook waiter: {why}");
-                    said = why;
-                }
-                std::thread::sleep(WAITER_REFUSED);
-            }
+            Waited::Refused => std::thread::sleep(WAITER_REFUSED),
         }
     }
 }

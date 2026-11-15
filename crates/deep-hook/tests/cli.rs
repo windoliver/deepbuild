@@ -1478,3 +1478,60 @@ fn the_waiter_waits_on_its_session_without_the_control_token() {
         "it waits on its own session: {request}"
     );
 }
+
+#[test]
+fn a_refused_waiter_keeps_waiting_quietly_and_asks_again_after_a_while() {
+    // A hub that won't bind the waiter (#1851) is asked again after seconds, not twice a second: each hello costs the
+    // hub a look at processes. Nothing goes to stderr, which becomes the prompt of the wake the waiter may carry later.
+    use std::io::{BufRead, BufReader, Write};
+    let home = short_home("refused");
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let hellos = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = hellos.clone();
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stopping = stop.clone();
+    let hub = std::thread::spawn(move || {
+        while !stopping.load(std::sync::atomic::Ordering::Relaxed) {
+            let Ok((stream, _)) = listener.accept() else {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+                continue;
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream.set_read_timeout(Some(5 * SECOND)).unwrap();
+            let mut reader = BufReader::new(stream);
+            let _ = reader
+                .get_mut()
+                .write_all(b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n");
+            let mut hello = String::new();
+            if reader.read_line(&mut hello).is_ok() && hello.contains("\"waiter\"") {
+                counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let _ = reader.get_mut().write_all(b"{\"v\":1,\"id\":null,\"error\":{\"code\":\"role\",\"retryable\":false,\"remediation\":\"Process 1 isn't a child of session s1851's agent.\",\"path\":\"/hello\",\"actual\":\"s1851\",\"evidence\":[]}}\n");
+            }
+        }
+    });
+    let mut waiter = hook(&home, "waiter");
+    feed(
+        &mut waiter,
+        br#"{"session_id":"s1851","cwd":"/tmp","hook_event_name":"Stop"}"#,
+    );
+    std::thread::sleep(3 * SECOND);
+    let waiting = waiter.try_wait().unwrap().is_none();
+    let _ = waiter.kill();
+    let _ = waiter.wait();
+    let said = stderr_of(&mut waiter);
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    hub.join().unwrap();
+    let _ = std::fs::remove_dir_all(&home);
+    let asked = hellos.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(waiting, "a refused waiter keeps waiting for its session");
+    assert_eq!(
+        asked, 1,
+        "a refused waiter asks again only after seconds; it said hello {asked} times in 3 s"
+    );
+    assert!(
+        said.is_empty(),
+        "a refused waiter says nothing on stderr: {said}"
+    );
+}

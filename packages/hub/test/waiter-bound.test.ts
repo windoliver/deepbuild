@@ -29,13 +29,13 @@ async function firstAsk(root: string): Promise<string | undefined> {
  * A child of this process (the agent of the sessions whose hooks name it) that says hello as `session`'s waiter and,
  * once bound, waits on `on`: the lines the hub wrote back, the hub's own hello first.
  */
-function rawWaiter(sock: string, session: string, on: string): Promise<{ pid: number; lines: Record<string, unknown>[] }> {
+function rawWaiter(sock: string, session: string, on: string, gate = ''): Promise<{ pid: number; lines: Record<string, unknown>[] }> {
   const script = `const s=require('net').connect(process.argv[1]);let got='',n=0;s.setEncoding('utf8');
 s.on('data',(d)=>{got+=d;const ls=got.split('\\n');while(ls.length-1>n){const l=JSON.parse(ls[n++]);console.log(JSON.stringify(l));
 if('hello' in l)s.write(JSON.stringify({v:1,hello:'waiter',session:process.argv[2]})+'\\n');
-else if(typeof l.role==='string')s.write(JSON.stringify({v:1,id:'w1',method:'session.wait',params:{session:process.argv[3],cwd:'',since:Date.now()}})+'\\n');
-else process.exit(0);}});s.on('close',()=>process.exit(0));setTimeout(()=>process.exit(0),4000);`;
-  const child = spawn(process.execPath, ['-e', script, sock, session, on], { stdio: ['ignore', 'pipe', 'inherit'] });
+else if(typeof l.role==='string'){const go=()=>{if(process.argv[4]&&!require('fs').existsSync(process.argv[4]))return setTimeout(go,50);s.write(JSON.stringify({v:1,id:'w1',method:'session.wait',params:{session:process.argv[3],cwd:'',since:Date.now()}})+'\\n');};go();}
+else process.exit(0);}});s.on('close',()=>process.exit(0));setTimeout(()=>process.exit(0),8000);`;
+  const child = spawn(process.execPath, ['-e', script, sock, session, on, gate], { stdio: ['ignore', 'pipe', 'inherit'] });
   let out = '';
   child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
   return new Promise((resolve) => child.on('exit', () => resolve({ pid: child.pid!, lines: out.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) })));
@@ -61,7 +61,7 @@ it('wakes an idle session through its waiter with control.token gone, and binds 
       // A waiter that isn't a child of B's agent, saying hello as B's waiter, is refused, naming the process.
       const posing = await rawWaiter(sock, b, b);
       expect(JSON.stringify(posing.lines[1]), 'the hello as B\'s waiter').toContain(`"code":"role"`);
-      expect(JSON.stringify(posing.lines[1])).toContain(`Process ${posing.pid} isn't a child of session ${b}'s agent, process ${other.pid}`);
+      expect(JSON.stringify(posing.lines[1])).toContain(`Process ${posing.pid} can't wait as session ${b}'s waiter: it isn't a child of session ${b}'s agent, process ${other.pid}`);
       // A's waiter asking to wait on B is refused, naming its binding.
       const asking = await rawWaiter(sock, a, b);
       expect(asking.lines[1], 'bound to A').toMatchObject({ role: `waiter:${a}` });
@@ -85,11 +85,9 @@ it('wakes an idle session through its waiter with control.token gone, and binds 
       await sleep(1500);
       const cli = await client(sock, token);
       await cli('ask.answer', { ask: `ask:${ask}`, option: 'first' });
-      const answered = Date.now();
-      const code = await Promise.race([exited, sleep(2000).then(() => 'still waiting' as const)]);
+      const code = await Promise.race([exited, sleep(10_000).then(() => 'still waiting' as const)]);
       if (code === 'still waiting') waiter.kill('SIGTERM');
-      expect(code, `the waiter wakes the session within 2 s of the answer to ask:${ask}; stderr: ${said}`).toBe(2);
-      expect(Date.now() - answered).toBeLessThan(2000);
+      expect(code, `the waiter wakes the session with the answer to ask:${ask}; stderr: ${said}`).toBe(2);
       expect(said).toContain('North');
     });
   } finally {
@@ -126,5 +124,34 @@ it('binds the waiter of an idle session the restarted hub has not heard from, by
     if (code === 'still waiting') waiter.kill('SIGTERM');
     expect(code, `the waiter wakes the session with the answer to ask:${ask}; stderr: ${said}`).toBe(2);
     expect(said).toContain('North');
+  });
+}, 120_000);
+
+it('binds no waiter in a process that runs two sessions, and ends a binding with its session', async () => {
+  const c = '7c4d5e60-1851-4222-8333-44445555dddd';
+  const d = '7c4d5e60-1851-4222-8333-44445555eeee';
+  const e = '7c4d5e60-1851-4222-8333-44445555ffff';
+  await withHub(async (root, home) => {
+    const sock = join(root, 'hub.sock');
+    const sc = session(home, c);
+    const sd = session(home, d);
+    const se = session(home, e);
+    const start = (s: ReturnType<typeof session>) => reply(sock, hookLine(ulid(Date.now()), 'SessionStart', s.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
+    await start(sc);
+    // Bound while C is the one session this process runs; C ends before the wait, and the binding with it.
+    const gate = join(home, 'go');
+    const ending = rawWaiter(sock, c, c, gate);
+    await sleep(1500);
+    await reply(sock, hookLine(ulid(Date.now()), 'SessionEnd', sc.payload('SessionEnd', { reason: 'prompt_input_exit' }), { ppid: process.pid }));
+    writeFileSync(gate, '');
+    const ended = await ending;
+    expect(ended.lines[1], 'bound to C while it ran').toMatchObject({ role: `waiter:${c}` });
+    expect(JSON.stringify(ended.lines[2])).toContain(`This waiter's binding to session ${c} has ended`);
+    // Two live sessions in one process: neither binds a waiter by that process.
+    await start(sd);
+    await start(se);
+    const two = await rawWaiter(sock, d, d);
+    expect(JSON.stringify(two.lines[1])).toContain(`"code":"role"`);
+    expect(JSON.stringify(two.lines[1])).toContain(`its agent, process ${process.pid}, runs sessions`);
   });
 }, 120_000);

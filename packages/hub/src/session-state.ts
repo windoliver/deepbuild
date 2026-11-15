@@ -835,23 +835,39 @@ export class SessionState {
   /**
    * Binds deep-hook's waiter to the session its hello names (#1851), as a deep mcp is bound: only where the process the
    * OS reports at the other end of its connection `fd` is a child of that session's agent, checked by the agent's start
-   * time. The hub's waiter entry execs deep-hook, so no shell stays between them. A session this hub hasn't met since it
-   * started binds by the agent the last hub watched for it. Otherwise the refusal names the process.
+   * time, and started no later than the connection was accepted, `at`, so a PID reused since names no other process.
+   * The hub's waiter entry execs deep-hook, so no shell stays between them. Otherwise the refusal names the process.
    */
-  async waiterHello(fd: number | undefined, session: string): Promise<{ session: string; parent: { pid: number; start: string } } | { refused: string }> {
+  async waiterHello(fd: number | undefined, session: string, at: number): Promise<{ session: string; parent: { pid: number; start: string } } | { refused: string }> {
     let hook: string | undefined;
     try { hook = deepHook(); } catch { /* no deep-hook here to ask the OS: no peer */ }
     const peer = hook && fd !== undefined && fd >= 0 ? await peerOf(hook, fd) : undefined;
     if (peer === undefined) return { refused: `The OS reports no process at the other end of this connection, so it can't be bound as session ${session}'s waiter: a waiter binds by its agent's process.` };
+    const began = Date.parse((await this.startOf(peer, true)) ?? '');
+    // ps gives a start time to the second: one later than the second the connection came in is another process's.
+    if (!(began < at + 1000)) return { refused: `Process ${peer} started after this connection was made, or is gone: the process that connected is no longer there to bind as session ${session}'s waiter.` };
     const above = await parentOf(peer);
     const start = above === undefined ? undefined : await this.startOf(above, true);
+    const why = this.waiterUnbound(session, above === undefined || !start ? undefined : { pid: above, start });
+    return why ? { refused: `Process ${peer} can't wait as session ${session}'s waiter: ${why}` } : { session, parent: { pid: above!, start: start! } };
+  }
+
+  /**
+   * Why a waiter whose parent is `parent` can't wait on `session`, or nothing: the session must be live, its agent that
+   * process by PID and start time, and the one session that process runs, so a process serving several threads, as
+   * Codex's shared one may, binds no waiter. A session this hub hasn't met since it started is the one the last hub
+   * watched in that process. Asked at the hello and at each wait, so a binding ends with its session or its agent.
+   */
+  waiterUnbound(session: string, parent: { pid: number; start: string } | undefined): string | undefined {
+    const same = (p: { pid: number; start: string }) => p.pid === parent?.pid && p.start === parent.start;
     const known = this.sessions.get(session);
-    const agent = known ? (known.ended ? undefined : { pid: known.pid, start: known.start }) : this.options.transcripts().cursors.get(session)?.watch;
-    if (!agent) return { refused: `Process ${peer} can't wait as session ${session}'s waiter: the hub knows no live session ${session} to bind it to.` };
-    if (above !== agent.pid || start !== agent.start) {
-      return { refused: `Process ${peer} isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${above === undefined ? 'gone' : `process ${above}${start ? ` started ${start}` : ''}`}, so it can't wait as that session's waiter.` };
-    }
-    return { session, parent: { pid: agent.pid, start: agent.start } };
+    const agent = known ? (known.ended ? undefined : { pid: known.pid, start: known.start, agent: known.agent }) : this.options.transcripts().cursors.get(session)?.watch;
+    if (!agent) return `the hub knows no live session ${session} to bind it to.`;
+    if (!parent || !same(agent)) return `it isn't a child of session ${session}'s agent, process ${agent.pid} started ${agent.start}: its parent is ${parent ? `process ${parent.pid} started ${parent.start}` : 'gone'}.`;
+    const live = [...this.sessions.values()].filter((s) => !s.ended && same(s)).map((s) => s.id);
+    for (const [id, cursor] of this.options.transcripts().cursors) if (!this.sessions.has(id) && cursor.watch && same(cursor.watch)) live.push(id);
+    if (manyThreads(agent.agent) || live.length > 1) return `its agent, process ${agent.pid}, runs ${live.length > 1 ? `sessions ${live.join(', ')}` : 'several threads'}, so no waiter is bound to one of them by that process.`;
+    return undefined;
   }
 
   /** The sessions' rows; one paseo runs whose answer no route could carry reads "answer waiting" (#55). */

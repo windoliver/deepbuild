@@ -338,6 +338,8 @@ class Conn {
   readonly subs = new Set<string>();
   /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
   readonly calls = new Set<string>();
+  /** When the connection was accepted: a waiter's peer must have started by then (#1851). */
+  readonly at = Date.now();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
     if (!this.done && this.sock.writable) this.sock.write(line(o));
@@ -374,6 +376,8 @@ interface Guard { match?: unknown; scope?: unknown; mode?: unknown; reason?: unk
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
+  /** The waiter refusals the hub's output has said (#1851): each once, and at most a thousand kept. */
+  private readonly waiterRefusals = new Set<string>();
   /** The connection that last reported the app's notification setting. */
   private notifier: Conn | undefined;
   private readonly subs = new Map<string, Sub>();
@@ -1294,8 +1298,14 @@ class Hub {
       // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
       const session = typeof value.session === 'string' ? value.session : '';
       const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
-      const bound = (await this.core.request({ op: 'waiter-hello', fd, session }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error) }))) as { session: string; parent: { pid: number; start: string } } | { refused: string };
+      const bound = (await this.core.request({ op: 'waiter-hello', fd, session, at: conn.at }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error) }))) as { session: string; parent: { pid: number; start: string } } | { refused: string };
       if ('refused' in bound) {
+        // Said once in the hub's output too: the waiter asks again quietly, and its stderr becomes a wake's prompt.
+        if (!this.waiterRefusals.has(bound.refused)) {
+          if (this.waiterRefusals.size >= 1000) this.waiterRefusals.clear();
+          this.waiterRefusals.add(bound.refused);
+          process.stderr.write(`deep hub: refused a waiter: ${bound.refused}\n`);
+        }
         conn.write({ id: null, error: refusal('role', '/hello', bound.refused, session) });
         return conn.end();
       }
