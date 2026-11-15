@@ -1158,17 +1158,16 @@ export class Core {
     }
   }
   /** A session's start from a process started after the sync its row names: its own evidence of the new set (#148). */
-  private async newSet(session: Session, meta: HookMeta): Promise<void> {
+  private async newSet(session: Session, meta: HookMeta, heldStart: string | undefined): Promise<void> {
     // Its own start: its transcript, from a process of its agent's own binary, a Codex daemon started since included.
     if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
     // npm's Codex runs as node with its bin script, its native build as codex itself.
     const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
     const args = binaries.length ? await this.state.parentArgs(meta) : '';
     if (binaries.length && !binaries.some((b) => b.test(args))) return;
-    const ppid = meta.ppid;
     const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
     if (!last || last.text.startsWith(NEWER_SET)) return;
-    const started = Date.parse((await this.state.startOf(ppid, true)) ?? '');
+    const started = Date.parse((heldStart && meta.fields?.source !== 'resume' ? heldStart : await this.state.startOf(meta.ppid, true)) ?? '');
     if (!(started > last.ts)) return;
     await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
@@ -1399,7 +1398,7 @@ export class Core {
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
     // A session's start is its own evidence of the set it loads (#148), from the process it starts in.
-    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta).catch(() => undefined);
+    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta, verified ? session.start : undefined).catch(() => undefined);
     // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
     // would start there until the task closes (#85); any other stop ends an earlier hold.
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
@@ -2636,5 +2635,5 @@ export class Core {
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.control.health(); }
+  async health(role: string): Promise<Obj> { return this.control.health(role); }
 }
