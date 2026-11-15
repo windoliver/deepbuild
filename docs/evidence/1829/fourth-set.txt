@@ -1,0 +1,28 @@
+-- set 2 times
+-- set 3 times
+-- set 4 times
+record: promise.set {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","quote":"I'll check the deploy again in 20 minutes.","due":1794732728180,"times_set":1,"end":1794819128180}
+record: promise.due {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","due":1794732728180,"route":"next_hook"}
+record: promise.due {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","due":1794732728180,"route":"wake"}
+record: promise.set {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","quote":"I'll check the deploy again in 20 minutes.","due":1794733994232,"times_set":2,"end":1794819128180}
+record: promise.due {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","due":1794733994232,"route":"next_hook"}
+record: promise.due {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","due":1794733994232,"route":"wake"}
+record: promise.set {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","quote":"I'll check the deploy again in 20 minutes.","due":1794735253254,"times_set":3,"end":1794819128180}
+record: promise.due {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","due":1794735253254,"route":"next_hook"}
+record: promise.due {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","due":1794735253254,"route":"wake"}
+record: ask.created {"kind":"choice","question":"The agent's promised check is BLOCKED (promised 4 times; owner: service): \"I'll check the deploy again in 20 minutes.\" Do the check yourself, or drop it?","options":[{"id":"take","label":"I will do the check","decision":"none"},{"id":"drop","label":"Drop it","decision":"none"}],"recommended":"drop","fallback":"you","provisional":false,"owner":"you","key":"92109d28a5e
+record: promise.blocked {"promise":"01M7F5BKZMC15JT2PMC4SPMY7T","status":"BLOCKED","quote":"I'll check the deploy again in 20 minutes.","cause":"set_again","owner":"service","ask":"ask:01M7F8Z4BFMCGW066P15971FD8"}
+$ deep status   (exit 0)
+no repo
+  Deploy the fix and make sure it is up.  claude-code  needs you · an ask open, 0s
+      says done · next: DeepBuild · session/dd63b694/01M7F5BM3NC9D02EKRX285Q9B5
+Needs you
+  The agent's promised check is BLOCKED (promised 4 times; owner: service): "I'll check the deploy again in 20 minutes." Do the check yourself, or drop it?  needs you  no repo, 0s
+1 session
+1 ask needs you
+
+$ deep inbox   (exit 0)
+The agent's promised check is BLOCKED (promised 4 times; owner: service): "I'll check the deploy again in 20 minutes." Do the check yourself, or drop it?  choice  no repo  dd63b694-9aa2-45ca-b9ea-1b64ebfa42ac  0s  If you don't answer: Drop it, on Tue 17 Nov at 01:35  ask:01M7F8Z4BFMCGW066P15971FD8
+    answer with take (I will do the check), drop (Drop it)
+1 ask needs you
+
