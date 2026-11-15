@@ -1,0 +1,69 @@
+Base commit: c740dede7 (main, no implementation of #2179)
+Command: node --test --test-reporter=spec tests/acceptance/2179/busy-disk.test.mjs
+Date: 2026-11-15  Node v24 (the repo's)  linux-arm64 (the Spark), load average about 78 at the start, ext4 /tmp on NVMe.
+Exit code: 1
+Result: 2 tests, 1 failed, 1 passed.
+
+Why each test reads as it does:
+- AC1 fails at its first assertion, for the reason the issue gives: with no call late (the quiet-disk stand-in hook),
+  busy_disk ran all 60 calls and panicked at busy_disk.rs:64 with "only 0 spooled lines' syncs outlasted the deadline
+  in 60 calls, so this proves nothing: the disk wasn't busy enough"; cargo's line is "... FAILED", and affected.mjs's
+  reading of it is NEW FAIL, not INCONCLUSIVE.
+- AC2 passes at the base, as it should: every call late and 200 ms long, busy_disk failed at busy_disk.rs:71 after 5
+  calls ("calls whose spooled line was still syncing at the deadline took [~205-213 ms x5]"), read as NEW FAIL. Kept as
+  the criterion's proof and regression protection; its wrong programs are named in README.md.
+
+Observed beside this run, at the base (an earlier draft that ran `cargo test` after placing the stand-in hook):
+- `cargo test` re-links target/.../debug/deep-hook before it starts the test, replacing the stand-in, so the draft read
+  BLOCKED; the tests now run cargo's built test binary directly (README: How each condition is made).
+- In that run the REAL hook ran, with the stand-in dd writing nothing: busy_disk PASSED after 18 calls at load ~78,
+  i.e. the machine's own disk load made 5 real syncs outlast the deadline. A "quiet disk" can't be had from the real
+  disk on this machine, which is why AC1 uses a stand-in hook.
+- GNU dd here rejects the base's spelling: `dd if=/dev/zero bs=1m count=1 of=/dev/null` prints
+  "dd: invalid number: '1m'" and exits 1, so on Linux the base's busy_disk writes nothing at all.
+
+Output (paths shortened to <checkout>):
+
+✖ AC1 #2179.c2c274c4 A quiet disk reads INCONCLUSIVE: no spooled line's sync outlasts the deadline, and affected.mjs reports the test INCONCLUSIVE with its reason, never FAIL (18872.213869ms)
+ℹ busy_disk exited 101; dd ran 60 times, the hook 60
+ℹ test a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms ... FAILED
+ℹ thread 'a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms' (3701087) panicked at crates/deep-hook/tests/busy_disk.rs:64:5:
+ℹ only 0 spooled lines' syncs outlasted the deadline in 60 calls, so this proves nothing: the disk wasn't busy enough
+ℹ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 18.78s
+ℹ affected.mjs: NEW FAIL cargo -p deep-hook --test busy_disk › a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms
+✔ AC2 #2179.bbec3c91 A hook that takes more than 50 ms with its line still syncing still fails the test, and affected.mjs reports it a new FAIL, not INCONCLUSIVE (2669.150596ms)
+ℹ busy_disk exited 101; dd ran 5 times, the hook 5
+ℹ test a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms ... FAILED
+ℹ thread 'a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms' (3720515) panicked at crates/deep-hook/tests/busy_disk.rs:71:5:
+ℹ calls whose spooled line was still syncing at the deadline took [212.982474ms, 205.286465ms, 210.959512ms, 211.9022ms, 208.079043ms]
+ℹ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.57s
+ℹ affected.mjs: NEW FAIL cargo -p deep-hook --test busy_disk › a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22025.891224
+
+✖ failing tests:
+
+test at tests/acceptance/2179/busy-disk.test.mjs:104:1
+✖ AC1 #2179.c2c274c4 A quiet disk reads INCONCLUSIVE: no spooled line's sync outlasts the deadline, and affected.mjs reports the test INCONCLUSIVE with its reason, never FAIL (18872.213869ms)
+  AssertionError [ERR_ASSERTION]: affected.mjs counted the quiet run as the hook failing: NEW FAIL cargo -p deep-hook --test busy_disk › a_hook_whose_spooled_line_is_still_syncing_exits_within_50_ms
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2179/busy-disk.test.mjs:107:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+real	0m22.058s
+user	0m0.484s
+sys	0m0.265s
