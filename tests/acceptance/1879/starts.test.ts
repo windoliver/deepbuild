@@ -9,7 +9,9 @@ import { ID, SAFE_REASON, VERSION, install, installed, loads, loadsAbove, notLoa
 const WATCH_MS = 20_000;
 
 describe('#1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it', () => {
-  it('a --safe hub with test/safe-probe installed loads no package, and a load of it is refused with the safe-mode reason', async () => {
+  // Retired with the owner's approval on #2607's PR: it sets no timeout of its own, so the lanes' vitest default of 5 s
+  // cuts its 20 s watch short; 1879-redraft-ac1/safe.test.ts is AC1's test (its README).
+  it.skip('a --safe hub with test/safe-probe installed loads no package, and a load of it is refused with the safe-mode reason', async () => {
     const w = world();
     const before = await installed(w);
     const hub = await startHub(w, { safe: true });

@@ -444,6 +444,12 @@
       "note": "",
       "reason": "retired by #2551, which keeps the two rules #1296 added, so the design names twelve: 313-redraft-2551/fakes.test.ts is AC12's test",
       "approval": "#2551, the owner's decision of 2026-11-14 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/1879/starts.test.ts › #1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it › a --safe hub with test/safe-probe installed loads no package, and a load of it is refused with the safe-mode reason",
+      "note": "",
+      "reason": "retired with the owner's approval on #2607's PR: 1879-redraft-ac1/safe.test.ts is AC1's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its 20 s watch short)",
+      "approval": "#1879, the owner on PR #2607, 2026-11-15"
     }
   ]
 }
