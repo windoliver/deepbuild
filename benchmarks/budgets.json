@@ -1586,6 +1586,24 @@
       ]
     },
     {
+      "id": "physics-behavior-kit",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "kit"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "kit_native_s": 60,
+        "kit_wasm32_s": 60
+      },
+      "initialReason": "Issue #191 first measurement: the merge base has no behavior kit. Release deep-physics runs the whole kit on Rapier in one process, and scripts/physics-wasm32.mjs runs it in wasm32; each run's wall time, one warm-up and five runs each. physics.mjs judge holds each target, 60 s per backend and target, on a reference Mac. The trial's 15 minutes and the bakes' no added work stay in tests/acceptance/191/ac8-budgets.test.ts. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#191.8b5fd147"
+      ]
+    },
+    {
       "id": "canvas-logic-budgets",
       "command": [
         "node",
@@ -1659,6 +1677,41 @@
       "initialReason": "Issue #213 first measurement: the merge base has no between-step services or mirror reads and no such task. Release deep-show's logic call reads each step's service_ns, the CPU time physics.cast@1 took answering a logic item's 256 rays in a level of 300 static boxes (cast_256_ms, the median of steps 0 to 58); release deep-logic's bake reads each step's mirror_ns, the time updating a mirror of a 1,000,000-element f64 array whose writer changed 1% in 64 runs (mirror_1pct_ms, the median of steps 1 to 63); and an item with neither counts its steps that read either time (idle_work). Five runs after a warm-up one; canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#213.16543e66"
+      ]
+    },
+    {
+      "id": "playtest-maze",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "playtest-maze"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "maze_40_runs_s": 300,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #184 first measurement: the merge base has no play mode and no playtest. On release builds, the playtest's own runner (packages/checks/playtest/run.ts) plays the plug-in's kit maze in 40 runs of 120 s, 20 by its route bot and 20 by a policy of seeded presses every 0.25 s, each run then replayed without its bot, on two deep-drive replicas: maze_40_runs_s, five runs after a warm-up, which canvas.mjs judge holds to 300 s on a reference Mac. idle_work counts the steps at which the maze played with no bot spends other fuel than deep-logic's own bake of it, judged anywhere: a piece played without the plug-in gains no work.",
+      "criteria": [
+        "#184.0bdc1a84"
+      ]
+    },
+    {
+      "id": "playtest-throughput",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "playtest-throughput"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "fixture_realtime_x": 50
+      },
+      "initialReason": "Issue #184 first measurement: the merge base has no play mode. On release builds, 20 runs of the 2-minute kit maze by a policy of seeded presses, each run then replayed to its full-state hash, on four deep-drive replicas: fixture_realtime_x, 20 × 120 s over the batch's seconds, five runs after a warm-up, a floor canvas.mjs judge holds at 50 times or faster on a reference Mac. With --planted renders-unkept-frames the replicas render a frame every step and fall under it.",
+      "criteria": [
+        "#184.694b8a04"
       ]
     }
   ]

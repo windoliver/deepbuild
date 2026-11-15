@@ -1,0 +1,40 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/codex-hub.test.ts packages/hub/test/compaction-sync.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+·x····························stderr | packages/hub/test/codex-hub.test.ts
+vitest-setup: stopping 4 process(es) this file left running:
+  82056 (node)
+  82068 (node)
+  82071 (node)
+  82073 (node)
+
+·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/compaction-sync.test.ts > a compaction keeps the older-set reading without ps, and a new-process resume reads and clears it
+AssertionError: a sync does not make the same compacting process newer: expected '-o lstart= -p 61518\n-o args= -p 6151…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ -o lstart= -p 61518
++ -o args= -p 61518
++ -o lstart= -p 61518
+
+ ❯ packages/hub/test/compaction-sync.test.ts:43:104
+     41|     await new Promise((r) => setTimeout(r, 1500));
+     42|     expect(readings().at(-1)).toMatch(/older set/i);
+     43|     expect(readFileSync(log, 'utf8').trim(), 'a sync does not make the…
+       |                                                                                                        ^
+     44|     await stop(a);
+     45|     b = agent();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 30 passed (31)
+   Start at  12:07:43
+   Duration  188.24s (tests 100%)

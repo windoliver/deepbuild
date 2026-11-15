@@ -1,0 +1,40 @@
+
+ RUN  v5.0.5 ~/doneright-2118
+
+ ❯ packages/hub/test/hook-replies.test.ts (2 tests | 1 failed) 272ms
+   × keeps a warn entry's words and each extension's block beside a standing rule's allow 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/hook-replies.test.ts > keeps a warn entry's words and each extension's block beside a standing rule's allow
+AssertionError: expected { hookEventName: 'PreToolUse', …(3) } to deeply equal { hookEventName: 'PreToolUse', …(3) }
+
+- Expected
++ Received
+
+  {
+    "additionalContext": "Mind the lockfile.
+- DeepBuild allowed this by your standing rule decision:01K.
+- [acme/open-notes] 3 notes are open",
++ DeepBuild allowed this by your standing rule decision:01K.",
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow",
+    "permissionDecisionReason": "DeepBuild allowed this by your standing rule decision:01K.",
+  }
+
+ ❯ packages/hub/test/hook-replies.test.ts:31:57
+     29|   const output = (text: string) => JSON.parse(JSON.parse(text).stdout)…
+     30|   const additionalContext = `Mind the lockfile.\n${allow}\n[acme/open-…
+     31|   expect(output(allowReply(allow, true, ruled, reply))).toEqual({ hook…
+       |                                                         ^
+     32|   // A permission mode that denies the call gets the words and no deci…
+     33|   expect(output(allowReply(allow, false, ruled, reply))).toEqual({ hoo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  02:16:33
+   Duration  1.67s (transform 56%, import 24%, tests 18%, setup 1%)
+

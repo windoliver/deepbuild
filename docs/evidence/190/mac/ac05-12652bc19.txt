@@ -1,0 +1,19 @@
+== git rev-parse HEAD: 12652bc19e441d770a80de40e044e74d79b44f91
+== command: npx vitest run tests/acceptance/190/ac05-library-trap.test.ts --no-file-parallelism --reporter=verbose
+== sw_vers: 27.2.1
+Now drawing from 'AC Power'
+== start 2026-11-14 23:39:39 23:39  up 1 day, 16:41, 2 users, load averages: 41.24 35.13 40.98 thermalState 1
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac05-library-trap.test.ts > #190.99970527 a trap in library code names the library and its function > #190.99970527 a fuel trap inside grid_path on a grid too large for one step names the item, the step, the kind and find_route, at the same offset on two machines 211641ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:39:40
+   Duration  213.81s (tests 100%)
+
+
+== end 2026-11-14 23:43:14 23:43  up 1 day, 16:45, 2 users, load averages: 40.60 39.03 41.35 thermalState 1
+vitest exit=0

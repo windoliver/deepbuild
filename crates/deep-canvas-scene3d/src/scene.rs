@@ -2521,7 +2521,7 @@ pub fn evaluate_any(
         code: r.code,
         path: r.path,
     })?;
-    evaluate_compiled(map, &program, t, look, labels, assets, outlines)
+    evaluate_compiled(doc, &program, t, look, labels, assets, outlines)
 }
 
 /// The document with each item hidden that a view-class control bound to its `visible` holds
@@ -3200,7 +3200,7 @@ fn solid_op(
 
 /// [`evaluate`] of a document whose motion program is compiled already.
 pub(crate) fn evaluate_compiled(
-    map: &Map<String, Value>,
+    doc: &Value,
     program: &Program,
     t: i64,
     look: &Look3,
@@ -3208,6 +3208,9 @@ pub(crate) fn evaluate_compiled(
     assets: Option<Assets<'_>>,
     outlines: Outlines<'_>,
 ) -> Result<Scene, Refused> {
+    let Some(map) = doc.as_object() else {
+        return refused("out_of_range", "");
+    };
     tones(map)?;
     let mut state = program.state();
     program.evaluate_local(t, eval::Validity::Full, &mut state);
@@ -3297,8 +3300,6 @@ pub(crate) fn evaluate_compiled(
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
     let mut readout_items: Vec<(String, Value)> = Vec::new();
-    // The document as builders read it (the curves they name), made once when one draws.
-    let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
     let mut painted = BTreeMap::new();
@@ -3464,7 +3465,6 @@ pub(crate) fn evaluate_compiled(
                     });
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
-                    let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
                     let l = edge_line(doc, &items, id, params, look, seconds, outlines, assets)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
@@ -3571,7 +3571,6 @@ pub(crate) fn evaluate_compiled(
                     || k == "mesh.sequence@1"
                     || k == "fixture.skin@1" =>
                 {
-                    let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
                     let (mesh, shared) = match (k, assets) {
                         ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
                         // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
@@ -3951,7 +3950,6 @@ pub(crate) fn evaluate_compiled(
         let (of, elements) = match params.get("from").filter(|f| !f.is_null()) {
             // #2013: its rows from a scatter.
             Some(from) => {
-                let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
                 let (of, rows) =
                     scattered(map, doc, &items, id, params, from, seconds, outlines, None)?;
                 let elements = rows

@@ -133,8 +133,12 @@ function checkSources(sources: unknown, plugin: string): ContractIssue[] {
   });
 }
 
-/** The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. */
-export function checkManifest(value: unknown): Validation {
+/**
+ * The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. `release`:
+ * the package is inside DeepBuild's signed release, written by no agent, so its check kinds and codes may be
+ * first-party names, such as the playtest plug-in's `playtest` (#184), rather than `ext.<plugin>.<name>`.
+ */
+export function checkManifest(value: unknown, release = false): Validation {
   // Read beside extension.manifest@1, whose frozen shape doesn't list them: `templates` is hook.template@1's,
   // `environments` the environment slot's (#331), `state_sources` the state-source slot's (#67), `conflicts` and `kernel` are extension.edges@1's and `signature` is
   // package.signature@1's (#351), `leases` is an array here, each item held to lease.kind@1 and to the names
@@ -213,7 +217,8 @@ export function checkManifest(value: unknown): Validation {
   const kinds = Array.isArray(jobs) ? jobs.filter((k): k is string => typeof k === 'string') : [];
   const kindCheck = (name: string): boolean => kinds.some((k) => name.length > k.length + 1 && name.startsWith(k) && '_.'.includes(name[k.length]!) && OWN_NAME.test(name.slice(k.length + 1)));
   for (const list of NAME_LISTS) {
-    (m[list] ?? []).forEach((name, i) => { if (!replaces.has(name) && !own(name, plugin, false) && !(list === 'checks' && kindCheck(name))) issues.push(issue('pattern', `/${list}/${i}`, name)); });
+    const firstParty = (name: string): boolean => release && (list === 'checks' || list === 'codes') && /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)?$/.test(name);
+    (m[list] ?? []).forEach((name, i) => { if (!replaces.has(name) && !own(name, plugin, false) && !(list === 'checks' && kindCheck(name)) && !firstParty(name)) issues.push(issue('pattern', `/${list}/${i}`, name)); });
   }
   (m.provides ?? []).forEach((provided, i) => {
     if (!replaces.has(provided.interface) && !own(provided.interface, plugin, true)) issues.push(issue('pattern', `/provides/${i}/interface`, provided.interface));

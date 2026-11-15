@@ -280,6 +280,16 @@ export class Core {
   private agents!: Agents;
   /** The box (#1998): changes in words, each a proposal you approve. */
   private box!: Box;
+  /** `deep.canvas.play`'s replica (#184): the piece's `<doc>@<rev>` read as that revision's canonical document, played once. */
+  private async play(call: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const piece = String(call.piece);
+    const at = piece.lastIndexOf('@');
+    const [row] = (await this.raw(`SELECT json_extract(data, '$.hash') AS hash FROM events WHERE kind = 'doc.patched' AND subject = ? AND json_extract(data, '$.rev') = ? LIMIT 1`, [`doc:${piece.slice(0, at)}`, Number(piece.slice(at + 1))])) as { hash: string }[];
+    if (!row) return { ok: false, error: { code: 'not_found', message: `no revision ${piece} is recorded` } };
+    const document = JSON.parse(readFileSync(join(this.root.evidence, row.hash.slice(0, 2), row.hash.slice(2)), 'utf8')) as Record<string, unknown>;
+    const { piece: _piece, ...run } = call;
+    return this.replicas.play({ ...run, document, evidence: this.root.evidence });
+  }
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
@@ -565,7 +575,7 @@ export class Core {
     });
     // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
-    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
+    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -867,7 +877,10 @@ export class Core {
     });
     // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+      // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
+      // revision's canonical document, its programs from the evidence store.
+      canvas: (call) => this.canvasSide.canvasCall(call), replica: (call) => this.play(call), ...plant });
     this.jobKinds = new Jobs({
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
@@ -1158,17 +1171,16 @@ export class Core {
     }
   }
   /** A session's start from a process started after the sync its row names: its own evidence of the new set (#148). */
-  private async newSet(session: Session, meta: HookMeta): Promise<void> {
+  private async newSet(session: Session, meta: HookMeta, heldStart: string | undefined): Promise<void> {
     // Its own start: its transcript, from a process of its agent's own binary, a Codex daemon started since included.
     if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
     // npm's Codex runs as node with its bin script, its native build as codex itself.
     const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
     const args = binaries.length ? await this.state.parentArgs(meta) : '';
     if (binaries.length && !binaries.some((b) => b.test(args))) return;
-    const ppid = meta.ppid;
     const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
     if (!last || last.text.startsWith(NEWER_SET)) return;
-    const started = Date.parse((await this.state.startOf(ppid, true)) ?? '');
+    const started = Date.parse((heldStart && meta.fields?.source !== 'resume' ? heldStart : await this.state.startOf(meta.ppid, true)) ?? '');
     if (!(started > last.ts)) return;
     await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
@@ -1399,7 +1411,7 @@ export class Core {
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
     // A session's start is its own evidence of the set it loads (#148), from the process it starts in.
-    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta).catch(() => undefined);
+    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta, verified ? session.start : undefined).catch(() => undefined);
     // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
     // would start there until the task closes (#85); any other stop ends an earlier hold.
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
@@ -2636,5 +2648,5 @@ export class Core {
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.control.health(); }
+  async health(role: string): Promise<Obj> { return this.control.health(role); }
 }
