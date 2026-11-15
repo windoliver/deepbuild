@@ -238,7 +238,8 @@ timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
 // #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
 alone.push('tests/acceptance/177/');
 alone.push('tests/acceptance/177-redraft-ac3/');
-// The first draft's AC3 can't pass the base's blank guard (177-redraft-ac3/DISPUTE.md): by hand until the swap is ruled.
+// AC3 runs as its blind redraft, on the owner's ruling ("Yes, swap it", Nov 15): the first draft's golden and snapshot
+// can't pass the base's blank guard, so it is kept by hand (177-redraft-ac3/DISPUTE.md).
 byHand.push('tests/acceptance/177/ac3-sdr-outputs.test.ts');
 byHand.push('tests/acceptance/177/ac4-layers.live.test.ts', 'tests/acceptance/177/ac5-envelope.live.test.ts', 'tests/acceptance/177/ac6-budgets.live.test.ts');
 timed.push('tests/acceptance/177/ac6-budgets.live.test.ts');
