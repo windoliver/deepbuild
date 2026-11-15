@@ -1,0 +1,41 @@
+Base commit: c740dede7 (Merge pull request #2559), the brief's base; no implementation of #1879 exists there.
+Built first: npm ci; npm run build --workspaces; cargo build -p deep-hook (target/debug/deep-hook).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1879 --testTimeout=3600000 --no-file-parallelism
+Date: 2026-11-15  Machine: Linux arm64  Node: v24.22.0  vitest 5.0.5  Load average 150-250 throughout (other sessions).
+Paths: ~ is the home; /tmp/dh1879-* are the suite's temp folders.
+
+Result: Test Files 2 failed (2); Tests 3 failed, 1 passed (4); 474 s.
+
+starts.test.ts (AC1, AC2): the expected result. Run alone too (about 20 s), with the same result.
+  x #1879.c42142c0 (AC1) FAILS at its criterion's assertion, naming the package:
+    AssertionError: test/safe-probe loaded on a --safe hub: the record holds 1 new load(s) of it since the hub
+    started with deep hub run --safe; hub stderr "(node:...) ExperimentalWarning: stripTypeScriptTypes is an
+    experimental feature and might change at any time ...": expected 1 to be +0
+    The --safe hub started (its ready line said safe: true), started test/safe-probe's sandboxed process (a new
+    process.starting in ~/.deepbuild/run-*), and wrote no "not loaded" line for it. This is the issue's bug: --safe
+    never reaches the extension host.
+  v #1879.81f0a695 (AC2) PASSES: the same home started with deep hub run loads test/safe-probe (a new process of it
+    in the record) and names no refusal of it.
+  The setup both share passed: deep install of test/safe-probe on a hub without --safe exited 0 ("Installed
+  test/safe-probe@1.0.0"), and the record showed its check's and its load's processes.
+
+floor.test.ts (AC3): INCONCLUSIVE at the base on this machine. The floor suites failed only on deadlines under load,
+not on behavior, and different tests failed in different runs:
+  x tests/acceptance/316, exit 1: run 1, corpus.test.ts AC9 other-checkout and agent-config, a denial carrying
+    deep-hook's timeout words instead of an entry's reason ("deep-hook couldn't read its guards in
+    ~/.deepbuild/rules.json within 500 ms" / "couldn't read this call ... within 500 ms"), 2 failed | 19 passed;
+    run 2 (corpus.test.ts alone) and run 3 (whole suite): "BLOCKED: the hub didn't start (deep hub run)", 1-2 failed.
+  x tests/acceptance/317, exit 1: in all three runs only plan.test.ts AC2 ("npm install ... never reached the record
+    after the hub started and replayed the spool"; the hook said "deep-hook: could not spool ... within the hook's
+    50 ms"), 1 failed | 28 passed. Its safe-mode test, floor.test.ts AC1 (the .deepbuild/ guard with the hub
+    stopped and in safe mode), passed in every run. plan.test.ts alone under umask 022 passed once (8 of 8), but the
+    whole suite under umask 022 failed it again, so the cause is read as load, not the umask.
+  Runs 2 and 3 were run under systemd-run --user --scope -p MemoryMax=24G -p MemorySwapMax=2G -E CARGO_BUILD_JOBS=4
+  (a scope takes no AppArmorProfile property, so that one was left out). For a reading, run 316 and 317 at the base
+  and on the change under the same load, or on a quiet machine.
+
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1879/tsconfig.json passes (exit 0).
+
+Not checked here: that AC1 passes with a fix (no implementation exists; by the README's readings, a fix whose host
+refuses the start's load writes "deep hub: extension test/safe-probe@1.0.0 not loaded: safe mode: ..." and starts no
+process of it).
