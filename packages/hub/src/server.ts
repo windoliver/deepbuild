@@ -425,7 +425,7 @@ class Hub {
   private identity!: Identity;
   /** The network listener (#1338), open only while a project here has a member. */
   private network: tls.Server | undefined;
-  constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {
+  constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined, private readonly safe: boolean) {
     this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
   }
@@ -434,7 +434,7 @@ class Hub {
     this.now = () => clock.start + (Date.now() - clock.real);
     const held = [this.token, ...testHeld()];
     this.off = gatesOff(this.root.dir);
-    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
+    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}), ...(this.safe ? { safe: true } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
@@ -1466,10 +1466,10 @@ function writeToken(root: Root): string {
   return token;
 }
 
-/** `deep hub run [--root <folder>]`: the hub itself, in this process. Resolves only if it couldn't start. */
 /**
- * Runs the hub. In safe mode (`safe`) it loads no extension; the hub loads none yet in either mode, and the
- * floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
+ * `deep hub run [--root <folder>] [--safe]`: the hub itself, in this process. Resolves only if it couldn't start.
+ * In safe mode (`--safe`) the extension host loads no extension: each installed one is refused with the safe-mode
+ * reason. The floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   dropTestSettings(options.root ?? installedRoot());
@@ -1509,7 +1509,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.on('SIGHUP', () => undefined);
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
-  const hub = new Hub(root, writeToken(root), lock, plant, vfs);
+  const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
   await hub.open(clock);
   process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);
