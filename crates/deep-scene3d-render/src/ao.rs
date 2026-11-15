@@ -17,6 +17,42 @@ pub const OCCLUSION: &str = deep_canvas_scene3d::module::AO_PASS;
 pub const BLUR: &str = "scene3d.ao_blur";
 
 const SHADER: &str = include_str!("ao.wgsl");
+
+/// #2516's wrong estimators, selected only by the proof binary's --planted argument.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Planted {
+    #[default]
+    None,
+    Main,
+    Uniform,
+    FullRadius,
+}
+
+fn shader(planted: Planted) -> String {
+    match planted {
+        Planted::None => SHADER.into(),
+        Planted::Uniform => {
+            let cosine = "let cos_t = sqrt(1.0 - b);";
+            let start = SHADER.find(cosine).expect("cosine-weighted direction");
+            let mut source = SHADER.to_string();
+            source.replace_range(start..start + cosine.len(), "let cos_t = 1.0 - b;");
+            source
+        }
+        Planted::Main | Planted::FullRadius => {
+            let start = SHADER.find("fn visibility(").expect("visibility function");
+            let end = start + SHADER[start..].find("@fragment").expect("ao fragment");
+            let mut source = SHADER.to_string();
+            source.replace_range(start..end, include_str!("ao_main.wgsl"));
+            if planted == Planted::FullRadius {
+                let length = "let len = radius * mix(0.15, 1.0, k * k);";
+                let start = source.find(length).expect("main's point length");
+                source.replace_range(start..start + length.len(), "let len = radius;");
+            }
+            source
+        }
+    }
+}
+
 const NORMAL: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// Occlusion in r; the key light's contact shadow in g (#446).
 const VISIBILITY: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
@@ -138,7 +174,11 @@ impl Passes {
         };
         let shade_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("scene3d ao shade"),
-            entries: &[tex(0, float), uniform(1)],
+            entries: &[
+                tex(0, float),
+                uniform(1),
+                tex(2, wgpu::TextureSampleType::Depth),
+            ],
         });
         let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(OCCLUSION),
@@ -166,6 +206,14 @@ impl Passes {
         let one = [0x00, 0x3c, 0x00, 0x3c];
         crate::write_texture(&device.queue, &white, 0, &one, 4, [1, 1]);
         let white = white.create_view(&Default::default());
+        let empty_depth = texture2d(
+            d,
+            "scene3d ao off depth",
+            [1, 1],
+            DEPTH,
+            wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
         let off = bind_group(
             d,
             "scene3d ao off",
@@ -173,6 +221,7 @@ impl Passes {
             [
                 wgpu::BindingResource::TextureView(&white),
                 buffer.as_entire_binding(),
+                wgpu::BindingResource::TextureView(&empty_depth),
             ],
         );
         Passes {
@@ -215,6 +264,7 @@ impl Passes {
         size: [u32; 2],
         clip: &[f64; 16],
         contact: Option<(Contact, [f64; 3])>,
+        planted: Planted,
     ) -> u32 {
         let was = self.on.map(|(_, s)| s);
         let mut compiled = 0;
@@ -247,7 +297,7 @@ impl Passes {
         if self.pipes.is_none() {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(OCCLUSION),
-                source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+                source: wgpu::ShaderSource::Wgsl(shader(planted).into()),
             });
             let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(OCCLUSION),
@@ -365,6 +415,7 @@ impl Passes {
             [
                 wgpu::BindingResource::TextureView(&blurred),
                 self.uniform.as_entire_binding(),
+                wgpu::BindingResource::TextureView(&depth),
             ],
         );
         Targets {
@@ -421,9 +472,9 @@ pub struct Frame {
 
 impl Frame {
     /// Records the prepass (the opaque solids' depth and normals), the occlusion and the blur,
-    /// each timed under the occlusion's name, which sums them.
+    /// each under its own name, so the cost includes three measured passes (#2516).
     pub fn record(&self, profiler: &Option<crate::Profiler>, encoder: &mut wgpu::CommandEncoder) {
-        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+        crate::timed(profiler, PREPASS, encoder, |encoder, timestamp_writes| {
             deep_gpu::alloc::outside(|| {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(PREPASS),
@@ -474,7 +525,7 @@ impl Frame {
                 timestamp_writes,
             );
         });
-        crate::timed(profiler, OCCLUSION, encoder, |encoder, timestamp_writes| {
+        crate::timed(profiler, BLUR, encoder, |encoder, timestamp_writes| {
             crate::full_pass(
                 encoder,
                 BLUR,
@@ -485,5 +536,31 @@ impl Frame {
                 timestamp_writes,
             );
         });
+    }
+}
+
+impl crate::Renderer {
+    /// This frame's ao passes over every batch's solids, in layer order; `None` with ao off.
+    pub(crate) fn ao_frame(&self) -> Option<Frame> {
+        if !self.ao.is_on() {
+            return None;
+        }
+        let solids = self
+            .order
+            .iter()
+            .filter_map(|id| self.batches.get(id))
+            .flat_map(|b| &b.solids)
+            .filter_map(|((shape, ..), set)| {
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                Some((
+                    mesh.vertices.clone(),
+                    mesh.indices.clone(),
+                    mesh.count,
+                    buffer.clone(),
+                    set.len(),
+                ))
+            })
+            .collect();
+        self.ao.frame(&self.frame_bind, solids)
     }
 }
