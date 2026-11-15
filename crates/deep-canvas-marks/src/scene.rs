@@ -4935,7 +4935,7 @@ fn text_marks(
 
 /// `spec`'s shaped run, through the shaped-run cache the renderers share; `None` for a font
 /// nothing bundles.
-fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
+pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
     let s = spec.shaper_spec()?;
     Some(LAYOUT_SHAPER.with(|shaper| shaper.borrow_mut().shape(&s)))
 }

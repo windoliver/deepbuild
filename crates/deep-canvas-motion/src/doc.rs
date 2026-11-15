@@ -2854,15 +2854,18 @@ fn cuts_of(
         if names_shot("from") || names_shot("to") {
             continue;
         }
-        // #494: a match morph between two items is the morph's (crate::morph).
+        // #494: a match morph between two items is the morph's (crate::morph), and so (#1968)
+        // is a text diff between two code items.
         let items = doc.get("items").and_then(Value::as_object);
         let names_item = |f: &str| {
             tr.get(f)
                 .and_then(Value::as_str)
                 .is_some_and(|n| items.is_some_and(|i| i.contains_key(n)))
         };
-        if tr.get("kind").and_then(Value::as_str) == Some("match_morph")
-            && (names_item("from") || names_item("to"))
+        if matches!(
+            tr.get("kind").and_then(Value::as_str),
+            Some("match_morph" | "text_diff")
+        ) && (names_item("from") || names_item("to"))
         {
             continue;
         }
