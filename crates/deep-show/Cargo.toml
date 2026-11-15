@@ -325,6 +325,8 @@ deep-text = { path = "../deep-text" }
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
+unicode-normalization = "0.1"
 sha2 = "0.10"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }

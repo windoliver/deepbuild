@@ -34,8 +34,9 @@ pub const fn slot(value: u32) -> u32 {
 /// A read control's slot in a read region and its type there, by the form of its entries'
 /// values: a pick on rows' `{set, key}` in 24 B (Control: picks on rows and grid focus), a
 /// point's 248 B (Control: point), an action's, a stick's or a look's 16 B (Control: actions,
-/// key repeat and gamepads), else a number's f64. A text control's one commit a step reserves
-/// its `u32` length and up to `max_bytes`, rounded up to a multiple of 8 (Control: text).
+/// key repeat and gamepads), a scroll's 8 B (Control: scroll), else a number's f64. A text
+/// control's one commit a step reserves its `u32` length and up to `max_bytes`, rounded up to a
+/// multiple of 8 (Control: text).
 pub fn form(control: &Value) -> (u32, &'static str) {
     let rows = control.get("verb").and_then(Value::as_str) == Some("pick")
         && control.get("rows").is_some();
@@ -45,6 +46,8 @@ pub fn form(control: &Value) -> (u32, &'static str) {
         // and up to 256 × 8 B), entries packed end to end.
         Some("point") => (slot(248 + 8 + 8 * crate::point::MAX_UNITS as u32), "point"),
         Some("actions") => (slot(16), "action"),
+        // #542: a scroll's `i32 position, i32 delta`.
+        Some("scroll") => (slot(8), "scroll"),
         Some("text") => {
             let max = control
                 .pointer("/text/max_bytes")
@@ -617,6 +620,59 @@ impl Item {
 /// The fixture canvas module whose carried state is of the `same_machine` class (#534).
 pub const MACHINE: &str = "same_machine.counter@1";
 
+/// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
+/// ends and, with `many` false, none (Control: text); a scroll control's position within its
+/// range, `from` its default clamped there, which its first entry's delta counts from (Control:
+/// scroll).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Limit {
+    Text { max: u32, many: bool },
+    Scroll { range: [i32; 2], from: i32 },
+}
+
+impl Limit {
+    fn of(control: &Value) -> Option<Limit> {
+        let i32_at = |p: &str| {
+            control
+                .pointer(p)
+                .and_then(Value::as_i64)
+                .and_then(|n| i32::try_from(n).ok())
+        };
+        match control.get("kind").and_then(Value::as_str)? {
+            "text" => Some(Limit::Text {
+                max: control
+                    .pointer("/text/max_bytes")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(256)
+                    .min(16_384) as u32,
+                many: control.pointer("/text/lines").and_then(Value::as_str) == Some("many"),
+            }),
+            "scroll" => {
+                let (a, b) = (i32_at("/scroll/range/0")?, i32_at("/scroll/range/1")?);
+                let range = [a.min(b), a.max(b)];
+                let from = control.get("default").and_then(Value::as_i64).unwrap_or(0);
+                let from = from.clamp(range[0].into(), range[1].into()) as i32;
+                Some(Limit::Scroll { range, from })
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether an entry's value is one the control may hold.
+    pub fn admits(&self, value: &crate::world::Given) -> bool {
+        use crate::world::Given;
+        match (self, value) {
+            (Limit::Text { max, many }, Given::Text(t)) => {
+                t.len() <= *max as usize && !t.contains('\r') && (*many || !t.contains('\n'))
+            }
+            (Limit::Scroll { range, .. }, Given::Number(n)) => {
+                n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
+            }
+            _ => false,
+        }
+    }
+}
+
 /// A piece: its seed, controls, tour and checked logic items in order.
 #[derive(Clone, Debug)]
 pub struct Piece {
@@ -625,6 +681,8 @@ pub struct Piece {
     pub class: Class,
     /// Each control by ID, with its slot's size and type in a read region ([`form`]).
     pub controls: BTreeMap<String, (u32, &'static str)>,
+    /// #542: what each text and scroll control's entries may hold.
+    pub limits: BTreeMap<String, Limit>,
     /// The sources its items' readings come from, each `reading:<source>`.
     pub sources: BTreeMap<String, Read>,
     pub tour: Option<Value>,
@@ -1622,10 +1680,18 @@ pub fn check_in(
             )],
         ));
     }
+    let limits = piece
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(id, c)| Some((id.clone(), Limit::of(c)?)))
+        .collect();
     Ok(Piece {
         seed,
         class,
         controls,
+        limits,
         sources,
         tour: piece.get("tour").cloned(),
         items,
