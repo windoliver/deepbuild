@@ -1,0 +1,77 @@
+#172: why every test fails at the base f98921218 ("Merge pull request #2636"). Mostly a note, not a run.
+
+What was run at the base: the type check (`node node_modules/typescript/bin/tsc -p tests/acceptance/172/tsconfig.json`:
+exit 0), `vitest list --root tests/acceptance/172` (20 tests in 10 files), taste.test.ts (below), and a scratch check
+(not committed) of the fixtures and the app's side with this folder's helpers on deep-show full, deep-logic and
+deep-physics built at the base: the lab is presented; its logic replay gives 600 step hashes and checkpoints of
+`scorer` every 60 steps; physics_bake gives 601 step hashes (596 distinct) that deep-physics's bake of the scene
+repeats, with checkpoints of `field` at 60 … 600; `eval` with the track reads `scorer.score` 1 at step 30, 3 at 300
+and 5 at 600; and its web export answers {"code": "unknown_target", "target": "web", "codec": "web", "outcome":
+"refused"}. The piece with stages is presented and evaluates (the dot at x 226 at 12 s, 235 at 12.5 s, y 60); the
+pictures' web export answers unknown_target. The remaining legs were not run: past that export each needs the
+missing surface, and the machine was shared and loaded (one-minute load average 120 to 233 on 20 cores). Where a test
+stops after the export is read from the base's code, and said so below.
+
+Found by the scratch check, and built in (README: Fixtures, Readings): a motion driver reading a logic array is
+refused in a scene with a world (`ref_unresolved` at drivers/readout/vars/s), so the lab's readout counts the world's
+hits; `eval` with a `track` replays the logic but not the scene's world, so the lab's evaluated data compared with the
+app is the logic array, the world held by step and full-state hashes; the base's `eval` reads `controls/year/value` as
+null, so that path is compared with the slider's default and the player's own start, not with the app; #533's
+assembler doesn't build `--locked` in this checkout, so the lab's program bytes are written in test code.
+
+What the base has, from its code:
+- crates/deep-show/src/export.rs `export_inner`: codecs `pdf`, `page` and `gltf` have writers of their own; any other
+  codec is looked up as a target of the same name in the sealed `export.target@1` registry, which holds no `web`, so
+  `video.codec: "web"` answers `{"outcome": "refused", "code": "unknown_target", "target": "web", "codec": "web"}`
+  before anything is written. No bundle, index page, player, probe(), receipt `player`/`gpu_needs`/`files` exists.
+- crates/deep-show/src/main.rs: an unknown scenario `planted` name answers the scenario `{"ok": false, "code":
+  "bad_input"}`; `web_fragment_writes_entry`, `web_index_export_time`, `web_probe_test_variant` and
+  `web_requests_adapter_limits` are unknown there. Unknown top-level scenario keys (`secrets`, `hub`) are ignored.
+- crates/deep-show/Cargo.toml has no feature `test-web-lacks`; no crate registers `test.native`.
+- benchmarks/budgets.json has no task naming #172.1e1f958d; docs/evidence/172/ doesn't exist.
+- What the tests lean on and the base has: `deep show` (#169's helpers), the `logic` call, `physics_bake`, `eval` with
+  `arrays` and `paths`, deep-physics's `bake` of a scene with `checkpoints: true`, #533's layout probe (deep-logic
+  `check`), ffmpeg fixtures of #499 and #503. In every test that exports, the first web export fails in this folder's
+  helpers.ts at `webReceiptOf`: "<what> is exported: expected 'refused' to be 'exported'" (observed for the lab and
+  the pictures).
+
+Per test:
+
+- lab.test.ts (builds deep-show full, deep-physics, deep-logic)
+  - AC1: `appRecord` (passes at the base, observed), then `exportLab` fails at `webReceiptOf` (unknown_target), before
+    any browser starts.
+- refusals.test.ts (builds full and full,test-web-lacks; the second build fails at the base, recorded in beforeAll)
+  - AC2 "a secret in the app's store …": `exportOnce` presents the lab, then fails at `webReceiptOf` (unknown_target).
+  - AC2 "a status binding, a capture, …": each of the first five pieces is refused with unknown_target, writing
+    nothing, so the first `none` fails at "each piece the bundle can't carry is refused, naming it", listing "the
+    refusal doesn't name lamp_status" (and wave, clip, sky, depth). Needs ffmpeg with libx264 (present here at
+    /opt/homebrew/bin/ffmpeg); without it, BLOCKED. Not observed: whether the base's document check presents the
+    capture piece (a device control on hands@1); if it doesn't, the same `none` also lists "the piece isn't presented".
+    The test-web-lacks part isn't reached.
+- hashes.test.ts
+  - AC3 "the lab with its logic program …": fails at `webReceiptOf` in `exportLab`.
+  - AC3 "the player's WebAssembly …": the same.
+- budgets.test.ts
+  - AC4 "the perf lane has a task …": fails at "benchmarks/budgets.json has a task naming #172.1e1f958d".
+  - AC4 "the lab's player is under 12 MB …": fails at `webReceiptOf` in `exportLab`.
+  - AC4 "on the reference Mac …": INCONCLUSIVE off a reference Mac or in an unfit state (never a pass); this Mac
+    (Mac17,10) is a reference model, so in a fit state it fails at `webReceiptOf` in `exportLab`.
+- links.test.ts
+  - AC5, all three: fail at `webReceiptOf` in `exportStages` ("the piece with stages is exported").
+- reproducible.test.ts
+  - AC6 "two macOS arm64 exports …": on macOS arm64 the first clean export fails at `webReceiptOf` in `cleanExport`
+    (elsewhere BLOCKED).
+  - AC6 "the Linux aarch64 export …": BLOCKED: no DEEP_LINUX_AARCH64 / DEEP_LINUX_AARCH64_DIR here (one ask). With them
+    set, it would fail at the Mac's export, as above.
+- probe.test.ts
+  - AC7 "every step hash …": `appRecord` with 600 evals, then fails at `webReceiptOf` in `exportLab`.
+  - AC7 "the planted web_probe_test_variant …": fails at the first, unplanted export's `webReceiptOf`; the planted run
+    (which the base would answer bad_input) isn't reached.
+- limits.test.ts
+  - AC8 "on a shim of spec-default limits …": `appRecord`, then `webReceiptOf` in `exportLab`.
+  - AC8 "under a shim offering …": fails at the unplanted export's `webReceiptOf`.
+- images.test.ts
+  - AC9, both: fail at `webReceiptOf` in `pictures()` ("the pictures exported to the web is exported").
+- taste.test.ts (observed at the base)
+  - AC10: INCONCLUSIVE: "the check run's pictures are not in docs/evidence/172/: player-lab.png,
+    player-stage-descent.png, player-bad-fragment.png, player-lab.webm; this is not a pass".
