@@ -2320,6 +2320,18 @@
         }
       }
     },
+    "tests/acceptance/190/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #190's blind suite: its own assembler for the fixtures, from #532's, apart from the linker under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #190's blind suite: validates each fixture and reads an object's linking and reloc.CODE sections back."
+        }
+      }
+    },
     "tests/acceptance/531/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
