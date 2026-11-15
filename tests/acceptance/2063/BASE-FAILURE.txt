@@ -1,0 +1,139 @@
+Acceptance tests for #2063 on the base 72fe11a1 (origin/main, no implementation), run on 2026-11-14 on an aarch64
+Linux machine at load average ~70, Node 24.22.0, with node_modules installed and packages/contracts/dist built. The
+run is from a scratch copy of the base (the base's scripts/, packages/contracts/, root files and this suite), since
+the checkout's working tree held the change by then; scripts/catalogue-drift.mjs there is `git show HEAD:`'s:
+
+  node --test 'tests/acceptance/2063/*.test.mjs'
+
+Trimmed to each test's result and failure reason (stack frames and node's assertion diff dropped). Local paths are
+redacted as <checkout>, and the node binary's path as node. Timings under this load are not evidence.
+
+ℹ tests 6
+ℹ pass 0
+ℹ fail 6
+
+test at tests/acceptance/2063/ac1-recorded-tracker.test.mjs:14:1
+✖ #2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it (1949.551825ms)
+  AssertionError [ERR_ASSERTION]: with the recorded list as scripts/not-event-kinds.txt the lane's verdict on the recorded tracker is PASS:
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
+  FAIL catalogue drift: 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.58 s
+test at tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs:17:1
+✖ #2063.d47f7c6f criterion 2: with the five listed names passing, an open issue (9605, the 36th of 40) that names the uncatalogued event kind ask.ghosted fails the lane, naming the kind and the issue (1173.019264ms)
+  AssertionError [ERR_ASSERTION]: the lane's verdict is PASS on 40 open issues whose only uncatalogued names are plan.overlay, process.conserve, archive.scene, stack.slot and move.feel, each listed beside the open issue that names it:
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+  FAIL catalogue drift: 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.67 s
+test at tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs:26:1
+✖ #2063.d47f7c6f criterion 2: listing ask.ghosted under #9606, an open issue that does not name it, while #9605 names it, fails the lane too, naming ask.ghosted (703.463257ms)
+  AssertionError [ERR_ASSERTION]: the lane's verdict is PASS on 40 open issues whose only uncatalogued names are plan.overlay, process.conserve, archive.scene, stack.slot and move.feel, each listed beside the open issue that names it:
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+  FAIL catalogue drift: 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.51 s
+test at tests/acceptance/2063/ac3-stale-entries.test.mjs:14:1
+✖ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608 is closed, naming move.feel, though the closed issue still names it and no open issue does (1107.816208ms)
+  AssertionError [ERR_ASSERTION]: the lane's verdict is PASS while every entry's issue is open and names it (move.feel #9608 among them):
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+  FAIL catalogue drift: 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.59 s
+test at tests/acceptance/2063/ac3-stale-entries.test.mjs:23:1
+✖ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608, still open, no longer names move.feel, naming move.feel (840.704269ms)
+  AssertionError [ERR_ASSERTION]: the lane's verdict is PASS while every entry's issue is open and names it (move.feel #9608 among them):
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+  FAIL catalogue drift: 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.52 s
+test at tests/acceptance/2063/ac4-listed-family.test.mjs:7:1
+✖ #2063.0d14edf8 criterion 4: with plan.overlay listed, an open issue (9605) that names plan.ghost, an unlisted name in the same family, fails the lane, naming plan.ghost and the issue (896.079585ms)
+  AssertionError [ERR_ASSERTION]: the lane's verdict is PASS while the only name in the plan family is the listed plan.overlay:
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+  FAIL catalogue drift: 7 event kinds named in backticks are not in the catalogue: plan.overlay (#9612), process.conserve (#9611), archive.scene (#9610), stack.slot (#9609), move.feel (#9608), plan.overlay (#9607), process.conserve (#9607)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.59 s
+
+Every test fails for the reason the issue gives: the base's lane reads no list. Criterion 1's fails at its "after",
+once its "before" half held (the lane failed on the recorded tracker with an empty list, naming the five names with
+their issues) and the recorded list read as the criterion says: with fixtures/not-event-kinds-2026-11-14.txt planted
+as scripts/not-event-kinds.txt, the base's lane still names all 17 entries in the 12 issues. The other five fail at
+their clean twin, where the base's lane reads the five listed names as event kinds.
+
+## The Proof's "before": the base's lane on the recorded tracker copy
+
+  DEEP_OPEN_ISSUES=tests/acceptance/2063/fixtures/open-issues-2026-11-14.json node scripts/catalogue-drift.mjs
+
+  FAIL 18 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:537), 
+  layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay 
+  (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy 
+  (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot 
+  (#335), move.feel (#274)
+
+The same command over the whole recorded list (1,197 open issues, 6,256,464 bytes, SHA-256 3921ccd3…a2b61737, not
+kept) printed the same line: the same 18 entries, 17 in 12 issues and one in docs/technical-design.md. Both were run
+in the checkout while it was still the base, over its own docs; the suite's tests use planted docs, so the doc's
+entry isn't in their output.
+
+## The harness against a planted fix and planted wrong lanes (in scratch copies, never in this checkout)
+
+A scratch copy of the checkout (scripts/, packages/contracts/, the two docs, the root's files and this suite, under
+the session's temp folder) got a throwaway fix: scripts/catalogue-drift.mjs as twins/passes-listed-families has it
+without the planted fault (a listed name passes only when its entry's issue is an open issue whose body holds the
+name in backticks; any other entry fails the lane with its line, name and issue), and no scripts/not-event-kinds.txt
+of its own: every test plants its list. All six tests passed on it. (A first draft of criterion 1's test read the
+checkout's own list; it was amended to plant the recorded one, fixtures/not-event-kinds-2026-11-14.txt, and the base,
+the fix and the twin were run again after that.)
+
+One planted fault at a time, on that fix:
+
+| Wrong lane | Tests that failed |
+|---|---|
+| twins/passes-listed-families: every name whose family the list holds passes | criterion 4's, at "the lane let plan.ghost through" (the other five passed; run again after the amendment) |
+| No entry is read against the tracker: every listed name passes | criterion 2's second, criterion 3's both |
+| An entry is stale only when its issue isn't open (the body is never read) | criterion 2's second, criterion 3's second |
+| Entries are read against open and closed issues alike (`gh issue list --state all`) | criterion 3's first |
+| The base's lane (no list) | all six, as above |
+
+The three middle rows were run on criteria 2 to 4's tests before the amendment, which didn't change those tests.
+
+A harness fault found on the way and fixed before the base run: the fake gh ended with process.exit after
+console.log, which cut the 494 kB recorded list short on a pipe now and then (the lane then failed on unreadable
+JSON). It now sets the exit status and lets the output drain.
+
+scripts/public-text.mjs, run once in the checkout with these files untracked, found no studied name in them.
+
+## A later harness fix: the scratch copy in a fully built checkout
+
+The first helpers copied every packages/*/dist. In a checkout where packages/cli/dist is built, scripts/lease then ran
+the lane through the copy's built CLI, which has no package there to start from, so all six tests failed in setup on
+any lane. The copy now carries packages/contracts/dist only, and the lane runs unleased in both kinds of checkout.
+Checked in scratch checkouts of the base fcd8c3852 (main had moved on from 72fe11a1; this suite, the base's scripts/,
+packages/contracts/ and root files), one with only the contracts build and one that also had a packages/cli/dist
+whose main.js exits 97 saying it was run:
+
+| Scratch checkout | Old helpers | New helpers |
+|---|---|---|
+| The base, contracts built | 6 fail at their assertions | 6 fail at their assertions, as above |
+| The base, with packages/cli/dist | 6 fail in setup ("the built CLI was run") | 6 fail at their assertions, the same output as the row above |
+| The throwaway fix, with packages/cli/dist | not run | 6 pass |
+| twins/passes-listed-families, with packages/cli/dist | not run | only criterion 4's fails |
