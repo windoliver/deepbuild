@@ -209,6 +209,7 @@ export class HeavyQueue {
     const granted = typeof params.ticket === 'string' ? this.held.get(params.ticket) : undefined;
     if (granted && granted.secret === params.secret) return this.grant(granted);
     if (!w) {
+      if (typeof params.ticket === 'string') throw Error('this deep lease lost its place in the queue; run it again');
       if (!peer) throw Error('deep lease names no process, so whose session it runs for is unknown; run the deep command itself');
       const id = await session();
       const needs = [{ kind: 'cpu.slot', mode: 'exclusive' as Mode }, ...needsOf(params.kinds ?? [])];
@@ -287,7 +288,8 @@ export class HeavyQueue {
       const by = [...new Set([...this.held.values()].filter((h) => h.tokens > 0).map((h) => this.who(h.holder)))].join(', ');
       return { kind: 'jobs', line: await this.line(w, 'jobs', by ? `held by ${by}` : 'all in use') };
     }
-    this.waiting.splice(this.waiting.indexOf(w), 1);
+    const at = this.waiting.indexOf(w);
+    if (at >= 0) this.waiting.splice(at, 1);
     const now = this.o.now();
     const waits = { ...w.waits };
     if (w.last) waits[w.last.reason] = (waits[w.last.reason] ?? 0) + (now - w.last.at);

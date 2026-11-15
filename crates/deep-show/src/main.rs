@@ -1382,6 +1382,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "counts_declared_as_reached" => Planted::CountsDeclaredAsReached,
                 "skips_snapshot_comparison" => Planted::SkipsSnapshotComparison,
                 "checks_expected_code_only" => Planted::ChecksExpectedCodeOnly,
+                "trusts_write_index" => Planted::TrustsWriteIndex,
                 "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
                 "every_digest_positive" => Planted::EveryDigestPositive,
                 "checks_share_only" => Planted::ChecksShareOnly,
@@ -1737,6 +1738,25 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     if scenario.planted.is_none() {
         scenario.planted = startup.run_planted;
     }
+    // #2085: a scenario under effects' planted check runs on a set sealed with that check.
+    let resealed;
+    let startup = if scenario.planted == Some(Planted::TrustsWriteIndex)
+        && startup.run_planted != scenario.planted
+    {
+        let planted = Some(StartPlanted::Run(Planted::TrustsWriteIndex));
+        match seal(planted, startup.sealed.costs.clone()) {
+            Ok(s) => {
+                resealed = Startup {
+                    cache: startup.cache.clone(),
+                    ..s
+                };
+                &resealed
+            }
+            Err(_) => return bad_input(),
+        }
+    } else {
+        startup
+    };
     match command {
         "run" => {
             let replies = jobs::around(&scenario, startup, |background| {
@@ -2145,9 +2165,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_logic::module::module()
         };
-        // A build without physics refuses the logic items that need it (#533).
+        // A build without physics refuses the logic items that need it (#533); one with it binds
+        // physics.cast@1 for the items that ask it between steps (#213).
         out.push(match physics::module() {
-            Some(_) => logic,
+            Some(_) => {
+                deep_logic::module::bind_services(physics::cast::bound);
+                logic
+            }
             None => deep_logic::module::without_physics(logic),
         });
     }
@@ -2548,6 +2572,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             *m = deep_canvas_media::module::png_reads_itself();
         }
     }
+    if planted == Some(StartPlanted::Run(Planted::TrustsWriteIndex)) {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "effects") {
+            *m = deep_canvas_effects::module::trusts_write_index();
+        }
+    }
     if let Some(StartPlanted::ControlKind(p)) = planted {
         for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
             *m = deep_canvas_input::module::with_test_kind(p);
@@ -2621,7 +2650,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
                 name: "kind@1".into(),
                 entries: entries.into_iter().map(Value::from).collect(),
                 rules: vec!["sheet_cap".into()],
-                passes: Vec::new(),
+                ..Default::default()
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
@@ -3335,6 +3364,9 @@ fn main() {
                 line["registry"] = json!(r.name);
                 line["entries"] = json!(r.entries);
                 line["rules"] = json!(r.rules);
+                for (k, v) in &r.report {
+                    line[k.as_str()] = v.clone();
+                }
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }

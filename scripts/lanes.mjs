@@ -605,6 +605,10 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #2085's files each build deep-show full, as #387's and #855's do.
+alone.push('tests/acceptance/2085/');
+// #2362's files build deep-show (debug and release, full) and run the kit, and its AC3 file runs two of #154's.
+alone.push('tests/acceptance/2362/');
 // #509's files each build deep-show and speak their fixtures with macOS say; most start a hub and deepbuild/speech's
 // model host on its fixed port 8720 (recording.test.ts also deepbuild/bakes' on 8719); budgets.test.ts times them.
 alone.push('tests/acceptance/509/', 'tests/acceptance/509-oracle/');
@@ -617,8 +621,13 @@ timed.push('tests/acceptance/2197/budget.test.ts');
 alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
+// #2120's files each start their own hubs: #1523's and #84's worlds with played sessions, #1330's with a gated played
+// agent (one hub stopped and started again) and #996's with a kept run across a killed hub.
+alone.push('tests/acceptance/2120/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
+// #1335's files each start their own hubs, a played forge and played agents, and run a standing run over its rule.
+alone.push('tests/acceptance/1335/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
 alone.push('tests/acceptance/1342/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
@@ -712,11 +721,25 @@ timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
 slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
 byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
   'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
+// #468's files each build deep-gpu (AC7 deep-show too) and draw on the Metal GPU; ac5-budgets judges the lens and
+// focus task's budgets on the reference Mac.
+// AC3 runs as its blind redraft, on the owner's ruling: the first draft reads view3d's `overlays` as an object keyed
+// by ID, where #506's suite already reads it as an array, so it is kept by hand (468-redraft-ac3/DISPUTE.md).
+alone.push('tests/acceptance/468/', 'tests/acceptance/468-redraft-ac3/');
+byHand.push('tests/acceptance/468/ac3-leader.test.ts');
+timed.push('tests/acceptance/468/ac5-budgets.test.ts');
 // #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
 // Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
+alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
+timed.push('tests/acceptance/213/ac8-budgets.test.ts');
+// #213's criterion 3 went to a blind redraft once #548's logic replay began stopping at a trap
+// (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
+alone.push('tests/acceptance/213-redraft-ac3/');
+byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -1,0 +1,278 @@
+One run of each test file of tests/acceptance/2120 at the base 2baafea73726387c4fabe5057599be0831774f0a (main,
+2026-11-14), with the runtime .node-version names (24.22.0), each run as:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2120 --no-file-parallelism --testTimeout=600000 <file>
+
+AC1, AC2 and AC6 below are one run of the three together, made after their load guards were added (INCONCLUSIVE paths
+only; each read as on its first run). AC3 and AC5 are their files' runs after the changes the README's Drafting notes
+name. The machine was loaded past its cores throughout (a 1-minute load up to about 280 on 18 cores); no reading below
+was INCONCLUSIVE. The checkout's path is written <checkout>.
+
+Why each fails, each at its assertion, as its criterion's "Today ..." sentence says:
+
+- AC1 #2120.9f18511b: after gh pr merge --auto --squash --match-head-commit=<head> armed the merge naming no pull
+  request, git push origin b runs.
+- AC2 #2120.eed5748f: pushBranches reads '+b', '+refs/heads/b' and 'cur'; git push origin +b and
+  git push -f origin +refs/heads/b from b, and git push --all origin and git push --mirror origin from c, all run.
+- AC3 #2120.5a379749: with the line in the root AGENTS.md, and then in ~/.codex/AGENTS.md, the offer is answered
+  "proceed" by rule commit-not-reserved, on the record and in the stop's reply, and no authority ask names it.
+- AC4 #2120.bc7c2b7d: both starts start.
+- AC5 #2120.19250b4a: the kept run, still alive, is finished "stopped: hub restarted", and its command is started again
+  under a new run (its program noted two starts).
+- AC6 #2120.606be734: the row's map has branch deep/41-<id> and issue null.
+- AC7 #2120.f803e5df: the record holds no start.session for the run.
+- AC8 #2120.dd8501f8: the record holds no forge.refused for the session.
+
+==== auto-no-number.test.ts, push-forms.test.ts, issue-row.test.ts (AC1, AC2, AC6, one run)
+
+RUN  v5.0.5 <checkout>/tests/acceptance/2120
+
+ ❯ push-forms.test.ts (1 test | 1 failed) 13330ms
+   × AC2 #2120.eed5748f pushBranches reads git push origin +b and git push -f origin +refs/heads/b as b, and git push --all origin as *; with PR 12's merge armed with --auto on b, each push so written is denied naming guard merge-names-head 13330ms
+ ❯ auto-no-number.test.ts (1 test | 1 failed) 13301ms
+   × AC1 #2120.9f18511b with gh pr merge --auto armed on branch b naming no pull request, git push origin b is denied naming guard merge-names-head 13300ms
+ ❯ issue-row.test.ts (1 test | 1 failed) 3386ms
+   × AC6 #2120.606be734 a session started with deep start for issue 41: once its first hook is mapped, its row's issue in the session map is 41 3143ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  auto-no-number.test.ts > AC1 #2120.9f18511b with gh pr merge --auto armed on branch b naming no pull request, git push origin b is denied naming guard merge-names-head
+AssertionError: AC1 #2120.9f18511b after `gh pr merge --auto --squash --match-head-commit=0b02b2362a3d5329eab3cf19440d71b1ae60447c` armed the merge on b with no number, `git push origin b` is a push to that branch: it is denied naming guard merge-names-head; deep-hook's reply: "": expected 'it runs' to be 'denied naming merge-names-head' // Object.is equality
+
+Expected: "denied naming merge-names-head"
+Received: "it runs"
+
+ ❯ auto-no-number.test.ts:38:8
+
+ ❯ verdict ../1523/helpers.ts:103:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  issue-row.test.ts > AC6 #2120.606be734 a session started with deep start for issue 41: once its first hook is mapped, its row's issue in the session map is 41
+AssertionError: AC6 #2120.606be734 session bd9b7ac2-e688-4d24-8136-6f678a64998f, which deep start started for issue 41 on branch deep/41-3qf9da, shows issue 41 in the session map: its row's map is {"repo":"/Users/Shared/dh1330-bEgrZI/src/shop","branch":"deep/41-3qf9da","issue":null,"files":[],"running":[],"leases":[],"state":"finished"}: expected null to be 41 // Object.is equality
+
+- Expected:
+41
+
++ Received:
+null
+
+ ❯ issue-row.test.ts:24:209
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  push-forms.test.ts > AC2 #2120.eed5748f pushBranches reads git push origin +b and git push -f origin +refs/heads/b as b, and git push --all origin as *; with PR 12's merge armed with --auto on b, each push so written is denied naming guard merge-names-head
+AssertionError: AC2 #2120.eed5748f the refs are read without the force mark and refs/heads/, --all reads as every branch, and with PR 12's merge armed with --auto on b each push so written is denied naming guard merge-names-head: expected { pushBranches: { …(3) }, …(1) } to deeply equal { pushBranches: { …(3) }, …(1) }
+
+- Expected
++ Received
+
+  {
+    "pushBranches": {
+      "pushBranches('git push --all origin', 'cur')": [
+-       "*",
++       "cur",
+      ],
+      "pushBranches('git push -f origin +refs/heads/b', 'cur')": [
+-       "b",
++       "+refs/heads/b",
+      ],
+      "pushBranches('git push origin +b', 'cur')": [
+-       "b",
++       "+b",
+      ],
+    },
+    "pushes": {
+-     "git push --all origin (from c)": "denied naming merge-names-head",
+-     "git push --mirror origin (from c)": "denied naming merge-names-head",
+-     "git push -f origin +refs/heads/b (from b)": "denied naming merge-names-head",
+-     "git push origin +b (from b)": "denied naming merge-names-head",
++     "git push --all origin (from c)": "it runs",
++     "git push --mirror origin (from c)": "it runs",
++     "git push -f origin +refs/heads/b (from b)": "it runs",
++     "git push origin +b (from b)": "it runs",
+    },
+  }
+
+ ❯ push-forms.test.ts:58:212
+
+ ❯ verdict ../1523/helpers.ts:103:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+ Test Files  3 failed (3)
+      Tests  3 failed (3)
+   Start at  22:21:54
+   Duration  30.35s (tests 100%)
+
+==== commit-offer.test.ts (AC3, with --reporter=verbose)
+
+RUN  v5.0.5 <checkout>/tests/acceptance/2120
+
+ × commit-offer.test.ts > AC3 #2120.5a379749 a session in a subfolder ends its turn on "Want me to commit this?" while the repo's root AGENTS.md, and in turn the user-level Codex file, says "Never commit unless I ask": no proceed by rule commit-not-reserved is sent and the offer goes to the authority path 3821ms
+   → AC3 #2120.5a379749 with "Never commit unless I ask" in the repo's root AGENTS.md, and in turn in the user-level Codex file ~/.codex/AGENTS.md, a session in packages/x that ends on "Want me to commit this?" gets no proceed by rule commit-not-reserved, and the offer goes to an authority ask: expected { …(2) } to deeply equal { …(2) }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  commit-offer.test.ts > AC3 #2120.5a379749 a session in a subfolder ends its turn on "Want me to commit this?" while the repo's root AGENTS.md, and in turn the user-level Codex file, says "Never commit unless I ask": no proceed by rule commit-not-reserved is sent and the offer goes to the authority path
+AssertionError: AC3 #2120.5a379749 with "Never commit unless I ask" in the repo's root AGENTS.md, and in turn in the user-level Codex file ~/.codex/AGENTS.md, a session in packages/x that ends on "Want me to commit this?" gets no proceed by rule commit-not-reserved, and the offer goes to an authority ask: expected { …(2) } to deeply equal { …(2) }
+
+- Expected
++ Received
+
+  {
+    "the repo's root AGENTS.md": {
+-     "an authority ask names the offer": true,
+-     "proceeds on the record": [],
+-     "the reply names commit-not-reserved": false,
++     "an authority ask names the offer": false,
++     "proceeds on the record": [
++       "commit-not-reserved: Want me to commit this?",
++     ],
++     "the reply names commit-not-reserved": true,
+    },
+    "the user-level Codex file ~/.codex/AGENTS.md": {
+-     "an authority ask names the offer": true,
+-     "proceeds on the record": [],
+-     "the reply names commit-not-reserved": false,
++     "an authority ask names the offer": false,
++     "proceeds on the record": [
++       "commit-not-reserved: Want me to commit this?",
++     ],
++     "the reply names commit-not-reserved": true,
+    },
+  }
+
+ ❯ commit-offer.test.ts:64:6
+
+ ❯ verdict ../84/sort/helpers.ts:71:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:54:00
+   Duration  4.46s (tests 95%, transform 3%, import 2%)
+
+==== at-once.test.ts (AC4)
+
+RUN  v5.0.5 <checkout>/tests/acceptance/2120
+
+ ❯ at-once.test.ts (1 test | 1 failed) 5591ms
+   × AC4 #2120.bc7c2b7d under an approval with at_once 1, two start.session requests sent without waiting for the first: one starts and the other is refused with bound at_once 4836ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  at-once.test.ts > AC4 #2120.bc7c2b7d under an approval with at_once 1, two start.session requests sent without waiting for the first: one starts and the other is refused with bound at_once
+AssertionError: AC4 #2120.bc7c2b7d two starts sent at once under an approval with at_once 1 take one slot each: one starts and the other is refused with bound at_once; the replies were [{"status":"started","run":"run:01M7EAN6H9JCH6MMDHJR0WX1YY"},{"status":"started","run":"run:01M7EAN6DRPTRCF87QPXRX36FG"}]: expected [ 'started', 'started' ] to deeply equal [ 'refused, bound at_once', 'started' ]
+
+- Expected
++ Received
+
+  [
+-   "refused, bound at_once",
++   "started",
+    "started",
+  ]
+
+ ❯ at-once.test.ts:21:6
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:45:25
+   Duration  5.85s (tests 99%, transform 1%, import 1%)
+
+==== kept-run.test.ts (AC5)
+
+RUN  v5.0.5 <checkout>/tests/acceptance/2120
+
+ ❯ kept-run.test.ts (1 test | 1 failed) 33280ms
+   × AC5 #2120.19250b4a a kept run in flight, the hub dead and runs.json unparseable: the next hub adopts it, with no run.finished while it lives and no second run of its command 33145ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  kept-run.test.ts > AC5 #2120.19250b4a a kept run in flight, the hub dead and runs.json unparseable: the next hub adopts it, with no run.finished while it lives and no second run of its command
+AssertionError: AC5 #2120.19250b4a the hub that started after run:01M7EAWGN6180ABYEKA6CJMHSA's journal couldn't be parsed adopts the kept run (PID 1559): no run.finished for it while it lives, and its command isn't started again: expected { 'the kept run lives': true, …(3) } to deeply equal { 'the kept run lives': true, …(3) }
+
+- Expected
++ Received
+
+  {
+-   "other runs started with its command": [],
+-   "run.finished for it": [],
+-   "starts of its command": 1,
++   "other runs started with its command": [
++     "run:01M7EAWVVE4HE2G0SP0520D1GA",
++   ],
++   "run.finished for it": [
++     "stopped: hub restarted",
++   ],
++   "starts of its command": 2,
+    "the kept run lives": true,
+  }
+
+ ❯ kept-run.test.ts:65:190
+     63|       'other runs started with its command': rerun(events).map((e) => …
+     64|       'starts of its command': linesOf(starts).length,
+     65|     }, `${AC5} the hub that started after ${run}'s journal couldn't be…
+       |                                                                                                                                                                                              ^
+     66|       'the kept run lives': true,
+     67|       'run.finished for it': [],
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:49:28
+   Duration  33.84s (tests 99%, transform 1%)
+
+==== restart-link.test.ts (AC7)
+
+RUN  v5.0.5 <checkout>/tests/acceptance/2120
+
+ ❯ restart-link.test.ts (1 test | 1 failed) 26037ms
+   × AC7 #2120.f803e5df a start whose agent has not hooked yet: the hub stops and starts, the agent's first hook arrives, and start.session is on the record for that run 25681ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  restart-link.test.ts > AC7 #2120.f803e5df a start whose agent has not hooked yet: the hub stops and starts, the agent's first hook arrives, and start.session is on the record for that run
+AssertionError: AC7 #2120.f803e5df run run:01M7EASJ85F9DHTQN0J8E1WSEH's agent (PID 17017) sent its first hook after the hub stopped and started again, so start.session for that run, naming session 1f6029a3-a871-4236-b74b-0b39529ea8ef, is on the record; the record holds 0 start.session for it: expected [] to deeply equal [ Array(1) ]
+
+- Expected
++ Received
+
+- [
+-   "start.session for run:01M7EASJ85F9DHTQN0J8E1WSEH naming session 1f6029a3-a871-4236-b74b-0b39529ea8ef",
+- ]
++ []
+
+ ❯ restart-link.test.ts:45:6
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:47:50
+   Duration  26.36s (tests 99%)
+
+==== default-branch.test.ts (AC8)
+
+RUN  v5.0.5 <checkout>/tests/acceptance/2120
+
+ ❯ default-branch.test.ts (1 test | 1 failed) 34127ms
+   × AC8 #2120.dd8501f8 in a repo with origin/main and no origin/HEAD, a started session's call whose output shows the forge refusing a push to refs/heads/main under a ruleset records forge.refused with action push-default-branch 33910ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  default-branch.test.ts > AC8 #2120.dd8501f8 in a repo with origin/main and no origin/HEAD, a started session's call whose output shows the forge refusing a push to refs/heads/main under a ruleset records forge.refused with action push-default-branch
+AssertionError: AC8 #2120.dd8501f8 session cac770b6-e728-4f65-bb68-098501d09fb5 (run run:01M7EAPYWJPJN351PX9WQ8FB1S) printed the forge refusing its push to refs/heads/main under a ruleset, in a repo with origin/main and no origin/HEAD, so forge.refused with action push-default-branch is on the record; the record's forge.refused for it: []: expected [] to include 'push-default-branch'
+ ❯ default-branch.test.ts:37:6
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:46:25
+   Duration  34.30s (tests 100%)

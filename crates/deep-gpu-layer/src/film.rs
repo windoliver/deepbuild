@@ -51,8 +51,9 @@ use crate::{frames, parity, refused, App, Planted};
 
 const FLICKS_PER_SECOND: i64 = 705_600_000;
 
-/// When the frame's Vello GPU passes finished encoding, set by the surface's module.
-pub type Encoded = Arc<Mutex<Option<Instant>>>;
+/// When the frame's Vello GPU passes finished encoding, and (#468) the fills and glyph runs its
+/// marks encoded into them, set by the surface's module.
+pub type Encoded = Arc<Mutex<Option<(Instant, u64)>>>;
 
 /// A look's definition: a shipped look's by its ID, or the look@1 given.
 fn def_of(v: &Value) -> Result<Value, Value> {
@@ -215,11 +216,13 @@ fn hex(c: &image::Rgba<u8>) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-/// A rendered frame's encode ms and GPU ms, its hash when asked for, and its bytes when kept.
-type Rendered = (f64, f64, Option<String>, Option<Vec<u8>>);
+/// A rendered frame's encode ms and GPU ms, its fills and glyph runs, its hash when asked for, and
+/// its bytes when kept.
+type Rendered = (f64, f64, u64, Option<String>, Option<Vec<u8>>);
 
-/// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms
-/// and the GPU layer's ms from the end of the encode to the work done.
+/// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms,
+/// the GPU layer's ms from the end of the encode to the work done, and the fills and glyph runs
+/// the encode held.
 fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Result<Rendered, Value> {
     let encoded = encoded.clone();
     app.worker
@@ -233,7 +236,7 @@ fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Resul
                 view.wait_free();
             };
             view.wait_done(drawn.slot);
-            let at = encoded
+            let (at, fills) = encoded
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take()
@@ -246,6 +249,7 @@ fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Resul
             Ok((
                 encode.as_secs_f64() * 1e3,
                 gpu.as_secs_f64() * 1e3,
+                fills,
                 pixels,
                 kept,
             ))
@@ -598,7 +602,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let built = started.elapsed().as_secs_f64() * 1e3;
             let keep = export || checks_flicker || capture.contains(&n);
-            let (encode_ms, layer_gpu_ms, pixels, bytes) = render(app, k, &encoded, hash, keep)?;
+            let (encode_ms, layer_gpu_ms, fills, pixels, bytes) =
+                render(app, k, &encoded, hash, keep)?;
             if let Some(e) = error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 return Err(e);
             }
@@ -624,6 +629,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 "frame": n,
                 "gpu_ms": layer_gpu_ms + window_gpu_ns as f64 / 1e6,
                 "cpu_ms": built + encode_ms + ui_time.as_secs_f64() * 1e3,
+                "fills": fills,
             });
             if hash {
                 row["pixel_hash"] = json!(pixels);

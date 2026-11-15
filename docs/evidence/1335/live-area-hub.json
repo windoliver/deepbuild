@@ -1,0 +1,740 @@
+{
+  "what": "#1335 Proof, second half: this repo's rule and what it selected on the live issues. Read-only: the open issues listed as the hub's standing run lists them, the hub's own rule and readiness code (packages/hub/src/work-rule.ts) applied, design links read on origin/main. No session started, nothing written to the forge.",
+  "at": "2026-11-14T21:34:18.554Z",
+  "repo": "windoliver/deepbuild",
+  "design_at": "a12be6c8c426e4ea9d87292cef42f12c564527f3",
+  "rule": {
+    "words": "every issue labelled area:hub",
+    "labels": [
+      "area:hub"
+    ],
+    "milestone": null,
+    "epic": null,
+    "roles": [
+      "OWNER",
+      "MEMBER",
+      "COLLABORATOR"
+    ]
+  },
+  "open_issues": 1204,
+  "meet_the_rules_structure": 121,
+  "by_outside_authors_or_apps": 0,
+  "joined": 111,
+  "stay_out": 10,
+  "stay_out_by_reason": {
+    "has no design link": 9,
+    "has no acceptance criteria": 1
+  },
+  "order": [
+    "#16 (R1 · Prove done, and see it)",
+    "#83 (R1 · Prove done, and see it)",
+    "#236 (R1 · Prove done, and see it)",
+    "#998 (R1 · Prove done, and see it)",
+    "#1157 (R1 · Prove done, and see it)",
+    "#1160 (R1 · Prove done, and see it)",
+    "#1456 (R1 · Prove done, and see it)",
+    "#1505 (R1 · Prove done, and see it)",
+    "#1511 (R1 · Prove done, and see it)",
+    "#1532 (R1 · Prove done, and see it)",
+    "#1578 (R1 · Prove done, and see it)",
+    "#1581 (R1 · Prove done, and see it)",
+    "#1584 (R1 · Prove done, and see it)",
+    "#1591 (R1 · Prove done, and see it)",
+    "#1689 (R1 · Prove done, and see it)",
+    "#1800 (R1 · Prove done, and see it)",
+    "#1810 (R1 · Prove done, and see it)",
+    "#1812 (R1 · Prove done, and see it)",
+    "#1813 (R1 · Prove done, and see it)",
+    "#1829 (R1 · Prove done, and see it)",
+    "#1836 (R1 · Prove done, and see it)",
+    "#1841 (R1 · Prove done, and see it)",
+    "#1864 (R1 · Prove done, and see it)",
+    "#1865 (R1 · Prove done, and see it)",
+    "#1866 (R1 · Prove done, and see it)",
+    "#1869 (R1 · Prove done, and see it)",
+    "#1879 (R1 · Prove done, and see it)",
+    "#1880 (R1 · Prove done, and see it)",
+    "#1885 (R1 · Prove done, and see it)",
+    "#1886 (R1 · Prove done, and see it)",
+    "#1891 (R1 · Prove done, and see it)",
+    "#1896 (R1 · Prove done, and see it)",
+    "#1898 (R1 · Prove done, and see it)",
+    "#1904 (R1 · Prove done, and see it)",
+    "#1982 (R1 · Prove done, and see it)",
+    "#2066 (R1 · Prove done, and see it)",
+    "#2067 (R1 · Prove done, and see it)",
+    "#2068 (R1 · Prove done, and see it)",
+    "#2069 (R1 · Prove done, and see it)",
+    "#2073 (R1 · Prove done, and see it)",
+    "#2074 (R1 · Prove done, and see it)",
+    "#2075 (R1 · Prove done, and see it)",
+    "#2076 (R1 · Prove done, and see it)",
+    "#2077 (R1 · Prove done, and see it)",
+    "#2084 (R1 · Prove done, and see it)",
+    "#2205 (R1 · Prove done, and see it)",
+    "#2218 (R1 · Prove done, and see it)",
+    "#261 (R2 · Find, and trust the numbers)",
+    "#615 (R2 · Find, and trust the numbers)",
+    "#616 (R2 · Find, and trust the numbers)",
+    "#807 (R2 · Find, and trust the numbers)",
+    "#1010 (R2 · Find, and trust the numbers)",
+    "#1029 (R2 · Find, and trust the numbers)",
+    "#1095 (R2 · Find, and trust the numbers)",
+    "#1101 (R2 · Find, and trust the numbers)",
+    "#1190 (R2 · Find, and trust the numbers)",
+    "#1259 (R2 · Find, and trust the numbers)",
+    "#1520 (R2 · Find, and trust the numbers)",
+    "#1533 (R2 · Find, and trust the numbers)",
+    "#1536 (R2 · Find, and trust the numbers)",
+    "#1649 (R2 · Find, and trust the numbers)",
+    "#1691 (R2 · Find, and trust the numbers)",
+    "#1721 (R2 · Find, and trust the numbers)",
+    "#1792 (R2 · Find, and trust the numbers)",
+    "#1803 (R2 · Find, and trust the numbers)",
+    "#1828 (R2 · Find, and trust the numbers)",
+    "#1868 (R2 · Find, and trust the numbers)",
+    "#1883 (R2 · Find, and trust the numbers)",
+    "#1170 (R3 · Change with proof)",
+    "#1011 (R6 · Run your workflow)",
+    "#1031 (R6 · Run your workflow)",
+    "#1193 (R6 · Run your workflow)",
+    "#1198 (R6 · Run your workflow)",
+    "#1236 (R6 · Run your workflow)",
+    "#1238 (R6 · Run your workflow)",
+    "#1287 (R6 · Run your workflow)",
+    "#1288 (R6 · Run your workflow)",
+    "#1301 (R6 · Run your workflow)",
+    "#1446 (R6 · Run your workflow)",
+    "#1263",
+    "#1335",
+    "#1339",
+    "#1340",
+    "#1341",
+    "#1344",
+    "#1345",
+    "#1350",
+    "#1353",
+    "#1355",
+    "#1356",
+    "#1572",
+    "#1573",
+    "#1574",
+    "#1576",
+    "#1597",
+    "#1666",
+    "#2118",
+    "#2119",
+    "#2120",
+    "#2121",
+    "#2122",
+    "#2123",
+    "#2198",
+    "#2315",
+    "#2316",
+    "#2328",
+    "#2329",
+    "#2330",
+    "#2332",
+    "#2345",
+    "#2354"
+  ],
+  "joined_issues": [
+    {
+      "issue": 16,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Hub daemon on a Unix socket"
+    },
+    {
+      "issue": 83,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The verdict in the chat, and status answered from the record"
+    },
+    {
+      "issue": 236,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Supervisor and platform sandbox: run tokens, grants, and the platform sandbox behind one seam, Seatbelt first"
+    },
+    {
+      "issue": 998,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "What the hub starts gets your login environment and its own privacy grants, and a platform refusal reads INCONCLUSIVE, never FAIL"
+    },
+    {
+      "issue": 1157,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Checkpoint: a real Claude Code session's question reaches you in the app as one notification and its card, leaves when it closes anywhere, and your answer reaches the agent once"
+    },
+    {
+      "issue": 1160,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Checkpoint: the hub killed, its lock lost, its state files damaged and its record restored while sessions work, and no check reads PASS on what was lost"
+    },
+    {
+      "issue": 1456,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A reworded reading changes a session's state: display text is used as logic"
+    },
+    {
+      "issue": 1505,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "MCP holds see a rewritten description, and a server with no tool list doesn't pass unheld"
+    },
+    {
+      "issue": 1511,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The start slice goes out with no word on how each line was known: an agent's inferred wiki claim reads like your own rule"
+    },
+    {
+      "issue": 1532,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A spent plan window on Claude Code reads as a rate limit, so nothing waits for its reset or resumes"
+    },
+    {
+      "issue": 1578,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A hub restart doesn't re-read the record, and the window never waits on the hub"
+    },
+    {
+      "issue": 1581,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Each ask says whether it needs the trusted path, and a proposal's approval does"
+    },
+    {
+      "issue": 1584,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A card whose asker is gone says so: buttons off, why, and what to do next"
+    },
+    {
+      "issue": 1591,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The app opens on a record from an older build"
+    },
+    {
+      "issue": 1689,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The hub never branches on an agent's name; each branch moves to a cap or a fact its adapter declares"
+    },
+    {
+      "issue": 1800,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A cancelled tool call stops its work and frees its lease, and every deep tool declares the shape of its result"
+    },
+    {
+      "issue": 1810,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The chat's \"needs you\" count is the open asks, the number the app shows"
+    },
+    {
+      "issue": 1812,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Every deep command fails the same way: one sentence, one next step, one exit table"
+    },
+    {
+      "issue": 1813,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Every line DeepBuild puts in a chat says who it's talking to and where the person answers"
+    },
+    {
+      "issue": 1829,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A BLOCKED promised check never asks you: promise.blocked has no row in the ask sources"
+    },
+    {
+      "issue": 1836,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A subagent's stop ends a proceed's turn in the hub's holds, so an authority call after it isn't held"
+    },
+    {
+      "issue": 1841,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "events.read builds its next page with no catch, so a read that fails as the core stops rejects unhandled"
+    },
+    {
+      "issue": 1864,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The gate reads a repo's spec checks from done.yaml on disk at each claim, not from the revision you approved"
+    },
+    {
+      "issue": 1865,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The installed hub stops on the control token alone, with no confirmation inside the hub"
+    },
+    {
+      "issue": 1866,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The hub keeps every claim's state and every presented revision for its whole life"
+    },
+    {
+      "issue": 1869,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A failed or stuck git read of what a claim changed lets an edited check count as approved"
+    },
+    {
+      "issue": 1879,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "deep hub run --safe loads no extension: the flag reaches the extension host"
+    },
+    {
+      "issue": 1880,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A reading job given to Codex runs, or is refused before it launches: today it throws at launch"
+    },
+    {
+      "issue": 1885,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Every command presents the token of the hub it calls"
+    },
+    {
+      "issue": 1886,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The review reads the route a session started on, so a proxied route counts no model"
+    },
+    {
+      "issue": 1891,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Agent names the ratchet can't see: sets, SQL and registry literals are counted, and constants come from the facts"
+    },
+    {
+      "issue": 1896,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A new check kind or work kind is one entry: the hub and proof read the kinds from their owners"
+    },
+    {
+      "issue": 1898,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "deep lease and the hub's entry load only what they use: no yaml or SQLite for a lease, no kit loaded before a check needs it"
+    },
+    {
+      "issue": 1904,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "One GitHub REST client: five copies fold into one that bounds redirects"
+    },
+    {
+      "issue": 1982,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "The hub calls the gate package's own entries where it keeps a copy, so #29's suites prove the code that runs"
+    },
+    {
+      "issue": 2066,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A rule: line in a prompt nobody typed is saved as your own rule"
+    },
+    {
+      "issue": 2067,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A pull request's claim runs no release checks, without a word, when the repo has no local main or master"
+    },
+    {
+      "issue": 2068,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A prompt that names an issue reads GitHub inside the hook chain, so every session's hooks wait on the forge"
+    },
+    {
+      "issue": 2069,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A paid check has no price source on an installed hub: prices and cost readings come only from the tests' file"
+    },
+    {
+      "issue": 2073,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "deep_run runs a spec command in a repo you haven't trusted, as you, in the live worktree"
+    },
+    {
+      "issue": 2074,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A claim whose snapshot or checkout fails is left with no verdict, and only the hub's stderr says why"
+    },
+    {
+      "issue": 2075,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A claim's slow checks never start when its fast lane is still running at the end of the stop's hold"
+    },
+    {
+      "issue": 2076,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A rule line an agent deletes is dropped with no proposal when its proposal can't be raised"
+    },
+    {
+      "issue": 2077,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "Taking a rule's removal lesson never runs a configuration eval on an installed hub, so no rule line can be removed that way"
+    },
+    {
+      "issue": 2084,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A heavy command runs unleased when its call is held for the core: the deep lease rewrite is dropped (#1015's AC1 and AC3 fail on main)"
+    },
+    {
+      "issue": 2205,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A spec check the gate can't run stands on the claim as BLOCKED: a misspelled name, an entry with no run line and a done.yaml that doesn't parse are each left out today"
+    },
+    {
+      "issue": 2218,
+      "milestone": "R1 · Prove done, and see it",
+      "title": "A spec check's runs, accept and min_tests are read, and a key the hub doesn't read is BLOCKED: today each is dropped without a word"
+    },
+    {
+      "issue": 261,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Sources and jobs over MCP: tools counted as read, inside the plug-in's grant, with the same quota, secrets and record"
+    },
+    {
+      "issue": 615,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Demo: fly into a repo's 3D city to see each part's tables, endpoints, wiki summary and a run's request steps"
+    },
+    {
+      "issue": 616,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Demo: a live 3D map of services and hosts from two plug-ins, with Read now, replay and stale values grayed"
+    },
+    {
+      "issue": 807,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Point and ask in the app: what you point at reaches a real session by its adapter's route, with the quote kept as data"
+    },
+    {
+      "issue": 1010,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Continue a task in another session, agent or model: the next attempt starts from a brief the record writes, and nothing you answered is asked again"
+    },
+    {
+      "issue": 1029,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Follow-ups reach the session that owns the thread: a comment, review or status on a task's item or PR goes to that task's live attempt, and only unowned events go through the source's own rules"
+    },
+    {
+      "issue": 1095,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "The Index: every session placed in one outline of the project's work, built from the sessions themselves, ad hoc ones included"
+    },
+    {
+      "issue": 1101,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Approved steps that can't be undone start after a short hold with Undo, and the receipt never offers Undo once they ran"
+    },
+    {
+      "issue": 1190,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Pushed sources: WebSocket and server-sent event feeds folded into recorded windows, with gaps and drops counted, never claimed lossless"
+    },
+    {
+      "issue": 1259,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Feed maps: feed.map@1 turns a feed's own field names, codes, units and place names into a piece's entity rows, with unknown codes drawn as unknown and counted, never dropped"
+    },
+    {
+      "issue": 1520,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Keep the Mac awake while DeepBuild's own work runs, and say so when it slept anyway"
+    },
+    {
+      "issue": 1533,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "What actually ran: each turn records the agent's version and effort, and a session shows when either, or the model, changed"
+    },
+    {
+      "issue": 1536,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "A service outage holds as one wait: the sessions it stopped resume together when the service answers"
+    },
+    {
+      "issue": 1649,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "An agent installed after setup is noticed, and one press sets it up"
+    },
+    {
+      "issue": 1691,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Linux budgets on a named Linux reference machine"
+    },
+    {
+      "issue": 1721,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "A patch to a document an agent drew through the live hub is refused: no shared document has this ID"
+    },
+    {
+      "issue": 1792,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "One task across more than one repo: a worktree and a claim in each, and done only when every repo's claim passes"
+    },
+    {
+      "issue": 1803,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "A helper that dies leaves a reproducer: the call that killed it is kept by hash and refused the second time"
+    },
+    {
+      "issue": 1828,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "The hub opens the extension host without its asks core, so a plug-in that needs your yes refuses instead of asking"
+    },
+    {
+      "issue": 1868,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Every canvas call reads all asks and every reading in the record, four times a second while a Terminal tab is open"
+    },
+    {
+      "issue": 1883,
+      "milestone": "R2 · Find, and trust the numbers",
+      "title": "Recording an agent's folder trust writes through a symlinked config file, not over the link"
+    },
+    {
+      "issue": 1170,
+      "milestone": "R3 · Change with proof",
+      "title": "Demo: a fix proven on your Linux machine over SSH, its session in your hub under the machine's name, gated by checks run there, and on the map"
+    },
+    {
+      "issue": 1011,
+      "milestone": "R6 · Run your workflow",
+      "title": "Work queue: a set of issues you approve once, worked in dependency order by whichever agent fits, each landing only on its own PASS"
+    },
+    {
+      "issue": 1031,
+      "milestone": "R6 · Run your workflow",
+      "title": "Fix in the background: a bug reported on a source you named is reproduced and fixed in a quiet attempt, and reaches you only as a PASS"
+    },
+    {
+      "issue": 1193,
+      "milestone": "R6 · Run your workflow",
+      "title": "News feeds as stories: feed items read once, grouped into stories, tagged with places their titles name, and briefs whose every sentence cites its stories"
+    },
+    {
+      "issue": 1198,
+      "milestone": "R6 · Run your workflow",
+      "title": "Demo: a world watch in the app, a globe that unrolls to a map with live quakes, fires, ships, aircraft and satellites, news as cited stories, and the last day replayed and exported as a film"
+    },
+    {
+      "issue": 1236,
+      "milestone": "R6 · Run your workflow",
+      "title": "Break down a goal: a separate job reads the open issues, the design and the code, and drafts the issues, a design issue first where the design is silent, which you approve once to start the run"
+    },
+    {
+      "issue": 1238,
+      "milestone": "R6 · Run your workflow",
+      "title": "Demo: one goal in the box becomes a breakdown on the Map you approve once, worked by Claude Code and Codex sessions to the end, reaching you only when it needs you"
+    },
+    {
+      "issue": 1287,
+      "milestone": "R6 · Run your workflow",
+      "title": "Brief to breakdown: every game brief field cited by an issue, build order as the tiebreak, and a field change that reruns only the issues citing it"
+    },
+    {
+      "issue": 1288,
+      "milestone": "R6 · Run your workflow",
+      "title": "Goal checks: a run from a goal or a brief locks checks on the whole result, runs them after each landing, and ends done only when they pass"
+    },
+    {
+      "issue": 1301,
+      "milestone": "R6 · Run your workflow",
+      "title": "Demo: a puzzle game made studio-style from a one-page brief, its core loop picked from played variants, built by Claude Code with role children and Codex, done only when the whole game passes, shipped in two languages and hotfixed on its release"
+    },
+    {
+      "issue": 1446,
+      "milestone": "R6 · Run your workflow",
+      "title": "Generation jobs on a model you serve: an image model on vLLM or a hosted image API, run by either agent through deep_job, each picture kept by hash"
+    },
+    {
+      "issue": 1263,
+      "milestone": null,
+      "title": "\"all done?\" typed in a real Claude Code session is answered from the record, though its transcript entry comes after the prompt hook"
+    },
+    {
+      "issue": 1335,
+      "milestone": null,
+      "title": "A standing run: issues that meet a rule you approved join on their own, so new work needs no new approval"
+    },
+    {
+      "issue": 1339,
+      "milestone": null,
+      "title": "A hub on Linux can confirm a person: pairing, links and answers work with no Secure Enclave, and the service stays up after logout"
+    },
+    {
+      "issue": 1340,
+      "milestone": null,
+      "title": "Asks reach the right person: each ask names who answers, a second person covers, the answerer is recorded and nobody is asked twice"
+    },
+    {
+      "issue": 1341,
+      "milestone": null,
+      "title": "Give it a repo link: everything is set up from that one input, you answer one card, and work starts"
+    },
+    {
+      "issue": 1344,
+      "milestone": null,
+      "title": "Demo: a repo link and a topic each become a running project, where you answer one card and then hear only what needs you"
+    },
+    {
+      "issue": 1345,
+      "milestone": null,
+      "title": "Taste calls wait for you, the work doesn't: a reversible change lands on everything else, and its calls reach you in one batch"
+    },
+    {
+      "issue": 1350,
+      "milestone": null,
+      "title": "Demo: two people who never touch a terminal get a trip plan and a client's monthly report from one sentence each, and see only what needs them"
+    },
+    {
+      "issue": 1353,
+      "milestone": null,
+      "title": "A hub of your own in the cloud: one sign-up makes it, it sleeps when idle, and you can take everything with you or delete it"
+    },
+    {
+      "issue": 1355,
+      "milestone": null,
+      "title": "Windows: the hub, the app, the sandbox and first run, so a Windows PC works like a Mac"
+    },
+    {
+      "issue": 1356,
+      "milestone": null,
+      "title": "Demo: with only a phone, a person signs up, says what they want and gets the finished result"
+    },
+    {
+      "issue": 1572,
+      "milestone": null,
+      "title": "Pair your phone in a minute: a code on the Mac, a passkey on the phone, and one list of what can answer for you"
+    },
+    {
+      "issue": 1573,
+      "milestone": null,
+      "title": "Your phone reaches your hub at home and away: ordered routes, the hub proves who it is first, and the failed hop is named"
+    },
+    {
+      "issue": 1574,
+      "milestone": null,
+      "title": "A locked phone buzzes when something needs you: web push from your own hub, with no service of ours"
+    },
+    {
+      "issue": 1576,
+      "milestone": null,
+      "title": "Reads a phone can afford: open items by default, a window on the rest, and budgets in bytes, frames and queries"
+    },
+    {
+      "issue": 1597,
+      "milestone": null,
+      "title": "Demo: away from your desk, your phone buzzes, you read what happened, answer, steer and stop"
+    },
+    {
+      "issue": 1666,
+      "milestone": null,
+      "title": "A started session commits in its own worktree, and the checkout and other worktrees stay closed to it"
+    },
+    {
+      "issue": 2118,
+      "milestone": null,
+      "title": "Claims and checks in the hub: a check that never started, a carried failure and a Closes check each end in the right verdict"
+    },
+    {
+      "issue": 2119,
+      "milestone": null,
+      "title": "Setup and doctor keep what a running session wrote, and name the home and program they really use"
+    },
+    {
+      "issue": 2120,
+      "milestone": null,
+      "title": "Push holds, starts and runs: a forced push, an armed merge with no number and two starts at once are each held to their rule"
+    },
+    {
+      "issue": 2121,
+      "milestone": null,
+      "title": "Agents sync, skill updates and their undo leave your files as the plan said"
+    },
+    {
+      "issue": 2122,
+      "milestone": null,
+      "title": "Products, heavy leases, the canvas core and waits: five cases the hub gets wrong after a restart or a failure"
+    },
+    {
+      "issue": 2123,
+      "milestone": null,
+      "title": "Wiki builds, channel sends, library fetches, review threads and disputes each finish or say why not"
+    },
+    {
+      "issue": 2198,
+      "milestone": null,
+      "title": "Three refusals an agent reads say the right thing: a missing setting, a blocked stack and a wrong form"
+    },
+    {
+      "issue": 2315,
+      "milestone": null,
+      "title": "Stacks resolves its runtime provider through ExtensionHost instead of hardcoding env-local in core.ts"
+    },
+    {
+      "issue": 2316,
+      "milestone": null,
+      "title": "buying folds only card_rule.set with readSince, and archive's session copy locates the session without walking every transcript"
+    },
+    {
+      "issue": 2328,
+      "milestone": null,
+      "title": "A leased command starts sooner: deep lease and the hub read start times together, not one ps after another"
+    },
+    {
+      "issue": 2329,
+      "milestone": null,
+      "title": "A compaction in the process its session holds starts no ps: a session's start runs two today"
+    },
+    {
+      "issue": 2330,
+      "milestone": null,
+      "title": "deep hub start and stop return when the hub is ready or gone, not at the next 100 ms step"
+    },
+    {
+      "issue": 2332,
+      "milestone": null,
+      "title": "The hub is ready sooner: what its core loads and runs before its first held hook, measured and cut"
+    },
+    {
+      "issue": 2345,
+      "milestone": null,
+      "title": "The proof #1687 left unrun: the full affected run, two twins and the loader review"
+    },
+    {
+      "issue": 2354,
+      "milestone": null,
+      "title": "Clients send the request ID and the view: the app, deep and the replica retry a write once and never undo a newer one"
+    }
+  ],
+  "stays_out": [
+    {
+      "issue": 1358,
+      "why": "#1358 has no design link"
+    },
+    {
+      "issue": 1361,
+      "why": "#1361 has no acceptance criteria"
+    },
+    {
+      "issue": 1411,
+      "why": "#1411 has no design link"
+    },
+    {
+      "issue": 1558,
+      "why": "#1558 has no design link"
+    },
+    {
+      "issue": 1712,
+      "why": "#1712 has no design link"
+    },
+    {
+      "issue": 1714,
+      "why": "#1714 has no design link"
+    },
+    {
+      "issue": 1715,
+      "why": "#1715 has no design link"
+    },
+    {
+      "issue": 1716,
+      "why": "#1716 has no design link"
+    },
+    {
+      "issue": 1726,
+      "why": "#1726 has no design link"
+    },
+    {
+      "issue": 2171,
+      "why": "#2171 has no design link"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+ "hitscan": {
+  "steps": 180,
+  "first_step_with_hits": 1,
+  "wall_hits": 1393,
+  "wall_face_error_max_m": 0.0000013987223308475905,
+  "pillar_hits": 537,
+  "other_hits": 79,
+  "fuel_step_1": 129838,
+  "fuel_step_0": 1001,
+  "traps": []
+ },
+ "mirror": {
+  "steps": 180,
+  "elements_compared": 71600,
+  "elements_differing": 0,
+  "list_counts": {
+   "1": 171,
+   "2": 8
+  },
+  "traps": []
+ }
+}
