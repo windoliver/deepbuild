@@ -1,0 +1,807 @@
+{
+  "id": "explain.linear_map",
+  "version": "1.0",
+  "title": "Linear map",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A linear map shown on its plane: a still grey plane under a moving one in a group warp, i and j as arrows whose ends follow M e, vectors with labels riding their tips, a unit square whose area readout is |det M| from a driver, and ghosts held at the old tips. 2D stage only.",
+  "inputs": {
+    "cues": {
+      "type": "records",
+      "default": [],
+      "about": "the cue list: a cues@1 list whose cues also carry text, sub and data"
+    },
+    "stage": {
+      "type": "choice",
+      "options": [
+        "2d"
+      ],
+      "default": "2d",
+      "about": "the stage the cues play on: 2d, or 3d through a perspective camera"
+    },
+    "look": {
+      "type": "choice",
+      "options": [
+        "clean",
+        "chalk",
+        "dark_math",
+        "notebook_pencil"
+      ],
+      "default": "dark_math",
+      "about": "the shipped look the film is drawn in; its type sets the words' face"
+    },
+    "palette": {
+      "type": "choice",
+      "options": [
+        "accent",
+        "ink",
+        "math",
+        "muted"
+      ],
+      "default": "accent",
+      "about": "the role the main words take"
+    },
+    "plane": {
+      "type": "record",
+      "default": {
+        "x": [
+          -7,
+          7
+        ],
+        "y": [
+          -4,
+          4
+        ],
+        "background": true,
+        "coordinates": false
+      },
+      "about": "the plane: its x and y ranges in plane units, whether the still grey plane shows beneath, and whether vectors carry their coordinates"
+    },
+    "basis": {
+      "type": "bool",
+      "default": true,
+      "about": "whether i and j show as arrows"
+    },
+    "vectors": {
+      "type": "records",
+      "default": [],
+      "about": "up to eight vectors: {id, coords: [x, y], role, label}"
+    },
+    "square": {
+      "type": "bool",
+      "default": false,
+      "about": "whether the unit square and its area readout show"
+    },
+    "ghosts": {
+      "type": "bool",
+      "default": false,
+      "about": "whether each map leaves the old tips as arrows at 0.3 opacity"
+    }
+  },
+  "let": {
+    "face": "look == dark_math ? math : body",
+    "x": "x",
+    "y": "y"
+  },
+  "steps": {
+    "cam": {
+      "op": "item",
+      "kind": "camera@1",
+      "let": {
+        "eye": [
+          320.0,
+          180.0,
+          879.3
+        ]
+      },
+      "params": {
+        "projection": "stage == 3d ? perspective : orthographic",
+        "target": [
+          320.0,
+          180.0,
+          0
+        ],
+        "position": "stage == 3d ? eye : null",
+        "fov": 40,
+        "view_width": "stage == 3d ? null : 640"
+      }
+    },
+    "shot": {
+      "op": "shot",
+      "params": {
+        "start": 0,
+        "camera": "id(instance, cam)",
+        "move": "hold",
+        "target": [
+          320.0,
+          180.0,
+          0
+        ],
+        "view_width": 640
+      }
+    },
+    "still": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "has(plane, background) ? plane.background : 1",
+      "params": {
+        "fn": {
+          "grid": {
+            "x": [
+              "320.0 + 40.0 * plane.x[0]",
+              "320.0 + 40.0 * plane.x[1]",
+              40.0
+            ],
+            "y": [
+              "180.0 - 40.0 * plane.y[1]",
+              "180.0 - 40.0 * plane.y[0]",
+              40.0
+            ]
+          }
+        },
+        "paint": {
+          "stroke": {
+            "role": "muted",
+            "width": 1
+          }
+        }
+      },
+      "adjust": {
+        "opacity": 0.4
+      }
+    },
+    "row0": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {},
+      "at": {
+        "pos": [
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    "row1": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {},
+      "at": {
+        "pos": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    "bend": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {},
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "moving": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {
+        "warp": {
+          "map": {
+            "x": "\\a * x + b * y",
+            "y": "\\c * x + d * y"
+          },
+          "vars": {
+            "a": "path(items, id(instance, row0), at, pos, 0)",
+            "b": "path(items, id(instance, row0), at, pos, 1)",
+            "c": "path(items, id(instance, row1), at, pos, 0)",
+            "d": "path(items, id(instance, row1), at, pos, 1)",
+            "u": "path(items, id(instance, bend), at, pos, 0)"
+          },
+          "plane": {
+            "origin": [
+              320.0,
+              180.0
+            ],
+            "unit": 40.0,
+            "y": "up"
+          }
+        }
+      }
+    },
+    "grid": {
+      "op": "mark",
+      "kind": "path@1",
+      "parent": "id(instance, moving)",
+      "params": {
+        "fn": {
+          "grid": {
+            "x": [
+              "320.0 + 40.0 * plane.x[0]",
+              "320.0 + 40.0 * plane.x[1]",
+              40.0
+            ],
+            "y": [
+              "180.0 - 40.0 * plane.y[1]",
+              "180.0 - 40.0 * plane.y[0]",
+              40.0
+            ]
+          }
+        },
+        "paint": {
+          "stroke": {
+            "role": "accent",
+            "width": 1
+          }
+        }
+      }
+    },
+    "square": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "square",
+      "parent": "id(instance, moving)",
+      "params": {
+        "d": "polyline(320.0, 180.0, 360.0, 180.0, 360.0, 140.0, 320.0, 140.0, 320.0, 180.0)",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        }
+      }
+    },
+    "i_hat": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "basis",
+      "parent": "id(instance, moving)",
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (1), 180.0 - 40.0 * (0))",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 3
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "j_hat": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "basis",
+      "parent": "id(instance, moving)",
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (0), 180.0 - 40.0 * (1))",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 3
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "vec": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "vectors",
+        "as": "v"
+      },
+      "parent": "id(instance, moving)",
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (v.coords[0]), 180.0 - 40.0 * (v.coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 3
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "label": {
+      "op": "mark",
+      "kind": "text@1",
+      "repeat": {
+        "over": "vectors",
+        "as": "v"
+      },
+      "parent": "id(instance, moving)",
+      "params": {
+        "text": "v.label",
+        "font": "face",
+        "size": 18,
+        "paint": {
+          "fill": {
+            "role": "palette"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "320.0 + 40.0 * (v.coords[0] + 0.15)",
+          "180.0 - 40.0 * (v.coords[1] + 0.45)",
+          0
+        ]
+      }
+    },
+    "coord": {
+      "op": "mark",
+      "kind": "text@1",
+      "repeat": {
+        "over": "vectors",
+        "as": "v"
+      },
+      "when": "has(plane, coordinates) ? plane.coordinates : 0",
+      "params": {
+        "text": "pair(v.coords[0], v.coords[1])",
+        "font": "math",
+        "size": 14,
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "320.0 + 40.0 * (v.coords[0] + 0.2)",
+          "180.0 - 40.0 * (v.coords[1] - 0.1)",
+          0
+        ]
+      }
+    },
+    "steps": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "vectors",
+        "as": "v"
+      },
+      "when": "has(plane, coordinates) ? plane.coordinates : 0",
+      "parent": "id(instance, moving)",
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * v.coords[0], 180.0, 320.0 + 40.0 * v.coords[0], 180.0 - 40.0 * v.coords[1])",
+        "paint": {
+          "stroke": {
+            "role": "muted",
+            "width": 1.5
+          }
+        }
+      }
+    },
+    "area": {
+      "op": "mark",
+      "kind": "text@1",
+      "when": "square",
+      "params": {
+        "text": {
+          "counter": {
+            "source": "\\data/area",
+            "format": {
+              "precision": 2
+            }
+          }
+        },
+        "data": {
+          "area": 1
+        },
+        "font": "face",
+        "size": 20,
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          24,
+          24,
+          0
+        ]
+      }
+    },
+    "det": {
+      "op": "driver",
+      "when": "square",
+      "params": {
+        "target": "path(items, id(instance, area), params, data, area)",
+        "expr": "\\abs(a * d - b * c)",
+        "vars": {
+          "a": "path(items, id(instance, row0), at, pos, 0)",
+          "b": "path(items, id(instance, row0), at, pos, 1)",
+          "c": "path(items, id(instance, row1), at, pos, 0)",
+          "d": "path(items, id(instance, row1), at, pos, 1)"
+        }
+      }
+    },
+    "ghost0": {
+      "op": "item",
+      "kind": "group@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "params": {},
+      "at": {
+        "pos": [
+          1,
+          0,
+          0
+        ]
+      }
+    },
+    "ghost1": {
+      "op": "item",
+      "kind": "group@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "params": {},
+      "at": {
+        "pos": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    "held": {
+      "op": "item",
+      "kind": "group@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "params": {
+        "warp": {
+          "map": {
+            "x": "\\a * x + b * y",
+            "y": "\\c * x + d * y"
+          },
+          "vars": {
+            "a": "path(items, id(instance, ghost0, i), at, pos, 0)",
+            "b": "path(items, id(instance, ghost0, i), at, pos, 1)",
+            "c": "path(items, id(instance, ghost1, i), at, pos, 0)",
+            "d": "path(items, id(instance, ghost1, i), at, pos, 1)"
+          },
+          "plane": {
+            "origin": [
+              320.0,
+              180.0
+            ],
+            "unit": 40.0,
+            "y": "up"
+          }
+        }
+      }
+    },
+    "ghost_i": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "basis && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (1), 180.0 - 40.0 * (0))",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_j": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "basis && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (0), 180.0 - 40.0 * (1))",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "cues": {
+      "op": "item",
+      "kind": "cues@1",
+      "params": {
+        "cues": {
+          "repeat": {
+            "over": "cues",
+            "as": "c",
+            "of": {
+              "id": "c.id",
+              "kind": "has(c, kind) ? c.kind : null",
+              "when": "has(c, when) ? c.when : after",
+              "gap": "has(c, gap) ? c.gap : 0",
+              "span": "has(c, span) ? c.span : 705600000",
+              "targets": [
+                "id(instance, row0)",
+                "id(instance, row1)"
+              ],
+              "params": {
+                "matrix": [
+                  [
+                    "has(c, params) ? (has(c.params, matrix) ? c.params.matrix[0][0] : 1) : 1",
+                    "has(c, params) ? (has(c.params, matrix) ? c.params.matrix[0][1] : 0) : 0"
+                  ],
+                  [
+                    "has(c, params) ? (has(c.params, matrix) ? c.params.matrix[1][0] : 0) : 0",
+                    "has(c, params) ? (has(c.params, matrix) ? c.params.matrix[1][1] : 1) : 1"
+                  ]
+                ],
+                "x": "has(c, params) ? (has(c.params, x) ? c.params.x : x) : x",
+                "y": "has(c, params) ? (has(c.params, y) ? c.params.y : y) : y",
+                "text": "has(c, params) ? (has(c.params, text) ? c.params.text : null) : null",
+                "vec": "has(c, params) ? (has(c.params, id) ? id(instance, vec, find(vectors, id, c.params.id)) : id(instance, area)) : id(instance, area)",
+                "coord": "has(c, params) ? (has(c.params, id) ? id(instance, coord, find(vectors, id, c.params.id)) : id(instance, area)) : id(instance, area)",
+                "path": "has(c, params) ? (has(c.params, id) ? id(instance, steps, find(vectors, id, c.params.id)) : id(instance, area)) : id(instance, area)",
+                "label": "has(c, params) ? (has(c.params, id) ? id(instance, label, find(vectors, id, c.params.id)) : id(instance, area)) : id(instance, area)",
+                "bend": "id(instance, bend)",
+                "moving": "id(instance, moving)",
+                "g0": "has(c, params) ? (has(c.params, matrix) ? (ghosts ? id(instance, ghost0, i) : none) : none) : none",
+                "g1": "has(c, params) ? (has(c.params, matrix) ? (ghosts ? id(instance, ghost1, i) : none) : none) : none"
+              }
+            }
+          }
+        }
+      }
+    },
+    "ghost_v0": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 0 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[0].coords[0]), 180.0 - 40.0 * (vectors[0].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v1": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 1 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[1].coords[0]), 180.0 - 40.0 * (vectors[1].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v2": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 2 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[2].coords[0]), 180.0 - 40.0 * (vectors[2].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v3": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 3 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[3].coords[0]), 180.0 - 40.0 * (vectors[3].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v4": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 4 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[4].coords[0]), 180.0 - 40.0 * (vectors[4].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v5": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 5 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[5].coords[0]), 180.0 - 40.0 * (vectors[5].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v6": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 6 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[6].coords[0]), 180.0 - 40.0 * (vectors[6].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    },
+    "ghost_v7": {
+      "op": "mark",
+      "kind": "path@1",
+      "repeat": {
+        "over": "cues",
+        "as": "c"
+      },
+      "when": "len(vectors) > 7 && ghosts && (has(c, params) ? (has(c.params, matrix) ? 1 : 0) : 0) == 1",
+      "parent": "id(instance, held, i)",
+      "adjust": {
+        "opacity": 0.3
+      },
+      "params": {
+        "d": "polyline(320.0, 180.0, 320.0 + 40.0 * (vectors[7].coords[0]), 180.0 - 40.0 * (vectors[7].coords[1]))",
+        "paint": {
+          "stroke": {
+            "role": "palette",
+            "width": 2
+          }
+        },
+        "ends": {
+          "end": "arrow",
+          "size": 3
+        }
+      }
+    }
+  }
+}

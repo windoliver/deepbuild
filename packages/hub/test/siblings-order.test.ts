@@ -24,7 +24,7 @@ it("counts an edit whose PostToolUse came before its PreToolUse, and tells the o
 
   const siblings = new Siblings({
     raw: async () => [], append: async () => undefined, ask: async () => 'ask', wake: async () => false,
-    acking: () => undefined, queue: (work) => void work(), now: () => Date.now(),
+    acking: () => undefined, queue: (work) => void work(), now: () => Date.now(), over: () => false,
   });
   let n = 0;
   const meta = (session: string, cwd: string, event: string, toolUse: string, extra: Partial<HookMeta> = {}): HookMeta =>

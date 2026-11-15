@@ -17,16 +17,15 @@ import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
-import { adapterOf, registry } from './hookmap.js';
-import type { Part } from './context-fit.js';
+import { registry } from './hookmap.js';
+import { agentReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, warnings, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
 import { dropTestSettings, installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
-import { heavyDenial } from './heavy.js';
 import { processHealth } from './process-health.js';
-import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
+import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
@@ -66,7 +65,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -153,64 +152,6 @@ function noticed<C extends object>(conn: C & { write(value: Obj): void }, id: un
     get: (target, key) => (key === 'write' ? write : Reflect.get(target, key, target)),
     set: (target, key, value) => Reflect.set(target, key, value, target),
   });
-}
-const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
-/** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
-const warnings = (ruled: string): string[] =>
-  ruled === EMPTY_REPLY ? [] : [(JSON.parse(String((JSON.parse(ruled) as Obj).stdout)) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext];
-/**
- * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
- * as deep-hook's own denials are; context goes as Claude Code reads it, after a warn entry's words, each block
- * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
- * with no context, gets it as it is.
- */
-function agentReply(agent: string, reply: ExtensionReply, ruled: string, fitted?: string): string {
-  if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
-  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
-  const additionalContext = fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n');
-  return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
-}
-/** A warn entry's words, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
-const contextParts = (reply: ExtensionReply, ruled: string): Part[] =>
-  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
-/**
- * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
- * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
- * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
- */
-function coreReplyLine(agent: string, event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
-  const out: Record<string, unknown> = {};
-  // Context goes as the agent's adapter gives it the model (#1296); one that gives none at this event sends nothing.
-  const adapter = adapterOf(agent);
-  const given = reply.context && !reply.block && adapter?.contextReply ? adapter.contextReply(event, reply.context) : undefined;
-  if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
-  else if (given) {
-    const json = ((): unknown => { try { return JSON.parse(given.stdout); } catch { return undefined; } })();
-    if (!isObj(json)) return line(given);
-    Object.assign(out, json);
-  }
-  else if (reply.context && !adapter?.contextReply) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
-  // A session's start names the ticker file whose change fires its FileChanged hook: the route a line takes into the
-  // terminal while a call still runs (#120).
-  if (watchPaths?.length && !reply.block) out.hookSpecificOutput = { hookEventName: event, ...(isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : {}), watchPaths };
-  if (reply.message) out.systemMessage = reply.message;
-  return Object.keys(out).length ? line({ exit: 0, stdout: JSON.stringify(out), stderr: '' }) : EMPTY_REPLY;
-}
-/**
- * A hook's reply with what the waits add (#120): the one line the chat shows, context for the agent, and a rewritten
- * input carrying a deadline, never a decision. A reply that already denies the call stands as it is.
- */
-function withWaits(ruled: string, event: string, wait: WaitReply): string {
-  if (!wait.message && !wait.context && !wait.updatedInput) return ruled;
-  const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
-  if (reply.exit !== 0) return ruled;
-  const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
-  const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: event };
-  if (wait.context) specific.additionalContext = [specific.additionalContext, wait.context].filter(Boolean).join('\n');
-  if (wait.updatedInput) specific.updatedInput = wait.updatedInput;
-  if (wait.context || wait.updatedInput) out.hookSpecificOutput = specific;
-  if (wait.message) out.systemMessage = [out.systemMessage, wait.message].filter(Boolean).join('\n');
-  return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
 }
 /** A file's identity, size and times, so a change is read once, one to its mode alone included; 'none' while it is missing. */
 const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}`; } catch { return 'none'; } };
@@ -587,22 +528,7 @@ class Hub {
    */
   private leased(meta: HookMeta, ruled: string): string {
     if (meta.event !== 'PreToolUse' || this.off) return ruled;
-    const command = typeof meta.call?.input.command === 'string' ? meta.call.input.command : undefined;
-    const rewrites = this.rewrites(meta.agent);
-    // The planted wrong program for AC2 denies the leased form too, so the agent's retry is denied again.
-    const retried = this.plant === 'denies-every-retry' && !rewrites && command !== undefined && /^\s*deep lease\b/.test(command);
-    if ((!meta.heavy && !retried) || command === undefined || this.plant === 'runs-matched-as-written') return ruled;
-    const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
-    if (reply.exit !== 0) return ruled;
-    const form = retried ? command : meta.heavy!.form;
-    if (!rewrites) {
-      return line({ exit: 2, stdout: '', stderr: `${heavyDenial(command, form, meta.heavy?.name ?? 'deep lease')}\n` });
-    }
-    const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
-    const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: 'PreToolUse' };
-    specific.updatedInput = { ...meta.call!.input, ...(isObj(specific.updatedInput) ? specific.updatedInput : {}), command: form };
-    out.hookSpecificOutput = specific;
-    return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
+    return heavyReply(meta, ruled, this.rewrites(meta.agent), this.plant);
   }
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
@@ -898,7 +824,7 @@ class Hub {
     if (prompted) void this.permissionReply(conn, meta, hold!);
     else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
     else if (before) void this.extensionReply(conn, meta, before.data, hold!, ruled);
-    else if (held !== null) void this.coreReply(conn, meta, held);
+    else if (held !== null) void this.coreReply(conn, meta, held, ruled);
   }
 
   /**
@@ -1122,8 +1048,8 @@ class Hub {
     if (!file || !existsSync(file)) return;
     await new Promise((done) => setTimeout(done, Math.max(0, hold + 1000 - Date.now())));
   }
-  /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
-  private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
+  /** The core's reply to a held hook, written by its hold, with the settled reply kept even if the core can't answer. */
+  private async coreReply(conn: Conn, meta: HookMeta, hold: number, ruled: string): Promise<void> {
     // A deep-hook that gave up on the hub before reading its reply has let the hook through: nothing is held for it (#27).
     let replied = false;
     conn.sock.once('close', () => { if (!replied) this.core.post({ op: 'hook-gone', id: meta.id, session: meta.session }); });
@@ -1139,7 +1065,7 @@ class Hub {
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
-    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, watch) : EMPTY_REPLY);
+    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, ruled, watch) : ruled);
   }
 
   /**

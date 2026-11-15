@@ -1,0 +1,15 @@
+{
+  "issue": 542,
+  "criterion": "#542.5cccb17f",
+  "verdict": "looks_right",
+  "who": "Claude (the implementing session), on the owner's delegation in this session: \"validate for me and close the gaps\"",
+  "when": "2026-11-15T06:40:56.000Z",
+  "screenshots": {
+    "list-0.png": "e0822b260ed3fd7b43f85bdaf0da2c69a883ce344b10099a1da046d09f25a5d7",
+    "list-1.png": "40622dc668c848ae6023698f48ad6bfdf7a21700febffa63152d0cb4cdcce1d9",
+    "list-3.png": "9e5692fbbf748f7018e57951519fd523aad71e7f673e75e177f7f2257ab3cefa",
+    "text-program.png": "8982c8031b9d1a5d5b471f7487db8918f6e13f0e2d0c6db83c950a8f1a15e3ea",
+    "scroll-steps.apng": "98128082b9009baa4d6c4dd31b3a1fcdea0c2a577bdc8e58890176ecddd207a9"
+  },
+  "note": "Checked by pixel, then by eye. list-0, list-1, list-3: the ten rows in the list's area are rows p to p + 9 (tile (p + k) mod 4: yellow, green, blue, red), each solid from the area's left to its right edge, for p = 0, 1 and 3. text-program: the list at 3, and the focused field (an accent outline) in the page's right half holding the three program lines in the mono face, with no ink in that field before the commit. scroll-steps.apng: four frames, the list at 0, 1, 2 and 3."
+}

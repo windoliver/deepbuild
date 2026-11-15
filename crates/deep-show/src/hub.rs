@@ -207,6 +207,10 @@ pub enum Planted {
     ExpandsInHashOrder,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
+    /// #1959: the loader takes one saved major for the whole document.
+    MigrationOneMajor,
+    /// #1959: the migrator at load reads a param set to 0 as left out.
+    MigrationZeroAsLeftOut,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -372,6 +376,8 @@ pub enum Planted {
     TargetWritesBakedChannel,
     /// #501: media fills export.target@1's `png` with a reader that is its own writer.
     TargetReaderIsWriter,
+    /// #2085: effects sealed with an operator check that trusts a compute write's index.
+    TrustsWriteIndex,
     /// #501: the mixer's Linux build adds one 16-bit step to every sample.
     MixerLinuxOneStep,
     /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
@@ -732,9 +738,22 @@ pub enum Call {
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
+    /// #225: a vector field's integrated streams, each its points from its start.
+    Streams {
+        doc: String,
+        item: String,
+    },
+    /// #225: a vector field's streams, arrows and flow windows at its frame.
+    VectorField {
+        doc: String,
+        item: String,
+        t: Option<EvalTime>,
+    },
     Path {
         doc: String,
         item: String,
+        /// #223: the frame it is drawn at; an item under a warp draws at its frame.
+        t: Option<EvalTime>,
     },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
@@ -1162,6 +1181,8 @@ pub struct Hub<'a> {
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
     pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
+    /// #506: each inset's picture its 3D frames drew last, by key.
+    pub(crate) inset_pictures: BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
@@ -1337,6 +1358,8 @@ impl<'a> Hub<'a> {
             rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
             kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
+            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
@@ -1361,6 +1384,7 @@ impl<'a> Hub<'a> {
             session_state: BTreeMap::new(),
             tracks: BTreeMap::new(),
             forms: BTreeMap::new(),
+            inset_pictures: BTreeMap::new(),
             renderer: Renderer::new().turning_about_corner(
                 scenario.module_planted.as_deref() == Some("turns_about_corner"),
             ),
@@ -1418,8 +1442,9 @@ impl<'a> Hub<'a> {
             shapings: HashMap::new(),
         };
         deep_text::cache::record();
-        // The store's packs, each checked once here and never on a document's open.
-        for (id, dir) in &scenario.packs {
+        // The store's packs, each checked once here and never on a document's open: a pack the
+        // others require first, so its kit finds what it builds on (#142).
+        for (id, dir) in required_first(&scenario.packs) {
             hub.install_pack(id, dir, None);
         }
         hub
@@ -1578,17 +1603,10 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        // #493: a shot writes the camera's pose the 3D frame is drawn through.
-        let posed = crate::film::posed(doc, t);
-        let doc = posed.as_ref().unwrap_or(doc);
-        // #1729: its assets and maps from the evidence store, as render-back reads them.
-        let (scene, look) = self.evaluate3d(doc, t, size)?;
-        let rgba = self.gpu3().and_then(|g| g.draw(&scene, &look));
-        let rgba = rgba.ok_or_else(|| Unfit {
-            code: "unsupported_platform",
-            path: String::new(),
-        })?;
-        Ok((rgba, size, scene.boxes()))
+        // #493: a shot writes the camera's pose the 3D frame is drawn through; #1729: its assets
+        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs).
+        self.painted3d(doc, t, size)
+            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -1931,7 +1949,31 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
-            Call::Path { doc, item } => match self.current(doc) {
+            Call::Streams { doc, item } => {
+                let reply = self.vector_field(doc, item, &EvalTime::Flicks(0));
+                match reply["outcome"].as_str() {
+                    Some("answered") => json!({
+                        "item": item,
+                        "streams": reply["streams"].as_array().into_iter().flatten()
+                            .map(|s| json!({"id": s["id"], "points": s["points"]}))
+                            .collect::<Vec<_>>(),
+                    }),
+                    _ => reply,
+                }
+            }
+            Call::VectorField { doc, item, t } => {
+                let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                self.vector_field(doc, item, &t)
+            }
+            Call::Path { doc, item, t } => match self.current(doc) {
+                // #142: a derived item answers as the frame draws it, as a warped one does.
+                Some(row)
+                    if crate::warps::under_warp(&row.doc, item)
+                        || row.doc.pointer(&format!("/items/{item}")).is_none() =>
+                {
+                    let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                    self.warped_path(doc, item, &t)
+                }
                 Some(row) => crate::function::path_reply(&row.doc, item),
                 None => json!({"outcome": "refused", "code": "no_revision"}),
             },
@@ -2474,6 +2516,9 @@ impl<'a> Hub<'a> {
             // #466: an operator transition's pass, checked before any frame draws it.
             issues.extend(crate::film_operator::check(form));
             issues.extend(deep_canvas_input::point::check(form));
+            // #542: text and scroll controls' fields.
+            issues.extend(deep_canvas_input::text::check(form));
+            issues.extend(deep_canvas_input::scroll::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {
@@ -3044,4 +3089,44 @@ fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map
         }
     }
     inputs
+}
+
+/// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
+/// the order offered otherwise (#142).
+fn required_first(packs: &[(String, PathBuf)]) -> Vec<&(String, PathBuf)> {
+    let read = |dir: &PathBuf| -> (String, Vec<String>) {
+        let manifest: Value = std::fs::read(dir.join("pack.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or(Value::Null);
+        let name = manifest["name"].as_str().unwrap_or("").to_string();
+        let needs = manifest["requires"]["packs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|t| t.rsplit_once('@'))
+            .map(|(n, _)| n.rsplit_once('/').map_or(n, |(_, n)| n).to_string())
+            .collect();
+        (name, needs)
+    };
+    let read: Vec<(String, Vec<String>)> = packs.iter().map(|(_, dir)| read(dir)).collect();
+    let mut out: Vec<usize> = Vec::new();
+    fn visit(i: usize, read: &[(String, Vec<String>)], out: &mut Vec<usize>, depth: usize) {
+        if out.contains(&i) || depth > read.len() {
+            return;
+        }
+        for need in &read[i].1 {
+            if let Some(j) = read.iter().position(|(n, _)| n == need) {
+                visit(j, read, out, depth + 1);
+            }
+        }
+        if !out.contains(&i) {
+            out.push(i);
+        }
+    }
+    for i in 0..packs.len() {
+        visit(i, &read, &mut out, 0);
+    }
+    out.into_iter().map(|i| &packs[i]).collect()
 }

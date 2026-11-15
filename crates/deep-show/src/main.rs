@@ -20,6 +20,7 @@ mod evidence;
 mod export;
 mod extended;
 mod familiar;
+mod fields;
 mod caption_design;
 mod film;
 mod film_operator;
@@ -48,7 +49,10 @@ mod maps;
 mod media;
 mod mixdown;
 mod modes;
+#[cfg(target_os = "macos")]
+mod momentum;
 mod narration;
+mod over3d;
 mod net;
 mod packs;
 mod physics;
@@ -102,6 +106,7 @@ mod timings;
 mod twins;
 mod verdict;
 mod video;
+mod warps;
 mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -646,10 +651,26 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "registries" => return Some(Call::Registries),
         // #490: the closed function list's point and interval forms, and their search.
         "fn" => return Some(Call::Fn(Box::new(c.clone()))),
+        // #225: a vector field's integrated streams alone.
+        "streams" => {
+            return Some(Call::Streams {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
+        // #225: a vector field's streams, arrows and flow windows at t.
+        "vector_field" => {
+            return Some(Call::VectorField {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+                t: optional(c.get("t"), |t| crate::time::eval_time(Some(t)))?,
+            })
+        }
         "path" => {
             return Some(Call::Path {
                 doc: doc()?,
                 item: c.get("item")?.as_str()?.to_string(),
+                t: optional(c.get("t"), |t| crate::time::eval_time(Some(t)))?,
             })
         }
         // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path. It arrives on
@@ -1293,11 +1314,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_input::rows::PLANTED.contains(p)
                 // #540's in the input module's point control and scene3d's pointer math.
                 || deep_canvas_input::point::PLANTED.contains(p)
+                // #542's in the text field and the scroll control's router.
+                || deep_canvas_input::text::PLANTED.contains(p)
+                || deep_canvas_input::scroll::PLANTED.contains(p)
                 || deep_canvas_scene3d::pointer::PLANTED.contains(p)
                 // #538's in the cells, text and motion modules.
                 || *p == deep_canvas_cells::module::GRID_WRAPS_INDEX
                 || deep_canvas_marks::copy::PLANTED.contains(p)
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
+                // #223's in the marks2d module's warp.
+                || deep_canvas_marks::warp::PLANTED.contains(p)
+                // #225's in the data module's integrator.
+                || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
@@ -1371,6 +1399,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "counts_declared_as_reached" => Planted::CountsDeclaredAsReached,
                 "skips_snapshot_comparison" => Planted::SkipsSnapshotComparison,
                 "checks_expected_code_only" => Planted::ChecksExpectedCodeOnly,
+                "trusts_write_index" => Planted::TrustsWriteIndex,
                 "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
                 "every_digest_positive" => Planted::EveryDigestPositive,
                 "checks_share_only" => Planted::ChecksShareOnly,
@@ -1423,6 +1452,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
+                "migration_one_major_per_document" => Planted::MigrationOneMajor,
+                "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1726,6 +1757,25 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     if scenario.planted.is_none() {
         scenario.planted = startup.run_planted;
     }
+    // #2085: a scenario under effects' planted check runs on a set sealed with that check.
+    let resealed;
+    let startup = if scenario.planted == Some(Planted::TrustsWriteIndex)
+        && startup.run_planted != scenario.planted
+    {
+        let planted = Some(StartPlanted::Run(Planted::TrustsWriteIndex));
+        match seal(planted, startup.sealed.costs.clone()) {
+            Ok(s) => {
+                resealed = Startup {
+                    cache: startup.cache.clone(),
+                    ..s
+                };
+                &resealed
+            }
+            Err(_) => return bad_input(),
+        }
+    } else {
+        startup
+    };
     match command {
         "run" => {
             let replies = jobs::around(&scenario, startup, |background| {
@@ -1991,6 +2041,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-logic",
     feature = "test-data-reads-logic-array",
     feature = "test-leave-out-data",
+    feature = "test-follow-stream-in-motion",
     feature = "test-leave-out-sandbox",
     feature = "test-mesh-item",
     feature = "test-prog-registry",
@@ -2134,9 +2185,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else {
             deep_logic::module::module()
         };
-        // A build without physics refuses the logic items that need it (#533).
+        // A build without physics refuses the logic items that need it (#533); one with it binds
+        // physics.cast@1 for the items that ask it between steps (#213).
         out.push(match physics::module() {
-            Some(_) => logic,
+            Some(_) => {
+                deep_logic::module::bind_services(physics::cast::bound);
+                logic
+            }
             None => deep_logic::module::without_physics(logic),
         });
     }
@@ -2300,6 +2355,12 @@ fn modules(set: BuildSet) -> Vec<Module> {
     for m in &mut out {
         if m.manifest.name == "motion" {
             *m = deep_canvas_motion::module::declaring_eases();
+        }
+    }
+    #[cfg(feature = "test-follow-stream-in-motion")]
+    for m in &mut out {
+        if m.manifest.name == "motion" {
+            *m = test_registries::motion_filling_follow_stream();
         }
     }
     #[cfg(feature = "test-ease-renumbered")]
@@ -2537,6 +2598,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             *m = deep_canvas_media::module::png_reads_itself();
         }
     }
+    if planted == Some(StartPlanted::Run(Planted::TrustsWriteIndex)) {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "effects") {
+            *m = deep_canvas_effects::module::trusts_write_index();
+        }
+    }
     if let Some(StartPlanted::ControlKind(p)) = planted {
         for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
             *m = deep_canvas_input::module::with_test_kind(p);
@@ -2610,7 +2676,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
                 name: "kind@1".into(),
                 entries: entries.into_iter().map(Value::from).collect(),
                 rules: vec!["sheet_cap".into()],
-                passes: Vec::new(),
+                ..Default::default()
             })),
             overrun_bytes: Some(over),
             ..SealError::default()
@@ -3241,7 +3307,15 @@ fn coefficients(path: Option<&str>) -> Result<Coefficients, cost::Refused> {
     Coefficients::read(&text)
 }
 
+/// Milliseconds on a monotonic clock, which times a vector field's integration (#225).
+fn clock_ms() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+}
+
 fn main() {
+    // #225: the check times each vector field's integration by this host's clock.
+    deep_canvas_marks::vector_field::time_with(Some(clock_ms));
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().cloned().unwrap_or_default();
     // #402: the terminal side on the wall clock, and a terminal's panel host; neither seals.
@@ -3324,6 +3398,9 @@ fn main() {
                 line["registry"] = json!(r.name);
                 line["entries"] = json!(r.entries);
                 line["rules"] = json!(r.rules);
+                for (k, v) in &r.report {
+                    line[k.as_str()] = v.clone();
+                }
                 if !r.passes.is_empty() {
                     line["passes"] = json!(r.passes);
                 }

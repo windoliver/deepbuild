@@ -8,6 +8,7 @@
 //! view draws through frame history's window (#173, `history`).
 
 mod history;
+mod views;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -118,6 +119,8 @@ struct Args {
     packs: Vec<(Option<String>, std::path::PathBuf)>,
     /// The paths whose evaluated values each frame reports (#429).
     evaluate: Vec<String>,
+    /// #468: world points each frame projects through the camera it draws, as `projected`.
+    project: Vec<[f64; 3]>,
     /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
     /// (#2016).
     sway: Vec<String>,
@@ -134,6 +137,9 @@ struct Args {
     /// its band masks (#425).
     lod: bool,
     light_cut: bool,
+    /// #506: each frame reports where its anchored overlays draw; #468: and where each one's
+    /// leader ends.
+    overlays: bool,
     masks: bool,
     /// The view's class (#419): an export draws every frame with all of the look's export
     /// samples and never settles; the live view draws its live samples while moving.
@@ -294,10 +300,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 | "depth"
                 | "reflection"
                 | "foam"
+                | "coc"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection and foam",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam and coc",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -379,6 +386,16 @@ fn parse(call: &Value) -> Result<Args, Value> {
             _ => return Err(bad("evaluate lists paths items/<id>/…")),
         }
     }
+    let mut project = Vec::new();
+    for p in call["project"].as_array().into_iter().flatten() {
+        match p
+            .as_array()
+            .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
+        {
+            Some(Some(v)) if v.len() == 3 => project.push([v[0], v[1], v[2]]),
+            _ => return Err(bad("project lists world points [x, y, z]")),
+        }
+    }
     let mut sway = Vec::new();
     for id in call["sway"].as_array().into_iter().flatten() {
         match id.as_str() {
@@ -393,6 +410,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         world: world.ok_or_else(|| bad("world lists item IDs"))?,
         packs,
         evaluate,
+        project,
         sway,
         docs,
         doc,
@@ -508,6 +526,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         shadows: call["shadows"].as_bool().unwrap_or(false),
         lod: call["lod"].as_bool().unwrap_or(false),
         light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        overlays: call["overlays"].as_bool().unwrap_or(false),
         masks: call["masks"].as_bool().unwrap_or(false),
         export,
         viewer,
@@ -604,21 +623,6 @@ pub(crate) fn apply_patch(
     apply_ops(doc, &patch, "patches/0", &id, &writing)
         .map(|_| ())
         .map_err(|i| refused(i.code, format!("{}: {}", i.path, i.what)))
-}
-
-/// An anchored 2D overlay as the picture GPUI paints: BGRA, placed on a whole pixel.
-fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPicture> {
-    let p = deep_canvas_scene3d::overlay::picture(o)?;
-    let mut bgra = p.rgba;
-    for px in bgra.as_chunks_mut::<4>().0 {
-        px.swap(0, 2);
-    }
-    let frame = image::RgbaImage::from_raw(u32::from(p.size[0]), u32::from(p.size[1]), bgra)?;
-    Some(OverlayPicture {
-        at: p.at,
-        size: p.size,
-        image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
-    })
 }
 
 /// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
@@ -885,6 +889,33 @@ pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, 
 
 /// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,
 /// each written as an 8-bit grayscale PNG of its alpha named by its SHA-256.
+/// #468: each overlay's leader over the frame `bgra` (`size` px, premultiplied BGRA), its straight
+/// RGBA picture laid on by its coverage.
+fn leaders_over(overlays: &[deep_canvas_scene3d::scene::Overlay], bgra: &mut [u8], size: [u32; 2]) {
+    for l in overlays.iter().filter_map(|o| o.leader.as_ref()) {
+        let Some(p) = deep_canvas_scene3d::overlay::leader_picture(l) else {
+            continue;
+        };
+        let w = i64::from(p.size[0]);
+        for (k, s) in p.rgba.as_chunks::<4>().0.iter().enumerate() {
+            let (dx, dy) = (p.at[0] + k as i64 % w, p.at[1] + k as i64 / w);
+            let a = u32::from(s[3]);
+            if a == 0 || dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
+                continue;
+            }
+            let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
+            let d = &mut bgra[o..o + 4];
+            let over = |src: u8, dst: u8| {
+                ((u32::from(src) * a + u32::from(dst) * (255 - a) + 127) / 255) as u8
+            };
+            d[0] = over(s[2], d[0]);
+            d[1] = over(s[1], d[1]);
+            d[2] = over(s[0], d[2]);
+            d[3] = over(255, d[3]);
+        }
+    }
+}
+
 fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     let mut labels = Vec::new();
     let mut sampled = BTreeSet::new();
@@ -936,6 +967,16 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
 }
 
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
+    run_view(app, out, call, &mut None)
+}
+
+/// [`run`]; `sub` is a view overlay's own run, which keeps its frames (#506).
+fn run_view(
+    app: &mut App,
+    out: &str,
+    call: &Value,
+    sub: &mut Option<views::Sub>,
+) -> Result<Value, Value> {
     // The cold report's build time runs from here to the first frame's scene, less the view's
     // opening, which compiles (#428).
     let started = std::time::Instant::now();
@@ -960,6 +1001,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if !broken.is_empty() {
         return Err(json!({"code": "refused", "issues": broken}));
     }
+    // #506: insets and view overlays the check refuses, each naming its items.
+    let broken = deep_canvas_scene3d::inset::refusals(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
+    // #506: each view overlay drawn by its own run before this view opens.
+    let shown = match sub {
+        None => views::run_all(app, out, call, &args.doc, args.size, &args.look)?,
+        Some(_) => Vec::new(),
+    };
+    let mut drawn_k = 0usize;
     crate::physics::bake(&mut args.doc)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
@@ -1068,6 +1120,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "depth",
         "reflection",
         "foam",
+        "coc",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1105,6 +1158,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     )?;
     let mut receipt = Value::Null;
     let mut videos = crate::video::Session::new(map_paths.clone(), args.fps, args.export);
+    // #506: the pictures insets draw, in the look's roles, their images from the assets.
+    let mut pictures = crate::insets::Pictures::new(
+        &args.assets,
+        args.look.roles.clone(),
+        app.planted == Some(Planted::InsetPremultipliedAsStraight),
+    );
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
@@ -1288,12 +1347,29 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 None
             } else {
                 let at = (&read as deep_canvas_scene3d::scene::Assets<'_>, app.planted);
-                Some(crate::fed::values(&composed, t, &args.evaluate, at)?)
+                Some(crate::fed::values(
+                    &composed,
+                    &scene,
+                    t,
+                    &args.evaluate,
+                    at,
+                )?)
             };
+            // #468: the call's world points through the camera this frame draws.
+            let projected = (!args.project.is_empty()).then(|| {
+                let at = |p: &[f64; 3]| scene.camera.project(*p).map(|q| json!([q[0], q[1]]));
+                Value::Array(
+                    args.project
+                        .iter()
+                        .map(|p| at(p).unwrap_or(Value::Null))
+                        .collect(),
+                )
+            });
             // Its maps, made ready in the decode worker once per run and held to the
             // document's decoded-image cap (#423), and its videos' frames at t there (#503).
             let (texels, made) = crate::textures::prepare(app, &composed, &scene, &map_paths)?;
             scene.texels = videos.at(app, &composed, n, &scene, texels)?;
+            pictures.paint(&mut scene)?;
             videos.clouds(app, &fx, &scene)?;
             // Over a window's flat page the view shows the page where nothing draws, so what it
             // lays over the page (a shadow catcher's alpha) composites in linear light (#424).
@@ -1341,6 +1417,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .as_ref()
                 .map(|(item, _)| crate::lod::tiles_of(&scene, item));
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
+            // #506's planted core: a view overlay shaded with the main view's light cut.
+            if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
+                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
+                scene.light_cut = Some(deep_canvas_scene3d::light::policy(&scene.lights, &main.camera));
+            }
             // How many times this frame derived each mesh-edge line's edge set (#1640).
             let edge_sets_derived: Map<String, Value> = scene
                 .layers
@@ -1460,7 +1542,46 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 None
             };
             if let Some(win) = app.window.as_ref().filter(|_| args.window.is_some()) {
-                let pictures = scene.overlays.iter().filter_map(overlay_picture).collect();
+                // #506: each overlay frame drawn whole (its text and images too) for GPUI to
+                // paint over the view, straight BGRA on a whole pixel.
+                let mut shown = Vec::new();
+                for (_, at, picture) in pictures.frames(&composed, &scene.overlays)? {
+                    let (w, h) = picture.dimensions();
+                    let mut bgra = picture.as_raw().clone();
+                    crate::insets::straight(&mut bgra);
+                    for px in bgra.as_chunks_mut::<4>().0 {
+                        px.swap(0, 2);
+                    }
+                    let Some(frame) = image::RgbaImage::from_raw(w, h, bgra) else {
+                        continue;
+                    };
+                    shown.push(OverlayPicture {
+                        at,
+                        size: [w.min(u32::from(u16::MAX)) as u16, h.min(u32::from(u16::MAX)) as u16],
+                        image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
+                    });
+                }
+                // #468: each overlay's leader over it.
+                for l in scene.overlays.iter().filter_map(|o| o.leader.as_ref()) {
+                    shown.extend(
+                        deep_canvas_scene3d::overlay::leader_picture(l).and_then(|p| {
+                            let mut bgra = p.rgba;
+                            for px in bgra.as_chunks_mut::<4>().0 {
+                                px.swap(0, 2);
+                            }
+                            let (w, h) = (u32::from(p.size[0]), u32::from(p.size[1]));
+                            let image = image::RgbaImage::from_raw(w, h, bgra)?;
+                            Some(OverlayPicture {
+                                at: p.at,
+                                size: p.size,
+                                image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(
+                                    image,
+                                )])),
+                            })
+                        }),
+                    );
+                }
+                let pictures = shown;
                 let mut p = win.paint.borrow_mut();
                 p.overlays.insert(n, pictures);
                 p.current = n;
@@ -1890,6 +2011,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // A frame's CPU: its evaluation, up to handing the scene to the render side.
             let cpu_ms = frame_started.elapsed().as_secs_f64() * 1e3;
+            // #506's planted cores: a view overlay drawn after the main view in the same frame,
+            // keeping the backdrop copy or the mirror's picture that one left.
+            let keeps = match app.planted {
+                Some(Planted::OneBackdropPerFrame) => [true, false],
+                Some(Planted::OneMirrorPerFrame) => [false, true],
+                _ => [false, false],
+            };
+            let keeping = sub.is_some() && keeps.contains(&true);
+            let anchored = scene.overlays.clone();
+            if let (Some(s), true) = (sub.as_ref(), keeping) {
+                let mut main = s.main.clone();
+                main["size"] = json!(size);
+                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
+                    .map_err(|r| refused(r.code, r.path))?;
+                first.texels.clone_from(&scene.texels);
+                session3::draw(app, &opened, Arc::new(first), args.look.clone(), n, 0, false, false)?;
+                session3::keep_first(app, keeps[0], keeps[1]);
+            }
             let mut drawn = match (hist.as_mut(), &planned) {
                 (Some(h), Some((_, plan))) if windowed => {
                     // Each window frame is the evaluation at its own grid step, drawn as any
@@ -1970,17 +2109,38 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let operator = timeline
                 .as_ref()
                 .and_then(|tl| tl.operator_at(t))
-                .and_then(|(w, p)| Some((op_passes.get(&w.id)?, p)));
-            if let (Some((pass, p)), Some(sides), Some(bytes)) =
+                .and_then(|(w, p)| {
+                    Some((format!("transition/{}", w.id), op_passes.get(&w.id)?, p))
+                });
+            // #468: the transition's declared cost this frame, by its pass's label.
+            let mut op_declared = None;
+            if let (Some((label, tr, p)), Some(sides), Some(bytes)) =
                 (operator, &sides, drawn.bytes.as_mut())
             {
-                // #466: the pass over the outgoing side's finished render and the incoming one's.
+                // #466: the pass over the outgoing side's finished render and the incoming one's,
+                // on the GPU, its time counted in the frame's (#468).
                 let incoming = sides
                     .get(1)
                     .and_then(|s| others.iter().find(|(k, _)| k.as_deref() == s.look))
                     .map(|(_, b)| b.clone())
                     .unwrap_or_else(|| bytes.clone());
-                *bytes = crate::op_transition::draw(pass, bytes, &incoming, p, size)?;
+                let outgoing = std::mem::take(bytes);
+                let (out, ms) = crate::op_transition::draw(
+                    app,
+                    opened.profiler.clone(),
+                    &label,
+                    tr,
+                    outgoing,
+                    incoming,
+                    p,
+                    size,
+                )?;
+                *bytes = out;
+                if let (Some(ms), Some((gpu_ms, passes))) = (ms, drawn.timing.as_mut()) {
+                    *gpu_ms += ms;
+                    passes.insert(label.clone(), ms);
+                }
+                op_declared = Some((label, tr.declared_ms(size)));
             } else if let (Some(tl), Some(sides), Some(bytes)) =
                 (&timeline, &sides, drawn.bytes.as_mut())
             {
@@ -2025,6 +2185,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     *bytes = mixed;
                 }
             }
+            if keeping {
+                session3::keep_first(app, false, false);
+            }
             let scene_bytes = drawn.bytes.clone();
             // The viewer's marks laid over the resolved frame where they drew.
             if let (Some(over), Some(plain), Some(bytes)) =
@@ -2044,6 +2207,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     }
                 }
             }
+            // #506: each view overlay's frame over its rect; a view overlay's own run keeps its
+            // frames for its host.
+            if let Some(bytes) = drawn.bytes.as_mut() {
+                pictures.frames_over(&composed, &anchored, bytes, size)?;
+                leaders_over(&anchored, bytes, size);
+                views::composite(&shown, drawn_k, bytes, size);
+                if let Some(s) = sub.as_mut() {
+                    s.keep(bytes)?;
+                }
+            }
+            drawn_k += 1;
             casts |= !drawn.counts.shadow_maps.is_empty();
             let compiled: Vec<&'static str> = session3::pipelines(app)
                 .into_iter()
@@ -2104,6 +2278,21 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("upload_ms".into(), json!(drawn.counts.upload_ms));
             }
             frame.insert("samples".into(), samples_report);
+            if args.overlays {
+                let rows: Vec<Value> = anchored
+                    .iter()
+                    .map(|o| {
+                        let mut row = json!({"id": o.id, "at": o.origin});
+                        // #468: where its leader ends, or null while it hides.
+                        if let Some(l) = &o.leader {
+                            let to = l.points.as_ref().and_then(|p| p.last());
+                            row["leader"] = to.map_or(Value::Null, |to| json!({"to": to}));
+                        }
+                        row
+                    })
+                    .collect();
+                frame.insert("overlays".into(), Value::Array(rows));
+            }
             frame.insert(
                 "history".into(),
                 match (&hist, &planned) {
@@ -2132,6 +2321,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             if let Some(values) = values {
                 frame.insert("values".into(), values);
+            }
+            if let Some(p) = projected {
+                frame.insert("projected".into(), p);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
             frame.extend(trails.map(|p| ("trails".to_string(), p)));
@@ -2208,6 +2400,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
                     frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
+                }
+                // #468: each pixel's signed circle of confusion, f32.
+                if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
+                    frame.insert("coc".into(), json!(write_named(out, c, "f32")?));
                 }
                 if let Some((material, f)) = &shore {
                     let bytes: Vec<u8> = f.cells.iter().flat_map(|c| c.to_le_bytes()).collect();
@@ -2437,6 +2633,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .declared
                     .iter()
                     .map(|(k, v)| (k.to_string(), json!(v)))
+                    .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
             }

@@ -1,0 +1,41 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/agents-sync.test.ts packages/hub/test/background.test.ts packages/hub/test/detached.test.ts packages/hub/test/vfs-image.test.ts tests/acceptance/2121/sync.test.ts` runs unleased
+
+ RUN  v5.0.5 /private/tmp/deepbuild-2121.WRTSs6/pr
+
+stderr | packages/hub/test/vfs-image.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  6380 (node)
+  6801 (node)
+
+·deep hub: run:01M7EB3WFWASGRG7NRG0H573XJ's finish wasn't recorded: the record is closed
+··deep hub: run:kept's finish wasn't recorded: the record is closed
+deep hub: sync:s1's conflict on /private/var/folders/nc/jmp2w2vj46gg_dcwvxj_4msh0000gn/T/deep-detached-THryNj/SKILL.md wasn't asked: asks are closed
+·deep hub: https://github.com/fixture/widgets/issues/7's blind job result wasn't recorded: the record is closed
+·····deep hub: SQLITE_IOERR: the test VFS refuses writes
+stderr | packages/hub/test/background.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  20817 (node)
+
+xdeep hub: a wiki reading's changed pages weren't recorded: ENOENT: no such file or directory, open '/private/tmp/dh63-world-5Fcp40/root/wiki/gone.md'
+··········
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+Error: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+ ❯ waitFor packages/hub/test/background.test.ts:54:33
+     52|     const v = await probe();
+     53|     if (v !== undefined) return v;
+     54|     if (Date.now() > end) throw Error(`timed out after ${ms} ms waitin…
+       |                                 ^
+     55|     await new Promise((r) => setTimeout(r, 100));
+     56|   }
+ ❯ packages/hub/test/background.test.ts:88:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 19 passed (20)
+   Start at  16:53:28
+   Duration  43.88s (tests 95%, transform 4%)

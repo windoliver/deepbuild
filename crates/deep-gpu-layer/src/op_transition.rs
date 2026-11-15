@@ -1,30 +1,58 @@
 //! #466's operator transitions in `view3d` (canvas primitives: Transition: operator, iris and
 //! dip): each one's pass, from the document's `gpu.pass@1` items, the call's packs or fx@1, checked
-//! before a frame draws; its window moved so the frame where its output first covers half the
-//! picture lands on the cut (`align: reveal`); and the pass run over the two finished sides at
-//! the transition's progress on the CPU reference interpreter, so the frame is the same anywhere.
+//! and compiled before a frame draws; its window moved so the frame where its output first covers
+//! half the picture lands on the cut (`align: reveal`), measured on the CPU reference interpreter
+//! so the reveal is the same on every machine; and the pass run on the GPU (canvas primitives: GPU
+//! operator) over the two finished sides at the transition's progress, timed and priced like any
+//! operator (#468) under `transition/<id>`. The GPU run is same machine at best: its bilinear
+//! fetches and f32 arithmetic can differ from the interpreter's f64 by a code value.
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
-use deep_canvas_effects::interp::Image;
-use deep_canvas_effects::transition::{self, Pass};
+use deep_canvas_effects::transition::{self, OUTGOING, PROGRESS};
 use deep_canvas_motion::shots::{self, Align, Kind};
+use deep_effects_render::compile::{self, Compiled};
+use deep_effects_render::runner::{Frame, Runner};
 use serde_json::{json, Value};
 
 use crate::regions::Timeline;
 
 /// The side the reveal is measured on: small, since a reveal is a share of the picture.
 const PROBE: [u32; 2] = [64, 36];
+/// The sides and the frame the pass draws: the finished frame's bytes as they are, each channel
+/// a code value over 255, as the interpreter reads them.
+const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-/// Each operator transition's checked pass by its ID, with each one that aligns on its reveal
-/// placed there; a pass that can't run refuses the document, naming the transition's field.
-/// With `by_progress` (#466's planted reveal) the reveal is where the progress reaches half.
+/// An operator transition's checked pass as it draws: its color alone (its `coverage` says where
+/// the incoming side shows, not how much of the color lands), compiled to WGSL, with its pipeline
+/// once a frame has built it on the device.
+pub struct Transition {
+    compiled: Arc<Compiled>,
+    /// The texture input reading each side, by side name.
+    sides: BTreeMap<String, String>,
+    /// The pipeline and the device epoch it was built at.
+    runner: Arc<Mutex<Option<(u64, Runner)>>>,
+}
+
+impl Transition {
+    /// What the pass's declared cost (its `cost`, else the check's estimate, ns a pixel) prices
+    /// a `size` frame at, ms.
+    pub fn declared_ms(&self, size: [u32; 2]) -> f64 {
+        let c = &self.compiled.checked;
+        c.op.cost.unwrap_or(c.estimate) * f64::from(size[0]) * f64::from(size[1]) / 1e6
+    }
+}
+
+/// Each operator transition's checked and compiled pass by its ID, with each one that aligns on
+/// its reveal placed there; a pass that can't run refuses the document, naming the transition's
+/// field. With `by_progress` (#466's planted reveal) the reveal is where the progress reaches half.
 pub fn passes(
     call: &Value,
     doc: &Value,
     timeline: Option<&mut Timeline>,
     by_progress: bool,
-) -> Result<BTreeMap<String, Pass>, Value> {
+) -> Result<BTreeMap<String, Transition>, Value> {
     let Some(timeline) = timeline else {
         return Ok(BTreeMap::new());
     };
@@ -57,6 +85,12 @@ pub fn passes(
                 "path": format!("{at}/{}", first.and_then(|i| i.path.clone()).unwrap_or_default()),
                 "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>()})
         })?;
+        let mut drawn = pass.checked.clone();
+        drawn.op.outputs.remove("coverage");
+        let wgsl = deep_canvas_effects::emit::pass(&drawn, Default::default());
+        compile::validate(&wgsl).map_err(
+            |e| json!({"code": "operator_compile", "path": format!("{at}/op"), "what": e}),
+        )?;
         if tr.align == Align::Reveal {
             let span = tr.end - tr.start;
             let mut probe = tr.clone();
@@ -75,52 +109,180 @@ pub fn passes(
             })?;
             timeline.place(i, reveal);
         }
-        out.insert(tr.id.clone(), pass);
+        out.insert(
+            tr.id.clone(),
+            Transition {
+                compiled: Arc::new(Compiled {
+                    checked: drawn,
+                    wgsl,
+                }),
+                sides: pass.sides,
+                runner: Arc::default(),
+            },
+        );
     }
     Ok(out)
 }
 
-/// `pass` over the finished sides `outgoing` and `incoming` (straight sRGB RGBA) at progress `p`,
-/// rows in bands across the cores.
+fn identity() -> [f32; 16] {
+    let mut m = [0.0; 16];
+    for k in 0..4 {
+        m[k * 5] = 1.0;
+    }
+    m
+}
+
+/// `tr`'s pass on the GPU over the finished sides `outgoing` and `incoming` (the frame's bytes,
+/// 4 a pixel, rows top-down) at progress `p`, and the frame it returns read back. With `profiler`
+/// the pass is timed under `label`, and the second value is its GPU time, ms.
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
-    pass: &Pass,
-    outgoing: &[u8],
-    incoming: &[u8],
+    app: &crate::App,
+    profiler: Option<deep_scene3d_render::Profiler>,
+    label: &str,
+    tr: &Transition,
+    outgoing: Vec<u8>,
+    incoming: Vec<u8>,
     p: f64,
     size: [u32; 2],
-) -> Result<Vec<u8>, Value> {
-    let image = |rgba: &[u8]| Image {
-        w: size[0],
-        h: size[1],
-        px: rgba
-            .chunks_exact(4)
-            .map(|c| [0, 1, 2, 3].map(|k| f64::from(c[k]) / 255.0))
-            .collect(),
-    };
-    let (a, b) = (image(outgoing), image(incoming));
-    let roles = BTreeMap::new();
-    let bands = std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(size[1] as usize)
-        .max(1) as u32;
-    let per = size[1].div_ceil(bands);
-    let rows: Result<Vec<Vec<[f64; 4]>>, String> = std::thread::scope(|s| {
-        let jobs: Vec<_> = (0..bands)
-            .map(|k| {
-                let (from, to) = ((k * per).min(size[1]), ((k + 1) * per).min(size[1]));
-                let (a, b, roles) = (&a, &b, &roles);
-                s.spawn(move || pass.rows(a, b, p, roles, size, from..to))
-            })
-            .collect();
-        jobs.into_iter()
-            .map(|j| j.join().unwrap_or_else(|_| Err("a band panicked".into())))
-            .collect()
-    });
-    let rows =
-        rows.map_err(|e| json!({"code": "render_failed", "path": "transitions", "what": e}))?;
-    Ok(rows
-        .into_iter()
-        .flatten()
-        .flat_map(|px| px.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8))
-        .collect())
+) -> Result<(Vec<u8>, Option<f64>), Value> {
+    let (compiled, runner, label) = (tr.compiled.clone(), tr.runner.clone(), label.to_string());
+    let values = deep_canvas_effects::interp::inputs(
+        &compiled.checked,
+        &BTreeMap::from([(PROGRESS.to_string(), Value::from(p))]),
+        &BTreeMap::new(),
+    );
+    // Each texture input, in binding order, reads the side it names.
+    let reads: Vec<bool> = compiled
+        .checked
+        .textures
+        .iter()
+        .map(|name| tr.sides.get(OUTGOING) == Some(name))
+        .collect();
+    app.worker
+        .call(move |state| -> Result<(Vec<u8>, Option<f64>), String> {
+            let d = state.gpu.device();
+            let device = &d.device;
+            let mut built = runner.lock().unwrap_or_else(|e| e.into_inner());
+            if built.as_ref().is_none_or(|(epoch, _)| *epoch != d.epoch) {
+                *built = Some((d.epoch, Runner::new(device, (*compiled).clone(), FORMAT)));
+            }
+            let Some((_, runner)) = built.as_ref() else {
+                return Err("the transition's pass has no pipeline".into());
+            };
+            let extent = wgpu::Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            };
+            let texture = |usage| {
+                device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("transition"),
+                    size: extent,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: FORMAT,
+                    usage,
+                    view_formats: &[],
+                })
+            };
+            let side = |bytes: &[u8]| {
+                let t =
+                    texture(wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
+                d.queue.write_texture(
+                    t.as_image_copy(),
+                    bytes,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(4 * size[0]),
+                        rows_per_image: None,
+                    },
+                    extent,
+                );
+                t.create_view(&Default::default())
+            };
+            let (out_side, in_side) = (side(&outgoing), side(&incoming));
+            let views: Vec<&wgpu::TextureView> = reads
+                .iter()
+                .map(|&o| if o { &out_side } else { &in_side })
+                .collect();
+            let target =
+                texture(wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC);
+            let target_view = target.create_view(&Default::default());
+            // The interpreter's frame: identity clip, time 0, seed 0.
+            let frame = Frame {
+                clip: identity(),
+                inverse_clip: identity(),
+                ..Default::default()
+            };
+            let (g0, g1, _buffers) = runner.bind(device, &frame, size, &values, &views, &[]);
+            let mut enc = device.create_command_encoder(&Default::default());
+            let mut timer = profiler
+                .as_ref()
+                .map(|p| p.lock().unwrap_or_else(|e| e.into_inner()));
+            match timer.as_mut() {
+                Some(t) => {
+                    let q = t.begin_pass_query(label.as_str(), &mut enc);
+                    runner.encode(
+                        &mut enc,
+                        &target_view,
+                        &(g0, g1),
+                        q.render_pass_timestamp_writes(),
+                    );
+                    t.end_query(&mut enc, q);
+                }
+                None => runner.encode(&mut enc, &target_view, &(g0, g1), None),
+            }
+            let row = (size[0] * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("transition read back"),
+                size: u64::from(row) * u64::from(size[1]),
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            enc.copy_texture_to_buffer(
+                target.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buffer,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(row),
+                        rows_per_image: None,
+                    },
+                },
+                extent,
+            );
+            d.queue.submit([enc.finish()]);
+            let bytes = crate::print2d::map_rows(
+                device,
+                &buffer,
+                row as usize,
+                (size[0] * 4) as usize,
+                size[1] as usize,
+            )?;
+            // The pass's own span, its timestamps resolved once it has finished, as the frame's
+            // are (resolved beside it, the end of its fragment work may not be written yet), from
+            // the newest finished profiler frame that holds it.
+            let mut ms = None;
+            if let Some(t) = timer.as_mut() {
+                let mut enc = device.create_command_encoder(&Default::default());
+                t.resolve_queries(&mut enc);
+                d.queue.submit([enc.finish()]);
+                let _ = t.end_frame();
+                let _ = device.poll(wgpu::PollType::wait_indefinitely());
+                let period = d.queue.get_timestamp_period();
+                while let Some(results) = t.process_finished_frame(period) {
+                    if let Some(span) = results
+                        .iter()
+                        .filter(|r| r.label == label)
+                        .find_map(|r| r.time.clone())
+                    {
+                        ms = Some((span.end - span.start) * 1e3);
+                    }
+                }
+            }
+            Ok((bytes, ms))
+        })
+        .map_err(|e| json!({"code": "render_failed", "path": "transitions", "what": e}))
 }

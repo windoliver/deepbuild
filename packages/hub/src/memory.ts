@@ -233,6 +233,7 @@ export async function memoryCommand(args: readonly string[], setUp: () => Promis
     return reply.error.code === 'not_found' ? 1 : 3;
   }
   if (acting) {
+    if (reply.result.status === 'pending') { process.stdout.write(`Configuration eval ${String(reply.result.job)} for ${args[1]!} is ${String(reply.result.state)}; the rule is unchanged until it adopts.\n`); return 0; }
     if (reply.result.status === 'refused') { process.stderr.write(`REFUSED: ${String(reply.result.reason)}\n`); return 1; }
     process.stdout.write(overruling ? `Overruled ${args[1]!}.\n` : `${args[0] === 'keep' ? 'Kept' : 'Removed'} ${args[1]!}: ${String(reply.result.decision)}\n`);
     return 0;

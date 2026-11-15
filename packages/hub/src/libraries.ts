@@ -202,11 +202,15 @@ export class Libraries {
     if (path === null || !path.startsWith('/')) return null;
     const known = this.thumbs.get(`${library}${path}`);
     if (known) return known;
-    const got = await this.d.host()!.libraryFile(library, path);
-    if (got.status !== 200) return null;
-    const sha = await this.d.keep(got.bytes, 'asset.thumbnail', row.url, { name: row.license.id, allows: [] });
-    this.thumbs.set(`${library}${path}`, sha);
-    return sha;
+    try {
+      const got = await this.d.host()!.libraryFile(library, path);
+      if (got.status !== 200) return null;
+      const sha = await this.d.keep(got.bytes, 'asset.thumbnail', row.url, { name: row.license.id, allows: [] });
+      this.thumbs.set(`${library}${path}`, sha);
+      return sha;
+    } catch {
+      return null;
+    }
   }
 
   /** A pack's standing rule is namespaced apart from libraries, and never matches another pack. */
@@ -299,7 +303,14 @@ export class Libraries {
         return { status: 'refused', reason };
       }
       this.fetches.set(key, { state: 'fetching', ask: null });
-      return this.run(library, id, picked);
+      try {
+        const reply = await this.run(library, id, picked);
+        if (reply.status === 'refused') this.fetches.delete(key);
+        return reply;
+      } catch (e) {
+        this.fetches.delete(key);
+        throw e;
+      }
     }
     const credit = picked.license.credit ? ` (credit: ${picked.license.credit})` : '';
     const files = 1 + picked.sidecars.length;

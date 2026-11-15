@@ -63,6 +63,9 @@ test-physics-shapes-empty = ["test-leave-out-physics"]
 test-leave-out-motion = []
 test-ease-in-motion = []
 test-ease-renumbered = []
+# Issue #225: the planted motion module that fills follow_stream in constraint@1 itself; built
+# with test-leave-out-data, motion@1's digest then differs from the full set's.
+test-follow-stream-in-motion = []
 # Issue #493: the planted layout that registers camera@1 in the scene3d module, not the core.
 test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
@@ -217,6 +220,8 @@ test-scene3d-reads-vector = []
 test-mark = ["dep:deep-canvas-test-modules"]
 # Issue #202: the test canvas module test.weight, an item kind of 0.20 ms of CPU.
 test-weight = ["dep:deep-canvas-test-modules"]
+# Issue #223: the test canvas module test.swirl, a stream table in streams@1 for (−y, x).
+test-swirl = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
 # Issue #522 (tests/acceptance/522): the test canvas module test.launch, whose items fire a world's
@@ -274,6 +279,9 @@ test-gpu-output-in-effects = []
 # readings entry hands the column view no changed ranges, and a motion module with one more operator
 # that reads the physics module's occurrence list by its array name.
 test-physics-hands-no-changes = []
+# Issue #213: physics.cast@1 sorting each request's hits by ID before distance, which the service's
+# conformance fixture refuses at the seal.
+test-cast-sorts-by-id = ["deep-physics-rapier/test-cast-sorts-by-id"]
 test-motion-reads-physics-array = []
 
 [dependencies]
@@ -323,6 +331,8 @@ deep-text = { path = "../deep-text" }
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
+unicode-normalization = "0.1"
 sha2 = "0.10"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }

@@ -705,7 +705,11 @@ fn keyed_named(
     Ok(crate::follow::keyed(scale, id, &items[id], items, channels))
 }
 
-fn scale_named(items: &Map<String, Value>, id: &str, path: &str) -> Result<Scale, Refused> {
+pub(crate) fn scale_named(
+    items: &Map<String, Value>,
+    id: &str,
+    path: &str,
+) -> Result<Scale, Refused> {
     match items.get(id) {
         Some(item) if item.get("kind").and_then(Value::as_str) == Some("scale@1") => {
             Scale::read(id, item, items)
