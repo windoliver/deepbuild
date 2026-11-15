@@ -734,3 +734,14 @@ raw files, `gen.test.ts`, the code and the issue. It also ran its own BFS over t
   - The other new lines are in files this change doesn't touch: about 390 lint lines (fmt, size, deps, vendor, code,
     color) and about 110 tests. Not compared with main in this run. Several read as the isolated HOME's doing (`git
     commit` failing in fixtures, `cargo-fmt is not installed`), which makes this run a weaker reading for them.
+- **Mac run at 4b10b58f1** (2026-11-14, the owner's go at the Mac; macOS 27.2.1, on AC; local main 51e4a2b3, merge
+  base 2c1c8cacc; Docker 29.2.1 with the linux/amd64 image `rust:1.99.1-slim-bookworm` already there, nothing
+  pulled; host name redacted; `mac/exits-4b10b58f1.txt`). All four files pass at this head:
+  - ac04 2 of 2 (`mac/ac04-4b10b58f1.txt`): the merged programs are byte for byte the same on macOS arm64 and Linux
+    x86_64, and the fixtures' hashes match in the app and headless Chrome. Criterion 4.
+  - ac05 1 of 1 (`mac/ac05-4b10b58f1.txt`), 2 min 39 s with its linux/amd64 container. Criterion 5.
+  - ac07 1 of 1 (`mac/ac07-4b10b58f1.txt`), against merge base 2c1c8cacc. Criterion 7.
+  - ac10 2 of 2 (`mac/ac10-4b10b58f1.txt`, `mac/ac10-gate-4b10b58f1.txt`) with no load wait, the owner's choice at
+    the Mac: load 51.3 and thermal state 1 at its start, load 41.9 at its end. Its budgets held under that load. As
+    a timing taken under load it is a weaker reading than the run at e44890825 (load 3.96, thermal state 0, both
+    tests passing), which is of the head before the merge of main 2c1c8cacc. Criterion 10.
