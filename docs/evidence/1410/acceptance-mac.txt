@@ -1,18 +1,24 @@
-# #1410 acceptance run at 652dcaef (the merge of main; the head's code) on the owner's Mac (macOS 27.2.1, AC power, load 17 to 20), relayed by the Mac runner, 2026-11-14; as the Mac runner saved it (no colour codes, home folder as ~). The run at dca3811e, before the merge, is in git history (30270f61).
+# #1410 acceptance run at 05b8016c (the head's code: merge af1739ff of main) on the owner's Mac; as the Mac runner saved it; the run's own lines give the commit, macOS version, power, time and load.
 
-== head 652dcaef6f0578d6fb3ce5dbd71385f87c083908
-27.2.1
-Now drawing from 'AC Power'
+== head 05b8016c57dbf74596992106b120ccfcd727ca52 tests/acceptance/1410
+== command: npx vitest run tests/acceptance/1410 --reporter=verbose
 sw_vers 27.2.1 node v24.22.0 Now drawing from 'AC Power'
-load start { 17.36 6.85 6.16 }
+== start 2026-11-14 16:15:26 load { 14.62 28.18 87.03 } thermal 0
 
- RUN  v5.0.5 ~/private/dbc-1410d
+ RUN  v5.0.5 ~/private/dbc-1410e
 
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC1: the shim sees each named evidence file and its folder synced before the WAL sync of the FULL commit that names it 1ms
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC2: with a power cut right after each FULL commit, every evidence hash that commit names reads back whole 5ms
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > Scope: an evidence write no FULL commit names is not synced, nor its folder (one cited by no event, one cited only by a stream event) 0ms
+stdout | tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens
+#1410 AC3: 195 hook calls, slowest PreToolUse 25 at 5 ms (the prompt 3 ms); each evidence sync takes 4000 ms; evidence syncs seen: 2
+
+ ✓ tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens 11249ms
 
  Test Files  2 passed (2)
       Tests  4 passed (4)
-   Start at  13:04:01
-   Duration  11.81s (tests 99%, transform 1%)
+   Start at  16:15:27
+   Duration  11.41s (tests 99%, transform 1%)
 
-load end { 20.23 7.81 6.51 }
+== end 2026-11-14 16:15:39 load { 16.20 28.07 86.30 } thermal 0
 vitest exit=0

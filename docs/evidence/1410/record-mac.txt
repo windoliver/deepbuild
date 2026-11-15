@@ -1,16 +1,92 @@
-# packages/record, tests named #1410 (two: 'a commit that waited behind an evidence sync...' and 'a verdict's commit syncs the evidence its requirements stand on...'), at 652dcaef on the owner's Mac (load 20), same run as acceptance-mac.txt; as the Mac runner saved it (no colour codes, home folder as ~)
+# packages/record, tests named #1410, at 05b8016c on the owner's Mac, same run as acceptance-mac.txt; as the Mac runner saved it; the run's own lines give the commit, macOS version, power, time and load.
 
-== head 652dcaef6f0578d6fb3ce5dbd71385f87c083908 packages/record test/record.test.ts -t 1410
+== head 05b8016c57dbf74596992106b120ccfcd727ca52 packages/record test/record.test.ts -t 1410
+== command: npx vitest run --root packages/record test/record.test.ts -t 1410 --reporter=verbose
 sw_vers 27.2.1 node v24.22.0 Now drawing from 'AC Power'
-load start { 19.57 7.88 6.54 }
+== start 2026-11-14 16:15:41 load { 15.62 27.75 85.85 } thermal 0
 
- RUN  v5.0.5 ~/private/dbc-1410d/packages/record
+ RUN  v5.0.5 ~/private/dbc-1410e/packages/record
 
+ ↓ test/record.test.ts > an event ID is one event, with what its connection proved > the same ID from a connection with another actor is a conflict, not the same event
+ ↓ test/record.test.ts > raw SQL cannot disarm the append-only log > a statement that writes is refused, the triggers included, and events stay as they were
+ ↓ test/record.test.ts > recovery reads the last FULL commit, whatever made it > a session ended in a NORMAL batch made durable by a later block reservation keeps its claim open after a cut
+ ↓ test/record.test.ts > recovery exempts a session whose end is the last durable event > a session end at the durable boundary itself, made durable by a reservation, keeps its claim open after a cut
+ ↓ test/record.test.ts > recovery reads no session.state or session.gone as the session going on after its end (#992) > a session.state the core appended after the session's end keeps its claim open after a cut
+ ↓ test/record.test.ts > recovery reads no session.state or session.gone as the session going on after its end (#992) > a session.gone the core appended after the session's end keeps its claim open after a cut
+ ↓ test/record.test.ts > an idle prompt leaves a failed or stuck stop as it was (#992) > a hook's finished after a failed stop leaves the session failed, live and after a rebuild
+ ↓ test/record.test.ts > an event that keeps only part of its text needs its whole text as evidence > a put that fails is the append failing, and the session has lost events
+ ↓ test/record.test.ts > an event that keeps only part of its text needs its whole text as evidence > with no evidence store, an event whose text is over the cut is refused, not kept in part
+ ↓ test/record.test.ts > an event that keeps only part of its text needs its whole text as evidence > every caller of close waits for the same stop
+ ↓ test/record.test.ts > an event that keeps only part of its text needs its whole text as evidence > close waits for an append whose evidence is still being written
+ ↓ test/record.test.ts > a commit that fails leaves no trace in the live projections > a refused agent.stop is not the stop a later prompt reads the clock against
+ ↓ test/record.test.ts > a decision that commits ahead of its queued subject still reaches the subject's row > a verdict committed FULL before the claim it judges is on the claim, live and after a rebuild
+ ↓ test/record.test.ts > a decision that commits ahead of its queued subject still reaches the subject's row > an answer committed FULL before its queued ask reads answered
+ ↓ test/record.test.ts > a denied lease request never erases the holder > after acquired by A, denied to B leaves the key held by A
+ ↓ test/record.test.ts > migrations only move forward > a migration that does not move forward is refused at open, not spun on at append
+ ↓ test/record.test.ts > a PostToolUse stamped after its turn's stop is recorded in that turn > with no turn open, a tool event after the newest stop joins that stopped turn and reopens nothing
+ ↓ test/record.test.ts > the evidence store's events come only from the core > evidence.stored and evidence.removed from a hook, the app or an extension are refused as writer
+ ↓ test/record.test.ts > a session that lost an event is remembered across a clean stop > a failed append, a close, a reopen, then the session's claim: INVALID, cause events lost
+ ↓ test/record.test.ts > a record from a newer version is refused untouched > an open that refuses schema 2 leaves the database schema exactly as it found it
+ ↓ test/record.test.ts > a claim lost with its events and replayed after the cut reads INVALID > a session active at the last FULL commit whose tail was cut: its replayed claim gets the verdict
+ ↓ test/record.test.ts > a retry of a committed long-text event needs no evidence store > the same event again, with the store gone, is the existing event
+ ↓ test/record.test.ts > a pre-start stamp sorts after every event of its turn that arrived before it > after a high stamp, then a lower one in range, a pre-start event still comes last
+ ↓ test/record.test.ts > a permission request is hook text too > its command keeps neither a scrub-list value nor a secret pattern
+ ↓ test/record.test.ts > a permission request is hook text too > in content-free mode its command is not kept
+ ↓ test/record.test.ts > asks the core closes without an answer > ask.moot closes its ask, live and after a rebuild
+ ↓ test/record.test.ts > asks the core closes without an answer > ask.superseded closes its ask, live and after a rebuild
+ ↓ test/record.test.ts > table() reads rows in SQLite primary-key order > attempt 2 comes before attempt 10
+ ↓ test/record.test.ts > a removed worktree leaves its session > worktree.removed clears the worktree worktree.created set, live and after a rebuild
+ ↓ test/record.test.ts > decided asks and answered plans > an ask.escalated from a hook leaves the person's answer and decision as they were
+ ↓ test/record.test.ts > decided asks and answered plans > an answer's plan_hash is the plan's answered_hash
+ ↓ test/record.test.ts > recovery invalidates every open claim of a lost session > two open claims in one session, cut: both INVALID
+ ↓ test/record.test.ts > an agent evidence.put leaves a stored file's origin and redaction > origin stays agent, redaction stays incomplete
+ ↓ test/record.test.ts > an agent run.started does not re-point a run > the finished run keeps its claim and commit
+ ↓ test/record.test.ts > raw refuses statements that change the database > PRAGMA journal_mode = DELETE
+ ↓ test/record.test.ts > raw refuses statements that change the database > PRAGMA synchronous = OFF
+ ↓ test/record.test.ts > raw refuses statements that change the database > PRAGMA fullfsync = OFF
+ ↓ test/record.test.ts > raw refuses statements that change the database > PRAGMA query_only = 1
+ ↓ test/record.test.ts > raw refuses statements that change the database > ATTACH ':memory:' AS x
+ ↓ test/record.test.ts > raw refuses statements that change the database > PRAGMA recursive_triggers = 1
+ ↓ test/record.test.ts > raw reads the projections as they are now > a read made before a rebuild reads the rebuilt tables after it, and a refused statement stays refused
+ ↓ test/record.test.ts > raw binds its parameters > a value with a quote in it is read as that value, never as SQL
+ ↓ test/record.test.ts > a decided ask stays decided > a hook ask.cancelled after decision.applied keeps decided_for_you
+ ↓ test/record.test.ts > a decided ask stays decided > an app ask.later after ask.answered keeps it answered
+ ↓ test/record.test.ts > task.completed title is agent text > content-free mode keeps no agent-written title
+ ↓ test/record.test.ts > task.completed title is agent text > a secret-pattern token in a title is scrubbed
+ ↓ test/record.test.ts > a refused raw statement takes no effect > after a refused raw PRAGMA query_only = 1 an append still lands
+ ↓ test/record.test.ts > a refused raw statement takes no effect > after a refused raw PRAGMA fullfsync = OFF a verdict still syncs full
+ ↓ test/record.test.ts > one event ID is appended one at a time > the same content at once stores its whole text once
+ ↓ test/record.test.ts > one event ID is appended one at a time > other content at once is a conflict, and its text is never stored
+ ↓ test/record.test.ts > a new session after an unclean start whose prompt arrives before its start > its claim is not INVALID, live and after a rebuild
+ ↓ test/record.test.ts > a session whose start was cut is judged once > its first claim after the restart is INVALID, its next one stands on its own
+ ↓ test/record.test.ts > a run is its first start and its first finish > a finish seen before its start keeps the start's claim and commit, live and after a rebuild
+ ↓ test/record.test.ts > a run is its first start and its first finish > a second finish with another check and outcome changes nothing
+ ↓ test/record.test.ts > a late event never replaces newer state > a release of A arriving after B acquired the key leaves B holding it, live and after a rebuild
+ ↓ test/record.test.ts > a late event never replaces newer state > a session.start arriving after its worktree.created keeps the worktree
+ ↓ test/record.test.ts > a run's first finish is kept whole > a second finish fills none of the fields the first left empty, live and after a rebuild
+ ↓ test/record.test.ts > a session's last_seen only moves forward > a spooled start stamped earlier leaves last_seen at the newer event, live and after a rebuild
+ ↓ test/record.test.ts > waiting on you ends with the session, and the core's reading of a session is no sign of it (#992) > a session end clears a permission prompt's waiting, and a session.state moves no last_seen, live and after a rebuild
+ ↓ test/record.test.ts > waiting on you ends with the session, and the core's reading of a session is no sign of it (#992) > a session.gone the core records a minute after a stop moves no last_seen, so the stop reads its own age
+ ↓ test/record.test.ts > an agent cannot hold a run's identity > the core's start of a run replaces an agent's earlier one, live and after a rebuild
+ ↓ test/record.test.ts > round 15: run results, resumed sessions, answered plans and agent puts > the core's finish of a run sets its result over a cli finish that landed first
+ ↓ test/record.test.ts > round 15: run results, resumed sessions, answered plans and agent puts > a finished session that resumes and loses its new events in a cut: its next claim reads INVALID
+ ↓ test/record.test.ts > round 15: run results, resumed sessions, answered plans and agent puts > an answered plan keeps the steps your yes bound
+ ↓ test/record.test.ts > round 15: run results, resumed sessions, answered plans and agent puts > an agent's evidence.put never brings back a removed file
+ ↓ test/record.test.ts > round 16: cut starts across restarts, late finishes, archived transcripts > a session whose start a cut lost reads INVALID at its claim after a later clean restart
+ ↓ test/record.test.ts > round 16: cut starts across restarts, late finishes, archived transcripts > a finish that lands after a newer prompt, before the FULL boundary, exempts nothing
+ ↓ test/record.test.ts > round 16: cut starts across restarts, late finishes, archived transcripts > transcript.archived never brings back a file retention removed
+ ↓ test/record.test.ts > the decisions projection tells a revocation from an overrule > a decision revoked on the trusted path reads revoked with no overruler; an overruled one names the event that overruled it
+ ↓ test/record.test.ts > a prompt the core answered in the model's place (#83) > the core's finish after the claim and the answered prompt ends the session: a cut while it idles loses nothing, its claim stays open
+ ↓ test/record.test.ts > readSince follows the log for a fold > hands on each event of its kinds once, in log order, across pages, and moves the cursor past the rest
+ ✓ test/record.test.ts > a commit that waited behind an evidence sync is judged by the log as it is when it commits (#1410) > a prompt queued behind its session's stop, both behind a sync, still resumes with a FULL commit 39ms
+ ✓ test/record.test.ts > a verdict's commit syncs the evidence its requirements stand on, without citing it (#1410) > the files its requirements name are synced before the verdict commits, and its own evidence list stays empty 14ms
+ ↓ test/record.test.ts > a read-only connection to the record > holds SQLite's 2 MB page cache, as the writer's does
+ ↓ test/record.test.ts > a read-only connection to the record > opens on a file that is no database, and its first read says so
 
  Test Files  1 passed (1)
       Tests  2 passed | 73 skipped (75)
-   Start at  13:04:16
-   Duration  288ms (transform 61%, tests 22%, import 16%, worker 1%)
+   Start at  16:15:41
+   Duration  290ms (transform 60%, tests 23%, import 16%, worker 1%)
 
-load end { 19.57 7.88 6.54 }
+== end 2026-11-14 16:15:42 load { 15.62 27.75 85.85 } thermal 0
 vitest exit=0
