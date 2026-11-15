@@ -734,6 +734,11 @@ pub enum Call {
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
+    /// #225: a vector field's integrated streams, each its points from its start.
+    Streams {
+        doc: String,
+        item: String,
+    },
     /// #225: a vector field's streams, arrows and flow windows at its frame.
     VectorField {
         doc: String,
@@ -1938,6 +1943,18 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
+            Call::Streams { doc, item } => {
+                let reply = self.vector_field(doc, item, &EvalTime::Flicks(0));
+                match reply["outcome"].as_str() {
+                    Some("answered") => json!({
+                        "item": item,
+                        "streams": reply["streams"].as_array().into_iter().flatten()
+                            .map(|s| json!({"id": s["id"], "points": s["points"]}))
+                            .collect::<Vec<_>>(),
+                    }),
+                    _ => reply,
+                }
+            }
             Call::VectorField { doc, item, t } => {
                 let t = t.clone().unwrap_or(EvalTime::Flicks(0));
                 self.vector_field(doc, item, &t)

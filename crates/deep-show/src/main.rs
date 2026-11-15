@@ -651,6 +651,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "registries" => return Some(Call::Registries),
         // #490: the closed function list's point and interval forms, and their search.
         "fn" => return Some(Call::Fn(Box::new(c.clone()))),
+        // #225: a vector field's integrated streams alone.
+        "streams" => {
+            return Some(Call::Streams {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
         // #225: a vector field's streams, arrows and flow windows at t.
         "vector_field" => {
             return Some(Call::VectorField {
