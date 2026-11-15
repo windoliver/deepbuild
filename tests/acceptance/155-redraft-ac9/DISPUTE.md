@@ -21,3 +21,8 @@ This folder is a fresh run of the same blind job with the same inputs (the issue
 the criterion, never the work, the diff or this dispute (design: Dogfooding). On the work it passes, 2 of 2, its planted
 preset included; so the dispute goes to the owner once, with both drafts and this output. Until then the first draft's
 `pack.test.ts` runs by hand (`scripts/lanes.mjs`), and this folder runs in the lanes.
+
+## The owner's call
+
+Nov 15, 2026, on PR #2613: "Yes, swap them". AC9 is proved by this redraft; the first draft's `pack.test.ts` stays by
+hand.
