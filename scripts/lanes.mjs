@@ -690,6 +690,10 @@ timed.push('tests/acceptance/223/ac7-budgets.test.ts');
 // vector fields through it; ac6 times 1,000 streams' integration in release.
 alone.push('tests/acceptance/225/', 'tests/acceptance/225-oracle/');
 timed.push('tests/acceptance/225/ac6-budgets.test.ts');
+// #225's first-draft Oracle port for criterion 7 holds a twin that lands on a full turn, so it passes every program and
+// its failsNaming can't pass (tests/acceptance/225-oracle-redraft-ac7/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/225-oracle-redraft-ac7/');
+byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
