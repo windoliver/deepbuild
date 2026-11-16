@@ -1,0 +1,46 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/compaction-sync.test.ts packages/hub/test/gone-watch.test.ts packages/hub/test/mods-start.test.ts packages/hub/test/overridden.test.ts packages/hub/test/process-read-reuse.test.ts packages/hub/test/start-ps.test.ts packages/hub/test/threads.test.ts tests/acceptance/2328/lease.test.ts tests/acceptance/2329/compaction-ps.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+·stderr | packages/hub/test/threads.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  91488 (node)
+  91497 (node)
+
+·x···········stdout | tests/acceptance/2328/lease.test.ts > #2328 a leased command starts sooner > #2328.661c3161 A leased command with the hub up starts after at most one `ps` wait in `deep lease` itself and two in the hub, counted by a stand-in `ps` on PATH
+AC1: deep lease (pid 95839) started by +0 ms, first connection +5242 ms, granted +15444 ms, the command started +15562 ms
+AC1: deep lease's own waits before the command started: wait 1: `ps -o lstart= -p 95839` by `deep lease`, `deep lease`'s start, +220 ms to +5239 ms
+AC1: the hub's waits between deep lease's first call and its grant: wait 1: `ps -o lstart= -p 95839` by the hub, `deep lease`'s start, +5252 ms to +10311 ms beside `ps -A -o pid=,ppid=` by the hub, the process table, +5252 ms to +10334 ms; wait 2: `ps -o lstart= -p 95262` by the hub, the agent's start, +10345 ms to +15440 ms
+AC1: every ps from deep lease's start on: `ps -o lstart= -p 95839` by `deep lease`, `deep lease`'s start, +220 ms to +5239 ms; `ps -o lstart= -p 95839` by the hub, `deep lease`'s start, +5252 ms to +10311 ms; `ps -A -o pid=,ppid=` by the hub, the process table, +5252 ms to +10334 ms; `ps -o lstart= -p 95262` by the hub, the agent's start, +10345 ms to +15440 ms; `ps -o lstart= -p 96923` by the hub, the command's start, +15458 ms to +20506 ms
+
+·stdout | tests/acceptance/2328/lease.test.ts > #2328 a leased command starts sooner > #2328.a793e073 The hub hears `lease.exited()` once for a command whose group ended with it
+AC2: every call deep lease made: lease.wait +5244 ms answered +15444 ms: {"status":"granted","ticket":"lease-wait:30ccdfb0fb2a","secret":"<secret>","run":"run:LEASE30CCDFB0FB2AMWIDEL3T","leases":["lease:01M7GK55TSV3MABE7YACJNB3QF"],"makeflags":"-j11 --jobserver-auth=fifo:/; lease.started +15448 ms answered +20512 ms: {"tracked":true}; lease.exited +20526 ms answered +20528 ms: {"code":"type","retryable":false,"remediation":"no lease this deep lease holds has that ticket","path":"/params","actual":"lease.exited","evidence":[]}
+
+stdout | tests/acceptance/2328/lease.test.ts > #2328 a leased command starts sooner > #2328.7a05df84 A `deep lease` run from inside an agent's process tree still holds its lease as that session; one whose PID was reused is still refused
+AC3: `deep lease` under agent pid 95262 (session c215d57e-9f88-4b47-be10-56b6ae064874): cpu.slot slow exclusive by session:c215d57e9f884b47be1056b6ae064874 (released)
+
+·stdout | tests/acceptance/2328/lease.test.ts > #2328 a leased command starts sooner > #2328.7a05df84 A `deep lease` run from inside an agent's process tree still holds its lease as that session; one whose PID was reused is still refused
+AC3: with pid 95262 reused, the second `deep lease`: lease.wait +163 ms answered +261 ms: {"status":"granted","ticket":"lease-wait:8a1d03b49cd9","secret":"<secret>","run":"run:LEASE8A1D03B49CD9MWIDEP8S","leases":["lease:01M7GK5B2C0V5MTC99BF2GR8CW"],"makeflags":"-j11 --jobserver-auth=fifo:/; lease.started +271 ms answered +338 ms: {"tracked":true}; lease.exited +342 ms answered +344 ms: {"ok":true}; cpu.slot slow exclusive by cli (released)
+
+·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/overridden.test.ts > a deny that did not hold > binds a Claude Code session resumed in a new process (--resume, the desktop app opened again) from its resume start
+Error: ENOTEMPTY, Directory not empty: '/private/tmp/hub-315-Dswekb'
+ ❯ withHub packages/hub/test/hub.ts:98:5
+     96|   } finally {
+     97|     await stop();
+     98|     rmSync(home, { recursive: true, force: true });
+       |     ^
+     99|   }
+    100| }
+ ❯ packages/hub/test/overridden.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 8 passed (9)
+      Tests  1 failed | 16 passed (17)
+   Start at  13:52:07
+   Duration  30.50s (tests 99%, transform 1%)

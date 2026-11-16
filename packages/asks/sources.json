@@ -944,6 +944,82 @@
     }
   },
   {
+    "source": "work.run_breaker",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "The standing run ask:01JQ4N1TZ6M5V0YB8K2D3F7G9H is paused: the last 5 attempts in a row ended without a landing: #104 attempt 1 in Claude Code, stalled; #105 attempt 1 in Claude Code, stalled; #106 attempt 1 in Codex, crashed or interrupted; #104 attempt 2 in Codex, stalled; #107 attempt 1 in Claude Code, sent back past its rounds. Go on, or keep it paused?",
+        "options": [
+          {
+            "id": "resume",
+            "label": "Go on",
+            "decision": "none"
+          },
+          {
+            "id": "stay",
+            "label": "Keep it paused",
+            "decision": "none"
+          }
+        ],
+        "recommended": "stay",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "stay",
+        "provisional": false,
+        "owner": "you",
+        "key": "5c2e8f1a0d9b7c6e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "5c2e8f1a0d9b7c6e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "work.call",
+    "kind": "taste",
+    "fixture": {
+      "ask": {
+        "kind": "taste",
+        "question": "Is \"the look of #100's change is right to you\" true of #100's change? Before: main at 0123456789ab; after: PR #7 at 89abcdef0123, which lands now and Send back reverts.",
+        "options": [
+          {
+            "id": "yes",
+            "label": "Yes",
+            "decision": "none"
+          },
+          {
+            "id": "send_back",
+            "label": "Send back",
+            "decision": "none"
+          }
+        ],
+        "recommended": "yes",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "yes",
+        "provisional": false,
+        "owner": "you",
+        "key": "3f1e9a7c5b2d8e0f4a6c1b3d5e7f9a2c4b6d8e0f1a3c5e7b9d2f4a6c8e0b1d3f",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "89abcdef0123456789abcdef0123456789abcdef"
+        },
+        "subject": {
+          "screen": "acme/shop#100",
+          "element": "the look of #100's change is right to you"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {

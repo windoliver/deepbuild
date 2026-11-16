@@ -1,0 +1,5 @@
+node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json   (after the last source edit)
+tsc exit 0
+node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json && node node_modules/typescript/bin/tsc -p tests/acceptance/2118/tsconfig.json   (with the frozen suite in place)
+tsc exit 0
+suite tsc exit 0

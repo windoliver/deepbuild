@@ -900,8 +900,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 .takes("{strength: 0..1, blur: px, plane: named part}"),
             // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
             // `water::parse` also takes a wind's fields bare, in place of `{wind: {..}}`.
-            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold}, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
-                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam, wake: {item, span} | none, shore}"),
+            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold, speed}, flow: {along, speed, cycle} | none, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
+                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, shore}"),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
@@ -1192,12 +1192,23 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
-        // #465: an Effect item; scene3d draws `kind: flare` (Effect: flare).
+        // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
+        // (Effect: dof).
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p(
+                    "dof",
+                    "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
+                    "",
+                    Value::Null,
+                    S,
+                    json!({"focus": 2}),
+                    json!({"focus": 4}),
+                )
+                .takes("{focus: ID | m, coc?: physical, max_coc?: px, taps?: 64 | 96 | 128, rotate?: pixel_hash, far_over_near?: refuse, projection?: perspective | orthographic, ortho_coc?: f32, band?: {center: ID | px, width: px, feather?: px, angle?: deg, amount: px}}"),
                 p(
                     "flare",
                     "{from: lights | {emissive: EV100}, ghosts: u8 <= 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic}, halo: ratio, starburst: {blades: u8}, intensity, tint: role}",

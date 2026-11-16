@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { ClaimCheck } from './gate-runner.js';
 
 type Obj = Record<string, unknown>;
 
@@ -21,6 +22,24 @@ export function releaseSpec(cwd: string): ReleaseSpec {
   const s = spec.switches;
   const switches = isObj(s) && typeof s.file === 'string' && typeof s.deployed === 'string' ? { file: s.file, deployed: s.deployed } : null;
   return { checks, switches };
+}
+
+const SPEC = '.deepbuild/done.yaml';
+/** A spec check the gate can't run (#2205): it stands on the claim missing its cause, yours to clear, never left out. */
+const blocked = (check: string, cause: string): ClaimCheck => ({ check, approved: null, command: '', covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', prerequisite: { outcome: 'missing', cause }, holds: false });
+/** The names of the spec's `checks` entries, whatever each one holds. */
+export const specEntries = (spec: unknown): string[] => (isObj(spec) && isObj(spec.checks) ? Object.keys(spec.checks) : []);
+/** A name of the done claim nothing can run (#2205): one `checks` doesn't define, or an entry with no `run` line that no check kind takes. */
+export const cantRun = (spec: unknown, name: string): ClaimCheck => blocked(name, specEntries(spec).includes(name) ? `nothing can run spec check ${name}: its entry has no run line and no check kind takes it` : `spec check ${name} is not defined in checks`);
+/**
+ * A done.yaml that is there and can't be read as a spec (#2205), as the one check its claim gets: the file, missing
+ * where the parser stopped. None for a checkout with no done.yaml, which alone reads as a repo with no spec.
+ */
+export function unreadSpec(cwd: string): ClaimCheck[] {
+  try { parseYaml(readFileSync(join(cwd, SPEC), 'utf8')); return []; } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return [];
+    return [blocked(SPEC, `${SPEC} can't be read: ${String((error as Error).message).split('\n')[0]!.replace(/:$/, '')}`)];
+  }
 }
 
 /** Git with none of this process's git settings, so a run reads the repo alone. */

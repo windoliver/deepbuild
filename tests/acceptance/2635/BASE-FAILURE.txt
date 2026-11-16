@@ -1,0 +1,62 @@
+✖ AC1: crates(cwd) with no cargo on PATH throws an Error starting "cargo metadata failed:" naming the spawn code (313.315963ms)
+✖ AC1: node scripts/affected.mjs with no cargo on PATH names cargo and that it could not start, with no TypeError (505.709555ms)
+✔ AC2: a cargo that writes "error: boom" to stderr and exits 101 makes crates(cwd) throw "cargo metadata failed: error: boom" (216.30427ms)
+✔ AC3: with no cargo on PATH, node scripts/affected.mjs exits non-zero and prints no PASS affected summary (608.742347ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1896.014866
+
+✖ failing tests:
+
+test at tests/acceptance/2635/affected-cargo-missing.test.mjs:69:1
+✖ AC1: crates(cwd) with no cargo on PATH throws an Error starting "cargo metadata failed:" naming the spawn code (313.315963ms)
+  AssertionError [ERR_ASSERTION]: crates(cwd) threw a TypeError: TypeError: Cannot read properties of undefined (reading 'trim')
+      at crates (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/scripts/affected.mjs:51:80)
+      at cratesWithPath (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:52:16)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:72:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:75:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2635/affected-cargo-missing.test.mjs:80:1
+✖ AC1: node scripts/affected.mjs with no cargo on PATH names cargo and that it could not start, with no TypeError (505.709555ms)
+  AssertionError [ERR_ASSERTION]: file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:51
+    if (result.status !== 0) throw Error(`cargo metadata failed: ${result.stderr.trim().split('\n').at(-1)}`);
+                                                                                 ^
+  
+  TypeError: Cannot read properties of undefined (reading 'trim')
+      at crates (file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:51:80)
+      at main (file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:380:21)
+      at file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:522:82
+  
+  Node.js v24.22.0
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2635/affected-cargo-missing.test.mjs:84:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:51\n  if (result.status !== 0) throw Error(`cargo metadata failed: ${result.stderr.trim().split('\\n').at(-1)}`);\n                                                                               ^\n\nTypeError: Cannot read properties of undefined (reading 'trim')\n    at crates (file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:51:80)\n    at main (file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:380:21)\n    at file:///tmp/deep-2635-YfFp0f/tree/scripts/affected.mjs:522:82\n\nNode.js v24.22.0\n",
+    expected: /TypeError/,
+    operator: 'doesNotMatch',
+    diff: 'simple'
+  }

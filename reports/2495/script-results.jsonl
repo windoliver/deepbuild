@@ -1,0 +1,6 @@
+{"type":"start","file":"<change>/tests/config-eval-storage.test.mjs","name":"an unreachable hub blocks evidence storage, leaves the report and prints no evidence handle","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"<change>/tests/config-eval-storage.test.mjs","name":"an unreachable hub blocks evidence storage, leaves the report and prints no evidence handle","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"<change>/tests/config-eval.test.mjs","name":"the gate passes a change that touches no configuration, and blocks one until a replay of it as it is now passes","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"<change>/tests/config-eval.test.mjs","name":"the gate passes a change that touches no configuration, and blocks one until a replay of it as it is now passes","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"start","file":"<change>/tests/config-eval.test.mjs","name":"plan freezes the change's files against the merge base and the repo's newest archived tasks after the cutoff","nesting":0,"suite":false,"skip":false,"todo":false}
+{"type":"pass","file":"<change>/tests/config-eval.test.mjs","name":"plan freezes the change's files against the merge base and the repo's newest archived tasks after the cutoff","nesting":0,"suite":false,"skip":false,"todo":false}

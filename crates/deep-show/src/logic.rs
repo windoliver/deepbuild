@@ -148,7 +148,7 @@ impl Hub<'_> {
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
     fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
         self.inline_worlds(form, track)?;
-        let Some(piece) = self.logic_piece(form)? else {
+        let Some(piece) = self.logic_piece(form, track)? else {
             return Ok(());
         };
         let entries: Vec<Entry> = track
@@ -240,24 +240,42 @@ impl Hub<'_> {
     }
 
     /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
-    /// each program read from the evidence store; none when it has no logic item.
-    pub(crate) fn logic_piece(&self, form: &Value) -> Result<Option<Piece>, Box<Issue>> {
+    /// each program read from the evidence store, with the between-step services this build binds
+    /// answering on `form`'s worlds and the core input track `track` (#213); none when it has no
+    /// logic item.
+    pub(crate) fn logic_piece(
+        &self,
+        form: &Value,
+        track: &[Value],
+    ) -> Result<Option<Piece>, Box<Issue>> {
         let Some(piece) = piece_json(form) else {
             return Ok(None);
         };
         let root = &self.scenario.evidence;
-        let piece = check_in(&piece, &Default::default(), &mut History::new(), &|sha| {
-            crate::evidence::read(root, sha)
-        })
+        let piece = check_in(
+            &piece,
+            &Default::default(),
+            &mut History::new(),
+            &|sha| crate::evidence::read(root, sha),
+            &crate::physics::cast::services(
+                &self.startup.sealed,
+                form,
+                track,
+                self.planted(crate::hub::Planted::Physics(
+                    crate::physics::Planted::CastAnswersLate,
+                )),
+            ),
+        )
         .map_err(|r| refused(r.0))?;
         Ok(Some(piece))
     }
 
     /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
     /// (and to the last step asked): its region map with its layout digest, each asked step's
-    /// arrays as that step left them and the fuel it used, and its trap, null when none.
+    /// arrays as that step left them and the fuel it used, its trap, null when none, and the
+    /// hash of the bytes it runs.
     pub(crate) fn logic_read(&self, form: &Value, items: &[String], steps: &[i64], track: &[Value]) -> Value {
-        let piece = match self.logic_piece(form) {
+        let piece = match self.logic_piece(form, track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
@@ -307,39 +325,41 @@ impl Hub<'_> {
                 })
                 .collect();
             let trap = rec.traps.iter().find(|t| t["item"] == json!(id)).cloned().unwrap_or(Value::Null);
-            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap}));
+            // #1164: `hash`, the SHA-256 of the bytes the engine runs (sandbox@1's rewrite).
+            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap, "hash": piece.items[i].hash}));
         }
         json!({"logic": out})
+    }
+}
+
+/// #1164: the logic twins a scenario's `planted` may name, alone or as a list applied together.
+const PLANTED: [&str; 2] = ["restore_zeroes_move_count", "check_compares_step_hashes"];
+
+/// A scenario's `planted` as logic twins: `Some(None)` when it names none, `None` (bad input)
+/// for a list holding any other name.
+pub(crate) fn planted(v: Option<&Value>) -> Option<Option<deep_logic::Planted>> {
+    let mut p = deep_logic::Planted::default();
+    match v {
+        Some(Value::String(n)) if PLANTED.contains(&n.as_str()) => Some(p.and(n)),
+        Some(Value::Array(names)) => {
+            for n in names {
+                p = p.and(n.as_str().filter(|n| PLANTED.contains(n))?)?;
+            }
+            Some(Some(p))
+        }
+        _ => Some(None),
     }
 }
 
 /// `form`'s logic items as one piece, as the logic module checks one: its seed, controls and
 /// items; none when it has no logic item.
 pub(crate) fn piece_json(form: &Value) -> Option<Value> {
-    let items: Map<String, Value> = form
-        .get("items")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
-        .map(|(id, i)| {
-            // Without the program the hub inlined as `wasm` for the module's steps (#533): the
-            // check reads it from the store by `program`.
-            let mut params = i.get("params").cloned().unwrap_or(json!({}));
-            if let Some(p) = params.as_object_mut() {
-                p.remove("wasm");
-            }
-            (id.clone(), json!({"kind": "logic@1", "params": params}))
-        })
-        .collect();
-    if items.is_empty() {
-        return None;
-    }
-    Some(json!({
-        "seed": form.get("seed").and_then(Value::as_i64).unwrap_or(0),
-        "controls": form.get("controls").cloned().unwrap_or(json!({})),
-        "items": items,
-    }))
+    // Without the program the hub inlined as `wasm` for the module's steps (#533): the check
+    // reads it from the store by `program`. The core's reads judge as figure, as they did before
+    // a play (#184) carried the document's class.
+    let mut piece = deep_logic::play::piece_of(form)?;
+    piece.as_object_mut()?.remove("class");
+    Some(piece)
 }
 
 /// #538: each array a text's lookup or a group's flip names, resolved through the core's view:

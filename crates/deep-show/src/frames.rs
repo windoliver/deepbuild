@@ -188,13 +188,15 @@ impl<'a> Hub<'a> {
         })
     }
 
-    /// Every canvas module's fixtures, the core's first.
+    /// Every canvas module's fixtures, the core's first; a planted document, which the check
+    /// refuses, is the kit's alone (#2085).
     pub fn fixtures_reply(&self) -> Value {
         let list: Vec<Value> = self
             .startup
             .sealed
             .fixtures
             .iter()
+            .filter(|(_, f)| !f.planted)
             .map(|(module, f)| {
                 let mut v = json!({"module": module, "name": f.name, "document": f.document});
                 if let Some(r) = &f.record {
@@ -237,7 +239,6 @@ impl<'a> Hub<'a> {
             .ok()
     }
 
-    /// One frame of a document's session (`eval`).
     /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
     /// through its groups' warps at their values then, each sub-path flattened to its points.
     pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
@@ -267,7 +268,63 @@ impl<'a> Hub<'a> {
         }
     }
 
+    /// #225: a vector field at its frame: its streams, its arrows and its flow windows at t, its
+    /// vars as the frame read them, by the integrator the scenario plants, if any.
+    pub fn vector_field(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let method =
+            deep_canvas_marks::vector_field::method_of(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let Some(items) = crate::warps::items_at(&self.sched, session) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let Some(field) = items.get(item).filter(|i| {
+            i.get("kind").and_then(Value::as_str) == Some(deep_canvas_marks::vector_field::KIND)
+        }) else {
+            return json!({"outcome": "refused", "code": "ref_unresolved", "item": item});
+        };
+        let seconds = t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        match deep_canvas_marks::vector_field::read_item(item, field, &|_| None, method) {
+            Ok(vf) => deep_canvas_marks::vector_field::answer(item, &vf, seconds),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
+    /// One frame of a document's session (`eval`). #542: a golden pins each view setting to its
+    /// declared default (Scope and input classes), so the frame leaves the session's view-class
+    /// values out, and the live session gets them back after.
     pub fn eval(&mut self, e: &Eval) -> Value {
+        let held = self.take_view(&e.doc);
+        if held.is_some() {
+            self.replay(&e.doc, self.now);
+        }
+        let reply = self.eval_frame(e);
+        if let Some(view) = held {
+            if let Some(s) = self.session_state.get_mut(&e.doc) {
+                s["view"] = view;
+            }
+            self.replay(&e.doc, self.now);
+        }
+        reply
+    }
+
+    /// The document's view-class session values, taken out; none when it holds none.
+    fn take_view(&mut self, doc: &str) -> Option<Value> {
+        let view = self.session_state.get_mut(doc)?.get_mut("view")?;
+        view.as_object()
+            .is_some_and(|m| !m.is_empty())
+            .then(|| view.take())
+    }
+
+    fn eval_frame(&mut self, e: &Eval) -> Value {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
         }
@@ -346,6 +403,13 @@ impl<'a> Hub<'a> {
         // Planted (#504): a plug-in's code computes a part each frame, outside every sealed operator.
         if self.scenario.planted == Some(crate::hub::Planted::PluginCodePerFrame) {
             nodes.push(json!({"operator": "plugin.place", "module": "plugin", "phase": "items", "item": null, "run": "ran"}));
+        }
+        // Planted (#233): math@1 expands its instances again each frame.
+        if self.scenario.pack_planted.as_deref() == Some(crate::math_twins::EXPANDS_EACH_FRAME) {
+            if let Some(form) = self.forms.get(&e.doc) {
+                let again = crate::math_twins::expand_again(form, &self.startup.sealed, &self.packs);
+                nodes.extend(again);
+            }
         }
         let report = &evaluated.report;
         let mut reply = json!({

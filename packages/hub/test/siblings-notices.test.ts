@@ -28,7 +28,7 @@ function world(): { wa: string; wb: string } {
 }
 const options = (extra: Partial<SiblingOptions> = {}): SiblingOptions => ({
   raw: async () => [], append: async () => undefined, ask: async () => 'ask:01', wake: async () => false,
-  acking: () => undefined, queue: (work) => void work(), now: () => Date.now(), ...extra,
+  acking: () => undefined, queue: (work) => void work(), now: () => Date.now(), over: () => false, ...extra,
 });
 let seq = 0;
 /** A Claude Code hook as deep-hook sends it, through the hub's own mapping. */
@@ -334,3 +334,29 @@ it('after a restart, a "keep which?" ask you answered is not asked again for the
   expect(asked, 'never the same question twice').toHaveLength(1);
   two.stop();
 }, 20_000);
+
+it('a session DeepBuild started whose agent has ended, with no SessionEnd, is no peer: the next one on its issue raises no "keep which?"', async () => {
+  const { wa } = world();
+  const root = join(wa, '..');
+  const wc = join(root, 'wc');
+  git(join(root, 'repo'), 'worktree', 'add', '-q', '-b', 'c/issue-7', wc);
+  let skew = 0;
+  const asked: string[] = [];
+  const over = new Set(['a']);
+  const siblings = new Siblings(options({
+    now: () => Date.now() + skew,
+    ask: async (_s, _a, _c, _source, ask) => { asked.push(String(ask.question)); return 'ask:12'; },
+    over: (session) => over.has(session),
+  }));
+  for (const [s, w] of [['a', wa], ['c', wc]] as const) { const h = hook(s, w, 'PreToolUse', `${s}1`); await siblings.hook(h.drafts, h.meta); }
+  skew = 6_000;
+  const next = hook('c', wc, 'PreToolUse', 'c2');
+  await siblings.hook(next.drafts, next.meta);
+  expect(asked, "a's agent is gone: c is alone on issue 7").toEqual([]);
+  // The same pair while both live is asked, so the silence above is the map's reading of a, not a quiet map.
+  over.clear();
+  const again = hook('c', wc, 'PreToolUse', 'c3');
+  await siblings.hook(again.drafts, again.meta);
+  expect(asked, 'both live on issue 7').toHaveLength(1);
+  siblings.stop();
+});

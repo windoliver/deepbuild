@@ -67,3 +67,23 @@ describe('a cited make target on a rule with several targets (property)', () => 
     expect(masks('check', justfile, 'justfile')).toEqual(['|| true']);
   });
 });
+
+// #1860: a cite resolves first to the run typed as the cite, and the masked-exit rule reads the cite's own text too, so a
+// cite that masks its exit status goes back whichever run it matched.
+describe('a cited run whose cite masks its exit status', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-floor-cite-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'cart', private: true, scripts: { test: 'vitest run' } }));
+  const masked = (cite: string, runs: SessionRun[]) => validityGate({ claim: { claim: 'claim:01K74G0A1B2C3D4E5F6G7H8J9K', message: `Done: \`${cite}\` passes.` }, checkout: dir, deliverables: [], session: { read: [], ran: runs } })
+    .filter((f) => f.kind === 'masked_exit').map((f) => ({ ref: f.ref, why: f.why }));
+  const why = 'the run `pnpm test || true` it cites proves nothing: exit status masked by `|| true`';
+  it('resolves `pnpm test || true` to the run typed as it, not the earlier `pnpm test`, and names the mask', () => {
+    expect(masked('pnpm test || true', ran('pnpm test', 'pnpm test || true'))).toEqual([{ ref: 'pnpm test || true', why }]);
+  });
+  it('reads the mask in the cite when the only run it matched, `pnpm test`, masks nothing', () => {
+    expect(masked('pnpm test || true', ran('pnpm test'))).toEqual([{ ref: 'pnpm test', why }]);
+  });
+  it('finds no mask in a cite of `pnpm test`, the run made', () => {
+    expect(floor({ claim: { claim: 'claim:01K74G0A1B2C3D4E5F6G7H8J9K', message: 'Done: `pnpm test` passes.' }, checkout: dir, definition, locked: lockDefinition(definition), session: { read: [], ran: ran('pnpm test') } })).toEqual({ ok: true });
+  });
+});

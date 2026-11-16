@@ -344,6 +344,13 @@ impl Locals {
         self.keys = [None; SLOTS];
     }
 
+    /// Lets go of the maps, so the next frame that casts makes them again; whether it held any.
+    pub fn rest(&mut self) -> bool {
+        self.forget();
+        self.layers = 0;
+        self.texture.take().is_some()
+    }
+
     /// The map a slot's layer holds, for a test against a clean render.
     pub fn view_of(&self, layer: usize) -> Option<&wgpu::TextureView> {
         self.texture.as_ref().and_then(|(_, v)| v.get(layer))

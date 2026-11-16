@@ -310,7 +310,7 @@ pub fn moving_member<'a>(
 }
 
 /// Whether `v` holds an `{array: "<item>.<name>"}` whose item `is_logic` says is a logic item.
-fn reads_logic(v: &Value, is_logic: &dyn Fn(&str) -> bool) -> bool {
+pub fn reads_logic(v: &Value, is_logic: &dyn Fn(&str) -> bool) -> bool {
     match v {
         Value::Object(m) => {
             m.get("array")

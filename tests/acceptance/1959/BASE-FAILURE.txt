@@ -1,0 +1,39 @@
+Base commit: 0e5572731 ("Merge pull request #2529 from windoliver/fix/2362-kit-seal"), also origin/main when run
+Run: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1959 --no-file-parallelism --testTimeout=600000
+     (vitest 5.0.5; cargo 1.99.1 on PATH; deep-show built with --features r1 in this checkout's target/, warm from one
+     prior build of the same command, which also wrote fixtures/ through the fixture script)
+Result: Test Files 2 failed (2); Tests 3 failed | 1 passed (4); exit 1. Duration 28.41 s.
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1959/tsconfig.json, exit 0.
+Date: 2026-11-15  darwin-arm64
+
+What holds at the base: all three pack versions install (their steps and corpus pass #1956's pack check); the four
+corpus documents open under acme/shelf@3.0.0 with partitions 1, 0, 2 and 3, span 0.8, depth 0.2, migrated @1->@2 and
+@2->@3 each, and their recorded values (#1956's migrator keeps a left-out param out and a 0 at 0 through a rename);
+mixed-versions.scene loads with all 12 instances expanding as shelf.bookcase@3 with the {span 1.6, shelves 4,
+depth 0.4} values, IDs and tag references intact. A one-off probe run of the lifecycle test with only its notice
+comparison switched off passed at all four stages (load, writer A's patch, its undo, the restart), so the fixtures and
+the harness hold on the base and only the missing notices fail it.
+
+Why each failing test fails at the base:
+
+- `read` of a shared document carries no `notices` (crates/deep-show/src/shared.rs, `read`), so no stage's `migrated`
+  notices can be read.
+- Neither planted value is a planted name (crates/deep-show/src/main.rs, the `planted` match ends `_ => return None`),
+  so those scenarios answer {"ok": false, "code": "bad_input"}.
+
+mixed.test.ts
+  x #1959.7ccdd727 mixed-versions.scene opens a1-a6 ... loaded, patched, undone and reopened after a restart
+      at "the load": 18 failures, one per expected step, e.g.
+        loaded: a1 raised no migrated from @1 to @2; the notices: null
+        loaded: b6 raised no migrated from @2 to @3; the notices: null
+  x #1959.7ccdd727 a planted loader ... (migration_one_major_per_document) ... fails, naming them
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+zero.test.ts
+  v #1959.fd45405b four @1 corpus documents ... open through both steps at @3 with partitions 1, 0, 2 and 3, each with
+    span 0.8 and depth 0.2                                                   PASSES at the base (#1956 already does it)
+  x #1959.fd45405b a planted migrator ... (migration_zero_as_left_out) ... naming the item and the param
+      at "deep-show run refused the scenario": {"ok":false,"code":"bad_input"} (unknown planted value)
+
+Sanity check of criterion 2's planted half (a one-off probe, not kept): presenting shelf-0's document with dividers
+left out in place of 0, which is what the plant's migration yields, made the check fail with a failure naming shelf-0
+and "partitions 1".

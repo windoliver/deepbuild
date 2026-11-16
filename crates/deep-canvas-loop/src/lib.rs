@@ -10,6 +10,7 @@ pub mod exposure;
 mod fixtures;
 pub mod framing;
 pub mod noise;
+pub mod review;
 mod pixels;
 pub mod scale;
 mod scene;
@@ -138,6 +139,12 @@ fn register(r: &mut Registrar) {
         issues(noise::report(l, i, &[]))
     })
     .check_frames(2, noise::report);
+    // #456's: a model's reading only its host makes, with the model it names; run anywhere else
+    // it reads nothing, so it is BLOCKED, never passed.
+    r.check(review::KIND, "same", &["loop.unreadable"], |l, i| {
+        issues(unhosted(l, i, &[]))
+    })
+    .check_frames(1, unhosted);
     r.code(
         "loop.unreadable",
         "What a loop check can't read: a mesh geometry.shading can't (missing, compressed data no pinned tool decoded, not triangles, away from its bind pose, or UV sets asked at a resolution over 4,096 px), or a document or subject a check can't evaluate.",
@@ -232,6 +239,15 @@ fn issues(out: Report) -> Vec<(String, Raised)> {
         .map(|(id, raised, _)| (id, raised))
         .chain(unread)
         .collect()
+}
+
+/// render.review outside a host that calls its model: BLOCKED, naming what it lacks.
+fn unhosted(_: &Value, _: &Value, _: &[deep_canvas::registry::Frame]) -> Report {
+    Report {
+        blocked: vec![json!({"code": "no_model", "ids": [], "path": "kind",
+            "ask": "run render.review where the host names its model"})],
+        ..Report::default()
+    }
 }
 
 /// A reading as a failure's text gives it: to four decimals.
