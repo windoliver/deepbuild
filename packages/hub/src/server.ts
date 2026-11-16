@@ -486,15 +486,12 @@ class Hub {
     // The lock is held and nothing listens there, so whatever is at the socket's path is a dead hub's: removed, then
     // made again only you can open.
     rmSync(this.root.socket, { force: true });
-    const umask = process.umask(0o177);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        this.server.once('error', reject);
-        this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
-      });
-    } finally {
-      process.umask(umask);
-    }
+    // The private root denies other users from creation, including before chmod. Changing the process's umask
+    // here would also strip the search bits from directories the core's worker is creating (#2594).
+    await new Promise<void>((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
+    });
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
     await this.syncNetwork();
@@ -1486,6 +1483,8 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   // Everything the hub writes, the record and the evidence included, is readable only by you.
   process.umask(0o077);
   mkdirSync(root.dir, { recursive: true, mode: 0o700 });
+  // mkdir's mode applies only to a new root; an existing dev or installed root must protect the socket too.
+  chmodSync(root.dir, 0o700);
   if (plant === 'unlink-before-lock') rmSync(root.socket, { force: true });
   const lock = takeLock(root.lock);
   if (!lock) {
