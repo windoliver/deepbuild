@@ -141,6 +141,7 @@ impl Named2 {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn marks_at(
     doc: &Map<String, Value>,
     program: &Program,
@@ -149,9 +150,21 @@ fn marks_at(
     (palette, ty): &(Palette, Type),
     snap: Option<f64>,
     motifs: Option<(&Motifs, bool)>,
+    planted: Option<Planted>,
 ) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
+    // #451: graphs drawn as marks2d's items, and 2D particles as their dots along the curves as
+    // laid out at t.
+    let mixed = crate::flows2d::lower(doc, &mut items, t, planted, palette)?;
+    let mut held;
+    let palette = if mixed.is_empty() {
+        palette
+    } else {
+        held = palette.clone();
+        held.extend(mixed);
+        &held
+    };
     // #462: the masks at their evaluated poses, before any look moves them.
     let volumes = crate::regions::volumes_2d(&items);
     // #462: the look's motifs move the evaluated items a scene binds, never the document.
@@ -341,6 +354,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         .collect();
     let export = call["export"].is_object();
     let black = app.planted == Some(Planted::DrawsBlack);
+    let asked: Vec<String> = call["particles"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect();
     let stops_at_request = app.planted == Some(Planted::StopsAtRequest);
 
     // Compiled once: no look enters the motion program.
@@ -460,6 +480,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         &look,
         snap(&ix),
         motifs.as_ref().map(|m| (m, reduced_motion)),
+        planted,
     )?;
     // The paper's fields hold still; only where the pixels land moves with the camera.
     let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
@@ -519,6 +540,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     d.look,
                     snap(d.ix),
                     d.motifs.map(|m| (m, reduced_motion)),
+                    planted,
                 )?;
                 let print = printing_at(n, d.def, d.look, &items, view.as_ref(), ground)?;
                 let index = index_frame(d.ix, &drawn, &items);
@@ -652,6 +674,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             });
             if hash {
                 row["pixel_hash"] = json!(pixels);
+            }
+            // #451: each asked 2D particles item's evaluated data at the frame's time.
+            if !asked.is_empty() {
+                row["particles"] = crate::flows2d::report(&doc, &program, at(n), &asked, planted)?;
             }
             if let Some(bytes) = bytes {
                 let image = if finish.is_some() {

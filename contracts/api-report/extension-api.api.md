@@ -10,6 +10,17 @@ export interface Deep {
         ask: {
         };
     }): Promise<unknown>;
+    "canvas.play"(params: {
+        doc: string;
+        run: {
+            seed: number;
+            span?: unknown;
+            bot?: { [key: string]: unknown };
+            track?: Array<{ [key: string]: unknown }>;
+            values?: Array<string>;
+            frames?: Array<number>;
+        };
+    }): Promise<unknown>;
     "canvas.read"(params: {
         doc: string;
         query: {

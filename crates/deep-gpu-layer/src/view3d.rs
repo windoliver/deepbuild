@@ -40,6 +40,8 @@ struct Window3 {
     size: [u32; 2],
     view: [u32; 2],
     page: [u8; 3],
+    /// The shell's question card over the view (#177).
+    card: Option<crate::window::Card>,
 }
 
 struct Args {
@@ -149,6 +151,8 @@ struct Args {
     viewer: Vec<(u64, Value)>,
     /// #173: the frame cap, stalls, scrubs, your hand's orbit and the determinism check.
     history: history::Inputs,
+    /// #177: the view's HDR output, `hdr` and the stub display.
+    hdr: crate::hdr::Hdr,
 }
 
 pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -313,11 +317,14 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
                 | "depth"
                 | "reflection"
                 | "foam"
+                | "normal"
                 | "coc"
+                | "surface"
+                | "window_linear"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam and coc",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface and window_linear",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -351,7 +358,12 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
                 ])
             });
             match (pair(&w["size"]), pair(&w["view"]), page) {
-                (Some(size), Some(view), Some(page)) => Some(Window3 { size, view, page }),
+                (Some(size), Some(view), Some(page)) => Some(Window3 {
+                    size,
+                    view,
+                    page,
+                    card: crate::frames::card_of(w),
+                }),
                 _ => return Err(bad("window is {size, view, page}")),
             }
         }
@@ -544,6 +556,7 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
         export,
         viewer,
         history: history::inputs(call)?,
+        hdr: crate::hdr::Hdr::parse(call)?,
     })
 }
 
@@ -1168,7 +1181,8 @@ fn run_view(
         p.page = (32, vec![w.page]);
         p.view = w.view;
         p.size = size;
-        p.card = None;
+        p.card = w.card.clone();
+        p.hdr = false;
         p.waits_on_gpu = false;
         p.overlays.clear();
         p.pairs_newest = app.planted == Some(Planted::PairsNewestSlot);
@@ -1192,6 +1206,7 @@ fn run_view(
         "depth",
         "reflection",
         "foam",
+        "normal",
         "coc",
     ]
     .iter()
@@ -1524,6 +1539,8 @@ fn run_view(
             scene.read_reflection = args.targets.contains("reflection");
             // #268: the water's foam share, read back as the `foam` target.
             scene.read_foam = args.targets.contains("foam");
+            // #968: the water's shaded normal, read back as the `normal` target.
+            scene.read_normal = args.targets.contains("normal");
             let shore = (args.shore)
                 .then(|| {
                     let w = scene.water.as_ref()?;
@@ -1671,6 +1688,19 @@ fn run_view(
                 .map(|(_, at)| *at)
                 .collect();
             let read_targets = (capture && wants_targets || !clicks.is_empty()) && !noop;
+            // #177: whether this frame presents through the HDR surface, and the headroom it
+            // rolls off to; an export, a render-back or a golden never does.
+            let hdr_headroom = if args.export {
+                crate::hdr::export_headroom(app.planted)
+            } else {
+                args.hdr.frame(n, scene.sky.is_some(), app.planted)
+            };
+            if !noop {
+                crate::hdr::present(app, hdr_headroom, size)?;
+            }
+            if let Some(win) = app.window.as_ref() {
+                win.paint.borrow_mut().hdr = hdr_headroom.is_some() && !args.export;
+            }
             // The planted wrong program reads the one pixel under the pointer (#424).
             let margin = if app.planted == Some(Planted::SinglePixelPick) {
                 0
@@ -2511,14 +2541,39 @@ fn run_view(
             if let Some(bytes) = drawn.gpu_bytes {
                 frame.insert("gpu_bytes".into(), json!(bytes));
             }
+            // #177: the HDR surface's frame, and with the planted export, the SDR frame taken from
+            // it.
+            let hdr_texels = hdr_headroom.and_then(|_| crate::hdr::read(app));
+            if args.export {
+                if let (Some(t), Some(b)) = (&hdr_texels, drawn.bytes.as_mut()) {
+                    crate::hdr::to_sdr(t, b);
+                }
+            }
+            let live_hdr = hdr_texels.as_ref().filter(|_| !args.export);
+            if let Some(h) = live_hdr.and(hdr_headroom) {
+                crate::hdr::shown(h);
+            }
+            frame.insert(
+                "hdr".into(),
+                json!({"state": if live_hdr.is_some() { "on" } else { "off" },
+                       "headroom": live_hdr.and(hdr_headroom).unwrap_or(1.0)}),
+            );
             let (frame_seq, window_name) = match (&args.window, app.window.as_ref()) {
-                (Some(_), Some(win)) => {
+                (Some(w), Some(win)) => {
                     win.present(&mut app.cx);
                     let shown = win.paint.borrow().shown;
                     let name = if capture {
                         let image = win
                             .capture(&mut app.cx)
                             .map_err(|e| refused("no_capture", e))?;
+                        if args.targets.contains("window_linear") {
+                            let under = live_hdr.map(|t| (&t[..], w.view, size));
+                            let linear = crate::hdr::composite(&image, under, app.planted);
+                            frame.insert(
+                                "window_linear".into(),
+                                json!(write_named(out, &linear, "f32")?),
+                            );
+                        }
                         Some(write_named(
                             out,
                             &png(image.as_raw(), [image.width(), image.height()])?,
@@ -2531,6 +2586,12 @@ fn run_view(
                 }
                 _ => (ui.latch().map(|(_, f)| f), None),
             };
+            if let (true, true, Some(bgra)) =
+                (capture, args.targets.contains("surface"), &drawn.bytes)
+            {
+                let surface = crate::hdr::surface_json(out, live_hdr.map(|t| &t[..]), bgra)?;
+                frame.insert("surface".into(), surface);
+            }
             frame.insert("frame_seq".into(), json!(frame_seq.unwrap_or(n)));
             frame.insert(
                 "pixel_hash".into(),
@@ -2572,6 +2633,9 @@ fn run_view(
                 }
                 if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
                     frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
+                }
+                if let (Some(n), true) = (&drawn.normal, args.targets.contains("normal")) {
+                    frame.insert("normal".into(), json!(write_named(out, n, "f32")?));
                 }
                 // #468: each pixel's signed circle of confusion, f32.
                 if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
