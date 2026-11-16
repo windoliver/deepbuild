@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "f9e3f787ef9db86f2787ac25a14a7533f34289035466f395c62dfc4df901577e",
+    "digest": "c6bed156756e586416e70a08ffbf41807c5edb9ec0d5a6a8ac70e19907357494",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -114,7 +114,7 @@
   },
   "input": {
     "version": "1.0.0",
-    "digest": "e65249671ed96cf758617d3f9e202cfd7401bf7c1ed804b4d410c90df61e325e",
+    "digest": "c5029a328914b5d10a5d4381cc3be730e0d0b35704f439eecf13d3506aed686b",
     "verdict": "PASS",
     "parts": {
       "clean_rebuild": "PASS",
@@ -124,7 +124,8 @@
       "replay": "PASS",
       "read_region": "PASS",
       "keyboard": "PASS",
-      "input": "PASS"
+      "input": "PASS",
+      "edges": "PASS"
     }
   },
   "logic": {
@@ -195,7 +196,7 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "16ba0318533d04e814906d17e911f9c632fb8b1089227252dad47ec6b392c1a2",
+    "digest": "d7a4fcd91d4d26d7bec14c48e27a80d6679c2904cd79b4fdf36484037f7c4eb3",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -241,7 +242,7 @@
   },
   "physics": {
     "version": "1.0.0",
-    "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
+    "digest": "f48e8b0d1eb431d5b799b0a2151e6b2e6ec8ab77f7e6454bf5ff479dc1cf5479",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
