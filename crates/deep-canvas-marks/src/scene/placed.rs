@@ -48,7 +48,8 @@ pub(super) fn placed(
     // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
     // Issue #160: a path with ops, ends, an attachment or a bend, or a stroke that tapers or
     // waves, is an outline the R1 marks can't draw.
-    let kinetic = ["ops", "ends", "attach", "bend", "width", "opacity"]
+    // #466: a path's build draws a share of its strokes, which R1's marks can't.
+    let kinetic = ["ops", "ends", "attach", "bend", "width", "opacity", "build"]
         .iter()
         .any(|k| params.get(*k).is_some_and(|v| !v.is_null()))
         || stroke.is_some_and(|s| s.contains_key("taper") || s.contains_key("wave"))
@@ -240,6 +241,23 @@ pub(super) fn placed(
         {
             let (_, verbs) = path_data()?;
             let verbs = attached(ctx, verbs, params, &path)?;
+            // #466: a build draws its strokes on in turn, and its fill when its fill says, as
+            // `path_report` and `<item>.build` read it.
+            let build = crate::build::read(params).map_err(|f| Refused {
+                code: "out_of_range",
+                path: format!("{path}/params/{f}"),
+            })?;
+            let verbs = match &build {
+                Some(b) => b.drawn(&verbs, id),
+                None => verbs,
+            };
+            let unfilled = build
+                .as_ref()
+                .filter(|b| !b.fills())
+                .map(|_| without_fill(params));
+            let paint = unfilled
+                .as_ref()
+                .map_or(paint, |p| object_or_empty(p.get("paint")));
             let built = build_path(ctx, id, verbs, params, paint, place)?;
             ctx.paints.shapes(id, &built, place, paint, &paint_path)?
         }
@@ -576,4 +594,70 @@ pub(super) fn placed(
         after: drawn(after),
         drawn: drawn_marks,
     }))
+}
+
+/// `mark` in one color, every span of a text included.
+pub(super) fn recolored(mark: &Mark, c: Rgb) -> Mark {
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect { fill, .. } => *fill = Fill::Solid(c),
+        Mark::Circle { color, .. } | Mark::Path { color, .. } => *color = c,
+        Mark::Shape { fill, stroke, .. } => {
+            fill.iter_mut().for_each(|(f, a)| {
+                *f = Fill::Solid(c);
+                *a = 1.0;
+            });
+            stroke.iter_mut().for_each(|l| {
+                l.paint = Fill::Solid(c);
+                l.opacity = 1.0;
+            });
+        }
+        Mark::Text {
+            color, runs, role, ..
+        } => {
+            *color = c;
+            *role = None;
+            runs.iter_mut().for_each(|r| r.color = c);
+        }
+        Mark::Image { .. } => {}
+    }
+    m
+}
+
+/// `mark` moved by `d` u, renamed `item`.
+pub(super) fn moved(mark: &Mark, d: [f64; 2], name: &str) -> Mark {
+    let shift = |p: [f64; 2]| [p[0] + d[0], p[1] + d[1]];
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect { item, bounds, .. } | Mark::Image { item, bounds, .. } => {
+            *item = name.to_string();
+            bounds[0] += d[0];
+            bounds[1] += d[1];
+        }
+        Mark::Circle { item, center, .. } => {
+            *item = name.to_string();
+            *center = shift(*center);
+        }
+        Mark::Path { item, offset, .. } => {
+            *item = name.to_string();
+            *offset = shift(*offset);
+        }
+        Mark::Text { item, origin, .. } => {
+            *item = name.to_string();
+            *origin = shift(*origin);
+        }
+        Mark::Shape { item, verbs, .. } => {
+            *item = name.to_string();
+            for v in verbs.iter_mut() {
+                *v = match *v {
+                    Verb::Move(p) => Verb::Move(shift(p)),
+                    Verb::Line(p) => Verb::Line(shift(p)),
+                    Verb::Quad(a, b) => Verb::Quad(shift(a), shift(b)),
+                    Verb::Cubic(a, b, c) => Verb::Cubic(shift(a), shift(b), shift(c)),
+                    Verb::Close => Verb::Close,
+                };
+            }
+        }
+    }
+    m
 }

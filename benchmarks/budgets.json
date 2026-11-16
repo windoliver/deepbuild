@@ -1858,6 +1858,51 @@
       "criteria": [
         "#1636.2d5eb798"
       ]
+    },
+    {
+      "id": "hub-lifecycle-start",
+      "command": [
+        "node",
+        "benchmarks/hub-lifecycle.mjs",
+        "start"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "start": 60
+      },
+      "initialReason": "Issue #2330 first measurement: the base has lifecycle commands but no registered lifecycle task, so an absent task is INITIAL, not retroactive base proof. Reuse the sealed redraft's real socket answering at spawn + 30 ms, its 30-35 ms qualification, silent CLI success and bracketed completion lag. One warm-up then five readings; judge all five upper bounds against 60 ms and failing lower bounds by the unchanged reference-Mac margin. The budget runner takes 20 samples per side when the task exists, retaining environment and instruction-counter evidence; p50 and peak memory get a 50% merge-base margin. Standalone --check is not budget proof; the original polling base still needs its authorized wrong-program run.",
+      "criteria": [
+        "#2330.c6939f4f"
+      ]
+    },
+    {
+      "id": "hub-lifecycle-stop",
+      "command": [
+        "node",
+        "benchmarks/hub-lifecycle.mjs",
+        "stop"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "stop": 30,
+        "early-close": 30
+      },
+      "initialReason": "Issue #2330 first measurement: the base has lifecycle commands but no registered lifecycle task, so an absent task is INITIAL, not retroactive base proof. Reuse the sealed redraft's normal stop, early control EOF with the socket still answering for 200 ms, and stubborn peer past the 15 s limit; preserve every safety assertion. One warm-up then five readings per timed scenario; judge all five upper bounds against 30 ms and failing lower bounds by the unchanged reference-Mac margin. The budget runner takes 20 samples per side when the task exists, retaining environment and instruction-counter evidence; p50 and peak memory get a 50% merge-base margin. Standalone --check is not budget proof; the original polling base still needs its authorized wrong-program run.",
+      "criteria": [
+        "#2330.c4ac049d"
+      ]
+    },
+    {
+      "id": "foley-render",
+      "command": [
+        "node",
+        "benchmarks/foley.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #155 first measurement (#155.3c3c0a49): the merge base has no foley renderer. Every foley@1 preset (90) renders its twelve variants at once, each in its own foley-render@1.0.0 process given the params foley_plan gives on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 30 s limit on the reference Mac and the 32 spawned voices' 10-minute soak stay in tests/acceptance/155/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

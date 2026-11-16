@@ -429,6 +429,9 @@ pub struct Scenario {
     pub planted: Option<Planted>,
     /// A canvas module's wrong program by name, which the scheduler hands its operators (#420).
     pub module_planted: Option<String>,
+    /// #155: the done `deep_job` replies the hub holds (`{status, outputs, receipt: {key}}`), which
+    /// a generator source resolves against by its job's key.
+    pub jobs: Vec<Value>,
     /// A first-party pack's planted twin by name, applied as the store reads the pack (#433).
     pub pack_planted: Option<String>,
     /// #1164: the logic module's restore and check twins, one name or a list applied together.

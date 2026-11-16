@@ -5127,72 +5127,6 @@ pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
 mod placed;
 use placed::*;
 
-/// `mark` in one color, every span of a text included.
-fn recolored(mark: &Mark, c: Rgb) -> Mark {
-    let mut m = mark.clone();
-    match &mut m {
-        Mark::Rect { fill, .. } => *fill = Fill::Solid(c),
-        Mark::Circle { color, .. } | Mark::Path { color, .. } => *color = c,
-        Mark::Shape { fill, stroke, .. } => {
-            fill.iter_mut().for_each(|(f, a)| {
-                *f = Fill::Solid(c);
-                *a = 1.0;
-            });
-            stroke.iter_mut().for_each(|l| {
-                l.paint = Fill::Solid(c);
-                l.opacity = 1.0;
-            });
-        }
-        Mark::Text {
-            color, runs, role, ..
-        } => {
-            *color = c;
-            *role = None;
-            runs.iter_mut().for_each(|r| r.color = c);
-        }
-        Mark::Image { .. } => {}
-    }
-    m
-}
-
-/// `mark` moved by `d` u, renamed `item`.
-fn moved(mark: &Mark, d: [f64; 2], name: &str) -> Mark {
-    let shift = |p: [f64; 2]| [p[0] + d[0], p[1] + d[1]];
-    let mut m = mark.clone();
-    match &mut m {
-        Mark::Rect { item, bounds, .. } | Mark::Image { item, bounds, .. } => {
-            *item = name.to_string();
-            bounds[0] += d[0];
-            bounds[1] += d[1];
-        }
-        Mark::Circle { item, center, .. } => {
-            *item = name.to_string();
-            *center = shift(*center);
-        }
-        Mark::Path { item, offset, .. } => {
-            *item = name.to_string();
-            *offset = shift(*offset);
-        }
-        Mark::Text { item, origin, .. } => {
-            *item = name.to_string();
-            *origin = shift(*origin);
-        }
-        Mark::Shape { item, verbs, .. } => {
-            *item = name.to_string();
-            for v in verbs.iter_mut() {
-                *v = match *v {
-                    Verb::Move(p) => Verb::Move(shift(p)),
-                    Verb::Line(p) => Verb::Line(shift(p)),
-                    Verb::Quad(a, b) => Verb::Quad(shift(a), shift(b)),
-                    Verb::Cubic(a, b, c) => Verb::Cubic(shift(a), shift(b), shift(c)),
-                    Verb::Close => Verb::Close,
-                };
-            }
-        }
-    }
-    m
-}
-
 /// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
 /// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own
 /// marks once more, moved and in its role, under them: on text the same shaped run. Every other
@@ -5813,6 +5747,44 @@ mod tests {
         };
         assert_eq!(spec.text, "75%");
         assert!(spec.bound, "a counter shapes with tabular figures");
+    }
+
+    /// #466's build, as a frame draws it: a path of four strokes at progress 0.3 draws its first
+    /// strokes only, and at 0 none, as `<item>.build` times them (found by #155's demo film).
+    #[test]
+    fn a_frame_draws_only_the_strokes_its_build_has_reached() {
+        let moves = |progress: f64| {
+            let doc = json!({
+                "size": [100, 100],
+                "layers": {"main": {"order": "a0"}},
+                "items": {"p": {"id": "p", "kind": "path@1", "layer": "main", "params": {
+                    "d": "M 0 10 L 90 10 M 0 30 L 90 30 M 0 50 L 90 50 M 0 70 L 90 70",
+                    "build": {"progress": progress}, "paint": {"stroke": {"role": "ink", "width": 2}}}}},
+            });
+            let doc = doc.as_object().unwrap();
+            let f = frame(
+                doc,
+                doc["items"].as_object().unwrap(),
+                &palette(),
+                &Record::default(),
+                1.0,
+            )
+            .unwrap();
+            f.layers
+                .iter()
+                .flat_map(|l| &l.marks)
+                .map(|m| match &m.mark {
+                    Mark::Shape { verbs, .. } => {
+                        verbs.iter().filter(|v| matches!(v, Verb::Move(_))).count()
+                    }
+                    Mark::Path { d, .. } => d.matches('M').count(),
+                    _ => 0,
+                })
+                .sum::<usize>()
+        };
+        assert_eq!(moves(1.0), 4);
+        assert_eq!(moves(0.3), 2, "stroke 0 whole and stroke 1 a fifth drawn");
+        assert_eq!(moves(0.0), 0);
     }
 
     fn board(items: Value) -> Value {
