@@ -22,6 +22,9 @@ use crate::emitter::{self, Cone, Distance, Model};
 use crate::eq;
 use crate::reverb::{self, Reverb};
 use crate::ring::Ring;
+use crate::shape::{
+    Crush, CrushSpec, CrushState, Modulate, ModulateSpec, ModulateState, Shaper, ShaperSpec,
+};
 use crate::FLICKS;
 
 /// One audio block (canvas primitives: Blocks).
@@ -162,6 +165,8 @@ pub struct Strip {
     pub r#in: i64,
     pub out: i64,
     pub rate: (i64, i64),
+    /// #155: a ramp from `rate` at the strip's start (a tape stop or start).
+    pub ramp: Option<Ramp>,
     pub gain: Gain,
     pub pan: f64,
     pub fade_in: Option<Fade>,
@@ -175,6 +180,67 @@ pub struct Strip {
     pub emitter: Option<Emit>,
     /// #204: a synth plays in place of the source (its span already holds the synth's tail).
     pub synth: Option<Arc<crate::synth::play::Spec>>,
+}
+
+/// #155: a strip's rate ramp (Strip and track: generator sources and rate ramps): from the
+/// strip's rate at its start to `to` over `over` flicks, linear or exponential in the rate, and
+/// `to` after. The source time is the exact integral of the rate, so a seek reads what a play
+/// does, and the read resamples per sample, so pitch follows as tape's does.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ramp {
+    pub to: (i64, i64),
+    pub over: i64,
+    pub exp: bool,
+}
+
+impl Ramp {
+    /// The source flicks travelled `rel` flicks in from rate `from`: ∫ rate over [0, rel],
+    /// floored. Linear: r₀u + (r₁ − r₀)u² ÷ 2T for u ≤ T, in exact rationals; exp:
+    /// r₀T(k^(u ÷ T) − 1) ÷ ln k with k = r₁ ÷ r₀; then r₁ a flick past T.
+    pub fn travel(&self, from: (i64, i64), rel: i64) -> i128 {
+        let (a, b) = (from.0 as i128, from.1.max(1) as i128);
+        let (c, d) = (self.to.0 as i128, self.to.1.max(1) as i128);
+        let t = self.over.max(1) as i128;
+        let rel = rel as i128;
+        let u = rel.clamp(0, t);
+        let after = (rel - t).max(0);
+        if rel < 0 {
+            return (rel * a).div_euclid(b);
+        }
+        if !self.exp || a * d == c * b {
+            // [2adTu + (cb − ad)u² + 2bcT·after] ÷ 2bdT
+            let num = 2 * a * d * t * u + (c * b - a * d) * u * u + 2 * b * c * t * after;
+            return num.div_euclid(2 * b * d * t);
+        }
+        let (r0, r1) = (a as f64 / b as f64, c as f64 / d as f64);
+        let k = r1 / r0;
+        let ramped = r0 * t as f64 * (ops::pow(k, u as f64 / t as f64) - 1.0) / ops::log(k);
+        (ramped + r1 * after as f64).floor() as i128
+    }
+
+    /// How long a strip of `length` source flicks plays: until the ramp has read it all, or
+    /// to the ramp's end when it stops (rate 0) first.
+    pub fn span(&self, from: (i64, i64), length: i64) -> i64 {
+        let length = length.max(0) as i128;
+        if self.travel(from, self.over) >= length {
+            let (mut lo, mut hi) = (0i64, self.over);
+            while lo < hi {
+                let mid = lo + (hi - lo) / 2;
+                if self.travel(from, mid) >= length {
+                    hi = mid;
+                } else {
+                    lo = mid + 1;
+                }
+            }
+            return lo;
+        }
+        if self.to.0 <= 0 {
+            return self.over;
+        }
+        let left = length - self.travel(from, self.over);
+        let (p, q) = (self.to.0 as i128, self.to.1.max(1) as i128);
+        self.over + (left * q + p - 1).div_euclid(p) as i64
+    }
 }
 
 impl Strip {
@@ -193,11 +259,17 @@ impl Strip {
         ((out - r#in) as i128 * rate.1 as i128 / rate.0.max(1) as i128) as i64
     }
 
+    /// The source flicks the strip has travelled `rel` flicks in, before any loop wraps it.
+    fn travel(&self, rel: i64) -> i128 {
+        match &self.ramp {
+            Some(r) => r.travel(self.rate, rel),
+            None => (rel as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128),
+        }
+    }
+
     /// The source time at `rel` flicks into the strip, wrapped by the loop region.
     pub fn source_at(&self, rel: i64) -> i64 {
-        let src = self.r#in as i128
-            + (rel as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
-        let src = src as i64;
+        let src = (self.r#in as i128 + self.travel(rel)) as i64;
         if !self.looped {
             return src;
         }
@@ -214,9 +286,7 @@ impl Strip {
     /// Whether the strip's end is its source's own end, where it needs no fade.
     fn ends_at_source_end(&self) -> bool {
         let dur = self.source.duration();
-        let end = self.r#in as i128
-            + (self.span as i128 * self.rate.0 as i128).div_euclid(self.rate.1.max(1) as i128);
-        let end = end as i64;
+        let end = (self.r#in as i128 + self.travel(self.span)) as i64;
         if !self.looped {
             return end >= dur;
         }
@@ -281,6 +351,10 @@ pub enum ProcKind {
     Limiter(LimiterSpec),
     Delay(DelaySpec),
     Pitch(PitchSpec),
+    /// #155: Processor: shaper, crush and modulate.
+    Shaper(ShaperSpec),
+    Crush(CrushSpec),
+    Modulate(ModulateSpec),
 }
 
 impl ProcKind {
@@ -292,6 +366,9 @@ impl ProcKind {
             ProcKind::Limiter(_) => "limiter",
             ProcKind::Delay(_) => "delay",
             ProcKind::Pitch(_) => "pitch",
+            ProcKind::Shaper(_) => "shaper",
+            ProcKind::Crush(_) => "crush",
+            ProcKind::Modulate(_) => "modulate",
         }
     }
 
@@ -496,6 +573,9 @@ enum Unit {
     Limiter(Limiter),
     Delay(Delay),
     Pitch(Pitch),
+    Shaper(Shaper),
+    Crush(Crush),
+    Modulate(Modulate),
 }
 
 #[derive(Clone)]
@@ -506,6 +586,10 @@ enum UnitState {
     Limiter(LimiterState),
     Delay(DelayState),
     Pitch(PitchState),
+    /// A shaper keeps nothing.
+    Shaper,
+    Crush(CrushState),
+    Modulate(ModulateState),
 }
 
 impl UnitState {
@@ -517,6 +601,9 @@ impl UnitState {
             UnitState::Limiter(s) => s.bytes(),
             UnitState::Delay(s) => s.bytes(),
             UnitState::Pitch(s) => s.bytes(),
+            UnitState::Shaper => 0,
+            UnitState::Crush(_) => 24,
+            UnitState::Modulate(s) => s.bytes(),
         }
     }
 }
@@ -536,6 +623,9 @@ impl Unit {
             ProcKind::Pitch(spec) => {
                 Unit::Pitch(Pitch::new(*spec, rate, planted.pitch_ignores_semitones))
             }
+            ProcKind::Shaper(spec) => Unit::Shaper(Shaper::new(*spec)),
+            ProcKind::Crush(spec) => Unit::Crush(Crush::new(*spec, rate)),
+            ProcKind::Modulate(spec) => Unit::Modulate(Modulate::new(spec, rate)),
         }
     }
     fn process(&mut self, block: &mut [f32], key: Option<&[f32]>) {
@@ -546,6 +636,9 @@ impl Unit {
             Unit::Limiter(l) => l.process(block),
             Unit::Delay(d) => d.process(block),
             Unit::Pitch(p) => p.process(block),
+            Unit::Shaper(u) => u.process(block),
+            Unit::Crush(u) => u.process(block),
+            Unit::Modulate(u) => u.process(block),
         }
     }
     fn state(&self) -> UnitState {
@@ -556,6 +649,9 @@ impl Unit {
             Unit::Limiter(l) => UnitState::Limiter(l.state.clone()),
             Unit::Delay(d) => UnitState::Delay(d.state.clone()),
             Unit::Pitch(p) => UnitState::Pitch(p.state.clone()),
+            Unit::Shaper(_) => UnitState::Shaper,
+            Unit::Crush(u) => UnitState::Crush(u.state),
+            Unit::Modulate(u) => UnitState::Modulate(u.state.clone()),
         }
     }
     fn set(&mut self, s: &UnitState, planted: &Planted) {
@@ -578,11 +674,14 @@ impl Unit {
                 }
             }
             (Unit::Pitch(p), UnitState::Pitch(s)) => p.state.clone_from(s),
+            (Unit::Crush(u), UnitState::Crush(s)) => u.state = *s,
+            (Unit::Modulate(u), UnitState::Modulate(s)) => u.state.clone_from(s),
             _ => {}
         }
     }
     /// Its tail, in flicks: to −120 dBFS for a reverb and a delay, its line for a limiter and a
-    /// pitch shifter, none for an eq or a compressor.
+    /// pitch shifter, its largest delay for modulate, none for an eq, a compressor, a shaper or
+    /// a crush.
     fn tail(&self, kind: &ProcKind, rate: i64) -> i64 {
         let samples = |n: i64| {
             let f = n as i128 * FLICKS as i128;
@@ -593,6 +692,7 @@ impl Unit {
             (_, ProcKind::Limiter(s)) => samples(s.latency(rate) as i64),
             (_, ProcKind::Delay(s)) => samples(Delay::tail(s, rate)),
             (_, ProcKind::Pitch(s)) => samples(Pitch::samples(s, rate) as i64),
+            (_, ProcKind::Modulate(s)) => samples(Modulate::tail(s, rate)),
             _ => 0,
         }
     }
@@ -1474,6 +1574,7 @@ mod tests {
             r#in: 0,
             out: span,
             rate: (1, 1),
+            ramp: None,
             gain: Gain::Db(0.0),
             pan: 0.0,
             fade_in: None,

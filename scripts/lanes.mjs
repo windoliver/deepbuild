@@ -544,6 +544,16 @@ timed.push('tests/acceptance/154/budgets.test.ts');
 alone.push('tests/acceptance/154-redraft/', 'tests/acceptance/154-oracle-redraft/');
 timed.push('tests/acceptance/154-redraft/budgets.test.ts');
 byHand.push('tests/acceptance/154/stems.test.ts');
+// #155's files each build deep-show, and most start hubs that render foley variants through the supervisor; the
+// Oracle lane also renders a score stem. budgets.test.ts times every preset's render and soaks 32 voices for 10 min.
+alone.push('tests/acceptance/155/', 'tests/acceptance/155-oracle/');
+timed.push('tests/acceptance/155/budgets.test.ts');
+slow.push('tests/acceptance/155/budgets.test.ts');
+// AC9 is proved by its blind redraft, on the owner's ruling; the first draft's pack file is kept by hand: its planted pack
+// and clean twin keep the manifest's name under other IDs, which #306's pack check refuses
+// (tests/acceptance/155-redraft-ac9/DISPUTE.md).
+alone.push('tests/acceptance/155-redraft-ac9/');
+byHand.push('tests/acceptance/155/pack.test.ts');
 // #1700's files each build deep-show; budgets.test.ts also builds it in release and times every geometry.shape
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
@@ -737,6 +747,14 @@ byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
 // full build needs (tests/acceptance/225-redraft-ac5/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/225-redraft-ac5/');
 byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
+// #172's files each build deep-show (full; the refusals also full,test-web-lacks) and drive headless Chrome with WebGPU on.
+alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
+timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
+// #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
+// never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
+// place.
+alone.push('tests/acceptance/172-redraft-ac2/');
+byHand.push('tests/acceptance/172/refusals.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
@@ -784,6 +802,11 @@ timed.push('tests/acceptance/468/ac5-budgets.test.ts');
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #508's files build deep-gpu and deep-show and draw effects on the Metal GPU; ac4-budgets times release builds, and
+// ac1's live sessions start real Claude Code and Codex sessions on your plan.
+alone.push('tests/acceptance/508/');
+timed.push('tests/acceptance/508/ac4-budgets.test.ts');
+byHand.push('tests/acceptance/508/ac1-skill.live.test.ts');
 // #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
 alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
 timed.push('tests/acceptance/213/ac8-budgets.test.ts');
@@ -814,6 +837,11 @@ alone.push('tests/acceptance/1048/');
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
+// #457's files each build deep-show; ac1, ac9 and ac10 draw on the Metal GPU. ac9-budgets judges the loop's budgets on
+// the reference Mac, and ac10-shots writes docs/evidence/457/ and waits on your taste call in tests/acceptance/457/TASTE.json.
+alone.push('tests/acceptance/457/');
+timed.push('tests/acceptance/457/ac9-budgets.test.ts');
+
 // #1636's files each build deep-show (full) and some deep-gpu; ac1-same-hash also builds deep-show for Linux x86_64
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');

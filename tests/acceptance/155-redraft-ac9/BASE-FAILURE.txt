@@ -1,0 +1,58 @@
+# One run at the base 0e5572731, deep-show built by the README's commands. Both tests fail: the base has no
+# packs/foley-1.0.0, not for a mistake in a test.
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-155-9fc359/agent-a9bd62db372968c91/tests/acceptance/155-redraft-ac9
+
+ ❯ presets.test.ts (2 tests | 2 failed) 965ms
+   ❯ AC9 #155.eaff7d6a every foley@1 preset is a synth.preset@1 entry that passes synth's pack check; a planted node outside the closed list is refused (2)
+     × AC9 #155.eaff7d6a packs/foley-1.0.0 (foley@1.0.0) holds one synth.preset@1 preset per material × action over the closed node list, installs as deepbuild/foley with no issue, and `registries` lists all 90 as foley.<material>.<action>@1 entries of synth.preset@1 with kit PASS 4ms
+     × AC9 #155.eaff7d6a a planted `metal.scrape@1` with a node `grains` of kind `granular` is refused at pack check, naming the preset and the node; its twin with that node a gain of 1 installs 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  presets.test.ts > AC9 #155.eaff7d6a every foley@1 preset is a synth.preset@1 entry that passes synth's pack check; a planted node outside the closed list is refused > AC9 #155.eaff7d6a packs/foley-1.0.0 (foley@1.0.0) holds one synth.preset@1 preset per material × action over the closed node list, installs as deepbuild/foley with no issue, and `registries` lists all 90 as foley.<material>.<action>@1 entries of synth.preset@1 with kit PASS
+AssertionError: the first-party pack foley@1 is committed at packs/foley-1.0.0/pack.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ manifest presets.test.ts:103:104
+    101| function manifest(): Obj {
+    102|   const file = join(PACK_DIR, 'pack.json');
+    103|   expect(existsSync(file), `the first-party pack foley@1 is committed …
+       |                                                                                                        ^
+    104|   const m = JSON.parse(readFileSync(file, 'utf8')) as Json;
+    105|   expect(isObj(m), 'pack.json holds an object').toBe(true);
+ ❯ presets.test.ts:127:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  presets.test.ts > AC9 #155.eaff7d6a every foley@1 preset is a synth.preset@1 entry that passes synth's pack check; a planted node outside the closed list is refused > AC9 #155.eaff7d6a a planted `metal.scrape@1` with a node `grains` of kind `granular` is refused at pack check, naming the preset and the node; its twin with that node a gain of 1 installs
+AssertionError: the first-party pack foley@1 is committed at packs/foley-1.0.0/pack.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ manifest presets.test.ts:103:104
+    101| function manifest(): Obj {
+    102|   const file = join(PACK_DIR, 'pack.json');
+    103|   expect(existsSync(file), `the first-party pack foley@1 is committed …
+       |                                                                                                        ^
+    104|   const m = JSON.parse(readFileSync(file, 'utf8')) as Json;
+    105|   expect(isObj(m), 'pack.json holds an object').toBe(true);
+ ❯ presets.test.ts:156:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  02:31:59
+   Duration  1.09s (tests 97%, transform 2%, import 1%)
+

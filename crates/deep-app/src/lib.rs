@@ -353,7 +353,7 @@ pub fn init(cx: &mut App) {
     let faces = deep_text::FACES
         .iter()
         .filter(|face| face.family == code.as_ref() || Some(face.family) == canvas)
-        .map(|face| std::borrow::Cow::Borrowed(face.bytes))
+        .map(|face| std::borrow::Cow::Borrowed(face.bytes()))
         .collect();
     let _ = cx.text_system().add_fonts(faces);
     gpui_shell::components::init(cx);

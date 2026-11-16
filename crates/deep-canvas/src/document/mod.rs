@@ -116,6 +116,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "tempo_map",
     // #935: the media module's generated sounds, each held to audio.gen before an item names it.
     "sounds",
+    // #155: a film's foley material for each collection (Foley `foley.render@1`).
+    "foley_materials",
     // #903: the input module's tour (Tour), its keys and its pointer.
     "tour",
 ];

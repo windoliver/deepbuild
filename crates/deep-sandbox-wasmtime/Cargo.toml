@@ -11,10 +11,21 @@ publish = false
 # reads but what the rewritten program itself computes.
 [dependencies]
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
-wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
 base64 = "0.22"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 wat = "=1.263.0"
+# #172: a call's time on the page's clock in the web player, the system's elsewhere.
+web-time = "=1.1.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
+
+# #172: in the web player the browser's own WebAssembly engine runs the rewritten bytes, reached
+# through the page's JavaScript; wasmparser reads the program's global types there.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "=0.3.106"
+wasm-bindgen = "=0.2.129"
+wasmparser = { version = "=0.258.3", default-features = false, features = ["std", "validate", "features", "simd"] }
 
 [features]
 # Issue #2324: the planted engine build, whose engine gives the kit fixture `pass.subset` another

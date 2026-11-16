@@ -31,6 +31,7 @@ mod oit;
 mod op;
 mod planted;
 pub mod print;
+mod readouts;
 mod set;
 pub mod shadow;
 pub mod sss;
@@ -65,6 +66,7 @@ use deep_gpu::surface::FORMAT;
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
 pub use crate::module::{draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX};
 pub use crate::planted::Planted;
+pub use crate::readouts::{lay_over, readouts_as_labels};
 use crate::mesh::Mesh;
 use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
@@ -6166,7 +6168,7 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             set.finish(device, &mut next, &mut written);
             if layer.fed.contains_key(&key.3) {
                 let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
