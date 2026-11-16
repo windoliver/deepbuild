@@ -1,0 +1,34 @@
+# Criterion 3: the public text lane by hand (node scripts/public-text.mjs), 2026-11-15, macOS arm64, on this branch,
+# with the open issues fetched once (1213). Run 2 planted one hash in scripts/studied-names.json; the file was restored
+# byte for byte after it.
+== 1. this change's list: every direct dependency in scripts/repo-rules.json and every adapter's name reads as not listed
+public text: 160 dependency and adapter names read as not listed
+public text: 50 changed files, 15 commit messages and 1213 open issues name no studied product
+exit=0
+== 2. the salted hash of the dependency objc2 planted in the list
+FAIL 12 dependency and adapter names read as listed in scripts/studied-names.json, which never lists a name DeepBuild runs, links, calls, reads or writes
+  objc2 (crates/deep-app/Cargo.toml, crates/deep-replica/Cargo.toml, crates/deep-show/Cargo.toml) reads as listed: "objc2"
+  objc2-app-kit (crates/deep-app/Cargo.toml, crates/deep-replica/Cargo.toml) reads as listed: "objc2"
+  objc2-foundation (crates/deep-app/Cargo.toml, crates/deep-replica/Cargo.toml, crates/deep-show/Cargo.toml) reads as listed: "objc2"
+  objc2-user-notifications (crates/deep-app/Cargo.toml) reads as listed: "objc2"
+  objc2-core-foundation (crates/deep-app/Cargo.toml, crates/deep-marks-render/Cargo.toml, crates/deep-gpu/Cargo.toml) reads as listed: "objc2"
+  objc2-core-graphics (crates/deep-app/Cargo.toml) reads as listed: "objc2"
+  objc2-screen-capture-kit (crates/deep-app/Cargo.toml) reads as listed: "objc2"
+  objc2-core-media (crates/deep-app/Cargo.toml) reads as listed: "objc2"
+  objc2-quartz-core (crates/deep-app/Cargo.toml) reads as listed: "objc2"
+  objc2-core-video (crates/deep-marks-render/Cargo.toml, crates/deep-gpu/Cargo.toml) reads as listed: "objc2"
+  objc2-io-surface (crates/deep-gpu/Cargo.toml) reads as listed: "objc2"
+  objc2-metal (crates/deep-gpu/Cargo.toml) reads as listed: "objc2"
+FAIL 10 studied names in public text (10 in the change, 0 in open issues)
+  tests/acceptance/2405/BASE-FAILURE.txt:17 "objc2"
+  tests/acceptance/2405/BASE-FAILURE.txt:44 "objc2"
+  tests/acceptance/2405/BASE-FAILURE.txt:105 "objc2"
+  tests/acceptance/2405/BASE-FAILURE.txt:106 "objc2"
+  tests/acceptance/2405/README.md:12 "objc2"
+  tests/acceptance/2405/README.md:108 "objc2"
+  tests/acceptance/2405/README.md:160 "objc2"
+  tests/acceptance/2405/README.md:185 "objc2"
+  tests/acceptance/2405/README.md:186 "objc2"
+  tests/acceptance/2405/helpers.mjs:96 "objc2"
+exit=1
+== 3. the base's lane with the same plant passes, as tests/acceptance/2405/BASE-FAILURE.txt records for AC3's lane test

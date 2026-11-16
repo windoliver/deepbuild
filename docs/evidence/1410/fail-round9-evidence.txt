@@ -1,0 +1,30 @@
+249b74959bf08230372855ae8481cb06c3ab8477
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1410-77182b/packages/evidence
+
+ ❯ test/sync-journal.test.ts (5 tests | 1 failed) 3904ms
+   × bytes put over a file on disk the store's journal doesn't hold, as deep-show writes them, are synced before they replace it (#1410) 708ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/sync-journal.test.ts > bytes put over a file on disk the store's journal doesn't hold, as deep-show writes them, are synced before they replace it (#1410)
+AssertionError: a sync of the new copy before it replaced the synced file: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ test/sync-journal.test.ts:93:136
+     91|   const put = await store.connect({ role: 'deepbuild', via: 'capture' …
+     92|   if (put.status !== 'stored') throw Error(put.reason);
+     93|   expect(synced.filter((path) => basename(path).startsWith('.tmp-')), …
+       |                                                                                                                                        ^
+     94| });
+     95|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  00:24:26
+   Duration  4.23s (tests 97%, import 2%, transform 1%)
+

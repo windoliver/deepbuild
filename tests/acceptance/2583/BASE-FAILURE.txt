@@ -1,0 +1,127 @@
+#2583 acceptance tests: the one run on the base
+
+Base a6e742ed0 ("Merge pull request #2708 ..."; no implementation), 2026-11-16 UTC, macOS 27.2 on arm64, Node 24.22.2,
+gh 2.103.3 signed in. Run from the checkout with only tests/acceptance/2583/ added (`git status --porcelain`:
+`?? tests/acceptance/2583/`), after `npm ci`, each file once: the two Vitest files in one run, then lane.test.mjs. Each
+run's output below is whole, between its start and end lines (with the time and the load averages); only the
+checkout's path is replaced, by <checkout>.
+
+AC1 (#2583.8f145f1b), the catalogue half, FAILS for the issue's reason: catalogue() holds no brief.uncited entry.
+
+AC2 (#2583.bfaf46c7) FAILS twice for the issue's reason: the record refuses even the whole event, "no event kind
+brief.uncited is catalogued", so no refusal names a field.
+
+AC1 (#2583.8f145f1b), the lane half, FAILS for the issue's reason: on the live tracker the catalogue drift lane
+names brief.uncited three times, at docs/technical-design.md:539 and in the open issues #2583 and #1193, among the 21
+uncatalogued kinds it lists. It ran at 07:17 UTC under one build grant of the machine's throttle, which this job's
+chain held for `npm run build -w packages/contracts` (the lane imports its dist) and the lane runs, so the lane's own
+request passed through it.
+
+start 2026-11-16T05:27:23.018Z, load 340 313 323
+$ npx vitest run --root tests/acceptance/2583 catalogue.test.ts record.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2583
+
+ ❯ catalogue.test.ts (1 test | 1 failed) 301ms
+   × #2583.8f145f1b AC1 the catalogue holds `brief.uncited`, from the schema brief.uncited@1 300ms
+ ❯ record.test.ts (2 tests | 2 failed) 821ms
+   × #2583.bfaf46c7 AC2 a brief.uncited event without job is refused by the record, naming the missing field, where the event with job and sentence is recorded 329ms
+   × #2583.bfaf46c7 AC2 a brief.uncited event without sentence is refused by the record, naming the missing field, where the event with job and sentence is recorded 489ms
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  21:27:29
+   Duration  9.16s (transform 85%, tests 9%, import 4%, worker 2%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  catalogue.test.ts > #2583.8f145f1b AC1 the catalogue holds `brief.uncited`, from the schema brief.uncited@1
+AssertionError: the catalogue entries of brief.uncited: expected [] to deeply equal [ { kind: 'brief.uncited', …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "kind": "brief.uncited",
+-     "schema": "brief.uncited@1",
+-     "version": 1,
+-   },
+- ]
++ []
+
+ ❯ catalogue.test.ts:9:58
+      7| it('#2583.8f145f1b AC1 the catalogue holds `brief.uncited`, from the s…
+      8|   const held = catalogue().filter((entry) => entry.kind === 'brief.unc…
+      9|   expect(held, 'the catalogue entries of brief.uncited').toEqual([{ ki…
+       |                                                          ^
+     10| });
+     11|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  record.test.ts > #2583.bfaf46c7 AC2 a brief.uncited event without job is refused by the record, naming the missing field, where the event with job and sentence is recorded
+ FAIL  record.test.ts > #2583.bfaf46c7 AC2 a brief.uncited event without sentence is refused by the record, naming the missing field, where the event with job and sentence is recorded
+AssertionError: promise rejected "RecordError: no event kind brief.uncited … { …(4) }" instead of resolving
+ ❯ record.test.ts:27:120
+     25|   try {
+     26|     const whole = uncited(PAYLOAD);
+     27|     await expect(record.append(CORE, whole), 'the record keeps a brief…
+       |                                                                                                                        ^
+     28|
+     29|     const { [missing]: _left, ...rest } = PAYLOAD;
+
+Caused by: RecordError: no event kind brief.uncited is catalogued
+ ❯ SqliteRecord.prepare ../../../packages/record/src/index.ts:474:26
+ ❯ SqliteRecord.appendNow ../../../packages/record/src/index.ts:539:27
+ ❯ ../../../packages/record/src/index.ts:522:96
+ ❯ SqliteRecord.append ../../../packages/record/src/index.ts:525:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'schema', path: '/kind', kind: undefined, id: undefined }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+exit 1
+end 2026-11-16T05:27:39.667Z, load 335 313 323
+
+start 2026-11-16T07:17:08Z, load 145 157 198
+$ node --test --test-reporter=spec tests/acceptance/2583/lane.test.mjs
+✖ #2583.8f145f1b AC1 the catalogue drift lane, on main's docs and the open issues, names `brief.uncited` nowhere (14762.686958ms)
+ℹ FAIL 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14982.454625
+
+✖ failing tests:
+
+test at tests/acceptance/2583/lane.test.mjs:23:1
+✖ #2583.8f145f1b AC1 the catalogue drift lane, on main's docs and the open issues, names `brief.uncited` nowhere (14762.686958ms)
+  AssertionError [ERR_ASSERTION]: the catalogue drift lane names brief.uncited
+  + actual - expected
+  
+  + [
+  +   'FAIL 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)',
+  +   'FAIL catalogue drift: 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2583/lane.test.mjs:64:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)', 'FAIL catalogue drift: 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+end 2026-11-16T07:17:24Z, load 135 154 196

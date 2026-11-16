@@ -30,6 +30,16 @@ The hub daemon on its socket (#16), the one writer to the record and evidence st
 - Regression tests go in `test/` (helper: `test/hub.ts`) and run the built CLI; acceptance tests live in `tests/acceptance/<issue>` and are never edited.
 - Logic of the record, gate, verdicts, leases or an extension belongs in that package, not here.
 
+## Startup boundary (#2332)
+
+The socket hello is not readiness. Before the core reports ready it opens the record and asks, restores leases and the supervisor, recovers jobs and held answers, loads installed extensions and replays the spool. Hook parsing and the guards remain available before the first held hook; none of that recovery is postponed.
+
+The check-kind table's module loads at readiness; its actual fills and command checks load when a claim or `checks.kinds` needs them. Configuration evals load for a removal, and the wiki builder for a build, forget or rule rewrite. YAML loads only after a spec file was read. The socket thread uses the contracts runtime entry and does not load the gate merely to recognize a PR command, or the scrubber merely to read adapter facts. Parser workers still warm their scrubber. The archive reuses the core's validated adapter registry.
+
+An empty archive pass still discovers sources and checks capture health. Previously it rebuilt all four adapters and unconditionally created the record's FTS5 trigram index even with no transcript. It now shares the adapters, and the record creates the index on the first archived copy; an existing index still processes deletions. No archive pass or recovery is delayed past ready. With no stored or placed products and no spec above a session's folder, hook intake does no product-store Git lookup; the guard observation stays active whenever products exist.
+
+`benchmarks/hub.mjs start-to-ready` reads the perf counter for the hub PID at its core-ready stdout line, excluding child processes and shutdown. The independent checks in `tests/acceptance/2332/` compare fresh homes with shipped guards over 20 alternated rounds and measure the first three hooks and idle RSS separately. Their results, not an earlier socket hello or a wall-time estimate, decide the issue. This belongs in startup wiring and storage: an extension cannot remove the modules its host loads before it starts.
+
 ## What it may import
 
 The top of the TypeScript stack under the CLI: the core packages and the first-party extensions, each through its package name, never a path into its `src`. Only the CLI imports it; no core package or extension ever imports the hub.
