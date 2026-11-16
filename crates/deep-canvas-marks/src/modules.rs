@@ -847,7 +847,45 @@ fn register_look(r: &mut Registrar) {
     look_with(r, finish);
 }
 
+/// #463: a pack's `looks` (Pack: art@1 painterly looks), each a look@1 by its ID, checked as
+/// a film resolves one (roles, fonts, the status distance where status shows), stating its GPU ms
+/// at 1080p in 2D and 3D (`cost: {"2d", "3d"}`) and its known limits (`limits`).
+fn pack_looks(manifest: &Value) -> Vec<(String, String)> {
+    let Some(looks) = manifest["looks"].as_object() else {
+        return vec![(
+            String::new(),
+            "looks maps each look's ID to its look@1".into(),
+        )];
+    };
+    let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+    let mut out = Vec::new();
+    for (id, def) in looks {
+        if let Err(r) =
+            crate::look::resolve_in(def, &bundled, crate::look::Distance::WhereStatusShows)
+        {
+            out.push((id.clone(), r.to_json().to_string()));
+            continue;
+        }
+        let ms = |d: &str| def["cost"][d].as_f64().is_some_and(|v| v > 0.0);
+        if !(ms("2d") && ms("3d")) {
+            out.push((
+                format!("{id}/cost"),
+                format!("{id} states its GPU ms at 1080p in 2d and 3d"),
+            ));
+        }
+        let limits = def["limits"].as_array();
+        if !limits.is_some_and(|l| !l.is_empty() && l.iter().all(Value::is_string)) {
+            out.push((
+                format!("{id}/limits"),
+                format!("{id} states its known limits"),
+            ));
+        }
+    }
+    out
+}
+
 fn look_with(r: &mut Registrar, finish: fn(&mut View<'_>) -> Result<(), OpError>) {
+    r.pack_field("looks", pack_looks);
     r.array("look.palette", "palette", "document", "shading", "items");
     // #418: a finish swatch, `look.finish@1`: the look's roles through the look's finish at the
     // item's settings (its tone map, exposure and grade, and the deband, ao and bloom it names),

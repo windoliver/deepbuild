@@ -1,0 +1,90 @@
+How the #903 acceptance suite fails at the base, d8c46f0d5 (main, "Merge pull request #2601").
+
+This is a note, not a run. The machine this suite was written on was shared and loaded, so no Rust was built and no
+test was run; each line below is read from the base's code. The implementer runs the suite unchanged at the base and
+keeps the real output. What did run:
+
+  $ npx tsc -p tests/acceptance/903/tsconfig.json
+  (no output, exit 0)
+  $ npx vitest list --root tests/acceptance/903
+  (14 tests in 8 files)
+
+What the base has and lacks, read from its code:
+
+- The tour lives in the input module's session (crates/deep-canvas-input/src/session.rs: `tour_of`, `origin`,
+  `advance`), driven by `deep-input input` (crates/deep-input/src/main.rs). `tour_of` reads `keys`, `idle_after`,
+  `resume_after` and `loop`, ignores each key's `interp` and ignores `tour.pointer`. The session takes the tour board
+  as it stands: a press and a toggle hit through `targets`, a slider through its `handle` (`press`, `knob`).
+- The session has no `tour_pointer` op: `Session::op` answers any op it doesn't know with `bad_input` at `op`, and
+  `deep-input` then answers the whole line {"ok": false, "code": "bad_input", "path": "op"}.
+- `Planted::named` knows none of `tour_pointer_frame_clock`, `tour_pointer_glide_before_key`,
+  `tour_pointer_takes_hits`: a line that names one answers {"ok": false, "code": "bad_input"}.
+- The app plays no tour. `tour` is not in `ENVELOPE_KEYS` (crates/deep-canvas/src/document/mod.rs), and `check_envelope`
+  (document/check.rs) raises `unknown_field` for any other key, "not a field of the document envelope": `deep_show`
+  refuses a document that holds a `tour`. `eval` (crates/deep-show/src/main.rs) reads its fields by name, so it would
+  ignore `tour_pointer: true` and answer with no `tour_pointer`.
+
+Where each test fails (with cargo; with none, each is `BLOCKED:` first):
+
+ac1-keys-seek-play.test.ts
+  AC1 #903.dd86ae00 at the press key at 2 s, the slider key at 4 s and the toggle key at 8 s …
+    "the tour board, played at 60 fps: deep-input plays the session and answers its `tour_pointer` ops (README: The
+    surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}": expected false to be true.
+  AC1 #903.dd86ae00 its positions at 120 sampled times are the same seeked and played
+    The same assertion, on "the tour board at 120 times, played at 30, 60 and 120 fps and seeked (session 1)".
+  AC1 #903.dd86ae00 a planted pointer that moves by the frame clock fails …
+    The planted name is `bad_input`, so no session answers: "the planted pointer moved by the frame clock
+    (tour_pointer_frame_clock): a failure names /the first sample that differs is sample …/; the failures: the seeked
+    session gave no answer".
+
+ac2-keys-in-a-gap.test.ts
+  AC2 #903.406ccd5b with two keys 0.2 s apart and glide 0.5 s …
+    "two keys 0.2 s apart: deep-input plays the session and answers its `tour_pointer` ops …; it answered
+    {"ok":false,"code":"bad_input","path":"op"}".
+  AC2 #903.406ccd5b a planted pointer that always starts glide before its key fails …
+    "… (tour_pointer_glide_before_key): a failure names /^the earlier key, on fire at 2 s: the pointer's tip is at /;
+    the failures: the session gave no answer".
+
+ac3-card-over-3d.test.ts
+  AC3 #903.92244161 at the key's time the pointer reaches the card's anchor …
+    The two fixture guards pass (they read no binary). `deep_show` refuses the riding card for its `tour`: "the riding
+    card is presented, its `tour` a field of the document the app takes (README: Documents); the reply's issues:
+    [… "unknown_field" … "tour" …]": expected 'refused' to be 'presented'.
+
+ac4-click-yield-resume.test.ts
+  AC4 #903.da7f464f a click that lands where the pointer is drawn reaches the control under it
+    "the tour board played to 6.4 s: deep-input plays the session and answers its `tour_pointer` ops …; it answered
+    {"ok":false,"code":"bad_input","path":"op"}".
+  AC4 #903.da7f464f your first gesture fades the pointer over 0.2 s …
+    The same assertion, in the same first run.
+  AC4 #903.da7f464f a planted pointer that takes hits fails …
+    "… (tour_pointer_takes_hits): a failure names /never reached gain, the control under it/; the failures: the planted
+    program draws no pointer at 6.4 s, so no click can land on it".
+
+ac5-show-changes-nothing.test.ts
+  AC5 #903.b48e3025 the input track's hash and every evaluated control value are identical …
+    "the tour board with pointer.show true and false (session 1): deep-input plays the session and answers its
+    `tour_pointer` ops …". Without the pointer readings the base would pass the equalities, since it ignores
+    `tour.pointer`: the readings are what make this test fail there.
+
+ac6-export.test.ts
+  AC6 #903.772321ac an export of the tour at 1920 × 1080 shows the pointer in its frames …
+    "the tour board is presented, its `tour` a field of the document the app takes …": expected 'refused' to be
+    'presented'. The export and its PNGs are not reached.
+  AC6 #903.772321ac the film's pixel hash is the same seeked and played, on the reference Mac
+    The same assertion. The reference-Mac gate is not reached.
+
+ac7-reduced-motion.test.ts
+  AC7 #903.f0bb108a under reduced motion the tour writes no entry and no pointer draws
+    "the tour board with and without reduced motion (session 1): deep-input plays the session and answers its
+    `tour_pointer` ops …". The base already writes no tour entry under reduced motion; it has no pointer to read.
+
+ac8-taste.test.ts
+  AC8 #903.1034b873 the check run takes the three screenshots …
+    "the tour board is presented, its `tour` a field of the document the app takes …": expected 'refused' to be
+    'presented'. No picture is written, and the taste gate is not reached.
+
+Every failure is an assertion of this suite on a reply the base gives, not a crash of a helper. Two of the reasons are
+this job's surface rather than the issue's words: the `tour_pointer` op (the issue names no way to read the pointer)
+and the app taking a document's `tour` (the design's Tour fields give it; its Document envelope list doesn't: README,
+Readings 1).
