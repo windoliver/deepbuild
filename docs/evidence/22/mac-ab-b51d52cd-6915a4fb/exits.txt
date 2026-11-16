@@ -4,8 +4,8 @@ side a tests/acceptance/1459/identifier.test.ts exit=1; front app [Windows App] 
 side a tests/acceptance/1459/panel.test.ts exit=0; front app [Google Chrome] 22:46:55 load { 36.81 114.51 99.32 } thermal 0 free KB 56128096
 side a tests/acceptance/1172/rows.test.ts exit=1; front app [Windows App] 22:48:38 load { 22.11 87.40 90.44 } thermal 0 free KB 55448208
 side b at 6915a4fbd75c35e0bac7e8ba11f95478cc169ea7 setup exit=0 22:49:23 load { 19.44 76.93 86.41 } thermal 1 free KB 55058428
-side b tests/acceptance/1459/identifier.test.ts exit=0; front app [WeChat] 22:50:35 load { 14.80 63.76 80.70 } thermal 1 free KB 54008304
-side b tests/acceptance/1459/panel.test.ts exit=0; front app [WeChat] 22:50:56 load { 13.09 60.21 79.03 } thermal 1 free KB 53993716
+side b tests/acceptance/1459/identifier.test.ts exit=0; front app [another app] 22:50:35 load { 14.80 63.76 80.70 } thermal 1 free KB 54008304
+side b tests/acceptance/1459/panel.test.ts exit=0; front app [another app] 22:50:56 load { 13.09 60.21 79.03 } thermal 1 free KB 53993716
 side b tests/acceptance/1172/rows.test.ts exit=1; front app [Windows App] 22:52:15 load { 21.67 51.35 73.92 } thermal 1 free KB 53949036
 login-name hits after redaction: 0 22:52:15 load { 21.67 51.35 73.92 } thermal 1 free KB 53948996
 secret scan hits=0 22:52:15 load { 21.67 51.35 73.92 } thermal 1 free KB 53948960

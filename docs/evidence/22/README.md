@@ -362,7 +362,7 @@ an ask released from a fold now notifies; `ask.batched` doesn't restart the dela
   (`mac-6915a4fb/3-suites.txt`): 1459/identifier, 1459/panel and 1172/rows. A small A/B of the same three files, one
   head after the other (`mac-ab-b51d52cd-6915a4fb/`), doesn't follow the change: b51d52cd failed identifier and rows,
   6915a4fb passed identifier and panel and failed rows. The Mac was in use throughout, load 13 to 46 with Windows App,
-  Chrome or WeChat in front (`exits.txt`), so this alone settles little; the four-round A/B at the merged head is below.
+  Chrome or another app in front (`exits.txt`), so this alone settles little; the four-round A/B at the merged head is below.
 - **Size.** `crates/deep-app/src/views.rs` is over its ceiling on main already (3938 against 3606); this change adds 76
   lines to it, all in its `mod tests`.
 

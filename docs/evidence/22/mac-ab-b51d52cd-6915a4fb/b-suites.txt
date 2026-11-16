@@ -1,6 +1,6 @@
 == side b commit 6915a4fbd75c35e0bac7e8ba11f95478cc169ea7
 
-===== tests/acceptance/1459/identifier.test.ts  start 22:49:23 load { 19.44 76.93 86.41 } thermal 1 screen-lock flag 0 front app [WeChat]
+===== tests/acceptance/1459/identifier.test.ts  start 22:49:23 load { 19.44 76.93 86.41 } thermal 1 screen-lock flag 0 front app [another app]
 
  RUN  v5.0.5 ~/private/dbc-22oab
 
@@ -13,9 +13,9 @@
    Start at  22:49:24
    Duration  70.51s (tests 100%)
 
-===== tests/acceptance/1459/identifier.test.ts exit=0 end 22:50:35 load { 14.80 63.76 80.70 } thermal 1 front app [WeChat]
+===== tests/acceptance/1459/identifier.test.ts exit=0 end 22:50:35 load { 14.80 63.76 80.70 } thermal 1 front app [another app]
 
-===== tests/acceptance/1459/panel.test.ts  start 22:50:35 load { 14.80 63.76 80.70 } thermal 1 screen-lock flag 0 front app [WeChat]
+===== tests/acceptance/1459/panel.test.ts  start 22:50:35 load { 14.80 63.76 80.70 } thermal 1 screen-lock flag 0 front app [another app]
 
  RUN  v5.0.5 ~/private/dbc-22oab
 
@@ -28,9 +28,9 @@
    Start at  22:50:35
    Duration  20.90s (tests 100%)
 
-===== tests/acceptance/1459/panel.test.ts exit=0 end 22:50:56 load { 13.09 60.21 79.03 } thermal 1 front app [WeChat]
+===== tests/acceptance/1459/panel.test.ts exit=0 end 22:50:56 load { 13.09 60.21 79.03 } thermal 1 front app [another app]
 
-===== tests/acceptance/1172/rows.test.ts  start 22:50:56 load { 13.09 60.21 79.03 } thermal 1 screen-lock flag 0 front app [WeChat]
+===== tests/acceptance/1172/rows.test.ts  start 22:50:56 load { 13.09 60.21 79.03 } thermal 1 screen-lock flag 0 front app [another app]
 
  RUN  v5.0.5 ~/private/dbc-22oab
 
