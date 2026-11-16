@@ -17,6 +17,9 @@ serde_json = "1"
 sha2 = "0.10"
 crc32fast = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
+# Issue #184: the play mode steps a piece's logic and a logic bot's, as the logic module does.
+deep-logic = { path = "../deep-logic" }
+base64 = "0.22"
 
 # Issue #1408: the wrong programs a test selects with DEEP_DRIVE_PLANT and, through the app, DEEP_HUB_PLANT, read only in
 # a build with this feature. A release build refuses it. Issue #1662: #124's planted session rows come through it too,
@@ -25,6 +28,9 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 env-plants = ["deep-app/env-plants", "deep-app/plant-row"]
 # Issue #1434: `deep-replica --chrome`, the chrome@1 fixture drawn headless, and its plants, in no shipped build.
 chrome-fixture = ["deep-app/chrome-fixture"]
+# Issue #184 criterion 15's planted replica: every play renders a frame at every step and keeps only those asked. In no
+# shipped build; allowed in a release build, where the throughput budget is timed.
+test-renders-unkept-frames = []
 
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -37,6 +37,10 @@ pub enum Plant {
     NotifiesEveryStep,
     /// A menu takes every release as a pick or a close, drag or not (#1470 criterion 2).
     MenuReleaseAlways,
+    /// A play's recorded track leaves out the run's first bot entry, which the run itself read (#184 criterion 6).
+    DropsFirstBotEntry,
+    /// A logic bot's play makes an entry only when its value changes, not its serial (#184 criterion 10).
+    EntryOnChange,
 }
 
 impl Plant {
@@ -54,6 +58,8 @@ impl Plant {
             "jumps-on-act" => Some(Plant::JumpsOnAct),
             "notifies-every-step" => Some(Plant::NotifiesEveryStep),
             "menu-release-always" => Some(Plant::MenuReleaseAlways),
+            "drops-first-bot-entry" => Some(Plant::DropsFirstBotEntry),
+            "entry-on-change" => Some(Plant::EntryOnChange),
             _ => None,
         }
     }

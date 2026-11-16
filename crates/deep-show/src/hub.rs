@@ -83,6 +83,20 @@ pub enum Planted {
     LoopChecksCachedByDoc,
     /// #1941: a stale patch is a conflict even when no ID it touches changed since its base.
     StaleFixNeverRebases,
+    /// #456: a render.review requirement passes when its model agrees and finds nothing.
+    ReviewPassesOnYes,
+    /// #456: the review's context also holds its session's name, messages and patch reasons.
+    ReviewSeesSession,
+    /// #456: an observation with no number, or one the ID view doesn't list, is kept.
+    KeepsBadObservation,
+    /// #456: the ID view's colors are salted by a value each process draws afresh.
+    IdViewVariesByRun,
+    /// #456: the taste ask is keyed by the reading's words, not the revision's hash.
+    AskKeyedByWords,
+    /// #456: a revision whose taste ask you answered is asked again.
+    AsksAgainAfterAnswer,
+    /// #456: the reading keeps every finding the model returns.
+    KeepsAllFindings,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.
@@ -713,6 +727,11 @@ pub enum Call {
     },
     ByWriter(String),
     Revisions(String),
+    /// #1164: a document's input track with its hash and fork; `load` replaces it first.
+    Track {
+        doc: String,
+        load: Option<Vec<Value>>,
+    },
     /// The sealed set as the build holds it (#305).
     Registry,
     /// #420: an item's built mesh, or its count from its params.
@@ -1005,6 +1024,8 @@ pub enum Call {
         actual: PathBuf,
         tolerance: Value,
     },
+    /// An interface trial's calls: a recorded input track, a trial and a replica's replay (#191).
+    Trial(Box<crate::kit::trial::TrialCall>),
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
     /// Terminals, streams and the session page's terminal tab (#402).
@@ -1092,6 +1113,8 @@ pub struct Scenario {
     pub module_planted: Option<String>,
     /// A first-party pack's planted twin by name, applied as the store reads the pack (#433).
     pub pack_planted: Option<String>,
+    /// #1164: the logic module's restore and check twins, one name or a list applied together.
+    pub logic_planted: Option<deep_logic::Planted>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -1146,6 +1169,8 @@ pub struct Scenario {
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
     pub background: Vec<Job>,
+    /// #456: the stub model render.review asks, `{name, replies}`, each call the next reply.
+    pub review_model: Option<Value>,
 }
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
@@ -1226,6 +1251,8 @@ pub struct Hub<'a> {
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
     /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
     pub audit_asks: BTreeMap<String, Option<bool>>,
+    /// #456: render.review's model calls and the findings its readings kept.
+    pub review: crate::review::State,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1418,6 +1445,7 @@ impl<'a> Hub<'a> {
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
+            review: Default::default(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
@@ -2047,6 +2075,7 @@ impl<'a> Hub<'a> {
                 source,
                 columns,
             } => self.batch(doc, source, columns),
+            Call::Track { doc, load } => self.track_call(doc, load.as_deref()),
             Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),
             Call::Revisions(doc) => {
                 let rows: Vec<Value> = self
@@ -2170,6 +2199,7 @@ impl<'a> Hub<'a> {
                 actual,
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
+            Call::Trial(t) => self.trial_call(t),
             Call::Ring(r) => self.ring_call(r),
             Call::Capture(c) => self.capture_call(c),
             Call::Media(m) => self.media_call(m),

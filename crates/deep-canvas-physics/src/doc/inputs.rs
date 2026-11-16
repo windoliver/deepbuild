@@ -11,8 +11,9 @@ use super::{data, join, Body, Reader, Refusal};
 /// The issue that brings the input kinds and fields this backend interface doesn't run yet.
 pub const INPUTS_LATER: &str = "#2371";
 
-/// The input kinds this backend interface runs, each with its fields and their defaults.
-const KINDS: [(&str, &[(&str, Field)]); 5] = [
+/// The input kinds this backend interface runs, each with its fields and their defaults; #191
+/// runs `deactivate`, which the behavior kit's sensor fixture needs.
+const KINDS: [(&str, &[(&str, Field)]); 6] = [
     (
         "grab",
         &[
@@ -42,13 +43,13 @@ const KINDS: [(&str, &[(&str, Field)]); 5] = [
         ],
     ),
     ("release", &[("keeps_velocity", Field::Bool(true))]),
+    ("deactivate", &[]),
 ];
 
 /// The kinds and fields the design gives that wait on `INPUTS_LATER` or the issue named.
-const LATER: [(&str, &str); 11] = [
+const LATER: [(&str, &str); 10] = [
     ("set", INPUTS_LATER),
     ("activate", INPUTS_LATER),
-    ("deactivate", INPUTS_LATER),
     ("blast", INPUTS_LATER),
     ("jump", "#182"),
     ("drive", "#251"),
