@@ -115,6 +115,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "tempo_map",
     // #935: the media module's generated sounds, each held to audio.gen before an item names it.
     "sounds",
+    // #903: the input module's tour (Tour), its keys and its pointer.
+    "tour",
 ];
 
 /// An item's keys (Item and kind), in this slice.

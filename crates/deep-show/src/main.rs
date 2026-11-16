@@ -94,6 +94,7 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod tour;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
@@ -762,6 +763,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
                 carried: flag("carried")?,
+                tour_pointer: flag("tour_pointer")?,
             })));
         }
         "frames" => {
