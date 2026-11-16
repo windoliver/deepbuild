@@ -1141,4 +1141,28 @@ mod tests {
         view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
         assert_eq!(handles(view.panel_asks()), ["ask:a0", "ask:x1", "ask:a1"]);
     }
+
+    #[test]
+    fn a_panel_isnt_given_an_ask_folded_into_an_exception_not_yet_in_sight() {
+        // #22: under batches the core folds a session's sixth ask into its "keeps asking", which waits for its batch
+        // like the rest: neither is in sight until the hub lists the exception.
+        let mut view = View::default();
+        let listed = |id: &str| json!({"kind": "row.set", "writer": "core", "data": {"id": id, "listed": true, "order": id}});
+        view.apply(json!({"kind": "ask.created", "id": "b1", "session": "s2", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        view.apply(listed("ask:b1"));
+        view.apply(fold("x1", "s1"));
+        view.apply(json!({"kind": "ask.created", "id": "a6", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a6").0, "folded");
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:b1"],
+            "nothing of s1 before its exception is in sight"
+        );
+        view.apply(listed("ask:x1"));
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:b1", "ask:x1", "ask:a6"],
+            "the folded ask with its exception"
+        );
+    }
 }
