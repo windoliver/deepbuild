@@ -2030,6 +2030,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-cycle",
     feature = "test-scatter",
     feature = "test-tick",
+    feature = "test-web-lacks",
     feature = "test-held",
     feature = "test-page-latch",
     feature = "test-frame-cache",
@@ -2292,6 +2293,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::scatter());
     #[cfg(feature = "test-tick")]
     out.push(deep_canvas_test_modules::tick());
+    #[cfg(feature = "test-web-lacks")]
+    out.push(deep_canvas_test_modules::native());
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-page-latch")]

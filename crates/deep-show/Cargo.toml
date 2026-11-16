@@ -124,6 +124,8 @@ test-scatter = ["dep:deep-canvas-test-modules"]
 # Issue #488: a stepping module with checkpoints, and a module whose cache is keyed by frame
 # number (the #488 acceptance README: The test canvas modules).
 test-tick = ["dep:deep-canvas-test-modules"]
+# #172: the full set and the test canvas module test.native, which no web player carries.
+test-web-lacks = ["dep:deep-canvas-test-modules"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #497: a module stepping at its item's step_rate into a held array.
 test-held = ["dep:deep-canvas-test-modules"]
@@ -306,6 +308,7 @@ deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-export = { path = "../deep-canvas-export" }
 deep-lottie-reader = { path = "../deep-lottie-reader" }
 deep-logic = { path = "../deep-logic" }
+deep-play = { path = "../deep-play" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
 deep-canvas-physics = { path = "../deep-canvas-physics" }
 deep-physics-rapier = { path = "../deep-physics-rapier" }
@@ -325,6 +328,7 @@ deep-gpu = { path = "../deep-gpu" }
 deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
+deep-marks-raster = { path = "../deep-marks-raster" }
 deep-text = { path = "../deep-text" }
 # Issue #402: a terminal's PTY (openpty, login_tty, the window size) and stopping what serve
 # started, by PID; already in the lockfile.

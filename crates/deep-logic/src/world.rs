@@ -12,10 +12,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
 use deep_canvas_sandbox::rewrite::{self, BLOCK, FUEL, GLOBAL, PAGES, START};
+use deep_sandbox_wasmtime::Val;
 use deep_sandbox_wasmtime::{Call, Faults, Runner};
 use serde_json::{json, Map, Value};
 use wasmparser::{ExternalKind, Parser, Payload, ValType};
-use wasmtime::Val;
 
 use crate::bake::{self, Range};
 pub use crate::bake::{handed, HANDED};
@@ -711,7 +711,7 @@ impl World {
         }
         loop {
             // When the steps before now ended: a save asked for there counts its time from here.
-            let ended_at = std::time::Instant::now();
+            let ended_at = web_time::Instant::now();
             let t = (0..self.lives.len())
                 .filter(|&i| due(self.lives[i].next, self.piece.items[i].step))
                 .map(|i| self.lives[i].next * self.piece.items[i].step)
@@ -773,7 +773,7 @@ impl World {
         if item.services.is_empty() || l.failed {
             return;
         }
-        let (k, started) = (l.last, std::time::Instant::now());
+        let (k, started) = (l.last, web_time::Instant::now());
         let memory = l.runner.memory_mut("memory").expect("a memory");
         match services::serve(item, k, memory) {
             Ok((pages, n)) => {
@@ -1055,7 +1055,7 @@ impl World {
         let mut touched = Vec::new();
         let mut filled = Map::new();
         if !item.mirrors.is_empty() {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             let lists = mirrors::fill(
                 item,
                 &mut l.mirrors,
@@ -1167,7 +1167,7 @@ impl World {
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
         }
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
         let ms = started.elapsed().as_secs_f64() * 1000.0;
         rec.compares.entry(item.id.clone()).or_default().push((k, n, ms));

@@ -52,14 +52,7 @@ pub(crate) fn reads(form: &Value, entry: &Value) -> bool {
             .any(|o| Some(o.as_str()) == entry["value"].as_str())
 }
 
-/// `form` with `entries` inlined as its `track`; `form` itself when there are none.
-pub(crate) fn with_track(form: &Value, entries: &[Value]) -> Value {
-    let mut out = form.clone();
-    if !entries.is_empty() {
-        out["track"] = Value::Array(entries.to_vec());
-    }
-    out
-}
+pub(crate) use deep_play::form::with_track;
 
 /// Each variant set's pick at `t`, by set: a document-class choice's last entry at or before
 /// `t`, else its default; a view-class choice's default, which [`Hub::played`] wrote from the

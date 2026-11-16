@@ -1700,34 +1700,13 @@ impl<'a> Hub<'a> {
     }
 
     /// Each `logic@1` item's program, inlined from the evidence store by its hash as
-    /// `params.wasm` (base64), which the logic module's steps run (#533). A program the store
-    /// doesn't hold stays out, and the logic module's step names it `asset_missing`.
+    /// `params.wasm` (base64), which the logic module's steps run (#533), as the web player inlines
+    /// the bundle's (#172).
     pub(crate) fn inline_programs(&self, form: &mut Value) {
         let root = &self.scenario.evidence;
-        let Some(items) = form.get_mut("items").and_then(Value::as_object_mut) else {
-            return;
-        };
-        for item in items
-            .values_mut()
-            .filter(|i| i["kind"] == deep_logic::module::INTERFACE)
-        {
-            let sha = item
-                .pointer("/params/program")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let Some(bytes) = (sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
-                .then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok())
-                .flatten()
-            else {
-                continue;
-            };
-            if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
-                params.insert(
-                    "wasm".into(),
-                    Value::String(deep_canvas::base64::encode(&bytes)),
-                );
-            }
-        }
+        deep_play::logic::inline_programs(form, &|sha| {
+            std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()
+        });
     }
 
     /// Each `vector@1` item's imported outline, inlined from the evidence store as

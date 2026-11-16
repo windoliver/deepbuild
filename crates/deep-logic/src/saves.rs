@@ -13,15 +13,15 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write as _};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Instant;
+use web_time::Instant;
 
 use sha2::Digest as _;
 
 use deep_canvas_sandbox::rewrite::{hash, START};
 use deep_sandbox_wasmtime::service::trap_json;
+use deep_sandbox_wasmtime::Val;
 use deep_sandbox_wasmtime::{Call, Faults, Runner};
 use serde_json::{json, Value};
-use wasmtime::Val;
 
 use crate::piece::{memory_bytes, migration_fuel, segments, Piece, MAX_MEMORY, PAGE};
 use crate::world::{arrays_json, names, track_of, Entry, Failed, Live, Record, World};
