@@ -4,7 +4,7 @@
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
 import { ulid } from '@deepbuild/record/ids';
-import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contracts';
@@ -181,6 +181,18 @@ const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
 const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set', 'claim.progress']);
+/**
+ * The evidence an event's data names by hash beside its own list (#1410): a verdict's run output, an answer's image or
+ * the page it approved, a lock's approved bytes, a workspace's readings. Synced before a FULL commit as what its own
+ * list names is, but not cited by it, so retention treats it as before. A hash the store doesn't hold has nothing to sync.
+ */
+function namedIn(value: unknown): string[] {
+  if (typeof value === 'string') return SHA256.test(value) ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(namedIn);
+  return isObj(value) ? Object.values(value).flatMap(namedIn) : [];
+}
+const SHA256 = /^[0-9a-f]{64}$/;
+
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The core's check of a learned change: only the core appends it, in the change's own batch. */
@@ -242,7 +254,7 @@ function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>
   }
   return into;
 }
-/** The published schemas' versions, read once: they never change in a process, so a record opened again reads none. */
+/** Published versions generated from the schemas at build: one small read, with no work deferred to a hook. */
 let published: ReadonlyMap<string, number[]> | undefined;
 /** A string cut to at most `max` UTF-16 units without splitting a surrogate pair. */
 function cut(text: string, max: number): string {
@@ -292,7 +304,13 @@ class SqliteRecord implements RecordStore {
   private readonly queue: Pending[] = [];
   /** The FULL appends made in this turn of the event loop: they share one FULL commit at its end (#22). */
   private readonly fulls: Pending[] = [];
+  /** FULL commits of a turn still syncing the evidence they name: a settle waits for them. */
+  private committingFulls = 0;
+  /** The last commit to have taken its place: the next one runs after it. */
+  private ordered: Promise<void> = Promise.resolve();
   private scheduled = false;
+  /** A FULL commit waiting for the evidence it names to sync: every commit after it waits too, so the log keeps arrival order. */
+  private syncing: Promise<void> | undefined;
   /** The one stop every close waits for, once a close began. */
   private closing: Promise<void> | undefined;
   private inFlight = 0;
@@ -331,7 +349,7 @@ class SqliteRecord implements RecordStore {
     this.stale = this.projector.ensure();
     const extra = options.schemas ?? [];
     this.registry = registry([...listSchemas(), ...extra]);
-    published ??= versionsOf(listSchemas(), new Map());
+    published ??= new Map(JSON.parse(readFileSync(new URL('../dist/versions.json', import.meta.url), 'utf8')) as [string, number[]][]);
     this.versions = versionsOf(extra, new Map(published));
     for (const m of options.migrations ?? []) {
       // Forward only, one step per version, so a replay through them always ends.
@@ -581,14 +599,22 @@ class SqliteRecord implements RecordStore {
       if (CORE_ONLY.has(input.kind) || this.resumes([prepared])) {
         return new Promise<Appended>((resolve, reject) => {
           this.fulls.push({ prepared, resolve, reject });
-          if (this.fulls.length === 1) queueMicrotask(() => this.commitPending(this.fulls.splice(0), true));
+          if (this.fulls.length === 1) queueMicrotask(() => void this.inOrder(() => this.commitFulls()));
         });
       }
-      // What was appended before it commits before it.
-      this.commitPending(this.fulls.splice(0), true);
-      const [outcome] = this.commit([prepared], 'normal');
-      if (!outcome!.ok) throw outcome!.error;
-      return outcome!.appended;
+      // It takes its place now, so it commits after what arrived before it and before what arrives after, even while a
+      // FULL commit ahead syncs its evidence (#1410). The FULL appends of this turn commit before it.
+      return this.inOrder(async () => {
+        await this.commitFulls();
+        while (this.syncing) await this.syncing;
+        // Its mode is read from the log as it is now: a stop committed ahead of it can make it resume a session.
+        const mode = this.resumes([prepared]) ? 'full' : 'normal';
+        const synced = this.evidenceSynced([prepared], mode);
+        if (synced) await synced;
+        const [outcome] = this.commit([prepared], mode);
+        if (!outcome!.ok) throw outcome!.error;
+        return outcome!.appended;
+      });
     }
     // The core reads what a learned change cites in the evidence store before it is in force; a refusal is its
     // event, queued right behind the change so both land in one commit, and the projection never reads bytes.
@@ -623,25 +649,65 @@ class SqliteRecord implements RecordStore {
       if (checked && !byRule) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
       if (!this.scheduled) {
         this.scheduled = true;
-        setImmediate(() => this.flush());
+        setImmediate(() => void this.flush());
       }
     });
   }
 
-  /** Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. */
-  private flush(): void {
-    this.scheduled = false;
-    this.commitPending(this.fulls.splice(0), true);
-    this.commitPending(this.queue.splice(0), false);
+  /**
+   * Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit, after the FULL
+   * appends of this turn (#22). A FULL one waits for the evidence it names, still scheduled, so a read that settles the
+   * queue waits for it too.
+   */
+  private async flush(): Promise<void> {
+    const batch = this.queue.splice(0);
+    try {
+      await this.inOrder(async () => {
+        await this.commitFulls();
+        await this.commitPending(batch, false);
+      });
+    } finally {
+      this.scheduled = false;
+      if (this.queue.length) {
+        this.scheduled = true;
+        setImmediate(() => void this.flush());
+      }
+    }
   }
 
-  /** Commits a batch of appends in one commit, FULL when asked or when it resumes an ended session, and answers each. */
-  private commitPending(batch: Pending[], full: boolean): void {
+  /** Runs a commit after every commit that took its place before it, so the log keeps arrival order. */
+  private inOrder<T>(commit: () => Promise<T>): Promise<T> {
+    const run = this.ordered.then(commit);
+    this.ordered = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  /** Commits the FULL appends made in this turn in one FULL commit (#22); a settle waits for it while it syncs. */
+  private async commitFulls(): Promise<void> {
+    const batch = this.fulls.splice(0);
+    if (!batch.length) return;
+    this.committingFulls++;
+    try {
+      await this.commitPending(batch, true);
+    } finally {
+      this.committingFulls--;
+    }
+  }
+
+  /**
+   * Commits a batch of appends in one commit, FULL when asked or when it resumes an ended session, and answers each.
+   * It first waits for a FULL commit already waiting, then syncs the evidence a FULL one names (#1410).
+   */
+  private async commitPending(batch: Pending[], full: boolean): Promise<void> {
     if (!batch.length) return;
     let outcomes: Outcome[];
     try {
       const items = batch.map((p) => p.prepared);
-      outcomes = this.commit(items, full || this.resumes(items) ? 'full' : 'normal');
+      while (this.syncing) await this.syncing;
+      const mode = full || this.resumes(items) ? 'full' : 'normal';
+      const synced = this.evidenceSynced(items, mode);
+      if (synced) await synced;
+      outcomes = this.commit(items, mode);
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
       return;
@@ -651,6 +717,26 @@ class SqliteRecord implements RecordStore {
       if (outcome.ok) pending.resolve(outcome.appended);
       else pending.reject(outcome.error);
     }
+  }
+
+  /**
+   * Before a commit: the evidence a FULL one names, synced with its folders (#1410), so a commit that survives a power
+   * cut never names a file that didn't. The caller first waits for a FULL commit already waiting, so a later event never
+   * lands first and its own mode is read from the log that commit left. The sync runs off this thread. A record opened without a store holds no files to sync. Undefined
+   * when there is nothing to wait for, so such a commit stays in this turn.
+   */
+  private evidenceSynced(items: readonly Prepared[], mode: Durability): Promise<void> | undefined {
+    const named = mode === 'full' && this.options.evidence ? [...new Set(items.flatMap((p) => [...p.evidence, ...namedIn(p.data)]))] : [];
+    return named.length ? this.syncNamed(items, named) : undefined;
+  }
+  private async syncNamed(items: readonly Prepared[], named: string[]): Promise<void> {
+    const synced = this.options.evidence!.sync(named);
+    const waiting = (this.syncing = synced.then(() => undefined, () => undefined).finally(() => { if (this.syncing === waiting) this.syncing = undefined; }));
+    await synced.catch((error: unknown) => {
+      // Nothing of the commit is in the log, as when the storage refuses it: its sessions have lost events.
+      for (const p of items) if (p.session) this.markLost(p.session);
+      throw new RecordError('storage', `the evidence a FULL commit names could not be synced: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   /**
@@ -922,7 +1008,7 @@ class SqliteRecord implements RecordStore {
 
   /** Waits for every queued stream event to commit or be refused. */
   private async settle(): Promise<void> {
-    while (this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.queue.length || this.fulls.length || this.committingFulls || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
   /** A clean stop: no new appends, every one accepted committed or refused, the state recorded FULL. */

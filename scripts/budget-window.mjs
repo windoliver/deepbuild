@@ -1,6 +1,7 @@
 // The budget window (docs/parallel-proof.md, section 12a). `throttle.mjs window` runs this with every slot drained: it
-// measures each commit merged on origin/main since the last window against its own merge base, writes one evidence
-// record per commit, and settles the commit's issue by that record. It runs only inside a window; agents never run it.
+// measures each commit merged on origin/main since the last window against its own merge base, on the budget tasks the
+// commit can reach, writes one evidence record per commit, and settles the commit's issue by that record. It runs only
+// inside a window; agents never run it.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,6 +31,8 @@ function blocked(message, fix) {
 }
 const outside = 'Only a scheduled `throttle.mjs window` runs this; agents never do.';
 const inWindow = () => holds('timed', { window: true });
+// The selection affected.mjs makes for tests (#1981). A checkout that can't load it places no task, so each one runs.
+const selection = await import('./affected.mjs').catch((error) => error);
 
 /** What a commit on main's first-parent line changed: a merge's branch tip against its merge base, or the commit against its parent. */
 function sides(commit) {
@@ -38,21 +41,42 @@ function sides(commit) {
 }
 const budgetsAt = (commit) => (git('ls-tree', '--name-only', commit, manifest) ? JSON.parse(git('show', `${commit}:${manifest}`)) : null);
 
-/** A side's copy of `commit`, at the same path every window, so the builds kept beside it stay valid. */
-function copyOf(side, commit) {
+/** A side's tree of `commit`, at the same path every window, so the builds kept beside it stay valid. */
+function treeOf(side, commit) {
   const directory = join(folder, side, 'copy');
-  process.env.CARGO_TARGET_DIR = join(folder, side, 'target');
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
+  // -m stamps the files now: Cargo goes by mtime, and an older commit would otherwise look fresh.
+  execFileSync('tar', ['-mxf', '-', '-C', directory], { input: execFileSync('git', ['archive', commit], { cwd: root, maxBuffer: 1 << 28 }) });
+  return directory;
+}
+/** A side's tree made ready to run tasks in, its builds kept beside it. */
+function ready(side, directory) {
+  process.env.CARGO_TARGET_DIR = join(folder, side, 'target');
   mkdirSync(process.env.CARGO_TARGET_DIR, { recursive: true });
   try {
-    // -m stamps the files now: Cargo goes by mtime, and an older commit would otherwise look fresh.
-    execFileSync('tar', ['-mxf', '-', '-C', directory], { input: execFileSync('git', ['archive', commit], { cwd: root, maxBuffer: 1 << 28 }) });
     prepareCopy(directory);
   } finally {
     delete process.env.CARGO_TARGET_DIR;
   }
   return directory;
+}
+
+/**
+ * The ids of the tasks a commit can reach, by the selection affected.mjs makes for tests over the commit's tree and
+ * what it changed against its merge base: those it reaches or marks wide, and those it can't place (#1981). With no
+ * selection, every task runs.
+ */
+function reachable(tree, { change, base }, tasks) {
+  try {
+    if (selection instanceof Error) throw selection;
+    const list = (...args) => git(...args).split('\0').filter(Boolean);
+    const changed = list('diff', '--name-only', '-z', '--no-renames', base, change);
+    return new Set(selection.select(tree, changed, { files: list('ls-tree', '-r', '-z', '--name-only', change), workspace: selection.crates(tree), tasks }).tasks);
+  } catch (error) {
+    console.log(`NOTE budget-window: no task of ${change} could be placed, so each runs: ${error.message.split('\n')[0]}`);
+    return new Set(tasks.map(({ id }) => id));
+  }
 }
 
 /** A task's row in the record: as perf reads it, with a load at or above the cores never a PASS (invariant 2). */
@@ -78,19 +102,26 @@ function judged(task, established, cwd, baseCwd) {
 
 function measured(commit) {
   const { change, base } = sides(commit);
-  let tests, named = new Set();
+  let tests, named = new Set(), notReached = [];
   try {
     const current = budgetsAt(change), established = budgetsAt(base);
     // Budget numbers stay as the merge base has them: a commit's own edit of one is no pass.
     validateBudgets(current, established);
-    const here = copyOf('change', change), there = established ? copyOf('base', base) : null;
-    tests = current.tasks.map((task) => judged(task, established?.tasks.find(({ id }) => id === task.id), here, there));
-    // What the commit's tasks prove (#1874): each names its criteria by ID, and only its numbers stay the merge base's.
-    named = new Set(current.tasks.flatMap(({ criteria }) => criteria ?? []));
+    const here = treeOf('change', change), reach = reachable(here, { change, base }, current.tasks);
+    // A task the commit can't reach doesn't run: its record lists it as not reached, never PASS. With none to run, no
+    // copy is built.
+    const run = current.tasks.filter(({ id }) => reach.has(id));
+    notReached = current.tasks.filter(({ id }) => !reach.has(id)).map(({ id }) => id);
+    if (run.length) ready('change', here);
+    const there = run.length && established ? ready('base', treeOf('base', base)) : null;
+    tests = run.map((task) => judged(task, established?.tasks.find(({ id }) => id === task.id), here, there));
+    // What the commit's tasks proved (#1874): each that ran names its criteria by ID, and only its numbers stay the merge
+    // base's. A criterion only an unreached task names stays unmeasured.
+    named = new Set(run.flatMap(({ criteria }) => criteria ?? []));
   } catch (error) {
     tests = [{ id: manifest, state: 'BLOCKED', note: error.message }];
   }
-  return { commit, change, base, tests, named, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
+  return { commit, change, base, tests, named, notReached, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
 }
 
 /** The issues a commit's messages name, as GitHub reads them, in this repository. */
@@ -113,9 +144,9 @@ function miss({ commit, base, tests }, issues) {
   gh('issue', 'create', '--title', `Budget regression in ${commit.slice(0, 12)} (${names})`, '--body', `The budget window measured ${commit}, of ${names}, against its merge base ${base}, and it missed its budget:\n\n${missed}`);
   for (const number of issues) gh('issue', 'comment', number, '--body', `The budget window measured ${commit} against its merge base ${base} and it missed:\n\n${missed}`);
 }
-// A pass closes an issue only on criteria it measured: the issue holds one still unticked, and a task names each such
-// one (the record passes only when every task did); a `Part of #n` merge ticks the others. An issue with no criteria
-// section, or none left unticked, holds nothing the window measured, so the window never closes it.
+// A pass closes an issue only on criteria it measured: the issue holds one still unticked, and a task that ran names
+// each such one (the record passes only when every task that ran did); a `Part of #n` merge ticks the others. An issue
+// with no criteria section, or none left unticked, holds nothing the window measured, so the window never closes it.
 function close(record, issue) {
   const open = unticked(issue);
   if (issue.state === 'OPEN' && open?.length && open.every((id) => record.named.has(id))) gh('issue', 'close', issue.number, '--comment', `The budget window measured ${record.commit} against its merge base ${record.base}: every budget passed, and a task names each criterion left open.`);
@@ -150,8 +181,8 @@ for (const [at, commit] of commits.entries()) {
     blocked(`${commit}'s issues weren't read: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
   }
   const unmeasured = read.flatMap((issue) => (unticked(issue) ?? []).filter((id) => !record.named.has(id)));
-  writeRecord(`budget-window ${commit}`, record.state, git('rev-parse', `${record.change}^{tree}`), record.tests, { commit, base: record.base, unmeasured });
-  console.log(`${record.state} budget-window: ${commit} against ${record.base}`);
+  writeRecord(`budget-window ${commit}`, record.state, git('rev-parse', `${record.change}^{tree}`), record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached });
+  console.log(`${record.state} budget-window: ${commit} against ${record.base}, ${record.tests.length} tasks run, ${record.notReached.length} not reached`);
   try {
     if (record.state === 'FAIL') miss(record, issues.get(commit));
     if (record.state !== 'PASS') for (const number of issues.get(commit)) held.add(number);

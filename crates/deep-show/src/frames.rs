@@ -404,6 +404,13 @@ impl<'a> Hub<'a> {
         if self.scenario.planted == Some(crate::hub::Planted::PluginCodePerFrame) {
             nodes.push(json!({"operator": "plugin.place", "module": "plugin", "phase": "items", "item": null, "run": "ran"}));
         }
+        // Planted (#233): math@1 expands its instances again each frame.
+        if self.scenario.pack_planted.as_deref() == Some(crate::math_twins::EXPANDS_EACH_FRAME) {
+            if let Some(form) = self.forms.get(&e.doc) {
+                let again = crate::math_twins::expand_again(form, &self.startup.sealed, &self.packs);
+                nodes.extend(again);
+            }
+        }
         let report = &evaluated.report;
         let mut reply = json!({
             "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
@@ -574,6 +581,15 @@ impl<'a> Hub<'a> {
                         .push(json!({"code": code, "severity": "error", "path": path, "ids": []}));
                 }
             }
+        }
+        // #903: the tour pointer as this frame draws it, in px of the frame at its own size.
+        if e.tour_pointer {
+            let form = self.played_form(&e.doc).map(|form| match &e.track {
+                Some(track) => crate::played::with_track(&form, track),
+                None => form,
+            });
+            let pointer = form.and_then(|f| self.tour_pointer(&f, t, reduced));
+            reply["tour_pointer"] = crate::tour::reading(pointer);
         }
         // #504: an eval's own track lasts the call: the session goes back to the hub's.
         if e.track.is_some() {
