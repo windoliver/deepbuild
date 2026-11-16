@@ -672,13 +672,14 @@ class Hub {
   }
 
   private async line(conn: Conn, parts: Buffer[]): Promise<void> {
-    if (conn.done && !conn.first) return;
+    if (this.stopping || (conn.done && !conn.first)) return;
     const first = conn.first;
     conn.first = false;
     const size = parts.reduce((sum, p) => sum + p.length, 0);
     // A small line is copied out of the socket's buffer, so only its own bytes cross to the parser.
     const chunks = size > BIG ? parts : [parts.length === 1 ? Buffer.from(parts[0]!) : Buffer.concat(parts)];
     const parsed = await this.parsers.parse(chunks, first);
+    if (this.stopping) return;
     if (parsed.kind === 'hook' && this.plant === 'log-raw-command') {
       // The planted wrong program: the command as the hook sent it, unscrubbed, in the hub's log.
       try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
