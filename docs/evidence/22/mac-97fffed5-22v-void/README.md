@@ -14,3 +14,9 @@ to be run again. What it reached, for the record:
   `queued` and unlisted (`signin/`).
 - Part 5: 1459/identifier BLOCKED on `cargo build -p deep-replica --bin deep-drive` failing to compile
   `cocoa-foundation`, with the disk running low.
+
+Part 2's three failures are, by exact test name, three of the six main 2252dfd6 fails on this Mac in its own run
+(`../mac-adaa0e19/2b-failed-names.txt`, from `2b-main-full.txt`): `ac11_after_a_power_cut_drops_900_to_905…`
+(`acceptance_34`), `ac2_each_sessions_state_title_and_open_asks…` and `ac3_a_sidebar_render_and_a_notifier_tick…`
+(`acceptance_1141`). The other three there (`a_wrong_token_is_refused…`, `the_app_reads_the_hubs_health…`,
+`the_hub_takes_the_views…`, `hub_client`) passed here. So nothing new fails at 97fffed5.
