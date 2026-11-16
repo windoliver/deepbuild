@@ -1,0 +1,10 @@
+# The shop's definition of done (fixture for #2218 AC1): one check, which needs three clean runs.
+claims:
+  done:
+    checks: [turnstile]
+checks:
+  turnstile: { type: command, run: "node --test tests/turnstile.js", runs: 3 }
+# The turnstile keeps its count outside its checkout, so it runs as you, outside the sandbox (#33).
+outside:
+  checks: [turnstile]
+  build: "true"

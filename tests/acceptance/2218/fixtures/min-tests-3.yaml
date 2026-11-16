@@ -1,0 +1,7 @@
+# The shop's definition of done (fixture for #2218 AC3, the passing half): the suite must count at least three tests,
+# and holds three.
+claims:
+  done:
+    checks: [suite]
+checks:
+  suite: { type: command, run: "node --test tests/suite.js", min_tests: 3 }
