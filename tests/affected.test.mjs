@@ -129,6 +129,22 @@ test('a Rust change reaches its crate and the crates depending on it, their [[te
   assert.deepEqual(select(root, ['packages/a/src/leaf.ts'], { files, workspace }).crates, ['r2']);
 });
 
+test('a budget task runs when the change reaches its script or its binary\'s crates, when it can\'t be placed, and when the change feeds every suite', (t) => {
+  const { root, files } = repo(t, { ...cargo, 'benchmarks/bench.mjs': "import './helper.mjs';\n", 'benchmarks/helper.mjs': 'export {};\n', 'benchmarks/r2.mjs': "const R2 = 'target/release/r2';\n", 'Cargo.lock': '' });
+  const workspace = crates(root);
+  const tasks = [
+    { id: 'binary', command: ['target/debug/r2', '--version'] }, { id: 'script', command: ['node', 'benchmarks/bench.mjs'] },
+    { id: 'script-runs-r2', command: ['node', 'benchmarks/r2.mjs'] }, { id: 'nowhere', command: ['/bin/sh', '-c', 'true'] },
+  ];
+  const run = (path) => select(root, [path], { files, workspace, tasks }).tasks;
+  // r2's binary links r1, so a selector that reaches only a crate whose own source changed, as for tests, drops the
+  // script that runs it.
+  assert.deepEqual(run('crates/r1/src/lib.rs'), ['binary', 'script-runs-r2', 'nowhere']);
+  assert.deepEqual(run('crates/r3/src/lib.rs'), ['nowhere']);
+  assert.deepEqual(run('benchmarks/helper.mjs'), ['script', 'nowhere']);
+  assert.deepEqual(run('Cargo.lock'), tasks.map(({ id }) => id));
+});
+
 test('the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does', (t) => {
   const { root, files } = repo(t, {
     'vitest.config.ts': "import { globs } from './scripts/globs.mjs';\nexport default { test: { include: globs, setupFiles: ['./tests/boot', './tests/gone.ts'] } };\n",

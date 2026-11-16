@@ -213,6 +213,7 @@ pub(super) fn run(
             orphaned: Vec::new(),
             channels: Map::new(),
             sections: lowered.sections,
+            placed: Vec::new(),
         });
     }
     out

@@ -1,0 +1,25 @@
+{
+  "name": "mathwords",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test familiar-names pack of the #233 acceptance suite (criterion 10): one recipe and two words. Dot maps to the pack's own recipe; Ghost names a target the pack doesn't hold, which the pack check must refuse, naming the word.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "mathwords.dot@1": "dot@1.json"
+  },
+  "aliases": {
+    "Dot": {
+      "target": "mathwords.dot@1",
+      "conversion": "radius in math units of the frame's short side / 8, drawn as a square of side 2 x radius at the frame's centre"
+    },
+    "Ghost": {
+      "target": "mathwords.ghost@1",
+      "conversion": "none: this pack holds no recipe or kind named mathwords.ghost@1"
+    }
+  }
+}
