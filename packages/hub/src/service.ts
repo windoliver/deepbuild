@@ -308,14 +308,18 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
   }
 }
 
+function stopFailed(path: string, error: unknown): number {
+  process.stderr.write(`deep hub stop: no hub could be stopped at unix:${path}: ${error instanceof Error ? error.message : String(error)}\n`);
+  return 3;
+}
+
 /** `deep hub stop --root <folder>`: stops a dev hub and waits for its socket to go quiet. */
 export async function stopHub(options: { root: string }): Promise<number> {
   const root = rootOf(options.root);
   try {
     await control(root.socket, root.token, 'hub.stop');
   } catch (error) {
-    process.stderr.write(`deep hub stop: no hub could be stopped at unix:${root.socket}: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    return stopFailed(root.socket, error);
   }
   return 0;
 }
@@ -331,6 +335,12 @@ export function removeService(): void {
 }
 /** Stops the hub at `root` if one answers there; a live hub that cannot stop is still a failure. */
 export async function stopIfRunning(root: string): Promise<number> {
-  if (!(await answers(rootOf(root).socket))) return 0;
+  const path = rootOf(root).socket;
+  try {
+    (await connect(path)).close();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ECONNREFUSED' ? 0 : stopFailed(path, error);
+  }
   return stopHub({ root });
 }
