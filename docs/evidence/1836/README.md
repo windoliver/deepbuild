@@ -7,6 +7,7 @@ deep-hook binary), on the branch and on the merge base. Run by hand on the Spark
 - `suite-branch.txt`: the branch. Both tests pass. In the turn a proceed started, after the subagent's
   `SubagentStop`, `gh pr merge 12` is held at PreToolUse by one authority ask naming the proceed. Under
   `DEEP_HUB_PLANT=proceed-ends-at-child-stop`, the merge runs and the check fails naming `gh pr merge 12`.
+- `suite-merge.txt`: the branch with main `b1fc9abb2` merged, rebuilt: both pass again.
 - `suite-base.txt`: the merge base `c740dede7` with the same tests. The merge runs with no ask
   (deep-hook exits 0, nothing held), and the plant isn't there yet.
   It ran in the blind job's own worktree, at its commit `87b20a7c0`, which is `37824538d` before the cherry-pick
