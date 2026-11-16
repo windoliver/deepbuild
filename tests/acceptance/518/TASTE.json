@@ -1,0 +1,15 @@
+{
+  "issue": 518,
+  "criterion": "#518.2feca46b",
+  "verdict": "looks_right",
+  "who": "Devin, on the owner's delegation given in this session (asked, he answered \"You make the call\"), as #157's and #501's calls were delegated; the owner can overrule it on the PR",
+  "when": "2026-11-16T21:10:04Z",
+  "screenshots": {
+    "h264-aac.png": "18181b24a9efe7e9150bf9e6db54e495b25d2682c8d9ace8b047c53179b587d2",
+    "av1.png": "ad6c12095a2748f0691565f567a5b91cb33bd7aefadef13428abd8653315ca3c"
+  },
+  "recording": {
+    "both-films.mp4": "08091fa1c38787a5164aa350e285a85c7123608e22fee6fb71bfb73dd7b3c679"
+  },
+  "note": "Looked at both frames (frame 480 of each exported file, scaled 4x nearest) and at frames 120, 720 and 1320 of the recording, side by side. Both show the same film: the grey panel on the left with its tick, the light ground and the yellow bar, in the same places and the same colours at each time. ffprobe reads both files as 160 x 90, 24 fps, 1,440 frames, BT.709 tv range, with 60 s of 48 kHz stereo AAC. The H.264 frame is clean. The AV1 frame, from the test tool (rav1e at speed 10, quantizer 60), shows coding noise at this magnification: faint blocking on the grey panel around the tick and soft vertical ghosts beside the bar. It is compression loss, not a wrong picture: the AV1 delivery reads 50.6 dB PSNR-Y against its own raw frames (floor 40 dB) and 52.9 dB against the H.264 delivery. A first-party AV1 tool would want a lower quantizer than this test tool uses."
+}
