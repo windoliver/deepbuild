@@ -468,6 +468,8 @@ pub struct View {
     pub window: u32,
     /// How it returns to full size below scale 1, and its sharpen (#386).
     pub surface: Surface,
+    /// The next frame's HDR surface on the display, when it presents one (#177).
+    pub hdr: Option<deep_scene3d_render::HdrFrame>,
     /// The internal scale and the upscale its last frame drew through.
     pub drew: (f64, &'static str),
     /// Frame history (#173), when its look keeps it.
@@ -625,6 +627,7 @@ impl View {
             scale,
             window,
             surface: Surface::default(),
+            hdr: None,
             drew: (1.0, "none"),
             history: None,
             base_bytes,
@@ -1141,6 +1144,13 @@ impl View {
                 draw.record(encoder, target, timer.writes(i));
                 timer.end(i);
             }
+        }
+        // #177: the HDR surface, from the finished slot.
+        if let Some(frame) = self.hdr.take() {
+            let i = timer.start(deep_scene3d_render::hdr::HDR_PASS, session);
+            self.renderer
+                .record_hdr(device, encoder, target, &frame, timer.writes(i));
+            timer.end(i);
         }
         true
     }

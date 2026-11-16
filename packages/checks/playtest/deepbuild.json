@@ -1,0 +1,30 @@
+{
+  "id": "deepbuild/playtest",
+  "version": "1.0.0",
+  "digest": "d1:ae3bdb3c4c30005e2b452a6c638161a8c8ef80312742523f69e00be85ef170bc",
+  "checks": [
+    "playtest"
+  ],
+  "codes": [
+    "playtest.not_live",
+    "playtest.stuck",
+    "playtest.goal_missed",
+    "playtest.trap",
+    "playtest.over_budget",
+    "playtest.replay",
+    "playtest.band",
+    "playtest.expect",
+    "play.missing",
+    "play.out_of_range"
+  ],
+  "access": {
+    "words": [
+      "canvas"
+    ]
+  },
+  "requires": {
+    "preview": [
+      "deep.canvas.play"
+    ]
+  }
+}

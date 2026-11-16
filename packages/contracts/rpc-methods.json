@@ -229,6 +229,14 @@
     "decide_by": "R4"
   },
   {
+    "method": "signin.open",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1349",
+    "preview_since": "R1",
+    "decide_by": "R4"
+  },
+  {
     "method": "hub.stop",
     "since": "R1",
     "stability": "stable",

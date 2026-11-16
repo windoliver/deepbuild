@@ -13,7 +13,9 @@
 // the forge each pass, so a restarted hub, its started sessions reconciled first, starts nothing twice. Each issue's
 // state word is recorded as `work.state`, which `deep work show` prints. A workspace's run (#1347) takes its tasks from
 // the record the same way, with no forge read or written: a task's change finishes on the workspace's own main once
-// its PASS covers the merge, the version before it kept a step back.
+// its PASS covers the merge, the version before it kept a step back. Under a standing rule or a topic's card (#1345), a
+// change whose only open requirements are calls on you lands on its other checks unless it reaches a release or a
+// published page; its issue stays open naming the calls, and their answers close it, revert it or start an attempt.
 import { execFile } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -21,7 +23,7 @@ import type { Asks } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { gitEnv } from '@deepbuild/gate';
 import type { WorkItem } from './ask-tasks.js';
-import { mergeOf, onlyWindow, type Landing, type Outcome } from './landing.js';
+import { mergeOf, onlyWindow, type Landing, type Outcome, type RaiseCall } from './landing.js';
 import type { Plant } from './plant.js';
 import type { Starts } from './starts.js';
 import type { WorkspaceService } from './workspaces-port.js';
@@ -47,13 +49,16 @@ const WEEK = 7 * DAY;
 /** How long a candidate's blocked-by links stand unless the issue changed. */
 const LINKS_MS = 5 * 60_000;
 /** How an attempt ended with its change landed. */
-const LANDED = new Set(['PASS', 'landed with the budget window open']);
+const LANDED = new Set(['PASS', 'landed with the budget window open', 'landed with your call open']);
 /** The words GitHub reads as linking an issue, closing ones first, and `Part of`, which links without closing. */
 const LINKS = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+#(\d+)\b/i;
 /** The baseline of issues closed before the gate: the repo's file, as the commit that added it holds it. */
 const BASELINE = '.deepbuild/closed-before-gate.json';
 /** How an attempt ended without being replaced: its change landed, or its issue waited on you. */
-const KEPT = new Set(['PASS', 'landed with the budget window open', 'gave up its slot']);
+const KEPT = new Set(['PASS', 'landed with the budget window open', 'landed with your call open', 'gave up its slot']);
+/** A call's two answers (#328's): Yes, the recommended one, and Send back. */
+const YES = 'yes';
+const SEND_BACK = 'send_back';
 /** The verdict words a landing records that are state words too. */
 const WORDS = new Set(['BLOCKED', 'INVALID', 'INCONCLUSIVE']);
 /** The machines a `Runs on:` line names, as docs/parallel-proof.md does, and what serves each. */
@@ -67,7 +72,11 @@ export interface Row { issue: number; word: string; waits_on: string | null; why
 interface Issue { n: number; open: boolean; title: string; body: string; blockers: number[] | { unread: string } }
 interface Pull { pr: number; issue: number; login: string; open: boolean; merged: boolean; branch: string; head: string }
 interface Attempt { attempt: number; run: string; agent: string; model: string | null; worktree: string; branch: string; reason: string; ended: { cause: string; verdict: string | null; model: string | null } | null }
-interface OpenAsk { handle: string; session: string | null; key: string }
+interface OpenAsk { handle: string; session: string | null; key: string; writer: string; provisional: boolean }
+/** A call on an issue's change (#1345) as it stands: open, or closed with the option it took and how. */
+interface CallRow { handle: string; issue: number; head: string; text: string; open: boolean; answer: string | null; how: string | null; words: string | null }
+/** What landed for an issue: the newest landing, its outcome, what it left open, its pull request, head, commit and claim. */
+interface Landed { outcome: string; open: string[]; pr: number; at?: string; head?: string | null; commit?: string | null }
 /** A merged revert of a landing, by the landing's commit as its branch names it, and when it merged. */
 interface Revert { pr: number; landing: string; at: number }
 /** What a pass reads: the issues and pull requests, the run's set, a standing run's left-out issues with why, and its milestones. */
@@ -79,7 +88,7 @@ export interface WorkOptions {
   token(): Promise<string | undefined>;
   repoOf(remote: string): string | undefined;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
-  appendCore(kind: string, data: Obj, extra?: { subject?: string }): Promise<void>;
+  appendCore(kind: string, data: Obj, extra?: { subject?: string; v?: number }): Promise<void>;
   starts(): Starts;
   landing(): Landing;
   asks(): Asks;
@@ -89,7 +98,9 @@ export interface WorkOptions {
   spaces(): Pick<WorkspaceService, 'idAt' | 'tasksOf' | 'finished'>;
   /** Each pass's turn for the briefs (#1342). */
   due?(): Promise<void>;
-  judgeTask(r: { folder: string; item: WorkItem; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined>;
+  judgeTask(r: { folder: string; item: WorkItem; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle?: string | null }[] } | undefined>;
+  /** A call on a claim's requirement whose oracle is you, and once it closed your answer: the claim's verdict reads them (#1345). */
+  answered(claim: string, req: string, ask: string, answer?: 'PASS' | 'FAIL' | 'unanswered'): Promise<void>;
 }
 
 const git = (cwd: string, ...args: string[]): Promise<string> =>
@@ -113,6 +124,10 @@ export class Work {
   private judgements = 0;
   /** Each attempt's worktree as it started: a turn that ends with it unchanged replaced the attempt. */
   private readonly snapshots = new Map<string, string>();
+  /** Each call's claims and requirements as this hub judged them, by the call's handle: your answer reaches each (#1345). */
+  private readonly asked = new Map<string, { claim: string; req: string }[]>();
+  /** The answers handed to claims, and the reverts and closes made for calls, each once: with why one couldn't be. */
+  private readonly done = new Map<string, string | null>();
   private you: string | undefined;
   constructor(private readonly o: WorkOptions) {}
 
@@ -224,21 +239,75 @@ export class Work {
     }
     return out;
   }
-  /** What landed for each issue of a repo: its outcome and the requirements only the budget window settles. */
-  private async landed(repo: string): Promise<Map<number, { outcome: string; open: string[]; pr: number; at?: string }>> {
+  /** What landed last for each issue of a repo: its outcome, the requirements it left open, and its head and commit. */
+  private async landed(repo: string): Promise<Map<number, Landed>> {
     const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'landing.made' AND json_extract(data, '$.step') = 'landed' AND json_extract(data, '$.repo') = ? ORDER BY log_pos`, [repo])) as { data: string }[];
-    const out = new Map<number, { outcome: string; open: string[]; pr: number }>();
+    const out = new Map<number, Landed>();
     for (const row of rows) {
-      const d = JSON.parse(row.data) as { issue: number; outcome: string; open: string[]; pr: number };
-      out.set(d.issue, { outcome: d.outcome, open: d.open ?? [], pr: d.pr });
+      const d = JSON.parse(row.data) as { issue: number; outcome: string; open: string[]; pr: number; head: string | null; commit: string | null };
+      out.set(d.issue, { outcome: d.outcome, open: d.open ?? [], pr: d.pr, head: d.head, commit: d.commit });
     }
     return out;
   }
+  /**
+   * The calls raised on a repo's issues (#1345), oldest first, each as it stands: open, or closed by your answer, a
+   * decision of yours, its default or the rest of the closed set. An undone default opens it again.
+   */
+  private async callsOf(repo: string): Promise<CallRow[]> {
+    const made = ((await this.o.raw(`SELECT id, data FROM events WHERE kind = 'ask.created' AND writer = 'core' AND json_extract(data, '$.kind') = 'taste' AND json_extract(data, '$.subject.screen') IS NOT NULL ORDER BY log_pos`)) as { id: string; data: string }[])
+      .map((r) => ({ id: r.id, d: JSON.parse(r.data) as Obj })).filter((r) => isObj(r.d.subject) && String(r.d.subject.screen).startsWith(`${repo}#`));
+    if (!made.length) return [];
+    const handles = made.map((r) => `ask:${r.id}`);
+    const closes = (await this.o.raw(`SELECT kind, subject, data FROM events WHERE subject IN (${handles.map(() => '?').join(', ')}) AND kind IN ('ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'decision.applied', 'default.undone') ORDER BY log_pos`, handles)) as { kind: string; subject: string; data: string }[];
+    const decided = closes.some((c) => c.kind === 'decision.applied')
+      ? new Map(((await this.o.raw(`SELECT id, json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'decision.created'`)) as { id: string; answer: string }[]).map((r) => [`decision:${r.id}`, r.answer]))
+      : new Map<string, string>();
+    return made.map(({ id, d }) => {
+      const handle = `ask:${id}`;
+      const last = closes.filter((c) => c.subject === handle).at(-1);
+      const e = last ? JSON.parse(last.data) as Obj : {};
+      const answer = !last || last.kind === 'default.undone' ? null
+        : last.kind === 'decision.applied' ? decided.get(String(e.decision)) ?? null : typeof e.option === 'string' ? e.option : typeof e.answer === 'string' ? e.answer : null;
+      return {
+        handle, issue: Number(String((d.subject as Obj).screen).slice(repo.length + 1)), head: String((d.pinned_to as Obj | undefined)?.ref ?? ''), text: String((d.subject as Obj).element),
+        open: !last || last.kind === 'default.undone', answer, how: last && last.kind !== 'default.undone' ? last.kind : null, words: typeof e.words === 'string' ? e.words : null,
+      };
+    });
+  }
+  /**
+   * Raises a call for a requirement whose oracle is you (#1345): Yes, the recommended answer and its default, or Send
+   * back. One per requirement and head, so the same change never asks twice; a claim judged again on it is told the
+   * call, and the answer once it came. An issue's calls keep a thread of their own: no attempt or judgement of its task
+   * claims there, so none of them makes a call moot, and calls from several issues never fold into one exception.
+   */
+  private raiser(repo: string): RaiseCall {
+    return async (c) => {
+      const had = (await this.callsOf(repo)).find((x) => x.issue === c.issue && x.head === c.head && x.text === c.text);
+      const screen = `${repo}#${c.issue}`;
+      const session = `calls${repo.replace(/[^0-9A-Za-z]/g, '')}x${c.issue}`;
+      const handle = had?.handle ?? await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you', session }, 'work.call', {
+        kind: 'taste',
+        question: `Is "${c.text}" true of #${c.issue}'s change? Before: main at ${c.main.slice(0, 12)}; after: PR #${c.pr} at ${c.head.slice(0, 12)}${c.reaches ? `, which reaches ${c.reaches}, so it waits for your answer` : ', which lands now and Send back reverts'}.`.slice(0, 8192),
+        options: [{ id: YES, label: 'Yes', decision: 'none' }, { id: SEND_BACK, label: 'Send back', decision: 'none' }],
+        recommended: YES, fallback: 'you', provisional: false, owner: 'you', key: key({ kind: 'work.call', screen, element: c.text }),
+        pinned_to: { kind: 'commit', ref: c.head }, subject: { screen, element: c.text.slice(0, 8192) },
+      });
+      const claims = this.asked.get(handle) ?? [];
+      if (!claims.some((x) => x.claim === c.claim)) this.asked.set(handle, [...claims, { claim: c.claim, req: c.req }]);
+      await this.o.answered(c.claim, c.req, handle, had && !had.open ? answerOf(had) : undefined);
+      return handle;
+    };
+  }
+  /** Whether calls are on for a run (#1345): only a standing rule, or a topic's card, turns them on. */
+  private async callsOn(ask: string, approval: Approval): Promise<boolean> {
+    if (approval.rule) return true;
+    return ((await this.o.raw(`SELECT 1 FROM events WHERE kind = 'brief.drafted' AND json_extract(data, '$.ask') = ? LIMIT 1`, [ask])) as unknown[]).length > 0;
+  }
   /** The asks still open: who raised each, and its key. */
   private async openAsks(): Promise<OpenAsk[]> {
-    const rows = (await this.o.raw(`SELECT c.id AS id, c.session_id AS session, json_extract(c.data, '$.key') AS key FROM events c WHERE c.kind = 'ask.created'
-      AND NOT EXISTS (SELECT 1 FROM events e WHERE e.subject = 'ask:' || c.id AND e.kind IN ('ask.answered', 'ask.defaulted', 'ask.cancelled', 'ask.moot', 'ask.superseded'))`)) as { id: string; session: string | null; key: string | null }[];
-    return rows.map((r) => ({ handle: `ask:${r.id}`, session: r.session, key: r.key ?? '' }));
+    const rows = (await this.o.raw(`SELECT c.id AS id, c.session_id AS session, c.writer AS writer, json_extract(c.data, '$.key') AS key, json_extract(c.data, '$.provisional') AS provisional FROM events c WHERE c.kind = 'ask.created'
+      AND NOT EXISTS (SELECT 1 FROM events e WHERE e.subject = 'ask:' || c.id AND e.kind IN ('ask.answered', 'ask.defaulted', 'ask.cancelled', 'ask.moot', 'ask.superseded', 'decision.applied'))`)) as { id: string; session: string | null; writer: string; key: string | null; provisional: number | null }[];
+    return rows.map((r) => ({ handle: `ask:${r.id}`, session: r.session, key: r.key ?? '', writer: r.writer, provisional: r.provisional === 1 }));
   }
   /**
    * The breaker on an issue: how many of its asks you answered to try again, which sets the count it trips at next,
@@ -502,8 +571,8 @@ export class Work {
     return { issues, pulls: [] };
   }
   /** The tasks that finished in a workspace: a PASS covered each one's change on main. */
-  private async finishedIn(id: string): Promise<Map<number, { outcome: string; open: string[]; pr: number; at?: string }>> {
-    const out = new Map<number, { outcome: string; open: string[]; pr: number; at?: string }>();
+  private async finishedIn(id: string): Promise<Map<number, Landed>> {
+    const out = new Map<number, Landed>();
     for (const t of await this.o.spaces().tasksOf(id)) if (t.step === 'finished' && t.commit) out.set(t.task, { outcome: 'PASS', open: [], pr: 0, at: t.commit });
     return out;
   }
@@ -582,6 +651,8 @@ export class Work {
     const repo = space ?? await this.slugOf(approval.repo);
     // A standing run (#1335) takes its set from its rule each pass, as the forge holds the issues then.
     const rule = space ? null : approval.rule ?? null;
+    // Calls on you hold no reversible change (#1345), under a standing rule or a topic's card only.
+    const on = !space && await this.callsOn(run.ask, approval);
     const readAll = async (fresh: boolean): Promise<Read> => {
       const none = { out: new Map<number, string>(), milestones: new Map<number, Listed['milestone']>() };
       if (space) return { ...(await this.readSpace(space, approval.issues)), reverts: [], set: approval.issues, ...none };
@@ -607,7 +678,7 @@ export class Work {
     let changed = false;
     for (const [issue, list] of attempts) {
       const a = list.at(-1);
-      if (a && !a.ended) changed = (await (space ? this.settleSpace(run.ask, approval, space, issue, a, asks) : this.settle(run.ask, approval, read.set, issue, a, pulls, asks))) || changed;
+      if (a && !a.ended) changed = (await (space ? this.settleSpace(run.ask, approval, space, issue, a, asks) : this.settle(run.ask, approval, repo, read.set, issue, a, pulls, asks, on))) || changed;
     }
     if (changed) {
       attempts = await this.attempts(run.ask);
@@ -615,6 +686,16 @@ export class Work {
       asks = await this.openAsks();
     }
     const { set, out, milestones } = read;
+    // Each closed call's answer reaches the claims it asks about, once (#1345).
+    const calls = on ? await this.callsOf(repo) : [];
+    for (const c of calls.filter((x) => !x.open)) {
+      for (const at of this.asked.get(c.handle) ?? []) {
+        const k = `${c.handle} ${at.claim} ${answerOf(c)}`;
+        if (this.done.has(k)) continue;
+        this.done.set(k, null);
+        await this.o.answered(at.claim, at.req, c.handle, answerOf(c)).catch(() => undefined);
+      }
+    }
     const landed = space ? await this.finishedIn(space) : await this.landed(repo);
     const baseline = space ? new Set<number>() : await this.baseline(approval.repo);
     const login = space ? undefined : await this.login();
@@ -631,7 +712,7 @@ export class Work {
       const unmerged = pulls.find((p) => p.issue === n && !p.merged);
       if (i && !i.open && unmerged) return `#${n}'s PR #${unmerged.pr}, which hasn't merged`;
       if (i && !i.open) return `#${n}, closed with no change of it landed`;
-      return l ? `#${n}'s budget window` : `#${n}`;
+      return l?.open.length ? `#${n}'s budget window` : `#${n}`;
     };
     const rows = new Map<number, Row>();
     const ready: number[] = [];
@@ -645,12 +726,51 @@ export class Work {
       const asked = asks.find((x) => x.session && sessions.has(x.session));
       const replaced = this.replaced(list);
       const breaker = await this.breakerOf(run.ask, n);
+      const mine = calls.filter((x) => x.issue === n);
+      // A change that landed with calls open (#1345): your Send back reverts it, and once each call closed otherwise its
+      // issue closes, saying how. Until then its issue waits on you.
+      const onLanded = l?.head ? mine.filter((x) => x.head === l.head) : [];
+      if (l && onLanded.length) {
+        const back = onLanded.find((x) => x.answer === SEND_BACK && !x.open);
+        const open = onLanded.filter((x) => x.open);
+        if (back) {
+          const k = `revert ${l.commit ?? l.pr}`;
+          if (!this.done.has(k)) this.done.set(k, l.commit ? (await this.o.landing().revert(approval.repo, { issue: n, pr: l.pr, commit: l.commit, ask: back.handle, words: back.words }).catch((error: unknown) => (error instanceof Error ? error.message : String(error)))) ?? null : 'the forge named no commit for its landing');
+          const failed = this.done.get(k);
+          row('sent back', failed ? 'you' : null, failed ? `your Send back on ${back.handle} couldn't revert PR #${l.pr}'s landing: ${failed}` : `your Send back on ${back.handle} reverted PR #${l.pr}'s landing`);
+          continue;
+        }
+        if (open.length) { row('needs you', 'you', `landed through PR #${l.pr} with its calls open: ${open.map((x) => `${x.handle}, "${x.text}"`).join('; ')}`); continue; }
+        const yes = onLanded.every((x) => x.answer === YES && x.how !== 'ask.defaulted');
+        const how = yes ? `you answered ${onLanded.map((x) => x.handle).join(', ')} yes` : `${onLanded.filter((x) => x.how !== 'ask.answered' && x.how !== 'decision.applied').map((x) => x.handle).join(', ')} took its recommended answer at its deadline, a default you can overrule`;
+        const k = `close ${n} ${l.head}`;
+        if (i.open && !this.done.has(k)) { this.done.set(k, null); await this.o.landing().closeAnswered(approval.repo, n, how).catch(() => this.done.delete(k)); }
+        row(yes ? 'PASS' : 'INCONCLUSIVE', null, `landed through PR #${l.pr}; ${how}`);
+        continue;
+      }
       if (l?.outcome === 'PASS') { row('PASS', null, l.at ? `finished at ${l.at}` : `landed through PR #${l.pr}`); continue; }
       if (l?.open.length) { row(WORDS.has(l.outcome) ? l.outcome : 'INCONCLUSIVE', `the budget window: ${l.open.join('; ')}`, `landed through PR #${l.pr} with only the budget window's requirement open`); continue; }
       if (baseline.has(n)) { row('closed before the gate', null, `closed before the gate, as the baseline commit lists it; never PASS`); continue; }
       if (!i.open) { const p = pulls.find((x) => x.issue === n && !x.merged); row('closed', p ? `PR #${p.pr} to land` : null, 'closed on the forge with no change of it landed'); continue; }
       if (last && !last.ended) { row('working', null, `attempt ${last.attempt} in ${last.agent}: ${last.reason}`); continue; }
       if (this.o.plant === 'starts-before-blockers-done' && last?.ended?.cause === 'PASS') { row('says done', 'its change to land', String(last.ended.verdict)); continue; }
+      // A change held for its calls, as one that reaches a release (#1345): your yes lands it, your Send back starts the
+      // next attempt, and a default lands nothing that can't be undone.
+      const pr = pulls.find((p) => p.issue === n && p.open && list.some((a) => a.branch === p.branch));
+      const onHeld = pr ? mine.filter((x) => x.head === pr.head) : [];
+      if (pr && onHeld.length && !onHeld.some((x) => x.answer === SEND_BACK && !x.open)) {
+        const open = onHeld.filter((x) => x.open);
+        if (open.length) { row('needs you', 'you', `its change waits for your answer to ${open.map((x) => x.handle).join(', ')}${this.judged.get(pr.pr)?.held ? `: ${this.judged.get(pr.pr)!.held}` : ''}`); continue; }
+        if (!onHeld.every((x) => x.answer === YES && x.how !== 'ask.defaulted')) { row('INCONCLUSIVE', 'you', `${onHeld.map((x) => x.handle).join(', ')} took its recommended answer as a default, and a change that can't be undone lands only on your yes`); continue; }
+        const k = `land ${pr.head}`;
+        if (!this.done.has(k)) {
+          this.done.set(k, null);
+          const round = await this.o.landing().work(approval.repo, set, this.raiser(repo)).catch(() => undefined);
+          if (!round?.landed.some((x) => x.issue === n)) setTimeout(() => this.done.delete(k), FORGE_MS).unref();
+        }
+        row('working', `PR #${pr.pr} to land`, `you answered ${onHeld.map((x) => x.handle).join(', ')} yes, so its change lands`);
+        continue;
+      }
       if (asked) { row('needs you', 'you', `its attempt waits on your answer to ${asked.handle}, so it gave up its slot`); continue; }
       if (breaker.raised === 'open') { row('needs you', 'you', `${replaced} attempts were replaced: ${breaker.handle} asks you`); continue; }
       if (breaker.raised === 'left') { row('queued', 'you', `${replaced} attempts were replaced, and you left it waiting (${breaker.handle})`); continue; }
@@ -661,7 +781,7 @@ export class Work {
       // An open PR of yours from before the run joins as the issue's attempt (#1331): it's judged and landed, and no
       // second attempt starts beside it. One from another account keeps the issue waiting (#110).
       if (other && login && other.login === login) {
-        if (this.judged.get(other.pr)?.head !== other.head) { this.judged.set(other.pr, { head: other.head, held: null }); await this.o.landing().work(approval.repo, set).catch(() => undefined); }
+        if (this.judged.get(other.pr)?.head !== other.head) { this.judged.set(other.pr, { head: other.head, held: null }); await this.o.landing().work(approval.repo, set, on ? this.raiser(repo) : undefined).catch(() => undefined); }
         row('working', `PR #${other.pr} to land`, `PR #${other.pr}, from before the run, is its attempt`);
         continue;
       }
@@ -698,7 +818,7 @@ export class Work {
       const order = `${rule ? (milestone ? `its milestone ${milestone.title} is the earliest ready; ` : 'it is in no milestone, so after those in one; ') : ''}${blocked.length ? `it unblocks ${blocked.map((m) => `#${m}`).join(', ')}` : 'it unblocks none in the set'}, then the lowest number`;
       // A standing run's issue joins on the record before it starts: its start is checked against that.
       if (rule && !before.has(n)) { const r = rows.get(n)!; await this.o.appendCore('work.state', { ask: run.ask, issue: n, word: r.word, waits_on: r.waits_on, why: r.why }, { subject: run.ask }); before.set(n, r); }
-      const r = await this.start(run.ask, approval, n, issues.get(n)!, list, order, space !== undefined);
+      const r = await this.start(run.ask, approval, n, issues.get(n)!, list, order, space !== undefined, calls.filter((x) => x.issue === n && x.answer === SEND_BACK && !x.open).at(-1));
       if (r.started) { rows.set(n, { issue: n, word: 'working', waits_on: null, why: r.why }); free--; }
       else rows.set(n, { ...rows.get(n)!, waits_on: r.why });
     }
@@ -724,31 +844,34 @@ export class Work {
   }
 
   /** A next attempt, in the approved agent whose turn it is, in the issue's worktree when an earlier attempt made one. */
-  private async start(ask: string, approval: Approval, n: number, issue: Issue, list: Attempt[], order: string, task = false): Promise<{ started: boolean; why: string }> {
+  private async start(ask: string, approval: Approval, n: number, issue: Issue, list: Attempt[], order: string, task = false, back?: CallRow): Promise<{ started: boolean; why: string }> {
     const k = list.length;
     const agent = approval.agents[k % approval.agents.length]!;
     const turn = approval.agents.length > 1 ? `${agent}'s turn, as the approved agents take turns` : `${agent}, the approved agent`;
     const last = list.at(-1);
-    const tree = last ? await this.o.starts().treeOf(last.run) : undefined;
+    // A next attempt goes on where the last one left off, unless that one's change landed: it starts again from main (#1345).
+    const tree = last && !LANDED.has(last.ended?.cause ?? '') ? await this.o.starts().treeOf(last.run) : undefined;
     const before = tree ? await this.state(tree.path) : undefined;
-    const r = await this.o.starts().runStart({ ask, repo: approval.repo, issue: n, agent, prompt: this.brief(n, issue, list, tree?.branch, task), ...(tree ? { worktree: tree } : {}) });
+    const r = await this.o.starts().runStart({ ask, repo: approval.repo, issue: n, agent, prompt: this.brief(n, issue, list, tree?.branch, task, back), ...(tree ? { worktree: tree } : {}) });
     if (r.status !== 'started') return { started: false, why: `its start was refused: ${r.reason}` };
     this.snapshots.set(r.run, before ?? `${(await this.o.starts().treeOf(r.run)).base}\n`);
     const reason = `${order}; ${turn}`;
-    await this.o.appendCore('work.attempt', { ask, step: 'started', issue: n, attempt: k + 1, run: r.run, agent, model: null, worktree: r.worktree, branch: r.branch, reason, cause: 'none', verdict: null }, { subject: ask });
+    await this.o.appendCore('work.attempt', { ask, step: 'started', issue: n, attempt: k + 1, run: r.run, agent, model: null, worktree: r.worktree, branch: r.branch, reason, cause: 'none', verdict: null }, { subject: ask, v: 2 });
     return { started: true, why: `attempt ${k + 1} in ${agent}: ${reason}` };
   }
 
   /** The brief an attempt starts from, written only from the record: the issue, the branch and each earlier attempt's verdict line. */
-  private brief(n: number, issue: Issue, list: Attempt[], branch: string | undefined, task: boolean): string {
+  private brief(n: number, issue: Issue, list: Attempt[], branch: string | undefined, task: boolean, back?: CallRow): string {
     // A workspace's task (#1347) has no forge: its change finishes on the workspace's main once its checks pass there.
     const finish = task ? `When your change is ready, commit it on your branch; it finishes once its checks pass on the workspace's main. Its criteria: ${issue.body}`
       : `When your change is ready, commit it, push the branch and open a pull request whose body says Closes #${n}.`;
     const what = task ? 'task' : 'issue';
     if (!list.length) return `Work ${what} #${n}: ${issue.title}. ${finish}`;
     return [
-      `Work ${what} #${n}: ${issue.title}. This is attempt ${list.length + 1}: you go on in the worktree and on the branch ${branch ?? 'of the earlier attempts'}, its uncommitted files kept.`,
+      `Work ${what} #${n}: ${issue.title}. This is attempt ${list.length + 1}: ${LANDED.has(list.at(-1)?.ended?.cause ?? '') ? 'you start again from main, where the last change landed and was reverted' : `you go on in the worktree and on the branch ${branch ?? 'of the earlier attempts'}, its uncommitted files kept`}.`,
       ...list.map((a) => `Attempt ${a.attempt}: ${a.agent}${a.model ? ` on ${a.model}` : ''}, ended ${a.ended?.cause ?? 'unknown'}${a.ended?.verdict ? `: ${a.ended.verdict}` : ''}.`),
+      // Your Send back on its call, with your words, is why it goes again (#1345).
+      ...(back ? [`You sent its change back on ${back.handle} ("${back.text}")${back.words ? `: ${back.words}` : ''}.`] : []),
       finish,
     ].join('\n');
   }
@@ -758,7 +881,7 @@ export class Work {
    * session stopped once that landed or once its issue waits on you, replaced when its turn ended with nothing changed or
    * with its change held, and ended with its cause once its session ended. Whether it ended.
    */
-  private async settle(ask: string, approval: Approval, set: number[], issue: number, a: Attempt, pulls: Pull[], asks: OpenAsk[]): Promise<boolean> {
+  private async settle(ask: string, approval: Approval, repo: string, set: number[], issue: number, a: Attempt, pulls: Pull[], asks: OpenAsk[], on: boolean): Promise<boolean> {
     if (this.closed) return false;
     const starts = this.o.starts();
     const live = starts.live(a.run);
@@ -769,19 +892,28 @@ export class Work {
       if (live) await starts.stop(a.run);
       return this.end(ask, issue, a, 'PASS', `PR #${pr.pr} is open`);
     }
-    if (live && session && asks.some((x) => x.session === session)) {
+    // Where calls are on (#1345), a taste call or a choice the agent went on from gives up no slot: its change lands,
+    // or waits, on the calls its own requirements raise.
+    if (live && session && asks.some((x) => x.session === session && !(on && x.provisional && x.writer !== 'core'))) {
       await starts.stop(a.run);
       return this.end(ask, issue, a, 'gave up its slot', 'its issue waits on your answer');
     }
     if (pr && this.judged.get(pr.pr)?.head !== pr.head) {
-      const round = await this.o.landing().work(approval.repo, set).catch(() => undefined);
-      const held = round?.held.find((h) => h.issue === issue)?.reason ?? (round?.sent_back.some((s) => s.issue === issue) ? 'its change no longer merges with main' : null);
-      this.judged.set(pr.pr, { head: pr.head, held });
+      const round = await this.o.landing().work(approval.repo, set, on ? this.raiser(repo) : undefined).catch(() => undefined);
+      const held = round?.held.find((h) => h.issue === issue);
+      this.judged.set(pr.pr, { head: pr.head, held: held?.reason ?? (round?.sent_back.some((s) => s.issue === issue) ? 'its change no longer merges with main' : null) });
       const landed = round?.landed.find((l) => l.issue === issue);
       if (landed) {
         if (live) await starts.stop(a.run);
-        const open = (await this.landed(await this.slugOf(approval.repo))).get(issue)?.open ?? [];
-        return this.end(ask, issue, a, open.length ? 'landed with the budget window open' : 'PASS', `landed at ${landed.commit}${open.length ? `; the budget window settles ${open.join('; ')}` : ''}`);
+        const l = (await this.landed(repo)).get(issue);
+        const open = l?.open ?? [];
+        const called = on && open.length > 0 && (await this.callsOf(repo)).some((x) => x.issue === issue && x.head === l?.head);
+        return this.end(ask, issue, a, called ? 'landed with your call open' : open.length ? 'landed with the budget window open' : 'PASS', `landed at ${landed.commit}${open.length ? `; ${called ? 'your calls settle' : 'the budget window settles'} ${open.join('; ')}` : ''}`);
+      }
+      // A change held for its calls waits on you (#1345): its attempt gives up its slot until you answer.
+      if (held?.calls?.length) {
+        if (live) await starts.stop(a.run);
+        return this.end(ask, issue, a, 'gave up its slot', held.reason);
       }
     }
     if (live) {
@@ -803,7 +935,7 @@ export class Work {
     if (this.closed) return false;
     const model = this.o.starts().modelOf(a.run) ?? null;
     this.snapshots.delete(a.run);
-    await this.o.appendCore('work.attempt', { ask, step: 'ended', issue, attempt: a.attempt, run: a.run, agent: a.agent, model, worktree: null, branch: null, reason: null, cause, verdict: verdict.slice(0, 2000) }, { subject: ask });
+    await this.o.appendCore('work.attempt', { ask, step: 'ended', issue, attempt: a.attempt, run: a.run, agent: a.agent, model, worktree: null, branch: null, reason: null, cause, verdict: verdict.slice(0, 2000) }, { subject: ask, v: 2 });
     return true;
   }
   /** Whether a session's newest turn event is its stop: its turn ended. */
@@ -875,6 +1007,9 @@ export class Work {
     });
   }
 }
+
+/** What a closed call tells its claim's verdict (#1345): Yes passes it, Send back fails it, and a default, or a close with no answer, leaves it unanswered. */
+const answerOf = (c: CallRow): 'PASS' | 'FAIL' | 'unanswered' => (c.how === 'ask.defaulted' || !c.answer ? 'unanswered' : c.answer === YES ? 'PASS' : c.answer === SEND_BACK ? 'FAIL' : 'unanswered');
 
 /** An agent by the name people know it by. */
 const agentName = (agent: string): string => (agent === 'claude-code' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent);
