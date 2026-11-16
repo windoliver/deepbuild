@@ -143,6 +143,14 @@ fn covered(r: Region, sd: f32, p: vec3<f32>, k: f32, block_sd: f32) -> f32 {
     let w = max(r.params.x, 1.0);
     let seed = vec2<u32>(r.tag.w, r.seed_hi.x);
     let at = p * k / (1.5 * w);
+    // #463: past the reach of an edge's noise (its fbm and noise each lie in [-1, 1)) its
+    // coverage clamps to 1 inside and 0 outside whatever the noise, so it isn't computed there.
+    if r.tag.x == 1u && abs(sd) > 0.62 * w + 0.75 + 0.01 * w + 0.01 {
+        return select(0.0, 1.0, sd < 0.0);
+    }
+    if r.tag.x == 3u && abs(sd) > 0.6 * w + 0.5 * max(0.25 * w, 1.0) + 0.01 * w + 0.01 {
+        return select(0.0, 1.0, sd < 0.0);
+    }
     switch r.tag.x {
         case 1u: {
             let tear = 0.5 * w * fbm(seed, at)
@@ -235,7 +243,10 @@ fn seen(r: Region, x: f32, y: f32, hit: f32) -> Seen {
     out.p = unproject(x, y, z);
     out.k = px_per_m(z);
     out.sd = signed_distance(r, out.p) * out.k;
-    out.block_sd = signed_distance(r, unproject(bx, by, z)) * out.k;
+    // Only a pixel edge reads its block's distance (#463).
+    if r.tag.x == 2u {
+        out.block_sd = signed_distance(r, unproject(bx, by, z)) * out.k;
+    }
     return out;
 }
 

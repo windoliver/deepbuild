@@ -1,0 +1,382 @@
+{
+  "id": "math.scene",
+  "version": "1.0",
+  "title": "Scene.play",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "A scene's self.play and self.wait calls, in order, as one cues@1 list: each play a cue of its animation's cue.kind@1 verb over its mobjects for run_time seconds, its rate function an ease@1 entry (smooth is sigmoid(10)), lag_ratio a stagger; a move with a rate function that ends at 0 (there_and_back, there_and_back_with_pause, wiggle) a pulse; lingering keys at 0 and 0.8 of the span, then holds; squish_rate_func(f, a, b) keys at a and b; not_quite_there(f, p) keys value p; next_section a stage marker. a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units.",
+  "inputs": {
+    "plays": {
+      "type": "records",
+      "default": [],
+      "about": "the calls in order: {play: animation word, mobjects: [IDs], run_time = 1, rate_func = smooth, lag_ratio = 0, squish: [a, b], not_quite_there: p, args: {its parameters}}, {wait: seconds}, or {next_section: name}"
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2",
+    "words": [
+      {
+        "word": "Create",
+        "verb": "create"
+      },
+      {
+        "word": "ShowCreation",
+        "verb": "create"
+      },
+      {
+        "word": "Uncreate",
+        "verb": "uncreate"
+      },
+      {
+        "word": "Write",
+        "verb": "write"
+      },
+      {
+        "word": "Unwrite",
+        "verb": "unwrite"
+      },
+      {
+        "word": "DrawBorderThenFill",
+        "verb": "draw_then_fill"
+      },
+      {
+        "word": "FadeIn",
+        "verb": "fade_in"
+      },
+      {
+        "word": "FadeOut",
+        "verb": "fade_out"
+      },
+      {
+        "word": "GrowFromCenter",
+        "verb": "grow"
+      },
+      {
+        "word": "SpinInFromNothing",
+        "verb": "spin_in"
+      },
+      {
+        "word": "Transform",
+        "verb": "morph"
+      },
+      {
+        "word": "ReplacementTransform",
+        "verb": "morph"
+      },
+      {
+        "word": "TransformMatchingTex",
+        "verb": "match"
+      },
+      {
+        "word": "TransformMatchingShapes",
+        "verb": "match"
+      },
+      {
+        "word": "Indicate",
+        "verb": "indicate"
+      },
+      {
+        "word": "Flash",
+        "verb": "flash"
+      },
+      {
+        "word": "Circumscribe",
+        "verb": "circumscribe"
+      },
+      {
+        "word": "ShowPassingFlash",
+        "verb": "passing_flash"
+      },
+      {
+        "word": "Wiggle",
+        "verb": "wiggle"
+      },
+      {
+        "word": "FocusOn",
+        "verb": "focus"
+      },
+      {
+        "word": "Rotate",
+        "verb": "rotate"
+      },
+      {
+        "word": "MoveAlongPath",
+        "verb": "move_along"
+      },
+      {
+        "word": "Swap",
+        "verb": "swap"
+      },
+      {
+        "word": "CyclicReplace",
+        "verb": "cycle"
+      },
+      {
+        "word": "ChangeDecimalToValue",
+        "verb": "count_to"
+      },
+      {
+        "word": "shift",
+        "verb": "shift"
+      },
+      {
+        "word": "scale",
+        "verb": "scale_by"
+      }
+    ],
+    "rates": [
+      {
+        "word": "smooth",
+        "ease": "sigmoid(10)"
+      },
+      {
+        "word": "linear",
+        "ease": "linear"
+      },
+      {
+        "word": "slow_into",
+        "ease": "out_circ"
+      },
+      {
+        "word": "rush_into",
+        "ease": "rush_in(10)"
+      },
+      {
+        "word": "rush_from",
+        "ease": "rush_out(10)"
+      },
+      {
+        "word": "exponential_decay",
+        "ease": "exp_decay(0.1)"
+      },
+      {
+        "word": "double_smooth",
+        "ease": "double_sigmoid(10)"
+      },
+      {
+        "word": "running_start",
+        "ease": "running_start(-0.5)"
+      },
+      {
+        "word": "lingering",
+        "ease": "linear"
+      },
+      {
+        "word": "there_and_back",
+        "ease": "linear"
+      },
+      {
+        "word": "there_and_back_with_pause",
+        "ease": "linear"
+      },
+      {
+        "word": "wiggle",
+        "ease": "linear"
+      },
+      {
+        "word": "ease_in_sine",
+        "ease": "in_sine"
+      },
+      {
+        "word": "ease_out_sine",
+        "ease": "out_sine"
+      },
+      {
+        "word": "ease_in_out_sine",
+        "ease": "in_out_sine"
+      },
+      {
+        "word": "ease_in_quad",
+        "ease": "in_quad"
+      },
+      {
+        "word": "ease_out_quad",
+        "ease": "out_quad"
+      },
+      {
+        "word": "ease_in_out_quad",
+        "ease": "in_out_quad"
+      },
+      {
+        "word": "ease_in_cubic",
+        "ease": "in_cubic"
+      },
+      {
+        "word": "ease_out_cubic",
+        "ease": "out_cubic"
+      },
+      {
+        "word": "ease_in_out_cubic",
+        "ease": "in_out_cubic"
+      },
+      {
+        "word": "ease_in_quart",
+        "ease": "in_quart"
+      },
+      {
+        "word": "ease_out_quart",
+        "ease": "out_quart"
+      },
+      {
+        "word": "ease_in_out_quart",
+        "ease": "in_out_quart"
+      },
+      {
+        "word": "ease_in_quint",
+        "ease": "in_quint"
+      },
+      {
+        "word": "ease_out_quint",
+        "ease": "out_quint"
+      },
+      {
+        "word": "ease_in_out_quint",
+        "ease": "in_out_quint"
+      },
+      {
+        "word": "ease_in_expo",
+        "ease": "in_expo"
+      },
+      {
+        "word": "ease_out_expo",
+        "ease": "out_expo"
+      },
+      {
+        "word": "ease_in_out_expo",
+        "ease": "in_out_expo"
+      },
+      {
+        "word": "ease_in_circ",
+        "ease": "in_circ"
+      },
+      {
+        "word": "ease_out_circ",
+        "ease": "out_circ"
+      },
+      {
+        "word": "ease_in_out_circ",
+        "ease": "in_out_circ"
+      },
+      {
+        "word": "ease_in_back",
+        "ease": "in_back"
+      },
+      {
+        "word": "ease_out_back",
+        "ease": "out_back"
+      },
+      {
+        "word": "ease_in_out_back",
+        "ease": "in_out_back"
+      },
+      {
+        "word": "ease_in_elastic",
+        "ease": "in_elastic"
+      },
+      {
+        "word": "ease_out_elastic",
+        "ease": "out_elastic"
+      },
+      {
+        "word": "ease_in_out_elastic",
+        "ease": "in_out_elastic"
+      },
+      {
+        "word": "ease_in_bounce",
+        "ease": "in_bounce"
+      },
+      {
+        "word": "ease_out_bounce",
+        "ease": "out_bounce"
+      },
+      {
+        "word": "ease_in_out_bounce",
+        "ease": "in_out_bounce"
+      }
+    ],
+    "sec": "\\s",
+    "pulse_words": [
+      {
+        "word": "there_and_back",
+        "shape": "there_and_back"
+      },
+      {
+        "word": "there_and_back_with_pause",
+        "shape": "pause"
+      },
+      {
+        "word": "wiggle",
+        "shape": "wiggle"
+      }
+    ],
+    "cue_list": {
+      "repeat": {
+        "over": "plays",
+        "as": "p",
+        "let": {
+          "run": "has(p, run_time) ? p.run_time : (has(p, wait) ? p.wait : 1)",
+          "rate": "has(p, rate_func) ? p.rate_func : smooth",
+          "verb": "has(p, play) ? words[find(words, word, p.play)].verb : wait",
+          "eased": "rates[find(rates, word, rate)].ease",
+          "span": "cat(shown(run, 4), sec)",
+          "lag": "cat(shown((has(p, lag_ratio) ? p.lag_ratio : 0) * run, 4), sec)",
+          "play_cue": {
+            "id": "cat(c, i)",
+            "when": "after",
+            "span": "span",
+            "kind": "verb",
+            "ease": "eased",
+            "lag": "lag",
+            "targets": "has(p, mobjects) ? p.mobjects : none_targets",
+            "params": "has(p, args) ? p.args : none_args"
+          },
+          "wait_cue": {
+            "id": "cat(c, i)",
+            "when": "after",
+            "span": "span"
+          }
+        },
+        "of": "has(p, play) ? play_cue : wait_cue"
+      }
+    },
+    "none_args": {},
+    "none_targets": []
+  },
+  "steps": {
+    "cues": {
+      "op": "item",
+      "kind": "cues@1",
+      "params": {
+        "cues": "cue_list"
+      }
+    },
+    "section": {
+      "op": "marker",
+      "repeat": {
+        "over": "plays",
+        "as": "p"
+      },
+      "when": "has(p, next_section)",
+      "params": {
+        "kind": "stage",
+        "name": "p.next_section",
+        "t": "i == 0 ? 0 : at(cues, id(c, i - 1), end)"
+      }
+    }
+  },
+  "refuses": {
+    "renderer": "Leave it out: the canvas renders every scene the same way.",
+    "add_updater": "An updater with no closed form has no mapping: drive the value with a driver@1 expression over t, or bake its frames with the bake route.",
+    "use_vectorized": "Leave it out: every math@1 shape is a path the renderer strokes and fills on its own.",
+    "sheen_factor": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "sheen_direction": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "background_stroke_width": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "background_stroke_color": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "joint_type": "Leave it out: paths join by the look's line style.",
+    "cap_style": "Leave it out: paths cap by the look's line style.",
+    "shade_in_3d": "Leave it out: 2D shapes draw flat; for a lit shape use math.surface."
+  }
+}

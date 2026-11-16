@@ -1,0 +1,71 @@
+Base commit: c740dede7 ("Merge pull request #2559 from windoliver/worktree-github-issue-542-dcd5c9"), unmodified.
+Machine: Linux arm64 dev box, Node 24.22.0.
+node_modules: the worktree had none, and there is no network, so a real node_modules directory was made in the
+  worktree (gitignored): each third-party entry symlinked to another local worktree's installed node_modules, and
+  @deepbuild/<pkg> linked to this worktree's own ../../packages/<pkg> (readlink -f node_modules/@deepbuild/gate is
+  this worktree's packages/gate). Third-party versions are that worktree's install, not an `npm ci` of this lockfile.
+Command (from the worktree root, run once):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1860
+  (the root vitest.config.ts doesn't load here: it resolves @deepbuild/config-eval's dist, which isn't built.)
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1860/tsconfig.json: exit 0, no output.
+
+Result: 3 tests: AC1 and AC2 fail at their first assertion (the gate lets the claim through, ok: true), naming the
+cite `pnpm test || true`; AC3 passes. As the issue says of the merge base.
+Output, verbatim (the worktree path written <worktree>):
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1860
+
+ ❯ cite-mask.test.ts (3 tests | 2 failed) 1128ms
+   ❯ #1860 the validity gate reads the mask in the run a claim cites (3)
+     × AC1 a session that ran `pnpm test` then `pnpm test || true`, citing `pnpm test || true`, goes back naming the mask 402ms
+     × AC2 a session that ran only `pnpm test`, citing `pnpm test || true`, goes back naming the mask 347ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  cite-mask.test.ts > #1860 the validity gate reads the mask in the run a claim cites > AC1 a session that ran `pnpm test` then `pnpm test || true`, citing `pnpm test || true`, goes back naming the mask
+AssertionError: a claim citing `pnpm test || true` in a session that ran `pnpm test` then `pnpm test || true` goes back before any check runs, naming "exit status masked by `|| true`"; the gate let it through: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ goesBackNamingMask cite-mask.test.ts:35:103
+     33| function goesBackNamingMask(r: FloorResult, cite: string, ran: string[…
+     34|   const story = `a claim citing \`${cite}\` in a session that ran ${ra…
+     35|   expect(r.ok, `${story} goes back before any check runs, naming "${MA…
+       |                                                                                                       ^
+     36|   if (r.ok) return;
+     37|   expect(r.action, `${story}: a validity-gate failure is a send-back`)…
+ ❯ cite-mask.test.ts:44:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  cite-mask.test.ts > #1860 the validity gate reads the mask in the run a claim cites > AC2 a session that ran only `pnpm test`, citing `pnpm test || true`, goes back naming the mask
+AssertionError: a claim citing `pnpm test || true` in a session that ran `pnpm test` goes back before any check runs, naming "exit status masked by `|| true`"; the gate let it through: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ goesBackNamingMask cite-mask.test.ts:35:103
+     33| function goesBackNamingMask(r: FloorResult, cite: string, ran: string[…
+     34|   const story = `a claim citing \`${cite}\` in a session that ran ${ra…
+     35|   expect(r.ok, `${story} goes back before any check runs, naming "${MA…
+       |                                                                                                       ^
+     36|   if (r.ok) return;
+     37|   expect(r.action, `${story}: a validity-gate failure is a send-back`)…
+ ❯ cite-mask.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  23:20:42
+   Duration  2.92s (transform 50%, tests 41%, import 9%)
+

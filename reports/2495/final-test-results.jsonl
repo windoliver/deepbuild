@@ -1,0 +1,6 @@
+{"type":"pass","file":"<change>/packages/hub/test/eval-report.test.ts","name":"stores exact report bytes, deduplicates by hash, and refuses malformed or non-CLI writes"}
+{"type":"pass","file":"<change>/packages/hub/test/eval-report.test.ts","name":"never labels a caller-supplied report as already redacted or licensed for sharing"}
+{"type":"pass","file":"<change>/tests/acceptance/2495/report.test.ts","name":"#2495 AC1 the evidence store holds the report, and the handle the run prints resolves to it › stores the frozen plan and every run by hash, and keeps the file the preflight reads"}
+{"type":"pass","file":"<change>/tests/acceptance/2495/report.test.ts","name":"#2495 AC2 a learn.widened change by the local-first rule that cites the handle › passes the check when the report adopts: the repo reads it"}
+{"type":"pass","file":"<change>/tests/acceptance/2495/report.test.ts","name":"#2495 AC2 a learn.widened change by the local-first rule that cites the handle › is refused naming the outcome when the report does not adopt: the repo does not read it"}
+{"type":"end"}

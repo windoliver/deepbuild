@@ -1,0 +1,25 @@
+Base of tests/acceptance/225-oracle at 0e5572731 ("Merge pull request #2529 from windoliver/fix/2362-kit-seal"), main
+with no implementation of #225.
+
+NOT RUN. The machine was shared and at load ~250, and this job was told not to build cargo binaries or run the suites,
+so no binary was built and no test ran. Where each test fails was reasoned from the base's code (see
+tests/acceptance/225/BASE-FAILURE.txt for what the base lacks), not observed. The type-check was run on a copy outside
+the repo (TypeScript 5.9.3, vitest 5.0.5, @types/node 24.19.2): `tsc -p tests/acceptance/225-oracle/tsconfig.json`
+exits 0.
+
+Where each test fails, expected:
+
+ac1-phase-flow.test.ts (criteria 1 and 3), both tests
+- at `the turn film at 10 fps is presented` (the follow_stream constraint refused as module_missing; `f` skipped as an
+  unknown kind). The planted case fails earlier, at `deep-show run accepted the scenario` (unknown plant
+  `streams_euler`).
+
+ac2-arrow-formula.test.ts (criterion 2), both tests
+- at `deep-show run accepted the scenario` (the `vector_field` call: bad_input).
+
+ac3-flow-trims.test.ts (criterion 3), both tests
+- at `deep-show run accepted the scenario` (the `vector_field` call: bad_input).
+
+ac7-flow-field.test.ts (criterion 7), both tests
+- at `the turn film at 10 fps is presented` / `the turn film at 60 fps is presented` (`f` skipped as an unknown kind,
+  so the flow names an item with no stream table).

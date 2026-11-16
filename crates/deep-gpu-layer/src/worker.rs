@@ -30,6 +30,8 @@ pub struct Session {
 pub struct Scene3Session {
     pub view: View,
     pub shared: Arc<std::sync::Mutex<deep_scene3d_render::Shared>>,
+    /// The stub display's HDR surface, off screen (#177).
+    pub hdr: Option<wgpu::Texture>,
 }
 
 pub struct State {

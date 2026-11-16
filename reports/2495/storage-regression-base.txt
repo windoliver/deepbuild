@@ -1,0 +1,82 @@
+
+ RUN  v5.0.5 <original-base>
+
+ ❯ packages/hub/test/eval-report.test.ts (1 test | 1 failed) 666ms
+   × stores exact report bytes, deduplicates by hash, and refuses malformed or non-CLI writes 600ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/eval-report.test.ts > stores exact report bytes, deduplicates by hash, and refuses malformed or non-CLI writes
+AssertionError: expected { v: 1, id: 1, error: { …(6) } } to match object { Object (result) }
+(9 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "result": {
+-     "handle": "ev:213417a0bb398e90a1324b4cb1f0e87a0731d29fce31897f0db1f031e8b5cf99",
++   "error": {
++     "actual": "eval.report",
++     "code": "unknown_method",
++     "evidence": [],
++     "path": "/method",
++     "remediation": "The hub serves no method eval.report.",
++     "retryable": false,
+    },
++   "id": 1,
++   "v": 1,
+  }
+
+ ❯ packages/hub/test/eval-report.test.ts:38:57
+     36|     const hash = createHash('sha256').update(report).digest('hex');
+     37|     for (let i = 0; i < 2; i++) {
+     38|       expect(await request(root, 'cli', token, report)).toMatchObject(…
+       |                                                         ^
+     39|     }
+     40|     const store = await openEvidenceStore({ root: join(root, 'evidence…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/eval-report.test.ts:33:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:32:17
+   Duration  869ms (tests 87%, transform 9%, import 3%, setup 1%)
+
+✖ an unreachable hub blocks evidence storage, leaves the report and prints no evidence handle (114.538583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 168.93575
+
+✖ failing tests:
+
+test at tests/config-eval-storage.test.mjs:11:1
+✖ an unreachable hub blocks evidence storage, leaves the report and prints no evidence handle (114.538583ms)
+  AssertionError [ERR_ASSERTION]: refused config eval: the plan names no task after its cutoff to decide on
+    before the cutoff: refused; 0 runs in 0.0 min, plan share unread
+  <fixture>/.deepbuild/evals/777600cc8b78c5171ad60604125cbadaedf9bf487094d453cb8017799a7c5db6.json
+
+
+  3 !== 1
+
+      at TestContext.<anonymous> (file://<original-base>/tests/config-eval-storage.test.mjs:24:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+vitest=1 node=1
