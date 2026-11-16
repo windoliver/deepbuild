@@ -101,7 +101,7 @@ export interface HubControlOptions {
     readonly landing: Landing;
     readonly work: Work;
     readonly runner: Runner;
-    readonly checkKinds: CheckKinds;
+    readonly checkKinds: () => Promise<CheckKinds>;
     readonly canvasSide: HubCanvas;
     readonly spaces: WorkspaceService;
     readonly asks: Asks;
@@ -333,7 +333,7 @@ export class HubControl {
       case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.options.services.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.options.services.runner.list() };
-      case 'checks.kinds': return { kinds: this.options.services.checkKinds.list() };
+      case 'checks.kinds': return { kinds: (await this.options.services.checkKinds()).list() };
       case 'job.output': return { stdout: await this.options.services.runner.output(String(params.job)) };
       case 'canvas.show': return this.options.services.canvasSide.showCli(params, context);
       case 'canvas.export': return this.options.services.canvasSide.exportStill(params);
