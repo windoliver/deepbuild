@@ -705,6 +705,14 @@ byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
 // full build needs (tests/acceptance/225-redraft-ac5/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/225-redraft-ac5/');
 byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
+// #172's files each build deep-show (full; the refusals also full,test-web-lacks) and drive headless Chrome with WebGPU on.
+alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
+timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
+// #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
+// never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
+// place.
+alone.push('tests/acceptance/172-redraft-ac2/');
+byHand.push('tests/acceptance/172/refusals.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
