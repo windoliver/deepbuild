@@ -2,7 +2,7 @@
 # By-hand e2e for #1883 in an isolated HOME. Usage: e2e.sh <repo checkout> [plant]
 set -u
 REPO=$1; PLANT=${2:-}
-NODE=node; [ -x $NODE ] || NODE=$(command -v node)
+NODE=$(command -v node)
 CLI=$REPO/packages/cli/dist/main.js
 H=$(mktemp -d /tmp/e2e1883-XXXX); export HOME=$H
 BIN=$H/bin; LP="$BIN:$(dirname $NODE):/usr/local/bin:/usr/bin:/bin"
@@ -24,7 +24,7 @@ git init -q --bare -b main $H/origin.git; mkdir -p $H/src/shop; cd $H/src/shop
 git init -q -b main; echo hi > README.md; git add -A; git -c user.name=e -c user.email=e@example.invalid commit -qm s; git remote add origin $H/origin.git; git push -q -u origin main 2>/dev/null
 cd $H
 echo "== HOME=$H plant=${PLANT:-none} stand-in version $VER"
-echo "== before:"; ls -l $H/.claude.json; stat -c '%a %n' $H/dotfiles/claude.json
+echo "== before:"; ls -l $H/.claude.json; stat -c 'mode %a %n' $H/dotfiles/claude.json
 DEEP_HUB_PLANT=$PLANT DEEP_HUB_TEST_CONFIRM=$H/confirm DEEP_HUB_TEST_FORGE=http://127.0.0.1:9 $NODE $CLI hub run > $H/hub.out 2> $H/hub.err &
 HUB=$!
 for i in $(seq 60); do grep -q ready $H/hub.out 2>/dev/null && break; sleep 1; done
@@ -37,8 +37,9 @@ OPT=allow
 echo "answer $ASK $OPT:"; $NODE $CLI inbox answer $ASK $OPT
 echo "start:"; $NODE $CLI start --repo $H/src/shop --issue 1883 --agent claude-code --prompt 'Say ready.' --json
 sleep 2
-echo "== after:"; ls -l $H/.claude.json; stat -c '%a %n' $H/dotfiles/claude.json $H/.claude.json
+echo "== after:"; ls -l $H/.claude.json; stat -L -c 'mode %a %n (followed)' $H/.claude.json; stat -c 'mode %a %n' $H/dotfiles/claude.json
 echo "-- link target content:"; cat $H/dotfiles/claude.json
 [ -L $H/.claude.json ] && echo "RESULT: still a symlink" || { echo "RESULT: REPLACED by a regular file; its content:"; cat $H/.claude.json; }
 [ -f $H/standin.pid ] && kill -TERM $(cat $H/standin.pid) 2>/dev/null
 for p in $(pgrep -P $HUB); do kill -TERM $p 2>/dev/null; done; kill -TERM $HUB; wait $HUB 2>/dev/null
+cd /; rm -rf "$H"

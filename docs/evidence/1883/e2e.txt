@@ -2,21 +2,21 @@
 # Stand-in claude (version 2.1.304, no sandbox entry) on the login PATH; real deep hub run, deep start approve, deep inbox answer, deep start.
 
 ## merge base c740dede7: the link is replaced by a regular file, the target is unchanged
-== HOME=/tmp/e2e1883-TveG plant=none stand-in version 2.1.304
+== HOME=/tmp/e2e1883-E3Cp plant=none stand-in version 2.1.304
 == before:
-lrwxrwxrwx 1 user user 38 Nov 15 00:06 /tmp/e2e1883-TveG/.claude.json -> /tmp/e2e1883-TveG/dotfiles/claude.json
-600 /tmp/e2e1883-TveG/dotfiles/claude.json
-{"v":1,"ready":true,"pid":3635819,"socket":"/tmp/e2e1883-TveG/.deepbuild/hub.sock","start":"01M7F3WGJS4G5W0N3NB1X10NQN"}
+lrwxrwxrwx 1 user user 38 Nov 15 00:14 /tmp/e2e1883-E3Cp/.claude.json -> /tmp/e2e1883-E3Cp/dotfiles/claude.json
+mode 600 /tmp/e2e1883-E3Cp/dotfiles/claude.json
+{"v":1,"ready":true,"pid":3990911,"socket":"/tmp/e2e1883-E3Cp/.deepbuild/hub.sock","start":"01M7F4AKYXMGBDC1C5DV0SMMYX"}
 
-approve: {"ask":"ask:01M7F3WK094C1FFPT1WGBJRCQD"}
-answer ask:01M7F3WK094C1FFPT1WGBJRCQD allow:
-ask:01M7F3WK094C1FFPT1WGBJRCQD answered allow; no decision saved
+approve: {"ask":"ask:01M7F4AR4JA6K5J057RBFF09CQ"}
+answer ask:01M7F4AR4JA6K5J057RBFF09CQ allow:
+ask:01M7F4AR4JA6K5J057RBFF09CQ answered allow; no decision saved
 start:
-{"status":"started","run":"run:01M7F3WP7PF1T5VQHWNJXT2P9G","worktree":"/tmp/e2e1883-TveG/.deepbuild/worktrees/shop/run01M7F3WP7PF1T5VQHWNJXT2P9G","branch":"deep/1883-xt2p9g","agent":"claude-code","version":"2.1.304","mode":"default","sandbox":{"sandboxed":false,"walls":{"writes":false,"credentials":false,"network":false}}}
+{"status":"started","run":"run:01M7F4AVHM7T372B91YDN0Y359","worktree":"/tmp/e2e1883-E3Cp/.deepbuild/worktrees/shop/run01M7F4AVHM7T372B91YDN0Y359","branch":"deep/1883-n0y359","agent":"claude-code","version":"2.1.304","mode":"default","sandbox":{"sandboxed":false,"walls":{"writes":false,"credentials":false,"network":false}}}
 == after:
--rw------- 1 user user 169 Nov 15 00:06 /tmp/e2e1883-TveG/.claude.json
-600 /tmp/e2e1883-TveG/dotfiles/claude.json
-600 /tmp/e2e1883-TveG/.claude.json
+-rw------- 1 user user 169 Nov 15 00:14 /tmp/e2e1883-E3Cp/.claude.json
+mode 600 /tmp/e2e1883-E3Cp/.claude.json (followed)
+mode 600 /tmp/e2e1883-E3Cp/dotfiles/claude.json
 -- link target content:
 {
   "theme": "dark"
@@ -25,33 +25,33 @@ RESULT: REPLACED by a regular file; its content:
 {
   "theme": "dark",
   "projects": {
-    "/tmp/e2e1883-TveG/.deepbuild/worktrees/shop/run01M7F3WP7PF1T5VQHWNJXT2P9G": {
+    "/tmp/e2e1883-E3Cp/.deepbuild/worktrees/shop/run01M7F4AVHM7T372B91YDN0Y359": {
       "hasTrustDialogAccepted": true
     }
   }
 }
 
 ## this branch: the path stays a link, the target holds the trust key, mode 0600
-== HOME=/tmp/e2e1883-Rlix plant=none stand-in version 2.1.304
+== HOME=/tmp/e2e1883-616R plant=none stand-in version 2.1.304
 == before:
-lrwxrwxrwx 1 user user 38 Nov 15 00:05 /tmp/e2e1883-Rlix/.claude.json -> /tmp/e2e1883-Rlix/dotfiles/claude.json
-600 /tmp/e2e1883-Rlix/dotfiles/claude.json
-{"v":1,"ready":true,"pid":3615429,"socket":"/tmp/e2e1883-Rlix/.deepbuild/hub.sock","start":"01M7F3VDAMWJ9H2KK5PA2404PT"}
+lrwxrwxrwx 1 user user 38 Nov 15 00:14 /tmp/e2e1883-616R/.claude.json -> /tmp/e2e1883-616R/dotfiles/claude.json
+mode 600 /tmp/e2e1883-616R/dotfiles/claude.json
+{"v":1,"ready":true,"pid":4008511,"socket":"/tmp/e2e1883-616R/.deepbuild/hub.sock","start":"01M7F4B6Z70N2HYXSHJ8EY7GK2"}
 
-approve: {"ask":"ask:01M7F3VGBD0Z040WMCPB23C1Z8"}
-answer ask:01M7F3VGBD0Z040WMCPB23C1Z8 allow:
-ask:01M7F3VGBD0Z040WMCPB23C1Z8 answered allow; no decision saved
+approve: {"ask":"ask:01M7F4BCGARND98H2QR7DZ4AYQ"}
+answer ask:01M7F4BCGARND98H2QR7DZ4AYQ allow:
+ask:01M7F4BCGARND98H2QR7DZ4AYQ answered allow; no decision saved
 start:
-{"status":"started","run":"run:01M7F3VKPWPRZBKECX99166M9A","worktree":"/tmp/e2e1883-Rlix/.deepbuild/worktrees/shop/run01M7F3VKPWPRZBKECX99166M9A","branch":"deep/1883-166m9a","agent":"claude-code","version":"2.1.304","mode":"default","sandbox":{"sandboxed":false,"walls":{"writes":false,"credentials":false,"network":false}}}
+{"status":"started","run":"run:01M7F4BG7HEQJTP4A50FNSPX7X","worktree":"/tmp/e2e1883-616R/.deepbuild/worktrees/shop/run01M7F4BG7HEQJTP4A50FNSPX7X","branch":"deep/1883-nspx7x","agent":"claude-code","version":"2.1.304","mode":"default","sandbox":{"sandboxed":false,"walls":{"writes":false,"credentials":false,"network":false}}}
 == after:
-lrwxrwxrwx 1 user user 38 Nov 15 00:05 /tmp/e2e1883-Rlix/.claude.json -> /tmp/e2e1883-Rlix/dotfiles/claude.json
-600 /tmp/e2e1883-Rlix/dotfiles/claude.json
-777 /tmp/e2e1883-Rlix/.claude.json
+lrwxrwxrwx 1 user user 38 Nov 15 00:14 /tmp/e2e1883-616R/.claude.json -> /tmp/e2e1883-616R/dotfiles/claude.json
+mode 600 /tmp/e2e1883-616R/.claude.json (followed)
+mode 600 /tmp/e2e1883-616R/dotfiles/claude.json
 -- link target content:
 {
   "theme": "dark",
   "projects": {
-    "/tmp/e2e1883-Rlix/.deepbuild/worktrees/shop/run01M7F3VKPWPRZBKECX99166M9A": {
+    "/tmp/e2e1883-616R/.deepbuild/worktrees/shop/run01M7F4BG7HEQJTP4A50FNSPX7X": {
       "hasTrustDialogAccepted": true
     }
   }
@@ -59,21 +59,21 @@ lrwxrwxrwx 1 user user 38 Nov 15 00:05 /tmp/e2e1883-Rlix/.claude.json -> /tmp/e2
 RESULT: still a symlink
 
 ## this branch with DEEP_HUB_PLANT=trust-renames-over-link: the merge base's rename again
-== HOME=/tmp/e2e1883-kXu9 plant=trust-renames-over-link stand-in version 2.1.304
+== HOME=/tmp/e2e1883-pRIX plant=trust-renames-over-link stand-in version 2.1.304
 == before:
-lrwxrwxrwx 1 user user 38 Nov 15 00:06 /tmp/e2e1883-kXu9/.claude.json -> /tmp/e2e1883-kXu9/dotfiles/claude.json
-600 /tmp/e2e1883-kXu9/dotfiles/claude.json
-{"v":1,"ready":true,"pid":3624150,"socket":"/tmp/e2e1883-kXu9/.deepbuild/hub.sock","start":"01M7F3VX0SMHY9B7NDKE9R6ETN"}
+lrwxrwxrwx 1 user user 38 Nov 15 00:14 /tmp/e2e1883-pRIX/.claude.json -> /tmp/e2e1883-pRIX/dotfiles/claude.json
+mode 600 /tmp/e2e1883-pRIX/dotfiles/claude.json
+{"v":1,"ready":true,"pid":4021639,"socket":"/tmp/e2e1883-pRIX/.deepbuild/hub.sock","start":"01M7F4BQNFBAD4H0ZC0VBMGNR2"}
 
-approve: {"ask":"ask:01M7F3VYE83KVE42K74D81BH9W"}
-answer ask:01M7F3VYE83KVE42K74D81BH9W allow:
-ask:01M7F3VYE83KVE42K74D81BH9W answered allow; no decision saved
+approve: {"ask":"ask:01M7F4BW76PJDAXMMM58D8JRGZ"}
+answer ask:01M7F4BW76PJDAXMMM58D8JRGZ allow:
+ask:01M7F4BW76PJDAXMMM58D8JRGZ answered allow; no decision saved
 start:
-{"status":"started","run":"run:01M7F3W1DH5GYZ352ATF51DA4G","worktree":"/tmp/e2e1883-kXu9/.deepbuild/worktrees/shop/run01M7F3W1DH5GYZ352ATF51DA4G","branch":"deep/1883-51da4g","agent":"claude-code","version":"2.1.304","mode":"default","sandbox":{"sandboxed":false,"walls":{"writes":false,"credentials":false,"network":false}}}
+{"status":"started","run":"run:01M7F4C06Z618XYHSS3Z7CJBFF","worktree":"/tmp/e2e1883-pRIX/.deepbuild/worktrees/shop/run01M7F4C06Z618XYHSS3Z7CJBFF","branch":"deep/1883-7cjbff","agent":"claude-code","version":"2.1.304","mode":"default","sandbox":{"sandboxed":false,"walls":{"writes":false,"credentials":false,"network":false}}}
 == after:
--rw------- 1 user user 169 Nov 15 00:06 /tmp/e2e1883-kXu9/.claude.json
-600 /tmp/e2e1883-kXu9/dotfiles/claude.json
-600 /tmp/e2e1883-kXu9/.claude.json
+-rw------- 1 user user 169 Nov 15 00:14 /tmp/e2e1883-pRIX/.claude.json
+mode 600 /tmp/e2e1883-pRIX/.claude.json (followed)
+mode 600 /tmp/e2e1883-pRIX/dotfiles/claude.json
 -- link target content:
 {
   "theme": "dark"
@@ -82,7 +82,7 @@ RESULT: REPLACED by a regular file; its content:
 {
   "theme": "dark",
   "projects": {
-    "/tmp/e2e1883-kXu9/.deepbuild/worktrees/shop/run01M7F3W1DH5GYZ352ATF51DA4G": {
+    "/tmp/e2e1883-pRIX/.deepbuild/worktrees/shop/run01M7F4C06Z618XYHSS3Z7CJBFF": {
       "hasTrustDialogAccepted": true
     }
   }
