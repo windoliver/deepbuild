@@ -38,6 +38,7 @@ mod frames;
 mod golden;
 mod groups;
 mod guard;
+mod hdr;
 mod host;
 mod insets;
 mod indexed;
@@ -131,6 +132,18 @@ pub enum Planted {
     SubmitsOnCompletion,
     ReleasesBeforeCompletion,
     WaitsOnGpu,
+    /// #177's wrong HDR output: the surface carries the SDR curve; the shoulder replaced by the
+    /// identity clipped at the headroom; the whole curve scaled by it; what draws over the scene
+    /// scaled by it; the headroom read once; an export drawn from the HDR surface; the HDR layer
+    /// above the window's; a view drawing 3D over 2D presenting HDR.
+    ClipsAtOne,
+    ClipsAtHeadroom,
+    MovesToe,
+    StatusOverPaperWhite,
+    ReadsHeadroomOnce,
+    ExportReadsHdrSurface,
+    HdrLayerAboveChrome,
+    CatcherViewGoesHdr,
     CompilesOnUiThread,
     ExposesGpuToPanels,
     /// #537's wrong programs (tests/acceptance/537/README.md: Planted twins).
@@ -195,6 +208,8 @@ pub enum Planted {
     ShoreFieldFromCentre,
     /// #268: waves at full amplitude by the shore, ignoring its field.
     ShoreCalmIgnoresField,
+    /// #968: the flow's noise moved in one phase, jumping back at every wrap.
+    WaterFlowSinglePhase,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -495,6 +510,14 @@ impl Planted {
             "submits_on_completion" => Planted::SubmitsOnCompletion,
             "releases_before_completion" => Planted::ReleasesBeforeCompletion,
             "waits_on_gpu" => Planted::WaitsOnGpu,
+            "clips_at_one" => Planted::ClipsAtOne,
+            "clips_at_headroom" => Planted::ClipsAtHeadroom,
+            "moves_toe" => Planted::MovesToe,
+            "status_over_paper_white" => Planted::StatusOverPaperWhite,
+            "reads_headroom_once" => Planted::ReadsHeadroomOnce,
+            "export_reads_hdr_surface" => Planted::ExportReadsHdrSurface,
+            "hdr_layer_above_chrome" => Planted::HdrLayerAboveChrome,
+            "catcher_view_goes_hdr" => Planted::CatcherViewGoesHdr,
             "compiles_on_ui_thread" => Planted::CompilesOnUiThread,
             "exposes_gpu_to_panels" => Planted::ExposesGpuToPanels,
             "forward_z" => Planted::ForwardZ,
@@ -541,6 +564,7 @@ impl Planted {
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
+            "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,

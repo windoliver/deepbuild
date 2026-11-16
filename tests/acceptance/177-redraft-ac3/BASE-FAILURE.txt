@@ -1,0 +1,12 @@
+AC3's redraft at the base, 0e5572731, on this Mac (Mac17,10), November 15, 2026. Not run (the machine was loaded; no
+Rust was built). What each test meets first at the base, read from its code:
+
+  × AC3 … byte-identical …: the blessing is decided (decide exists and stores the gradient), then the live view3d is
+    refused for the target "surface" (view3d's targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth,
+    reflection, foam and coc): "was answered, not refused".
+  × AC3 planted export_reads_hdr_surface: `deep-gpu run --planted export_reads_hdr_surface` exits 2 with
+    {"ok": false, "code": "bad_input"}: Planted::parse doesn't know the name.
+
+The type-check passes:
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/177-redraft-ac3/tsconfig.json
+  (no output, exit 0)

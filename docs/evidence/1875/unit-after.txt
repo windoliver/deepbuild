@@ -1,0 +1,19 @@
+$ node --test tests/affected.test.mjs   # branch 8cd443e7d
+✔ a change reaches the tests that import it, near or far, through the packages' entries, and no others (51.48705ms)
+✔ a test starting a package's build sees that package and the ones it depends on; deeper is wide, and a fixture reaches its folder (59.089621ms)
+✔ a test the change deletes is left out of the run, and the tests naming it still run (23.451365ms)
+✔ a Rust change reaches its crate and the crates depending on it, their [[test]] files outside them, and the tests that run it (60.414378ms)
+✔ the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does (26.877249ms)
+✔ each test runs with its own runner, alone or in parallel as lanes.mjs says, and never one it leaves to a person (5.276291ms)
+✔ results come from the runners' reports and cargo's lines, each by an ID that reruns it (36.7533ms)
+✔ a failure main already has reads apart from a new one, and a timing budget missed under load is INCONCLUSIVE (0.685459ms)
+✔ a report line that can't be parsed, such as a record a full disk cut short with the next glued on, reads INCONCLUSIVE for each file it names, and the rest still reads (0.700419ms)
+✔ the vitest reporter finishes a record a full disk cut short once space is back, and a record that never lands leaves its report unfinished, never a pass (248.998273ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1370.691885

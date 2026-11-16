@@ -959,6 +959,52 @@ workloads['water-shore'] = () => {
   }
 };
 
+// #968: a 30 m × 20 m sheet of water with flow along a straight curve down its middle (speed 1.5, cycle 2, a 3 m/s
+// breeze's waves and the default ripples), seen straight down so it fills a third of a 1080p frame, against the same
+// sheet with `water: {}`; the difference of the sides' median `gpu_ms` over 300 frames is what the flow adds. One
+// warm-up run and five, each a fresh process. The stage is tests/acceptance/968/budgets.test.ts's.
+function flowStage(flow) {
+  const size = [1920, 1080];
+  const height = Math.sqrt((3 * 30 * 20 * size[0]) / size[1]) / 2 / Math.tan(Math.PI / 6);
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', position: [0, height, 0], target: [0, 0, 0], fov: 60, near: 0.1, far: 1000 } },
+    sky: { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.6, 0.7, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } },
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-30, 30, 0] } },
+    'sheet-water': { kind: 'material@1', params: { roughness: 0.05, water: flow ? { flow } : {} } },
+    c: { kind: 'curve@1', params: { points: [[-15, 0, 0], [15, 0, 0]], mode: 'linear' } },
+    sheet: { kind: 'plate@1', params: { grid: [256, 256], size: [30, 20] }, at: { pos: [0, 0, 0] }, material: 'sheet-water' },
+  };
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' });
+  return { format: 1, id: `sheet-${flow ? 'flow' : 'still'}`, profile: 'scene', title: 'Flow', size, camera: 'cam', seed: 968, transport: { span: '30s' },
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items };
+}
+workloads['water-flow'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'filmic-968', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const docs = Object.fromEntries(Object.entries({ flow: flowStage({ along: 'c', speed: 1.5, cycle: 2 }), still: flowStage(null) }).map(([k, d]) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: [1920, 1080], frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.flow), side(docs.still)] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [flow, still] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { flow_sheet_gpu_ms: Math.max(0, flow - still), still_gpu_ms: still };
+    });
+    console.log(JSON.stringify({ task: 'canvas-water-flow', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #2017: the modeling, scatter, terrain and wind task's budgets (#442) on release builds, one warm-up run and five,
 // each a fresh process per binary. `deep-show`'s `geometry` with `timings` reads a bevel with weighted normals on a
 // 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning, and a
@@ -1094,6 +1140,7 @@ const EFFICIENCY = {
   'canvas-lens-focus': { dof_gpu_ms: (r) => r.dof_gpu_ms },
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
+  'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
@@ -1106,8 +1153,13 @@ const EFFICIENCY = {
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
+  // #184: each reading by its own name (benchmarks/playtest.mjs).
+  'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
+  'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work']);
+/** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
+const FLOORS = new Set(['fixture_realtime_x']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1176,6 +1228,8 @@ function judgeEfficiency(current) {
       verdict = values.length === RUNS && values.every(Number.isFinite)
         ? (values.some((v) => v > limit) ? { status: 'FAIL', limit, runs: values } : { status: 'PASS', limit, runs: values })
         : { status: 'BLOCKED', limit, runs: values, reason: `a count is judged on five runs, got ${JSON.stringify(values)}` };
+    } else if (FLOORS.has(name)) {
+      verdict = { ...judgeLimit({ limit: -limit, runs: values.map((v) => -v), fingerprint: current.fingerprint }), limit, runs: values };
     } else {
       verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint });
     }
@@ -1557,6 +1611,9 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
+// #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
+// plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
+for (const task of ['playtest-maze', 'playtest-throughput']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

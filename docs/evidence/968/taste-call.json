@@ -1,0 +1,11 @@
+{
+  "criterion": "#968.dc555b94",
+  "by": "you",
+  "screenshots": [
+    "2299dc5ddc7abc5b9cded42ece838cd68a3a80c9effa967c546ec97ea73133b9",
+    "fad08d0965536fb4331b71b50bd4c05290fc0d042a428613be4e888a33f8291b",
+    "af3482d18300c46c90ec6f6dc84dda8dc072ec422c92d613ebaccb4bfdf390c3"
+  ],
+  "call": "looks_right",
+  "note": "Made by Claude at the owner's request (\"validate screenshot for me\", Nov 15, 2026). Channel: ripples under the sky's reflection, the banks mirrored at the waterline. Recording: the surface runs away from the camera, downstream (+x), 2-3 px every 3 frames; each phase wrap's frame-to-frame change is 1.13-1.19x the median, no visible jump. River: foam covers the water past 2 m/s in streaks along the current, its edge breaking into tongues reaching upstream; clear water below."
+}
