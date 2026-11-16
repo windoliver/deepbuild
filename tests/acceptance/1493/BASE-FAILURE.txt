@@ -1,0 +1,69 @@
+Base commit: 0e5572731 ("Merge pull request #2529 from windoliver/fix/2362-kit-seal"), this job's worktree at its base,
+with only tests/acceptance/1493/ added.
+Date: 2026-11-15  darwin-arm64, Node 24.22.2, cargo 1.99.1 from ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin
+
+Commands (from the checkout root, after npm ci and npm run build --workspaces):
+  export PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+  node scripts/throttle.mjs build --wait 30 -- cargo build --locked --bin deep-show --no-default-features --features full
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1493 census.test.ts --no-file-parallelism --testTimeout=600000
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1493 word.test.ts recipe.test.ts document.test.ts --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1493/tsconfig.json
+
+Builds: deep-show was built once through the throttle before the run, so each file's own cargo step found it fresh.
+The reference cache was not warmed (AC1 fails before it reads the cache).
+
+Result: Test Files 4 failed (4); Tests 9 failed (9); vitest exit 1 for each run (census.test.ts 3.7 s; the other three
+files 25 s). tsc exit 0. Every test ran and failed on an assertion it names; none failed to load, build or run.
+
+census.test.ts
+  × #1493.943e1d6c every listed name has exactly one row, totals sum to the listing's length, mapped equals the aliases;
+      a planted alias with no row and a planted mapped row with no alias each fail, naming the word
+      census.test.ts:24  "familiar@1's pack.json names its census file: [name, version, license, description, requires,
+      recipes, aliases]": expected 'undefined' to be 'string'. The base's familiar@1 has no census.
+  × #1493.d1b3af60 a stub reference with one added export fails --check, naming the export; with the cache removed it
+      reads BLOCKED, never PASS
+      census.test.ts:93  "the stub as counted": ["census.mjs --check on the stub as counted: exits 1, not 0", "… prints
+      no \"PASS census:\" line", "exit 1; output: Error: Cannot find module '…/scripts/census.mjs'"]
+  × #1493.4299b7da a planted move of a mapped word to refused with no break file fails, naming the word; with its break
+      file it passes
+      census.test.ts:121  "the move with no break file": ["BoxShape moved from mapped to refused with no break file: no
+      \"FAIL census:\" line names BoxShape", "exit 1; output: Error: Cannot find module '…/scripts/census.mjs'"]
+  × #1493.e36cbcda a gallery line quoting a count one off from the census fails the lint, naming file and line
+      census.test.ts:131  "the checkout": ["census.mjs --counts on the checkout's gallery: exits 1, not 0", "… prints no
+      \"PASS census:\" line", "exit 1; output: Error: Cannot find module '…/scripts/census.mjs'"]
+
+word.test.ts
+  × #1493.cd0a4e1c deep_kinds on a refused word returns refused and its reason, and on an undecided word open; a planted
+      row in refused with no reason fails, naming the row
+      word.test.ts:26  "acme/names@1.0.0, whose census is whole, installs": expected 'refused' to be 'installed'. The
+      base's pack check refuses the manifest key: unknown_field at path census, "not a field of a pack in this slice".
+
+recipe.test.ts
+  × #1493.d175c804 a planted recipe that accepts a parameter and ignores it fails through field.effect, naming the
+      parameter
+      recipe.test.ts:27  "the control acme/names@1.0.0, whose every input changes what it draws, installs": expected
+      'refused' to be 'installed' (unknown_field at path census, as above).
+
+document.test.ts
+  × #1493.fcddaf21 bevelDepth, which acme/names maps, set on a test.dot@1 in a document that names no pack is refused
+      with unknown_field whose fix names the pack, the target field and the conversion, and the revision stays;
+      census_accepts and census_skipped each fail, naming it
+      document.test.ts:20 (from :35)  "the setup holds": ["acme/names@1.0.0 installs: {outcome: refused, issues:
+      [{code: unknown_field, path: census, actual: census.json, what: not a field of a pack in this slice}]}"]
+  × #1493.1d536b9e autoUpdate, refused in acme/names's census for imperative, set on a test.dot@1 is refused with that
+      reason in the fix
+      document.test.ts:20 (from :46)  "the setup holds": the same refusal of acme/names@1.0.0 at path census.
+  × #1493.4db739b5 w, which test.rect@1 defines and acme/names maps, set on a test.dot@1 gives a fix naming test.rect@1
+      first and the pack after it; census_pack_first fails, naming the field
+      document.test.ts:20 (from :55)  "the setup holds": the same refusal of acme/names@1.0.0 at path census.
+
+What the fixtures do at the base without the census key (a probe run once outside the suite, with acme/names@1.0.0's
+"census" key removed): the pack installs (its recipe and alias are valid at the base); the hidden test.dot@1 board
+presents and becomes current; the board with bevelDepth is refused with unknown_field at items/d/params/bevelDepth and
+no close names, and with w with close [{name: test.rect@1, defines: w}] (test.rect@1 is the only kind in the full build
+that defines w); in each case the current revision's hash is unchanged. So the setup each document test asserts holds
+at the base apart from the census key, and the base's close names carry no pack entry.
+
+A check of the census tests' fixtures and judges (not part of the suite): AC2, AC4 and AC5's tests, run once against a
+minimal census script written in the job's scratch folder (listing, rows, aliases, reasons, totals, the HEAD move
+check and the count lint), passed (3 passed); the scratch script was not kept.
