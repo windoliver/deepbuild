@@ -1555,6 +1555,27 @@
       "pick": "rgb"
      }
     },
+    "cr_r": {
+     "op": "split@1",
+     "args": {
+      "x": "col",
+      "pick": "r"
+     }
+    },
+    "cr_g": {
+     "op": "split@1",
+     "args": {
+      "x": "col",
+      "pick": "g"
+     }
+    },
+    "cr_b": {
+     "op": "split@1",
+     "args": {
+      "x": "col",
+      "pick": "b"
+     }
+    },
     "cl": {
      "op": "luminance@1",
      "args": {
@@ -1611,12 +1632,62 @@
       "b": "outside"
      }
     },
-    "light": {
+    "cmax0": {
+     "op": "max@1",
+     "args": {
+      "a": "cr_r",
+      "b": "cr_g"
+     }
+    },
+    "cmax": {
+     "op": "max@1",
+     "args": {
+      "a": "cmax0",
+      "b": "cr_b"
+     }
+    },
+    "cmin0": {
+     "op": "min@1",
+     "args": {
+      "a": "cr_r",
+      "b": "cr_g"
+     }
+    },
+    "cmin": {
+     "op": "min@1",
+     "args": {
+      "a": "cmin0",
+      "b": "cr_b"
+     }
+    },
+    "chroma": {
+     "op": "sub@1",
+     "args": {
+      "a": "cmax",
+      "b": "cmin"
+     }
+    },
+    "colored": {
      "op": "smoothstep@1",
      "args": {
-      "lo": 0.12,
-      "hi": 0.22,
+      "lo": 0.1,
+      "hi": 0.2,
+      "x": "chroma"
+     }
+    },
+    "pale": {
+     "op": "smoothstep@1",
+     "args": {
+      "lo": 0.75,
+      "hi": 0.9,
       "x": "cl"
+     }
+    },
+    "light": {
+     "op": "max@1",
+     "args": {
+      "a": "colored",
+      "b": "pale"
      }
     },
     "inked": {
@@ -1684,7 +1755,7 @@
     "blend": "replace"
    },
    "cost": {
-    "ns_per_px": 0.0262
+    "ns_per_px": 0.0286
    },
    "resolution": "full"
   },
@@ -2118,34 +2189,20 @@
       "pick": "rgb"
      }
     },
-    "egs": {
-     "op": "mul@1",
-     "args": {
-      "a": "eg",
-      "b": 6.0
-     }
-    },
     "ec": {
-     "op": "clamp@1",
+     "op": "smoothstep@1",
      "args": {
-      "x": "egs",
-      "lo": 0.0,
-      "hi": 1.0
-     }
-    },
-    "hgs": {
-     "op": "mul@1",
-     "args": {
-      "a": "hg",
-      "b": 2.0
+      "lo": 0.03,
+      "hi": 0.15,
+      "x": "eg"
      }
     },
     "hc": {
-     "op": "clamp@1",
+     "op": "smoothstep@1",
      "args": {
-      "x": "hgs",
-      "lo": 0.0,
-      "hi": 1.0
+      "lo": 0.03,
+      "hi": 0.3,
+      "x": "hg"
      }
     },
     "tube4": {
@@ -2218,7 +2275,7 @@
     "blend": "replace"
    },
    "cost": {
-    "ns_per_px": 0.0638
+    "ns_per_px": 0.065
    },
    "resolution": "full"
   },
@@ -3230,10 +3287,10 @@
    "finish": [],
    "strokes": {
     "on": "all",
-    "density": 0.006,
+    "density": 0.005,
     "size": [
-     7,
-     8
+     9,
+     10
     ],
     "orient": {
      "surface": "u"
@@ -3251,7 +3308,7 @@
     "seed": "item"
    },
    "limits": [
-    "Dots are round dabs of one size range; they never follow a flow field",
+    "Dots are round dabs 9 to 10 px across at design size, smaller on far surfaces; they never follow a flow field",
     "Dots lie on marks' surfaces, never on the ground"
    ],
    "cost": {

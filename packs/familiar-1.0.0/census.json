@@ -1,0 +1,2573 @@
+{
+  "reference": {
+    "commit": "65c4864bb3bd4309257d41c6e54f4403dc57f255",
+    "version": "0.186.0",
+    "files": [
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/examples/jsm/geometries/RoundedBoxGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.Core.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.Legacy.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/PerspectiveCamera.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/constants.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/core/BufferAttribute.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/extras/curves/Curves.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/BoxGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CapsuleGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CircleGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ConeGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CylinderGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/DodecahedronGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/EdgesGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ExtrudeGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/Geometries.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/IcosahedronGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/LatheGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/OctahedronGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/PlaneGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/PolyhedronGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/RingGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ShapeGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/SphereGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TetrahedronGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TorusGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TorusKnotGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TubeGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/WireframeGeometry.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/PointLight.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/SpotLight.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/Materials.js",
+      "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshStandardMaterial.js"
+    ]
+  },
+  "scope": "every name the web 3D library's WebGL entry exports at 0.186.0, through its re-exports, and the rounded-box addon; parameters are each mapped name's constructor arguments, or the properties its constructor sets from one parameters object",
+  "names": [
+    {
+      "name": "ACESFilmicToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "AddEquation",
+      "state": "open"
+    },
+    {
+      "name": "AddOperation",
+      "state": "open"
+    },
+    {
+      "name": "AdditiveAnimationBlendMode",
+      "state": "open"
+    },
+    {
+      "name": "AdditiveBlending",
+      "state": "open"
+    },
+    {
+      "name": "AgXToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "AlphaFormat",
+      "state": "open"
+    },
+    {
+      "name": "AlwaysCompare",
+      "state": "open"
+    },
+    {
+      "name": "AlwaysDepth",
+      "state": "open"
+    },
+    {
+      "name": "AlwaysStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "AmbientLight",
+      "state": "open"
+    },
+    {
+      "name": "AnimationAction",
+      "state": "open"
+    },
+    {
+      "name": "AnimationClip",
+      "state": "open"
+    },
+    {
+      "name": "AnimationLoader",
+      "state": "open"
+    },
+    {
+      "name": "AnimationMixer",
+      "state": "open"
+    },
+    {
+      "name": "AnimationObjectGroup",
+      "state": "open"
+    },
+    {
+      "name": "AnimationUtils",
+      "state": "open"
+    },
+    {
+      "name": "ArcCurve",
+      "state": "open"
+    },
+    {
+      "name": "ArrayCamera",
+      "state": "open"
+    },
+    {
+      "name": "ArrowHelper",
+      "state": "open"
+    },
+    {
+      "name": "AttachedBindMode",
+      "state": "open"
+    },
+    {
+      "name": "Audio",
+      "state": "open"
+    },
+    {
+      "name": "AudioAnalyser",
+      "state": "open"
+    },
+    {
+      "name": "AudioContext",
+      "state": "open"
+    },
+    {
+      "name": "AudioListener",
+      "state": "open"
+    },
+    {
+      "name": "AudioLoader",
+      "state": "open"
+    },
+    {
+      "name": "AxesHelper",
+      "state": "open"
+    },
+    {
+      "name": "BackSide",
+      "state": "open"
+    },
+    {
+      "name": "BasicDepthPacking",
+      "state": "open"
+    },
+    {
+      "name": "BasicShadowMap",
+      "state": "open"
+    },
+    {
+      "name": "BatchedMesh",
+      "state": "open"
+    },
+    {
+      "name": "BezierInterpolant",
+      "state": "open"
+    },
+    {
+      "name": "Bone",
+      "state": "open"
+    },
+    {
+      "name": "BooleanKeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "Box2",
+      "state": "open"
+    },
+    {
+      "name": "Box3",
+      "state": "open"
+    },
+    {
+      "name": "Box3Helper",
+      "state": "open"
+    },
+    {
+      "name": "BoxGeometry",
+      "state": "mapped",
+      "target": "familiar.box@1"
+    },
+    {
+      "name": "BoxHelper",
+      "state": "open"
+    },
+    {
+      "name": "BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "BufferGeometry",
+      "state": "open"
+    },
+    {
+      "name": "BufferGeometryLoader",
+      "state": "open"
+    },
+    {
+      "name": "ByteType",
+      "state": "open"
+    },
+    {
+      "name": "Cache",
+      "state": "open"
+    },
+    {
+      "name": "Camera",
+      "state": "open"
+    },
+    {
+      "name": "CameraHelper",
+      "state": "open"
+    },
+    {
+      "name": "CanvasTexture",
+      "state": "open"
+    },
+    {
+      "name": "CapsuleGeometry",
+      "state": "mapped",
+      "target": "familiar.capsule@1"
+    },
+    {
+      "name": "CatmullRomCurve3",
+      "state": "open"
+    },
+    {
+      "name": "CineonToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "CircleGeometry",
+      "state": "mapped",
+      "target": "familiar.circle@1"
+    },
+    {
+      "name": "ClampToEdgeWrapping",
+      "state": "open"
+    },
+    {
+      "name": "Clock",
+      "state": "open"
+    },
+    {
+      "name": "Color",
+      "state": "open"
+    },
+    {
+      "name": "ColorKeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "ColorManagement",
+      "state": "open"
+    },
+    {
+      "name": "Compatibility",
+      "state": "open"
+    },
+    {
+      "name": "CompressedArrayTexture",
+      "state": "open"
+    },
+    {
+      "name": "CompressedCubeTexture",
+      "state": "open"
+    },
+    {
+      "name": "CompressedTexture",
+      "state": "open"
+    },
+    {
+      "name": "CompressedTextureLoader",
+      "state": "open"
+    },
+    {
+      "name": "ConeGeometry",
+      "state": "mapped",
+      "target": "familiar.cone@1"
+    },
+    {
+      "name": "ConstantAlphaFactor",
+      "state": "open"
+    },
+    {
+      "name": "ConstantColorFactor",
+      "state": "open"
+    },
+    {
+      "name": "Controls",
+      "state": "open"
+    },
+    {
+      "name": "CubeCamera",
+      "state": "open"
+    },
+    {
+      "name": "CubeDepthTexture",
+      "state": "open"
+    },
+    {
+      "name": "CubeReflectionMapping",
+      "state": "open"
+    },
+    {
+      "name": "CubeRefractionMapping",
+      "state": "open"
+    },
+    {
+      "name": "CubeTexture",
+      "state": "open"
+    },
+    {
+      "name": "CubeTextureLoader",
+      "state": "open"
+    },
+    {
+      "name": "CubicBezierCurve",
+      "state": "open"
+    },
+    {
+      "name": "CubicBezierCurve3",
+      "state": "open"
+    },
+    {
+      "name": "CubicInterpolant",
+      "state": "open"
+    },
+    {
+      "name": "CullFaceBack",
+      "state": "open"
+    },
+    {
+      "name": "CullFaceFront",
+      "state": "open"
+    },
+    {
+      "name": "CullFaceFrontBack",
+      "state": "open"
+    },
+    {
+      "name": "CullFaceNone",
+      "state": "open"
+    },
+    {
+      "name": "Curve",
+      "state": "open"
+    },
+    {
+      "name": "CurvePath",
+      "state": "open"
+    },
+    {
+      "name": "CustomBlending",
+      "state": "open"
+    },
+    {
+      "name": "CustomToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "CylinderGeometry",
+      "state": "mapped",
+      "target": "familiar.cylinder@1"
+    },
+    {
+      "name": "Cylindrical",
+      "state": "open"
+    },
+    {
+      "name": "Data3DTexture",
+      "state": "open"
+    },
+    {
+      "name": "DataArrayTexture",
+      "state": "open"
+    },
+    {
+      "name": "DataTexture",
+      "state": "open"
+    },
+    {
+      "name": "DataTextureLoader",
+      "state": "open"
+    },
+    {
+      "name": "DataUtils",
+      "state": "open"
+    },
+    {
+      "name": "DecrementStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "DecrementWrapStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "DefaultLoadingManager",
+      "state": "open"
+    },
+    {
+      "name": "DepthFormat",
+      "state": "open"
+    },
+    {
+      "name": "DepthStencilFormat",
+      "state": "open"
+    },
+    {
+      "name": "DepthTexture",
+      "state": "open"
+    },
+    {
+      "name": "DetachedBindMode",
+      "state": "open"
+    },
+    {
+      "name": "DirectionalLight",
+      "state": "open"
+    },
+    {
+      "name": "DirectionalLightHelper",
+      "state": "open"
+    },
+    {
+      "name": "DiscreteInterpolant",
+      "state": "open"
+    },
+    {
+      "name": "DodecahedronGeometry",
+      "state": "mapped",
+      "target": "familiar.dodecahedron@1"
+    },
+    {
+      "name": "DoubleSide",
+      "state": "open"
+    },
+    {
+      "name": "DstAlphaFactor",
+      "state": "open"
+    },
+    {
+      "name": "DstColorFactor",
+      "state": "open"
+    },
+    {
+      "name": "DynamicCopyUsage",
+      "state": "open"
+    },
+    {
+      "name": "DynamicDrawUsage",
+      "state": "open"
+    },
+    {
+      "name": "DynamicReadUsage",
+      "state": "open"
+    },
+    {
+      "name": "EdgesGeometry",
+      "state": "open"
+    },
+    {
+      "name": "EllipseCurve",
+      "state": "open"
+    },
+    {
+      "name": "EqualCompare",
+      "state": "open"
+    },
+    {
+      "name": "EqualDepth",
+      "state": "open"
+    },
+    {
+      "name": "EqualStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "EquirectangularReflectionMapping",
+      "state": "open"
+    },
+    {
+      "name": "EquirectangularRefractionMapping",
+      "state": "open"
+    },
+    {
+      "name": "Euler",
+      "state": "open"
+    },
+    {
+      "name": "EventDispatcher",
+      "state": "open"
+    },
+    {
+      "name": "ExternalTexture",
+      "state": "open"
+    },
+    {
+      "name": "ExtrudeGeometry",
+      "state": "mapped",
+      "target": "familiar.extrude@1"
+    },
+    {
+      "name": "FileLoader",
+      "state": "open"
+    },
+    {
+      "name": "Float16BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Float32BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "FloatType",
+      "state": "open"
+    },
+    {
+      "name": "Fog",
+      "state": "open"
+    },
+    {
+      "name": "FogExp2",
+      "state": "open"
+    },
+    {
+      "name": "FramebufferTexture",
+      "state": "open"
+    },
+    {
+      "name": "FrontSide",
+      "state": "open"
+    },
+    {
+      "name": "Frustum",
+      "state": "open"
+    },
+    {
+      "name": "FrustumArray",
+      "state": "open"
+    },
+    {
+      "name": "GLBufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "GLSL1",
+      "state": "open"
+    },
+    {
+      "name": "GLSL3",
+      "state": "open"
+    },
+    {
+      "name": "GreaterCompare",
+      "state": "open"
+    },
+    {
+      "name": "GreaterDepth",
+      "state": "open"
+    },
+    {
+      "name": "GreaterEqualCompare",
+      "state": "open"
+    },
+    {
+      "name": "GreaterEqualDepth",
+      "state": "open"
+    },
+    {
+      "name": "GreaterEqualStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "GreaterStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "GridHelper",
+      "state": "open"
+    },
+    {
+      "name": "Group",
+      "state": "open"
+    },
+    {
+      "name": "HTMLTexture",
+      "state": "open"
+    },
+    {
+      "name": "HalfFloatType",
+      "state": "open"
+    },
+    {
+      "name": "HemisphereLight",
+      "state": "open"
+    },
+    {
+      "name": "HemisphereLightHelper",
+      "state": "open"
+    },
+    {
+      "name": "IcosahedronGeometry",
+      "state": "mapped",
+      "target": "familiar.icosahedron@1"
+    },
+    {
+      "name": "ImageBitmapLoader",
+      "state": "open"
+    },
+    {
+      "name": "ImageLoader",
+      "state": "open"
+    },
+    {
+      "name": "ImageUtils",
+      "state": "open"
+    },
+    {
+      "name": "IncrementStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "IncrementWrapStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "InstancedBufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "InstancedBufferGeometry",
+      "state": "open"
+    },
+    {
+      "name": "InstancedInterleavedBuffer",
+      "state": "open"
+    },
+    {
+      "name": "InstancedMesh",
+      "state": "open"
+    },
+    {
+      "name": "Int16BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Int32BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Int8BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "IntType",
+      "state": "open"
+    },
+    {
+      "name": "InterleavedBuffer",
+      "state": "open"
+    },
+    {
+      "name": "InterleavedBufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Interpolant",
+      "state": "open"
+    },
+    {
+      "name": "InterpolateBezier",
+      "state": "open"
+    },
+    {
+      "name": "InterpolateDiscrete",
+      "state": "open"
+    },
+    {
+      "name": "InterpolateLinear",
+      "state": "open"
+    },
+    {
+      "name": "InterpolateSmooth",
+      "state": "open"
+    },
+    {
+      "name": "InterpolationSamplingMode",
+      "state": "open"
+    },
+    {
+      "name": "InterpolationSamplingType",
+      "state": "open"
+    },
+    {
+      "name": "InvertStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "KeepStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "KeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "LOD",
+      "state": "open"
+    },
+    {
+      "name": "LatheGeometry",
+      "state": "mapped",
+      "target": "familiar.lathe@1"
+    },
+    {
+      "name": "Layers",
+      "state": "open"
+    },
+    {
+      "name": "LessCompare",
+      "state": "open"
+    },
+    {
+      "name": "LessDepth",
+      "state": "open"
+    },
+    {
+      "name": "LessEqualCompare",
+      "state": "open"
+    },
+    {
+      "name": "LessEqualDepth",
+      "state": "open"
+    },
+    {
+      "name": "LessEqualStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "LessStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "Light",
+      "state": "open"
+    },
+    {
+      "name": "LightProbe",
+      "state": "open"
+    },
+    {
+      "name": "LightShadow",
+      "state": "open"
+    },
+    {
+      "name": "Line",
+      "state": "open"
+    },
+    {
+      "name": "Line3",
+      "state": "open"
+    },
+    {
+      "name": "LineBasicMaterial",
+      "state": "open"
+    },
+    {
+      "name": "LineCurve",
+      "state": "open"
+    },
+    {
+      "name": "LineCurve3",
+      "state": "open"
+    },
+    {
+      "name": "LineDashedMaterial",
+      "state": "open"
+    },
+    {
+      "name": "LineLoop",
+      "state": "open"
+    },
+    {
+      "name": "LineSegments",
+      "state": "open"
+    },
+    {
+      "name": "LinearFilter",
+      "state": "open"
+    },
+    {
+      "name": "LinearInterpolant",
+      "state": "open"
+    },
+    {
+      "name": "LinearMipMapLinearFilter",
+      "state": "open"
+    },
+    {
+      "name": "LinearMipMapNearestFilter",
+      "state": "open"
+    },
+    {
+      "name": "LinearMipmapLinearFilter",
+      "state": "open"
+    },
+    {
+      "name": "LinearMipmapNearestFilter",
+      "state": "open"
+    },
+    {
+      "name": "LinearSRGBColorSpace",
+      "state": "open"
+    },
+    {
+      "name": "LinearToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "LinearTransfer",
+      "state": "open"
+    },
+    {
+      "name": "Loader",
+      "state": "open"
+    },
+    {
+      "name": "LoaderUtils",
+      "state": "open"
+    },
+    {
+      "name": "LoadingManager",
+      "state": "open"
+    },
+    {
+      "name": "LoopOnce",
+      "state": "open"
+    },
+    {
+      "name": "LoopPingPong",
+      "state": "open"
+    },
+    {
+      "name": "LoopRepeat",
+      "state": "open"
+    },
+    {
+      "name": "MOUSE",
+      "state": "open"
+    },
+    {
+      "name": "Material",
+      "state": "open"
+    },
+    {
+      "name": "MaterialBlending",
+      "state": "open"
+    },
+    {
+      "name": "MaterialLoader",
+      "state": "open"
+    },
+    {
+      "name": "MathUtils",
+      "state": "open"
+    },
+    {
+      "name": "Matrix2",
+      "state": "open"
+    },
+    {
+      "name": "Matrix3",
+      "state": "open"
+    },
+    {
+      "name": "Matrix4",
+      "state": "open"
+    },
+    {
+      "name": "MaxEquation",
+      "state": "open"
+    },
+    {
+      "name": "Mesh",
+      "state": "open"
+    },
+    {
+      "name": "MeshBasicMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshDepthMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshDistanceMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshLambertMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshMatcapMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshNormalMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshPhongMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshPhysicalMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "state": "mapped",
+      "target": "familiar.standard_material@1"
+    },
+    {
+      "name": "MeshToonMaterial",
+      "state": "open"
+    },
+    {
+      "name": "MinEquation",
+      "state": "open"
+    },
+    {
+      "name": "MirroredRepeatWrapping",
+      "state": "open"
+    },
+    {
+      "name": "MixOperation",
+      "state": "open"
+    },
+    {
+      "name": "MultiplyBlending",
+      "state": "open"
+    },
+    {
+      "name": "MultiplyOperation",
+      "state": "open"
+    },
+    {
+      "name": "NearestFilter",
+      "state": "open"
+    },
+    {
+      "name": "NearestMipMapLinearFilter",
+      "state": "open"
+    },
+    {
+      "name": "NearestMipMapNearestFilter",
+      "state": "open"
+    },
+    {
+      "name": "NearestMipmapLinearFilter",
+      "state": "open"
+    },
+    {
+      "name": "NearestMipmapNearestFilter",
+      "state": "open"
+    },
+    {
+      "name": "NeutralToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "NeverCompare",
+      "state": "open"
+    },
+    {
+      "name": "NeverDepth",
+      "state": "open"
+    },
+    {
+      "name": "NeverStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "NoBlending",
+      "state": "open"
+    },
+    {
+      "name": "NoColorSpace",
+      "state": "open"
+    },
+    {
+      "name": "NoNormalPacking",
+      "state": "open"
+    },
+    {
+      "name": "NoToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "NormalAnimationBlendMode",
+      "state": "open"
+    },
+    {
+      "name": "NormalBlending",
+      "state": "open"
+    },
+    {
+      "name": "NormalGAPacking",
+      "state": "open"
+    },
+    {
+      "name": "NormalRGPacking",
+      "state": "open"
+    },
+    {
+      "name": "NotEqualCompare",
+      "state": "open"
+    },
+    {
+      "name": "NotEqualDepth",
+      "state": "open"
+    },
+    {
+      "name": "NotEqualStencilFunc",
+      "state": "open"
+    },
+    {
+      "name": "NumberKeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "Object3D",
+      "state": "open"
+    },
+    {
+      "name": "ObjectLoader",
+      "state": "open"
+    },
+    {
+      "name": "ObjectSpaceNormalMap",
+      "state": "open"
+    },
+    {
+      "name": "OctahedronGeometry",
+      "state": "mapped",
+      "target": "familiar.octahedron@1"
+    },
+    {
+      "name": "OneFactor",
+      "state": "open"
+    },
+    {
+      "name": "OneMinusConstantAlphaFactor",
+      "state": "open"
+    },
+    {
+      "name": "OneMinusConstantColorFactor",
+      "state": "open"
+    },
+    {
+      "name": "OneMinusDstAlphaFactor",
+      "state": "open"
+    },
+    {
+      "name": "OneMinusDstColorFactor",
+      "state": "open"
+    },
+    {
+      "name": "OneMinusSrcAlphaFactor",
+      "state": "open"
+    },
+    {
+      "name": "OneMinusSrcColorFactor",
+      "state": "open"
+    },
+    {
+      "name": "OrthographicCamera",
+      "state": "open"
+    },
+    {
+      "name": "PCFShadowMap",
+      "state": "open"
+    },
+    {
+      "name": "PCFSoftShadowMap",
+      "state": "open"
+    },
+    {
+      "name": "PMREMGenerator",
+      "state": "open"
+    },
+    {
+      "name": "Path",
+      "state": "open"
+    },
+    {
+      "name": "PerspectiveCamera",
+      "state": "mapped",
+      "target": "familiar.perspective_camera@1"
+    },
+    {
+      "name": "Plane",
+      "state": "open"
+    },
+    {
+      "name": "PlaneGeometry",
+      "state": "mapped",
+      "target": "familiar.plane@1"
+    },
+    {
+      "name": "PlaneHelper",
+      "state": "open"
+    },
+    {
+      "name": "PointLight",
+      "state": "mapped",
+      "target": "familiar.point_light@1"
+    },
+    {
+      "name": "PointLightHelper",
+      "state": "open"
+    },
+    {
+      "name": "Points",
+      "state": "open"
+    },
+    {
+      "name": "PointsMaterial",
+      "state": "open"
+    },
+    {
+      "name": "PolarGridHelper",
+      "state": "open"
+    },
+    {
+      "name": "PolyhedronGeometry",
+      "state": "open"
+    },
+    {
+      "name": "PositionalAudio",
+      "state": "open"
+    },
+    {
+      "name": "PropertyBinding",
+      "state": "open"
+    },
+    {
+      "name": "PropertyMixer",
+      "state": "open"
+    },
+    {
+      "name": "QuadraticBezierCurve",
+      "state": "open"
+    },
+    {
+      "name": "QuadraticBezierCurve3",
+      "state": "open"
+    },
+    {
+      "name": "Quaternion",
+      "state": "open"
+    },
+    {
+      "name": "QuaternionKeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "QuaternionLinearInterpolant",
+      "state": "open"
+    },
+    {
+      "name": "R11_EAC_Format",
+      "state": "open"
+    },
+    {
+      "name": "RED_GREEN_RGTC2_Format",
+      "state": "open"
+    },
+    {
+      "name": "RED_RGTC1_Format",
+      "state": "open"
+    },
+    {
+      "name": "REVISION",
+      "state": "open"
+    },
+    {
+      "name": "RG11_EAC_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBADepthPacking",
+      "state": "open"
+    },
+    {
+      "name": "RGBAFormat",
+      "state": "open"
+    },
+    {
+      "name": "RGBAIntegerFormat",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_10x10_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_10x5_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_10x6_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_10x8_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_12x10_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_12x12_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_4x4_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_5x4_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_5x5_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_6x5_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_6x6_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_8x5_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_8x6_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ASTC_8x8_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_BPTC_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_ETC2_EAC_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_PVRTC_2BPPV1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_PVRTC_4BPPV1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_S3TC_DXT1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_S3TC_DXT3_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBA_S3TC_DXT5_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGBDepthPacking",
+      "state": "open"
+    },
+    {
+      "name": "RGBFormat",
+      "state": "open"
+    },
+    {
+      "name": "RGBIntegerFormat",
+      "state": "open"
+    },
+    {
+      "name": "RGB_BPTC_SIGNED_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGB_BPTC_UNSIGNED_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGB_ETC1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGB_ETC2_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGB_PVRTC_2BPPV1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGB_PVRTC_4BPPV1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGB_S3TC_DXT1_Format",
+      "state": "open"
+    },
+    {
+      "name": "RGDepthPacking",
+      "state": "open"
+    },
+    {
+      "name": "RGFormat",
+      "state": "open"
+    },
+    {
+      "name": "RGIntegerFormat",
+      "state": "open"
+    },
+    {
+      "name": "RawShaderMaterial",
+      "state": "open"
+    },
+    {
+      "name": "Ray",
+      "state": "open"
+    },
+    {
+      "name": "Raycaster",
+      "state": "open"
+    },
+    {
+      "name": "RectAreaLight",
+      "state": "open"
+    },
+    {
+      "name": "RedFormat",
+      "state": "open"
+    },
+    {
+      "name": "RedIntegerFormat",
+      "state": "open"
+    },
+    {
+      "name": "ReinhardToneMapping",
+      "state": "open"
+    },
+    {
+      "name": "RenderObjectRefreshType",
+      "state": "open"
+    },
+    {
+      "name": "RenderTarget",
+      "state": "open"
+    },
+    {
+      "name": "RenderTarget3D",
+      "state": "open"
+    },
+    {
+      "name": "RepeatWrapping",
+      "state": "open"
+    },
+    {
+      "name": "ReplaceStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "ReverseSubtractEquation",
+      "state": "open"
+    },
+    {
+      "name": "RingGeometry",
+      "state": "mapped",
+      "target": "familiar.ring@1"
+    },
+    {
+      "name": "RoundedBoxGeometry",
+      "state": "mapped",
+      "target": "familiar.rounded_box@1"
+    },
+    {
+      "name": "SIGNED_R11_EAC_Format",
+      "state": "open"
+    },
+    {
+      "name": "SIGNED_RED_GREEN_RGTC2_Format",
+      "state": "open"
+    },
+    {
+      "name": "SIGNED_RED_RGTC1_Format",
+      "state": "open"
+    },
+    {
+      "name": "SIGNED_RG11_EAC_Format",
+      "state": "open"
+    },
+    {
+      "name": "SRGBColorSpace",
+      "state": "open"
+    },
+    {
+      "name": "SRGBTransfer",
+      "state": "open"
+    },
+    {
+      "name": "Scene",
+      "state": "open"
+    },
+    {
+      "name": "ShaderChunk",
+      "state": "open"
+    },
+    {
+      "name": "ShaderLib",
+      "state": "open"
+    },
+    {
+      "name": "ShaderMaterial",
+      "state": "open"
+    },
+    {
+      "name": "ShadowMaterial",
+      "state": "open"
+    },
+    {
+      "name": "Shape",
+      "state": "open"
+    },
+    {
+      "name": "ShapeGeometry",
+      "state": "mapped",
+      "target": "familiar.shape@1"
+    },
+    {
+      "name": "ShapePath",
+      "state": "open"
+    },
+    {
+      "name": "ShapeUtils",
+      "state": "open"
+    },
+    {
+      "name": "ShortType",
+      "state": "open"
+    },
+    {
+      "name": "Skeleton",
+      "state": "open"
+    },
+    {
+      "name": "SkeletonHelper",
+      "state": "open"
+    },
+    {
+      "name": "SkinnedMesh",
+      "state": "open"
+    },
+    {
+      "name": "Source",
+      "state": "open"
+    },
+    {
+      "name": "Sphere",
+      "state": "open"
+    },
+    {
+      "name": "SphereGeometry",
+      "state": "mapped",
+      "target": "familiar.sphere@1"
+    },
+    {
+      "name": "Spherical",
+      "state": "open"
+    },
+    {
+      "name": "SphericalHarmonics3",
+      "state": "open"
+    },
+    {
+      "name": "SplineCurve",
+      "state": "open"
+    },
+    {
+      "name": "SpotLight",
+      "state": "mapped",
+      "target": "familiar.spot_light@1"
+    },
+    {
+      "name": "SpotLightHelper",
+      "state": "open"
+    },
+    {
+      "name": "Sprite",
+      "state": "open"
+    },
+    {
+      "name": "SpriteMaterial",
+      "state": "open"
+    },
+    {
+      "name": "SrcAlphaFactor",
+      "state": "open"
+    },
+    {
+      "name": "SrcAlphaSaturateFactor",
+      "state": "open"
+    },
+    {
+      "name": "SrcColorFactor",
+      "state": "open"
+    },
+    {
+      "name": "StaticCopyUsage",
+      "state": "open"
+    },
+    {
+      "name": "StaticDrawUsage",
+      "state": "open"
+    },
+    {
+      "name": "StaticReadUsage",
+      "state": "open"
+    },
+    {
+      "name": "StereoCamera",
+      "state": "open"
+    },
+    {
+      "name": "StreamCopyUsage",
+      "state": "open"
+    },
+    {
+      "name": "StreamDrawUsage",
+      "state": "open"
+    },
+    {
+      "name": "StreamReadUsage",
+      "state": "open"
+    },
+    {
+      "name": "StringKeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "SubtractEquation",
+      "state": "open"
+    },
+    {
+      "name": "SubtractiveBlending",
+      "state": "open"
+    },
+    {
+      "name": "TOUCH",
+      "state": "open"
+    },
+    {
+      "name": "TangentSpaceNormalMap",
+      "state": "open"
+    },
+    {
+      "name": "TetrahedronGeometry",
+      "state": "mapped",
+      "target": "familiar.tetrahedron@1"
+    },
+    {
+      "name": "Texture",
+      "state": "open"
+    },
+    {
+      "name": "TextureLoader",
+      "state": "open"
+    },
+    {
+      "name": "TextureSource",
+      "state": "open"
+    },
+    {
+      "name": "TextureUtils",
+      "state": "open"
+    },
+    {
+      "name": "Timer",
+      "state": "open"
+    },
+    {
+      "name": "TimestampQuery",
+      "state": "open"
+    },
+    {
+      "name": "TorusGeometry",
+      "state": "mapped",
+      "target": "familiar.torus@1"
+    },
+    {
+      "name": "TorusKnotGeometry",
+      "state": "open"
+    },
+    {
+      "name": "Triangle",
+      "state": "open"
+    },
+    {
+      "name": "TriangleFanDrawMode",
+      "state": "open"
+    },
+    {
+      "name": "TriangleStripDrawMode",
+      "state": "open"
+    },
+    {
+      "name": "TrianglesDrawMode",
+      "state": "open"
+    },
+    {
+      "name": "TubeGeometry",
+      "state": "mapped",
+      "target": "familiar.tube@1"
+    },
+    {
+      "name": "UVMapping",
+      "state": "open"
+    },
+    {
+      "name": "Uint16BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Uint32BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Uint8BufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Uint8ClampedBufferAttribute",
+      "state": "open"
+    },
+    {
+      "name": "Uniform",
+      "state": "open"
+    },
+    {
+      "name": "UniformsGroup",
+      "state": "open"
+    },
+    {
+      "name": "UniformsLib",
+      "state": "open"
+    },
+    {
+      "name": "UniformsUtils",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedByteType",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedInt101111Type",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedInt248Type",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedInt5999Type",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedIntType",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedShort4444Type",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedShort5551Type",
+      "state": "open"
+    },
+    {
+      "name": "UnsignedShortType",
+      "state": "open"
+    },
+    {
+      "name": "VSMShadowMap",
+      "state": "open"
+    },
+    {
+      "name": "Vector2",
+      "state": "open"
+    },
+    {
+      "name": "Vector3",
+      "state": "open"
+    },
+    {
+      "name": "Vector4",
+      "state": "open"
+    },
+    {
+      "name": "VectorKeyframeTrack",
+      "state": "open"
+    },
+    {
+      "name": "VideoFrameTexture",
+      "state": "open"
+    },
+    {
+      "name": "VideoTexture",
+      "state": "open"
+    },
+    {
+      "name": "WebGL3DRenderTarget",
+      "state": "open"
+    },
+    {
+      "name": "WebGLArrayRenderTarget",
+      "state": "open"
+    },
+    {
+      "name": "WebGLCoordinateSystem",
+      "state": "open"
+    },
+    {
+      "name": "WebGLCubeRenderTarget",
+      "state": "open"
+    },
+    {
+      "name": "WebGLRenderTarget",
+      "state": "open"
+    },
+    {
+      "name": "WebGLRenderer",
+      "state": "open"
+    },
+    {
+      "name": "WebGLUtils",
+      "state": "open"
+    },
+    {
+      "name": "WebGPUCoordinateSystem",
+      "state": "open"
+    },
+    {
+      "name": "WebXRController",
+      "state": "open"
+    },
+    {
+      "name": "WireframeGeometry",
+      "state": "open"
+    },
+    {
+      "name": "WrapAroundEnding",
+      "state": "open"
+    },
+    {
+      "name": "ZeroCurvatureEnding",
+      "state": "open"
+    },
+    {
+      "name": "ZeroFactor",
+      "state": "open"
+    },
+    {
+      "name": "ZeroSlopeEnding",
+      "state": "open"
+    },
+    {
+      "name": "ZeroStencilOp",
+      "state": "open"
+    },
+    {
+      "name": "createCanvasElement",
+      "state": "open"
+    },
+    {
+      "name": "error",
+      "state": "open"
+    },
+    {
+      "name": "getConsoleFunction",
+      "state": "open"
+    },
+    {
+      "name": "log",
+      "state": "open"
+    },
+    {
+      "name": "setConsoleFunction",
+      "state": "open"
+    },
+    {
+      "name": "warn",
+      "state": "open"
+    },
+    {
+      "name": "warnOnce",
+      "state": "open"
+    }
+  ],
+  "params": [
+    {
+      "name": "BoxGeometry",
+      "param": "width",
+      "state": "mapped",
+      "target": "width"
+    },
+    {
+      "name": "BoxGeometry",
+      "param": "height",
+      "state": "mapped",
+      "target": "height"
+    },
+    {
+      "name": "BoxGeometry",
+      "param": "depth",
+      "state": "mapped",
+      "target": "depth"
+    },
+    {
+      "name": "BoxGeometry",
+      "param": "widthSegments",
+      "state": "refused",
+      "reason": "renderer"
+    },
+    {
+      "name": "BoxGeometry",
+      "param": "heightSegments",
+      "state": "refused",
+      "reason": "renderer"
+    },
+    {
+      "name": "BoxGeometry",
+      "param": "depthSegments",
+      "state": "refused",
+      "reason": "renderer"
+    },
+    {
+      "name": "CapsuleGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "CapsuleGeometry",
+      "param": "height",
+      "state": "mapped",
+      "target": "height"
+    },
+    {
+      "name": "CapsuleGeometry",
+      "param": "capSegments",
+      "state": "mapped",
+      "target": "capSegments"
+    },
+    {
+      "name": "CapsuleGeometry",
+      "param": "radialSegments",
+      "state": "mapped",
+      "target": "radialSegments"
+    },
+    {
+      "name": "CapsuleGeometry",
+      "param": "heightSegments",
+      "state": "mapped",
+      "target": "heightSegments"
+    },
+    {
+      "name": "CircleGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "CircleGeometry",
+      "param": "segments",
+      "state": "mapped",
+      "target": "segments"
+    },
+    {
+      "name": "CircleGeometry",
+      "param": "thetaStart",
+      "state": "mapped",
+      "target": "thetaStart"
+    },
+    {
+      "name": "CircleGeometry",
+      "param": "thetaLength",
+      "state": "mapped",
+      "target": "thetaLength"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "height",
+      "state": "mapped",
+      "target": "height"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "radialSegments",
+      "state": "mapped",
+      "target": "radialSegments"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "heightSegments",
+      "state": "mapped",
+      "target": "heightSegments"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "openEnded",
+      "state": "mapped",
+      "target": "openEnded"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "thetaStart",
+      "state": "mapped",
+      "target": "thetaStart"
+    },
+    {
+      "name": "ConeGeometry",
+      "param": "thetaLength",
+      "state": "mapped",
+      "target": "thetaLength"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "radiusTop",
+      "state": "mapped",
+      "target": "radiusTop"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "radiusBottom",
+      "state": "mapped",
+      "target": "radiusBottom"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "height",
+      "state": "mapped",
+      "target": "height"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "radialSegments",
+      "state": "mapped",
+      "target": "radialSegments"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "heightSegments",
+      "state": "mapped",
+      "target": "heightSegments"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "openEnded",
+      "state": "mapped",
+      "target": "openEnded"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "thetaStart",
+      "state": "mapped",
+      "target": "thetaStart"
+    },
+    {
+      "name": "CylinderGeometry",
+      "param": "thetaLength",
+      "state": "mapped",
+      "target": "thetaLength"
+    },
+    {
+      "name": "DodecahedronGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "DodecahedronGeometry",
+      "param": "detail",
+      "state": "mapped",
+      "target": "detail"
+    },
+    {
+      "name": "ExtrudeGeometry",
+      "param": "shapes",
+      "state": "open"
+    },
+    {
+      "name": "ExtrudeGeometry",
+      "param": "options",
+      "state": "open"
+    },
+    {
+      "name": "IcosahedronGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "IcosahedronGeometry",
+      "param": "detail",
+      "state": "mapped",
+      "target": "detail"
+    },
+    {
+      "name": "LatheGeometry",
+      "param": "points",
+      "state": "mapped",
+      "target": "points"
+    },
+    {
+      "name": "LatheGeometry",
+      "param": "segments",
+      "state": "mapped",
+      "target": "segments"
+    },
+    {
+      "name": "LatheGeometry",
+      "param": "phiStart",
+      "state": "mapped",
+      "target": "phiStart"
+    },
+    {
+      "name": "LatheGeometry",
+      "param": "phiLength",
+      "state": "mapped",
+      "target": "phiLength"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "color",
+      "state": "mapped",
+      "target": "color"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "roughness",
+      "state": "mapped",
+      "target": "roughness"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "metalness",
+      "state": "mapped",
+      "target": "metalness"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "map",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "lightMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "lightMapIntensity",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "aoMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "aoMapIntensity",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "emissive",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "emissiveIntensity",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "emissiveMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "bumpMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "bumpScale",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "normalMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "normalMapType",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "normalScale",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "displacementMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "displacementScale",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "displacementBias",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "roughnessMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "metalnessMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "alphaMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "envMap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "envMapRotation",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "envMapIntensity",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "wireframe",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "wireframeLinewidth",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "wireframeLinecap",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "wireframeLinejoin",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "flatShading",
+      "state": "open"
+    },
+    {
+      "name": "MeshStandardMaterial",
+      "param": "fog",
+      "state": "open"
+    },
+    {
+      "name": "OctahedronGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "OctahedronGeometry",
+      "param": "detail",
+      "state": "mapped",
+      "target": "detail"
+    },
+    {
+      "name": "PerspectiveCamera",
+      "param": "fov",
+      "state": "mapped",
+      "target": "fov"
+    },
+    {
+      "name": "PerspectiveCamera",
+      "param": "aspect",
+      "state": "mapped",
+      "target": "aspect"
+    },
+    {
+      "name": "PerspectiveCamera",
+      "param": "near",
+      "state": "mapped",
+      "target": "near"
+    },
+    {
+      "name": "PerspectiveCamera",
+      "param": "far",
+      "state": "mapped",
+      "target": "far"
+    },
+    {
+      "name": "PlaneGeometry",
+      "param": "width",
+      "state": "mapped",
+      "target": "width"
+    },
+    {
+      "name": "PlaneGeometry",
+      "param": "height",
+      "state": "mapped",
+      "target": "height"
+    },
+    {
+      "name": "PlaneGeometry",
+      "param": "widthSegments",
+      "state": "mapped",
+      "target": "widthSegments"
+    },
+    {
+      "name": "PlaneGeometry",
+      "param": "heightSegments",
+      "state": "mapped",
+      "target": "heightSegments"
+    },
+    {
+      "name": "PointLight",
+      "param": "color",
+      "state": "mapped",
+      "target": "color"
+    },
+    {
+      "name": "PointLight",
+      "param": "intensity",
+      "state": "mapped",
+      "target": "intensity"
+    },
+    {
+      "name": "PointLight",
+      "param": "distance",
+      "state": "mapped",
+      "target": "distance"
+    },
+    {
+      "name": "PointLight",
+      "param": "decay",
+      "state": "mapped",
+      "target": "decay"
+    },
+    {
+      "name": "RingGeometry",
+      "param": "innerRadius",
+      "state": "mapped",
+      "target": "innerRadius"
+    },
+    {
+      "name": "RingGeometry",
+      "param": "outerRadius",
+      "state": "mapped",
+      "target": "outerRadius"
+    },
+    {
+      "name": "RingGeometry",
+      "param": "thetaSegments",
+      "state": "mapped",
+      "target": "thetaSegments"
+    },
+    {
+      "name": "RingGeometry",
+      "param": "phiSegments",
+      "state": "mapped",
+      "target": "phiSegments"
+    },
+    {
+      "name": "RingGeometry",
+      "param": "thetaStart",
+      "state": "mapped",
+      "target": "thetaStart"
+    },
+    {
+      "name": "RingGeometry",
+      "param": "thetaLength",
+      "state": "mapped",
+      "target": "thetaLength"
+    },
+    {
+      "name": "RoundedBoxGeometry",
+      "param": "width",
+      "state": "mapped",
+      "target": "width"
+    },
+    {
+      "name": "RoundedBoxGeometry",
+      "param": "height",
+      "state": "mapped",
+      "target": "height"
+    },
+    {
+      "name": "RoundedBoxGeometry",
+      "param": "depth",
+      "state": "mapped",
+      "target": "depth"
+    },
+    {
+      "name": "RoundedBoxGeometry",
+      "param": "segments",
+      "state": "refused",
+      "reason": "renderer"
+    },
+    {
+      "name": "RoundedBoxGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "ShapeGeometry",
+      "param": "shapes",
+      "state": "open"
+    },
+    {
+      "name": "ShapeGeometry",
+      "param": "curveSegments",
+      "state": "open"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "widthSegments",
+      "state": "mapped",
+      "target": "widthSegments"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "heightSegments",
+      "state": "mapped",
+      "target": "heightSegments"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "phiStart",
+      "state": "mapped",
+      "target": "phiStart"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "phiLength",
+      "state": "mapped",
+      "target": "phiLength"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "thetaStart",
+      "state": "mapped",
+      "target": "thetaStart"
+    },
+    {
+      "name": "SphereGeometry",
+      "param": "thetaLength",
+      "state": "mapped",
+      "target": "thetaLength"
+    },
+    {
+      "name": "SpotLight",
+      "param": "color",
+      "state": "mapped",
+      "target": "color"
+    },
+    {
+      "name": "SpotLight",
+      "param": "intensity",
+      "state": "mapped",
+      "target": "intensity"
+    },
+    {
+      "name": "SpotLight",
+      "param": "distance",
+      "state": "mapped",
+      "target": "distance"
+    },
+    {
+      "name": "SpotLight",
+      "param": "angle",
+      "state": "mapped",
+      "target": "angle"
+    },
+    {
+      "name": "SpotLight",
+      "param": "penumbra",
+      "state": "mapped",
+      "target": "penumbra"
+    },
+    {
+      "name": "SpotLight",
+      "param": "decay",
+      "state": "mapped",
+      "target": "decay"
+    },
+    {
+      "name": "TetrahedronGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "TetrahedronGeometry",
+      "param": "detail",
+      "state": "mapped",
+      "target": "detail"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "tube",
+      "state": "mapped",
+      "target": "tube"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "radialSegments",
+      "state": "mapped",
+      "target": "radialSegments"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "tubularSegments",
+      "state": "mapped",
+      "target": "tubularSegments"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "arc",
+      "state": "mapped",
+      "target": "arc"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "thetaStart",
+      "state": "open"
+    },
+    {
+      "name": "TorusGeometry",
+      "param": "thetaLength",
+      "state": "open"
+    },
+    {
+      "name": "TubeGeometry",
+      "param": "path",
+      "state": "mapped",
+      "target": "path"
+    },
+    {
+      "name": "TubeGeometry",
+      "param": "tubularSegments",
+      "state": "mapped",
+      "target": "tubularSegments"
+    },
+    {
+      "name": "TubeGeometry",
+      "param": "radius",
+      "state": "mapped",
+      "target": "radius"
+    },
+    {
+      "name": "TubeGeometry",
+      "param": "radialSegments",
+      "state": "mapped",
+      "target": "radialSegments"
+    },
+    {
+      "name": "TubeGeometry",
+      "param": "closed",
+      "state": "mapped",
+      "target": "closed"
+    }
+  ],
+  "totals": {
+    "names": {
+      "mapped": 22,
+      "refused": 0,
+      "open": 422
+    },
+    "params": {
+      "mapped": 87,
+      "refused": 4,
+      "open": 34
+    }
+  }
+}
