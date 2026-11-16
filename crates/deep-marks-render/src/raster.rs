@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use deep_canvas_marks::data;
+use deep_canvas_marks::light;
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
@@ -31,8 +32,8 @@ use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, Cap, RoundedRect, Shape};
 use vello_cpu::peniko::{Fill as FillRule, FontData, ImageAlphaType};
 use vello_cpu::{
-    Image, ImageSource, Level, Pixmap, RasterizerSettings, RenderContext, RenderMode,
-    RenderSettings, Resources,
+    Image, ImageSource, Level, PixelMetadata, Pixmap, RasterizerSettings, RenderContext,
+    RenderMode, RenderSettings, Resources,
 };
 
 use crate::asset;
@@ -1230,6 +1231,70 @@ fn composite<'s>(
         p.marks(marks.iter().copied())?;
         return Ok(Vec::new());
     }
+    // #2031: a layer whose only isolated groups are lights draws in place: everything outside a
+    // lit run straight into the frame, as with no light, and each lit run drawn alone, lit and
+    // laid in at its place in the draw order.
+    let only_lights = marks.iter().all(|d| {
+        d.scopes
+            .iter()
+            .all(|s| lit_scope(s) || !matches!(s, Scope::Opacity { blend: Some(_), .. }))
+    });
+    if only_lights {
+        let mut i = 0;
+        while i < marks.len() {
+            let found = marks[i..]
+                .iter()
+                .enumerate()
+                .find_map(|(k, d)| d.scopes.iter().position(lit_scope).map(|at| (i + k, at)));
+            let Some((start, at)) = found else {
+                p.marks(marks[i..].iter().copied())?;
+                break;
+            };
+            p.marks(marks[i..start].iter().copied())?;
+            let group = marks[start].scopes[at].item().to_string();
+            let end = marks[start..]
+                .iter()
+                .position(|d| !d.scopes.iter().any(|s| s.item() == group))
+                .map_or(marks.len(), |n| start + n);
+            let Scope::Opacity {
+                effect: Some(e), ..
+            } = &marks[start].scopes[at]
+            else {
+                return Err(refused("bad_input", "a light's scope is a group's"));
+            };
+            let light = e.light.clone().expect("a lit scope holds its light");
+            let mut content = Painter {
+                store: p.store,
+                kept: p.kept,
+                zoom: p.zoom,
+                spans_apart: p.spans_apart,
+                anim: p.anim.clone(),
+                ..Painter::on(new_ctx())
+            };
+            let placed = *content.ctx.transform();
+            let inside: Vec<Drawn> = marks[start..end]
+                .iter()
+                .map(|d| Drawn {
+                    scopes: d.scopes[at + 1..].to_vec(),
+                    ..(*d).clone()
+                })
+                .collect();
+            content.marks(inside.iter())?;
+            p.texts.append(&mut content.texts);
+            let mut pixmap = Pixmap::new(content.ctx.width(), content.ctx.height());
+            content
+                .ctx
+                .render_with(&mut pixmap, &mut content.resources, raster);
+            let source = lit(&pixmap, &light, placed);
+            let outer = &marks[start].scopes[..at];
+            p.scopes.enter(&mut p.ctx, &mut p.resources, outer);
+            put(&mut p.ctx, source);
+            p.scopes.enter(&mut p.ctx, &mut p.resources, &[]);
+            p.scopes.offscreen += 1;
+            i = end;
+        }
+        return Ok(Vec::new());
+    }
     let sub = |p: &Painter<'s, RenderContext>| Painter {
         store: p.store,
         kept: p.kept,
@@ -1270,6 +1335,8 @@ fn composite<'s>(
         layer.marks(marks[i..start].iter().copied())?;
         let backdrop = render(&mut layer);
         let mut content = sub(p);
+        // Where the content's units land in its pixels, which a light reads back (#2031).
+        let placed = *content.ctx.transform();
         let inside: Vec<Drawn> = marks[start..end]
             .iter()
             .map(|d| Drawn {
@@ -1277,7 +1344,13 @@ fn composite<'s>(
                 ..(*d).clone()
             })
             .collect();
-        content.marks(inside.iter())?;
+        // #2031: a lit group's light around the run reaches lit children inside a blended group.
+        if inside.iter().any(|d| d.scopes.iter().any(lit_scope)) {
+            let inside: Vec<&Drawn> = inside.iter().collect();
+            composite(&mut content, &inside, new_ctx, raster)?;
+        } else {
+            content.marks(inside.iter())?;
+        }
         p.texts.append(&mut content.texts);
         let source = render(&mut content);
         // #467: a part an item's paint builds from its coverage, which `source` holds.
@@ -1289,6 +1362,17 @@ fn composite<'s>(
         };
         let source = match part {
             Some(part) => painted(&source, &part, p.zoom as f32),
+            None => source,
+        };
+        // #2031: a lit group's run of lit children, lit at each pixel.
+        let light = match &marks[start].scopes[at] {
+            Scope::Opacity {
+                effect: Some(e), ..
+            } => e.light.clone(),
+            _ => None,
+        };
+        let source = match &light {
+            Some(l) => lit(&source, l, placed),
             None => source,
         };
         // What the layer drew so far keeps its texts' readings.
@@ -1307,18 +1391,55 @@ fn composite<'s>(
             .scopes
             .enter(&mut layer.ctx, &mut layer.resources, &[]);
         p.scopes.offscreen += 3;
-        inputs.push(Inputs {
-            group,
-            blend,
-            backdrop,
-            source,
-        });
+        if light.is_none() {
+            inputs.push(Inputs {
+                group,
+                blend,
+                backdrop,
+                source,
+            });
+        }
         i = end;
     }
     p.texts.append(&mut layer.texts);
     let drawn = render(&mut layer);
     put(&mut p.ctx, drawn);
     Ok(inputs)
+}
+
+/// Whether `s` is a lit group's light around its lit children (#2031).
+fn lit_scope(s: &Scope) -> bool {
+    matches!(s, Scope::Opacity { effect: Some(e), .. } if e.light.is_some())
+}
+
+/// #2031: `source`, a lit group's lit children drawn alone (premultiplied) through `placed`, lit
+/// at each pixel's centre: unpremultiplied, lit in linear light, encoded once and premultiplied.
+fn lit(source: &Pixmap, l: &light::Light, placed: Affine) -> Pixmap {
+    let w = usize::from(source.width());
+    let back = placed.inverse();
+    let mut out = source.data_as_u8_slice().to_vec();
+    for (i, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+        if px[3] == 0 {
+            continue;
+        }
+        let a = f64::from(px[3]) / 255.0;
+        let p = back * vello_cpu::kurbo::Point::new((i % w) as f64 + 0.5, (i / w) as f64 + 0.5);
+        let at = [p.x, p.y];
+        let rgb = [0, 1, 2].map(|k| (f64::from(px[k]) / 255.0 / a).min(1.0));
+        let c = l.lit(rgb, at);
+        for k in 0..3 {
+            px[k] = (c[k] * a * 255.0).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+    Pixmap::from_parts(
+        out,
+        source.width(),
+        source.height(),
+        PixelMetadata {
+            may_have_transparency: true,
+            alpha_type: ImageAlphaType::AlphaPremultiplied,
+        },
+    )
 }
 
 /// #467: each text's bounds grown by what its paint draws past its run (a drop's copy, an outer
@@ -1827,6 +1948,7 @@ pub fn planted_path(name: &str) -> Option<Planted> {
         deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
         "merge_zero_fills" => Some(Planted::MergeZeroFills),
         "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
+        "light_stale_list" => Some(Planted::LightStaleList),
         _ => {
             let op = name.strip_prefix("moved:")?;
             OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
@@ -1879,6 +2001,8 @@ pub fn path_answer(
         };
         let (palette, ty) = (&palette, &ty);
         let mut frames = Vec::with_capacity(req.times.len());
+        // #2031: a lit group's light list as the frame before took it (the planted evaluator's).
+        let mut before: Option<Value> = None;
         for &t in &req.times {
             // #223: what the warps map is counted until the frame reports it, the evaluation's
             // placing pass included, which carries them first (the line's first frame from before
@@ -1900,6 +2024,19 @@ pub fn path_answer(
                 .map_err(|r| refused(r.code, &r.path))?
             {
                 frames.push(json!({"t": t, "parallax": {"offset": o}}));
+                continue;
+            }
+            // #2031: a lit group's frame is its light list evaluated at t.
+            if let Some(light) = items
+                .get(&req.item)
+                .and_then(deep_canvas_marks::light::evaluated)
+            {
+                let shown = match (&before, req.planted == Planted::LightStaleList) {
+                    (Some(kept), true) => kept.clone(),
+                    _ => light.clone(),
+                };
+                before = Some(light);
+                frames.push(json!({"t": t, "light": shown}));
                 continue;
             }
             // The build alone is timed: the item through its ops, its heads and its digest (a

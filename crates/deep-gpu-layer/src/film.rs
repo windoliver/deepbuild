@@ -200,13 +200,14 @@ fn marks_at(
         pinned: t,
         ..Record::default()
     };
+    crate::lightfx::stale(planted, &mut items);
     let frame = scene::frame_planted(
         doc,
         &items,
         (palette, ty),
         &record,
         1.0,
-        scene::Planted::None,
+        crate::lightfx::scene_plant(planted).unwrap_or(scene::Planted::None),
     )
     .map_err(|r| refused(r.code, r.path))?;
     let layers = frame

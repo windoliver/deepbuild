@@ -35,6 +35,7 @@ pub mod fx;
 pub mod implicit;
 pub mod key;
 pub mod layout;
+pub mod light;
 pub mod lines;
 pub mod look;
 pub mod modules;

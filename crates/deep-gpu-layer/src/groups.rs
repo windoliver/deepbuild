@@ -207,6 +207,7 @@ pub struct Groups {
     stage: Option<Stage>,
     drawn: Option<drawn::Drawn>,
     paintfx: Option<crate::paintfx::PaintFx>,
+    lightfx: Option<crate::lightfx::LightFx>,
     mips: Option<deep_effects_render::mips::Mips>,
 }
 
@@ -451,6 +452,7 @@ impl Groups {
             stage: None,
             drawn: None,
             paintfx: None,
+            lightfx: None,
             mips: None,
         }
     }
@@ -877,7 +879,33 @@ impl Groups {
             }
             None => None,
         };
+        // #2031: a lit group's run of lit children, lit at each pixel over their bounds.
+        let lit = match effect.as_deref().and_then(|e| e.light.clone()) {
+            Some(light) => {
+                let zoom = x.options.zoom;
+                let rect = px(bounds.map(|v| v * zoom), 1.0, x.size);
+                let out = self.take(x.device, x.size, ACC);
+                let device = x.device;
+                self.lightfx
+                    .get_or_insert_with(|| crate::lightfx::LightFx::new(device, ACC))
+                    .run(
+                        device,
+                        &light,
+                        zoom,
+                        x.space == Space::Linear,
+                        &view,
+                        rect,
+                        &out,
+                    );
+                Some(out)
+            }
+            None => None,
+        };
         let (shown, cover, rect) = match effect.as_deref() {
+            Some(e) if e.light.is_some() => {
+                let out = lit.as_ref().expect("lit above");
+                (out.create_view(&Default::default()), false, 0.0)
+            }
             Some(e) if e.paint.is_some() => {
                 let (out, _) = painted.as_ref().expect("painted above");
                 let grow = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
@@ -945,6 +973,9 @@ impl Groups {
         self.composite(x.device, into, m, x.size);
         self.give(&children);
         if let Some((out, _)) = &painted {
+            self.give(out);
+        }
+        if let Some(out) = &lit {
             self.give(out);
         }
         Ok(())

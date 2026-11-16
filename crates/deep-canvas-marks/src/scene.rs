@@ -283,6 +283,8 @@ pub struct Effect {
     pub medium: Option<Arc<deep_canvas_drawn::medium::Medium>>,
     /// #467: the marks inside are an item's coverage, and this is the layer built from it.
     pub paint: Option<Arc<crate::fx::Part>>,
+    /// #2031: the marks inside are a lit group's lit children, lit by its lights at each pixel.
+    pub light: Option<Arc<crate::light::Light>>,
 }
 
 /// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which Vello draws,
@@ -445,6 +447,7 @@ impl Effect {
             dancing,
             medium: None,
             paint: None,
+            light: None,
         }))
     }
 }
@@ -509,6 +512,9 @@ impl Scope {
                     }
                     if let Some(p) = &e.paint {
                         k.text(&format!("{p:?}"));
+                    }
+                    if let Some(l) = &e.light {
+                        k.text(&format!("{l:?}"));
                     }
                 }
             }
@@ -1520,7 +1526,7 @@ pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|n| n.is_finite())
 }
 
-fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
+pub(crate) fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
     match v {
         Some(Value::Array(a)) if a.len() >= 2 => Some([num(a.first())?, num(a.get(1))?]),
         _ => None,
@@ -2672,7 +2678,7 @@ pub fn path_report(
     } else {
         None
     };
-    let scopes = scopes_of(doc, items, palette, &BTreeMap::new())?;
+    let scopes = scopes_of(doc, items, palette, &BTreeMap::new(), planted)?;
     let paints = Paints {
         doc,
         items,
@@ -3951,6 +3957,7 @@ fn scopes_of(
     items: &Map<String, Value>,
     palette: &Palette,
     mattes: &BTreeMap<String, Arc<Vec<Drawn>>>,
+    planted: Planted,
 ) -> Result<BTreeMap<String, Vec<Scope>>, Refused> {
     // #504: a parent that names an assembly ends the chain of item scopes; the motion module
     // composes the assembly's transform.
@@ -4044,6 +4051,17 @@ fn scopes_of(
             target,
         ));
     }
+    // #2031: each lit group's light at t; a refused one names what the check names.
+    if let Some(p) = crate::light::problems(items).into_iter().next() {
+        return refuse(p.code, p.path);
+    }
+    let mut lit = BTreeMap::new();
+    for (id, item) in items {
+        if let Some(light) = crate::light::read(id, item, palette, planted)? {
+            lit.insert(id.as_str(), Arc::new(light));
+        }
+    }
+    let status_bound = crate::light::status_bound(doc);
     let mut out = BTreeMap::new();
     for (id, item) in items {
         // The ancestors, innermost first, bounded so a cycle the check refuses can't spin.
@@ -4076,7 +4094,16 @@ fn scopes_of(
             } else {
                 Some(mask_scope(a, ancestor, items, palette)?)
             };
-            let Some(scope) = scope else { continue };
+            // #2031: a lit group's lit children draw inside its light, an unlit or status one
+            // outside it.
+            let light = lit
+                .get(a)
+                .filter(|_| by_parent && crate::light::is_lit(items, id, a, &status_bound, planted));
+            let light = light.map(|l| crate::light::scope(a, l));
+            let Some(scope) = scope else {
+                scopes.extend(light);
+                continue;
+            };
             if ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
                 if ancestor.get("layer") != item.get("layer") {
                     return refuse("mask_writer", format!("items/{a}: {id}"));
@@ -4087,6 +4114,7 @@ fn scopes_of(
                 }
             }
             scopes.push(scope);
+            scopes.extend(light);
         }
         for (_, scope, members, target) in &matte_of {
             let under = match members {
@@ -4448,6 +4476,14 @@ pub enum Planted {
     /// stream table by the `vector_field@1` kind rather than by its data layout.
     WarpAnchorsOnly,
     WarpFlowByKind,
+    /// #2031's twins: a light that falls off linearly; lights summed in encoded space; a lit
+    /// group's default ambient 0; a pass that lights every child of a lit group, unlit and status
+    /// ones too; and (the `path` surface's) a lit group's light list kept from the frame before.
+    LightLinearFalloff,
+    LightEncodedSum,
+    LightDefaultAmbientZero,
+    LightEveryChild,
+    LightStaleList,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -6166,7 +6202,7 @@ fn build(
             Arc::new(marks.into_iter().map(|m| (*m.3).clone()).collect()),
         );
     }
-    let scopes = scopes_of(doc, items, palette, &sources)?;
+    let scopes = scopes_of(doc, items, palette, &sources, planted)?;
     // Each layer as (order, ID, its marks as (order, ID, mark)), sorted below.
     let mut layers: Vec<(String, String, Vec<Ordered>)> = Vec::new();
     if let Some(Value::Object(ls)) = doc.get("layers") {
