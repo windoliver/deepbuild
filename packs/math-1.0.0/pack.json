@@ -1,0 +1,672 @@
+{
+  "name": "math",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "math@1: familiar math-film words (#233), the objects, layout words, animations, rate functions, plots, planes, fields, tables and 3D an agent already knows from the upstream math-film library, each a recipe over the canvas primitives with its conversion stated, expanded at check. A parameter no primitive honors is refused with a fix, never dropped.",
+  "requires": {
+    "core": ">=0.0.0",
+    "packs": [
+      "deepbuild/verbs@1.0.0"
+    ]
+  },
+  "recipes": {
+    "math.area@1": "area@1.json",
+    "math.arrow3d@1": "arrow3d@1.json",
+    "math.arrow@1": "arrow@1.json",
+    "math.axes3d@1": "axes3d@1.json",
+    "math.axes@1": "axes@1.json",
+    "math.bar_chart@1": "bar_chart@1.json",
+    "math.camera@1": "camera@1.json",
+    "math.circle@1": "circle@1.json",
+    "math.complex_plane@1": "complex_plane@1.json",
+    "math.dot@1": "dot@1.json",
+    "math.line@1": "line@1.json",
+    "math.matrix@1": "matrix@1.json",
+    "math.number_line@1": "number_line@1.json",
+    "math.number_plane@1": "number_plane@1.json",
+    "math.plot@1": "plot@1.json",
+    "math.polar_plane@1": "polar_plane@1.json",
+    "math.polygon@1": "polygon@1.json",
+    "math.rectangle@1": "rectangle@1.json",
+    "math.riemann@1": "riemann@1.json",
+    "math.sample_space@1": "sample_space@1.json",
+    "math.scene@1": "scene@1.json",
+    "math.secant@1": "secant@1.json",
+    "math.square@1": "square@1.json",
+    "math.stream_lines@1": "stream_lines@1.json",
+    "math.surface@1": "surface@1.json",
+    "math.t_label@1": "t_label@1.json",
+    "math.table@1": "table@1.json",
+    "math.tex@1": "tex@1.json",
+    "math.value_tracker@1": "value_tracker@1.json",
+    "math.vector_field@1": "vector_field@1.json",
+    "math.vgroup@1": "vgroup@1.json"
+  },
+  "aliases": {
+    "Circle": {
+      "target": "math.circle@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Square": {
+      "target": "math.square@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Rectangle": {
+      "target": "math.rectangle@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Dot": {
+      "target": "math.dot@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Line": {
+      "target": "math.line@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; Line's buff is buff_line"
+    },
+    "Arrow": {
+      "target": "math.arrow@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; Arrow's buff is buff_line; the tip is the path's arrow end, tip_length long"
+    },
+    "Polygon": {
+      "target": "math.polygon@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "VGroup": {
+      "target": "math.vgroup@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; arrange and arrange_in_grid are the group frame's auto layout; group[i] is member i"
+    },
+    "MathTex": {
+      "target": "math.tex@1",
+      "conversion": "the typeset job's SVG, by its sha256, drawn as vector@1 with one id per term; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Tex": {
+      "target": "math.tex@1",
+      "conversion": "the typeset job's SVG, by its sha256, drawn as vector@1 with one id per term; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "NumberLine": {
+      "target": "math.number_line@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; ticks are one axis@1's, numbers text@1 in the math role"
+    },
+    "Axes": {
+      "target": "math.axes@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; a scale@1 and an axis@1 per axis, the middles of the ranges at the center"
+    },
+    "NumberPlane": {
+      "target": "math.number_plane@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; the background lines are one path fn grid"
+    },
+    "ComplexPlane": {
+      "target": "math.complex_plane@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "PolarPlane": {
+      "target": "math.polar_plane@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; azimuth_units pi, tau, degrees or gradians; azimuth_step is the count of rays"
+    },
+    "Axes.plot": {
+      "target": "math.plot@1",
+      "conversion": "f is text in the closed function list, over the axes' scales; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "plot": {
+      "target": "math.plot@1",
+      "conversion": "f is text in the closed function list, over the axes' scales; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "get_area": {
+      "target": "math.area@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "get_riemann_rectangles": {
+      "target": "math.riemann@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; bars from computed columns"
+    },
+    "get_secant_slope_group": {
+      "target": "math.secant@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "get_T_label": {
+      "target": "math.t_label@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "BarChart": {
+      "target": "math.bar_chart@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "ArrowVectorField": {
+      "target": "math.vector_field@1",
+      "conversion": "func becomes the field's x and y formulas; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "StreamLines": {
+      "target": "math.stream_lines@1",
+      "conversion": "func becomes the field's x and y formulas, integrated at check; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Surface": {
+      "target": "math.surface@1",
+      "conversion": "func becomes three formulas over u and v; 3D units are math@1 units, as meters"
+    },
+    "ThreeDAxes": {
+      "target": "math.axes3d@1",
+      "conversion": "3D units are math@1 units, as meters; z up"
+    },
+    "Arrow3D": {
+      "target": "math.arrow3d@1",
+      "conversion": "3D units are math@1 units, as meters"
+    },
+    "set_camera_orientation": {
+      "target": "math.camera@1",
+      "conversion": "phi and theta in radians become the camera's place on the sphere about the origin; gamma becomes a roll in degrees"
+    },
+    "Matrix": {
+      "target": "math.matrix@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; entries are vector@1 items placed onto centers h_buff and v_buff apart"
+    },
+    "Table": {
+      "target": "math.table@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units; a frame grid of text@1 cells with rules between tracks"
+    },
+    "SampleSpace": {
+      "target": "math.sample_space@1",
+      "conversion": "its parameters by name with the reference's defaults; a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units"
+    },
+    "Scene.play": {
+      "target": "math.scene@1",
+      "conversion": "each play a cue of a cue.kind@1 verb for run_time seconds; rate functions are ease@1 entries or pulses"
+    },
+    "ValueTracker": {
+      "target": "math.value_tracker@1",
+      "conversion": "a named value, data/<id>, which formulas read and cues key"
+    },
+    "next_section": {
+      "target": "math.scene@1",
+      "conversion": "a stage marker at the start of the next play"
+    },
+    "Create": {
+      "target": "verbs.create@1",
+      "conversion": "Create (once ShowCreation, its older spelling) is the cue verb create: a path build from start to end over run_time, the play's rate function its ease",
+      "renamed_from": "ShowCreation"
+    },
+    "ShowCreation": {
+      "target": "verbs.create@1",
+      "conversion": "Create (once ShowCreation, its older spelling) is the cue verb create: a path build from start to end over run_time, the play's rate function its ease",
+      "renamed_from": "ShowCreation"
+    },
+    "Write": {
+      "target": "verbs.write@1",
+      "conversion": "the text's or vector's write_on over run_time"
+    },
+    "FadeIn": {
+      "target": "verbs.fade_in@1",
+      "conversion": "shift and scale are the verb's, shift in u (unit × the reference's)"
+    },
+    "FadeOut": {
+      "target": "verbs.fade_out@1",
+      "conversion": "shift and scale are the verb's"
+    },
+    "Uncreate": {
+      "target": "verbs.uncreate@1",
+      "conversion": "the path build run back"
+    },
+    "DrawBorderThenFill": {
+      "target": "verbs.draw_then_fill@1",
+      "conversion": "the outline builds, then the fill rises"
+    },
+    "GrowFromCenter": {
+      "target": "verbs.grow@1",
+      "conversion": "the scale rises from 0 about the center"
+    },
+    "Transform": {
+      "target": "verbs.morph@1",
+      "conversion": "match_morph by arc length onto target_mobject"
+    },
+    "ReplacementTransform": {
+      "target": "verbs.morph@1",
+      "conversion": "match_morph onto target_mobject, which takes its place"
+    },
+    "TransformMatchingTex": {
+      "target": "verbs.match@1",
+      "conversion": "match_morph pairing the typeset parts by their ids"
+    },
+    "TransformMatchingShapes": {
+      "target": "verbs.match@1",
+      "conversion": "match_morph pairing parts by area and centroid"
+    },
+    "LaggedStart": {
+      "target": "math.scene@1",
+      "conversion": "lag_ratio × run_time becomes the cue's stagger, lag"
+    },
+    "Indicate": {
+      "target": "verbs.indicate@1",
+      "conversion": "scale_factor becomes scale; color becomes role"
+    },
+    "Circumscribe": {
+      "target": "verbs.circumscribe@1",
+      "conversion": "shape Rectangle or Circle becomes rect or circle; buff in u"
+    },
+    "Flash": {
+      "target": "verbs.flash@1",
+      "conversion": "the verb's lines about the point"
+    },
+    "ShowPassingFlash": {
+      "target": "verbs.passing_flash@1",
+      "conversion": "a stretch of the outline passes along it"
+    },
+    "Wiggle": {
+      "target": "verbs.wiggle@1",
+      "conversion": "scale_value becomes scale, rotation_angle in radians becomes angle in degrees, n_wiggles becomes count"
+    },
+    "FocusOn": {
+      "target": "verbs.focus@1",
+      "conversion": "a spotlight closes on the point"
+    },
+    "Rotate": {
+      "target": "verbs.rotate@1",
+      "conversion": "angle in radians becomes degrees"
+    },
+    "MoveAlongPath": {
+      "target": "verbs.move_along@1",
+      "conversion": "the path item it travels"
+    },
+    "Swap": {
+      "target": "verbs.swap@1",
+      "conversion": "the two targets trade places"
+    },
+    "CyclicReplace": {
+      "target": "verbs.cycle@1",
+      "conversion": "each target takes the next one's place"
+    },
+    "ChangeDecimalToValue": {
+      "target": "verbs.count_to@1",
+      "conversion": "the number counts to the value"
+    },
+    "smooth": {
+      "target": {
+        "ease": {
+          "name": "sigmoid",
+          "params": 10
+        }
+      },
+      "conversion": "smooth is the logistic sigmoid with k = 10, normalized to run from 0 to 1"
+    },
+    "slow_into": {
+      "target": {
+        "ease": {
+          "name": "out_circ"
+        }
+      },
+      "conversion": "slow_into(t) = sqrt(1 − (1 − t)²), out_circ"
+    },
+    "rush_into": {
+      "target": {
+        "ease": {
+          "name": "rush_in",
+          "params": 10
+        }
+      },
+      "conversion": "rush_into is the first half of smooth, stretched: 2·sigmoid(t/2) with k = 10"
+    },
+    "rush_from": {
+      "target": {
+        "ease": {
+          "name": "rush_out",
+          "params": 10
+        }
+      },
+      "conversion": "rush_from is the second half of smooth, stretched"
+    },
+    "double_smooth": {
+      "target": {
+        "ease": {
+          "name": "double_sigmoid",
+          "params": 10
+        }
+      },
+      "conversion": "double_smooth is smooth on each half"
+    },
+    "running_start": {
+      "target": {
+        "ease": {
+          "name": "running_start",
+          "params": -0.5
+        }
+      },
+      "conversion": "running_start is the six-degree Bézier with controls 0, 0, pull, pull, 1, 1, 1, pull −0.5"
+    },
+    "exponential_decay": {
+      "target": {
+        "ease": {
+          "name": "exp_decay",
+          "params": 0.1
+        }
+      },
+      "conversion": "exponential_decay(t) = 1 − e^(−t/0.1), divided by its value at 1 so it ends at 1"
+    },
+    "there_and_back": {
+      "target": "math.scene@1",
+      "conversion": "ends at 0, so a pulse: the value goes out by sigmoid(10) and back"
+    },
+    "there_and_back_with_pause": {
+      "target": "math.scene@1",
+      "conversion": "ends at 0, so a pulse with a pause of a third of its span"
+    },
+    "wiggle": {
+      "target": "math.scene@1",
+      "conversion": "the rate function ends at 0, so a pulse wiggle (count 2); the animation Wiggle is the cue verb wiggle"
+    },
+    "lingering": {
+      "target": "math.scene@1",
+      "conversion": "keys at 0 and 0.8 of the span, then hold"
+    },
+    "squish_rate_func": {
+      "target": "math.scene@1",
+      "conversion": "squish_rate_func(f, a, b): keys at a and b of the span, eased by f"
+    },
+    "not_quite_there": {
+      "target": "math.scene@1",
+      "conversion": "not_quite_there(f, p): the key's value is p of the way, eased by f"
+    },
+    "add_updater": {
+      "no_match": "an updater runs code every frame, which has no closed form: drive the value with a driver (driver@1, an expression over t and named values), or bake the frames with the bake route",
+      "conversion": "none: an updater is code, never data"
+    },
+    "always_redraw": {
+      "no_match": "a redraw each frame is code with no closed form: drive what changes with a driver (driver@1), or bake the frames with the bake route",
+      "conversion": "none: a redraw is code, never data"
+    },
+    "UpdateFromFunc": {
+      "no_match": "a function run each frame has no closed form: drive it with a driver (driver@1), or bake the frames with the bake route",
+      "conversion": "none: an updater is code, never data"
+    }
+  },
+  "looks": {
+    "math": {
+      "format": 1,
+      "basis": "drawing",
+      "license": "Apache-2.0",
+      "description": "math: the familiar math-film palette by its names on a black ground, white ink, yellow accent and the math face, each palette name a role.",
+      "palette": {
+        "navy": "#0e1220",
+        "paper_white": "#e7eaf2",
+        "slate_fill": "#26304a",
+        "gold": "#f6c446",
+        "grid_line": "#1b2236",
+        "teal": "#5fd3bc",
+        "sky": "#6cc6e8",
+        "leaf": "#9bd17a",
+        "rose": "#f29aa6",
+        "haze": "#8f9bb8",
+        "WHITE": "#FFFFFF",
+        "GRAY_A": "#DDDDDD",
+        "GRAY_B": "#BBBBBB",
+        "GRAY_C": "#888888",
+        "GRAY_D": "#444444",
+        "GRAY_E": "#222222",
+        "BLACK": "#000000",
+        "BLUE_A": "#C7E9F1",
+        "BLUE_B": "#9CDCEB",
+        "BLUE_C": "#58C4DD",
+        "BLUE_D": "#29ABCA",
+        "BLUE_E": "#236B8E",
+        "TEAL_A": "#ACEAD7",
+        "TEAL_B": "#76DDC0",
+        "TEAL_C": "#5CD0B3",
+        "TEAL_D": "#55C1A7",
+        "TEAL_E": "#49A88F",
+        "GREEN_A": "#C9E2AE",
+        "GREEN_B": "#A6CF8C",
+        "GREEN_C": "#83C167",
+        "GREEN_D": "#77B05D",
+        "GREEN_E": "#699C52",
+        "YELLOW_A": "#FFF1B6",
+        "YELLOW_B": "#FFEA94",
+        "YELLOW_C": "#FFFF00",
+        "YELLOW_D": "#F4D345",
+        "YELLOW_E": "#E8C11C",
+        "GOLD_A": "#F7C797",
+        "GOLD_B": "#F9B775",
+        "GOLD_C": "#F0AC5F",
+        "GOLD_D": "#E1A158",
+        "GOLD_E": "#C78D46",
+        "RED_A": "#F7A1A3",
+        "RED_B": "#FF8080",
+        "RED_C": "#FC6255",
+        "RED_D": "#E65A4C",
+        "RED_E": "#CF5044",
+        "MAROON_A": "#ECABC1",
+        "MAROON_B": "#EC92AB",
+        "MAROON_C": "#C55F73",
+        "MAROON_D": "#A24D61",
+        "MAROON_E": "#94424F",
+        "PURPLE_A": "#CAA3E8",
+        "PURPLE_B": "#B189C6",
+        "PURPLE_C": "#9A72AC",
+        "PURPLE_D": "#715582",
+        "PURPLE_E": "#644172",
+        "PINK": "#D147BD",
+        "LIGHT_PINK": "#DC75CD",
+        "ORANGE": "#FF862F",
+        "LIGHT_BROWN": "#CD853F",
+        "DARK_BROWN": "#8B4513",
+        "GRAY_BROWN": "#736357"
+      },
+      "roles": {
+        "ground": "BLACK",
+        "ink": "WHITE",
+        "muted": "GRAY_C",
+        "accent": "YELLOW_C",
+        "grid": "BLUE_D",
+        "math": "math",
+        "code_keyword": "gold",
+        "code_type": "teal",
+        "code_function": "sky",
+        "code_string": "leaf",
+        "code_number": "rose",
+        "code_comment": "haze",
+        "diff_added": "leaf",
+        "diff_removed": "rose",
+        "diff_changed": "gold",
+        "WHITE": "WHITE",
+        "GRAY_A": "GRAY_A",
+        "GRAY_B": "GRAY_B",
+        "GRAY_C": "GRAY_C",
+        "GRAY_D": "GRAY_D",
+        "GRAY_E": "GRAY_E",
+        "BLACK": "BLACK",
+        "BLUE_A": "BLUE_A",
+        "BLUE_B": "BLUE_B",
+        "BLUE_C": "BLUE_C",
+        "BLUE_D": "BLUE_D",
+        "BLUE_E": "BLUE_E",
+        "TEAL_A": "TEAL_A",
+        "TEAL_B": "TEAL_B",
+        "TEAL_C": "TEAL_C",
+        "TEAL_D": "TEAL_D",
+        "TEAL_E": "TEAL_E",
+        "GREEN_A": "GREEN_A",
+        "GREEN_B": "GREEN_B",
+        "GREEN_C": "GREEN_C",
+        "GREEN_D": "GREEN_D",
+        "GREEN_E": "GREEN_E",
+        "YELLOW_A": "YELLOW_A",
+        "YELLOW_B": "YELLOW_B",
+        "YELLOW_C": "YELLOW_C",
+        "YELLOW_D": "YELLOW_D",
+        "YELLOW_E": "YELLOW_E",
+        "GOLD_A": "GOLD_A",
+        "GOLD_B": "GOLD_B",
+        "GOLD_C": "GOLD_C",
+        "GOLD_D": "GOLD_D",
+        "GOLD_E": "GOLD_E",
+        "RED_A": "RED_A",
+        "RED_B": "RED_B",
+        "RED_C": "RED_C",
+        "RED_D": "RED_D",
+        "RED_E": "RED_E",
+        "MAROON_A": "MAROON_A",
+        "MAROON_B": "MAROON_B",
+        "MAROON_C": "MAROON_C",
+        "MAROON_D": "MAROON_D",
+        "MAROON_E": "MAROON_E",
+        "PURPLE_A": "PURPLE_A",
+        "PURPLE_B": "PURPLE_B",
+        "PURPLE_C": "PURPLE_C",
+        "PURPLE_D": "PURPLE_D",
+        "PURPLE_E": "PURPLE_E",
+        "PINK": "PINK",
+        "LIGHT_PINK": "LIGHT_PINK",
+        "ORANGE": "ORANGE",
+        "LIGHT_BROWN": "LIGHT_BROWN",
+        "DARK_BROWN": "DARK_BROWN",
+        "GRAY_BROWN": "GRAY_BROWN",
+        "BLUE": "BLUE_C",
+        "TEAL": "TEAL_C",
+        "GREEN": "GREEN_C",
+        "YELLOW": "YELLOW_C",
+        "GOLD": "GOLD_C",
+        "RED": "RED_C",
+        "MAROON": "MAROON_C",
+        "PURPLE": "PURPLE_C",
+        "GRAY": "GRAY_C",
+        "GREY": "GRAY_C",
+        "LIGHT_GRAY": "GRAY_B",
+        "DARK_GRAY": "GRAY_D",
+        "DARK_BLUE": "BLUE_E",
+        "LIGHTER_GRAY": "GRAY_A",
+        "DARKER_GRAY": "GRAY_E"
+      },
+      "themes": {
+        "light": {},
+        "dark": {}
+      },
+      "status": {
+        "pass": "#007429",
+        "fail": "#bf232b",
+        "invalid": "#8645b0",
+        "blocked": "#a44700",
+        "inconclusive": "#666600",
+        "running": "#0063b8",
+        "needs_you": "#8a5900",
+        "stale": "#326c6f",
+        "idle": "#636464"
+      },
+      "status_treatment": {
+        "core_min_px": 4,
+        "glyph": {
+          "pass": "✓",
+          "fail": "✗",
+          "invalid": "⊘",
+          "blocked": "■",
+          "inconclusive": "?",
+          "running": "↻",
+          "needs_you": "!",
+          "stale": "◇",
+          "idle": "○"
+        }
+      },
+      "min_distance": 0.1,
+      "attention_treatment": {
+        "line": "dashed",
+        "role": "ink",
+        "glyph": "⚠"
+      },
+      "legend": "auto",
+      "code": {
+        "keyword": "code_keyword",
+        "type": "code_type",
+        "function": "code_function",
+        "variable": "ink",
+        "string": "code_string",
+        "number": "code_number",
+        "comment": "code_comment",
+        "operator": "ink",
+        "punctuation": "ink",
+        "plain": "ink"
+      },
+      "diff": {
+        "added": "diff_added",
+        "removed": "diff_removed",
+        "changed": "diff_changed"
+      },
+      "lines": {
+        "line": {
+          "kind": "exact",
+          "width": 2
+        }
+      },
+      "fills": {
+        "fill": {
+          "kind": "flat"
+        }
+      },
+      "ground": {
+        "kind": "flat"
+      },
+      "fonts": {
+        "body": {
+          "family": "Inter",
+          "file": "Inter-Regular.ttf",
+          "license": "OFL-1.1",
+          "embed": true,
+          "single_line": false
+        },
+        "mono": {
+          "family": "JetBrains Mono",
+          "file": "JetBrainsMono-Regular.ttf",
+          "license": "OFL-1.1",
+          "embed": true,
+          "single_line": false
+        },
+        "math": {
+          "family": "STIX Two Math",
+          "file": "STIXTwoMath-Regular.ttf",
+          "license": "OFL-1.1",
+          "embed": true,
+          "single_line": false
+        },
+        "cjk": {
+          "family": "Noto Sans SC",
+          "file": "NotoSansSC-Regular.otf",
+          "license": "OFL-1.1",
+          "embed": true,
+          "single_line": false
+        },
+        "arabic": {
+          "family": "Noto Sans Arabic",
+          "file": "NotoSansArabic-Regular.ttf",
+          "license": "OFL-1.1",
+          "embed": true,
+          "single_line": false
+        },
+        "emoji": {
+          "family": "Noto Emoji",
+          "file": "NotoEmoji-Regular.ttf",
+          "license": "OFL-1.1",
+          "embed": true,
+          "single_line": false
+        }
+      },
+      "fallback": [
+        "cjk",
+        "arabic",
+        "emoji"
+      ],
+      "time": {
+        "state": {
+          "span": "0.25s",
+          "interp": {
+            "ease": {
+              "name": "in_out_cubic"
+            }
+          }
+        }
+      },
+      "finish": [],
+      "limits": [
+        "A palette name draws only in this look: in another look, color words fall back to its roles",
+        "Flat fills and exact lines: no sheen, gradients only as paint gradients"
+      ],
+      "cost": {
+        "2d": 0.4,
+        "3d": 0.6
+      }
+    }
+  }
+}

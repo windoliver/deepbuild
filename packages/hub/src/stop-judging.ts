@@ -80,7 +80,7 @@ export interface StopJudgingOptions {
     readonly holds: Holds;
     readonly questions: Questions;
     readonly runner: Runner;
-    readonly checkKinds: CheckKinds;
+    readonly checkKinds: () => Promise<CheckKinds>;
     readonly reviewRounds: Pick<ReviewRounds, "settled">;
     readonly store: EvidenceStore;
     readonly trust: ProjectTrust;
@@ -1058,8 +1058,8 @@ export class StopJudging {
       const cited = told.reduce((m, command) => m.replaceAll(`\`${command}\``, command), message);
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
       // A number's cited query is the numbers check's to re-run (#1537), never a run or a file the session had to make or read.
-      const [log, trusted] = await reads;
-      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: this.options.services.checkKinds.uncited(cited) }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
+      const [[log, trusted], checkKinds] = await Promise.all([reads, this.options.services.checkKinds()]);
+      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: checkKinds.uncited(cited) }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.options.services.now(), findings };
       // The planted wrong program runs no check before the definition locks, the repo's spec included.
@@ -1108,7 +1108,7 @@ export class StopJudging {
           kinded.set(c.check, { spec: docSpec(doc, at), of });
           continue;
         }
-        const spec = bytes ? this.options.services.checkKinds.definitionSpec(bytes) : undefined;
+        const spec = bytes ? checkKinds.definitionSpec(bytes) : undefined;
         if (spec) kinded.set(c.check, { spec, of });
       }
       if (!r.joins) {
@@ -1118,8 +1118,8 @@ export class StopJudging {
           checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec' });
           kinded.set(check, { spec, of });
         };
-        if (await this.prOf(r.session)) add('review', this.options.services.checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
-        for (const n of await this.options.services.checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
+        if (await this.prOf(r.session)) add('review', checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
+        for (const n of await checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);
       // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back
@@ -1344,7 +1344,7 @@ export class StopJudging {
     if (outside) await this.builtOutside(r.cwd, outside.build);
     // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
     const kinded = this.kindChecks.get(r.claim)?.get(r.check);
-    const { run } = await this.options.services.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.options.services.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.options.services.stacks.wanted(r.cwd) ? r.stack : undefined);
+    const { run } = await this.options.services.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? (await this.options.services.checkKinds()).deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.options.services.stacks.wanted(r.cwd) ? r.stack : undefined);
     if (paid) {
       const charge = () => this.options.services.ledger.charge(this.options.events.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.options.services.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -1386,7 +1386,7 @@ export class StopJudging {
    * reading, claims the merge commit in a worktree of its own, as `session` did a stop; its slow checks start, and its
    * verdict is read once made. Each check whose key the merge didn't change carries from the run that made it (#1018).
    */
-  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
+  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle?: string | null }[] } | undefined> {
     const [owner, name] = r.repo.split('/') as [string, string];
     const fetch = this.options.settings.github ? recordedFetch(this.options.settings.github) : liveFetch(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
     // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
@@ -1424,10 +1424,12 @@ export class StopJudging {
         await this.verdictWrites.get(made.claim)?.catch(() => undefined);
         const v = this.options.services.gate.verdictOf(made.claim);
         const [row] = v && v.outcome !== 'pending' ? (await this.options.services.record.raw(`SELECT outcome, requirements FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [made.claim.slice(6)])) as { outcome: Outcome; requirements: string | null }[] : [];
-        if (row) {
-          const settled = new Map((await this.options.services.tasks.lockedRequirements(made.task)).map((q) => [q.req, q]));
-          const reqs = (JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string }[]).map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome }));
-          return { claim: made.claim, outcome: row.outcome, requirements: reqs };
+        // A verdict that waits only on your answer to requirements whose oracle is you, every other one passed, waits on
+        // no check (#1345): it's judged now, INCONCLUSIVE, with those requirements pending, and never recorded as made.
+        const calls = !row && v && v.requirements.some((q) => q.oracle === 'person' && q.outcome === 'pending') && v.requirements.every((q) => q.outcome === 'PASS' || (q.oracle === 'person' && q.outcome === 'pending'));
+        if (row || calls) {
+          const read = row ? JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string; oracle?: string }[] : v!.requirements;
+          return { claim: made.claim, outcome: row?.outcome ?? 'INCONCLUSIVE', requirements: await this.landingRequirements(made.task, read) };
         }
         if (Date.now() > until) return undefined;
         await new Promise((done) => setTimeout(done, 200));
@@ -1436,6 +1438,25 @@ export class StopJudging {
       this.options.state().live.delete(r.session);
       if (!r.keep) await worktree('remove', '--force', tree).catch(() => undefined);
     }
+  }
+
+  /** A verdict's requirements as the landing reads them: each one's text and what alone settles it, from the task's locked definition, and whose word decides it. */
+  private async landingRequirements(task: string, read: { req: string; outcome: string; oracle?: string }[]): Promise<{ req: string; text: string; settled_by: string | null; outcome: string; oracle: string | null }[]> {
+    const settled = new Map((await this.options.services.tasks.lockedRequirements(task)).map((q) => [q.req, q]));
+    return read.map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome, oracle: q.oracle ?? null }));
+  }
+  /** A landed claim's newest recorded verdict (#1345): one your answers to its calls made; undefined while none is recorded. */
+  async recorded(claim: string): Promise<{ outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle: string | null }[] } | undefined> {
+    const [row] = (await this.options.services.record.raw(`SELECT v.outcome AS outcome, v.requirements AS requirements, c.subject_ref AS task FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE v.claim_id = ? ORDER BY v.created DESC LIMIT 1`, [claim.slice(6)])) as { outcome: Outcome; requirements: string | null; task: string | null }[];
+    if (!row?.task) return undefined;
+    return { outcome: row.outcome, requirements: await this.landingRequirements(row.task, JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string; oracle?: string }[]) };
+  }
+  /**
+   * A call on a requirement whose oracle is you (#1345), and once it closed your answer (`unanswered` for a default):
+   * the claim's verdict reads them from now on, and the one they make is recorded.
+   */
+  async answered(claim: string, req: string, ask: string, answer?: 'PASS' | 'FAIL' | 'unanswered'): Promise<void> {
+    if (this.options.services.gate.answered(claim, req, ask, answer) && answer) await this.judged(claim);
   }
 
   /** The validity floor's INVALID and snapshot budget's INCONCLUSIVE, recorded before checks count. */

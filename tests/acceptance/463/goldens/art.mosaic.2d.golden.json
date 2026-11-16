@@ -1,0 +1,10 @@
+{
+ "fixture": "art.mosaic.2d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "e2aa5dbdde871122cc3e6d0aeb2aefb636d1955a5c924e0c13614671905a152b"
+}

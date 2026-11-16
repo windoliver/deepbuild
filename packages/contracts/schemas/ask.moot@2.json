@@ -152,6 +152,34 @@
             "host"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "because": {
+              "const": "signed_in"
+            },
+            "agent": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The agent whose sign-in probe read signed in: the sign-in task's check passing (#1349)."
+            },
+            "account": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192,
+              "description": "The account the agent was signed in to when the probe read signed in, as the agent records it; null when it records none."
+            }
+          },
+          "required": [
+            "because",
+            "agent",
+            "account"
+          ],
+          "additionalProperties": false
         }
       ]
     },
