@@ -389,6 +389,9 @@ impl Notifier {
                 })
                 .collect()
         };
+        // Asks shown together in one showing are one card, so they post one notification (#1345): the batch's, under
+        // its first ask, saying how many it holds.
+        let mut batches: Vec<(&[String], usize, usize)> = Vec::new();
         for (handle, _) in due {
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
                 continue;
@@ -403,6 +406,15 @@ impl Notifier {
                 }
                 continue;
             }
+            let batch = table.batch(&handle);
+            if let Some(seen) = batches
+                .iter_mut()
+                .find(|(b, ..)| !b.is_empty() && *b == batch)
+            {
+                seen.2 += 1;
+                continue;
+            }
+            batches.push((batch, out.len(), 1));
             out.push(Notification {
                 ask: Some(handle),
                 session: session.to_owned(),
@@ -410,6 +422,10 @@ impl Notifier {
                 text: ask_text(table, ask, now),
                 sound: None,
             });
+        }
+        for &(_, at, count) in batches.iter().filter(|(.., count)| *count > 1) {
+            out[at].title = "DeepBuild".to_owned();
+            out[at].text = batch_text(&out[at].text, count);
         }
         // Each session keeps its newest; the one sound goes on what is left.
         let mut kept: Vec<Notification> = Vec::new();
@@ -443,7 +459,7 @@ impl Notifier {
     }
 }
 
-/// Whether the notifier reads the event: it opens an ask, gives it a new deadline or sends a notice.
+/// Whether the notifier reads the event: it opens an ask, gives it a new deadline, shows asks or sends a notice.
 pub fn reads(event: &Value) -> bool {
     !openings(event).is_empty()
         || event["kind"] == "notice.sent"
@@ -573,6 +589,18 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         states::State::NeedsYou.word(),
         question,
         states::moment(deadline, now),
+    )
+}
+
+/// A batch's notification (#1345), from its first ask's: how many questions the one card holds, then the first's
+/// question and default.
+fn batch_text(first: &str, count: usize) -> String {
+    let line = first.split_once('\n').map_or(first, |(_, line)| line);
+    let first = line.split_once(" — ").map_or(line, |(_, rest)| rest);
+    format!(
+        "DeepBuild\n{} {} — {count} questions on one card. The first: {first}",
+        states::glyph(states::State::NeedsYou.entry()),
+        states::State::NeedsYou.word()
     )
 }
 
