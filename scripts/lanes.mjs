@@ -259,6 +259,11 @@ timed.push('tests/acceptance/1486/grid.test.ts');
 // 1485-redraft-ac2/, draws them at full size and runs in its place.
 alone.push('tests/acceptance/1485-redraft-ac2/');
 byHand.push('tests/acceptance/1485/cap.test.ts');
+// #1493's word, recipe and document files each build deep-show and install test packs. Its first-draft census.test.ts
+// is kept by hand, on the owner's ruling (1493/DISPUTE.md): its AC1 lists the reference's names by a rule no program
+// can meet, and the blind redraft 1493-redraft-ac1/ runs in its place; the same file's AC2, AC4 and AC5 run with it.
+alone.push(...['word', 'recipe', 'document'].map((f) => `tests/acceptance/1493/${f}.test.ts`), 'tests/acceptance/1493-redraft-ac1/');
+byHand.push('tests/acceptance/1493/census.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 // #1816's live file runs the spine judge for #44 for hours and reopens #44 on GitHub if it doesn't read PASS.
@@ -596,6 +601,8 @@ byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
 // #542's files each build deep-show, deep-input or deep-logic and #544's assembler, run logic programs and draw the app's window.
 alone.push('tests/acceptance/542/');
+// #903's files build deep-input or deep-show with cargo; its export and taste files draw on the GPU and the app's window.
+alone.push('tests/acceptance/903/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -804,14 +811,42 @@ timed.push('tests/acceptance/184/budgets.test.ts');
 // replica's refusal before a play's first step is "before any run", its third draft runs; the first two by hand.
 alone.push('tests/acceptance/184-redraft-ac7-2/');
 byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/184-redraft-ac7/ac7-bots-refused.test.ts');
+// #555's files start replicas and a hub and play the crawler's 4,000-step runs for minutes.
+alone.push('tests/acceptance/555/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
+// #1636's files each build deep-show (full) and some deep-gpu; ac1-same-hash also builds deep-show for Linux x86_64
+// in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
+alone.push('tests/acceptance/1636/');
+timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+
+/**
+ * #1830: since #1555 judgeLimit reads INCONCLUSIVE when a call gives no loads, so these files' timing criteria read
+ * INCONCLUSIVE on every machine. Each original file holding such a call (or the test file judging through one), kept as
+ * written, maps to the blind redraft that reads the load at each run's start and end and runs in its place: the original
+ * test files run by hand only, and scripts/loads-lint.mjs skips an original once its redraft has landed.
+ */
+export const redrafted = Object.fromEntries([
+  ...[['103', 'budgets.test.ts'], ['365', 'budgets.test.ts'], ['262', 'budgets.test.ts'], ['761', 'budgets.test.ts'], ['1098', 'budgets.test.ts'],
+    ['148', 'budgets.test.ts'], ['417', 'budgets.test.ts'], ['1425', 'budgets.test.ts'], ['149', 'budgets.test.ts'], ['568', 'judge.test.mjs'],
+    ['124', 'ac5-budgets.live.test.ts'], ['1427', 'ac8-budget.live.test.ts'], ['311', 'redraft-ac12/budgets.test.ts'],
+    ['1018', 'redraft-ac6/budgets.test.ts'], ['1018', 'redraft-ac6/helpers.ts'],
+    ...['166', '268', '465', '968'].flatMap((n) => [[n, 'budgets.test.ts'], [n, 'helpers.ts']])]
+    .map(([issue, file]) => [`tests/acceptance/${issue}/${file}`, `tests/acceptance/${issue}-redraft-1830/`]),
+]);
+byHand.push(...Object.keys(redrafted).filter((path) => /\.test\.m?[jt]s$/.test(path) && !byHand.includes(path)));
+// The redrafts time what their originals timed, so each is timed, and alone where its original was; the two live ones
+// run by hand, as theirs do. #1830's own ac2-timing runs #311's redraft for real.
+alone.push(...['103', '365', '262', '761', '1098', '417', '149', '124', '1427', '311', '1018', '166', '268', '465', '968'].map((n) => `tests/acceptance/${n}-redraft-1830/`), 'tests/acceptance/1830/ac2-timing.test.ts');
+timed.push(...['103', '365', '262', '761', '1098', '148', '417', '1425', '149', '311', '1018', '166', '268', '465', '968'].map((n) => `tests/acceptance/${n}-redraft-1830/budgets.test.ts`),
+  'tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts', 'tests/acceptance/1830/ac2-timing.test.ts');
+byHand.push('tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding and each size FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding and each size FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit.' },
   { name: 'unit', commands: [
     // The canvas, text and marks acceptance files each build a binary before spawning it, and cargo
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
@@ -846,7 +881,7 @@ export const checks = [
   { name: 'wasm32', commands: [[process.execPath, 'scripts/wasm32.mjs']], fix: 'Remove the threads or the native-only API from the crate each FAIL line names, or install the target (rustup target add wasm32-unknown-unknown).' },
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
-  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
+  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, write the name so it does not read as an event kind, or list a name that is no event kind in scripts/not-event-kinds.txt beside the open issue that names it, and remove each stale entry named above; offline, run again with network and gh signed in.' },
   // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910), and
   // every `deep` command and agent tool an open issue names is in the design or planned (#1329). It reads the open
   // issues the catalogue drift lane fetched.

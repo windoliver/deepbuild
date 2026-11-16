@@ -1,6 +1,6 @@
 ---
 name: deepbuild-canvas
-description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set 909cd3f9fefa43a8cd0e9fc7eec3820b29564d58840df7e2ec0d21cfb687a436; never edit by hand.
+description: Teaches writing DeepBuild canvas documents (figures, films, boards and pieces) as JSON, and the craft rules their checks hold them to. Use it to draw in DeepBuild. Generated from DeepBuild 0.0.0's kinds' schemas, module set f9e3f787ef9db86f2787ac25a14a7533f34289035466f395c62dfc4df901577e; never edit by hand.
 version: 0.0.0
 ---
 
@@ -41,7 +41,7 @@ A document is one JSON object. The keys to write first:
 - packs: the packs it names, such as the pack of a piece recipe.
 - audit: {"support": {"floating": ["<item ID>"]}}: the items the geometry audit takes as held in place, such as a floor.
 
-Every key the core reads: format, id, profile, title, description, seed, transport, size, safe, aspect, look, camera, locale, light_policy, budget, requires, packs, data, assets, items, collections, assemblies, channels, drivers, constraints, clips, placements, time_remaps, transitions, shots, markers, controls, inputs, bound_values, status_bindings, variants, card, audit, script, record, source, worlds, brief, checks, strips, emitters, buses, processors, spawns, ducking, bakes, tempo_map, sounds. Leave out layers and each item's layer: the hub stamps them from your connection.
+Every key the core reads: format, id, profile, title, description, seed, transport, size, safe, aspect, look, camera, locale, light_policy, budget, requires, packs, data, assets, items, collections, assemblies, channels, drivers, constraints, clips, placements, time_remaps, transitions, shots, markers, controls, inputs, bound_values, status_bindings, variants, card, audit, script, record, source, worlds, brief, checks, strips, emitters, buses, processors, spawns, ducking, bakes, tempo_map, sounds, tour. Leave out layers and each item's layer: the hub stamps them from your connection.
 
 An item is {"id": "<its key in items>", "kind": "name@major", "name": "a readable name", "order": "a0", "params": {…}, "at": {"pos": [x, y, z]}}. id, kind, name and order are required; order is a sort key, "a0", "a1" and so on, unique in the document. parent names an item or an assembly. Its keys: id, kind, parent, name, role, params, at, adjust, visible, pickable, order, broken_out, modifiers, materials, material, constraints, cast_shadow, receive_shadow, lod, tone, halo, relations. Its role is one of part, control, label, data, decoration.
 
@@ -119,7 +119,7 @@ A film's brief names the checks it wants; each runs only when named and never pa
 }
 ```
 
-## Kinds (module set 909cd3f9fefa43a8cd0e9fc7eec3820b29564d58840df7e2ec0d21cfb687a436)
+## Kinds (module set f9e3f787ef9db86f2787ac25a14a7533f34289035466f395c62dfc4df901577e)
 
 Each entry as name@major, with its origin when not first party and its stability when not stable; then its fields as name: type, unit, [min, max] and = default, each left out when it has none. Entries with no fields share one line.
 
@@ -176,6 +176,7 @@ Each entry as name@major, with its origin when not first party and its stability
 - display@1: size: [m, m] m; bezel: m m = 0.01; screen: inset ID; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; uv0: natural | box {size: m} | planar {axis: x | y | z} | cylinder {axis: x | y | z} | sphere = "natural"; uv_scale: m m = 1; scatter: {count: 1 to 10000, part?: named part}
 - hull@1: points: [[x, y, z]] ≤ 4096 m; of: ID | <ID>#<part>; shade: smooth | flat | by_angle {angle: deg} = "smooth"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; uv0: natural | box {size: m} | planar {axis: x | y | z} | cylinder {axis: x | y | z} | sphere = "natural"; uv_scale: m m = 1; scatter: {count: 1 to 10000, part?: named part}
 - surface@1: fn: {x: text, y: text, z: text}; u: [f64, f64]; v: [f64, f64]; zero: text; box: [[m, m], [m, m], [m, m]] m; max_cells: u32 = 65536; vars: {name → f64 | text}; tolerance: m m = 0.002; max: [u16, u16] = [256,256]; closed: auto | bool | {u: auto | bool, v: auto | bool} = "auto"; two_sided: bool = true; color: {by: text, ramp: [role] ≤ 8, domain: [f64, f64]}; checker: {roles: [role] ≤ 4, cells: [u16, u16]}; grid_lines: {u: f64 | none, v: f64 | none, stroke: {role: role, width: px, dash: [px, px], line: text}}; shade: smooth | flat | by_angle {angle: deg} = "smooth"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; uv0: natural | box {size: m} | planar {axis: x | y | z} | cylinder {axis: x | y | z} | sphere = "natural"; uv_scale: m m = 1; scatter: {count: 1 to 10000, part?: named part}
+- tree@1: seed: u32 = 0; levels: u8 = 4; length: m m = 4; radius: m m = 0.15; exponent: f32 = 2; split: u8 = 3; angle: deg deg = 40; roll: deg deg = 137.5; gravity: f32 = 0; leaves: {per_twig: u8, size: m}; segments: u16 = 8; rings: u16 = 8; shade: smooth | flat | by_angle {angle: deg} = "smooth"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}; uv0: natural | box {size: m} | planar {axis: x | y | z} | cylinder {axis: x | y | z} | sphere = "natural"; uv_scale: m m = 1; scatter: {count: 1 to 10000, part?: named part}
 - curve@1: points: [[x, y, z]] m; ids: [u32]; fn: {x: text, y: text, z: text, over: [f64, f64], vars: {name → f64 | text}, tolerance: m}; mode: linear | bezier | catmull_rom | auto | bspline = "auto"; handles: {in: [[x, y, z]], out: [[x, y, z]]} m; alpha: f32 = 0.5; closed: bool = false; roll: deg | [deg] deg = 0; frames: rmf | up = "rmf"; up: [x, y, z] = [0,1,0]; samples: u16 = 16
 - mesh.asset@1: sha256: sha256; node: index | name | {scene: index} = 0; shade: smooth | flat | by_angle {angle: deg} = "smooth"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}
 - mesh.sequence@1: frames: [sha256]; frame_rate: f32 = 24; start: s | text = 0; interpolate: none | linear = "none"; shade: smooth | flat | by_angle {angle: deg} = "smooth"; paint: {fill: {role: role, fill: text, noise}, stroke: {role: role, width: px, line: text}}

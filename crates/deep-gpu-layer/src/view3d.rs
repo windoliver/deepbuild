@@ -1115,7 +1115,7 @@ fn run_view(
         return Err(json!({"code": "refused", "issues": broken}));
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
-    crate::physics::bake(&mut args.doc)?;
+    crate::physics::bake(&mut args.doc, &call["tracks"])?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
@@ -2797,6 +2797,14 @@ fn run_view(
                     .map(|(item, view, batch)| json!({"item": item, "view": view, "batch": batch}))
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
+                // #1636: each draw of a mesh the main view's color pass issues.
+                let draws: Vec<Value> = (c.draws.iter())
+                    .map(|(of, mesh, material, instances)| {
+                        json!({"pass": "color", "of": of, "mesh": mesh, "material": material,
+                            "instances": instances})
+                    })
+                    .collect();
+                frame.insert("draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("axes_mapped".into(), json!(axes_mapped));
                 frame.insert(

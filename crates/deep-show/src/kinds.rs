@@ -1124,7 +1124,7 @@ impl Hub<'_> {
         let rows = kind_rows(sealed, planted);
         let Some(e) = rows.iter().map(|r| &r.entry).find(|e| e["name"] == kind) else {
             let close =
-                deep_canvas::document::kind_names(kind, &sealed.kinds(), sealed.close_fault);
+                deep_canvas::document::kind_names(kind, &sealed.kinds(), &[], sealed.close_fault);
             return field_miss(path, &format!("{kind} is no kind this build lists"), &close);
         };
         let mut fields: Vec<&Value> = e["fields"].as_array().into_iter().flatten().collect();
@@ -1164,7 +1164,14 @@ impl Hub<'_> {
             deep_canvas::kinds::Lookup::Known { entry, .. } => {
                 let fault = sealed.close_fault;
                 let owners = deep_canvas::document::owners(name, entry, &registry, fault);
-                deep_canvas::document::field_names(name, entry, entry.current(), &owners, fault)
+                deep_canvas::document::field_names(
+                    name,
+                    entry,
+                    entry.current(),
+                    &owners,
+                    &[],
+                    fault,
+                )
             }
             _ => Vec::new(),
         };

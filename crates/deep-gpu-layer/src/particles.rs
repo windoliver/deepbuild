@@ -181,7 +181,7 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if crate::flows2d::any(&doc) {
         return crate::flows2d::answer(&doc, call, app.planted);
     }
-    crate::physics::bake(&mut doc)?;
+    crate::physics::bake(&mut doc, &Value::Null)?;
     let (plants, flags, every) = plants(app.planted);
     // The rules that read the document alone refuse it before anything evaluates.
     let early: Vec<_> = rule::issues(&doc, every)

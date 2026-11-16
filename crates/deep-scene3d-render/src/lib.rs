@@ -1255,6 +1255,14 @@ const LOBES_BIT: u32 = 1 << 29;
 const MASK_BIT: u32 = 1 << 28;
 const MAPS_INDEX: u32 = MASK_BIT - 1;
 
+/// A draw of a mesh a batch's bundle records (#1636): an opaque set's, by its key, or a
+/// see-through record's, by its place in the batch's `clear`.
+#[derive(Clone, Copy)]
+enum Call {
+    Set(SetKey),
+    Clear(usize),
+}
+
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
@@ -1279,6 +1287,8 @@ struct Batch {
     clear_draws: Vec<((Shape, u32), u8)>,
     /// Each see-through draw's material operator key (#431), 0 for none, as `clear_draws`.
     clear_ops: Vec<u64>,
+    /// #1636: each draw of a mesh its bundle records, with the instances it draws.
+    calls: Vec<(Call, u32)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -4458,6 +4468,7 @@ impl Renderer {
             let order = &self.order;
             self.batches.retain(|id, _| order.contains(id));
         }
+        self.count_draws(scene);
         self.update_culls(device);
         self.ensure_casters(device, scene);
         self.motion_frame = self.targets.as_ref().and_then(|t| {
@@ -4980,6 +4991,7 @@ impl Renderer {
                 self.prepare_batch(device, layer, &scene.camera);
             }
             self.sways.move_all(device, scene);
+            self.count_draws(scene);
             self.update_culls(device);
             return;
         }
@@ -5022,6 +5034,7 @@ impl Renderer {
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
         self.sways.move_all(device, scene);
+        self.count_draws(scene);
         self.update_culls(device);
     }
 
@@ -5141,6 +5154,40 @@ impl Renderer {
             self.compiled += 1;
             self.names.push("scene3d.rows_cut");
         }
+    }
+
+    /// #1636: this frame's draws of meshes in the color pass, each named by its layer's
+    /// `draw_names` for its first record's item and its shape.
+    fn count_draws(&mut self, scene: &Scene) {
+        let mut draws = Vec::new();
+        for layer in &scene.layers {
+            let Some(batch) = self.batches.get(&layer.id).filter(|b| b.bundle.is_some()) else {
+                continue;
+            };
+            for &(call, instances) in &batch.calls {
+                let (owner, shape) = match call {
+                    Call::Set(key) => {
+                        (batch.solids.get(&key).and_then(|s| s.owners.first()), key.0)
+                    }
+                    Call::Clear(k) => match batch.clear_draws.get(k) {
+                        Some(((shape, _), _)) => (batch.clear.owners.get(k), *shape),
+                        None => (None, Shape::Box),
+                    },
+                };
+                let Some(item) = owner.and_then(|o| o.split('#').next()) else {
+                    continue;
+                };
+                // A shape its level of detail chose is named as its item's first.
+                let names = &layer.draw_names;
+                let named = names.get(&(item.to_string(), shape)).or_else(|| {
+                    let first = names.range((item.to_string(), Shape::Box)..).next();
+                    first.filter(|((i, _), _)| i == item).map(|(_, n)| n)
+                });
+                let (mesh, material) = named.cloned().unwrap_or((item.to_string(), String::new()));
+                draws.push((item.to_string(), mesh, material, instances));
+            }
+        }
+        self.counts.draws = draws;
     }
 
     /// Each culled batch's lists, for every view this frame draws it into: the stale views'
@@ -6325,9 +6372,10 @@ impl Renderer {
             return;
         }
         std::mem::swap(&mut batch.key, &mut batch.next_key);
-        let bundle = self.encode(device, &layer.id);
+        let (bundle, calls) = self.encode(device, &layer.id);
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         batch.bundle = Some(bundle);
+        batch.calls = calls;
         // An instancer's elements draw as its instanced batch, which names the instancer (#1921).
         let elements: BTreeSet<&str> = layer
             .solids
@@ -6502,9 +6550,10 @@ impl Renderer {
         draws
     }
 
-    /// Records a batch's draws into a render bundle.
-    fn encode(&self, device: &Device, id: &str) -> wgpu::RenderBundle {
+    /// Records a batch's draws into a render bundle, with each draw of a mesh it records (#1636).
+    fn encode(&self, device: &Device, id: &str) -> (wgpu::RenderBundle, Vec<(Call, u32)>) {
         let batch = &self.batches[id];
+        let mut calls = Vec::new();
         let mut enc =
             device
                 .device
@@ -6527,10 +6576,12 @@ impl Renderer {
         // detailed band's pixel quads and move their shading's derivatives with GPU timing.
         let (detailed, lower): (Vec<_>, Vec<_>) =
             batch.solids.iter().partition(|(_, set)| !set.lower);
-        for ((shape, maps, op, _), set) in detailed.into_iter().chain(lower) {
+        for (key, set) in detailed.into_iter().chain(lower) {
+            let (shape, maps, op, _) = key;
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
+            calls.push((Call::Set(*key), set.len()));
             let index = *maps & MAPS_INDEX;
             // An instancer's batch draws the rows its cull kept for the camera, by the count the
             // GPU wrote (#484).
@@ -6612,6 +6663,7 @@ impl Renderer {
                         enc.set_vertex_buffer(1, buffer.slice(..));
                         enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                         enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                        calls.push((Call::Clear(k as usize), 1));
                     }
                     continue;
                 }
@@ -6622,6 +6674,7 @@ impl Renderer {
                     enc.set_vertex_buffer(1, buffer.slice(..));
                     enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                     enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                    calls.push((Call::Clear(k as usize), 1));
                     continue;
                 }
                 for &p in kinds {
@@ -6634,6 +6687,7 @@ impl Renderer {
                     enc.set_vertex_buffer(1, buffer.slice(..));
                     enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                     enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                    calls.push((Call::Clear(k as usize), 1));
                 }
             }
         }
@@ -6659,7 +6713,8 @@ impl Renderer {
             enc.set_bind_group(1, &atlas.bind, &[]);
             enc.draw(0..6, 0..batch.labels.len());
         }
-        enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) })
+        let bundle = enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) });
+        (bundle, calls)
     }
 
     /// What the GPU drew for `solid` in the frame just drawn (#2016): the gust its sway used,

@@ -27,8 +27,13 @@ pub struct Caps {
 }
 
 /// #191: the features a backend's caps may claim: swept collision for a body with `ccd`, soft
-/// bodies, and a character controller.
-pub const CLAIMS: [&str; 3] = ["ccd", "soft_bodies", "character_controller"];
+/// bodies, a character controller and (#251) a vehicle controller.
+pub const CLAIMS: [&str; 4] = [
+    "ccd",
+    "soft_bodies",
+    "character_controller",
+    "vehicle_controller",
+];
 
 /// Rapier 0.36.1 in 3D, as the design pins it.
 pub const RAPIER3D: Caps = Caps {
@@ -50,5 +55,5 @@ pub const RAPIER3D: Caps = Caps {
         "It runs gear, rack, pulley and path joints only in kinematic mode.",
         "A contact with restitution 1 or more never comes to rest.",
     ],
-    claims: &["ccd", "soft_bodies"],
+    claims: &["ccd", "soft_bodies", "vehicle_controller"],
 };

@@ -1,7 +1,7 @@
 {
   "id": "deepbuild/playtest",
   "version": "1.0.0",
-  "digest": "d1:21c37b4510d4a974b2dc4126921c1b2e8305abfd0b2835a55c8694c99729c913",
+  "digest": "d1:ae3bdb3c4c30005e2b452a6c638161a8c8ef80312742523f69e00be85ef170bc",
   "checks": [
     "playtest"
   ],
@@ -11,7 +11,11 @@
     "playtest.goal_missed",
     "playtest.trap",
     "playtest.over_budget",
-    "playtest.replay"
+    "playtest.replay",
+    "playtest.band",
+    "playtest.expect",
+    "play.missing",
+    "play.out_of_range"
   ],
   "access": {
     "words": [
