@@ -1,0 +1,11 @@
+Mac15,12
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+node v24.22.0
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+start: 2026-11-16 01:42:24 load1 3.06 (cores 8); thermalState 0; Now drawing from 'AC Power'; free KB 66281872
+setup: 2026-11-16 01:42:42 load1 4.83 (cores 8); thermalState 0; Now drawing from 'AC Power'; free KB 65298880
+run: 2026-11-16 01:47:44 load1 85.11 (cores 8); thermalState 1; Now drawing from 'AC Power'; free KB 60768276
+end: 2026-11-16 01:49:05 load1 41.78 (cores 8); thermalState 0; Now drawing from 'AC Power'; free KB 59505708
+end 2026-11-16 01:49:05  1:49  up 2 days, 18:51, 2 users, load averages: 41.78 55.68 33.47

@@ -1,0 +1,93 @@
+== commit 13a35ce3780ff9a56e8b8ff3bb5bbcd0f766f8fa
+== command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1810 --no-file-parallelism
+
+ RUN  v5.0.5 ~/private/d1810f/tests/acceptance/1810
+
+stdout | redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+deep status --json at 35 and 35; the app's list at 35: [["session:e44f7ea6-9b00-42d3-b98b-90ee62a28015","Cart totals","needs you"],["ask:01M7HWP3WWMWM80482EF74QRKM","Which header colour on the login page?","needs you"]]; its window's counts [1]
+deep:
+shop
+  Cart totals  claude-code  needs you · an ask open, 0s
+Needs you
+  Which header colour on the login page?  needs you  shop, 0s
+1 session
+1 ask needs you
+
+
+ ❯ redraft-replica/list.test.ts (1 test | 1 failed) 42586ms
+   ❯ #1810.eebcb4a2 (1)
+     × #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 42524ms
+stdout | count.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position
+status answer:
+says done · next: DeepBuild (for 8s) · needs you: 1
+work: /private/tmp/dh16-wjNhH9/shop · session 40a205d5 (claude-code) · resume: claude --resume 40a205d5-1f72-4369-8fd8-6a48656cdd7d · deep://sessions/40a205d5-1f72-4369-8fd8-6a48656cdd7d
+
+stdout | count.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position
+deep:
+shop
+  Cart totals  claude-code  needs you · an ask open, 30m
+Needs you
+  Which header colour on the login page?  needs you  shop, 30m
+1 session
+1 ask needs you
+
+
+ ✓ count.test.ts (2 tests) 14777ms
+   ✓ #1810.eebcb4a2 (2)
+     ✓ #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position 10718ms
+     ✓ #1810.eebcb4a2: the replica's list (the app itself, on macOS) says 1 at deep status --json's log position 3995ms
+stdout | defaulted.test.ts > #1810.a646c123 > #1810.a646c123: an ask that took its default and can still be undone isn't counted by the status answer, deep or the app's list
+status answer:
+says done · next: DeepBuild (for 5s) · needs you: 1
+work: /private/tmp/dh16-Tplyy2/shop · session 76567d70 (claude-code) · resume: claude --resume 76567d70-3811-4bc7-8082-ea47b7c6300b · deep://sessions/76567d70-3811-4bc7-8082-ea47b7c6300b
+
+stdout | defaulted.test.ts > #1810.a646c123 > #1810.a646c123: (wrong program) a status answer that counts the undoable default (DEEP_HUB_PLANT=needs-you-counts-defaulted) fails, naming the ask
+planted status answer:
+says done · next: DeepBuild (for 5s) · needs you: 2
+work: /private/tmp/dh16-iqgNRt/shop · session 97da4d0b (claude-code) · resume: claude --resume 97da4d0b-628e-4820-b2e6-da507c62c469 · deep://sessions/97da4d0b-628e-4820-b2e6-da507c62c469
+
+ ✓ defaulted.test.ts (2 tests) 14515ms
+   ✓ #1810.a646c123 (2)
+     ✓ #1810.a646c123: an ask that took its default and can still be undone isn't counted by the status answer, deep or the app's list 8142ms
+     ✓ #1810.a646c123: (wrong program) a status answer that counts the undoable default (DEEP_HUB_PLANT=needs-you-counts-defaulted) fails, naming the ask 6295ms
+ ✓ redraft-replica/judges.test.ts (5 tests) 2ms
+ ✓ judges.test.ts (2 tests) 2ms
+stdout | width.test.ts > #1810.1a3e8cda > #1810.1a3e8cda: a session with a 90-character title and 3 open asks: the status answer's line is at most 80 columns and ends in "needs you: 3"
+status answer:
+says done · next: DeepBuild (for 5s) · needs you: 3
+work: /private/tmp/dh16-YUsYNa/shop · session 57a4b151 (claude-code) · resume: claude --resume 57a4b151-043f-4f98-b62a-5215c3c77048 · deep://sessions/57a4b151-043f-4f98-b62a-5215c3c77048
+
+ ✓ width.test.ts (1 test) 6409ms
+   ✓ #1810.1a3e8cda (1)
+     ✓ #1810.1a3e8cda: a session with a 90-character title and 3 open asks: the status answer's line is at most 80 columns and ends in "needs you: 3" 6341ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+AssertionError: deep and the app's list with ask:01M7HWP3WW7S982C6KRY5DF52M and ask:01M7HWP3WW7SCD9YNRCHC7DSJP answered and ask:01M7HWP3WWMWM80482EF74QRKM open: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "row ask:01M7HWP3WWMWM80482EF74QRKM's node reads \"Which header colour on the login page? needs_you ! needs_you Which header colour on the login page?  How it looks  Thu 15:28  Thu 15:28\", which lacks its word \"needs you\"",
++ ]
+
+ ❯ redraft-replica/list.test.ts:56:92
+     54|       ...drawnFailures(app.snapshot, openRows),
+     55|       ...textRowFailures(d.stdout, openRows, 'deep'),
+     56|     ], `deep and the app's list with ${answered.join(' and ')} answere…
+       |                                                                                            ^
+     57|   }, 1_800_000);
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 5 passed (6)
+      Tests  1 failed | 12 passed (13)
+   Start at  01:47:45
+   Duration  79.15s (tests 99%)
+
+exit=1
