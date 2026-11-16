@@ -1,0 +1,55 @@
+merged tree 876a12da8f00975d994cb0d32c3b02570ec65933 = PR 1800a937240f4921840be28e88de348a7050ddb4 + main 30041682270f691d801b0afa5185a60fdd267035; Sun Nov 15 03:53:57 PM PST 2026; load 26.39 28.45 32.98
+npm ci exit 0
+build workspaces exit 0
+deep-hook build exit 0
+=== packages/asks/test
+exit 0
+ Test Files  5 passed (5)
+      Tests  76 passed (76)
+=== packages/hub/test/asleep.test.ts
+exit 0
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+=== tests/acceptance/1349
+exit 1
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/1349/clean-account.test.ts > the clean account > AC1 #1349.ba1a9b5f On a clean macOS test account with no agent, Node, git or developer tools, the download reaches the box with no terminal and no developer tools prom
+AssertionError: INCONCLUSIVE: the clean account's run isn't recorded: docs/evidence/1349/ lacks clean-account.mov, clean-account.json, deepbuild; this is not a pass
+ FAIL  tests/acceptance/1349/clean-account.test.ts > the clean account > AC6 #1349.aa369523 On the clean account, a person, not the harness, signs in once from the row's button in a recorded run, and the words typed before sign-in reach the
+AssertionError: INCONCLUSIVE: the clean account's run isn't recorded: docs/evidence/1349/ lacks clean-account.mov, clean-account.json, deepbuild; this is not a pass
+ FAIL  tests/acceptance/1349/first-screen.test.ts > AC7 #1349.72be1f28 The first screen has one button with no agent found. A planted screen with an install button beside Set up fails, naming the control > AC7 #1349.72be1f28 with no agent f
+Error: BLOCKED: the app and its replica draw on macOS only; this is linux
+ FAIL  tests/acceptance/1349/first-screen.test.ts > AC7 #1349.72be1f28 The first screen has one button with no agent found. A planted screen with an install button beside Set up fails, naming the control > AC7 #1349.72be1f28 (wrong program)
+Error: BLOCKED: the app and its replica draw on macOS only; this is linux
+ FAIL  tests/acceptance/1349/first-screen.test.ts > AC8 #1349.8524225c The record's setup events name the agent the first screen's row named before the click. A planted setup that installs a different agent fails, naming both (the screen's 
+Error: BLOCKED: the app and its replica draw on macOS only; this is linux
+ FAIL  tests/acceptance/1349/journey.test.ts > the journey on the fixture machine > AC1 #1349.ba1a9b5f On a clean macOS test account with no agent, Node, git or developer tools, the download reaches the box with no terminal and no developer
+ FAIL  tests/acceptance/1349/journey.test.ts > the journey on the fixture machine > AC2 #1349.30081c64 A topic then makes a workspace with working history and going back. A build that needs a system git fails, naming the call (a topic makes
+ FAIL  tests/acceptance/1349/journey.test.ts > the journey on the fixture machine > AC3 #1349.d6911e12 DeepBuild's record and logs hold no credential, and a scan of them finds none
+=== tests/acceptance/319
+exit 0
+ Test Files  7 passed (7)
+      Tests  18 passed | 2 skipped (20)
+=== tests/acceptance/320
+exit 0
+ Test Files  5 passed (5)
+      Tests  9 passed (9)
+=== tests/acceptance/321
+exit 0
+ Test Files  5 passed (5)
+      Tests  9 passed (9)
+=== tests/acceptance/318
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/acceptance/318/sources.test.ts > #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing
+Error: Test timed out in 5000ms.
+ Test Files  1 failed | 6 passed (7)
+      Tests  1 failed | 26 passed (27)
+=== tests/acceptance/83/redraft-319
+exit 0
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+=== cargo test -p deep-app --lib
+exit 0
+test result: ok. 114 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+done Sun Nov 15 04:17:04 PM PST 2026; load 70.70 58.22 53.15

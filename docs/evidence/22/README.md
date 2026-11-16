@@ -500,3 +500,15 @@ not changed:
   succeed. That retry is the fix's point; an ask past its deadline already did the same.
 - With no batches declared, `show()` returns before setting `shownAt`; batches declared later while the hub runs cost one
   extra tick. Harmless and untested.
+
+## With main 30041682 merged in: #1349's sign-in task waits for the batch (`merge-main-30041682/`)
+
+Main moved 379 commits after 2252dfd6 and touched six of this PR's files. A scratch merge of 1800a937 with main
+30041682 merges clean and passes `packages/asks/test` (76), `packages/hub/test/asleep.test.ts` (3), acceptance 319, 320,
+321 and 83/redraft-319, and deep-app's unit tests (114) (`merged-check.txt`). 318's `sources.test.ts` timed out at load 50
+to 70, as it does on main under load. #1349's suites are BLOCKED on Linux (`release-pack` makes macOS archives) or macOS-only.
+
+But #1349's sign-in task, under setup's 8-hour batches, stays `queued` (`probe-signin.txt`, from `probe-signin.test.ts.txt`
+run in the merged tree): the core gives it the unblock deadline, 2 days, so it waits for the next batch. On main the app
+draws every open ask, so the task shows at once; with this PR the hub's list and the app hold it until its batch, up to 8
+hours after a first Send or a lapsed sign-in. Open, for a design decision.
