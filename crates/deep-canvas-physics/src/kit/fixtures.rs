@@ -479,5 +479,6 @@ pub fn all() -> Vec<Fixture> {
     out.push(super::scan::queries());
     out.push(ccd_wall());
     out.extend(super::sensors::all());
+    out.extend(super::vehicles::all());
     out
 }

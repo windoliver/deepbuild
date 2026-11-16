@@ -3,7 +3,7 @@
 
 use std::io::{BufRead, Write};
 
-use deep_physics_rapier::runner::{kit, Run, BAD_INPUT, PLANTED};
+use deep_physics_rapier::runner::{kit, vehicle, Run, BAD_INPUT, PLANTED};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -16,7 +16,8 @@ fn main() {
                 if flag == "--planted"
                     && planted.is_none()
                     && (PLANTED.contains(&name.as_str())
-                        || kit::PLANTED.contains(&name.as_str())) =>
+                        || kit::PLANTED.contains(&name.as_str())
+                        || vehicle::PLANTED.contains(&name.as_str())) =>
             {
                 planted = Some(name.as_str())
             }

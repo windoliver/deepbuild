@@ -1738,6 +1738,57 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("coil@1", json!({"radius": 0.2, "pitch": 0.05, "wire": 0.01, "turns": 3, "paint": {"fill": {"role": "accent"}}}))}),
         },
+        "tree@1" => Spec {
+            kind: "tree@1",
+            module: "scene3d",
+            params: vec![
+                p("seed", "u32", "", json!(0), G, json!(0), json!(1)),
+                ranged(p("levels", "u8", "", json!(4), G, json!(3), json!(4)), 1.0, 5.0),
+                ranged(p("length", "m", "m", json!(4), G, json!(4), json!(3)), 0.001, 1000.0),
+                ranged(
+                    p("radius", "m", "m", json!(0.15), G, json!(0.15), json!(0.2)),
+                    0.0001,
+                    100.0,
+                ),
+                ranged(
+                    p("exponent", "f32", "", json!(2.0), G, json!(2.0), json!(2.5)),
+                    1.0,
+                    4.0,
+                ),
+                ranged(p("split", "u8", "", json!(3), G, json!(3), json!(2)), 1.0, 8.0),
+                ranged(
+                    p("angle", "deg", "deg", json!(40), G, json!(40), json!(30)),
+                    0.0,
+                    90.0,
+                ),
+                ranged(
+                    p("roll", "deg", "deg", json!(137.5), G, json!(137.5), json!(90)),
+                    -360.0,
+                    360.0,
+                ),
+                ranged(
+                    p("gravity", "f32", "", json!(0), G, json!(0), json!(0.4)),
+                    -4.0,
+                    4.0,
+                ),
+                p(
+                    "leaves",
+                    "{per_twig: u8 ≤ 64, size: m}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"per_twig": 4, "size": 0.1}),
+                    json!({"per_twig": 6, "size": 0.15}),
+                )
+                .takes("{per_twig: u8, size: m}"),
+                ranged(p("segments", "u16", "", json!(8), G, json!(8), json!(6)), 3.0, 64.0),
+                ranged(p("rings", "u16", "", json!(8), G, json!(8), json!(6)), 2.0, 64.0),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item("tree@1", json!({"seed": 1, "levels": 3, "length": 2, "radius": 0.1, "leaves": {"per_twig": 4, "size": 0.1}, "paint": {"fill": {"role": "accent"}}}))}),
+        },
         "plate@1" => Spec {
             kind: "plate@1",
             module: "scene3d",
@@ -2038,7 +2089,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 27] = [
+pub const SCENE3D: [&str; 28] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -2063,6 +2114,7 @@ pub const SCENE3D: [&str; 27] = [
     "display@1",
     "hull@1",
     "surface@1",
+    "tree@1",
     "curve@1",
     "mesh.asset@1",
     "mesh.sequence@1",

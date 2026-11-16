@@ -1,0 +1,41 @@
+The tightened criterion 1 test (README-exact.md), run 2026-11-15 on an aarch64 Linux machine at load average ~70, with
+Node 24.22.0. Each run is from a scratch copy: the base fcd8c3852's scripts/, packages/contracts/ with its built
+dist/, the root's files and this folder, with no scripts/not-event-kinds.txt. Local paths are redacted. Timings under
+this load are not evidence.
+
+  node --test tests/acceptance/2063/ac1-recorded-tracker-exact.test.mjs
+
+## The merge base
+
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+✖ #2063.1fc4ef66 criterion 1 (exact, on the ruling that brief.uncited is an event kind): on the recorded tracker copy the lane fails with an empty list, naming the five names with their issues; 
+with the day's list it reports exactly brief.uncited from #1193 and no other name the record holds when the catalogue lacks brief.uncited, and passes when the catalogue holds it (1616.261298ms)
+  AssertionError [ERR_ASSERTION]: with the day's list the lane reports names other than brief.uncited:
+  FAIL 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), 
+plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little 
+(#980), stack.slot (#335), move.feel (#274)
+  FAIL catalogue drift: 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay 
+(#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), 
+process.little (#980), stack.slot (#335), move.feel (#274)
+    actual: [ 'layer.puffs', 'job.status', 'lease.gpu', 'user.pan', 'archive.scene', 'plan.overlay', 'plan.sheet', 'process.conserve', 'process.busy', 'process.little', 'stack.slot', 'move.feel' ],
+
+It fails at its own assertion, the exact set, after the before half and the list's checks held: with the day's list,
+the base's lane, which reads no list, still reports the 12 listed names.
+
+## The over-reporting twin, twins/reports-every-family
+
+It fails at the same assertion: "with the day's list the lane reports names other than brief.uncited". It reported 46
+names besides brief.uncited, none of them listed: memory.ts undo.ts record.read scene.water solid.model scene.size scene.camera self.meshes inbox.read main.js pack.json frames.in data.commit data.restored playtest.camera playtest.camera_unbounded document.archive closure.scene document.closure claude_code.api_request canvas.user canvas.revisions canvas.messages otlp.telemetry requires.packs closure.chain status.ts states.rs lanes.clear lanes.stuck point.size_px push.gap runs.json terminals.json index.md log.md config.toml asset.same_look secret.txt paint.count url.full status.min_distance db.table tool_input.command rules.json events.data 
+
+The same twin passes ac1-recorded-tracker-ruled.test.mjs, which is the gap the review found. twins.json isn't edited
+(README-exact.md says why), so the twin isn't entered there.
+
+## Others
+
+| Program | Result |
+|---|---|
+| The blind job's throwaway fix (the lane in twins/ without a fault) | passes: FAIL naming brief.uncited (#1193) alone, since the base's catalogue lacks it |
+| The worktree (the change, packages built), run once | passes |
