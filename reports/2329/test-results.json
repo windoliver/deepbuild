@@ -1,0 +1,450 @@
+{
+  "base": "d8c46f0d58162ff0a4a483544149316aec960637",
+  "runs": {
+    "base": [
+      {
+        "type": "pass",
+        "file": "packages/hub/test/overridden.test.ts",
+        "name": "a deny that did not hold › is recorded when the denied call's PostToolUse reaches a hub started after the deny"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/start-ps.test.ts",
+        "name": "a Claude Code session's start reads its agent's command line once, and no process table when no session could be its parent"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/mods-start.test.ts",
+        "name": "starts that arrive while a home's mods are being read share that one read: claude plugin list runs once"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/overridden.test.ts",
+        "name": "a deny that did not hold › binds a Claude Code session resumed in a new process (--resume, the desktop app opened again) from its resume start"
+      },
+      {
+        "type": "fail",
+        "file": "tests/acceptance/2329/compaction-ps.test.ts",
+        "name": "#2329.ac1 ten compactions from the process their session holds start no ps",
+        "error": {
+          "name": "AssertionError",
+          "message": "ps invocations over ten compactions in the held process: expected [ '-o lstart= -p 70270', …(19) ] to deeply equal []"
+        }
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/overridden.test.ts",
+        "name": "a deny that did not hold › takes back a session's watch-only line once its home loads no mod that can override the guard"
+      },
+      {
+        "type": "pass",
+        "file": "tests/acceptance/2329/compaction-ps.test.ts",
+        "name": "#2329.ac2 a session resumed in a new process is bound to it, and the resume still reads the process"
+      },
+      {
+        "type": "pass",
+        "file": "tests/acceptance/2329/compaction-ps.test.ts",
+        "name": "#2329.ac2 a compaction from a PID another process took is refused"
+      }
+    ],
+    "fixed": [
+      {
+        "type": "pass",
+        "file": "packages/hub/test/pi-takeover.test.ts",
+        "name": "takes over no Claude Code session whose process has gone"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/overridden.test.ts",
+        "name": "a deny that did not hold › is recorded when the denied call's PostToolUse reaches a hub started after the deny"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex subagent's prompt › is no ask of yours on the root session: no task, no person"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/overridden.test.ts",
+        "name": "a deny that did not hold › binds a Claude Code session resumed in a new process (--resume, the desktop app opened again) from its resume start"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/gone-watch.test.ts",
+        "name": "a session whose hooks each came from a process that then ended is not gone"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/start-ps.test.ts",
+        "name": "a Claude Code session's start reads its agent's command line once, and no process table when no session could be its parent"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/mods-start.test.ts",
+        "name": "starts that arrive while a home's mods are being read share that one read: claude plugin list runs once"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/threads.test.ts",
+        "name": "threads across rotated session IDs › joins the ID /clear rotates and a --fork-session fork into the first session's thread, and links an agent another agent started as its child"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/login-plan.test.ts",
+        "name": "a Claude Code home's login plan › is read once for many session starts, and again once the sign-in changes"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/overridden.test.ts",
+        "name": "a deny that did not hold › takes back a session's watch-only line once its home loads no mod that can override the guard"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/gone-watch.test.ts",
+        "name": "a hub started again watches the agent the last hub watched, and records its end"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/process-read-reuse.test.ts",
+        "name": "a rotated session ID in the held process reuses the process reads"
+      },
+      {
+        "type": "pass",
+        "file": "tests/acceptance/2329/compaction-ps.test.ts",
+        "name": "#2329.ac1 ten compactions from the process their session holds start no ps"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/process-read-reuse.test.ts",
+        "name": "a failed parent-table read is retried, and a parent rotating its ID invalidates the child link"
+      },
+      {
+        "type": "pass",
+        "file": "tests/acceptance/2329/compaction-ps.test.ts",
+        "name": "#2329.ac2 a session resumed in a new process is bound to it, and the resume still reads the process"
+      },
+      {
+        "type": "pass",
+        "file": "tests/acceptance/2329/compaction-ps.test.ts",
+        "name": "#2329.ac2 a compaction from a PID another process took is refused"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › ends the run as a FAIL, and that FAIL reaches the agent in the same turn"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › is measured from the stop: one that no longer fits what is left of the hold is not held"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › a hold that ends with the check still going says why, and the verdict comes with your next message"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › is said once, and its verdict told once, however many stops the claim has"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › a held stop's verdict line, once delivered, is not repeated at the next prompt"
+      },
+      {
+        "type": "fail",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex thread resumed in a new process › is its own again from its SessionStart, and not before",
+        "error": {
+          "name": "Error",
+          "message": "ENOTEMPTY, Directory not empty: '<fixture>'"
+        }
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex thread resumed in a new process › is not taken from a process still running it, nor by anything but a Codex binary resuming it"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › stay apart when one starts again by compact: the other's answer is not its"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › stay apart when one starts again by clear: the other's answer is not its"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › stay apart when one starts again by fork: the other's answer is not its"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › files each ask under its own thread, though the shared deep mcp met only the first"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex subagent's hooks under its own turn › make no ask on the root, and leave the root's turn its own"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "an Interrupt that can't be checked against its session › ends nothing and says nothing"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex heartbeat gone from the automations › leaves the row at its next stop"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup › has its sessions verified, and its entries read, by a hub without that variable"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup, later › is the one doctor reads for hooks = false"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup, later › is the one undo takes DeepBuild out of"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup, later › is the one the hub asks Codex for trust in"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "doctor on Codex's trust › warns of a disabled entry and of entries missing from the list, and says healthy only of all of them trusted"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "setup with Codex files it can't read › leaves Codex out, says why, and still sets up Claude Code"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "deep setup --undo › takes out what setup kept for Codex, so doctor no longer reads it as removed"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "deep setup --undo › finishes with hooks.json turned invalid and config.toml deleted, and says so"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a reading that comes back › is recorded again and is what the row shows"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a stop not held, on the row › stops being the row's reason once the session goes on"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a subagent's stop › is no boundary of the root's turn across a hub restart"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a subagent's stop › a SubagentStart naming its own rollout, as Codex 0.160 sends it, is the root's reading; a rollout that is not its agent's is refused"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a subagent's stop › a child's rollout never binds the root across a restart, and only SubagentStart may name one"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "deep hub status for a Codex version past its facts › shows the session open until its SessionEnd, then closed"
+      }
+    ],
+    "sync-base": [
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex subagent's prompt › is no ask of yours on the root session: no task, no person"
+      },
+      {
+        "type": "fail",
+        "file": "packages/hub/test/compaction-sync.test.ts",
+        "name": "a compaction keeps the older-set reading without ps, and a new-process resume reads and clears it",
+        "error": {
+          "name": "AssertionError",
+          "message": "a sync does not make the same compacting process newer: expected '-o lstart= -p 61518\\n-o args= -p 6151…' to be '' // Object.is equality"
+        }
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › ends the run as a FAIL, and that FAIL reaches the agent in the same turn"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › is measured from the stop: one that no longer fits what is left of the hold is not held"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › a hold that ends with the check still going says why, and the verdict comes with your next message"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › an answer waiting before the stop starts no slow check; one that comes during the hold ends the hold"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › is said once, and its verdict told once, however many stops the claim has"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a slow check's deadline › a held stop's verdict line, once delivered, is not repeated at the next prompt"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex thread resumed in a new process › is its own again from its SessionStart, and not before"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex thread resumed in a new process › is not taken from a process still running it, nor by anything but a Codex binary resuming it"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › stay apart when one starts again by compact: the other's answer is not its"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › stay apart when one starts again by clear: the other's answer is not its"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › stay apart when one starts again by fork: the other's answer is not its"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "two Codex threads on one daemon › files each ask under its own thread, though the shared deep mcp met only the first"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex subagent's hooks under its own turn › make no ask on the root, and leave the root's turn its own"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "an Interrupt that can't be checked against its session › ends nothing and says nothing"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex heartbeat gone from the automations › leaves the row at its next stop"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup › has its sessions verified, and its entries read, by a hub without that variable"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup, later › is the one doctor reads for hooks = false"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup, later › is the one undo takes DeepBuild out of"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a Codex home set by CODEX_HOME at setup, later › is the one the hub asks Codex for trust in"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "doctor on Codex's trust › warns of a disabled entry and of entries missing from the list, and says healthy only of all of them trusted"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "setup with Codex files it can't read › leaves Codex out, says why, and still sets up Claude Code"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "deep setup --undo › takes out what setup kept for Codex, so doctor no longer reads it as removed"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "deep setup --undo › finishes with hooks.json turned invalid and config.toml deleted, and says so"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a reading that comes back › is recorded again and is what the row shows"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a stop not held, on the row › stops being the row's reason once the session goes on"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a subagent's stop › is no boundary of the root's turn across a hub restart"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a subagent's stop › a SubagentStart naming its own rollout, as Codex 0.160 sends it, is the root's reading; a rollout that is not its agent's is refused"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "a subagent's stop › a child's rollout never binds the root across a restart, and only SubagentStart may name one"
+      },
+      {
+        "type": "pass",
+        "file": "packages/hub/test/codex-hub.test.ts",
+        "name": "deep hub status for a Codex version past its facts › shows the session open until its SessionEnd, then closed"
+      }
+    ],
+    "sync-fixed": [
+      {
+        "type": "pass",
+        "file": "packages/hub/test/compaction-sync.test.ts",
+        "name": "a compaction keeps the older-set reading without ps, and a new-process resume reads and clears it"
+      }
+    ]
+  }
+}

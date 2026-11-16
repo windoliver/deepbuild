@@ -11,9 +11,9 @@
     "unanswered": "Closed unanswered"
   },
   "stop.cause": {
-    "sign_in_required": "its agent needs you to sign in",
-    "token_refresh_failed": "its sign-in couldn't be refreshed",
-    "plan_window_spent": "its plan's usage window is spent",
+    "sign_in_required": "its sign-in lapsed; it waits for you to sign in, and nothing is lost",
+    "token_refresh_failed": "its sign-in lapsed; it waits for you to sign in, and nothing is lost",
+    "plan_window_spent": "its plan's limit is reached; it waits for the reset, and nothing is lost",
     "rate_limited": "rate limited or overloaded",
     "refusal": "the model refused",
     "max_turns": "it hit its most turns",

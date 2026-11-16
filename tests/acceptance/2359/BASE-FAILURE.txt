@@ -1,0 +1,48 @@
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Environment: Node v24.22.2; cargo not on PATH; node_modules absent.
+Paths below are repository-relative. This is a redacted result extract, not a fresh run.
+
+Ran once:
+  node --test --test-reporter=spec tests/acceptance/2359/dependencies.test.mjs
+Exit: 1
+Tests: 8; pass: 4; fail: 4; cancelled: 0; skipped: 0; todo: 0
+
+FAIL (expected behavioral failures, AC1):
+  rsa: RUSTSEC-2023-0071: locked 0.10.0-rc.18, requires >= 0.10.0
+    deep-app@0.0.0 -> gpui-shell@0.8.0 -> quickjs-jit-stdlib@0.12.7 -> llrt_crypto@0.9.0-beta -> rsa@0.10.0-rc.18
+    deep-panel-host@0.0.0 -> gpui-shell@0.8.0 -> quickjs-jit-stdlib@0.12.7 -> llrt_crypto@0.9.0-beta -> rsa@0.10.0-rc.18
+  quick-xml: RUSTSEC-2026-0194, RUSTSEC-2026-0195: locked 0.38.4, requires >= 0.41.0
+    deep-typeset@0.0.0 -> typst@0.15.1 -> typst-library@0.15.1 -> hayagriva@0.10.1 -> citationberg@0.7.0 -> quick-xml@0.38.4
+  rkyv: RUSTSEC-2026-0235: locked 0.7.46, requires >= 0.8.17
+    deep-typeset@0.0.0 -> mitex-spec-gen@0.2.7 -> mitex-spec@0.2.7 -> rkyv@0.7.46
+
+PASS (negative-control assertions only, not the dependencies):
+  planted rsa@0.10.0-rc.18 rejected with rsa and RUSTSEC-2023-0071
+  planted quick-xml@0.38.4 rejected with quick-xml and both RUSTSEC-2026-0194/RUSTSEC-2026-0195
+  planted rkyv@0.7.46 rejected with rkyv and RUSTSEC-2026-0235
+  Each isolated fixed-floor graph was accepted first; a disconnected fixed copy did not hide the old affected path.
+
+BLOCKED (reported as a failing Node test, never skipped):
+  cargo metadata --format-version 1 --locked --offline
+  BLOCKED: cargo metadata could not run (ENOENT)
+  Cargo.lock remained byte-identical.
+  This environment failure is NOT the expected old-version regression proof.
+
+PASS (suppression-config portion of AC3 only):
+  Suppression configs inspected: none present.
+  #2298 advisory result is NOT covered.
+
+Also attempted once (selection only, no builds/suites):
+  node scripts/affected.mjs --list tests/acceptance/2359/dependencies.test.mjs
+Exit: 1
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typescript' imported from <repo>/scripts/affected.mjs
+  No WIDE or INCONCLUSIVE lines emitted: module loading failed before selection.
+  No affected test execution occurred. AC4 remains BLOCKED/unrun, not PASS.
+
+Not run:
+  Existing upstream panel crypto tests (sources/runner not in snapshot).
+  Existing deep-typeset native tests, WASM build, #220 document/SVG tests.
+  Before-and-after fixture output comparison; golden/approval proof.
+  #2298 advisory lane (absent in base), including its own real old-dependency controls.
+  Actual node scripts/affected.mjs execution on an implementation diff.
+No fetches, builds, whole neighbouring suites, commits, or changes outside tests/acceptance/2359/.

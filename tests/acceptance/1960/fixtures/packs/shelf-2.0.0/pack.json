@@ -1,0 +1,77 @@
+{
+  "name": "shelf",
+  "version": "2.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1960 acceptance suite, by an outside owner: shelf.bookcase@2, whose @1-to-@2 step renames levels to shelves and sets depth = old.width * 0.25.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@2": "shelf.bookcase@2.json"
+  },
+  "kinds": {
+    "shelf.bookcase@2": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@2",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {
+        "1": {
+          "rename": {
+            "levels": "shelves"
+          },
+          "set": {
+            "depth": "old.width * 0.25"
+          },
+          "drop": []
+        }
+      },
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 10
+        }
+      }
+    }
+  },
+  "corpus": {
+    "1": [
+      "176cf520b53f3d0ee6ed2333940d1f8e2450f0844ed98321f2fd868fe56ee0ec",
+      "a65ae32bc48019506fff0735d1c03016aef294ca787e33b1f1c743f5741270d6"
+    ],
+    "2": [
+      "c906b18fa7eb8376faf2163f62e4a6dd5493ab235ce2d40ecb1aa372964f2476"
+    ]
+  },
+  "assets": [
+    {
+      "path": "corpus/case-1.json",
+      "sha256": "176cf520b53f3d0ee6ed2333940d1f8e2450f0844ed98321f2fd868fe56ee0ec",
+      "size": 3406,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/lift.json",
+      "sha256": "a65ae32bc48019506fff0735d1c03016aef294ca787e33b1f1c743f5741270d6",
+      "size": 7384,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/case-2.json",
+      "sha256": "c906b18fa7eb8376faf2163f62e4a6dd5493ab235ce2d40ecb1aa372964f2476",
+      "size": 3443,
+      "license": "MIT"
+    }
+  ]
+}

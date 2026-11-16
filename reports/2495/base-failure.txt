@@ -1,0 +1,65 @@
+
+ RUN  v5.0.5 <base>
+
+ ❯ tests/acceptance/2495/report.test.ts (3 tests | 3 failed) 5147ms
+   ❯ #2495 AC1 the evidence store holds the report, and the handle the run prints resolves to it (1)
+     × stores the frozen plan and every run by hash, and keeps the file the preflight reads 3ms
+   ❯ #2495 AC2 a learn.widened change by the local-first rule that cites the handle (2)
+     × passes the check when the report adopts: the repo reads it 0ms
+     × is refused naming the outcome when the report does not adopt: the repo does not read it 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2495/report.test.ts > #2495 AC1 the evidence store holds the report, and the handle the run prints resolves to it > stores the frozen plan and every run by hash, and keeps the file the preflight reads
+AssertionError: the run prints the report's ev:<sha256> handle (output: adopt config eval: the one-sided 95% bound beats the base on every declared measure over 3 tasks: grade's mean gain 0.3333 has a bound of 0.2818 over 3 tasks
+  before the cutoff: INCONCLUSIVE; 12 runs in 0.0 min, plan share unread
+<fixture-home>/.deepbuild/evals/91b67e28351d830d83fcdc96ca7bf198782b6b339d1920037385783140dee2e6.json
+): expected undefined to be defined
+ ❯ handleOfRun tests/acceptance/2495/report.test.ts:23:84
+     21|   expect(r.kept.after.outcome, `the fixture's eval reads ${outcome} (o…
+     22|   const sha = HANDLE.exec(r.out)?.[1];
+     23|   expect(sha, `the run prints the report's ev:<sha256> handle (output:…
+       |                                                                                    ^
+     24|   return `ev:${sha}`;
+     25| }
+ ❯ tests/acceptance/2495/report.test.ts:29:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2495/report.test.ts > #2495 AC2 a learn.widened change by the local-first rule that cites the handle > passes the check when the report adopts: the repo reads it
+AssertionError: the run prints the report's ev:<sha256> handle (output: adopt config eval: the one-sided 95% bound beats the base on every declared measure over 3 tasks: grade's mean gain 0.3333 has a bound of 0.2818 over 3 tasks
+  before the cutoff: INCONCLUSIVE; 12 runs in 0.0 min, plan share unread
+<fixture-home>/.deepbuild/evals/91b67e28351d830d83fcdc96ca7bf198782b6b339d1920037385783140dee2e6.json
+): expected undefined to be defined
+ ❯ handleOfRun tests/acceptance/2495/report.test.ts:23:84
+     21|   expect(r.kept.after.outcome, `the fixture's eval reads ${outcome} (o…
+     22|   const sha = HANDLE.exec(r.out)?.[1];
+     23|   expect(sha, `the run prints the report's ev:<sha256> handle (output:…
+       |                                                                                    ^
+     24|   return `ev:${sha}`;
+     25| }
+ ❯ tests/acceptance/2495/report.test.ts:62:47
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2495/report.test.ts > #2495 AC2 a learn.widened change by the local-first rule that cites the handle > is refused naming the outcome when the report does not adopt: the repo does not read it
+AssertionError: the run prints the report's ev:<sha256> handle (output: regresses config eval: the change regresses: grade's gain is below 0 at one-sided 95% (mean -0.3333, upper bound -0.2818); it broke t1, t2, t3
+  before the cutoff: INCONCLUSIVE; 12 runs in 0.0 min, plan share unread
+<fixture-home>/.deepbuild/evals/0e2ab632dd120832e47571672ecd7353a14b5cd519d5d56e2eed5011735ac5c2.json
+): expected undefined to be defined
+ ❯ handleOfRun tests/acceptance/2495/report.test.ts:23:84
+     21|   expect(r.kept.after.outcome, `the fixture's eval reads ${outcome} (o…
+     22|   const sha = HANDLE.exec(r.out)?.[1];
+     23|   expect(sha, `the run prints the report's ev:<sha256> handle (output:…
+       |                                                                                    ^
+     24|   return `ev:${sha}`;
+     25| }
+ ❯ tests/acceptance/2495/report.test.ts:71:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  22:38:38
+   Duration  5.88s (tests 89%, transform 10%, import 1%)

@@ -1,0 +1,1 @@
+ac10 conditions: no load wait (the user's choice at the Mac, 2026-11-14: Drop the waits); at start load 51.32 thermal 1, Now drawing from 'AC Power'. The runner sets no gate; ac10's own test decides what its readings count for.

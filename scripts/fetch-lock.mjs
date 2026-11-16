@@ -1,6 +1,8 @@
 // One lock file for every outside input (#1824). Each file the reference lane (#461) and the pack census (#1493) fetch
 // on first use is a row of scripts/fetch-lock.json, `{path, url, sha256, size, credit}`, its URL at a commit named by
-// its 40 hex characters, never a branch or a tag. One fetcher reads the rows into one cache outside the checkout,
+// its 40 hex characters, never a branch or a tag; the one exception is Node's own release folder for an exact version
+// (https://nodejs.org/dist/v<x.y.z>/), which Node never rewrites and whose files have no commit in their address (#1349).
+// One fetcher reads the rows into one cache outside the checkout,
 // ~/.deepbuild/fetched/<path>. It skips a file whose hash already matches and never passes one whose hash doesn't. The
 // blind acceptance suites that fetch on first use keep their own pin tables.
 //
@@ -21,6 +23,7 @@ const LOCK = 'scripts/fetch-lock.json';
 const CACHE = '~/.deepbuild/fetched';
 const COMMIT = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const NODE_RELEASE = /^\/dist\/v\d+\.\d+\.\d+\/[^/]+$/;
 const FIX = '  Fix: Pin the row to a commit by its 40 hex characters, with the file\'s sha256, its size in bytes and the credit line its source gives, under a relative path no other row has.';
 const UNBLOCK = '  Unblock: let this machine fetch what the lock lists, checked against its pinned hashes: DEEP_FETCH_NETWORK=1 node scripts/fetch-lock.mjs fetch';
 const say = (line) => console.log(line);
@@ -48,7 +51,7 @@ function problems(row, paths) {
   else if (paths.has(path)) found.push('another row has its path');
   const link = typeof url === 'string' ? URL.parse(url) : null;
   if (!['http:', 'https:'].includes(link?.protocol)) found.push('it has no http or https URL');
-  else if (!link.pathname.split('/').some((part) => COMMIT.test(part))) found.push('its URL names no commit by its 40 hex characters, so a branch or a tag can move it');
+  else if (!link.pathname.split('/').some((part) => COMMIT.test(part)) && !(link.host === 'nodejs.org' && NODE_RELEASE.test(link.pathname))) found.push('its URL names no commit by its 40 hex characters, so a branch or a tag can move it');
   if (typeof sha256 !== 'string' || !SHA256.test(sha256)) found.push('it has no sha256 of 64 lowercase hex characters');
   if (!Number.isSafeInteger(size) || size < 0) found.push('it has no size in bytes');
   if (typeof credit !== 'string' || !credit.trim()) found.push('it has no credit line');

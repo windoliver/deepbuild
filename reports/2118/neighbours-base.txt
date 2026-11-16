@@ -1,0 +1,97 @@
+
+ RUN  v5.0.5 ~/doneright-2118-blind
+
+(node:10065) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:12002) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ packages/hub/test/extensions.test.ts (2 tests | 2 failed) 42564ms
+   ❯ an extension on the hub answers tool.before (2)
+     × denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold 21116ms
+     × is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning 21401ms
+ ❯ tests/acceptance/39/lanes.test.ts (6 tests | 3 failed) 49336ms
+   ❯ AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s (2)
+     × AC19 #39.52f53113 at 8 s: broken, naming 8 s, and deep_ask returns at once with ID, deadline and default 1265ms
+     × AC19 #39.52f53113 at 60 s: deep_ask says "still waiting" at 55 s 1100ms
+   ❯ AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test (2)
+     × AC25 #39.5981bf3b deadline 3 s before the timeout: not held, pending, and the verdict comes with your next message 1326ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning
+Error: the hub wasn't ready within 10 s
+ ❯ Timeout.<anonymous> packages/hub/test/hub.ts:76:39
+     74|       hub.stdout.once('data', resolve);
+     75|       hub.once('exit', () => reject(Error('the hub exited before it wa…
+     76|       timer = setTimeout(() => reject(Error("the hub wasn't ready with…
+       |                                       ^
+     77|     }).finally(() => clearTimeout(timer));
+     78|   };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/39/lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s > AC19 #39.52f53113 at 8 s: broken, naming 8 s, and deep_ask returns at once with ID, deadline and default
+AssertionError: AC19 #39.52f53113 its deadline: expected '{"jsonrpc":"2.0","id":2,"result":{"co…' to match /deadline/i
+
+- Expected:
+/deadline/i
+
++ Received:
+"{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7FDD3K1621ZP0NQM7KCE4JC\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with Blue header: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7FDD3K1621ZP0NQM7KCE4JC\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}"
+
+ ❯ tests/acceptance/39/lanes.test.ts:77:44
+     75|     expect(ms, `${AC[19]} at once: ${text.slice(0, 400)}`).toBeLessTha…
+     76|     expect(text, `${AC[19]} the ask's ID`).toMatch(/ask:/);
+     77|     expect(text, `${AC[19]} its deadline`).toMatch(/deadline/i);
+       |                                            ^
+     78|     expect(text, `${AC[19]} its default`).toMatch(/default/i);
+     79|     d.stop();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/39/lanes.test.ts > AC19 #39.52f53113 With tool_timeout_sec = 8 for DeepBuild's MCP server in a Codex config fixture, the deep_ask relation shows broken, and a deep_ask returns at once with the ask's ID, deadline and default; with 60 it says "still waiting" at 55 s > AC19 #39.52f53113 at 60 s: deep_ask says "still waiting" at 55 s
+AssertionError: AC19 #39.52f53113 says still waiting: expected '{"jsonrpc":"2.0","id":2,"result":{"co…' to match /still waiting/i
+
+- Expected:
+/still waiting/i
+
++ Received:
+"{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7FDD4NE5VNCFND15Q0M6KEQ\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with Blue header: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7FDD4NE5VNCFND15Q0M6KEQ\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with Blue header: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}"
+
+ ❯ tests/acceptance/39/lanes.test.ts:90:67
+     88|     await d.init();
+     89|     const { reply, ms } = await d.ask(t, choice(`Wait ${tag()}?`), 70_…
+     90|     expect(JSON.stringify(reply), `${AC[19]} says still waiting`).toMa…
+       |                                                                   ^
+     91|     expect(ms, `${AC[19]} at 55 s, 5 s before the 60 s it was given`).…
+     92|     expect(ms, `${AC[19]} at 55 s, before Codex cuts it off`).toBeLess…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/39/lanes.test.ts > AC25 #39.5981bf3b On a controlled clock with Codex's Stop hook timeout at 45 minutes, a stop whose slow check's deadline ends 3 s before the timeout isn't held: Codex gets its reply at once, the claim stays pending and the verdict comes with your next message; with the deadline 10 s before the timeout, the stop is held and a FAIL at the deadline reaches the agent in the same turn; a hub that holds for any deadline before the timeout holds the first stop and fails this test > AC25 #39.5981bf3b deadline 3 s before the timeout: not held, pending, and the verdict comes with your next message
+AssertionError: AC25 #39.5981bf3b the check's run is in the slow lane: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/39/lanes.test.ts:107:77
+    105|     expect(r.reply?.decision, `${AC[25]} no verdict at this stop`).toB…
+    106|     const at = await allEvents(hub);
+    107|     expect(inSlowLane(at), `${AC[25]} the check's run is in the slow l…
+       |                                                                             ^
+    108|     expect(finished(at).length, `${AC[25]} pending at the reply`).toBe…
+    109|     await waitFor(async () => finished(await allEvents(hub)).length > …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 3 passed (8)
+   Start at  02:51:29
+   Duration  92.20s (tests 100%)
+
+neighbours exit 1

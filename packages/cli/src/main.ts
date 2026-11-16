@@ -187,7 +187,7 @@ const usage = [
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
   'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
-  'deep host run <ask> | changes <host> | list | facts <host> [--refresh]   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; or the hosts your SSH config names, and one\'s facts',
+  'deep host run <ask> | changes <host> | remove <host> | list | facts <host> [--refresh]   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; undo them, yours as you and root\'s as one root plan; or the hosts your SSH config names, and one\'s facts',
   'deep hub run [--safe] | start | status [--root <folder>]',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',

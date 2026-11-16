@@ -1,0 +1,55 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/process-read-reuse.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/process-read-reuse.test.ts > a rotated session ID in the held process reuses the process reads
+AssertionError: a new ID in the same held process needs no ps: expected '-o lstart= -p 82305\n-o args= -p 82305' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ -o lstart= -p 82305
++ -o args= -p 82305
+
+ ❯ packages/hub/test/process-read-reuse.test.ts:34:97
+     32|     try {
+     33|       expect(db.prepare('SELECT thread_id FROM sessions WHERE id = ?')…
+     34|       expect(readFileSync(log, 'utf8').trim(), 'a new ID in the same h…
+       |                                                                                                 ^
+     35|     } finally { db.close(); }
+     36|   });
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/process-read-reuse.test.ts:12:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/process-read-reuse.test.ts > a failed parent-table read is retried, and a parent rotating its ID invalidates the child link
+AssertionError: a failed lookup is retried at the next start: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ packages/hub/test/process-read-reuse.test.ts:67:115
+     65|       await sleep(100);
+     66|       await start(b, child!, 'compact');
+     67|       expect(await recorded(root, b, 'session.child_started', 1), 'a f…
+       |                                                                                                                   ^
+     68|       await start(c, pid!, 'clear');
+     69|       expect(await recorded(root, c, 'session.start', 1)).toBe(1);
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/process-read-reuse.test.ts:44:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  11:52:38
+   Duration  21.78s (tests 100%)

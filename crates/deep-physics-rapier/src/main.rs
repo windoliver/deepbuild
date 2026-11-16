@@ -3,16 +3,33 @@
 
 use std::io::{BufRead, Write};
 
-use deep_physics_rapier::runner::{Run, BAD_INPUT, PLANTED};
+use deep_physics_rapier::runner::{kit, Run, BAD_INPUT, PLANTED};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let run = match args.as_slice() {
-        [] => Run::new(None),
-        [flag, name] if flag == "--planted" && PLANTED.contains(&name.as_str()) => {
-            Run::new(Some(name))
+    // `--planted <name>` plants one criterion's wrong program; `--backend <name>` (#191, a
+    // `test-backends` build only) runs a test backend in Rapier's place; either, both or neither.
+    let (mut planted, mut backend, mut bad) = (None, None, false);
+    for pair in args.chunks(2) {
+        match pair {
+            [flag, name]
+                if flag == "--planted"
+                    && planted.is_none()
+                    && (PLANTED.contains(&name.as_str())
+                        || kit::PLANTED.contains(&name.as_str())) =>
+            {
+                planted = Some(name.as_str())
+            }
+            [flag, name] if flag == "--backend" && backend.is_none() => {
+                backend = Some(name.as_str())
+            }
+            _ => bad = true,
         }
-        _ => None,
+    }
+    let run = (!bad).then(|| Run::new(planted)).flatten();
+    let run = match backend {
+        Some(b) => run.and_then(|r| r.with_backend(b)),
+        None => run,
     };
     let Some(run) = run else {
         println!("{BAD_INPUT}");

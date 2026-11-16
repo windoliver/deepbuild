@@ -1,7 +1,7 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, dof, history, inset, local, lock, read_texture, texture2d, After, Planted,
+    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After, Planted,
     Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS,
     MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS, WATER_PASS,
 };
@@ -150,6 +150,15 @@ pub struct Shared {
     pub clouds: clouds::Clouds,
     /// Samples a pixel its renderer's geometry pass draws (#173: one under temporal upscaling).
     pub samples: u32,
+    /// The next frame's HDR surface, when the view presents one (#177).
+    pub hdr: Option<HdrFrame>,
+}
+
+/// A live frame's HDR surface (#177): the texture it writes and the display's headroom then.
+#[derive(Clone, Debug)]
+pub struct HdrFrame {
+    pub into: wgpu::TextureView,
+    pub headroom: f32,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -167,6 +176,7 @@ impl Module3 {
             after: None,
             clouds: Default::default(),
             samples: if planted.single_sample { 1 } else { MSAA },
+            hdr: None,
         }));
         (
             Module3 {
@@ -312,12 +322,14 @@ impl RenderModule for Module3 {
             post,
             after,
             clouds,
+            hdr,
             ..
         } = &mut *s;
         let Some(renderer) = renderer.as_mut() else {
             return Vec::new();
         };
         renderer.clouds.clone_from(clouds);
+        renderer.hdr.clone_from(hdr);
         // The instances outputs the frame's instancers draw from (#484).
         if let Some(p) = post.as_deref_mut() {
             renderer.feed(p.sources(device));
@@ -470,6 +482,18 @@ impl Module3 {
                 resolution: Resolution::Full,
                 ns_per_px: 0.1,
                 determinism: Determinism::SameMachine,
+            },
+            // #177: the HDR surface, live only, after every pass that writes the slot; a frame
+            // with no HDR surface doesn't run it.
+            Pass {
+                name: hdr::HDR_PASS.into(),
+                place: "overlays",
+                order: u32::MAX,
+                reads: vec!["linear", "slot"],
+                writes: vec!["hdr surface"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.02,
+                determinism: Determinism::LiveOnly,
             },
         ]
     }
