@@ -1,0 +1,28 @@
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/387/perturb.test.ts` runs unleased
+failed to load config from <home>/deepbuild-shards/11/vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: Failed to resolve entry for package "@deepbuild/config-eval". The package may have incorrect main/module/exports specified in its package.json.
+    at packageEntryFailure (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:29504:30)
+    at resolvePackageEntry (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:29501:2)
+    at tryNodeResolve (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:29400:70)
+    at nodeResolveWithVite (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:29662:9)
+    at PluginContextImpl.handler (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:38025:19)
+    at plugin (file://<home>/doneright/node_modules/rolldown/dist/shared/bindingify-input-options-UCGox0BH.mjs:1650:30)
+    at file://<home>/doneright/node_modules/rolldown/dist/shared/bindingify-input-options-UCGox0BH.mjs:2122:21
+    at plugin.<computed> (file://<home>/doneright/node_modules/rolldown/dist/shared/bindingify-input-options-UCGox0BH.mjs:2320:18)
+    at aggregateBindingErrorsIntoJsError (file://<home>/doneright/node_modules/rolldown/dist/shared/error-CBG33oNV.mjs:49:18)
+    at unwrapBindingResult (file://<home>/doneright/node_modules/rolldown/dist/shared/error-CBG33oNV.mjs:19:128)
+    at #build (file://<home>/doneright/node_modules/rolldown/dist/shared/rolldown-BYX6bV3R.mjs:146:34)
+    at async bundleConfigFile (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:38081:12)
+    at async bundleAndLoadConfigFile (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:37977:18)
+    at async loadConfigFromFile (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:37938:42)
+    at async resolveConfig (file://<home>/doneright/node_modules/vite/dist/node/chunks/node.js:37540:22)
+    at async resolveConfig (file://<home>/deepbuild-shards/11/node_modules/vitest/dist/chunks/index.1TqnEahn.js:9269:25)
+    at async createVitest (file://<home>/deepbuild-shards/11/node_modules/vitest/dist/chunks/cli-api.De07GUeT.js:13392:17)
+    at async prepareVitest (file://<home>/deepbuild-shards/11/node_modules/vitest/dist/chunks/cli-api.De07GUeT.js:13787:14) {
+  errors: [Getter/Setter]
+}
