@@ -3217,4 +3217,7 @@ fn well_named_member(t: &str) -> bool {
 }
 
 #[cfg(test)]
+const PACK_SCHEMA: &str = include_str!("../../../../packages/contracts/canvas-schemas/pack@1.json");
+
+#[cfg(test)]
 mod tests;
