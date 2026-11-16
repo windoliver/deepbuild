@@ -97,6 +97,7 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod tour;
 mod track_call;
 #[cfg(any(
     feature = "test-json",
@@ -772,6 +773,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
                 carried: flag("carried")?,
+                tour_pointer: flag("tour_pointer")?,
             })));
         }
         "frames" => {
