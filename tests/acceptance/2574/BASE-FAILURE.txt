@@ -1,0 +1,35 @@
+✖ AC1: claimShards makes shards on Linux, holding the worktree, and reuses them after an edit (1153.36943ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1246.824866
+
+✖ failing tests:
+
+test at tests/acceptance/2574/shards-linux.test.mjs:43:1
+✖ AC1: claimShards makes shards on Linux, holding the worktree, and reuses them after an edit (1153.36943ms)
+  AssertionError [ERR_ASSERTION]: no shard is "not used"
+  + actual - expected
+  
+  + [
+  +   "SHARD 1 not used: Try 'cp --help' for more information.",
+  +   "SHARD 2 not used: Try 'cp --help' for more information."
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/wonderful-leavitt-57c12a/tests/acceptance/2574/shards-linux.test.mjs:67:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "SHARD 1 not used: Try 'cp --help' for more information.", "SHARD 2 not used: Try 'cp --help' for more information." ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

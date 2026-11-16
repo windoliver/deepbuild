@@ -1,0 +1,18 @@
+{
+  "issue": 451,
+  "criterion": "#451.98808b85",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in session (\"validate scrrenshot for me and close whtever gaps\")",
+  "when": "2026-11-15T22:24:13.966Z",
+  "screenshots": {
+    "graph-edge-packets.png": "a902cf6cedc91cf2ea8e217829e18ee93472162486e2ea8d02c46e17ea092948",
+    "path-particles.png": "af25d237ecb10d28510c4b7fc1dccb3a27c6abfb7ed602142c55e3204e027598",
+    "stream-particles.png": "e415cbf7ee4ea049b2ff4ea8b46fa93b889dc0b59d2e333937de81a5f91648df"
+  },
+  "recordings": {
+    "graph-edge-packets.apng": "37fbd73bb9aca48d145259fbed4d33e0bb26ec96b3375e06202d6a7ca06f2f17",
+    "path-particles.apng": "6d4c6bed8bf4f9b37b619ee42d9e0be59a176aba590a6d029f8f9618b7773a34",
+    "stream-particles.apng": "eb7ef8f85465f926456d2d2cf220c23541248d52e89d79dd6b9f11b2fef61407"
+  },
+  "note": "Checked the stills and recording frames 0, 10, 20, 30, 40, 50 and 59 (2 s to 4 s at 30 fps) of each flow. Packets ride edge ab as routed, out of A's east port, up and over C and toward B, every dot on the line. The drops stay on the cubic, moving from its start. Particles on the field circle each of the four streams clockwise as drawn, the way the arrows point, every dot on its circle. No dot leaves its curve, and none jumps between frames. Each flow ends short of its curve's end because the fixtures give it a life of 2 to 3 s; at end of life a dot disappears, since the fixtures keep opacity at 1. That framing is the fixtures', not the flows'."
+}
