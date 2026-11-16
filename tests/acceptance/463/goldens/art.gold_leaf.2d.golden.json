@@ -1,0 +1,10 @@
+{
+ "fixture": "art.gold_leaf.2d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "a6869309997460ba120a3df427eaa4af11a6666a78c3904cb9f2e63bc1d645d8"
+}
