@@ -1302,6 +1302,18 @@
         "deep-images": {
           "spec": "* path=../deep-images",
           "why": "Issue #1486: the one image service: still pictures drawn at their levels."
+        },
+        "deep-canvas-export": {
+          "spec": "* path=../deep-canvas-export",
+          "why": "Issue #162: the export canvas module joins the build set; deep-show writes the Lottie file and the export page it lists."
+        },
+        "deep-lottie-reader": {
+          "spec": "* path=../deep-lottie-reader",
+          "why": "Issue #162: `deep-show lottie-reader`, the reference renderer served as its own process for the export's read-back."
+        },
+        "unicode-normalization": {
+          "spec": "^0.1",
+          "why": "Issue #542: the planted field text_normalizes_nfc, whose commit normalizes the text to NFC and which the text tests must refuse; the real field keeps the text's own code points."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1652,6 +1664,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #453: documents, the requirement it reads and the report it writes."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #506: camera.framing reads a film's shot spans and the document posed at each sampled time."
         }
       }
     },
@@ -2460,6 +2476,222 @@
           "why": "Issue #204: reads a note's request, its preset among it, as JSON. Already in the workspace tree."
         }
       }
+    },
+    "crates/deep-canvas-export/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #162: the ops module the Lottie writer's angles go through, the frame clock and the schedule's carried state the export check reads."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #162: the scene items, outlines, path verbs and boxes the writer turns into Lottie layers and shapes, and the shipped look it resolves."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #162: the compiled motion program and its curves, which the writer turns into Lottie keys."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #162: the faces the canvas bundles, which the shipped look's fonts resolve against."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #162: the Lottie file's JSON, keys in order and floats that round-trip. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-lottie/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #162: the document grammar, canonical hash and blend modes the import writes to, and the ops module its angles go through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #162: the shipped looks an imported file's colors map to, and the document check the tool's output passes."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #162: compiles the imported keys as a motion program, and reads a morph's path data."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #162: the faces the canvas bundles, the only ones a generated look's fonts may name."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #162: reads the Lottie file and writes the document, its look and its issues. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-lottie-reader/Cargo.toml": {
+      "dependencies": {
+        "thorvg": {
+          "spec": "=0.6.0",
+          "why": "Issue #162: the pinned reference Lottie renderer the export's read-back runs as its own process, built from its vendored source with the system's C++ compiler."
+        }
+      }
+    },
+    "spikes/2435/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "=30.0.1",
+          "why": "Spike #2435: ray queries on the wgpu the app pins, on Metal; outside the workspace with its own lockfile, so nothing it pins reaches the app."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Spike #2435: blocks on wgpu's adapter, device and read-back futures in the headless probe."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Spike #2435: casts the probe's vertex, index and read-back buffers to and from bytes."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #2435: the probe's report of its counts, keys in order."
+        },
+        "blake3": {
+          "spec": "^1",
+          "why": "Spike #2435: the hash the probe names a read-back buffer by in its report."
+        },
+        "log": {
+          "spec": "^0.4",
+          "why": "Spike #2435: the logger that collects wgpu's warnings into the probe's report."
+        }
+      }
+    },
+    "tests/acceptance/533/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #533's blind suite: its own assembler for the fixtures, cut down from #531's, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #533's blind suite: validates each fixture module before it is written."
+        }
+      }
+    },
+    "tests/acceptance/12/twins/build-without-cargo/package.json": {
+      "devDependencies": {
+        "@microsoft/api-extractor": {
+          "spec": "7.60.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @microsoft/api-extractor is the root's own entry, unchanged."
+        },
+        "@stryker-mutator/core": {
+          "spec": "10.0.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @stryker-mutator/core is the root's own entry, unchanged."
+        },
+        "@types/better-sqlite3": {
+          "spec": "7.6.13",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @types/better-sqlite3 is the root's own entry, unchanged."
+        },
+        "@types/node": {
+          "spec": "24.19.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; @types/node is the root's own entry, unchanged."
+        },
+        "fast-check": {
+          "spec": "4.10.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; fast-check is the root's own entry, unchanged."
+        },
+        "gpt-tokenizer": {
+          "spec": "4.0.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; gpt-tokenizer is the root's own entry, unchanged."
+        },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; jest is the root's own entry, unchanged."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; typescript is the root's own entry, unchanged."
+        },
+        "vitest": {
+          "spec": "5.0.5",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a build script that builds no crate, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
+        }
+      }
+    },
+    "tests/acceptance/12/twins/no-deep-bin/package.json": {
+      "devDependencies": {
+        "@microsoft/api-extractor": {
+          "spec": "7.60.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @microsoft/api-extractor is the root's own entry, unchanged."
+        },
+        "@stryker-mutator/core": {
+          "spec": "10.0.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @stryker-mutator/core is the root's own entry, unchanged."
+        },
+        "@types/better-sqlite3": {
+          "spec": "7.6.13",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @types/better-sqlite3 is the root's own entry, unchanged."
+        },
+        "@types/node": {
+          "spec": "24.19.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; @types/node is the root's own entry, unchanged."
+        },
+        "fast-check": {
+          "spec": "4.10.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; fast-check is the root's own entry, unchanged."
+        },
+        "gpt-tokenizer": {
+          "spec": "4.0.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; gpt-tokenizer is the root's own entry, unchanged."
+        },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; jest is the root's own entry, unchanged."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; typescript is the root's own entry, unchanged."
+        },
+        "vitest": {
+          "spec": "5.0.5",
+          "why": "Issue #12's blind suite: this twin is the root package.json with no bin entry for deep, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
+        }
+      }
+    },
+    "tests/acceptance/12/twins/release-check-local/package.json": {
+      "devDependencies": {
+        "@microsoft/api-extractor": {
+          "spec": "7.60.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @microsoft/api-extractor is the root's own entry, unchanged."
+        },
+        "@stryker-mutator/core": {
+          "spec": "10.0.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @stryker-mutator/core is the root's own entry, unchanged."
+        },
+        "@types/better-sqlite3": {
+          "spec": "7.6.13",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @types/better-sqlite3 is the root's own entry, unchanged."
+        },
+        "@types/node": {
+          "spec": "24.19.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; @types/node is the root's own entry, unchanged."
+        },
+        "fast-check": {
+          "spec": "4.10.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; fast-check is the root's own entry, unchanged."
+        },
+        "gpt-tokenizer": {
+          "spec": "4.0.0",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; gpt-tokenizer is the root's own entry, unchanged."
+        },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; jest is the root's own entry, unchanged."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; typescript is the root's own entry, unchanged."
+        },
+        "vitest": {
+          "spec": "5.0.5",
+          "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
+        }
+      }
     }
   },
   "allowedFindings": [
@@ -2612,6 +2844,24 @@
       "kind": "home path",
       "sha256": "45c1386eb381f8d5be4342bedf020534617f4f71d1136667e207a728fb2b2365",
       "why": "The corpus redaction's own test: the redacted form it expects, under the placeholder user user; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/host.undone@1/01.json",
+      "kind": "home path",
+      "sha256": "54928de8dcb392620f777b43901838fb8dba6bb09a02e51cd8c2940e22a2d6f0",
+      "why": "A contract fixture: the unit files and the backup a host undo names, under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/staged.undone@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: a staged delete's folder under the placeholder user you; no real home."
+    },
+    {
+      "path": "tests/acceptance/1946/BASE-FAILURE.txt",
+      "kind": "home path",
+      "sha256": "c2ac37b4b37cd2b3c313d53b379116b5a9397b0cf4da758c4d3bd619c71f5684",
+      "why": "Issue #1946's blind suite: the throwaway account dh1946c244bb44 its base run made on the test host, in the saved base failure; no real home."
     }
   ]
 }
