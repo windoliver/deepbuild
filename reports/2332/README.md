@@ -1,6 +1,6 @@
 # #2332: hub startup
 
-The measurements below are historical, from main `9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff`. The latest strict proof compares candidate `fdedb13fd7d24d48698e6f48a10147571fb31074` with pinned main `031292bf15c0b9a32260413793f3b2d17e87115b`: startup −27.594%, SessionStart −4.873%, prompt −5.695%, PreToolUse −6.116%, all PASS over 20 pairs. See [strict-instructions.json](strict-instructions.json). Memory under valid conditions and complete regression verification remain open; the measurements below do not close them. The original checkout's unrelated edits were not changed.
+The measurements below are historical, from main `9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff`. The latest strict proof compares candidate `fdedb13fd7d24d48698e6f48a10147571fb31074` with pinned main `031292bf15c0b9a32260413793f3b2d17e87115b`: startup −27.594%, SessionStart −4.873%, prompt −5.695%, PreToolUse −6.116%, all PASS over 20 pairs. See [strict-instructions.json](strict-instructions.json). Memory under valid conditions and complete regression verification remain open; the measurements below do not close them. The later main `3557b3489` was integrated as `2330de429`, but its paired build timed out waiting for a grant before starting; see [closure.md](closure.md). The original checkout's unrelated edits were not changed.
 
 ## Requirement → change → proof
 
