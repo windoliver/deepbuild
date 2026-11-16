@@ -1,0 +1,237 @@
+#458 relations group (criteria 10, 12, 13, 14): the suite at the base commit 06e231702, before any implementation.
+
+Every test fails at the base, and each first failure is an assertion on the base's own `bad_input`: the `relation` call
+is unknown (after the fixture checks passed: the base's view3d drew every side's document), and each `--planted` name
+is unknown (one `{"ok": false, "code": "bad_input"}` line, exit 2). No test failed in its own code.
+
+What was run, and how:
+
+1. relations.test.ts: run as the README says, the file building `deep-gpu` itself (`cargo build --locked --bin
+   deep-gpu` from this checkout into the shared target folder). Output below.
+2. translation.test.ts and light-level.test.ts: cargo's build lock on the shared target folder was held by other
+   sessions' builds for over 25 minutes, so these two runs were made with a stand-in `cargo` first on PATH that returns
+   0 at once and CARGO_TARGET_DIR pointing at a folder holding the base's `deep-gpu` (default features, built at
+   06e231702 in the shared target folder and copied out of it). The files and the binary's behavior are the same; only
+   the build step was skipped. Output below. The same two files, queued with the real build, had not finished when
+   the queue was stopped.
+3. software-adapter.test.ts: NOT RUN. The queue never reached its `--features test-seam` build: the build before it
+   was still compiling after 17 minutes and was stopped. What was shown instead, on the base's default build:
+   `{"call": "full_lane", …}` is answered `{"code": "bad_input", "reason": "unknown call"}` and `--planted
+   lane_adapter_from_configuration` answers `{"ok": false, "code": "bad_input"}`, exit 2. Read from the base's code,
+   not run: the seam picks a lone test adapter whatever its `type` (crates/deep-gpu/src/seam.rs, `pick`), so the first
+   test's first failure at the base is `full_lane`'s `bad_input`. Its second test is BLOCKED on this Mac by design (no
+   Vulkan loader, no software rasterizer). The adapters file's form (`{"adapters": [{name, type, vendor, device,
+   driver, memory, features}]}`) is #140's and wasn't exercised here.
+4. `npx tsc -p tests/acceptance/458/relations/tsconfig.json`: no error.
+5. `node scripts/repo-rules.mjs`: no finding in this folder (secrets: PASS). It reports one FAIL of the base's own,
+   `deps: crates/deep-replica/Cargo.toml dependencies deep-canvas-input … is not in scripts/repo-rules.json`, in a
+   file this job didn't touch.
+
+All nine planted names and both calls, asked of the base's `deep-gpu run` directly:
+
+  --planted light_sum_clamped | exposure_after_tone_map | ortho_camera_snaps_to_grid | shades_by_local_tangent |
+            shadow_brightens | instances_skip_normal_target | lane_adapter_from_configuration |
+            absolute_f32_world_positions | light_cut_absolute_illuminance
+      each: {"ok":false,"code":"bad_input"}   (exit 2)
+  calls relation, full_lane:
+      {"ok":true,"replies":[{"code":"bad_input","reason":"unknown call"},{"code":"bad_input","reason":"unknown call"}]}
+
+What the fixtures show at the base, read from view3d's own targets (linear and pre_tone are rgba16float there):
+
+  exposure-doubles          pre_tone at EV100 0 and −1 agrees within 2^-9 on every pixel (it is read before exposure, and
+                            the sky's own exposure keeps the sky from moving with the look's)
+  lights-add                ab = a + b within 2^-9 relative on every pixel (40,877 pixels are past 1e-4: 16-bit float
+                            steps); A and B overlap past 1.05 on 13,368 pixels; a alone reads at most 0.76, ab 1.39
+  ortho-shift               moved(x, y) = base(x + 7, y − 3) on every pixel; the other three sign choices break on
+                            3,595 to 6,519 pixels
+  sphere-turn               turned = base within 2^-9 relative on every pixel (19 pixels are past 1e-4)
+  occluder-never-brightens  in the lit linear target the slab's shadow halves 8,202 pixels and brightens none
+  instances-keep-hash       final, linear, normal and depth are byte-equal; ids differ (picks {"1":"thing"} against
+                            {"1":"thing#0","2":"thing#1"}); the base writes no velocity file
+  translation               44,056 of 129,600 pixels within one code value, the worst 243 off: the base fails the
+                            relation; with blur off 545 pixels of the base side move by more than one code value
+  light-level               scaled pre_tone = base ÷ 100 within 1.5e-3 with bloom off; with bloom on, up to 2.2% off
+                            (1,905 values past 1%)
+
+=== 1. npx vitest run --root tests/acceptance/458/relations relations.test.ts --no-file-parallelism --testTimeout=600000
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+ ❯ relations.test.ts (2 tests | 2 failed) 1524251ms
+   ❯ #458 criterion 10: rendering relations on linear targets (2)
+     × AC10 #458.a35e570a: the six relations hold: exposure +1 EV doubles, A and B add, an orthographic move shifts by k pixels, a turned sphere keeps its pixels, an occluder never brightens, and a mesh split into instances keeps its pixel hash in every target 16711ms
+     × AC10 #458.a35e570a: each relation's planted twin breaks it and fails, naming the relation; the planted light loop that clamps the summed light to 1.0 breaks the sum where A and B overlap 6280ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  relations.test.ts > #458 criterion 10: rendering relations on linear targets > AC10 #458.a35e570a: the six relations hold: exposure +1 EV doubles, A and B add, an orthographic move shifts by k pixels, a turned sphere keeps its pixels, an occluder never brightens, and a mesh split into instances keeps its pixel hash in every target
+AssertionError: relation exposure-doubles was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:165:79
+    163| export function answered(reply: JsonObject, what: string): JsonObject {
+    164|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    165|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    166|   return reply;
+    167| }
+ ❯ heldOf helpers.ts:561:3
+ ❯ relations.test.ts:167:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  relations.test.ts > #458 criterion 10: rendering relations on linear targets > AC10 #458.a35e570a: each relation's planted twin breaks it and fails, naming the relation; the planted light loop that clamps the summed light to 1.0 breaks the sum where A and B overlap
+AssertionError: deep-gpu run --planted light_sum_clamped exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:153:151
+    151|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    152|   const stdout = run.stdout ?? '';
+    153|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    154|   const lines = stdout.split('\n').filter((l) => l !== '');
+    155|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ relations.test.ts:179:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  14:47:25
+   Duration  1530.36s (tests 100%)
+
+exit 1
+
+=== 2a. the same command for translation.test.ts (stand-in cargo; the base's binary)
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+ ❯ translation.test.ts (2 tests | 2 failed) 14935ms
+   ❯ #458 criterion 13: translation invariance (2)
+     × AC13 #458.824452c4: the fixture moved by (1e7, −3e6, 5e6) m draws within one code value on 99.9% of pixels and no pixel is more than 4 off 9170ms
+     × AC13 #458.824452c4: a planted renderer that uploads absolute f32 world positions jitters vertices by whole pixels and fails, naming the item 1980ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  translation.test.ts > #458 criterion 13: translation invariance > AC13 #458.824452c4: the fixture moved by (1e7, −3e6, 5e6) m draws within one code value on 99.9% of pixels and no pixel is more than 4 off
+AssertionError: relation translation was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:165:79
+    163| export function answered(reply: JsonObject, what: string): JsonObject {
+    164|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    165|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    166|   return reply;
+    167| }
+ ❯ heldOf helpers.ts:561:3
+ ❯ translation.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  translation.test.ts > #458 criterion 13: translation invariance > AC13 #458.824452c4: a planted renderer that uploads absolute f32 world positions jitters vertices by whole pixels and fails, naming the item
+AssertionError: deep-gpu run --planted absolute_f32_world_positions exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:153:151
+    151|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    152|   const stdout = run.stdout ?? '';
+    153|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    154|   const lines = stdout.split('\n').filter((l) => l !== '');
+    155|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ translation.test.ts:53:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:13:19
+   Duration  17.09s (tests 97%, import 2%)
+
+exit 1
+
+=== 2b. the same command for light-level.test.ts (stand-in cargo; the base's binary)
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+ ❯ light-level.test.ts (2 tests | 2 failed) 32045ms
+   ❯ #458 criterion 14: light-level invariance (2)
+     × AC14 #458.52b742e2: every light's power, the sky and every emission at 1/100 with exposure up log2 100 EV and bloom's threshold off leaves every linear pixel after exposure within 1e-4 relative 28781ms
+     × AC14 #458.52b742e2: a planted light policy whose cut uses an absolute illuminance changes a pixel and fails, naming the light 920ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  light-level.test.ts > #458 criterion 14: light-level invariance > AC14 #458.52b742e2: every light's power, the sky and every emission at 1/100 with exposure up log2 100 EV and bloom's threshold off leaves every linear pixel after exposure within 1e-4 relative
+AssertionError: relation light-level was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:165:79
+    163| export function answered(reply: JsonObject, what: string): JsonObject {
+    164|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    165|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    166|   return reply;
+    167| }
+ ❯ heldOf helpers.ts:561:3
+ ❯ light-level.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  light-level.test.ts > #458 criterion 14: light-level invariance > AC14 #458.52b742e2: a planted light policy whose cut uses an absolute illuminance changes a pixel and fails, naming the light
+AssertionError: deep-gpu run --planted light_cut_absolute_illuminance exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:153:151
+    151|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    152|   const stdout = run.stdout ?? '';
+    153|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    154|   const lines = stdout.split('\n').filter((l) => l !== '');
+    155|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ light-level.test.ts:55:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:13:48
+   Duration  34.98s (tests 100%)
+
+exit 1
