@@ -84239,6 +84239,163 @@ impl Contract for TranscriptArchivedV3 {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptArchivedV4V;
+
+impl Contract for TranscriptArchivedV4V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "4").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("4").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptArchivedV4Kind;
+
+impl Contract for TranscriptArchivedV4Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"transcript.archived\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"transcript.archived\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptArchivedV4DataSource {
+    pub size: i64,
+    pub sha256: String,
+    pub stamp: String,
+    pub ended: bool,
+    pub continuable: bool,
+}
+
+impl Contract for TranscriptArchivedV4DataSource {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["size", "sha256", "stamp", "ended", "continuable"])?;
+        deep_contracts::check_member(members, at, "size", &RULE_4)?;
+        deep_contracts::check_member(members, at, "sha256", &RULE_83)?;
+        deep_contracts::check_member(members, at, "stamp", &RULE_15)?;
+        Ok(Self {
+            size: deep_contracts::required(members, at, "size")?,
+            sha256: deep_contracts::required(members, at, "sha256")?,
+            stamp: deep_contracts::required(members, at, "stamp")?,
+            ended: deep_contracts::required(members, at, "ended")?,
+            continuable: deep_contracts::required(members, at, "continuable")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("size".to_string(), self.size.to_json()));
+        members.push(("sha256".to_string(), self.sha256.to_json()));
+        members.push(("stamp".to_string(), self.stamp.to_json()));
+        members.push(("ended".to_string(), self.ended.to_json()));
+        members.push(("continuable".to_string(), self.continuable.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptArchivedV4Data {
+    pub session: String,
+    pub evidence: String,
+    pub source: TranscriptArchivedV4DataSource,
+    pub parts: Vec<String>,
+}
+
+impl Contract for TranscriptArchivedV4Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["session", "evidence", "source", "parts"])?;
+        deep_contracts::check_member(members, at, "session", &RULE_107)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_83)?;
+        deep_contracts::check_member(members, at, "parts", &RULE_9)?;
+        Ok(Self {
+            session: deep_contracts::required(members, at, "session")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            source: deep_contracts::required(members, at, "source")?,
+            parts: deep_contracts::required(members, at, "parts")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("session".to_string(), self.session.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("source".to_string(), self.source.to_json()));
+        members.push(("parts".to_string(), self.parts.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptArchivedV4 {
+    pub v: TranscriptArchivedV4V,
+    pub id: String,
+    pub kind: TranscriptArchivedV4Kind,
+    pub subject: Option<String>,
+    pub writer: String,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: TranscriptArchivedV4Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for TranscriptArchivedV4 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_0)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_2)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_91)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_3)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_3)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_4)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_5)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TurnUsageV;
 
 impl Contract for TurnUsageV {
@@ -90880,6 +91037,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "transcript.archived@1" => <TranscriptArchived as Contract>::from_json(&value, "")?.to_json(),
         "transcript.archived@2" => <TranscriptArchivedV2 as Contract>::from_json(&value, "")?.to_json(),
         "transcript.archived@3" => <TranscriptArchivedV3 as Contract>::from_json(&value, "")?.to_json(),
+        "transcript.archived@4" => <TranscriptArchivedV4 as Contract>::from_json(&value, "")?.to_json(),
         "turn.usage@1" => <TurnUsage as Contract>::from_json(&value, "")?.to_json(),
         "user.ask@1" => <UserAsk as Contract>::from_json(&value, "")?.to_json(),
         "user.ask@2" => <UserAskV2 as Contract>::from_json(&value, "")?.to_json(),

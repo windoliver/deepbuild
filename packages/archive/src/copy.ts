@@ -2,10 +2,10 @@
 import type { BigIntStats } from 'node:fs';
 import { MessageChannel, Worker } from 'node:worker_threads';
 
-export interface Prefix { size: number; sha256: string; ended?: boolean }
+export interface Prefix { size: number; sha256: string; ended?: boolean; continuable?: boolean }
 export interface Part { bytes: Uint8Array; complete: boolean; cwd?: string; keys: { key: string; uuid?: string }[] }
 export const sourceStamp = (s: BigIntStats): string => `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
-export interface CopyResult extends Prefix { grew: boolean; ended: boolean }
+export interface CopyResult extends Prefix { grew: boolean; ended: boolean; continuable: boolean }
 let queue = Promise.resolve();
 
 export function copyTranscript(path: string, size: number, stamp: string, before: Prefix | undefined, stable: boolean, held: readonly string[], session: string, keep: (part: Part) => Promise<void>): Promise<CopyResult> {

@@ -173,7 +173,8 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
       copied.set(d.session, { size: Number(d.source.size), sha256: String(d.source.sha256), evidence: String(d.evidence),
         parts: Array.isArray(d.parts) ? d.parts.map(String) : [String(d.evidence)],
         ...(typeof d.source.stamp === 'string' ? { stamp: d.source.stamp } : {}),
-        ...(typeof d.source.ended === 'boolean' ? { ended: d.source.ended } : {}) });
+        ...(typeof d.source.ended === 'boolean' ? { ended: d.source.ended } : {}),
+        ...(typeof d.source.continuable === 'boolean' ? { continuable: d.source.continuable } : {}) });
       if (e.agent) captured.set(e.agent, Math.max(captured.get(e.agent) ?? 0, e.ts));
     } else if (e.kind === 'ci.archived') runs.add(`${String(d.repo)}#${String(d.run)}`);
     else if (e.kind === 'archive.quiet') alerted.add(`${String(d.agent)}@${String(d.last)}`);
@@ -249,8 +250,8 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
       const project = cwd ? options.projectOf?.(cwd, source.agent) : undefined;
       const after = await stat(source.path, { bigint: true }).catch(() => undefined);
       if (!after || sourceStamp(after) !== mark) throw Error('the transcript changed or was replaced before its archive link');
-      await append(source.agent, 'transcript.archived', 3, { session, evidence: put.evidence.sha256, parts,
-        source: { size: result.size, sha256: result.sha256, stamp: mark, ended: result.ended } }, parts, undefined, project);
+      await append(source.agent, 'transcript.archived', 4, { session, evidence: put.evidence.sha256, parts,
+        source: { size: result.size, sha256: result.sha256, stamp: mark, ended: result.ended, continuable: result.continuable } }, parts, undefined, project);
     }
     seen.set(source.path, mark);
   }

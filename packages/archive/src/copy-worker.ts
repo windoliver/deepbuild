@@ -35,7 +35,7 @@ parentPort!.on('message', async ({ path, size, stamp, before, stable, held, sess
     let hash = createHash('sha256');
     let offset = 0;
     let grew = false;
-    if (before && before.size <= size && before.ended !== false) {
+    if (before && before.size <= size && before.ended !== false && before.continuable === true) {
       while (offset < before.size) {
         const { bytesRead } = await file.read(buffer, 0, Math.min(buffer.length, before.size - offset), offset);
         if (!bytesRead) throw Error('the transcript shrank during prefix verification');
@@ -46,7 +46,7 @@ parentPort!.on('message', async ({ path, size, stamp, before, stable, held, sess
     }
     if (!grew) { offset = 0; hash = createHash('sha256'); }
     let copied = offset, used = 0, flushAt = PART;
-    let ended = true, cwdFound = false;
+    let ended = true, continuable = true, cwdFound = false;
     const flush = async (final: boolean | 'growing'): Promise<boolean> => {
       const complete = final ? used : buffer.lastIndexOf(10, used - 1) + 1;
       if (!complete) return false;
@@ -82,6 +82,7 @@ parentPort!.on('message', async ({ path, size, stamp, before, stable, held, sess
       }
       hash.update(pending.subarray(0, rawEnd)); copied += rawEnd;
       ended = buffer[rawEnd - 1] === 10;
+      continuable = kept.continuable;
       // Compact in place rather than allocating a carry, a joined input and a pending copy on every read.
       buffer.copyWithin(0, rawEnd, used); used -= rawEnd;
       flushAt = PART;
@@ -103,7 +104,7 @@ parentPort!.on('message', async ({ path, size, stamp, before, stable, held, sess
     if (!stable && used) used = buffer.lastIndexOf(10, used - 1) + 1;
     while (used && await flush(stable ? true : 'growing')) { /* retain an unfinished multi-line match */ }
     if (sourceStamp(await file.stat({ bigint: true })) !== stamp) throw Error('the transcript changed while it was copied');
-    const result: CopyResult = { grew, size: copied, sha256: hash.digest('hex'), ended };
+    const result: CopyResult = { grew, size: copied, sha256: hash.digest('hex'), ended, continuable };
     port.postMessage({ result });
   } catch (error) { port.postMessage({ error: error instanceof Error ? error.message : String(error) }); }
   finally { await file.close(); port.close(); }
