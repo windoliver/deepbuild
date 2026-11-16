@@ -1198,6 +1198,7 @@ mod tests {
             light_clip: Some(light_clip),
             picks,
             core: Vec::new(),
+            crop: None,
         }
     }
 
