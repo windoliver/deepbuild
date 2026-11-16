@@ -2689,10 +2689,10 @@ fn check_targets(
         let target_path = format!("{section}/{key}/target");
         match member(entry, "target") {
             // #504: a take-apart's target: the share of each target assembly's `apart` its
-            // follow's stagger writes (Assembly: "timed by the follow's stagger").
+            // follow's stagger writes (Assembly: "timed by the follow's stagger"). #508: with no
+            // stagger, every assembly at once.
             Some(Value::String(text))
-                if text == "assemblies/apart"
-                    && entry.pointer("/follow/stagger/targets").is_some() => {}
+                if text == "assemblies/apart" && entry.pointer("/follow").is_some() => {}
             Some(Value::String(text)) => match Path::parse(text) {
                 Ok(path) => {
                     if let Err(what) = resolve(doc, &path, kinds) {

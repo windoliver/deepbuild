@@ -2458,6 +2458,7 @@ dependencies = [
  "objc2-metal 0.3.2",
  "pollster 0.4.0",
  "serde_json",
+ "web-time",
  "wgpu 30.0.1",
 ]
 
@@ -2520,6 +2521,7 @@ dependencies = [
  "deep-canvas",
  "image",
  "sha2 0.10.9",
+ "web-time",
 ]
 
 [[package]]
@@ -2546,6 +2548,7 @@ dependencies = [
  "wasmparser 0.258.3",
  "wasmtime",
  "wat",
+ "web-time",
 ]
 
 [[package]]
@@ -2572,6 +2575,19 @@ version = "0.0.0"
 dependencies = [
  "deep-canvas-marks",
  "gpui-kit",
+]
+
+[[package]]
+name = "deep-marks-raster"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-images",
+ "deep-marks-vello",
+ "deep-text",
+ "serde_json",
+ "vello_cpu 0.3.0",
 ]
 
 [[package]]
@@ -2653,6 +2669,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-play"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-cells",
+ "deep-canvas-marks",
+ "deep-canvas-media",
+ "deep-canvas-motion",
+ "deep-canvas-physics",
+ "deep-canvas-scene3d",
+ "deep-canvas-vector",
+ "deep-logic",
+ "deep-marks-raster",
+ "deep-physics-rapier",
+ "deep-text",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-player"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-cells",
+ "deep-canvas-effects",
+ "deep-canvas-graph",
+ "deep-canvas-input",
+ "deep-canvas-loop",
+ "deep-canvas-marks",
+ "deep-canvas-media",
+ "deep-canvas-motion",
+ "deep-canvas-physics",
+ "deep-canvas-record",
+ "deep-canvas-sandbox",
+ "deep-canvas-scene3d",
+ "deep-canvas-seams",
+ "deep-canvas-sheet",
+ "deep-canvas-vector",
+ "deep-gpu",
+ "deep-images",
+ "deep-logic",
+ "deep-marks-raster",
+ "deep-physics-rapier",
+ "deep-play",
+ "deep-scene3d-render",
+ "deep-text",
+ "js-sys",
+ "serde_json",
+ "sha2 0.10.9",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu 30.0.1",
+]
+
+[[package]]
 name = "deep-relay"
 version = "0.0.0"
 dependencies = [
@@ -2687,9 +2759,13 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "deep-canvas-sandbox",
+ "js-sys",
  "serde_json",
+ "wasm-bindgen",
+ "wasmparser 0.258.3",
  "wasmtime",
  "wat",
+ "web-time",
 ]
 
 [[package]]
@@ -2704,6 +2780,7 @@ dependencies = [
  "deep-gpu",
  "naga 30.0.1",
  "serde_json",
+ "web-time",
  "wgpu 30.0.1",
  "wgpu-profiler",
 ]
@@ -2736,8 +2813,10 @@ dependencies = [
  "deep-images",
  "deep-logic",
  "deep-lottie-reader",
+ "deep-marks-raster",
  "deep-marks-vello",
  "deep-physics-rapier",
+ "deep-play",
  "deep-relay",
  "deep-replica",
  "deep-sandbox-wasmtime",

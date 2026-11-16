@@ -4,7 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use web_time::Instant;
 
 use crate::counted::{Counts, Queue, Wgpu};
 use crate::seam::{self, Choice, Refusal, Startup};
@@ -308,6 +308,30 @@ impl Device {
                 .map_err(|e| format!("no GPU device: {e}"))?
             }
         };
+        Ok(Device::wrap(device, queue, backend, features, info, name))
+    }
+
+    /// A device and queue opened elsewhere, wrapped as this crate's: the web player's, which it
+    /// requested from the browser's adapter with exactly its bundle's `gpu_needs` (#172).
+    pub fn from_parts(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        features: wgpu::Features,
+        info: wgpu::AdapterInfo,
+    ) -> Arc<Device> {
+        let name = info.name.clone();
+        Device::wrap(device, queue, Backend::Gpu, features, Some(info), name)
+    }
+
+    /// `device` and `queue` with this crate's loss and error callbacks, counts and timestamps.
+    fn wrap(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        backend: Backend,
+        features: wgpu::Features,
+        info: Option<wgpu::AdapterInfo>,
+        name: String,
+    ) -> Arc<Device> {
         let lost = Arc::new(AtomicBool::new(false));
         let failures: Failures = Arc::new(Mutex::new(Vec::new()));
         let (flag, failed) = (lost.clone(), failures.clone());
@@ -354,7 +378,7 @@ impl Device {
             period_ns: query.then(|| queue.get_timestamp_period()),
         };
         let counts = Arc::new(Counts::default());
-        Ok(Arc::new(Device {
+        Arc::new(Device {
             device: Wgpu::new(device, counts.clone()),
             queue: Queue::new(queue, counts),
             backend,
@@ -365,7 +389,7 @@ impl Device {
             lost,
             raised,
             failures,
-        }))
+        })
     }
 
     /// Loses the device on purpose, as the forced device-loss tests do.

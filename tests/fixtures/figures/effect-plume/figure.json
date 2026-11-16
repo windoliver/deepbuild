@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "effect-plume",
+  "profile": "scene",
+  "title": "A plume from a nozzle",
+  "description": "A nozzle on a stand fires a plume along +X with shock cells; no haze.",
+  "size": [1920,1080],
+  "camera": "cam",
+  "seed": 508,
+  "requires": {
+    "modules": {"scene3d":"^1","effects":"^1"}
+  },
+  "transport": {
+    "span": "4s",
+    "frame_rate": [30,1]
+  },
+  "items": {
+    "cam": {"id":"cam","kind":"camera@1","name":"Camera","order":"a000","params":{"projection":"perspective","position":[0,2,6],"target":[0,0.6,0],"fov":40}},
+    "stand": {"id":"stand","kind":"mark.box@1","name":"Stand","order":"a001","params":{"size":[0.3,0.6,0.3],"paint":{"fill":{"role":"stone"}}},"at":{"pos":[-1.6,0.3,0]}},
+    "nozzle": {"id":"nozzle","kind":"mark.cylinder@1","name":"Nozzle","order":"a002","params":{"size":[0.2,0.2,0.2],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[-1.4,0.7,0],"rot":[0,0,90]}},
+    "plume": {"id":"plume","kind":"effect@1","name":"Plume","order":"a051","params":{"kind":"plume","anchor":"nozzle","axis":[1,0,0],"plume":{"radius":0.15,"reach":2.6,"heat":1.5,"shock_cells":2,"turbulence":0.15,"seed":7}},"at":{"pos":[-1.3,0.7,0]}}
+  }
+}
