@@ -94,6 +94,15 @@
     "decide_by": "R4"
   },
   {
+    "method": "eval.report",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#2495",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "called_by": "scripts/config-eval.mjs run"
+  },
+  {
     "method": "numbers.read",
     "since": "R1",
     "stability": "preview",
@@ -216,6 +225,14 @@
     "since": "R1",
     "stability": "preview",
     "tracking": "#2018",
+    "preview_since": "R1",
+    "decide_by": "R4"
+  },
+  {
+    "method": "signin.open",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1349",
     "preview_since": "R1",
     "decide_by": "R4"
   },
@@ -408,19 +425,25 @@
     "method": "work.approve",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1332"
+    "tracking": "#1332",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.pause",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1332"
+    "tracking": "#1332",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "work.show",
     "since": "R1",
     "stability": "preview",
-    "tracking": "#1332"
+    "tracking": "#1332",
+    "preview_since": "R1",
+    "decide_by": "R4"
   },
   {
     "method": "job.submit",

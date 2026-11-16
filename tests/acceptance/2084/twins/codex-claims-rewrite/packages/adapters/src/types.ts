@@ -1,0 +1,90 @@
+// The adapter contract's types (#312): the shapes an adapter gives and takes, shared by the registry and the
+// shipped parts without either importing the other.
+import type { JsonValue } from '@deepbuild/contracts';
+
+export type JsonObject = { [key: string]: JsonValue };
+
+/** deep-hook's request line, a hook.request@3 instance as it crosses the wire: seq is its decimal string. */
+export interface HookRequestLine {
+  v: 1; agent: string; event: string; seq: string; id: string; pid: number; ppid: number; matched: string[]; payload: JsonValue;
+  late?: boolean; billing?: Record<string, boolean>; notes?: Record<string, string>; stage?: Record<string, string[]>; heavy?: { name: string; kinds: string[]; form: string };
+}
+
+/** One event an adapter mapped (adapter.event@1): rule is the JSON Pointer of the facts entry that decided it. */
+export interface AdapterEvent { agent: string; kind: string; data: JsonObject; rule: string }
+export interface Reading { code: string; field: string; version: string }
+export interface Mapped { events: AdapterEvent[]; verified: boolean; readings: Reading[] }
+
+/** adapter.caps@1: every flag present, each a boolean. */
+export interface AdapterCaps {
+  holdStop: boolean; wakeIdle: boolean; steer: boolean; followUp: boolean; answerPermission: boolean; nativeTools: boolean;
+  mcp: boolean; rewrite: boolean; editInput: boolean; errorTurnHook: boolean; startTurn: boolean;
+}
+/** adapter.unsupported@1: per surface, the driven operations the adapter can't do there. */
+export type Unsupported = { [surface: string]: string[] };
+
+export interface DoctorItem { code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
+
+export type StopCause =
+  | 'sign_in_required' | 'token_refresh_failed' | 'plan_window_spent' | 'rate_limited' | 'refusal' | 'max_turns'
+  | 'context_overflow' | 'tool_schema_rejected' | 'agent_crashed' | 'timed_out' | 'unknown';
+export interface StopReading { cause: StopCause; reset?: number }
+
+/** The data of a turn.usage event. */
+export interface TurnUsage {
+  turn: string;
+  model: string;
+  covers: 'turn' | 'session';
+  tokens: { input: number; cached: number; output: number; exact: boolean };
+  cost: { basis: 'reported'; usd: number } | { basis: 'estimated'; usd: number; rate_card: string } | { basis: 'unpriced' };
+  context?: { used: number; window: number };
+}
+export interface Skill { name: string; source: string }
+
+/**
+ * What the adapter is handed for a permission request: the asks core's delivery, plus the chosen option's label, as
+ * permission.answer@1 has it: allow, deny or cancel (the ask was cancelled, so the agent's own dialog asks), for this
+ * call or for the session.
+ */
+export interface PermissionAnswer {
+  ask: string; session: string; option: string | null; label: string | null;
+  decision: 'allow' | 'deny' | 'cancel' | 'none'; for?: 'call' | 'session'; words: string | null; provisional: boolean; undoes: string | null;
+}
+
+export interface Adapter {
+  facts: JsonValue;
+  caps: AdapterCaps;
+  unsupported: Unsupported;
+  mapHook(request: HookRequestLine, version: string, transcript?: readonly JsonValue[]): Mapped;
+  doctor(): DoctorItem[];
+  readUsage?(transcript: readonly JsonValue[]): TurnUsage[];
+  classifyStop?(payload: JsonValue, transcript?: readonly JsonValue[]): StopReading;
+  skills?(home: string): Skill[];
+  /** The hook output the agent reads for a permission request answered with `answer`: allow only from its decision. */
+  permissionReply?(answer: PermissionAnswer, request: HookRequestLine): JsonValue;
+  /** The route to its model of a session started in `env` (#87): whether each variable or setting that moves it was
+   *  set, never its value. */
+  routeAtStart?(env: Readonly<Record<string, string | undefined>>): SessionRoute;
+  /** The hook output that gives the model `text` at `event` (#1296), on an output its facts' contextOutput marks as
+   *  reaching the model; none at an event where no output does. */
+  contextReply?(event: string, text: string): HookOutput | undefined;
+}
+/** A hook's output as deep-hook writes it: its exit status, stdout and stderr. */
+export interface HookOutput { exit: number; stdout: string; stderr: string }
+/** What an adapter records at a session's start about the route to its model, by name, true or false. */
+export type SessionRoute = Record<string, boolean>;
+/** The parts of an adapter that aren't data; everything else comes from its facts file. */
+export interface AdapterParts {
+  caps: AdapterCaps; unsupported: Unsupported; doctor(): DoctorItem[];
+  readUsage?: Adapter['readUsage']; classifyStop?: Adapter['classifyStop']; skills?: Adapter['skills']; permissionReply?: Adapter['permissionReply']; routeAtStart?: Adapter['routeAtStart'];
+  contextReply?(event: string, text: string, facts: JsonValue): HookOutput | undefined;
+}
+
+export interface AdapterRegistry {
+  register(name: string, adapter: Adapter): void;
+  names(): string[];
+  get(name: string): Adapter;
+  mapHook(request: HookRequestLine, version: string, transcript?: readonly JsonValue[]): Mapped;
+}
+
+export interface Drift { field: string; reason: string }

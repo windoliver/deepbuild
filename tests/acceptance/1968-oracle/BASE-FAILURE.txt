@@ -1,0 +1,54 @@
+# The base run of tests/acceptance/1968-oracle, at a12be6c8 ("Merge pull request #2525 ..."), Nov 14, 2026, on this Mac,
+# with the pinned files read from the saved oracle folder (DEEP_ORACLES).
+#
+#   DEEP_ORACLES=<oracles> PATH=<rust 1.99.1>:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease \
+#     npx vitest run --root tests/acceptance/1968-oracle --no-file-parallelism --testTimeout=600000   -> exit 1
+#   npx tsc --noEmit -p tests/acceptance/1968-oracle                                                  -> exit 0
+#
+# Both tests fail at their own assertion for missing behaviour: the pinned files were read and every case ported, each
+# case's own library alignment passed the judge and every planted alignment failed it (README: Wrong programs); then
+# deep_show refuses the film of the cases, transition_kind at transitions/<case>/kind ("motion.compile can't evaluate
+# this"): a transition between two items lands only as a match_morph. The film is read once per file and its failure
+# given to the second test (1 ms).
+# The lease script found no deep and ran the command unleased (its first line below).
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1968-oracle --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1968-oracle
+
+ ❯ upstream-diff.test.ts (2 tests | 2 failed) 3742ms
+   ❯ AC1 #1968.4bf4e5fe the pinned upstream diff tests, run on text_diff (2)
+     × AC1 #1968.4bf4e5fe the LCS module's sequences, each as lines and as one line's tokens: test_diff's and test_pat's snapshots, the swapped and bad-range regressions' operations and the table test's lengths, on our alignment 2181ms
+     × AC1 #1968.4bf4e5fe the inline module's line-then-token tests: test_line_ops_inline's snapshot by word, and the two character-mode tests' asserts, on our alignment 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  upstream-diff.test.ts > AC1 #1968.4bf4e5fe the pinned upstream diff tests, run on text_diff > AC1 #1968.4bf4e5fe the LCS module's sequences, each as lines and as one line's tokens: test_diff's and test_pat's snapshots, the swapped and bad-range regressions' operations and the table test's lengths, on our alignment
+ FAIL  upstream-diff.test.ts > AC1 #1968.4bf4e5fe the pinned upstream diff tests, run on text_diff > AC1 #1968.4bf4e5fe the inline module's line-then-token tests: test_line_ops_inline's snapshot by word, and the two character-mode tests' asserts, on our alignment
+AssertionError: the pinned cases is presented: [{"check":"document.validate","code":"transition_kind","severity":"error","ids":[],"path":"transitions/bad-range-lines/kind","actual":null,"what":"motion.compile can't evaluate this","fix":"See the issue."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented ../535/helpers.ts:255:93
+    253| /** A `deep_show` reply that presented its document: the message lists…
+    254| export function presented(reply: JsonObject, what: string): void {
+    255|   expect(reply['outcome'], `${what} is presented: ${show(reply['issues…
+       |                                                                                             ^
+    256| }
+    257| /** `eval` at `t` flicks on the document's live session (#387), with a…
+ ❯ filmsAt ../1968/helpers.ts:162:3
+ ❯ upstream-diff.test.ts:232:15
+ ❯ ../1968/helpers.ts:46:40
+ ❯ upstream-diff.test.ts:274:111
+ ❯ judge upstream-diff.test.ts:274:80
+ ❯ upstream-diff.test.ts:289:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  13:38:47
+   Duration  4.09s (tests 94%, transform 5%, import 1%)
+

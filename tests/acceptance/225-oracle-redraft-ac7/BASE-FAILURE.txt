@@ -1,0 +1,35 @@
+Base of tests/acceptance/225-oracle-redraft-ac7 at 0e5572731 (main, no implementation of #225); the checkout's head
+is dc9b43154, a later main merge that changes none of the files these tests reach.
+
+NOT RUN against the binary. No cargo binary was built and the suite was not run on the base: the machine is shared and
+heavily loaded, and this job was told not to build. Where each binary test fails was reasoned from the base's code, not
+observed.
+
+Observed, outside the repo: a copy of this folder with the root tsconfig.json's options, TypeScript 5.9.3, vitest 5.0.5
+and @types/node 24.19.2.
+- `tsc -p tests/acceptance/225-oracle-redraft-ac7/tsconfig.json` exits 0.
+- `vitest run -t 'the judge passes'` (the copy has no Cargo.toml, so the beforeAll build fails at once and nothing is
+  built): test 1 passes; the RK4 and exact flows pass, the unturned square fails, and the per-frame Euler twin strays
+  11.78 u at 24 fps and 4.64 u at 60 fps as worked out by hand, failing the judge at each rate.
+
+Reasoned, at the base:
+
+flow-square.test.ts, test 1 ("the judge passes the field's exact flow ... and fails the planted twins")
+- Pure test code; passes at the base and after (it shows the judge can fail; it proves nothing about the binary).
+
+flow-square.test.ts, test 2 ("played at 24 fps and at 60 fps ...")
+- The full build compiles (no new feature is asked for). The base registers no `vector_field@1`, so `deep show` notes
+  `unknown_kind` for `swirl` and skips it; the warp's `flow` (crates/deep-canvas-marks/src/warp.rs, `flow_of`) then
+  finds no `streams@1` table at `swirl`'s `params.streams` (the authored `{starts, step, time}` is not one) and refuses
+  with `ref_unresolved` naming `items/g/params/warp/flow/streams: swirl`.
+- Fails at: "24 fps: the film is presented at its own rate and the square drawn at every frame" (`notPlayed`: the
+  `unknown_kind` notice for `vector_field@1`, and the outcome or an error issue if the refusal surfaces at the check;
+  otherwise every `path` reply is refused and each frame fails as "deep-show path draws no square").
+
+flow-square.test.ts, test 3 ("a planted twin, the field written clockwise ...")
+- Fails at the same place for the same reason: "24 fps: the clockwise twin is presented and drawn at every frame". The
+  twin can't pass at the base: it asserts the film is presented before the judge is asked to fail.
+
+After #225: test 2 passes only if `swirl` builds its stream table and the flow carries the square through 90° by 1 s at
+both rates; test 3 passes only if the same program, given the clockwise field, ends the square more than 100 u off and
+the judge fails naming each rate.

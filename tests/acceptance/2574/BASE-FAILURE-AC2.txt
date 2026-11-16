@@ -1,0 +1,259 @@
+# node --test tests/acceptance/2574/grant.test.mjs at base 1ab891283 (no fix), 2026-11-16T00:32:50Z, Linux, load 37.19 on 20 cores,
+# in a systemd-run --user unit (MemoryMax=16G). The test files ran from a staging folder (<stage>/) whose tests/acceptance/1115 links
+# to the base checkout, so the scripts under test are the base's. Home paths read ~/.
+▶ #2574 AC2 a run with untimed jobs and no neighbour
+  ✖ #2574.AC2a the throttle log shows one top-level test grant, a passed event for each job that asks, and no build request (1.858052ms)
+  ✔ #2574.AC2c the run's grant waits 30 minutes and is taken through scripts/throttle.mjs test --wait (1.108211ms)
+✖ #2574 AC2 a run with untimed jobs and no neighbour (2553.098603ms)
+✖ #2574.AC2b while every test slot is held by other live processes the run starts no job, and starts once a slot frees (13752.292616ms)
+✖ #2574.AC2d with no grant within the wait the run prints INCONCLUSIVE no grant, names each file, reads INCONCLUSIVE, exits 2 and starts no job (3175.815576ms)
+✔ #2574.AC2e with --timed the timed files run after the run's test grant is released, each block under its own timed grant (2844.660443ms)
+ℹ tests 5
+ℹ suites 1
+ℹ pass 2
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22389.076898
+
+✖ failing tests:
+
+test at tests/acceptance/2574/grant.test.mjs:32:3
+✖ #2574.AC2a the throttle log shows one top-level test grant, a passed event for each job that asks, and no build request (1.858052ms)
+  AssertionError [ERR_ASSERTION]: the run took 2 top-level test grants, not one
+  exit 0
+  stdout:
+  …c04-budgets.test.ts tests/acceptance/1477/record.test.ts tests/acceptance/1477/built.test.ts tests/acceptance/1477/redraft/record.test.ts tests/acceptance/1637/budgets.test.ts tests/acceptance/501/budgets.test.ts tests/acceptance/1461/budget.test.ts tests/acceptance/1942/budgets.test.ts tests/acceptance/1942/stall.test.ts tests/acceptance/408-redraft-ac5/machines.test.ts tests/acceptance/405-redraft-ac4/budgets.test.ts tests/acceptance/1939/ac2-budget.test.ts tests/acceptance/2513/ac2-budget.test.ts tests/acceptance/202/budgets.test.ts tests/acceptance/1971/budget.test.ts tests/acceptance/220/budgets.test.ts tests/acceptance/724-redraft-1405/ tests/acceptance/1575/budgets.test.ts tests/acceptance/1575-redraft-ac1/budgets.test.ts tests/acceptance/2026/load.test.ts tests/acceptance/2026/outage.test.ts tests/acceptance/2026-redraft-ac3/replay.test.ts tests/acceptance/2011/ac2-step-budget.test.ts tests/acceptance/547/ac4-keyframes.test.ts tests/acceptance/154/budgets.test.ts tests/acceptance/154-redraft/budgets.test.ts tests/acceptance/1700/budgets.test.ts tests/acceptance/1958/budgets.test.ts tests/acceptance/157/budgets.test.ts tests/acceptance/162/budgets.test.ts tests/acceptance/537/ac4-budget.test.ts tests/acceptance/538/ac8-budgets.test.ts tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts tests/acceptance/1863/speed.test.ts tests/acceptance/2017/ac3-budgets.test.ts tests/acceptance/173/budgets.test.ts tests/acceptance/173/envelope.test.ts tests/acceptance/509/budgets.test.ts tests/acceptance/2197/budget.test.ts tests/acceptance/525-device/device.test.ts tests/acceptance/204/budgets.test.ts tests/acceptance/239/seek-play.test.ts tests/acceptance/239/budget.test.ts tests/acceptance/239/off-reference.test.ts tests/acceptance/169/budgets.test.ts tests/acceptance/226/ac7-budgets.test.ts tests/acceptance/222-redraft-ac7/budgets.test.ts tests/acceptance/223/ac7-budgets.test.ts tests/acceptance/225/ac6-budgets.test.ts tests/acceptance/142/ac6-budgets.test.ts tests/acceptance/548/ac3-budgets.test.ts tests/acceptance/224/ac02-rebuild-budget.test.ts tests/acceptance/1968/ac2-budgets.test.ts tests/acceptance/823-redraft-2073/run.test.ts tests/acceptance/468/ac5-budgets.test.ts tests/acceptance/213/ac8-budgets.test.ts tests/acceptance/184/budgets.test.ts tests/acceptance/2516/timing.test.ts
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 2 s at load 25; logs in /tmp/deep-1115-O1wJGd/tmp/deep-affected-SM2SWd
+  
+  stderr:
+  
+  throttle log:
+  {"at":"2026-11-16T00:32:16.700Z","event":"granted","class":"build","grant":"top-level","id":"82ff2b135e4715ab","pid":190453,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.017Z","event":"released","class":"build","id":"82ff2b135e4715ab","pid":190453}
+  {"at":"2026-11-16T00:32:17.385Z","event":"granted","class":"test","grant":"top-level","id":"b5c2e7ac192895c7","pid":190756,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.530Z","event":"granted","class":"build","grant":"top-level","id":"aa67c06b53e5e6e9","pid":190878,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.607Z","event":"granted","class":"build","grant":"top-level","id":"cedc0de6fa21d594","pid":190980,"index":2,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.656Z","event":"released","class":"build","id":"aa67c06b53e5e6e9","pid":190878}
+  {"at":"2026-11-16T00:32:17.665Z","event":"released","class":"test","id":"b5c2e7ac192895c7","pid":190756}
+  {"at":"2026-11-16T00:32:17.674Z","event":"granted","class":"test","grant":"top-level","id":"faa1882e18b44392","pid":190724,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.682Z","event":"released","class":"build","id":"cedc0de6fa21d594","pid":190980}
+  {"at":"2026-11-16T00:32:17.802Z","event":"granted","class":"build","grant":"top-level","id":"e7195672d9b69caf","pid":190802,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.855Z","event":"granted","class":"build","grant":"top-level","id":"6d8a896f7e21c474","pid":190976,"index":2,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.867Z","event":"released","class":"build","id":"e7195672d9b69caf","pid":190802}
+  {"at":"2026-11-16T00:32:17.875Z","event":"granted","class":"build","grant":"top-level","id":"42774dbd4b8ed09c","pid":190767,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:17.910Z","event":"released","class":"build","id":"42774dbd4b8ed09c","pid":190767}
+  {"at":"2026-11-16T00:32:17.917Z","event":"released","class":"build","id":"6d8a896f7e21c474","pid":190976}
+  {"at":"2026-11-16T00:32:18.048Z","event":"granted","class":"build","grant":"top-level","id":"dae193ab9b7da9b6","pid":190943,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:18.086Z","event":"released","class":"build","id":"dae193ab9b7da9b6","pid":190943}
+  {"at":"2026-11-16T00:32:18.229Z","event":"granted","class":"build","grant":"top-level","id":"e402ec9e67c351ba","pid":190955,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:18.247Z","event":"granted","class":"build","grant":"top-level","id":"208ced05efff03ec","pid":190792,"index":2,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:18.262Z","event":"released","class":"build","id":"e402ec9e67c351ba","pid":190955}
+  {"at":"2026-11-16T00:32:18.290Z","event":"released","class":"build","id":"208ced05efff03ec","pid":190792}
+  {"at":"2026-11-16T00:32:18.293Z","event":"granted","class":"build","grant":"top-level","id":"964b6b7db31b8479","pid":190917,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:18.325Z","event":"granted","class":"build","grant":"top-level","id":"5bf4a4e917eb3f5b","pid":190979,"index":2,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:18.331Z","event":"released","class":"build","id":"964b6b7db31b8479","pid":190917}
+  {"at":"2026-11-16T00:32:18.365Z","event":"released","class":"build","id":"5bf4a4e917eb3f5b","pid":190979}
+  {"at":"2026-11-16T00:32:18.412Z","event":"released","class":"test","id":"faa1882e18b44392","pid":190724}
+  probes:
+  [{"job":"build","at":1794789136982,"throttle":"build:82ff2b135e4715ab"},{"job":"lint scripts/repo-rules.mjs","at":1794789137197,"throttle":null},{"job":"lint scripts/slots-check.mjs","at":1794789137243,"throttle":null},{"job":"lint scripts/conformance-lint.mjs","at":1794789137243,"throttle":null},{"job":"lint scripts/record-reader-guard.mjs","at":1794789137278,"throttle":null},{"job":"lint scripts/canvas-closures.mjs","at":1794789137287,"throttle":null},{"job":"lint scripts/canvas-closures.mjs","at":1794789137337,"throttle":null},{"job":"lint scripts/guide.mjs","at":1794789137373,"throttle":null},{"job":"lint scripts/color-literal-guard.mjs","at":1794789137396,"throttle":null},{"job":"lint scripts/render-lint.mjs","at":1794789137563,"throttle":"build:aa67c06b53e5e6e9"},{"job":"tests/fixture-2574-probe.test.mjs","at":1794789137578,"throttle":"test:b5c2e7ac192895c7"},{"job":"lint scripts/fetch-lock.mjs","at":1794789137673,"throttle":"build:cedc0de6fa21d594"},{"job":"lint scripts/canvas-lint.mjs","at":1794789137855,"throttle":"build:e7195672d9b69caf"},{"job":"lint scripts/panel-catalog.mjs","at":1794789137906,"throttle":"build:6d8a896f7e21c474"},{"job":"lint scripts/vendor-rebase.mjs","at":1794789137906,"throttle":"build:42774dbd4b8ed09c"},{"job":"lint scripts/plant-lint.mjs","at":1794789138083,"throttle":"build:dae193ab9b7da9b6"},{"job":"lint scripts/blocking-call-guard.mjs","at":1794789138257,"throttle":"build:e402ec9e67c351ba"},{"job":"lint scripts/size-ratchet.mjs","at":1794789138283,"throttle":"build:208ced05efff03ec"},{"job":"lint scripts/keymap-guard.mjs","at":1794789138324,"throttle":"build:964b6b7db31b8479"},{"job":"tests/fixture-2574/probe.test.ts","at":1794789138345,"throttle":"test:faa1882e18b44392"},{"job":"lint scripts/known-failures-check.mjs","at":1794789138362,"throttle":"build:5bf4a4e917eb3f5b"}]
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file://<stage>/tests/acceptance/2574/grant.test.mjs:37:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2574/grant.test.mjs:69:1
+✖ #2574.AC2b while every test slot is held by other live processes the run starts no job, and starts once a slot frees (13752.292616ms)
+  AssertionError [ERR_ASSERTION]: jobs started while all 4 test slots were held by others
+  exit 0
+  stdout:
+  …04-budgets.test.ts tests/acceptance/1477/record.test.ts tests/acceptance/1477/built.test.ts tests/acceptance/1477/redraft/record.test.ts tests/acceptance/1637/budgets.test.ts tests/acceptance/501/budgets.test.ts tests/acceptance/1461/budget.test.ts tests/acceptance/1942/budgets.test.ts tests/acceptance/1942/stall.test.ts tests/acceptance/408-redraft-ac5/machines.test.ts tests/acceptance/405-redraft-ac4/budgets.test.ts tests/acceptance/1939/ac2-budget.test.ts tests/acceptance/2513/ac2-budget.test.ts tests/acceptance/202/budgets.test.ts tests/acceptance/1971/budget.test.ts tests/acceptance/220/budgets.test.ts tests/acceptance/724-redraft-1405/ tests/acceptance/1575/budgets.test.ts tests/acceptance/1575-redraft-ac1/budgets.test.ts tests/acceptance/2026/load.test.ts tests/acceptance/2026/outage.test.ts tests/acceptance/2026-redraft-ac3/replay.test.ts tests/acceptance/2011/ac2-step-budget.test.ts tests/acceptance/547/ac4-keyframes.test.ts tests/acceptance/154/budgets.test.ts tests/acceptance/154-redraft/budgets.test.ts tests/acceptance/1700/budgets.test.ts tests/acceptance/1958/budgets.test.ts tests/acceptance/157/budgets.test.ts tests/acceptance/162/budgets.test.ts tests/acceptance/537/ac4-budget.test.ts tests/acceptance/538/ac8-budgets.test.ts tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts tests/acceptance/1863/speed.test.ts tests/acceptance/2017/ac3-budgets.test.ts tests/acceptance/173/budgets.test.ts tests/acceptance/173/envelope.test.ts tests/acceptance/509/budgets.test.ts tests/acceptance/2197/budget.test.ts tests/acceptance/525-device/device.test.ts tests/acceptance/204/budgets.test.ts tests/acceptance/239/seek-play.test.ts tests/acceptance/239/budget.test.ts tests/acceptance/239/off-reference.test.ts tests/acceptance/169/budgets.test.ts tests/acceptance/226/ac7-budgets.test.ts tests/acceptance/222-redraft-ac7/budgets.test.ts tests/acceptance/223/ac7-budgets.test.ts tests/acceptance/225/ac6-budgets.test.ts tests/acceptance/142/ac6-budgets.test.ts tests/acceptance/548/ac3-budgets.test.ts tests/acceptance/224/ac02-rebuild-budget.test.ts tests/acceptance/1968/ac2-budgets.test.ts tests/acceptance/823-redraft-2073/run.test.ts tests/acceptance/468/ac5-budgets.test.ts tests/acceptance/213/ac8-budgets.test.ts tests/acceptance/184/budgets.test.ts tests/acceptance/2516/timing.test.ts
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 13 s at load 31; logs in /tmp/deep-1115-nuEH5e/tmp/deep-affected-wJUvWO
+  
+  stderr:
+  
+  throttle log:
+  {"at":"2026-11-16T00:32:18.718Z","event":"granted","class":"test","grant":"top-level","id":"954e4ef5b66856a7","pid":191750,"index":1,"load":24.94,"cores":20,"wait":1}
+  {"at":"2026-11-16T00:32:18.722Z","event":"granted","class":"test","grant":"top-level","id":"9767a7b2f70c47c8","pid":191762,"index":2,"load":24.94,"cores":20,"wait":1}
+  {"at":"2026-11-16T00:32:18.725Z","event":"granted","class":"test","grant":"top-level","id":"8998d90d2510a346","pid":191759,"index":3,"load":24.94,"cores":20,"wait":1}
+  {"at":"2026-11-16T00:32:18.882Z","event":"granted","class":"test","grant":"top-level","id":"96ce5beb3d369779","pid":191778,"index":4,"load":24.94,"cores":20,"wait":1}
+  {"at":"2026-11-16T00:32:19.707Z","event":"granted","class":"build","grant":"top-level","id":"c2cbd9e9e726c9d6","pid":192449,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:19.976Z","event":"released","class":"build","id":"c2cbd9e9e726c9d6","pid":192449}
+  {"at":"2026-11-16T00:32:20.189Z","event":"granted","class":"build","grant":"top-level","id":"533ffd75eb13ef84","pid":193026,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.199Z","event":"granted","class":"build","grant":"top-level","id":"15ba8ba637dc7dd8","pid":192991,"index":2,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.252Z","event":"released","class":"build","id":"15ba8ba637dc7dd8","pid":192991}
+  {"at":"2026-11-16T00:32:20.253Z","event":"released","class":"build","id":"533ffd75eb13ef84","pid":193026}
+  {"at":"2026-11-16T00:32:20.397Z","event":"granted","class":"build","grant":"top-level","id":"e932412596213aa6","pid":192969,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.447Z","event":"released","class":"build","id":"e932412596213aa6","pid":192969}
+  {"at":"2026-11-16T00:32:20.486Z","event":"granted","class":"build","grant":"top-level","id":"114a7da721107ed3","pid":193114,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.532Z","event":"released","class":"build","id":"114a7da721107ed3","pid":193114}
+  {"at":"2026-11-16T00:32:20.648Z","event":"granted","class":"build","grant":"top-level","id":"7397e0e25024f4d9","pid":193123,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.684Z","event":"released","class":"build","id":"7397e0e25024f4d9","pid":193123}
+  {"at":"2026-11-16T00:32:20.816Z","event":"granted","class":"build","grant":"top-level","id":"85bc439fe5e79a82","pid":193143,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.855Z","event":"released","class":"build","id":"85bc439fe5e79a82","pid":193143}
+  {"at":"2026-11-16T00:32:20.956Z","event":"granted","class":"build","grant":"top-level","id":"a3aab546634e9378","pid":193247,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:20.999Z","event":"released","class":"build","id":"a3aab546634e9378","pid":193247}
+  {"at":"2026-11-16T00:32:21.125Z","event":"granted","class":"build","grant":"top-level","id":"a842502e2b569bd2","pid":193190,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:21.156Z","event":"released","class":"build","id":"a842502e2b569bd2","pid":193190}
+  {"at":"2026-11-16T00:32:21.217Z","event":"granted","class":"build","grant":"top-level","id":"89a9860becb52d76","pid":193262,"index":1,"load":24.94,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:21.244Z","event":"released","class":"build","id":"89a9860becb52d76","pid":193262}
+  {"at":"2026-11-16T00:32:21.293Z","event":"granted","class":"build","grant":"top-level","id":"0e26d1517c69b9dc","pid":193291,"index":1,"load":25.19,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:21.320Z","event":"released","class":"build","id":"0e26d1517c69b9dc","pid":193291}
+  {"at":"2026-11-16T00:32:30.863Z","event":"released","class":"test","id":"954e4ef5b66856a7","pid":191750,"reason":"holder gone"}
+  {"at":"2026-11-16T00:32:30.904Z","event":"granted","class":"test","grant":"top-level","id":"6c1e68b64d9e0da2","pid":192907,"index":1,"load":28.3,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:31.750Z","event":"released","class":"test","id":"6c1e68b64d9e0da2","pid":192907}
+  {"at":"2026-11-16T00:32:31.924Z","event":"granted","class":"test","grant":"top-level","id":"6607a24dfc60a623","pid":192932,"index":1,"load":30.92,"cores":20,"wait":30}
+  {"at":"2026-11-16T00:32:32.095Z","event":"released","class":"test","id":"6607a24dfc60a623","pid":192932}
+  probes:
+  [{"job":"build","at":1794789139955,"throttle":"build:c2cbd9e9e726c9d6"},{"job":"lint scripts/repo-rules.mjs","at":1794789140043,"throttle":null},{"job":"lint scripts/conformance-lint.mjs","at":1794789140101,"throttle":null},{"job":"lint scripts/slots-check.mjs","at":1794789140110,"throttle":null},{"job":"lint scripts/canvas-closures.mjs","at":1794789140119,"throttle":null},{"job":"lint scripts/canvas-closures.mjs","at":1794789140122,"throttle":null},{"job":"lint scripts/record-reader-guard.mjs","at":1794789140192,"throttle":null},{"job":"lint scripts/canvas-lint.mjs","at":1794789140236,"throttle":"build:533ffd75eb13ef84"},{"job":"lint scripts/color-literal-guard.mjs","at":1794789140244,"throttle":null},{"job":"lint scripts/size-ratchet.mjs","at":1794789140249,"throttle":"build:15ba8ba637dc7dd8"},{"job":"lint scripts/guide.mjs","at":1794789140252,"throttle":null},{"job":"lint scripts/vendor-rebase.mjs","at":1794789140439,"throttle":"build:e932412596213aa6"},{"job":"lint scripts/render-lint.mjs","at":1794789140526,"throttle":"build:114a7da721107ed3"},{"job":"lint scripts/plant-lint.mjs","at":1794789140676,"throttle":"build:7397e0e25024f4d9"},{"job":"lint scripts/blocking-call-guard.mjs","at":1794789140850,"throttle":"build:85bc439fe5e79a82"},{"job":"lint scripts/known-failures-check.mjs","at":1794789140994,"throttle":"build:a3aab546634e9378"},{"job":"lint scripts/keymap-guard.mjs","at":1794789141153,"throttle":"build:a842502e2b569bd2"},{"job":"lint scripts/panel-catalog.mjs","at":1794789141240,"throttle":"build:89a9860becb52d76"},{"job":"lint scripts/fetch-lock.mjs","at":1794789141317,"throttle":"build:0e26d1517c69b9dc"},{"job":"tests/fixture-2574/probe.test.ts","at":1794789151655,"throttle":"test:6c1e68b64d9e0da2"},{"job":"tests/fixture-2574-probe.test.mjs","at":1794789152029,"throttle":"test:6607a24dfc60a623"}]
+  + actual - expected
+  
+  + [
+  +   {
+  +     at: 1794789139955,
+  +     job: 'build',
+  +     throttle: 'build:c2cbd9e9e726c9d6'
+  +   },
+  +   {
+  +     at: 1794789140043,
+  +     job: 'lint scripts/repo-rules.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140101,
+  +     job: 'lint scripts/conformance-lint.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140110,
+  +     job: 'lint scripts/slots-check.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140119,
+  +     job: 'lint scripts/canvas-closures.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140122,
+  +     job: 'lint scripts/canvas-closures.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140192,
+  +     job: 'lint scripts/record-reader-guard.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140236,
+  +     job: 'lint scripts/canvas-lint.mjs',
+  +     throttle: 'build:533ffd75eb13ef84'
+  +   },
+  +   {
+  +     at: 1794789140244,
+  +     job: 'lint scripts/color-literal-guard.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140249,
+  +     job: 'lint scripts/size-ratchet.mjs',
+  +     throttle: 'build:15ba8ba637dc7dd8'
+  +   },
+  +   {
+  +     at: 1794789140252,
+  +     job: 'lint scripts/guide.mjs',
+  +     throttle: null
+  +   },
+  +   {
+  +     at: 1794789140439,
+  +     job: 'lint scripts/vendor-rebase.mjs',
+  +     throttle: 'build:e932412596213aa6'
+  +   },
+  +   {
+  +     at: 1794789140526,
+  +     job: 'lint scripts/render-lint.mjs',
+  +     throttle: 'build:114a7da721107ed3'
+  +   },
+  +   {
+  +     at: 1794789140676,
+  +     job: 'lint scripts/plant-lint.mjs',
+  +     throttle: 'build:7397e0e25024f4d9'
+  +   },
+  +   {
+  +     at: 1794789140850,
+  +     job: 'lint scripts/blocking-call-guard.mjs',
+  +     throttle: 'build:85bc439fe5e79a82'
+  +   },
+  +   {
+  +     at: 1794789140994,
+  +     job: 'lint scripts/known-failures-check.mjs',
+  +     throttle: 'build:a3aab546634e9378'
+  +   },
+  +   {
+  +     at: 1794789141153,
+  +     job: 'lint scripts/keymap-guard.mjs',
+  +     throttle: 'build:a842502e2b569bd2'
+  +   },
+  +   {
+  +     at: 1794789141240,
+  +     job: 'lint scripts/panel-catalog.mjs',
+  +     throttle: 'build:89a9860becb52d76'
+  +   },
+  +   {
+  +     at: 1794789141317,
+  +     job: 'lint scripts/fetch-lock.mjs',
+  +     throttle: 'build:0e26d1517c69b9dc'
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<stage>/tests/acceptance/2574/grant.test.mjs:84:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ { job: 'build', at: 1794789139955, throttle: 'build:c2cbd9e9e726c9d6' }, { job: 'lint scripts/repo-rules.mjs', at: 1794789140043, throttle: null }, { job: 'lint scripts/conformance-lint.mjs', at: 1794789140101, throttle: null }, { job: 'lint scripts/slots-check.mjs', at: 1794789140110, throttle: null }, { job: 'lint scripts/canvas-closures.mjs', at: 1794789140119, throttle: null }, { job: 'lint scripts/canvas-closures.mjs', at: 1794789140122, throttle: null }, { job: 'lint scripts/record-reader-guard.mjs', at: 1794789140192, throttle: null }, { job: 'lint scripts/canvas-lint.mjs', at: 1794789140236, throttle: 'build:533ffd75eb13ef84' }, { job: 'lint scripts/color-literal-guard.mjs', at: 1794789140244, throttle: null }, { job: 'lint scripts/size-ratchet.mjs', at: 1794789140249, throttle: 'build:15ba8ba637dc7dd8' }, { job: 'lint scripts/guide.mjs', at: 1794789140252, throttle: null }, { job: 'lint scripts/vendor-rebase.mjs', at: 1794789140439, throttle: 'build:e932412596213aa6' }, { job: 'lint scripts/render-lint.mjs', at: 1794789140526, throttle: 'build:114a7da721107ed3' }, { job: 'lint scripts/plant-lint.mjs', at: 1794789140676, throttle: 'build:7397e0e25024f4d9' }, { job: 'lint scripts/blocking-call-guard.mjs', at: 1794789140850, throttle: 'build:85bc439fe5e79a82' }, { job: 'lint scripts/known-failures-check.mjs', at: 1794789140994, throttle: 'build:a3aab546634e9378' }, { job: 'lint scripts/keymap-guard.mjs', at: 1794789141153, throttle: 'build:a842502e2b569bd2' }, { job: 'lint scripts/panel-catalog.mjs', at: 1794789141240, throttle: 'build:89a9860becb52d76' }, { job: 'lint scripts/fetch-lock.mjs', at: 1794789141317, throttle: 'build:0e26d1517c69b9dc' } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2574/grant.test.mjs:94:1
+✖ #2574.AC2d with no grant within the wait the run prints INCONCLUSIVE no grant, names each file, reads INCONCLUSIVE, exits 2 and starts no job (3175.815576ms)
+  AssertionError [ERR_ASSERTION]: no "INCONCLUSIVE no grant: no test grant came within 0.02 min" line
+  exit 2
+  stdout:
+  …ets.test.ts tests/acceptance/1477/record.test.ts tests/acceptance/1477/built.test.ts tests/acceptance/1477/redraft/record.test.ts tests/acceptance/1637/budgets.test.ts tests/acceptance/501/budgets.test.ts tests/acceptance/1461/budget.test.ts tests/acceptance/1942/budgets.test.ts tests/acceptance/1942/stall.test.ts tests/acceptance/408-redraft-ac5/machines.test.ts tests/acceptance/405-redraft-ac4/budgets.test.ts tests/acceptance/1939/ac2-budget.test.ts tests/acceptance/2513/ac2-budget.test.ts tests/acceptance/202/budgets.test.ts tests/acceptance/1971/budget.test.ts tests/acceptance/220/budgets.test.ts tests/acceptance/724-redraft-1405/ tests/acceptance/1575/budgets.test.ts tests/acceptance/1575-redraft-ac1/budgets.test.ts tests/acceptance/2026/load.test.ts tests/acceptance/2026/outage.test.ts tests/acceptance/2026-redraft-ac3/replay.test.ts tests/acceptance/2011/ac2-step-budget.test.ts tests/acceptance/547/ac4-keyframes.test.ts tests/acceptance/154/budgets.test.ts tests/acceptance/154-redraft/budgets.test.ts tests/acceptance/1700/budgets.test.ts tests/acceptance/1958/budgets.test.ts tests/acceptance/157/budgets.test.ts tests/acceptance/162/budgets.test.ts tests/acceptance/537/ac4-budget.test.ts tests/acceptance/538/ac8-budgets.test.ts tests/acceptance/538-redraft-ac8/ac8-budgets.test.ts tests/acceptance/1863/speed.test.ts tests/acceptance/2017/ac3-budgets.test.ts tests/acceptance/173/budgets.test.ts tests/acceptance/173/envelope.test.ts tests/acceptance/509/budgets.test.ts tests/acceptance/2197/budget.test.ts tests/acceptance/525-device/device.test.ts tests/acceptance/204/budgets.test.ts tests/acceptance/239/seek-play.test.ts tests/acceptance/239/budget.test.ts tests/acceptance/239/off-reference.test.ts tests/acceptance/169/budgets.test.ts tests/acceptance/226/ac7-budgets.test.ts tests/acceptance/222-redraft-ac7/budgets.test.ts tests/acceptance/223/ac7-budgets.test.ts tests/acceptance/225/ac6-budgets.test.ts tests/acceptance/142/ac6-budgets.test.ts tests/acceptance/548/ac3-budgets.test.ts tests/acceptance/224/ac02-rebuild-budget.test.ts tests/acceptance/1968/ac2-budgets.test.ts tests/acceptance/823-redraft-2073/run.test.ts tests/acceptance/468/ac5-budgets.test.ts tests/acceptance/213/ac8-budgets.test.ts tests/acceptance/184/budgets.test.ts tests/acceptance/2516/timing.test.ts
+  INCONCLUSIVE affected: 0 new, 0 already failing on main, 2 inconclusive or blocked, 0 listed skips, 0 passed, in 2 s at load 31; logs in /tmp/deep-1115-ZHWIfA/tmp/deep-affected-d2GXsD
+  
+  stderr:
+  
+  probes:
+  [{"job":"build","at":1794789153807,"throttle":"build:7ce1e939c00d23f0"},{"job":"lint scripts/conformance-lint.mjs","at":1794789153978,"throttle":null},{"job":"lint scripts/slots-check.mjs","at":1794789153997,"throttle":null},{"job":"lint scripts/repo-rules.mjs","at":1794789154018,"throttle":null},{"job":"lint scripts/record-reader-guard.mjs","at":1794789154025,"throttle":null},{"job":"lint scripts/canvas-closures.mjs","at":1794789154025,"throttle":null},{"job":"lint scripts/canvas-closures.mjs","at":1794789154089,"throttle":null},{"job":"lint scripts/size-ratchet.mjs","at":1794789154104,"throttle":"build:88a3e34baa9afd36"},{"job":"lint scripts/color-literal-guard.mjs","at":1794789154110,"throttle":null},{"job":"lint scripts/vendor-rebase.mjs","at":1794789154119,"throttle":"build:fed0f095231498b8"},{"job":"lint scripts/guide.mjs","at":1794789154162,"throttle":null},{"job":"lint scripts/canvas-lint.mjs","at":1794789154176,"throttle":"build:1be0f75a31f9cff1"},{"job":"lint scripts/plant-lint.mjs","at":1794789154408,"throttle":"build:656cb5a562d55b03"},{"job":"lint scripts/blocking-call-guard.mjs","at":1794789154449,"throttle":"build:8f381e9639996bd1"},{"job":"lint scripts/keymap-guard.mjs","at":1794789154510,"throttle":"build:5123ee815867085d"},{"job":"lint scripts/panel-catalog.mjs","at":1794789154669,"throttle":"build:4b0aa0610c216cd1"},{"job":"lint scripts/known-failures-check.mjs","at":1794789154678,"throttle":"build:d825661cb0d297c7"},{"job":"lint scripts/fetch-lock.mjs","at":1794789154884,"throttle":"build:85f2fa2a271ab551"},{"job":"lint scripts/render-lint.mjs","at":1794789155014,"throttle":"build:05d5ca9c9652094b"}]
+      at TestContext.<anonymous> (file://<stage>/tests/acceptance/2574/grant.test.mjs:101:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1

@@ -1,0 +1,36 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/removal-cutoff.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/removal-cutoff.test.ts > does not adopt when the rule was still in use before the held-out cohort, even though it is unused now
+AssertionError: the 20 replay tasks are only 7–26 days old, so the old use is inside the 60 days BEFORE their cutoff: expected '# Legacy rules\r\n\r\n\r\nKeep this p…' to be '# Legacy rules\r\n\r\n- Never edit th…' // Object.is equality
+
+- Expected
++ Received
+
+  # Legacy rules\r
+  \r
+- - Never edit the generated stubs by hand\r
+  \r
+  Keep this paragraph, including its trailing spaces.  \r
+
+
+ ❯ packages/hub/test/removal-cutoff.test.ts:27:158
+     25|     const job = (await jobs(hub)).find((j) => j.kind === 'eval')!;
+     26|     const ended = await until(() => control(hub, 'job.status', { job: …
+     27|     expect(readFileSync(join(w.repo, FILE), 'utf8'), 'the 20 replay ta…
+       |                                                                                                                                                              ^
+     28|     expect(ended.refused ?? ended.result).toMatch(/INCONCLUSIVE.*cutof…
+     29|     expect(observations(w)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:21:38
+   Duration  19.04s (tests 99%)

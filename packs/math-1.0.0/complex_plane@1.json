@@ -1,0 +1,489 @@
+{
+  "id": "math.complex_plane",
+  "version": "1.0",
+  "title": "ComplexPlane",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "ComplexPlane as math.number_plane whose y numbers read as imaginary, each with its i. a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units.",
+  "inputs": {
+    "x_range": {
+      "type": "records",
+      "default": [
+        -7,
+        7,
+        1
+      ],
+      "about": "x_range: [min, max, step]"
+    },
+    "y_range": {
+      "type": "records",
+      "default": [
+        -4,
+        4,
+        1
+      ],
+      "about": "y_range: [min, max, step]"
+    },
+    "x_length": {
+      "type": "number",
+      "default": 0,
+      "about": "the x axis's length in units; 0 for its range's span",
+      "min": 0
+    },
+    "y_length": {
+      "type": "number",
+      "default": 0,
+      "about": "the y axis's length in units; 0 for its range's span",
+      "min": 0
+    },
+    "tips": {
+      "type": "bool",
+      "default": false,
+      "about": "an arrow tip at each axis's max end"
+    },
+    "axis_config": {
+      "type": "record",
+      "default": {},
+      "about": "axis_config: what both axes take, as a number line does (include_numbers, numbers_to_exclude, font_size, tick_size, include_ticks, decimal_places, numbers_with_elongated_ticks, longer_tick_multiple, line_to_number_buff, stroke_width)"
+    },
+    "x_axis_config": {
+      "type": "record",
+      "default": {},
+      "about": "x_axis_config: the x axis's own, over axis_config"
+    },
+    "y_axis_config": {
+      "type": "record",
+      "default": {},
+      "about": "y_axis_config: the y axis's own, over axis_config"
+    },
+    "move_to": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "unit",
+      "about": "move_to: where the ranges' middles go, in units"
+    },
+    "color": {
+      "type": "choice",
+      "options": [
+        "default",
+        "BLACK",
+        "BLUE_A",
+        "BLUE_B",
+        "BLUE_C",
+        "BLUE_D",
+        "BLUE_E",
+        "DARK_BROWN",
+        "GOLD_A",
+        "GOLD_B",
+        "GOLD_C",
+        "GOLD_D",
+        "GOLD_E",
+        "GRAY_A",
+        "GRAY_B",
+        "GRAY_BROWN",
+        "GRAY_C",
+        "GRAY_D",
+        "GRAY_E",
+        "GREEN_A",
+        "GREEN_B",
+        "GREEN_C",
+        "GREEN_D",
+        "GREEN_E",
+        "LIGHT_BROWN",
+        "LIGHT_PINK",
+        "MAROON_A",
+        "MAROON_B",
+        "MAROON_C",
+        "MAROON_D",
+        "MAROON_E",
+        "ORANGE",
+        "PINK",
+        "PURPLE_A",
+        "PURPLE_B",
+        "PURPLE_C",
+        "PURPLE_D",
+        "PURPLE_E",
+        "RED_A",
+        "RED_B",
+        "RED_C",
+        "RED_D",
+        "RED_E",
+        "TEAL_A",
+        "TEAL_B",
+        "TEAL_C",
+        "TEAL_D",
+        "TEAL_E",
+        "WHITE",
+        "YELLOW_A",
+        "YELLOW_B",
+        "YELLOW_C",
+        "YELLOW_D",
+        "YELLOW_E",
+        "BLUE",
+        "DARKER_GRAY",
+        "DARK_BLUE",
+        "DARK_GRAY",
+        "GOLD",
+        "GRAY",
+        "GREEN",
+        "GREY",
+        "LIGHTER_GRAY",
+        "LIGHT_GRAY",
+        "MAROON",
+        "PURPLE",
+        "RED",
+        "TEAL",
+        "YELLOW"
+      ],
+      "default": "default",
+      "about": "the axes' color; unwritten, the ink role"
+    },
+    "tip_length": {
+      "type": "number",
+      "default": 0.35,
+      "about": "each tip's length in units",
+      "min": 0
+    },
+    "faded_line_ratio": {
+      "type": "integer",
+      "default": 1,
+      "about": "faded lines between background lines: ratio − 1 of them",
+      "min": 1,
+      "max": 16
+    },
+    "background_line_style": {
+      "type": "record",
+      "default": {},
+      "about": "background_line_style: stroke_color, stroke_width, stroke_opacity"
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2",
+    "role": "color == default ? ink : color",
+    "cx": "ox + move_to[0] * unit",
+    "cy": "oy + ys * move_to[1] * unit",
+    "zero": [
+      0
+    ],
+    "none_list": [],
+    "x0": "x_range[0]",
+    "x1": "x_range[1]",
+    "xd": "len(x_range) > 2 ? x_range[2] : 1",
+    "xm": "(x0 + x1) / 2",
+    "xo": "(x0 <= 0 && 0 <= x1) ? 0 : (x0 > 0 ? x0 : x1)",
+    "xu0": "cx + ((x0) - xm) / (x1 - x0) * (x_length > 0 ? x_length : x1 - x0) * unit",
+    "xu1": "cx + ((x1) - xm) / (x1 - x0) * (x_length > 0 ? x_length : x1 - x0) * unit",
+    "xuo": "cx + ((xo) - xm) / (x1 - x0) * (x_length > 0 ? x_length : x1 - x0) * unit",
+    "xticks": "round((x1 - x0) / xd) + 1",
+    "xvalues": {
+      "repeat": {
+        "count": "xticks",
+        "as": "k",
+        "of": "x0 + k * xd"
+      }
+    },
+    "xnumbers": "has(x_axis_config, include_numbers) ? x_axis_config.include_numbers : (has(axis_config, include_numbers) ? axis_config.include_numbers : 0)",
+    "xexclude": "has(x_axis_config, numbers_to_exclude) ? x_axis_config.numbers_to_exclude : (has(axis_config, numbers_to_exclude) ? axis_config.numbers_to_exclude : zero)",
+    "xfont": "has(x_axis_config, font_size) ? x_axis_config.font_size : (has(axis_config, font_size) ? axis_config.font_size : 36)",
+    "xticks_on": "has(x_axis_config, include_ticks) ? x_axis_config.include_ticks : (has(axis_config, include_ticks) ? axis_config.include_ticks : 1)",
+    "xtick_size": "has(x_axis_config, tick_size) ? x_axis_config.tick_size : (has(axis_config, tick_size) ? axis_config.tick_size : 0.1)",
+    "xtick": "xticks_on ? xtick_size * unit : 0",
+    "xlong": "has(x_axis_config, numbers_with_elongated_ticks) ? x_axis_config.numbers_with_elongated_ticks : (has(axis_config, numbers_with_elongated_ticks) ? axis_config.numbers_with_elongated_ticks : none_list)",
+    "xlonger": "has(x_axis_config, longer_tick_multiple) ? x_axis_config.longer_tick_multiple : (has(axis_config, longer_tick_multiple) ? axis_config.longer_tick_multiple : 2)",
+    "xbuff": "has(x_axis_config, line_to_number_buff) ? x_axis_config.line_to_number_buff : (has(axis_config, line_to_number_buff) ? axis_config.line_to_number_buff : 0.25)",
+    "xstroke": "has(x_axis_config, stroke_width) ? x_axis_config.stroke_width : (has(axis_config, stroke_width) ? axis_config.stroke_width : 2)",
+    "xwidth": "xstroke * unit / 100",
+    "xdecimals": "has(x_axis_config, decimal_places) ? x_axis_config.decimal_places : (has(axis_config, decimal_places) ? axis_config.decimal_places : -1)",
+    "xplaces": "xdecimals >= 0 ? xdecimals : (xd == floor(xd) ? 0 : ((xd) * 10 == floor((xd) * 10) ? 1 : 2))",
+    "y0": "y_range[0]",
+    "y1": "y_range[1]",
+    "yd": "len(y_range) > 2 ? y_range[2] : 1",
+    "ym": "(y0 + y1) / 2",
+    "yo": "(y0 <= 0 && 0 <= y1) ? 0 : (y0 > 0 ? y0 : y1)",
+    "yu0": "cy + ys * ((y0) - ym) / (y1 - y0) * (y_length > 0 ? y_length : y1 - y0) * unit",
+    "yu1": "cy + ys * ((y1) - ym) / (y1 - y0) * (y_length > 0 ? y_length : y1 - y0) * unit",
+    "yuo": "cy + ys * ((yo) - ym) / (y1 - y0) * (y_length > 0 ? y_length : y1 - y0) * unit",
+    "yticks": "round((y1 - y0) / yd) + 1",
+    "yvalues": {
+      "repeat": {
+        "count": "yticks",
+        "as": "k",
+        "of": "y0 + k * yd"
+      }
+    },
+    "ynumbers": "has(y_axis_config, include_numbers) ? y_axis_config.include_numbers : (has(axis_config, include_numbers) ? axis_config.include_numbers : 0)",
+    "yexclude": "has(y_axis_config, numbers_to_exclude) ? y_axis_config.numbers_to_exclude : (has(axis_config, numbers_to_exclude) ? axis_config.numbers_to_exclude : zero)",
+    "yfont": "has(y_axis_config, font_size) ? y_axis_config.font_size : (has(axis_config, font_size) ? axis_config.font_size : 36)",
+    "yticks_on": "has(y_axis_config, include_ticks) ? y_axis_config.include_ticks : (has(axis_config, include_ticks) ? axis_config.include_ticks : 1)",
+    "ytick_size": "has(y_axis_config, tick_size) ? y_axis_config.tick_size : (has(axis_config, tick_size) ? axis_config.tick_size : 0.1)",
+    "ytick": "yticks_on ? ytick_size * unit : 0",
+    "ylong": "has(y_axis_config, numbers_with_elongated_ticks) ? y_axis_config.numbers_with_elongated_ticks : (has(axis_config, numbers_with_elongated_ticks) ? axis_config.numbers_with_elongated_ticks : none_list)",
+    "ylonger": "has(y_axis_config, longer_tick_multiple) ? y_axis_config.longer_tick_multiple : (has(axis_config, longer_tick_multiple) ? axis_config.longer_tick_multiple : 2)",
+    "ybuff": "has(y_axis_config, line_to_number_buff) ? y_axis_config.line_to_number_buff : (has(axis_config, line_to_number_buff) ? axis_config.line_to_number_buff : 0.25)",
+    "ystroke": "has(y_axis_config, stroke_width) ? y_axis_config.stroke_width : (has(axis_config, stroke_width) ? axis_config.stroke_width : 2)",
+    "ywidth": "ystroke * unit / 100",
+    "ydecimals": "has(y_axis_config, decimal_places) ? y_axis_config.decimal_places : (has(axis_config, decimal_places) ? axis_config.decimal_places : -1)",
+    "yplaces": "ydecimals >= 0 ? ydecimals : (yd == floor(yd) ? 0 : ((yd) * 10 == floor((yd) * 10) ? 1 : 2))",
+    "xtip": "tip_length * unit",
+    "ytip": "tip_length * unit",
+    "grid_role": "has(background_line_style, stroke_color) ? background_line_style.stroke_color : muted",
+    "grid_width": "(has(background_line_style, stroke_width) ? background_line_style.stroke_width : 2) * unit / 100",
+    "grid_opacity": "has(background_line_style, stroke_opacity) ? background_line_style.stroke_opacity : 1",
+    "gx": [
+      "min(xu0, xu1)",
+      "max(xu0, xu1)",
+      "abs(xu1 - xu0) / ((x1 - x0) / xd)"
+    ],
+    "gy": [
+      "min(yu0, yu1)",
+      "max(yu0, yu1)",
+      "abs(yu1 - yu0) / ((y1 - y0) / yd)"
+    ],
+    "fx_step": [
+      "min(xu0, xu1)",
+      "max(xu0, xu1)",
+      "abs(xu1 - xu0) / ((x1 - x0) / xd) / faded_line_ratio"
+    ],
+    "fy_step": [
+      "min(yu0, yu1)",
+      "max(yu0, yu1)",
+      "abs(yu1 - yu0) / ((y1 - y0) / yd) / faded_line_ratio"
+    ],
+    "i_sign": "\\i"
+  },
+  "steps": {
+    "all": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {}
+    },
+    "faded": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "faded_line_ratio > 1",
+      "params": {
+        "fn": {
+          "grid": {
+            "x": "fx_step",
+            "y": "fy_step"
+          }
+        },
+        "paint": {
+          "stroke": {
+            "role": "grid_role",
+            "width": "grid_width / 2",
+            "opacity": "grid_opacity / 2"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "grid": {
+      "op": "mark",
+      "kind": "path@1",
+      "params": {
+        "fn": {
+          "grid": {
+            "x": "gx",
+            "y": "gy"
+          }
+        },
+        "paint": {
+          "stroke": {
+            "role": "grid_role",
+            "width": "grid_width",
+            "opacity": "grid_opacity"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "xscale": {
+      "op": "item",
+      "kind": "scale@1",
+      "params": {
+        "type": "linear",
+        "domain": [
+          "x0",
+          "x1"
+        ],
+        "range": [
+          "xu0",
+          "xu1"
+        ],
+        "nice": false,
+        "ticks": "xd"
+      },
+      "parent": "id(instance, all)"
+    },
+    "xaxis": {
+      "op": "item",
+      "kind": "axis@1",
+      "params": {
+        "scale": "id(instance, xscale)",
+        "side": "bottom",
+        "at": "yuo",
+        "role": "role",
+        "labels": false,
+        "width": "xwidth",
+        "tick": {
+          "size": "xtick",
+          "both": true,
+          "long": "xlong",
+          "long_size": "xtick * xlonger"
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "xtip": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "tips",
+      "params": {
+        "d": "polyline(xu0, yuo, xu1, yuo)",
+        "ends": {
+          "end": "arrow",
+          "size": "tip_length * unit / max(xwidth, 0.001)"
+        },
+        "paint": {
+          "stroke": {
+            "role": "role",
+            "width": "xwidth"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "xnumber": {
+      "op": "mark",
+      "kind": "text@1",
+      "repeat": {
+        "over": "xvalues",
+        "as": "v"
+      },
+      "when": "xnumbers && !(sum(j, 0, len(xexclude) - 1, abs(xexclude[j] - (v)) < 0.000000001 ? 1 : 0) > 0)",
+      "params": {
+        "text": "shown(v, xplaces)",
+        "name": true,
+        "font": "math",
+        "size": "xfont / 96 * unit",
+        "paint": {
+          "fill": {
+            "role": "role"
+          }
+        }
+      },
+      "at": {
+        "place": {
+          "beside": "part(id(instance, xaxis), tick, v)",
+          "side": "s",
+          "gap": "xbuff * unit",
+          "align": "center"
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "yscale": {
+      "op": "item",
+      "kind": "scale@1",
+      "params": {
+        "type": "linear",
+        "domain": [
+          "y0",
+          "y1"
+        ],
+        "range": [
+          "yu0",
+          "yu1"
+        ],
+        "nice": false,
+        "ticks": "yd"
+      },
+      "parent": "id(instance, all)"
+    },
+    "yaxis": {
+      "op": "item",
+      "kind": "axis@1",
+      "params": {
+        "scale": "id(instance, yscale)",
+        "side": "left",
+        "at": "xuo",
+        "role": "role",
+        "labels": false,
+        "width": "ywidth",
+        "tick": {
+          "size": "ytick",
+          "both": true,
+          "long": "ylong",
+          "long_size": "ytick * ylonger"
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "ytip": {
+      "op": "mark",
+      "kind": "path@1",
+      "when": "tips",
+      "params": {
+        "d": "polyline(xuo, yu0, xuo, yu1)",
+        "ends": {
+          "end": "arrow",
+          "size": "tip_length * unit / max(ywidth, 0.001)"
+        },
+        "paint": {
+          "stroke": {
+            "role": "role",
+            "width": "ywidth"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "ynumber": {
+      "op": "mark",
+      "kind": "text@1",
+      "repeat": {
+        "over": "yvalues",
+        "as": "v"
+      },
+      "when": "ynumbers && !(sum(j, 0, len(yexclude) - 1, abs(yexclude[j] - (v)) < 0.000000001 ? 1 : 0) > 0)",
+      "params": {
+        "text": "cat(shown(v, yplaces), i_sign)",
+        "name": true,
+        "font": "math",
+        "size": "yfont / 96 * unit",
+        "paint": {
+          "fill": {
+            "role": "role"
+          }
+        }
+      },
+      "at": {
+        "place": {
+          "beside": "part(id(instance, yaxis), tick, v)",
+          "side": "w",
+          "gap": "ybuff * unit",
+          "align": "center"
+        }
+      },
+      "parent": "id(instance, all)"
+    }
+  },
+  "refuses": {
+    "use_vectorized": "Leave it out: every math@1 shape is a path the renderer strokes and fills on its own.",
+    "sheen_factor": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "sheen_direction": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "background_stroke_width": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "background_stroke_color": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "joint_type": "Leave it out: paths join by the look's line style.",
+    "cap_style": "Leave it out: paths cap by the look's line style.",
+    "shade_in_3d": "Leave it out: 2D shapes draw flat; for a lit shape use math.surface."
+  }
+}

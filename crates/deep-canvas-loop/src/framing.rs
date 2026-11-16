@@ -1,9 +1,11 @@
 //! `camera.framing` (#1938; canvas primitives: Check input: loop kinds, Camera `camera@1`:
 //! framing): the kept items projected through the evaluated camera at each checked time, held
 //! inside the safe frame less `margin`, spanning `fill` of its shorter side, clear of overlays,
-//! with the horizon level; its fix the camera's distance or roll as one patch op, in closed form.
+//! with the horizon level and, with `verticals_max` (#468), the kept items' vertical edges upright;
+//! its fix the camera's distance or roll as one patch op, or a level camera and a lens shift, in
+//! closed form.
 
-use deep_canvas::ops::{atan2, deg, sqrt};
+use deep_canvas::ops::{atan2, deg, sqrt, tan};
 use deep_canvas::registry::{Raised, Report};
 use deep_canvas_scene3d::scene::{Camera, Scene, Shape2};
 use serde_json::{json, Value};
@@ -20,6 +22,8 @@ struct Opts {
     margin: f64,
     fill: [f64; 2],
     horizon_max: f64,
+    /// Off unless the input names it (#468).
+    verticals_max: Option<f64>,
 }
 
 /// One checked time's reading.
@@ -31,6 +35,8 @@ struct Reading {
     horizon: f64,
     /// The overlays the kept items' box reaches.
     under: Vec<String>,
+    /// The kept item whose projected vertical edge leans most, and its lean in degrees.
+    lean: Option<(String, f64)>,
 }
 
 impl Reading {
@@ -69,9 +75,14 @@ fn points(scene: &Scene, keep: &[String]) -> Result<Vec<(String, Vec<Vec3>)>, Va
         .collect()
 }
 
-/// The boxes overlays and readouts cover on the frame, by ID.
-fn overlay_boxes(scene: &Scene) -> Vec<(String, [f64; 4])> {
+/// The boxes overlays and readouts cover on the frame, by ID: each view overlay's rect (#506)
+/// among them.
+fn overlay_boxes(doc: &Value, scene: &Scene) -> Vec<(String, [f64; 4])> {
     let mut out = Vec::new();
+    for v in deep_canvas_scene3d::views::placed(doc, scene.size, None).unwrap_or_default() {
+        let [x, y, w, h] = v.rect.map(f64::from);
+        out.push((v.id, [x, y, x + w, y + h]));
+    }
     for o in &scene.overlays {
         let Some([ox, oy]) = o.origin else { continue };
         for s in &o.shapes {
@@ -124,7 +135,7 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
     } else {
         0.0
     };
-    let mut under: Vec<String> = overlay_boxes(scene)
+    let mut under: Vec<String> = overlay_boxes(doc, scene)
         .into_iter()
         .filter(|(_, b)| b[0] < bbox[2] && b[2] > bbox[0] && b[1] < bbox[3] && b[3] > bbox[1])
         .map(|(id, _)| id)
@@ -137,7 +148,103 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
         fill,
         horizon,
         under,
+        lean: lean(scene, keep),
     })
+}
+
+/// The kept item whose vertical edges lean most on the frame, and that lean in degrees from the
+/// frame's vertical: each solid's edges along its own y over its local box, where they stand
+/// within 1° of the world's vertical, both ends in front of the eye.
+fn lean(scene: &Scene, keep: &[String]) -> Option<(String, f64)> {
+    let cam = &scene.camera;
+    let mut worst: Option<(String, f64)> = None;
+    for id in keep {
+        for s in scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .filter(|s| scene::is_of(&s.id, id))
+        {
+            // The local box: the unit shape's, or the mesh's own extent.
+            let (lo, hi) = match &s.mesh {
+                Some(m) => m.positions.iter().fold(
+                    ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
+                    |(lo, hi), p| {
+                        (
+                            std::array::from_fn(|k| lo[k].min(p[k])),
+                            std::array::from_fn(|k| hi[k].max(p[k])),
+                        )
+                    },
+                ),
+                None => ([-0.5; 3], [0.5; 3]),
+            };
+            if !lo[0].is_finite() {
+                continue;
+            }
+            let at = |p: Vec3| -> Vec3 {
+                let m = &s.model;
+                std::array::from_fn(|r| m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3])
+            };
+            for x in [lo[0], hi[0]] {
+                for z in [lo[2], hi[2]] {
+                    let (a, b) = (at([x, lo[1], z]), at([x, hi[1], z]));
+                    let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+                    let len = length(d);
+                    if len <= 0.0 || d[1].abs() / len < 0.999_85 {
+                        continue;
+                    }
+                    let front = |p: Vec3| !cam.perspective || cam.to_view(p)[2] > 0.0;
+                    let (Some(pa), Some(pb)) = (
+                        cam.project(a).filter(|_| front(a)),
+                        cam.project(b).filter(|_| front(b)),
+                    ) else {
+                        continue;
+                    };
+                    let angle = deg(atan2((pb[0] - pa[0]).abs(), (pb[1] - pa[1]).abs()));
+                    if worst.as_ref().is_none_or(|w| angle > w.1) {
+                        worst = Some((id.clone(), angle));
+                    }
+                }
+            }
+        }
+    }
+    worst
+}
+
+/// The ops that level the camera and shift its lens instead, so what it aimed at stays where it
+/// was on the frame: the target (or the orbit's elevation) set level with the eye, and the
+/// shift raised by the pitch's tangent over the frame's height in focal lengths.
+fn level_ops(doc: &Value, scene: &Scene) -> Option<(Vec<Value>, f64)> {
+    let (cam_id, item) = scene::camera_of(doc)?;
+    let params = item.get("params")?;
+    let cam = &scene.camera;
+    if !cam.perspective {
+        return None;
+    }
+    let f = cam.forward;
+    let pitch = atan2(f[1], sqrt(f[0] * f[0] + f[2] * f[2]));
+    let rise = cam.scale * tan(pitch) / cam.size[1];
+    let at = |p: &str| format!("items/{cam_id}/params/{p}");
+    let op = |path: String, value: Value| json!({"op": "set", "id": cam_id, "path": path, "value": value});
+    let level = if params.get("orbit").is_some_and(Value::is_object) {
+        op(at("orbit/elevation"), json!(0))
+    } else {
+        let t = params.get("target").and_then(Value::as_array)?;
+        let t: Vec<f64> = t.iter().filter_map(Value::as_f64).collect();
+        let [x, _, z] = <[f64; 3]>::try_from(t).ok()?;
+        op(at("target"), json!([x, cam.eye[1], z]))
+    };
+    let own: Vec<f64> = params
+        .get("shift")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_f64).collect())
+        .unwrap_or_default();
+    let (sx, sy) = (
+        own.first().copied().unwrap_or(0.0),
+        own.get(1).copied().unwrap_or(0.0),
+    );
+    let shift = op(at("shift"), json!([sx, sy + rise]));
+    Some((vec![level, shift], deg(pitch)))
 }
 
 /// Where the kept items should land, as offsets from the camera's centre: the frame they must stay
@@ -278,10 +385,6 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             out.blocked.push(blocked("out_of_range", KIND, &[], field));
         }
     }
-    // A shot poses the camera at each time, which the hub writes before it draws.
-    if lowered.get("shots").and_then(Value::as_object).is_some_and(|s| !s.is_empty()) {
-        out.blocked.push(blocked("not_run", KIND, &[], "shots"));
-    }
     let fill = input
         .get("fill")
         .and_then(Value::as_array)
@@ -293,6 +396,7 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             _ => [0.2, 0.9],
         },
         horizon_max: crate::number(input, "/horizon_max", 1.0).min(1.0),
+        verticals_max: input.get("verticals_max").and_then(Value::as_f64),
     };
     let keep = match scene::kept(lowered, input, "keep", KIND) {
         Ok(k) => k,
@@ -301,7 +405,19 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             return out;
         }
     };
-    let times = match scene::times(input, KIND) {
+    // #506: a film's main shot is checked along its span, at 30 Hz (`path_rate`'s default) from
+    // each of the envelope camera's shots' start to its end, when the input names no times; a
+    // film whose shots it can't read is BLOCKED, never passed on one sample.
+    let shot_times = match lowered.get("shots").and_then(Value::as_object) {
+        Some(s) if !s.is_empty() && input.get("at_times").is_none() => {
+            match deep_canvas_motion::shots::spans(lowered).map(|s| scene::sampled(&s, 30)) {
+                Some(t) if !t.is_empty() => Some(Ok(t)),
+                _ => Some(Err(blocked("not_run", KIND, &[], "shots"))),
+            }
+        }
+        _ => None,
+    };
+    let times = match shot_times.unwrap_or_else(|| scene::times(input, KIND)) {
         Ok(t) => t,
         Err(b) => {
             out.blocked.push(b);
@@ -315,6 +431,10 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         times
             .iter()
             .map(|&t| {
+                // A shot poses the camera at each time, as the frame draws it (#506: the main
+                // shot's kept items).
+                let posed = deep_canvas_motion::shots::posed(doc, t);
+                let doc = posed.as_ref().unwrap_or(doc);
                 let s = scene::evaluate(doc, input, t, KIND)?;
                 Ok((read(doc, &s, t, &keep, &o)?, s))
             })
@@ -333,6 +453,7 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         out.results.push(json!({
             "t": r.t, "keep": keep, "cut": r.cut, "fill": r.fill, "range": o.fill,
             "horizon": r.horizon, "under": r.under,
+            "verticals": r.lean.as_ref().map(|(id, a)| json!({"item": id, "angle": a})),
         }));
     }
     // The subject: cut by the frame, or spanning outside `fill`; one fix moves the camera.
@@ -384,7 +505,55 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             what: format!("the horizon tilts {:.2}°, past {}°: set the camera's roll to 0", r.horizon, o.horizon_max),
             fix_ops: cures.then(|| vec![json!({"op": "set", "id": cam_id, "path": path, "value": 0})]),
         };
-        out.raised.push((first.clone(), raised, json!({"t": r.t, "horizon": r.horizon, "max": o.horizon_max, "camera": cam_id})));
+        out.raised.push((
+            first.clone(),
+            raised,
+            json!({"t": r.t, "horizon": r.horizon, "max": o.horizon_max, "camera": cam_id}),
+        ));
+    }
+    // #468: vertical edges that lean on the frame: a pitched camera, which a level camera and a
+    // lens shift fix.
+    if let Some(max) = o.verticals_max {
+        if let Some((r, s)) = readings
+            .iter()
+            .find(|(r, _)| r.lean.as_ref().is_some_and(|l| l.1 > max))
+        {
+            let (item, angle) = r.lean.clone().unwrap_or_default();
+            let fix = level_ops(lowered, s).filter(|(ops, _)| {
+                let fixed = ops.iter().fold(lowered.clone(), |d, op| {
+                    scene::with_set(
+                        &d,
+                        op["path"].as_str().unwrap_or_default(),
+                        op["value"].clone(),
+                    )
+                });
+                read_all(&fixed).is_ok_and(|rs| {
+                    rs.iter()
+                        .all(|(r, _)| r.lean.as_ref().is_none_or(|l| l.1 <= max))
+                })
+            });
+            let words = match &fix {
+                Some((ops, pitch)) => format!(
+                    ": level the camera (it pitches {pitch:.2}°) and shift the lens to {}",
+                    ops[1]["value"]
+                ),
+                None => String::new(),
+            };
+            let raised = Raised {
+                code: CODE,
+                severity: "error",
+                path: format!("items/{cam_id}/params"),
+                what: format!(
+                    "{item}'s vertical edges lean {angle:.2}°, past verticals_max {max}°{words}"
+                ),
+                fix_ops: fix.map(|(ops, _)| ops),
+            };
+            out.raised.push((
+                item.clone(),
+                raised,
+                json!({"t": r.t, "item": item, "angle": angle, "max": max, "camera": cam_id}),
+            ));
+        }
     }
     // An overlay over the subject: no camera move clears it in closed form, so its fix is text.
     if let Some((r, _)) = readings.iter().find(|(r, _)| !r.under.is_empty()) {

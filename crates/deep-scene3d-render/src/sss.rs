@@ -282,6 +282,8 @@ pub struct Subsurface {
     spread_pipeline: wgpu::RenderPipeline,
     spread: wgpu::BindGroup,
     uniform: wgpu::Buffer,
+    /// What was last written to it; a clone shares the buffer, so this too.
+    written: std::sync::Arc<deep_gpu::counted::Written>,
 }
 
 /// What the share pass reads of the geometry's targets, and the scene shader and its layout.
@@ -410,6 +412,7 @@ impl Subsurface {
             spread_pipeline,
             spread,
             uniform,
+            written: Default::default(),
         }
     }
 
@@ -423,7 +426,9 @@ impl Subsurface {
             radii,
             edges,
         };
-        deep_gpu::alloc::outside(|| queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u)));
+        deep_gpu::alloc::outside(|| {
+            queue.write_changed(&self.uniform, &self.written, bytemuck::bytes_of(&u))
+        });
     }
 
     /// The share pass over `draws` (with the scene's groups 0 to 2 bound), then the spread into

@@ -1,0 +1,88 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "What the logs say",
+  "description": "What the logs say: explain@1's evidence_board.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "6s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.evidence_board@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "e1",
+            "kind": "fade_in",
+            "text": "Latency spike",
+            "span": "0.5s",
+            "sub": "api latency"
+          },
+          {
+            "id": "e2",
+            "kind": "fade_in",
+            "text": "Deploy just before",
+            "span": "0.5s",
+            "sub": "release log"
+          },
+          {
+            "id": "e3",
+            "kind": "fade_in",
+            "text": "Cache cold",
+            "span": "0.5s",
+            "sub": "hit rate fell"
+          },
+          {
+            "id": "e4",
+            "kind": "fade_in",
+            "text": "Rollback later",
+            "span": "0.5s",
+            "sub": "on-call"
+          },
+          {
+            "id": "e5",
+            "kind": "indicate",
+            "targets": [
+              "e2"
+            ],
+            "span": "1s"
+          },
+          {
+            "id": "e6",
+            "kind": "fade_in",
+            "text": "Cause: cold cache after deploy",
+            "span": "0.5s",
+            "data": {
+              "section": true
+            }
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}

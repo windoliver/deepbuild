@@ -1,0 +1,107 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "A shear, then a stretch",
+  "description": "A shear, then a stretch: explain@1's linear_map.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "5s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.linear_map@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "plane": {
+          "x": [
+            -7,
+            7
+          ],
+          "y": [
+            -4,
+            4
+          ],
+          "background": true,
+          "coordinates": false
+        },
+        "basis": true,
+        "square": true,
+        "ghosts": true,
+        "vectors": [
+          {
+            "id": "v",
+            "coords": [
+              1,
+              2
+            ],
+            "role": "accent",
+            "label": "v"
+          }
+        ],
+        "cues": [
+          {
+            "id": "shear",
+            "kind": "explain.apply",
+            "params": {
+              "matrix": [
+                [
+                  1,
+                  1
+                ],
+                [
+                  0,
+                  1
+                ]
+              ]
+            },
+            "span": "1.5s"
+          },
+          {
+            "id": "hold",
+            "span": "0.5s"
+          },
+          {
+            "id": "stretch",
+            "kind": "explain.apply",
+            "params": {
+              "matrix": [
+                [
+                  2,
+                  0
+                ],
+                [
+                  0,
+                  1
+                ]
+              ]
+            },
+            "span": "1.5s"
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}

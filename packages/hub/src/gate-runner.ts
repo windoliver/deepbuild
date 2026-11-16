@@ -124,7 +124,7 @@ const AUTOMATIC = new Set(['continuation', 'scheduled', 'subagent', 'session', '
 /** Those whose next prompt no fact foresees; a Codex goal's continuation too, until the hub reads its goal (#39). */
 const UNFORESEEN = new Set(['continuation', 'session', 'unknown']);
 /** Ignored dependency folders a checkout gets cloned copy-on-write, so a check starts as it would in the worktree. */
-const DEPENDENCIES = ['node_modules', '.venv'];
+export const DEPENDENCIES = ['node_modules', '.venv'];
 /** What a journey asks of its stack, which the core gives it when the checkout's done.yaml has an environment (#580). */
 const stackOf = (c: Pick<Claim, 'session' | 'cwd'>, check: ClaimCheck, more: Partial<Pick<StackWant, 'base' | 'fresh'>> = {}): { stack?: StackWant } => (check.depth === 'journey' ? { stack: { session: c.session, worktree: c.cwd, on_base: check.on_base, ...more } } : {});
 /** The entry that stands for a claim's definition while it hasn't locked (#322): pending, or BLOCKED by a cause outside the code. */
@@ -157,7 +157,9 @@ const LOAD_POLL_MS = 1_000;
 const LOAD_WAIT_MS = 30 * 60_000;
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
-interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes }
+/** A reply that ended the turn before its fast lane was ready to place slow checks (#2075). */
+interface TurnEnd { session: string; background: string[]; stopAt: number; repliedAt: number; reading: LoopReading | undefined }
+interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes; ready?: boolean }
 /** What a claim's worktree changed against its merge base when its snapshot was taken, and the test runners' configs it held, each with its text (#33). */
 interface Changes { changed: string[]; configs: Map<string, string>; scripts: boolean }
 async function changesOf(cwd: string, base: string): Promise<Changes> {
@@ -190,6 +192,8 @@ async function hold(dir: string, files: Record<string, string>): Promise<void> {
 export class GateRunner {
   /** Each session's claims, oldest first. */
   private readonly claims = new Map<string, Claim[]>();
+  /** Turn-end replies waiting for their fast lanes, including claims still making their snapshots. */
+  private readonly turnEnds = new Map<string, TurnEnd>();
   /** The slow lane's queue: at most one place per session and check, the newest snapshot's. */
   private readonly queue = new Map<string, Entry>();
   /** The held places, at most one per session and check; and the place each newest record stands for, until it starts. */
@@ -541,6 +545,10 @@ export class GateRunner {
     }
     return runs;
   }
+  /** Whether a check's result is carried from a key that holds a failed or overran run: it fails as the check's own would (#1018). */
+  private carriedFailure(e: Entry): boolean {
+    return e.outcome === 'carried' && e.group !== undefined && this.runsOn(e.group).some((s) => ['failed', 'overran'].includes(this.records.get(s.run)?.outcome ?? ''));
+  }
   /** A check whose run couldn't start, its snapshot's checkout or its start refused: one missing run, naming why (#31). */
   private cantStart(e: Entry, error: unknown): void {
     const run = `run:${ulid(this.o.now())}`;
@@ -549,6 +557,17 @@ export class GateRunner {
   }
   /** The commit a claim's checks run on: its snapshot, once taken (#1537: what its review reads the diff to). */
   snapshotOf(claim: string): string | undefined { return this.claimOf(claim)?.snapshot; }
+  /**
+   * The call that asks you a requirement whose oracle is you (#1345), and once it closes your answer, or `unanswered`
+   * when it took its default: the claim's verdict reads them from now on. Whether the claim and the requirement were found.
+   */
+  answered(claim: string, req: string, ask: string, answer?: 'PASS' | 'FAIL' | 'unanswered'): boolean {
+    const q = this.claimOf(claim)?.requirements.find((r) => r.req === req && r.oracle === 'person');
+    if (!q) return false;
+    q.ask = ask;
+    if (answer) q.answer = answer;
+    return true;
+  }
   private claimOf(claim: string): Claim | undefined {
     for (const list of this.claims.values()) { const c = list.find((x) => x.claim === claim); if (c) return c; }
     return undefined;
@@ -583,14 +602,16 @@ export class GateRunner {
     let checkout: string | null = null;
     // Hooks cannot see an outside edit (#2078). Read the tree and HEAD under the snapshot budget before deciding
     // whether the last claim's results can carry without a checkout (#82).
-    const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0;
+    const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0 && KEPT.has(e.outcome);
     // What a workspace's checks read is one of their inputs: another reading on the same tree is new work (#67).
     const stated = (t: string | undefined): string | undefined => (t !== undefined && r.state?.digests.length ? sha256Hex(new TextEncoder().encode(`${t}\n${r.state.digests.join('\n')}`)) : t);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
     if (r.checks.length || r.joins) {
       try {
         installs = installsOf(r.cwd);
-        ({ commit: snapshot, tree } = await this.o.checkouts().snapshot(r.cwd, budget));
+        // Both setup tasks belong to the lane: a dependency read rejecting while git runs must be caught too.
+        const [taken] = await Promise.all([this.o.checkouts().snapshot(r.cwd, budget), installs]);
+        ({ commit: snapshot, tree } = taken);
         tree = stated(tree);
         // A sibling claim may have landed while Git read the tree; compare against the last claim now.
         const prior = (this.claims.get(r.session) ?? []).filter((c) => c.claim !== r.claim).at(-1);
@@ -617,6 +638,7 @@ export class GateRunner {
       repo, installs: facts?.installs ?? Promise.resolve(''), names: facts?.names ?? Promise.resolve(''), state: r.state, changes: await changes };
     const last = older.at(-1)?.tree;
     const changed = r.checks.length > 0 && (tree === undefined || last === undefined || tree !== last);
+    claim.ready = false;
     if (joined) {
       joined.requirements = r.requirements;
       joined.entries.delete(DEFINITION);
@@ -737,17 +759,22 @@ export class GateRunner {
         e.running = false;
       }
       // A result carried from another session's failed run fails as the check's own would.
-      const failed = (o: string | null | undefined) => o === 'failed' || o === 'overran';
-      if (failed(e.outcome) || (e.outcome === 'carried' && e.group && this.runsOn(e.group).some((s) => failed(this.records.get(s.run)?.outcome)))) unlocked?.();
+      if (e.outcome === 'failed' || e.outcome === 'overran' || this.carriedFailure(e)) unlocked?.();
       await this.o.judged?.(r.claim);
       await e.readings;
     });
     for (const c of slow) claim.entries.set(c.check, { check: c, claim: r.claim, commit: c.commit ?? snapshot, lane: 'slow', runs: [], base: null, outcome: null, running: false, stale: superseded.has(c.check) });
+    claim.ready = true;
+    // Either side of the handoff may arrive first: the reply or the fast lane's last result. Never await the runs
+    // in the reply, and never lose the reply when the hold ends before they do (#2075).
+    void Promise.allSettled(runs).then(async () => {
+      const end = this.turnEnds.get(r.claim);
+      if (end) await this.queueSlow(r.claim, end);
+    }).catch(() => undefined).finally(() => this.cleanup(claim));
     // The hold replies once: when every admitted check has ended, and the lock has landed or a check failed, or when the hold ends.
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([Promise.allSettled([...runs, ...(lockWait ? [lockWait] : [])]), new Promise<void>((done) => { timer = setTimeout(done, Math.max(0, r.stopAt + this.o.hold_ms - this.o.now())); })]).finally(() => clearTimeout(timer));
     if (lockWait) void lockWait.then(() => { if (this.lockWaits.get(r.claim) === unlocked) this.lockWaits.delete(r.claim); });
-    void Promise.allSettled(runs).then(() => this.cleanup(claim));
     return { fast: fast.map((f) => f.c.check), slow: slow.map((c) => c.check), snapshot, readyAt, budgetCost, changed };
   }
 
@@ -785,9 +812,11 @@ export class GateRunner {
    * requirement's `stand_in`.
    */
   private async onBase(c: Claim, e: Entry): Promise<void> {
-    // A fix check runs there once it passed, to prove the fix; a spec check once it failed, so a failure the merge base
-    // shares reads as inherited, BLOCKED, never as the claim's own FAIL (design: How runs become one of five verdicts).
-    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
+    // A fix check runs there once it passed, to prove the fix; a spec check once it failed, on its own run or one carried
+    // from another session's, so a failure the merge base shares reads as inherited, BLOCKED, never as the claim's own
+    // FAIL (design: How runs become one of five verdicts).
+    const outcome = this.carriedFailure(e) ? 'failed' : e.outcome;
+    if (outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;
@@ -870,8 +899,9 @@ export class GateRunner {
           e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
           // Its held-out variants run again on the new reading too.
           if (KEPT.has(e.outcome)) await this.variants(c, e, undefined, 'slow');
-        } catch {
+        } catch (error) {
           e.outcome = 'missing';
+          if (!e.runs.length) this.cantStart(e, error);
         } finally {
           e.running = false;
         }
@@ -897,7 +927,7 @@ export class GateRunner {
   }
 
   /**
-   * A stop's reply let the turn end, with its claim's fast lane green (or no claim to judge): its slow checks take
+   * A stop's reply let the turn end: once its fast lane has ended with none FAIL or INVALID, its slow checks take
    * their queued places, each the place an older snapshot's held for the same check; a reply that keeps the agent
    * working starts none of them. A looping session's are held there instead (#965) until the loop pauses for them:
    * its next automatic prompt can't come before a check would end, counting its queue wait and expected time, by the
@@ -906,10 +936,23 @@ export class GateRunner {
    * or your words, starts them and the session's held ones. Resolves once the held places are recorded.
    */
   async turnEnded(claim: string | null, background: string[] = [], stopAt = this.o.now(), reading?: LoopReading): Promise<void> {
-    const plant = this.o.plant;
-    const c = claim ? this.claimOf(claim) : undefined;
-    const session = reading?.session ?? c?.session;
+    const session = reading?.session ?? (claim ? this.claimOf(claim)?.session : undefined);
     if (!session) return;
+    const end = { session, background, stopAt, repliedAt: this.o.now(), reading };
+    if (claim) this.turnEnds.set(claim, end);
+    await this.queueSlow(claim, end);
+  }
+  private async queueSlow(claim: string | null, end: TurnEnd): Promise<void> {
+    const c = claim ? this.claimOf(claim) : undefined;
+    if (claim) {
+      // The definition placeholder is not a running check: spec checks still run while it drafts.
+      if (!c?.ready || [...c.entries.values()].some((e) => e.check.check !== DEFINITION && e.lane === 'fast' && (e.running || e.waiting))) return;
+      const fast = this.standing(claim).filter((e) => e.check !== DEFINITION && e.lane === 'fast');
+      if (fast.some((e) => e.result === 'pending')) return;
+      if (fast.some((e) => e.result === 'FAIL' || e.result === 'INVALID')) { this.turnEnds.delete(claim); return; }
+    }
+    const plant = this.o.plant;
+    const { session, background, stopAt, repliedAt, reading } = end;
     const loop = { origin: reading?.origin, due: reading?.due ?? null, background, starter: reading?.starter ?? null };
     const slow = c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.runs.length && !e.running && !e.waiting && !e.group && !e.stale) : [];
     const looping = AUTOMATIC.has(loop.origin ?? '') && plant !== 'starts-on-every-green-stop';
@@ -926,10 +969,13 @@ export class GateRunner {
     } else {
       const now = this.o.now();
       const unforeseen = !loop.due && UNFORESEEN.has(loop.origin ?? '');
-      const next = loop.due ? loop.due.at : unforeseen ? now + GRACE_MS : Infinity;
+      const next = loop.due ? loop.due.at : unforeseen ? repliedAt + GRACE_MS : Infinity;
       const free = await this.slotTimes(now);
-      for (const e of slow) {
-        const ms = e.check.expected_ms ?? (await this.expectedMs(e.check.check)) ?? 0;
+      const timed = await Promise.all(slow.map(async (e) => ({ e, ms: e.check.expected_ms ?? (await this.expectedMs(e.check.check)) ?? 0 })));
+      // Finish every queue-time read before placing any check: a prompt, newer reply or joining definition
+      // can intervene, but placement and consuming the turn-end reading must be one synchronous step.
+      if (claim && (this.turnEnds.get(claim) !== end || !c?.ready)) return;
+      for (const { e, ms } of timed) {
         free.sort((a, b) => a - b);
         const start = free[0] ?? Infinity;
         if (start + ms <= next && plant !== 'holds-every-loop-check') {
@@ -937,11 +983,14 @@ export class GateRunner {
           this.place(session, e, 'loop_paused', writes);
         } else this.hold(session, e, unforeseen ? 'grace' : 'due', loop.due?.what ?? 'no prompt foreseen', writes);
       }
-      if (unforeseen && plant !== 'no-grace-window' && [...this.heldOf(session)].some((h) => h.why === 'grace')) this.graces.set(session, now + GRACE_MS);
+      if (unforeseen && plant !== 'no-grace-window' && [...this.heldOf(session)].some((h) => h.why === 'grace')) this.graces.set(session, repliedAt + GRACE_MS);
     }
+    if (claim) this.turnEnds.delete(claim);
     const pumped = this.pump();
     await Promise.all(writes);
     await pumped;
+    // A late fast lane does not restart the reply's grace window or the stop's background cap.
+    this.tick();
   }
   /** A claim's slow checks as they were declared, each with the deadline a hold is measured by; null when it has none. */
   slowDeadlines(claim: string): { check: string; deadline_ms: number | null }[] {
@@ -953,9 +1002,13 @@ export class GateRunner {
     const c = this.claimOf(claim);
     return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.waiting && !e.group && !e.runs.length).map((e) => e.check.check) : [];
   }
-  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
-  slowStanding(claim: string): { pending: boolean; failed: string[] } {
-    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale);
+  /** A claim's slow checks held in their places, for its session's loop or its background work (#965, #907): no stop is held for them. */
+  slowHeld(claim: string): string[] {
+    return [...this.holding.values()].filter((h) => h.entry.claim === claim).map((h) => h.entry.check.check);
+  }
+  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither, nor one `besides` names. */
+  slowStanding(claim: string, besides: readonly string[] = []): { pending: boolean; failed: string[] } {
+    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale && !besides.includes(c.check));
     return { pending: slow.some((c) => c.result === 'pending'), failed: slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED').map((c) => `${c.check} ${c.result}`) };
   }
   /** Resolves once none of a claim's slow checks is running or queued. */
@@ -1020,9 +1073,10 @@ export class GateRunner {
     const ts = this.o.now();
     return this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'check.held', ts, subject: record.claim, data: { ...record } });
   }
-  /** A prompt came: the grace window's loop didn't pause. */
+  /** A prompt came: neither a grace window nor an earlier reply may start checks for this new turn. */
   prompted(session: string): void {
     this.graces.delete(session);
+    for (const [claim, end] of this.turnEnds) if (end.session === session) this.turnEnds.delete(claim);
   }
   /**
    * The session is idle and its facts have emptied (#965): no background work and no cron job left, so what they held
@@ -1036,10 +1090,15 @@ export class GateRunner {
   /** The session ended, and its wake-ups and cron jobs with it: no prompt comes, so everything it held starts. */
   ended(session: string): void {
     this.graces.delete(session);
+    for (const end of this.turnEnds.values()) if (end.session === session) {
+      end.background = [];
+      end.reading = undefined;
+    }
     this.release(session, () => true, 'loop_paused');
   }
   /** The session's background work has ended: the checks it held take their queued places (#907). Returns them. */
   backgroundEnded(session: string): string[] {
+    for (const end of this.turnEnds.values()) if (end.session === session) end.background = [];
     return this.release(session, (h) => h.why === 'background', 'loop_paused');
   }
   /** Fires what came due on the hub's clock: background work's 30 minutes, and each grace window with no prompt in it. */

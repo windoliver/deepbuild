@@ -95,6 +95,17 @@ pub struct Channel {
     pub glide: Option<Curve>,
     /// #494: a path channel's keys.
     pub path: Option<PathKeys>,
+    /// #468: a focus pull's keys on `dof.focus`, in key order, when one names an item: each
+    /// key's value is then its index, and what it names is here.
+    pub named: Option<Vec<FocusKey>>,
+}
+
+/// What a focus pull's key names (#468; Camera `camera@1`: lens): a distance in m, or an item
+/// (`ID` or `ID#anchor`) whose evaluated distance at t the key stands for.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FocusKey {
+    At(f64),
+    Item(String),
 }
 
 impl Channel {
@@ -1635,8 +1646,8 @@ fn rest_on_of(c: &Map<String, Value>, path: &str) -> Result<RestOn, Refused> {
     })
 }
 
-/// A constraint of any kind but `limit`. `follow_stream` is the data module's, which this build
-/// may lack; every other kind motion doesn't fill is refused as unknown.
+/// A constraint of any kind but `limit` and those the core gives another module; every other
+/// kind motion doesn't fill is refused as unknown.
 fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused> {
     let path = format!("constraints/{id}");
     let owner = id_of(c, "owner", &path)?;
@@ -1666,8 +1677,21 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             }
             Kind::FollowPath {
                 points,
-                fraction: crate::constraint::Fraction::of(c.get("fraction"))
-                    .or_else(|code| refuse(code, at("fraction")))?,
+                // #1960: `fraction: {path}` is the number at that path, as a driver's var reads one.
+                fraction: match c
+                    .get("fraction")
+                    .and_then(Value::as_object)
+                    .filter(|f| f.len() == 1)
+                    .and_then(|f| f.get("path"))
+                {
+                    Some(Value::String(text)) => crate::constraint::Fraction::Path(target_of(
+                        text,
+                        false,
+                        &at("fraction/path"),
+                    )?),
+                    _ => crate::constraint::Fraction::of(c.get("fraction"))
+                        .or_else(|code| refuse(code, at("fraction")))?,
+                },
                 orient: flag("orient"),
                 offset: pair(c.get("offset"), &at("offset"))?,
             }
@@ -1755,7 +1779,6 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
                 Some(_) => Some(rest_on_of(c, &path)?),
             },
         },
-        Some("follow_stream") => return refuse("module_missing", at("kind")),
         _ => return refuse("unknown_kind", at("kind")),
     };
     Ok(Constraint {
@@ -2090,10 +2113,14 @@ pub(crate) fn channel_of(
             range,
             glide: None,
             path: None,
+            named: None,
         });
     }
     let mut keys = Vec::new();
     let mut path_shapes: Vec<(String, Option<crate::morph::Shape>, Option<String>)> = Vec::new();
+    // #468: keys on a dof's focus may name items (a focus pull), eased in_out_cubic by default.
+    let focus = !in_clip && ty == ValueType::F32 && target.field == ["params", "dof", "focus"];
+    let mut named: Vec<(String, FocusKey)> = Vec::new();
     let strict = match (ty, c.get("morph").and_then(Value::as_str), c.get("morph")) {
         (_, _, None) => false,
         (ValueType::Path, Some("match"), _) => false,
@@ -2122,7 +2149,17 @@ pub(crate) fn channel_of(
             )?
         };
         let value = match (ty, key.get("value")) {
-            (ValueType::F32 | ValueType::Angle, v) => vec![number(v, &format!("{kpath}/value"))?],
+            (ValueType::F32, Some(Value::String(item))) if focus && !item.is_empty() => {
+                named.push((kid.clone(), FocusKey::Item(item.clone())));
+                vec![0.0]
+            }
+            (ValueType::F32 | ValueType::Angle, v) => {
+                let x = number(v, &format!("{kpath}/value"))?;
+                if focus {
+                    named.push((kid.clone(), FocusKey::At(x)));
+                }
+                vec![x]
+            }
             (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
             (ValueType::Enum, Some(Value::String(s))) => {
                 let i = labels.iter().position(|l| l == s).unwrap_or_else(|| {
@@ -2158,6 +2195,9 @@ pub(crate) fn channel_of(
         };
         let mut interp = match (ty, key.get("interp")) {
             (ValueType::Bool | ValueType::Enum, None) => Interp::Hold,
+            (_, None) if focus => Interp::Ease(ease::Entry::opened(
+                ease::named("in_out_cubic", None).expect("a first-party ease"),
+            )),
             (_, v) => interp_of(v, &format!("{kpath}/interp"))?,
         };
         if glides {
@@ -2244,6 +2284,22 @@ pub(crate) fn channel_of(
         return refuse("bad_doc", format!("{path}/modifiers"));
     }
     keys.sort_by(|a, b| a.t.cmp(&b.t).then_with(|| a.id.cmp(&b.id)));
+    // #468: a focus pull's keys stand for their index; each one's distance is taken at t.
+    let named = named
+        .iter()
+        .any(|(_, n)| matches!(n, FocusKey::Item(_)))
+        .then(|| {
+            keys.iter_mut()
+                .enumerate()
+                .map(|(i, k)| {
+                    k.value = vec![i as f64];
+                    named
+                        .iter()
+                        .find(|(kid, _)| *kid == k.id)
+                        .map_or(FocusKey::At(0.0), |(_, n)| n.clone())
+                })
+                .collect::<Vec<_>>()
+        });
     match ty {
         // q and −q are one rotation: each key takes the sign nearest the key before it.
         ValueType::Quat if ctx.arc == quat::Arc::Short => {
@@ -2293,6 +2349,7 @@ pub(crate) fn channel_of(
         modifiers,
         follow: None,
         range,
+        named,
         glide: glides.then(|| {
             glide.sort_by_key(|k| k.t);
             let keys = glide
@@ -2591,9 +2648,15 @@ pub fn read_with(
     let mut limits = Vec::new();
     let mut constraints = Vec::new();
     for (id, c) in section(doc, "constraints")? {
+        // #225: a kind the core gives another module is that module's to solve.
+        let other = c
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(deep_canvas::registry::core_lists::constraint_owner)
+            .is_some();
         if let Some(limit) = limit_of(id, c)? {
             limits.push(limit);
-        } else {
+        } else if !other {
             constraints.push(constraint_of(id, c)?);
         }
     }
@@ -2867,15 +2930,18 @@ fn cuts_of(
         if names_shot("from") || names_shot("to") {
             continue;
         }
-        // #494: a match morph between two items is the morph's (crate::morph).
+        // #494: a match morph between two items is the morph's (crate::morph), and so (#1968)
+        // is a text diff between two code items.
         let items = doc.get("items").and_then(Value::as_object);
         let names_item = |f: &str| {
             tr.get(f)
                 .and_then(Value::as_str)
                 .is_some_and(|n| items.is_some_and(|i| i.contains_key(n)))
         };
-        if tr.get("kind").and_then(Value::as_str) == Some("match_morph")
-            && (names_item("from") || names_item("to"))
+        if matches!(
+            tr.get("kind").and_then(Value::as_str),
+            Some("match_morph" | "text_diff")
+        ) && (names_item("from") || names_item("to"))
         {
             continue;
         }

@@ -1,0 +1,33 @@
+{
+ "issue": 142,
+ "criterion": "#142.0815c532",
+ "verdict": "looks_right",
+ "who": "the owner (Tao Feng), in the session: \"Swap; looks right\"",
+ "when": "2026-11-15T06:15:46Z",
+ "files": {
+  "chart_story-2d.png": "320533b1eb94f474aec550d7ed84c42ac760b769f8feb4c434e73b3291695b4e",
+  "chart_story-3d.png": "4a0ec667782f793ca75780993d7e567084d5b23312021993f6e102f536c9f937",
+  "dark_math-2d.png": "e8cee49d3ea0f2a969a04021d234ddfc3186d78f35ae1881bb7da78b98e8215b",
+  "dark_math-3d.png": "a9a23d034078032e7f008134ecb64e395f64b82f709eaca58bd359ce21bb8380",
+  "evidence_board-2d.png": "d5f47372438ce4eb53136d4ca8074ec3e45ef10c1bf1b4eb2987aac62b6e4e72",
+  "evidence_board-3d.png": "18183a96e6b91884bae3f13cadbf3bd3340b42db26b10760397afc0bc554813e",
+  "infographic-2d.png": "7103c34f7f6a58721fc104f9b029f4885aa0ace75dbd3c96f05bc8de7ed0af3a",
+  "infographic-3d.png": "e4b34c67c058ecaca6d46d067345d6627dec9eb11d783c0718e9ee74d13174b4",
+  "keynote_ui-2d.png": "19c5e270bbb3c2dc382774c5cd7ececa28bea3d21f15070cf9e4037fc7696fa6",
+  "keynote_ui-3d.png": "7287c13403e513d9a52d21096cfa94aa834eb22838197d9080a503ab57e373f9",
+  "kinetic-slam.png": "457d7bddb66801174aaa4d81ddca8c36000c5042ba4086bd24fe8da5583986f5",
+  "kinetic-type.apng": "447d6fe0e1031431d9251bf2f07c64be259bf3eb3c1231e5cdf49fcec8e42f42",
+  "kinetic_type-2d.png": "2927141de75f06ec604ecb8610451c8ebbede44d845c24fed5a2c7422f2407a4",
+  "kinetic_type-3d.png": "227b3ecba0202a13528654507d6877145edef733cb5a85ab559eee46b9e5e24b",
+  "linear-map-shear.png": "2c64f49d89688e129e17af561fb4270c096d4cc1c53b769fb01170f738f4582a",
+  "linear-map-shear.apng": "9bac3ad2ace89ab410213bbff8104439fd1251ccc77843c8eab2933861f63567",
+  "linear_map-2d.png": "6a34813cd150ceae723396ff1ce5815da62cd969a750f0f224e83fda64c9ba87",
+  "presenter-2d.png": "c280252662bbecf2a2b1429688aca440f7fb7214fd95ba6dc5fffdc9be2077c8",
+  "presenter-3d.png": "ad111696bafe46f7a87ce508322c8d449066b054386ba5c1e74aff89e50d5038",
+  "storytime-2d.png": "c3111c494e078ac540c47e580d795d52ddb343d1aea3f3fff16e19f56bd2c927",
+  "storytime-3d.png": "6835884aec6bbf67ffec28e6708fa4fad180a9485b17672c005c4721fea3bb8d",
+  "whiteboard-2d.png": "f032ff8cdaa84ee1ad2d5f3decaddf767ced38af0855d09498b681fff2e7eff9",
+  "whiteboard-3d.png": "c9432147a84a5f060025dd45dea926bf50c3de0a8da84da40fda265bba30eb57"
+ },
+ "note": "Called on the 23 files in this folder as the session showed them: the ten examples on the 2D stage, nine on the 3D stage, the kinetic-type slam, the linear-map shear, and the two recordings."
+}

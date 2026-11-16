@@ -1,0 +1,136 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/2066/origin.test.ts tests/acceptance/2066/recorded-origin.test.ts` runs unleased
+
+ RUN  v5.0.5 <work>
+
+x·xxdeep hub: the definition of session:5b0032dea0384d8e9a87bd5162ee2d5d#2 was not locked: the record is closed
+xx·x·x···stderr | tests/acceptance/2066/recorded-origin.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  37050 (node)
+
+·stderr | tests/acceptance/2066/origin.test.ts
+vitest-setup: stopping 5 process(es) this file left running:
+  46124 (node)
+  46215 (node)
+  46314 (node)
+  46380 (node)
+  46381 (node)
+
+·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2066/origin.test.ts > #2066 a rule line in a prompt nobody typed saves nothing > AC1/AC2 #2066 a prompt recorded with origin session holding a rule: line appends no learn.applied, reaches no other session, and its session records the refusal once, naming session
+Error: ENOTEMPTY, Directory not empty: '/private/tmp/dh303-7AWaeC'
+ ❯ cleanup tests/acceptance/303/helpers.ts:135:37
+    133|   owned.clear();
+    134|   agents.clear();
+    135|   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, for…
+       |                                     ^
+    136| }
+    137|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a scheduled prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685802191000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a session prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685805426000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a subagent prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685808295000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a continuation prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685810876000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a unknown prompt saves no rule and no other session gets it; the typed twin is saved once and reaches a second open session
+RangeError: Value is too large to be represented as a JavaScript number: 1794685812935000000
+ ❯ events tests/acceptance/2066/recorded-origin.test.ts:40:63
+     38|   const db = new DatabaseSync(file, { readOnly: true });
+     39|   try {
+     40|     return (db.prepare(`SELECT * FROM events WHERE ${where}`).all(...a…
+       |                                                               ^
+     41|       const values = Object.values(r).map(decode);
+     42|       return { kind: String(r.kind), values, text: values.map((v) => (…
+ ❯ notes tests/acceptance/2066/recorded-origin.test.ts:59:3
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:127:21
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:99:11
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:114:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/2066/recorded-origin.test.ts > #2066 a rule line is saved only from a prompt a person typed > a prompt with no recorded origin saves nothing; the typed twin still does
+Error: ENOTEMPTY, Directory not empty: '/private/tmp/hub-315-bTD1Ap'
+ ❯ withHub packages/hub/test/hub.ts:98:5
+     96|   } finally {
+     97|     await stop();
+     98|     rmSync(home, { recursive: true, force: true });
+       |     ^
+     99|   }
+    100| }
+ ❯ tests/acceptance/2066/recorded-origin.test.ts:134:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 8 passed (15)
+   Start at  11:49:59
+   Duration  32.90s (tests 98%, transform 1%)

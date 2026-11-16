@@ -67,6 +67,21 @@ fn lines(raw: &[u8]) -> Vec<Range<usize>> {
     out
 }
 
+/// #1968: `raw`'s lines, each as its byte range without its line end.
+pub fn line_ranges(raw: &[u8]) -> Vec<Range<usize>> {
+    lines(raw)
+        .into_iter()
+        .map(|r| {
+            let end = match &raw[r.clone()] {
+                [.., b'\r', b'\n'] => r.end - 2,
+                [.., b'\r' | b'\n'] => r.end - 1,
+                _ => r.end,
+            };
+            r.start..end
+        })
+        .collect()
+}
+
 /// The display form of `raw`: UTF-8 decoded, a byte that isn't shown as U+FFFD; lines split at
 /// LF, CRLF or CR with their ends dropped; tabs expanded at `tab` columns; then NFC, one grapheme
 /// at a time so each keeps its raw range.
@@ -91,7 +106,11 @@ pub fn display(raw: impl AsRef<[u8]>, tab: usize) -> Display {
         let (mut column, mut at_raw) = (0, range.start);
         for chunk in line[..end].utf8_chunks() {
             let valid = chunk.valid();
-            let starts = deep_text::unicode::grapheme_starts(valid);
+            // #1968: in ASCII inside a line each byte is a grapheme, which NFC leaves as it is.
+            let starts = match valid.is_ascii() {
+                true => (0..valid.len()).collect(),
+                false => deep_text::unicode::grapheme_starts(valid),
+            };
             for (k, &from) in starts.iter().enumerate() {
                 let to = starts.get(k + 1).copied().unwrap_or(valid.len());
                 let at = d.text.len();
@@ -100,6 +119,10 @@ pub fn display(raw: impl AsRef<[u8]>, tab: usize) -> Display {
                         let spaces = tab - column % tab;
                         d.text.extend(std::iter::repeat_n(' ', spaces));
                         column += spaces;
+                    }
+                    g if g.is_ascii() => {
+                        d.text.push_str(g);
+                        column += 1;
                     }
                     g => {
                         d.text.extend(g.nfc());
@@ -169,8 +192,16 @@ pub fn tokens(
     if list.is_empty() {
         return Ok(Vec::new());
     }
-    let starts = deep_text::unicode::grapheme_starts(&d.text);
-    let index = |byte: usize| starts.partition_point(|&s| s < byte);
+    // #1968: an ASCII text's graphemes are its bytes (it holds no line end but LF).
+    let ascii = d.text.is_ascii();
+    let starts = match ascii {
+        true => Vec::new(),
+        false => deep_text::unicode::grapheme_starts(&d.text),
+    };
+    let index = |byte: usize| match ascii {
+        true => byte,
+        false => starts.partition_point(|&s| s < byte),
+    };
     let mut out = Vec::with_capacity(list.len());
     for (k, token) in list.iter().enumerate() {
         let offset = |key: &str| token.get(key).and_then(Value::as_u64).map(|n| n as usize);
@@ -202,7 +233,7 @@ pub fn tokens(
 /// item's tokens (`d`, its display form), each a run in the role the look's type gives its class.
 /// Each grapheme stays in the first run listed that holds it, so a run a document writes paints
 /// over a token.
-pub(crate) fn runs(
+pub fn runs(
     (palette, ty): (&Palette, &Type),
     params: &Map<String, Value>,
     d: Option<&Display>,

@@ -1,0 +1,37 @@
+Base of tests/acceptance/142 at 64c9be338 ("Merge #223's branch (PR #2505, group warps) as #142's base"), main
+a50d92323 plus #223's branch, with no implementation of #142.
+
+One cheap run, with no cargo on PATH, so no binary was built (a cold build of deep-show is long on the shared Mac):
+
+  NO_COLOR=1 npx vitest run --root tests/acceptance/142 --no-file-parallelism --testTimeout=600000
+  Test Files  12 failed (12)
+       Tests  15 failed (15)
+  Duration  1.90s
+
+Each test failed at the first thing #142 lacks, or at the build where the binary comes first:
+
+- ac1-render.test.ts (AC1, 2): "the examples are data, and no canvas module names a recipe: dark_math: no example at
+  packs/explain-1.0.0/examples/dark_math.json" and the nine others; the render test the same, before any binary. (No
+  Rust source names a recipe at the base; that part of the guard reads clean.)
+- ac2-stages.test.ts (AC2, 1): "the 3D stage changes no cue, time or word …: dark_math: no example at …" for all nine.
+- ac3-rules.test.ts (AC3, 2): the breaking lists at "the binary builds"; the twins at "the explain pack's manifest is
+  at packs/explain-1.0.0/pack.json: expected false to be true".
+- ac4-kinetic.test.ts (AC4, 1): "the kinetic-type example: kinetic_type: no example at …".
+- ac5-reveal.test.ts (AC5, 1), ac7-shear.test.ts (AC7, 1), ac8-singular.test.ts (AC8, 1), ac9-timing.test.ts (AC9, 2:
+  the "differ only in cue_three's span" check passed first), ac10-pack.test.ts (AC10, 1), ac11-boundaries.test.ts
+  (AC11, 1): "the binary builds: … cargo could not run: spawnSync cargo ENOENT".
+- ac6-budgets.test.ts (AC6, 1): "every recipe ships its example: dark_math: no example at …".
+- ac12-taste.test.ts (AC12, 1): "every example is there to show: dark_math: no example at …".
+
+Where the binary-backed tests would fail with a binary, read from the base's code, not observed:
+- AC3, AC9, AC11 (and AC7, AC8): every fixture names deepbuild/explain@1.0.0, which the store can't load from the
+  missing folder, so `deep show` doesn't present it: the breaking lists are refused for the missing pack, never
+  naming a cue or a grammar rule, and the clean twins aren't presented.
+- AC5: push and wipe align on their reveal at the base (crates/deep-canvas-motion/src/shots/kinds.rs, `coverage`),
+  but `zoom_through` has no coverage there, so its `align: "reveal"` is refused at check ("the zoom_through film is
+  not presented"); and zoom_through draws as a plain fade in deep-show's 2D frames (film.rs, `Mix::Fade`).
+- AC9's plant: `film_cue_starts_absolute` is no scenario plant at the base; the scenario is refused.
+- AC10: the test pack's kind rule carries `over`, a field #202's rules don't take, and its step repeats `over`, which
+  packs.rs refuses ("over, on and pack land later"): acme is refused at install.
+
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/142/tsconfig.json, exits 0.

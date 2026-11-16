@@ -33,17 +33,21 @@ mod film;
 mod fix;
 mod fixtures;
 mod flat;
+mod flows2d;
 mod frames;
 mod golden;
 mod groups;
 mod guard;
+mod hdr;
 mod host;
+mod insets;
 mod indexed;
 mod interp_suite;
 mod levels;
 mod live;
 mod liveview;
 mod lod;
+mod look_ops;
 mod marks2d;
 mod opframe;
 mod paintfx;
@@ -129,6 +133,18 @@ pub enum Planted {
     SubmitsOnCompletion,
     ReleasesBeforeCompletion,
     WaitsOnGpu,
+    /// #177's wrong HDR output: the surface carries the SDR curve; the shoulder replaced by the
+    /// identity clipped at the headroom; the whole curve scaled by it; what draws over the scene
+    /// scaled by it; the headroom read once; an export drawn from the HDR surface; the HDR layer
+    /// above the window's; a view drawing 3D over 2D presenting HDR.
+    ClipsAtOne,
+    ClipsAtHeadroom,
+    MovesToe,
+    StatusOverPaperWhite,
+    ReadsHeadroomOnce,
+    ExportReadsHdrSurface,
+    HdrLayerAboveChrome,
+    CatcherViewGoesHdr,
     CompilesOnUiThread,
     ExposesGpuToPanels,
     /// #537's wrong programs (tests/acceptance/537/README.md: Planted twins).
@@ -143,6 +159,10 @@ pub enum Planted {
     EncodesEveryFrame,
     ReplaysAfterAdd,
     PairsNewestSlot,
+    /// #2516: wrong ambient-occlusion estimators (tests/acceptance/2516).
+    AoMainLoop,
+    AoUniformHemisphere,
+    AoFullRadius,
     /// #380's wrong programs (tests/acceptance/380/README.md: Planted programs).
     HostUnclipped,
     SlowGlow,
@@ -181,12 +201,16 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #468: a circle of confusion linear in |d − s|, matched to the physical one at 10 m.
+    CocLinearInDistance,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,
     /// #268: the shore's field measured from each item's centre, not where it meets the water.
     ShoreFieldFromCentre,
     /// #268: waves at full amplitude by the shore, ignoring its field.
     ShoreCalmIgnoresField,
+    /// #968: the flow's noise moved in one phase, jumping back at every wrap.
+    WaterFlowSinglePhase,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -291,6 +315,9 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    /// #463's wrong program (tests/acceptance/463/README.md: Planted programs): `art.halftone_pop`
+    /// drawn with `art.dot`'s passes.
+    HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
     DropsClouds,
@@ -335,6 +362,15 @@ pub enum Planted {
     /// the live rung; a frame-health drop climbed again without a view change.
     BandHysteresis,
     LightCutHysteresis,
+    /// #506's wrong programs (tests/acceptance/506/README.md: Planted programs): an eye inset
+    /// drawn from the eye through a frustum centred on the window, its picture laid on the face's
+    /// corners; a view overlay that reads the main view's backdrop, mirror or light cut from the
+    /// same frame; an inset's premultiplied render sampled as straight alpha.
+    EyeInsetCentredFrustum,
+    OneBackdropPerFrame,
+    OneMirrorPerFrame,
+    OneLightCutPerFrame,
+    InsetPremultipliedAsStraight,
     BandFadeByWallClock,
     LevelByEarlierFrame,
     BandMasksIndependent,
@@ -439,6 +475,9 @@ pub enum Planted {
     BoundsBindPose,
     /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
     TrailAppendsPerFrame,
+    /// #451's: particles on a vector field's stream move instead in a straight line along the
+    /// field's arrow at their birth point (tests/acceptance/451/README.md: The planted program).
+    ParticlesFollowArrows,
     /// #226's wrong programs (tests/acceptance/226/README.md: The planted programs).
     AxesModAppliesTransform,
     Axes3dOwnTickRule,
@@ -475,6 +514,14 @@ impl Planted {
             "submits_on_completion" => Planted::SubmitsOnCompletion,
             "releases_before_completion" => Planted::ReleasesBeforeCompletion,
             "waits_on_gpu" => Planted::WaitsOnGpu,
+            "clips_at_one" => Planted::ClipsAtOne,
+            "clips_at_headroom" => Planted::ClipsAtHeadroom,
+            "moves_toe" => Planted::MovesToe,
+            "status_over_paper_white" => Planted::StatusOverPaperWhite,
+            "reads_headroom_once" => Planted::ReadsHeadroomOnce,
+            "export_reads_hdr_surface" => Planted::ExportReadsHdrSurface,
+            "hdr_layer_above_chrome" => Planted::HdrLayerAboveChrome,
+            "catcher_view_goes_hdr" => Planted::CatcherViewGoesHdr,
             "compiles_on_ui_thread" => Planted::CompilesOnUiThread,
             "exposes_gpu_to_panels" => Planted::ExposesGpuToPanels,
             "forward_z" => Planted::ForwardZ,
@@ -483,6 +530,9 @@ impl Planted {
             "encodes_every_frame" => Planted::EncodesEveryFrame,
             "replays_after_add" => Planted::ReplaysAfterAdd,
             "pairs_newest_slot" => Planted::PairsNewestSlot,
+            "ao_main_loop" => Planted::AoMainLoop,
+            "ao_uniform_hemisphere" => Planted::AoUniformHemisphere,
+            "ao_full_radius" | "ao_points_at_radius" => Planted::AoFullRadius,
             "host_unclipped" => Planted::HostUnclipped,
             "slow_glow" => Planted::SlowGlow,
             "compares_any_environment" => Planted::ComparesAnyEnvironment,
@@ -513,10 +563,12 @@ impl Planted {
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "coc_linear_in_distance" => Planted::CocLinearInDistance,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
+            "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -559,6 +611,7 @@ impl Planted {
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
             "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "particles_follow_arrows" => Planted::ParticlesFollowArrows,
             "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
             "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
             "axes_mod_maps_every_frame" => Planted::AxesModMapsEveryFrame,
@@ -603,6 +656,7 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,
@@ -639,6 +693,11 @@ impl Planted {
             "premixed_metallic" => Planted::PremixedMetallic,
             "band_hysteresis" => Planted::BandHysteresis,
             "light_cut_hysteresis" => Planted::LightCutHysteresis,
+            "eye_inset_centred_frustum" => Planted::EyeInsetCentredFrustum,
+            "one_backdrop_per_frame" => Planted::OneBackdropPerFrame,
+            "one_mirror_per_frame" => Planted::OneMirrorPerFrame,
+            "one_light_cut_per_frame" => Planted::OneLightCutPerFrame,
+            "inset_premultiplied_as_straight" => Planted::InsetPremultipliedAsStraight,
             "band_fade_by_wall_clock" => Planted::BandFadeByWallClock,
             "level_by_earlier_frame" => Planted::LevelByEarlierFrame,
             "band_masks_independent" => Planted::BandMasksIndependent,

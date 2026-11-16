@@ -363,7 +363,8 @@ pub(super) fn align_from(v: Option<&Value>, path: &str) -> Result<Align, Refused
 pub(super) fn coverage(kind: &Kind, tr: &Transition, t: i64) -> Option<f64> {
     let p = tr.progress(t);
     match kind {
-        Kind::CrossFade | Kind::Wipe { .. } => Some(p),
+        // A zoom-through blends its sides by its progress as it zooms (#142).
+        Kind::CrossFade | Kind::Wipe { .. } | Kind::ZoomThrough { .. } => Some(p),
         // A push reveals when the incoming side has travelled 90% of the way (Transition).
         Kind::Push { .. } => Some(if p >= 0.9 { 0.5 } else { 0.5 * p / 0.9 }),
         Kind::Dip(d) => match d.at(tr, t, false) {

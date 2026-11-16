@@ -1,0 +1,12 @@
+{
+  "#1981.91e6703b": [
+    "silent-record"
+  ],
+  "#1981.a6a21922": [
+    "skips-unplaced"
+  ],
+  "#1981.2eb85d5e": [
+    "closes-unreached",
+    "silent-record"
+  ]
+}

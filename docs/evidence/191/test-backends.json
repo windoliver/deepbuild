@@ -1,0 +1,442 @@
+{
+ "--backend friction_average": {
+  "backend": "friction_average",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "slide_geometric",
+    "measured": 2.5431947717557923,
+    "answer": 3.1855249745158,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "friction_average fails slide_geometric: its distance block moved by step 600, m read 2.5431947717557923 where the interface's answer is 3.1855249745158 within 3%"
+   },
+   {
+    "fixture": "slide_min",
+    "measured": 2.5431947717557923,
+    "answer": 6.3710499490316,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "friction_average fails slide_min: its distance block moved by step 600, m read 2.5431947717557923 where the interface's answer is 6.3710499490316 within 3%"
+   },
+   {
+    "fixture": "slide_max",
+    "measured": 2.5431947717557923,
+    "answer": 1.5927624872579,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "friction_average fails slide_max: its distance block moved by step 600, m read 2.5431947717557923 where the interface's answer is 1.5927624872579 within 3%"
+   },
+   {
+    "fixture": "slide_multiply",
+    "measured": 2.5431947717557923,
+    "answer": 7.9638124362894995,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "friction_average fails slide_multiply: its distance block moved by step 600, m read 2.5431947717557923 where the interface's answer is 7.9638124362894995 within 3%"
+   }
+  ]
+ },
+ "--backend no_joint_limits": {
+  "backend": "no_joint_limits",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "hinge_limit",
+    "measured": 179.1669935318518,
+    "answer": 30,
+    "tolerance": {
+     "deg": 0.5
+    },
+    "what": "no_joint_limits fails hinge_limit: its largest coordinate joint pin reached read 179.1669935318518 where the interface's answer is 30 within 0.5°; joint pin"
+   },
+   {
+    "fixture": "slider_limit",
+    "measured": 19.640399932861328,
+    "answer": 0.5,
+    "tolerance": {
+     "m": 0.005
+    },
+    "what": "no_joint_limits fails slider_limit: its largest coordinate joint rail reached read 19.640399932861328 where the interface's answer is 0.5 within 0.005 m; joint rail"
+   }
+  ]
+ },
+ "--backend restitution_min": {
+  "backend": "restitution_min",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "bounce_max",
+    "measured": 0.246009761095047,
+    "answer": 0.81,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "restitution_min fails bounce_max: its height of ball's first bounce, m read 0.246009761095047 where the interface's answer is 0.81 within 3%"
+   },
+   {
+    "fixture": "bounce_average",
+    "measured": 0.246009761095047,
+    "answer": 0.48999999999999994,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "restitution_min fails bounce_average: its height of ball's first bounce, m read 0.246009761095047 where the interface's answer is 0.48999999999999994 within 3%"
+   },
+   {
+    "fixture": "bounce_geometric",
+    "measured": 0.246009761095047,
+    "answer": 0.45,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "restitution_min fails bounce_geometric: its height of ball's first bounce, m read 0.246009761095047 where the interface's answer is 0.45 within 3%"
+   },
+   {
+    "fixture": "bounce_multiply",
+    "measured": 0.246009761095047,
+    "answer": 0.2025,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "restitution_min fails bounce_multiply: its height of ball's first bounce, m read 0.246009761095047 where the interface's answer is 0.2025 within 3%"
+   }
+  ]
+ },
+ "--backend drops_cap": {
+  "backend": "drops_cap",
+  "admitted": true,
+  "verdict": "pass",
+  "excluded": [
+   "ccd_wall",
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed",
+   "test_capped"
+  ],
+  "fails": []
+ },
+ "--backend drops_cap --planted kit_runs_excluded": {
+  "backend": "drops_cap",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [],
+  "fails": [
+   {
+    "fixture": "ccd_wall",
+    "measured": null,
+    "answer": 0.049749999999999996,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "drops_cap fails ccd_wall: its time ball first touches wall, s read nothing where the interface's answer is 0.049749999999999996 within 1 steps; the world didn't run: rapier3d 0.36.1 claims no swept collision (ccd), so bodies/ball/ccd is refused"
+   },
+   {
+    "fixture": "sensor/static/character",
+    "measured": null,
+    "answer": 75,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "drops_cap fails sensor/static/character: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 75 within 1 steps; the world didn't run: a character body isn't run by this backend interface yet; #182 brings it"
+   },
+   {
+    "fixture": "sensor/static/placed",
+    "measured": null,
+    "answer": 300,
+    "tolerance": {
+     "steps": 0
+    },
+    "what": "drops_cap fails sensor/static/placed: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 300 within 0 steps; the world didn't run: a character body isn't run by this backend interface yet; #182 brings it; inputs/place/kind must be one of grab, launch, move, poke, release, deactivate"
+   },
+   {
+    "fixture": "sensor/kinematic/character",
+    "measured": null,
+    "answer": 75,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "drops_cap fails sensor/kinematic/character: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 75 within 1 steps; the world didn't run: a character body isn't run by this backend interface yet; #182 brings it"
+   },
+   {
+    "fixture": "sensor/kinematic/placed",
+    "measured": null,
+    "answer": 300,
+    "tolerance": {
+     "steps": 0
+    },
+    "what": "drops_cap fails sensor/kinematic/placed: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 300 within 0 steps; the world didn't run: a character body isn't run by this backend interface yet; #182 brings it; inputs/place/kind must be one of grab, launch, move, poke, release, deactivate"
+   },
+   {
+    "fixture": "sensor/dynamic/character",
+    "measured": null,
+    "answer": 75,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "drops_cap fails sensor/dynamic/character: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 75 within 1 steps; the world didn't run: a character body isn't run by this backend interface yet; #182 brings it"
+   },
+   {
+    "fixture": "sensor/dynamic/placed",
+    "measured": null,
+    "answer": 300,
+    "tolerance": {
+     "steps": 0
+    },
+    "what": "drops_cap fails sensor/dynamic/placed: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 300 within 0 steps; the world didn't run: a character body isn't run by this backend interface yet; #182 brings it; inputs/place/kind must be one of grab, launch, move, poke, release, deactivate"
+   },
+   {
+    "fixture": "test_capped",
+    "measured": null,
+    "answer": 4.905,
+    "tolerance": {
+     "relative": 0.01
+    },
+    "what": "drops_cap fails test_capped: its distance ball moved by step 120, m read nothing where the interface's answer is 4.905 within 1%; the world didn't run: rapier3d 0.36.1 claims no swept collision (ccd), so bodies/ball/ccd is refused"
+   }
+  ]
+ },
+ "--backend query_ignores_groups": {
+  "backend": "query_ignores_groups",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "queries",
+    "measured": 5,
+    "answer": 0,
+    "tolerance": {
+     "relative": 0
+    },
+    "what": "query_ignores_groups fails queries: its probes whose hits differ from a scan over every shape read 5 where the interface's answer is 0 within 0%; hit a"
+   }
+  ]
+ },
+ "--backend rapier_caps": {
+  "backend": "rapier_caps",
+  "admitted": false,
+  "verdict": "refused",
+  "refused": {
+   "features": [
+    "soft_bodies"
+   ],
+   "what": "rapier_caps is a candidate whose caps() claim soft_bodies, which no fixture of the behavior part tests, so it is refused before any fixture runs"
+  },
+  "excluded": [],
+  "fails": []
+ },
+ "--backend no_soft_bodies": {
+  "backend": "no_soft_bodies",
+  "admitted": true,
+  "verdict": "pass",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": []
+ },
+ "--backend rapier_caps --planted kit_admits_unfixtured": {
+  "backend": "rapier_caps",
+  "admitted": true,
+  "verdict": "pass",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": []
+ },
+ "--backend loose_tolerance": {
+  "backend": "loose_tolerance",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "free_fall",
+    "measured": 5.0135416984558105,
+    "answer": 4.905,
+    "tolerance": {
+     "relative": 0.01
+    },
+    "what": "loose_tolerance fails free_fall: its distance ball moved by step 120, m read 5.0135416984558105 where the interface's answer is 4.905 within 1%"
+   },
+   {
+    "fixture": "projectile_range",
+    "measured": 9.978963607594878,
+    "answer": 10.19367991845056,
+    "tolerance": {
+     "relative": 0.01
+    },
+    "what": "loose_tolerance fails projectile_range: its range of ball back at its launch height, m read 9.978963607594878 where the interface's answer is 10.19367991845056 within 1%"
+   },
+   {
+    "fixture": "bounce_min",
+    "measured": 0.24164154529571533,
+    "answer": 0.25,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "loose_tolerance fails bounce_min: its height of ball's first bounce, m read 0.24164154529571533 where the interface's answer is 0.25 within 3%"
+   },
+   {
+    "fixture": "bounce_average",
+    "measured": 0.4749980211257935,
+    "answer": 0.48999999999999994,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "loose_tolerance fails bounce_average: its height of ball's first bounce, m read 0.4749980211257935 where the interface's answer is 0.48999999999999994 within 3%"
+   },
+   {
+    "fixture": "bounce_geometric",
+    "measured": 0.4360307097434998,
+    "answer": 0.45,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "loose_tolerance fails bounce_geometric: its height of ball's first bounce, m read 0.4360307097434998 where the interface's answer is 0.45 within 3%"
+   },
+   {
+    "fixture": "bounce_multiply",
+    "measured": 0.1955365478992462,
+    "answer": 0.2025,
+    "tolerance": {
+     "relative": 0.03
+    },
+    "what": "loose_tolerance fails bounce_multiply: its height of ball's first bounce, m read 0.1955365478992462 where the interface's answer is 0.2025 within 3%"
+   },
+   {
+    "fixture": "slider_limit",
+    "measured": 0.5050007700920105,
+    "answer": 0.5,
+    "tolerance": {
+     "m": 0.005
+    },
+    "what": "loose_tolerance fails slider_limit: its largest coordinate joint rail reached read 0.5050007700920105 where the interface's answer is 0.5 within 0.005 m; joint rail"
+   },
+   {
+    "fixture": "test_capped",
+    "measured": 5.0135416984558105,
+    "answer": 4.905,
+    "tolerance": {
+     "relative": 0.01
+    },
+    "what": "loose_tolerance fails test_capped: its distance ball moved by step 120, m read 5.0135416984558105 where the interface's answer is 4.905 within 1%"
+   }
+  ]
+ },
+ "--planted pair_filter_default": {
+  "backend": "rapier3d",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "sensor/static/kinematic",
+    "measured": null,
+    "answer": 75,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "rapier3d fails sensor/static/kinematic: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 75 within 1 steps; mover and sensor wrote enters at steps [] and exits at steps [], where one enter at step 75 and one exit at step 165 are due, within 1 steps"
+   },
+   {
+    "fixture": "sensor/kinematic/kinematic",
+    "measured": null,
+    "answer": 75,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "rapier3d fails sensor/kinematic/kinematic: its step of mover's sensor_enter on sensor read nothing where the interface's answer is 75 within 1 steps; mover and sensor wrote enters at steps [] and exits at steps [], where one enter at step 75 and one exit at step 165 are due, within 1 steps"
+   }
+  ]
+ },
+ "--planted swept_collision_off": {
+  "backend": "rapier3d",
+  "admitted": true,
+  "verdict": "fail",
+  "excluded": [
+   "sensor/static/character",
+   "sensor/static/placed",
+   "sensor/kinematic/character",
+   "sensor/kinematic/placed",
+   "sensor/dynamic/character",
+   "sensor/dynamic/placed"
+  ],
+  "fails": [
+   {
+    "fixture": "ccd_wall",
+    "measured": 0.058333333333333334,
+    "answer": 0.049749999999999996,
+    "tolerance": {
+     "steps": 1
+    },
+    "what": "rapier3d fails ccd_wall: its time ball first touches wall, s read 0.058333333333333334 where the interface's answer is 0.049749999999999996 within 1 steps; body ball's centre passed the wall's far face (x = 10.02 m) at step 8"
+   }
+  ]
+ }
+}

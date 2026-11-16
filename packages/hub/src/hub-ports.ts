@@ -136,7 +136,7 @@ export interface StopJudgingPort {
   backgroundCapped(session: string, checks: string[]): Promise<void>;
   laneOf(claim: string, until: number): Promise<{ fast: string[]; slow: string[]; readyAt: number; budgetCost?: string[]; changed?: boolean; sendBack?: string } | undefined>;
   sizedAt(claim: string, meta: HookMeta, deadline: number): Promise<string | undefined>;
-  slowStop(meta: HookMeta, r: Routes, claim: string, held: number): Promise<string | undefined>;
+  slowStop(meta: HookMeta, r: Routes, claim: string, held: number, turnEnds: () => Promise<void>): Promise<string | undefined>;
   slowVerdicts(r: Routes): string | undefined;
   stopHold(meta: HookMeta, r: Routes, until: number): Promise<string | undefined>;
   claimed(session: string, claim: string): void;
@@ -175,7 +175,7 @@ export interface SessionMemoryPort {
   lessons(): Promise<Lesson[]>;
   ruleStateOf(session: string): void;
   startRules(meta: HookMeta): Promise<Piece[] | undefined>;
-  promptRules(meta: HookMeta, prompt: string): Promise<Piece[] | undefined>;
+  promptRules(meta: HookMeta, prompt: string, from: string | undefined): Promise<Piece[] | undefined>;
   ruleHook(meta: HookMeta): Promise<void>;
   syncRules(): Promise<Obj>;
   removeRule(lesson: Lesson): Promise<Obj>;
@@ -264,7 +264,7 @@ export interface McpOperationsPort {
 export interface HubControlPort {
   dispatch(method: string, params: Obj, context: CallContext): Promise<unknown>;
   notifierGone(): Promise<void>;
-  health(): Promise<Obj>;
+  health(role: string): Promise<Obj>;
   hubId(): string;
   trusted(method: string, params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void>;
   answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj>;

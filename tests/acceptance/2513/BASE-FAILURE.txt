@@ -1,0 +1,66 @@
+Base commit: 0f89ab109 ("Merge origin/main into #1939"), the head of #1939's branch (#1938's render checks and
+             #1939's snapshot light readings, neither merged on main)
+Machine: macOS 27.2 on Apple silicon (Mac17,10, Apple M5 Max, 64 GB, 18 cores), its GPU; the shared Mac this job ran
+         on, one-minute load 127 to 330 during the job and thermal state "fair", so no timing could be judged here.
+Builds: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+        CARGO_PROFILE_DEV_DEBUG=0, the pinned 1.99.1 toolchain: exit 0 (9 min 50 s); the same with --release: exit 0
+        (14 min 45 s). Both warn that rust-objcopy couldn't strip debug info (its libLLVM.dylib isn't found); neither
+        failed. npm ci once (node_modules was missing), exit 0.
+Command (from the worktree, one file at a time, each run once):
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2513 --no-file-parallelism --testTimeout=600000 <file>
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/2513/tsconfig.json passes (exit 0, no output).
+
+Result (observed, one run of each final file): 2 files, 3 tests: 1 passed, 1 failed at an assertion, 1 failed
+INCONCLUSIVE. None at a load error, none skipped.
+
+ac1-agreement.test.ts (#2513.50c62d71), 16.6 s
+  ✓ #2513.50c62d71 on the revision whose kept card fills the 1936 × 1584 frame's height, the snapshot readings agree
+    with render.exposure within 1e-6, its px is the card's area within its edge px and its key EV the card's grey at
+    the camera's exposure within 0.002 EV
+      Passes at the base, as the issue's expected values say it should (the base measures on the CPU what the
+      reduction must give). Its numbers, read by a scratch probe outside the repo (not kept) that ran the same
+      scenario through the same debug binary, since vitest printed no output for the passing test:
+        deep_show: rev 1, one snapshot 5384d9afa78045eb24f0c43de20d389e4cf9d65b2de686a05b54ccee575d7d2c, 1936 × 1584,
+          light {clipped: 0, crushed: 0, key_ev: −1.0005480026594742}
+        verdict key: rev 1, hash 3ab433c3635d96706586a61c949a579439b927317f52106bca1b39400867f03e (the hash
+          `revisions` gives rev 1)
+        render.exposure: FAIL (machines same, fingerprint "gpu/Apple M5 Max/macos/"), results [{t: 0, subject:
+          [card], px: 2509056, clipped: 0, crushed: 0, key_ev: −1.0005480026594742, exposure: 0.5, pass: false}],
+          loop.exposure's fix_ops [{op: set, id: cam, path: items/cam/params/exposure, value: −0.26}]
+        So px is 1584 × 1584 exactly (0 off, tolerance 6336), key EV 0.00055 from −1 (tolerance 0.002), and the
+        readings equal render.exposure's (0 apart).
+  × #2513.50c62d71 a planted reduction that leaves out the frame's last rows counts fewer px and fails, naming the
+    snapshot
+      AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+      ❯ run helpers.ts:156:79
+      ❯ judged ac1-agreement.test.ts:45:28
+      ❯ ac1-agreement.test.ts:68:21
+      `reduction_leaves_out_last_rows` isn't a planted name at the base (crates/deep-show/src/main.rs), so the
+      scenario carrying it is refused as bad input.
+
+ac2-budget.test.ts (#2513.ea6f22ea), 12.4 s
+  × #2513.ea6f22ea the readings add under 20 ms to a render-back at 1936 × 1584 of the frame-filling card, on against
+    off in one process, judged on the reference Mac
+      Held before it, on the debug build: both render-backs presented with one 1936 × 1584 snapshot each, one picture:
+        PROOF #2513 the render-backs at 1936 × 1584: {"on":[{"sha256":"5384d9afa78045eb24f0c43de20d389e4cf9d65b2de686a05b54ccee575d7d2c","w":1936,"h":1584,"light":{"clipped":0,"crushed":0,"key_ev":-1.0005480026594742}}],"off":[{"sha256":"5384d9afa78045eb24f0c43de20d389e4cf9d65b2de686a05b54ccee575d7d2c","w":1936,"h":1584}]}
+      This Mac is a reference Mac by its hardware (Mac17,10), so the release build was timed, and refused to start:
+      AssertionError: INCONCLUSIVE: deep-show refuses to start, so no render-back can be timed: {"ok":false,"code":"seal_refused","reason":"kit_failed","modules":["motion"],"operators":[],"arrays":[],"what":"motion hasn't passed the canvas conformance kit at its digest","interface":"motion@1","implementations":["motion"]}; this is not a pass
+      ❯ inconclusive helpers.ts:52:10
+      ❯ Streamed.send helpers.ts:193:64
+      ❯ once ac2-budget.test.ts:67:24
+      ❯ added ac2-budget.test.ts:74:41
+      ❯ ac2-budget.test.ts:79:9
+      No timing was taken at the base, loaded or not. Had the release build started, judgeLimit would still read
+      INCONCLUSIVE here (thermal state "fair", load over the 18 cores), with the five runs as the Proof's loaded
+      reading.
+
+Observed at the base with scratch probes outside the repo (not kept), on the debug build:
+- The 3D camera's `fit` isn't solved at the base: #1939's kept 0.2 m cube at 320 × 240 through a perspective camera
+  with `fit: {keep}` (fill at its default 0.6), `fill: 1, pad: 0` and `fill: 0.2, pad: 0` drew one snapshot, SHA-256
+  72626a55801eb1d57293222d1ca549cfc836a98e54b77ab1b0d3cc6902134dca, with render.exposure's px 9604 and key_ev
+  −0.017532997711932286 at scale 1 each time. The suite's fixture is sized so it draws the same with or without the
+  solve (README: What the base already does).
+
+Not run here: criterion 2's timing (the base's release build refuses to start, and this machine can't judge a timing
+now); the planted program's failure (the base has no such plant); criterion 3's suites (it names existing suites,
+which this job neither copies nor runs).

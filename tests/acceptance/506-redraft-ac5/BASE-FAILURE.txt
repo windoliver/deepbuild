@@ -1,0 +1,55 @@
+How ac5-close.test.ts fails at the base, ef869ad87 (main), on this Mac (macOS, Apple silicon, cargo from Homebrew's
+rustup). Run, not only read: the surfaces it drives (deep-show run, deep show, scope, input keys, view) exist at the
+base. Absolute paths are written <repo>.
+
+  $ npx tsc -p tests/acceptance/506-redraft-ac5/tsconfig.json
+  (no output, exit 0)
+
+1. As the base stands, deep-show doesn't build.
+
+  $ cargo build --locked --bin deep-show --no-default-features --features full
+  error[E0308]: mismatched types
+     --> crates/deep-canvas-motion/src/cues.rs:841:25
+      |
+  841 |                     ty: ParamType::Json,
+      |                         ^^^^^^^^^^^^^^^ expected `ParamType`, found enum constructor
+  error: could not compile `deep-canvas-motion` (lib) due to 1 previous error
+
+  #222's cue lists (030c1d296) and #1973's `ParamType::Json(form)` (13765c599) are both in ef869ad87 and don't build
+  together. So at the base the test fails in its own build assertion:
+    "deep-show builds: cargo build --locked --bin deep-show --no-default-features --features full"
+  That is main's break, not this clause's; whoever runs the base run sees it in every deep-show suite.
+
+2. With that one line built as `ParamType::Json("[cue]")` in a scratch edit (reverted; nothing outside this folder is
+   committed), the test ran once against the base's deep-show and failed at its first assertion on the room:
+
+   FAIL  ac5-close.test.ts > AC5 #506.f7b7c9cf the card's close button > AC5 #506.f7b7c9cf the card's close button
+         is reached by Tab and closes the card on Enter
+   AssertionError: the room is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate",
+     "code":"module_missing","severity":"error","ids":[],"path":"items/card/kind: overlay.frame@1","actual":null,
+     "what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the
+     field."}],…,"snapshots":[],"outcome":"refused",…}: expected 'refused' to be 'presented'
+    ❯ presented helpers.ts:176:66
+    ❯ ac5-close.test.ts:36:5
+
+   The base's deep-show refuses every document that holds an `overlay.frame@1`: its marks2d frame operator draws the
+   2D kinds and refuses any other with module_missing (crates/deep-canvas-marks/src/scene.rs, the `_ =>` arm of the
+   mark kinds). A scratch run showed the same refusal for the card with every 3D item taken out, so no document holding
+   the criterion's card ("an `overlay.frame@1` holds a 2D frame … anchored to a part's point", the issue's Scope) is
+   presented by deep-show at the base: the card can't be shown there, so it can't be closed. The same scratch run, with
+   the overlay item taken out (not the criterion's card), was presented; Tab put the scope's focus on `close-card`
+   (every control is a Tab stop at the base), Enter left it there, and `view` replied {"code": "module_missing",
+   "path": "items/floor/kind: mark.box@1"}: the base's view draws through the 2D renderer only and refuses a 3D room
+   (surface 14 of the first suite, which this test reuses).
+
+   This means the clause can't be held to the parent's rule that every fixture passes the base binary's validation:
+   the issue's card is an `overlay.frame@1`, which the base's deep-show refuses wherever it appears. The roles and
+   texts are no longer the cause (the first suite's role `card` is gone; `accent` and `ink` are the clean look's, and
+   no text holds a number).
+
+Past the room, on a build that presents it and draws its view, the test's own assertions decide: Tab reaches
+`close-card` within 8 presses (the base already makes every control a Tab stop); the view shows at least 2,000 card
+pixels before any key and after the Tabs; and none after Enter, which the base's scope doesn't do: Enter or Return acts
+only on a focused pick target (crates/deep-canvas/src/scope.rs, the key arm: `done.pick = self.focused_target(doc)`),
+and a control's own Tab stop has none, so the card would still be drawn ("Enter on the close button closes the card:
+pixels of its background after it", expected 0).

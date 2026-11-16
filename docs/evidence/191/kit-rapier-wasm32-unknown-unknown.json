@@ -1,0 +1,666 @@
+{
+ "backend": "rapier3d",
+ "admitted": true,
+ "results": [
+  {
+   "backend": "rapier3d",
+   "fixture": "free_fall",
+   "measure": "distance ball moved by step 120, m",
+   "answer": 4.905,
+   "tolerance": {
+    "relative": 0.01
+   },
+   "caps": [],
+   "measured": 4.9152326583862305,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes free_fall: its distance ball moved by step 120, m read 4.9152326583862305 against the interface's answer 4.905 within 1%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "projectile_range",
+   "measure": "range of ball back at its launch height, m",
+   "answer": 10.19367991845056,
+   "tolerance": {
+    "relative": 0.01
+   },
+   "caps": [],
+   "measured": 10.178851027949332,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes projectile_range: its range of ball back at its launch height, m read 10.178851027949332 against the interface's answer 10.19367991845056 within 1%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "pendulum_period",
+   "measure": "period of bob, s",
+   "answer": 2.009885948561886,
+   "tolerance": {
+    "relative": 0.01
+   },
+   "caps": [],
+   "measured": 2.0108913014509375,
+   "body": "bob",
+   "result": "pass",
+   "what": "rapier3d passes pendulum_period: its period of bob, s read 2.0108913014509375 against the interface's answer 2.009885948561886 within 1%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "bounce_max",
+   "measure": "height of ball's first bounce, m",
+   "answer": 0.81,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 0.800326669216156,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes bounce_max: its height of ball's first bounce, m read 0.800326669216156 against the interface's answer 0.81 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "bounce_min",
+   "measure": "height of ball's first bounce, m",
+   "answer": 0.25,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 0.246009761095047,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes bounce_min: its height of ball's first bounce, m read 0.246009761095047 against the interface's answer 0.25 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "bounce_average",
+   "measure": "height of ball's first bounce, m",
+   "answer": 0.48999999999999994,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 0.48344268798828127,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes bounce_average: its height of ball's first bounce, m read 0.48344268798828127 against the interface's answer 0.48999999999999994 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "bounce_geometric",
+   "measure": "height of ball's first bounce, m",
+   "answer": 0.45,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 0.443878972530365,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes bounce_geometric: its height of ball's first bounce, m read 0.443878972530365 against the interface's answer 0.45 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "bounce_multiply",
+   "measure": "height of ball's first bounce, m",
+   "answer": 0.2025,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 0.19905450344085693,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes bounce_multiply: its height of ball's first bounce, m read 0.19905450344085693 against the interface's answer 0.2025 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slide_geometric",
+   "measure": "distance block moved by step 600, m",
+   "answer": 3.1855249745158,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 3.180325508871358,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slide_geometric: its distance block moved by step 600, m read 3.180325508871358 against the interface's answer 3.1855249745158 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slide_average",
+   "measure": "distance block moved by step 600, m",
+   "answer": 2.54841997961264,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 2.5431947717557923,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slide_average: its distance block moved by step 600, m read 2.5431947717557923 against the interface's answer 2.54841997961264 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slide_min",
+   "measure": "distance block moved by step 600, m",
+   "answer": 6.3710499490316,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 6.365904808422588,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slide_min: its distance block moved by step 600, m read 6.365904808422588 against the interface's answer 6.3710499490316 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slide_max",
+   "measure": "distance block moved by step 600, m",
+   "answer": 1.5927624872579,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 1.587459565718661,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slide_max: its distance block moved by step 600, m read 1.587459565718661 against the interface's answer 1.5927624872579 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slide_multiply",
+   "measure": "distance block moved by step 600, m",
+   "answer": 7.9638124362894995,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 7.958585739437792,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slide_multiply: its distance block moved by step 600, m read 7.958585739437792 against the interface's answer 7.9638124362894995 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slope_hold",
+   "measure": "distance block moved by step 240, m",
+   "answer": 0,
+   "tolerance": {
+    "m": 0.001
+   },
+   "caps": [],
+   "measured": 0.00021561394227089943,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slope_hold: its distance block moved by step 240, m read 0.00021561394227089943 against the interface's answer 0 within 0.001 m"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slope_slide",
+   "measure": "distance block moved by step 240, m",
+   "answer": 1.3142907888746553,
+   "tolerance": {
+    "relative": 0.03
+   },
+   "caps": [],
+   "measured": 1.3263602616751629,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes slope_slide: its distance block moved by step 240, m read 1.3263602616751629 against the interface's answer 1.3142907888746553 within 3%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "hinge_limit",
+   "measure": "largest coordinate joint pin reached",
+   "answer": 30,
+   "tolerance": {
+    "deg": 0.5
+   },
+   "caps": [],
+   "measured": 30.00000024011171,
+   "joint": "pin",
+   "step": 33,
+   "result": "pass",
+   "what": "rapier3d passes hinge_limit: its largest coordinate joint pin reached read 30.00000024011171 against the interface's answer 30 within 0.5°"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "slider_limit",
+   "measure": "largest coordinate joint rail reached",
+   "answer": 0.5,
+   "tolerance": {
+    "m": 0.005
+   },
+   "caps": [],
+   "measured": 0.5000000596046448,
+   "joint": "rail",
+   "step": 39,
+   "result": "pass",
+   "what": "rapier3d passes slider_limit: its largest coordinate joint rail reached read 0.5000000596046448 against the interface's answer 0.5 within 0.005 m"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "hinge_motor",
+   "measure": "turn rate of bar after step 60, deg/s",
+   "answer": 90,
+   "tolerance": {
+    "relative": 0.01
+   },
+   "caps": [],
+   "measured": 89.99468231201172,
+   "body": "bar",
+   "result": "pass",
+   "what": "rapier3d passes hinge_motor: its turn rate of bar after step 60, deg/s read 89.99468231201172 against the interface's answer 90 within 1%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "first_contact_time",
+   "measure": "time of the first contact_begin of ball and floor, s",
+   "answer": 0.4515236409857309,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 0.4583333333333333,
+   "step": 55,
+   "result": "pass",
+   "what": "rapier3d passes first_contact_time: its time of the first contact_begin of ball and floor, s read 0.4583333333333333 against the interface's answer 0.4515236409857309 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "first_contact_speed",
+   "measure": "speed of the first hit of ball and floor",
+   "answer": 4.4294469180700204,
+   "tolerance": {
+    "relative": 0.02
+   },
+   "caps": [],
+   "measured": 4.414501190185547,
+   "step": 55,
+   "result": "pass",
+   "what": "rapier3d passes first_contact_speed: its speed of the first hit of ball and floor read 4.414501190185547 against the interface's answer 4.4294469180700204 within 2%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor_entry",
+   "measure": "time of the first sensor_enter of ball and gate, s",
+   "answer": 0.3192754284070505,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 0.325,
+   "step": 39,
+   "result": "pass",
+   "what": "rapier3d passes sensor_entry: its time of the first sensor_enter of ball and gate, s read 0.325 against the interface's answer 0.3192754284070505 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sleep",
+   "measure": "steps from block's speed falling under the sleep speed to its rest",
+   "answer": 60,
+   "tolerance": {
+    "steps": 2
+   },
+   "caps": [],
+   "measured": 62,
+   "body": "block",
+   "under": 42,
+   "rest": 104,
+   "result": "pass",
+   "what": "rapier3d passes sleep: its steps from block's speed falling under the sleep speed to its rest read 62 against the interface's answer 60 within 2 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sleep_off",
+   "measure": "count of rest rows of block",
+   "answer": 0,
+   "tolerance": {
+    "relative": 0
+   },
+   "caps": [],
+   "measured": 0,
+   "body": "block",
+   "result": "pass",
+   "what": "rapier3d passes sleep_off: its count of rest rows of block read 0 against the interface's answer 0 within 0%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "queries",
+   "measure": "probes whose hits differ from a scan over every shape",
+   "answer": 0,
+   "tolerance": {
+    "relative": 0
+   },
+   "caps": [],
+   "measured": 0,
+   "probes": {
+    "ray": 6,
+    "sweep": 4,
+    "overlap": 5
+   },
+   "result": "pass",
+   "what": "rapier3d passes queries: its probes whose hits differ from a scan over every shape read 0 against the interface's answer 0 within 0%"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "ccd_wall",
+   "measure": "time ball first touches wall, s",
+   "answer": 0.049749999999999996,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [
+    "ccd"
+   ],
+   "measured": 0.05,
+   "body": "ball",
+   "result": "pass",
+   "what": "rapier3d passes ccd_wall: its time ball first touches wall, s read 0.05 against the interface's answer 0.049749999999999996 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/static/dynamic",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 75,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 75
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 165
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/static/dynamic: its step of mover's sensor_enter on sensor read 75 against the interface's answer 75 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/static/kinematic",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 75,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 75
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 166
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/static/kinematic: its step of mover's sensor_enter on sensor read 75 against the interface's answer 75 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/static/character",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [
+    "character_controller"
+   ],
+   "measured": null,
+   "result": "excluded_by_caps",
+   "what": "rapier3d doesn't claim character_controller in its caps(), so sensor/static/character is excluded, never run or passed"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/static/placed",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 300,
+   "tolerance": {
+    "steps": 0
+   },
+   "caps": [
+    "character_controller"
+   ],
+   "measured": null,
+   "result": "excluded_by_caps",
+   "what": "rapier3d doesn't claim character_controller in its caps(), so sensor/static/placed is excluded, never run or passed"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/static/inside",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 1,
+   "tolerance": {
+    "steps": 0
+   },
+   "caps": [],
+   "measured": 1,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 1
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 240
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/static/inside: its step of mover's sensor_enter on sensor read 1 against the interface's answer 1 within 0 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/kinematic/dynamic",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 75,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 75
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 165
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/kinematic/dynamic: its step of mover's sensor_enter on sensor read 75 against the interface's answer 75 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/kinematic/kinematic",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 75,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 75
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 166
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/kinematic/kinematic: its step of mover's sensor_enter on sensor read 75 against the interface's answer 75 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/kinematic/character",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [
+    "character_controller"
+   ],
+   "measured": null,
+   "result": "excluded_by_caps",
+   "what": "rapier3d doesn't claim character_controller in its caps(), so sensor/kinematic/character is excluded, never run or passed"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/kinematic/placed",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 300,
+   "tolerance": {
+    "steps": 0
+   },
+   "caps": [
+    "character_controller"
+   ],
+   "measured": null,
+   "result": "excluded_by_caps",
+   "what": "rapier3d doesn't claim character_controller in its caps(), so sensor/kinematic/placed is excluded, never run or passed"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/kinematic/inside",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 1,
+   "tolerance": {
+    "steps": 0
+   },
+   "caps": [],
+   "measured": 1,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 1
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 240
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/kinematic/inside: its step of mover's sensor_enter on sensor read 1 against the interface's answer 1 within 0 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/dynamic/dynamic",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 75,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 75
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 165
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/dynamic/dynamic: its step of mover's sensor_enter on sensor read 75 against the interface's answer 75 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/dynamic/kinematic",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [],
+   "measured": 75,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 75
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 166
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/dynamic/kinematic: its step of mover's sensor_enter on sensor read 75 against the interface's answer 75 within 1 steps"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/dynamic/character",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 75,
+   "tolerance": {
+    "steps": 1
+   },
+   "caps": [
+    "character_controller"
+   ],
+   "measured": null,
+   "result": "excluded_by_caps",
+   "what": "rapier3d doesn't claim character_controller in its caps(), so sensor/dynamic/character is excluded, never run or passed"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/dynamic/placed",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 300,
+   "tolerance": {
+    "steps": 0
+   },
+   "caps": [
+    "character_controller"
+   ],
+   "measured": null,
+   "result": "excluded_by_caps",
+   "what": "rapier3d doesn't claim character_controller in its caps(), so sensor/dynamic/placed is excluded, never run or passed"
+  },
+  {
+   "backend": "rapier3d",
+   "fixture": "sensor/dynamic/inside",
+   "measure": "step of mover's sensor_enter on sensor",
+   "answer": 1,
+   "tolerance": {
+    "steps": 0
+   },
+   "caps": [],
+   "measured": 1,
+   "occurrences": [
+    {
+     "kind": "sensor_enter",
+     "step": 1
+    },
+    {
+     "kind": "sensor_exit",
+     "step": 240
+    }
+   ],
+   "result": "pass",
+   "what": "rapier3d passes sensor/dynamic/inside: its step of mover's sensor_enter on sensor read 1 against the interface's answer 1 within 0 steps"
+  }
+ ],
+ "verdict": "pass",
+ "ok": true,
+ "target": "wasm32-unknown-unknown"
+}
