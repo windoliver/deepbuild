@@ -1,0 +1,36 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365-redraft-ac4/rewritten.test.ts (2 tests | 1 failed) 3390ms
+   ❯ AC4 #2365.1e24d52d a transcript whose first megabyte was rewritten after its last copy is copied again from its start, and its handles resolve through the new parts (2)
+     ✓ AC4 archived at 480 lines, first megabyte rewritten from line 3, 20 lines gained: the pass after reads as the rewritten file, every probed handle resolves to its new text, and the evidence it linked holds the file from its start 1229ms
+     × AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 3, the first line that differs 1640ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac4/rewritten.test.ts > AC4 #2365.1e24d52d a transcript whose first megabyte was rewritten after its last copy is copied again from its start, and its handles resolve through the new parts > AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 3, the first line that differs
+AssertionError: expected [Function] to throw error matching /line 3 \(session:f78bc1e9a6bc44f58022…/ but got 'session:f78bc1e9a6bc44f580221a73cf59a…'
+
+- Expected:
+/line 3 \(session:f78bc1e9a6bc44f580221a73cf59a9a7#m3\) differs/
+
++ Received:
+"session:f78bc1e9a6bc44f580221a73cf59a9a7: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line: expected 'line 3 (session:f78bc1e9a6bc44f580221…' to be undefined"
+
+ ❯ tests/acceptance/2365-redraft-ac4/rewritten.test.ts:38:45
+     36|       expect(r.reading?.[TOTAL - 1]?.text, 'the twin appended the gain…
+     37|       expect(r.reading?.[LINES - 1]?.text, 'past the rewrite, the twin…
+     38|       expect(() => copiedAgainFromStart(r)).toThrow(new RegExp(`line 3…
+       |                                             ^
+     39|     } finally {
+     40|       await w.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  21:43:47
+   Duration  4.37s (tests 85%, transform 12%, import 3%)
+
+EXIT 1

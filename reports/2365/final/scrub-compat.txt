@@ -1,0 +1,10 @@
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+
+ Test Files  3 passed (3)
+      Tests  32 passed (32)
+   Start at  22:47:19
+   Duration  29.31s (tests 97%, import 2%, transform 1%)
+
+exit=0

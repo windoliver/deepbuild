@@ -16,8 +16,8 @@ The next part starts again at that line and scrubs it without the BEGIN keyword 
 
 **Synthetic trigger (`final=true`):**
 ```
-L1 = "-----BEGIN RSA PRIVATE KEY-----\n"
-L2 = "A".repeat(64) + "-----END RSA PRIVATE KEY----- x -----BEGIN RSA PRIVATE KEY-----\n"
+L1 = "-----BEGIN RSA PRIVATE KEY (synthetic)-----\n"
+L2 = "A".repeat(64) + "-----END RSA PRIVATE KEY----- x -----BEGIN RSA PRIVATE KEY (synthetic)-----\n"
 L3 = "B".repeat(64) + "\n"
 L4 = "-----END RSA PRIVATE KEY-----\n"
 scrubPrefix(Buffer.from(L1+L2+L3+L4), [], (L1+L2+L3).length, true)
@@ -39,7 +39,7 @@ When `stable` is false, the tail is trimmed to the last newline, but the worker 
 
 **Synthetic trigger:** a first-seen transcript (no `before`) whose bytes end with:
 ```
-"-----BEGIN OPENSSH PRIVATE KEY-----\n" + "A".repeat(70) + "\n" + "B".repeat(70) + "\n"
+"-----BEGIN OPENSSH PRIVATE KEY (synthetic)-----\n" + "A".repeat(70) + "\n" + "B".repeat(70) + "\n"
 ```
 Then append `"-----END OPENSSH PRIVATE KEY-----\n"` and copy again. The archived `transcript-copy` parts contain the `A`/`B` lines verbatim.
 

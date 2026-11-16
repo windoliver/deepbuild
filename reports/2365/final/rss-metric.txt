@@ -1,0 +1,23 @@
+node v24.22.2 (Homebrew), node --expose-gc metric.mjs:
+start                              rss   12.7 maxRSS   42.7
+holding 60 MB                      rss   74.3 maxRSS  105.5
+dropped and collected              rss   74.8 maxRSS  106.3
+holding 10 MB                      rss   84.9 maxRSS  116.2
+holding 30 MB                      rss  104.9 maxRSS  136.3
+
+node v24.22.0 (the repo's .node-version, fnm):
+start                              rss   46.1 maxRSS   46.1
+holding 60 MB                      rss  108.9 maxRSS  108.9
+dropped and collected              rss  109.8 maxRSS  109.9
+holding 10 MB                      rss  119.8 maxRSS  119.8
+holding 30 MB                      rss  139.8 maxRSS  139.8
+
+metric.mjs:
+// Is ru_maxrss the highest value process.memoryUsage.rss() reached? Fill 60 MB, drop it, collect, then fill 10 MB.
+const mb = (n) => (n / 1e6).toFixed(1);
+const read = (what) => console.log(what.padEnd(34), 'rss', mb(process.memoryUsage.rss()).padStart(6), 'maxRSS', mb(process.resourceUsage().maxRSS * 1024).padStart(6));
+read('start');
+let big = Buffer.alloc(60_000_000, 1); read('holding 60 MB');
+big = null; globalThis.gc(); await new Promise((r) => setTimeout(r, 300)); globalThis.gc(); read('dropped and collected');
+const small = Buffer.alloc(10_000_000, 1); read('holding 10 MB');
+const more = Buffer.alloc(20_000_000, 1); read('holding 30 MB'); void small; void more;

@@ -1,8 +1,6 @@
-# #2365: proposed unblock, not an approved change
+# #2365: the unblock proposal, decided 2026-11-15
 
-Status: **BLOCKED pending owner decision**. This document changes no requirement, test, budget, verdict, or issue state. Repeated requests to finish the issue have not been treated as permission to weaken its checks or silently change its scope.
-
-The implementation is PR [#2644](https://github.com/windoliver/deepbuild/pull/2644). Its current result is mapped in [../2365.md](../2365.md). Both permitted blind acceptance redrafts have already run and failed, so another redraft or an implementation-side edit is not an available shortcut.
+Status: **decided by the owner on 2026-11-15**. Proposal A is approved, and #2365's first Scope bullet carries its wording. Proposal B ran as a separate maintenance job that never saw the implementation (commit `2a88eab5b`, runs in `repair/`). What is still open is in [../2365.md](../2365.md). The text below is the proposal as it was put.
 
 ## Proposal A — distinguish verification reads from copying
 

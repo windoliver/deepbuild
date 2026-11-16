@@ -1,0 +1,121 @@
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+ ❯ packages/contracts/test/rust-checks.test.ts (309 tests | 1 failed) 76487ms
+   ❯ the Rust types refuse what the schemas refuse (309)
+     × every published pattern was matched and refused in some field 33ms
+deep hub: the core stopped: Error: no deep-hook is built under <home>/doneright-2365/target; run cargo build -p deep-hook first
+    at deepHook (file://<home>/doneright-2365/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<home>/doneright-2365/packages/hub/dist/core.js:376:75)
+    at Products.secure (file://<home>/doneright-2365/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<home>/doneright-2365/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<home>/doneright-2365/packages/hub/dist/core.js:823:29)
+    at async Core.init (file://<home>/doneright-2365/packages/hub/dist/core.js:568:9)
+deep hub: the core stopped: Error: no deep-hook is built under <home>/doneright-2365/target; run cargo build -p deep-hook first
+    at deepHook (file://<home>/doneright-2365/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<home>/doneright-2365/packages/hub/dist/core.js:376:75)
+    at Products.secure (file://<home>/doneright-2365/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<home>/doneright-2365/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<home>/doneright-2365/packages/hub/dist/core.js:823:29)
+    at async Core.init (file://<home>/doneright-2365/packages/hub/dist/core.js:568:9)
+ ❯ packages/hub/test/archive.test.ts (2 tests | 2 failed) 16281ms
+   ❯ the archive in the hub (1)
+     × runs at start with no setting: copies a transcript and the CI run of a repo a session worked in 950ms
+   ❯ the hub's retention (1)
+     × keeps a CI log a ci.archived event links past 30 days, beside an uncited file it removes 15223ms
+ ❯ tests/acceptance/342/archive.test.ts (3 tests | 3 failed) 97ms
+   ❯ AC1 #342.c44dce7a deleting or archiving a desktop session leaves its archived transcript (3)
+     × AC1 in the Claude desktop app, a session deleted or archived at SessionEnd (reason other) leaves a copy holding its last line, read back after its source is gone 3ms
+     × AC1 in Codex Desktop, a session deleted or archived at SessionEnd (reason other) leaves a copy holding its last line, read back after its source is gone 0ms
+     × AC1 a Codex Desktop thread archived with no hook fired is archived from ~/.codex/archived_sessions, what it said last included 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/contracts/test/rust-checks.test.ts > the Rust types refuse what the schemas refuse > every published pattern was matched and refused in some field
+AssertionError: expected [ '^[A-Z][A-Za-z]*$', …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "^[A-Z][A-Za-z]*$",
++   "^(day|week|month|year)$",
++   "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*(:(shared|exclusive))?$",
++ ]
+
+ ❯ packages/contracts/test/rust-checks.test.ts:163:25
+    161|     for (const { schema } of listSchemas()) walk(schema);
+    162|     const unexercised = [...published].filter((p) => !(patternsSeen.ge…
+    163|     expect(unexercised).toEqual([]);
+       |                         ^
+    164|   });
+    165| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  packages/hub/test/archive.test.ts > the archive in the hub > runs at start with no setting: copies a transcript and the CI run of a repo a session worked in
+Error: the hub exited before it was ready
+ ❯ ChildProcess.<anonymous> packages/hub/test/hub.ts:75:37
+     73|     await new Promise((resolve, reject) => {
+     74|       hub.stdout.once('data', resolve);
+     75|       hub.once('exit', () => reject(Error('the hub exited before it wa…
+       |                                     ^
+     76|       timer = setTimeout(() => reject(Error("the hub wasn't ready with…
+     77|     }).finally(() => clearTimeout(timer));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  packages/hub/test/archive.test.ts > the hub's retention > keeps a CI log a ci.archived event links past 30 days, beside an uncited file it removes
+AssertionError: the retention pass ran: the uncited file is gone: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ packages/hub/test/archive.test.ts:96:95
+     94|       try {
+     95|         for (const until = Date.now() + 15_000; Date.now() < until && …
+     96|         expect(existsSync(file(uncited)), 'the retention pass ran: the…
+       |                                                                                               ^
+     97|         expect(existsSync(file(log)), 'the CI log ci.archived links is…
+     98|       } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/342/archive.test.ts > AC1 #342.c44dce7a deleting or archiving a desktop session leaves its archived transcript > AC1 in the Claude desktop app, a session deleted or archived at SessionEnd (reason other) leaves a copy holding its last line, read back after its source is gone
+ FAIL  tests/acceptance/342/archive.test.ts > AC1 #342.c44dce7a deleting or archiving a desktop session leaves its archived transcript > AC1 in Codex Desktop, a session deleted or archived at SessionEnd (reason other) leaves a copy holding its last line, read back after its source is gone
+Error: BLOCKED: deep-hook (cargo build --locked -p deep-hook) is not built at <home>/doneright-2365/target/debug/deep-hook
+ ❯ openWorld tests/acceptance/342/helpers.ts:76:37
+     74| export async function openWorld(o: { plant?: string; files?: Record<st…
+     75|   if (!existsSync(CLI)) throw Error(`BLOCKED: the deep CLI (npm run bu…
+     76|   if (!existsSync(DEEP_HOOK)) throw Error(`BLOCKED: deep-hook (cargo b…
+       |                                     ^
+     77|   const h = home();
+     78|   const root = join(h, '.deepbuild');
+ ❯ tests/acceptance/342/archive.test.ts:26:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/342/archive.test.ts > AC1 #342.c44dce7a deleting or archiving a desktop session leaves its archived transcript > AC1 a Codex Desktop thread archived with no hook fired is archived from ~/.codex/archived_sessions, what it said last included
+Error: BLOCKED: deep-hook (cargo build --locked -p deep-hook) is not built at <home>/doneright-2365/target/debug/deep-hook
+ ❯ openWorld tests/acceptance/342/helpers.ts:76:37
+     74| export async function openWorld(o: { plant?: string; files?: Record<st…
+     75|   if (!existsSync(CLI)) throw Error(`BLOCKED: the deep CLI (npm run bu…
+     76|   if (!existsSync(DEEP_HOOK)) throw Error(`BLOCKED: deep-hook (cargo b…
+       |                                     ^
+     77|   const h = home();
+     78|   const root = join(h, '.deepbuild');
+ ❯ tests/acceptance/342/archive.test.ts:36:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+
+ Test Files  3 failed | 11 passed (14)
+      Tests  6 failed | 409 passed (415)
+   Start at  23:18:49
+   Duration  124.34s (tests 96%, transform 3%, import 1%)
+
+exit=1

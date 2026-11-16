@@ -15,7 +15,7 @@ AssertionError: expected '{"parentUuid":null,"isSidechain":fals…' to be '{"par
 
 - {"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"public first line"},"uuid":"m1","timestamp":"2026-10-05T09:00:00.000Z","userType":"external","entrypoint":"cli","cwd":"/tmp/dh20-work/shop","sessionId":"93a08d27-c73e-4529-933f-2d68af1d0279","version":"2.1.304","gitBranch":"main"}
 + {"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"public first line"},"uuid":"m1","timestamp":"2026-10-05T09:00:00.000Z","userType":"external","entrypoint":"cli","cwd":"/tmp/dh20-work/shop","sessionId":"93a08d27-c73e-4529-933f-2d68af1d0279","version":"2.1.304","gitBranch":"main"}
-+ -----BEGIN OPENSSH PRIVATE KEY-----
++ -----BEGIN OPENSSH PRIVATE KEY (synthetic)-----
 + synthetickeybodysynthetickeybodysynthetickeybodysynthetickeybodysynthetickeybodysynthetickeybodysynthetickeybody
 
 

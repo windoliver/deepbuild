@@ -1,0 +1,10 @@
+
+ RUN  v5.0.5 <home>/doneright-2365/tests/acceptance/2365
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  23:03:05
+   Duration  46.60s (tests 99%)
+
+exit=0

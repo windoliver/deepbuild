@@ -1,0 +1,14 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ✓ tests/acceptance/2365-redraft-ac4/rewritten.test.ts (2 tests) 5395ms
+   ✓ AC4 #2365.1e24d52d a transcript whose first megabyte was rewritten after its last copy is copied again from its start, and its handles resolve through the new parts (2)
+     ✓ AC4 archived at 480 lines, first megabyte rewritten from line 3, 20 lines gained: the pass after reads as the rewritten file, every probed handle resolves to its new text, and the evidence it linked holds the file from its start 1852ms
+     ✓ AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 3, the first line that differs 2645ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:47:56
+   Duration  6.46s (tests 89%, transform 8%, import 3%)
+
+EXIT 0

@@ -1,0 +1,19 @@
+node scripts/affected.mjs --list, on 98aea60d9 against merge base f98921218 (selection only; not run):
+parallel vitest: 706 files
+parallel node: 138 files
+alone vitest: 908 files
+alone node: 1 files
+timed vitest: 104 files
+timed node: 18 files
+slow vitest: 48 files
+slow node: 10 files
+parallel cargo test: 5 (deep-app deep-contracts deep-hook deep-logic deep-relay)
+NOTE benchmarks/archive-growth.mjs reaches no test
+NOTE benchmarks/budgets.json reaches no test
+NOTE packages/archive/src/copy-worker.ts reaches no test
+NOTE packages/contracts/fixtures/transcript.archived@3/01.json reaches no test
+NOTE packages/contracts/fixtures/transcript.archived@4/01.json reaches no test
+NOTE packages/contracts/src/generated/types.ts reaches no test
+NOTE packages/evidence/package.json reaches no test
+NOTE packages/evidence/src/digest-worker.ts reaches no test
+No WIDE line was printed. NOTE lines for files under reports/ are left out.
