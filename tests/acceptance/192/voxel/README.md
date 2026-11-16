@@ -256,5 +256,7 @@ their defaults, a channel or a reading as the binding (the criterion names t, a 
 
 ## Base failure
 
-`BASE-FAILURE.txt` is one run of each file at the base (`06e231702`), home paths redacted, with the first failure of
-each.
+`BASE-FAILURE.txt` holds what ran at the base (`06e231702`): the cargo feature check for criterion 9's two test
+builds (both missing) and the fixtures in Node; and, read from the base's code, the first failure each file meets
+there. No file ran through deep-show at the base: the shared Mac's one build slot stayed taken with five to ten builds
+queued ahead while this suite was drafted. That base run is still owed; it replaces the file's last section.
