@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5",
+  "set_digest": "d29853678ee979b83de6eda48acaed9f8bc6a3610cbb19afc2a976e9b68361d9",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -277,7 +277,7 @@
       }
     },
     "loop@1": {
-      "digest": "9fc00a319de12e9ec0058e38ed76d6a18251e71677be2e61548b1536daf5ed84",
+      "digest": "72b690e1540d77eeea053c3460b2b70b823f4495247344ece5d2677a73f05c01",
       "reference": "loop",
       "kit": [
         "fixtures",
@@ -438,7 +438,8 @@
         "contribution",
         "catalog",
         "migration",
-        "bit"
+        "bit",
+        "behavior"
       ],
       "behavior": "none",
       "module": "physics",
@@ -604,7 +605,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "57178f9f2bee8a60db6ec6429d4956fa8faa52d76080d17227f9fa1d0db05d92",
+      "digest": "734bbdf586002e6672af9efdac8e7dfd67a721aa68f8799fb3ab0154e94ea41b",
       "reference": "scene3d",
       "kit": [
         "fixtures",

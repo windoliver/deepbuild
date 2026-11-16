@@ -1,0 +1,10 @@
+{
+ "fixture": "art.neon_tape.2d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "a66eec55e72d12d338174e06acd565c320243d74c5c2112347c819439d3e481a"
+}

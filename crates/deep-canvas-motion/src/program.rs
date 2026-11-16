@@ -84,9 +84,11 @@ pub(crate) enum CoreInput {
     /// Seconds since the transport's start; over the document's span when bounded.
     Time,
     /// A control's value: its entries on the input track as `(t, seq, value)` in order, its
-    /// default before any, and its declared range.
+    /// default before any, and its declared range. #903: `ramps` holds each entry a tour's
+    /// linear key wrote, as `(t, seq, end, to)`: from that entry the value moves to `to` at `end`.
     Control {
         entries: Vec<(i64, i64, f64)>,
+        ramps: Vec<(i64, i64, i64, f64)>,
         default: f64,
         range: (f64, f64),
     },
@@ -395,6 +397,27 @@ pub struct Program {
     pub trails: crate::trail::Bakes,
     /// #507: the timeline's position on the clock, through the stops' holds and jumps.
     pub path: crate::present::Path,
+    /// #903: the tour's linear keys on the inline track, whose controls' values move.
+    pub(crate) ramps: Vec<doc::Ramp>,
+}
+
+/// A control's entries as `(t, seq, value)`, and its ramps as `(t, seq, end, to)`.
+type Entries = [(i64, i64, f64)];
+type Ramps = [(i64, i64, i64, f64)];
+
+/// A control's value at `t` from its entries: the last one's at or before `t`, moved along its
+/// ramp when a tour's linear key wrote it, or `default` before any.
+fn control_at(entries: &Entries, ramps: &Ramps, default: f64, t: i64) -> f64 {
+    let i = entries.partition_point(|e| e.0 <= t);
+    let Some(&(start, seq, value)) = i.checked_sub(1).map(|i| &entries[i]) else {
+        return default;
+    };
+    match ramps.iter().find(|r| (r.0, r.1) == (start, seq)) {
+        Some(&(_, _, end, to)) => {
+            value + (to - value) * ((t.min(end) - start) as f64 / (end - start) as f64)
+        }
+        None => value,
+    }
 }
 
 /// #504: one take-apart target: its stagger (in [`Motion::staggers`]), its assembly's share slot
@@ -682,6 +705,7 @@ impl Program {
             staggered: Vec::new(),
             trails: Default::default(),
             path: Default::default(),
+            ramps: doc::ramps(doc),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -933,7 +957,7 @@ impl Program {
                 }
                 _ => [owner; 2],
             };
-            let table = match &c.kind {
+            let mut table = match &c.kind {
                 Kind::FollowPath {
                     points, fraction, ..
                 } => Some(crate::constraint::PathRead::compile(
@@ -944,6 +968,18 @@ impl Program {
                 )?),
                 _ => None,
             };
+            // #1960: a fraction read at a path takes that field's slot, as a driver's var does.
+            if let Kind::FollowPath {
+                fraction: crate::constraint::Fraction::Path(t),
+                ..
+            } = &c.kind
+            {
+                let slot = program.slot(items_json, &t.owner, t, 1);
+                table = table.map(|read| crate::constraint::PathRead {
+                    from: Some(slot),
+                    ..read
+                });
+            }
             program.constraints.push(Compiled {
                 owner,
                 other,
@@ -2229,7 +2265,10 @@ impl Program {
             .iter()
             .filter_map(|s| s.follow.next_change(t))
             .min();
-        [timeline, self.inputs.next_change(t), staggered]
+        // #903: a tour's linear key moves its control at every flick of its segment.
+        let ramped = self.ramps.iter().filter(|r| r.end > t);
+        let ramped = ramped.map(|r| r.t.max(t + 1)).min();
+        [timeline, self.inputs.next_change(t), staggered, ramped]
             .into_iter()
             .flatten()
             .min()
@@ -3089,16 +3128,15 @@ impl Program {
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
                     }
-                    // #1183: a logic item's scalar output its host baked into the document.
+                    // #1183, #1164: a logic output its host baked, or one element of it.
                     if let Some(read) = doc
                         .get("arrays")
-                        .and_then(|a| a.get(array.as_str()))
-                        .and_then(crate::array::Read::of)
+                        .and_then(|a| crate::array::Read::of_var(a, array))
                     {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
                         continue;
                     }
-                    let why = "motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands";
+                    let why = "motion's drivers read only a logic item's scalar f64 output or one element of an i32 or f64 one, baked into the document, or a spectrum's bands";
                     let detail = Some(Box::new(
                         json!({"driver": driver.id, "array": array, "why": why}),
                     ));
@@ -3141,6 +3179,7 @@ impl Program {
                     scope.maxes.insert(name.clone(), range.1);
                     CoreInput::Control {
                         entries,
+                        ramps: Vec::new(),
                         default,
                         range,
                     }
@@ -3179,8 +3218,10 @@ impl Program {
                         .into_iter()
                         .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
                         .collect();
+                    let ramps = self.ramps.iter().filter(|r| r.control == *id);
                     CoreInput::Control {
                         entries,
+                        ramps: ramps.map(|r| (r.t, r.seq, r.end, r.to)).collect(),
                         default: c.get("default").and_then(Value::as_f64).unwrap_or(lo),
                         range: (lo, hi),
                     }
@@ -3299,15 +3340,10 @@ impl Program {
                     }
                     CoreInput::Control {
                         entries,
+                        ramps,
                         default,
                         range,
-                    } => {
-                        let at = t_run - dt;
-                        let i = entries.partition_point(|e| e.0 <= at);
-                        i.checked_sub(1)
-                            .map_or(*default, |i| entries[i].2)
-                            .clamp(range.0, range.1)
-                    }
+                    } => control_at(entries, ramps, *default, t_run - dt).clamp(range.0, range.1),
                     _ => f64::NAN,
                 },
                 CoreInput::Array(read) => read.at(doc_t),
@@ -3331,13 +3367,10 @@ impl Program {
                 // A control's value, held to its declared range.
                 CoreInput::Control {
                     entries,
+                    ramps,
                     default,
                     range,
-                } => {
-                    let i = entries.partition_point(|e| e.0 <= t_run);
-                    let v = i.checked_sub(1).map_or(*default, |i| entries[i].2);
-                    v.clamp(range.0, range.1)
-                }
+                } => control_at(entries, ramps, *default, t_run).clamp(range.0, range.1),
             };
         }
         let v = core.expr.eval_num(&vals[..core.inputs.len()]);
@@ -3614,9 +3647,10 @@ impl Program {
                 CoreInput::Time => time,
                 CoreInput::Control {
                     entries,
+                    ramps,
                     default,
                     range,
-                } => self.control_in(entries, *default, *range, time, span),
+                } => self.control_in((entries, ramps), *default, *range, time, span),
                 CoreInput::Slot(s) => self.slot_bound(*s),
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
@@ -3626,12 +3660,13 @@ impl Program {
                     CoreInput::Slot(s) => self.slot_bound(*s),
                     CoreInput::Control {
                         entries,
+                        ramps,
                         default,
                         range,
                     } => {
                         let back = *dt as f64 / f;
                         self.control_in(
-                            entries,
+                            (entries, ramps),
                             *default,
                             *range,
                             Iv::new(time.lo - back, time.hi - back),
@@ -3656,7 +3691,7 @@ impl Program {
     /// widened by a flick each way, past the rounding of its seconds.
     fn control_in(
         &self,
-        entries: &[(i64, i64, f64)],
+        (entries, ramps): (&Entries, &Ramps),
         default: f64,
         range: (f64, f64),
         time: Iv,
@@ -3682,10 +3717,14 @@ impl Program {
         let i = entries.partition_point(|e| (e.0 as f64) < lo);
         let open = i.checked_sub(1).map_or(default, |i| entries[i].2);
         let held = |v: f64| Iv::point(v.clamp(range.0, range.1));
-        entries[i..]
+        let stepped = entries[i..]
             .iter()
             .take_while(|e| e.0 as f64 <= hi)
-            .fold(held(open), |b, e| b.hull(held(e.2)))
+            .fold(held(open), |b, e| b.hull(held(e.2)));
+        // #903: a ramp under way in the window may reach its end's value.
+        let under_way = |r: &&(i64, i64, i64, f64)| r.0 as f64 <= hi && r.2 as f64 >= lo;
+        let reached = ramps.iter().filter(under_way);
+        reached.fold(stepped, |b, r| b.hull(held(r.3)))
     }
 
     /// The bound of what slot `s` holds: its base value when nothing writes it, a channel's

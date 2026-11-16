@@ -1,8 +1,8 @@
 // Hook replies formatted for the agent: the hub's settled reply, with the core's or an extension's words.
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj } from '@deepbuild/contracts/runtime';
 import type { Part } from './context-fit.js';
 import { heavyDenial } from './heavy.js';
-import { adapterOf } from './hookmap.js';
+import { adapterOf } from './adapter-facts.js';
 import type { Reply as WaitReply } from './waits.js';
 import { line, type ExtensionReply, type HookMeta, type Plant } from './wire.js';
 
@@ -29,8 +29,11 @@ export function heavyReply(meta: HookMeta, ruled: string, rewrites: boolean, pla
 }
 
 /** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
-export const warnings = (ruled: string): string[] =>
-  ruled === EMPTY_REPLY ? [] : [(JSON.parse(String((JSON.parse(ruled) as Obj).stdout)) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext];
+export const warnings = (ruled: string): string[] => {
+  const stdout = String((JSON.parse(ruled) as Obj).stdout ?? '');
+  const said = stdout ? (JSON.parse(stdout) as { hookSpecificOutput?: { additionalContext?: unknown } }).hookSpecificOutput?.additionalContext : undefined;
+  return typeof said === 'string' ? [said] : [];
+};
 /**
  * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
  * as deep-hook's own denials are; context goes as Claude Code reads it, after a warn entry's words, each block
@@ -40,12 +43,25 @@ export const warnings = (ruled: string): string[] =>
 export function agentReply(agent: string, reply: ExtensionReply, ruled: string, fitted?: string): string {
   if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
   if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
-  const additionalContext = fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n');
-  return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
+  return settledWith(ruled, { additionalContext: fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n') });
 }
-/** A warn entry's words, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
-export const contextParts = (reply: ExtensionReply, ruled: string): Part[] =>
-  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
+/** The settled reply with a PreToolUse's own output set over its own: its rewrite, deadline and wait line stay beside it (#2084). */
+function settledWith(ruled: string, specific: Obj): string {
+  const settled = JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
+  const out: Obj = settled.stdout ? JSON.parse(settled.stdout) as Obj : {};
+  out.hookSpecificOutput = { hookEventName: 'PreToolUse', ...(isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : {}), ...specific };
+  return line({ ...settled, stdout: JSON.stringify(out) });
+}
+/**
+ * Your standing rule's yes as Claude Code's hook output (#23): the explicit allow, never past a permission mode that
+ * denies the call (`past`), and as context a warn entry's words, the rule's, then each extension's block (#350).
+ */
+export function allowReply(allow: string, past: boolean, ruled: string, reply: ExtensionReply = { denies: [], context: [] }, fitted?: string): string {
+  return settledWith(ruled, { ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext: fitted ?? contextParts(reply, ruled, allow).map((p) => p.text).join('\n') });
+}
+/** A warn entry's words, your standing rule's when it allowed the call, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
+export const contextParts = (reply: ExtensionReply, ruled: string, allow?: string): Part[] =>
+  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...(allow === undefined ? [] : [{ name: "your standing rule's words", text: allow, keep: true }]), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
 /**
  * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
  * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one

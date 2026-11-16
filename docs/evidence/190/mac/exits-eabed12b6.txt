@@ -1,0 +1,11 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 21:16:00 load { 2.71 3.82 14.53 } thermal 0 free KB 79775108
+Docker Desktop already open but engine not answering; waiting 21:16:33 load { 2.64 3.69 14.12 } thermal 0 free KB 79773028
+opened Docker Desktop (user go: Yes, you open Docker) 21:16:33 load { 2.64 3.69 14.12 } thermal 0 free KB 79773024
+correction (runner note): the 'opened Docker Desktop' line above is a wrong log line from this run's script; Docker Desktop was already open and this run did not open it
+BLOCKED: docker info did not answer in about 5-25 min of tries (last answer in docker-info.txt); ac04 and ac05 not run 21:38:45 load { 2.41 2.38 5.00 } thermal 0 free KB 79761744
+head eabed12b6c1151c8b62c89dec12914a539560cd8 local main d3326d3c3682ccaad48a34b6f178d75236572b64 merge-base 2c1c8cacc83665675a65b262c948511050a5500c 21:38:49 load { 2.53 2.41 5.00 } thermal 0 free KB 79247124
+setup exit=0 21:39:30 load { 11.57 4.68 5.71 } thermal 0 free KB 78833936
+ac07-no-links.test.ts exit=0 21:40:54 load { 42.44 16.24 10.02 } thermal 0 free KB 77254552
+ac10 gate: no load wait (the user's choice at the Mac, 2026-11-14: Drop the waits); at start load 42.44 thermal 0, Now drawing from 'AC Power' 21:40:55 load { 42.44 16.24 10.02 } thermal 0 free KB 77254536
+ac10-budgets.test.ts exit=0 21:41:10 load { 36.90 16.32 10.16 } thermal 0 free KB 77231152
+secret scan hits=0 21:41:10 load { 36.90 16.32 10.16 } thermal 0 free KB 77230868

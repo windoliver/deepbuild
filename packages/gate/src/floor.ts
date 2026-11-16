@@ -131,10 +131,12 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
   const cites = [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
   const runs = session.ran.map((r) => ({ ...r, command: typed(r.command) }));
   for (const cite of new Set(cites)) {
-    const run = runs.find((r) => cite === r.command || cite.startsWith(`${r.command} `));
+    // The run typed as the cite first (#1860), else the first the cite extends with its arguments.
+    const run = runs.find((r) => cite === r.command) ?? runs.find((r) => cite.startsWith(`${r.command} `));
     if (run) {
-      const mask = plant === 'run-happened-only' ? null : maskOf(checkout, run.command);
-      if (mask !== null) found.push({ kind: 'masked_exit', ref: run.command, mask, why: `the run \`${run.command}\` it cites proves nothing: exit status masked by \`${mask}\`` });
+      // The cite's own text masks too, whichever run it matched: `pnpm test || true` proves nothing beside `pnpm test`.
+      const mask = plant === 'run-happened-only' ? null : maskIn(cite) ?? maskOf(checkout, run.command);
+      if (mask !== null) found.push({ kind: 'masked_exit', ref: run.command, mask, why: `the run \`${cite}\` it cites proves nothing: exit status masked by \`${mask}\`` });
       continue;
     }
     if (LINK.test(cite)) {

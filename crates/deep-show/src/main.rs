@@ -42,6 +42,8 @@ mod input;
 mod jobs;
 mod kept;
 mod kinds;
+mod kinds_word;
+mod math_twins;
 mod kit;
 mod lengths;
 mod logic;
@@ -71,6 +73,7 @@ mod query;
 mod data_hash;
 mod registries;
 mod retired;
+mod review;
 mod ring;
 mod runs;
 mod sandbox;
@@ -94,6 +97,8 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod tour;
+mod track_call;
 #[cfg(any(
     feature = "test-json",
     feature = "test-debug-digest",
@@ -453,6 +458,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
+        "track" => {
+            return Some(Call::Track {
+                doc: doc()?,
+                load: optional(c.get("load"), |l| l.as_array().cloned())?,
+            })
+        }
         "session" => {
             return Some(Call::Session {
                 doc: doc()?,
@@ -765,6 +776,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
                 carried: flag("carried")?,
+                tour_pointer: flag("tour_pointer")?,
             })));
         }
         "frames" => {
@@ -948,6 +960,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             });
         }
         _ => {}
+    }
+    if let Some(t) = kit::trial::parse_call(name, c) {
+        return Some(Call::Trial(Box::new(t)));
     }
     if let Some(r) = ring::parse_call(name, c) {
         return Some(Call::Ring(Box::new(r)));
@@ -1340,10 +1355,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let pack_planted = input
         .get("planted")
         .and_then(Value::as_str)
-        .filter(|p| familiar::PLANTED.contains(p))
+        .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
+    let logic_planted = crate::logic::planted(input.get("planted"))?;
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,
+        Some(_) if logic_planted.is_some() => None,
         Some(None) => return None,
         Some(Some(_)) if module_planted.is_some() || pack_planted.is_some() => None,
         Some(Some(p)) => match placement_planted.flag(p) {
@@ -1385,6 +1402,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "regression_asks_every_verdict" => Planted::RegressionAsksEveryVerdict,
                 "loop_checks_cached_by_doc" => Planted::LoopChecksCachedByDoc,
                 "stale_fix_never_rebases" => Planted::StaleFixNeverRebases,
+                "review_passes_on_yes" => Planted::ReviewPassesOnYes,
+                "review_sees_session" => Planted::ReviewSeesSession,
+                "keeps_bad_observation" => Planted::KeepsBadObservation,
+                "id_view_varies_by_run" => Planted::IdViewVariesByRun,
+                "ask_keyed_by_words" => Planted::AskKeyedByWords,
+                "asks_again_after_answer" => Planted::AsksAgainAfterAnswer,
+                "keeps_all_findings" => Planted::KeepsAllFindings,
                 "key_without_locale" => Planted::KeyWithoutLocale,
                 "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
                 "key_hashes_positions" => Planted::KeyHashesPositions,
@@ -1457,6 +1481,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "migration_one_major_per_document" => Planted::MigrationOneMajor,
                 "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
+                "migration_renames_params_only" => Planted::MigrationRenamesParamsOnly,
+                "migration_rewrites_channel_targets_only" => {
+                    Planted::MigrationRewritesChannelTargetsOnly
+                }
+                "store_migrated_params_under_saved_major" => {
+                    Planted::StoreMigratedParamsUnderSavedMajor
+                }
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1692,6 +1723,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         installed,
         plugin_entries,
         gallery: optional(input.get("gallery"), |g| Some(PathBuf::from(g.as_str()?)))?,
+        review_model: optional(input.get("review_model"), |m| {
+            m.get("name")?.as_str()?;
+            m.get("replies")?.as_array()?;
+            Some(m.clone())
+        })?,
         corpus_runs,
         sessions,
         processes,
@@ -1715,6 +1751,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         planted,
         module_planted,
         pack_planted,
+        logic_planted,
         calls,
         at,
         seeds,
@@ -2011,6 +2048,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-sim-b-public-renamed",
     feature = "test-sim-b-false-bit",
     feature = "test-sim-b-off",
+    feature = "test-sim-b-plus-one",
     feature = "test-sim-c",
     feature = "test-sim-a-1-0-1",
     feature = "test-sim-b-1-0-1",
@@ -2472,6 +2510,10 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
             let mut parts = kit.clone();
             if sandbox {
                 parts.push(kit::SANDBOX_PART.to_string());
+            }
+            // #191: physics@1's behavior part, its fixtures held by the interface's crate.
+            if interface == deep_canvas_physics::module::INTERFACE {
+                parts.push("behavior".to_string());
             }
             // #418, #399, #421: look@1's, data@1's, graph@1's, vector@1's and scene3d@1's
             // references are the shipped modules, whichever a test build holds.
@@ -3253,6 +3295,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
+        "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
+        "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,

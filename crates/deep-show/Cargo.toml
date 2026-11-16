@@ -203,6 +203,8 @@ test-sim-b-private-renamed = ["test-sim"]
 test-sim-b-public-renamed = ["test-sim"]
 test-sim-b-false-bit = ["test-sim"]
 test-sim-b-off = ["test-sim"]
+# Issue #191: B adding one unit to one value at step 300 of a recorded input track.
+test-sim-b-plus-one = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []

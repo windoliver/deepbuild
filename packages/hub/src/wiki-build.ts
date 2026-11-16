@@ -18,7 +18,6 @@ import { openWiki, type Candidate, type Wiki } from '@deepbuild/wiki';
 import { rulesAppendix } from './rules.js';
 import { writeJson } from './claude-settings.js';
 import { captureRejected } from './memory.js';
-import { repoOf } from './paths.js';
 import type { WikiBuildOptions, WikiBuilt } from './knowledge-port.js';
 export type { WikiBuilt } from './knowledge-port.js';
 
@@ -37,11 +36,6 @@ const CHECK = /^curl\b.*\/(?:health|healthz|ready|status|ping)(?=[\s"'?]|$)|^(?:
 const CREDENTIAL = /^(?:[A-Z][A-Z0-9]*_)+(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|CREDENTIALS?|URL)$/;
 const ENV_FILE = /(?:^|[\s=])(\.env(?:\.[\w-]+)*)(?=$|[\s;&|)])/;
 const AGENTS = ['claude-code', 'codex'] as const;
-/** Where pi and Cursor keep their transcripts (#111); Claude Code's and Codex's come from their adapters' facts. A Cursor line names no folder, but its project folder's name does. */
-export const MEMORY_TRANSCRIPTS = [
-  { agent: 'pi', transcripts: { home: ['~/.pi/agent'], path: 'sessions/{folder}/{stamp}_{session}.jsonl' } },
-  { agent: 'cursor', transcripts: { home: ['~/.cursor'], path: 'projects/{folder}/agent-transcripts/{session}.jsonl' }, folderNames: -3 },
-];
 /** The memory and instruction files you keep for every repo, one per agent: Claude Code's, Codex's, pi's and Cursor's rules. */
 function userMemory(home: string): string[] {
   const rules = join('.cursor', 'rules');
@@ -49,20 +43,6 @@ function userMemory(home: string): string[] {
   return [join('.claude', 'CLAUDE.md'), join('.codex', 'AGENTS.md'), join('.pi', 'agent', 'AGENTS.md'), ...cursor];
 }
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
-const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
-
-/**
- * The repo a session worked in, as its folder says: the repo's own ID, or, for a folder that is gone, the ID its name and
- * its path give. A folder that is neither is no repo's. The planted wrong programs merge by name, or by nothing but agent.
- */
-export function projectOf(cwd: string, agent: string, plant?: string): string | undefined {
-  let id = repoOf(cwd);
-  if (!id && !existsSync(cwd)) id = `${letters(basename(cwd))}${sha256(cwd).slice(0, 8)}`;
-  if (!id) return undefined;
-  if (plant === 'merge-by-name') id = id.slice(0, -8);
-  if (plant === 'never-merge') id += letters(agent).toLowerCase();
-  return id;
-}
 
 /** The page and scope a session's claims go to: its repo's, or the setup's when it worked in none. */
 const placeOf = (project: string | null): { page: string; scope: string } => project ? { page: `repos/${project.toLowerCase()}`, scope: `repo:${project}` } : { page: 'setup', scope: 'all' };

@@ -42,7 +42,18 @@ pub fn looks_of(call: &Value, theme: Option<&str>) -> Result<BTreeMap<String, Na
     let Some(all) = all.as_object() else {
         return Err(refused("bad_input", "looks maps names to look@1s"));
     };
+    // #463: a name may give a pack look by its ID, from the call's packs.
+    let manifests = crate::op_transition::manifests(call)?;
     for (name, def) in all {
+        let def = &match def {
+            Value::String(id) => crate::look_ops::pack_look(id, &manifests).ok_or_else(|| {
+                refused(
+                    "look_unknown",
+                    format!("looks/{name}: {id} isn't a look of the call's packs"),
+                )
+            })?,
+            _ => def.clone(),
+        };
         let json = theme.map_or_else(|| def.clone(), |t| crate::status::themed(def, t));
         let look =
             Look3::read(&json).map_err(|e| refused("bad_input", format!("looks/{name}: {e}")))?;
@@ -82,15 +93,69 @@ pub struct Side<'a> {
 /// A mask's volume: its shape and world matrix (its size applied).
 pub type Volume = (Shape, [[f64; 4]; 3]);
 
-/// A look's own edge, from its definition: a pixel look's steps, a stroke look's brush, a
-/// physical look's straight line, and a drawing's torn paper.
+/// A look's own edge, from its definition: the edge it names (#463: an art@1 look's edge style),
+/// else a pixel look's steps, a stroke look's brush, a physical look's straight line, and a
+/// drawing's torn paper.
 fn own_edge(def: &Value) -> Edge {
+    if let Some(e) = def
+        .get("edge")
+        .and_then(Value::as_str)
+        .and_then(Edge::named)
+    {
+        return e;
+    }
     match def.get("basis").and_then(Value::as_str) {
         Some("indexed") => Edge::Pixel,
         _ if def.get("strokes").is_some_and(|s| !s.is_null()) => Edge::Brush,
         Some("physical") => Edge::Straight,
         _ => Edge::Torn,
     }
+}
+
+/// The document with each look's signature transition (`transition: {kind, span}`, Look
+/// `look@1`) joining two shots where one ends as the next starts and they change look, no
+/// transition of the document's joins them, and the incoming look names one that isn't a cut; or
+/// `None` when no pair takes one.
+fn signature_transitions<'a>(
+    doc: &Map<String, Value>,
+    def: &impl Fn(&str) -> Option<&'a Value>,
+) -> Option<Map<String, Value>> {
+    let shots = doc.get("shots")?.as_object()?;
+    let joined = |a: &str, b: &str| {
+        doc.get("transitions")
+            .and_then(Value::as_object)
+            .is_some_and(|t| t.values().any(|t| t["from"] == a && t["to"] == b))
+    };
+    let mut added = Map::new();
+    for (a, sa) in shots {
+        for (b, sb) in shots {
+            let (Some(la), Some(lb)) = (sa["look"].as_str(), sb["look"].as_str()) else {
+                continue;
+            };
+            if a == b || la == lb || sa["end"] != sb["start"] || joined(a, b) {
+                continue;
+            }
+            let Some(tr) = def(lb).map(|d| &d["transition"]).filter(|t| t.is_object()) else {
+                continue;
+            };
+            if tr["kind"] == "cut" {
+                continue;
+            }
+            added.insert(
+                format!("look_{a}_{b}"),
+                json!({"from": a, "to": b, "kind": tr["kind"], "span": tr["span"]}),
+            );
+        }
+    }
+    if added.is_empty() {
+        return None;
+    }
+    let mut out = doc.clone();
+    let all = out
+        .entry("transitions")
+        .or_insert_with(|| Value::Object(Map::new()));
+    all.as_object_mut()?.extend(added);
+    Some(out)
 }
 
 impl Timeline {
@@ -108,7 +173,13 @@ impl Timeline {
             return Ok(None);
         }
         let map = doc.as_object().expect("an object: it has shots");
-        let program = Program::compile(map).map_err(|r| refused(r.code, r.path))?;
+        // #463: a look's signature transition joins two shots that meet and change look where no
+        // transition of the document's does; one that doesn't fit its shots leaves the cut.
+        let signed = signature_transitions(map, &def);
+        let program = match signed.as_ref().map(Program::compile) {
+            Some(Ok(p)) => p,
+            _ => Program::compile(map).map_err(|r| refused(r.code, r.path))?,
+        };
         let Some(plan) = program.shots.as_ref() else {
             return Ok(None);
         };
@@ -510,6 +581,8 @@ struct FrameU {
     size: [f32; 4],
     sides: [f32; 4],
     counts: [u32; 4],
+    /// #463: where each look's render starts in the frame, px: looks 0 and 1, then 2 and 3.
+    origins: [[f32; 4]; 2],
 }
 
 #[repr(C)]
@@ -525,6 +598,7 @@ struct RegionU {
 
 /// A frame's mix as the composite pass reads it: the looks it mixes, by key, in the order their
 /// renders bind (the first side's own first), and each side's and region's share of the pass.
+#[derive(Clone)]
 pub struct Mix {
     pub keys: Vec<Key>,
     frame: FrameU,
@@ -619,6 +693,7 @@ pub fn mix(
             sides.len().min(2) as u32,
             u32::from(independent),
         ],
+        origins: [[0.0; 4]; 2],
     };
     match seen {
         Seen::Camera(c) => {
@@ -641,6 +716,73 @@ pub fn mix(
     })
 }
 
+impl Mix {
+    /// #463: the look of index `j` was drawn from frame px `origin` on, at its crop's size.
+    pub fn set_origin(&mut self, j: usize, origin: [u32; 2]) {
+        if j < MOST_LOOKS {
+            self.frame.origins[j / 2][2 * (j % 2)] = origin[0] as f32;
+            self.frame.origins[j / 2][2 * (j % 2) + 1] = origin[1] as f32;
+        }
+    }
+}
+
+/// How far past where a 2D region's look can show its frame still draws, px: what its media and
+/// paper read around a pixel (#463).
+const CROP_MARGIN_2D: f64 = 48.0;
+/// The grid a 2D crop's corner lies on, px (#463).
+const CROP_GRID: f64 = 64.0;
+
+/// #463: the px rectangle `[x, y, w, h]` of a 2D frame of `size` that the look `key` draws in:
+/// the screen bounds of the masks of the regions that draw it, grown by each edge's width and
+/// [`CROP_MARGIN_2D`]. A 2D region covers only pixels whose page point is within its edge of its
+/// mask, so nothing outside shows the look. `None` where it can show anywhere: a side's own look,
+/// or a 3D view.
+pub fn crop_2d(
+    sides: &[Side<'_>],
+    seen: &Seen,
+    volumes: &BTreeMap<String, Volume>,
+    key: &Key,
+) -> Result<Option<[u32; 4]>, Value> {
+    let (Some(name), Seen::Page { size, .. }) = (key, seen) else {
+        return Ok(None);
+    };
+    if sides.iter().any(|s| s.look == Some(name.as_str())) {
+        return Ok(None);
+    }
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for side in sides {
+        for r in side.regions.iter().filter(|r| &r.look == name) {
+            let v = volume(volumes, &r.mask, side.shot)?;
+            let grow = r.width + CROP_MARGIN_2D;
+            for c in 0..8 {
+                let corner = [0, 1, 2].map(|a| if c >> a & 1 == 0 { -0.5 } else { 0.5 });
+                let Some(q) = seen.project(apply(&v.1, corner)) else {
+                    return Ok(None);
+                };
+                for a in 0..2 {
+                    lo[a] = lo[a].min(q[a] - grow);
+                    hi[a] = hi[a].max(q[a] + grow);
+                }
+            }
+        }
+    }
+    let at = |v: f64, n: u32| v.clamp(0.0, f64::from(n));
+    // The corner on a 64 px grid, so the passes that read a look's coverage at reduced sizes
+    // sample it at the same pixels as the whole frame does.
+    let grid = |v: f64| (v / CROP_GRID).floor() * CROP_GRID;
+    let (x0, y0) = (grid(at(lo[0], size[0])), grid(at(lo[1], size[1])));
+    let (x1, y1) = (at(hi[0], size[0]).ceil(), at(hi[1], size[1]).ceil());
+    if !(x0 < x1 && y0 < y1) {
+        return Ok(None);
+    }
+    Ok(Some([
+        x0 as u32,
+        y0 as u32,
+        (x1 - x0) as u32,
+        (y1 - y0) as u32,
+    ]))
+}
+
 /// What the composite reads a frame's view depths from.
 pub enum Depth<'a> {
     /// A renderer's own depth target, reversed Z, and its size.
@@ -657,9 +799,14 @@ pub struct Composite {
     target: Option<(wgpu::BindGroupLayout, wgpu::RenderPipeline)>,
     view_z: Option<(wgpu::BindGroupLayout, wgpu::RenderPipeline)>,
     blank: Option<wgpu::TextureView>,
+    /// #463: the bounds pass's layout and pipeline, built the first frame a region needs it.
+    bounds: Option<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
 }
 
 const SOURCE: &str = include_str!("regions.wgsl");
+/// #463: the bounds pass, appended to the composite's own shader so it reads coverage as the
+/// composite does.
+const BOUNDS_SOURCE: &str = include_str!("regions_bounds.wgsl");
 pub const PASS: &str = "look.regions";
 
 fn pipeline(device: &Wgpu, raw: bool) -> (wgpu::BindGroupLayout, wgpu::RenderPipeline) {
@@ -755,6 +902,25 @@ impl Composite {
         depth: Depth<'_>,
         target: &wgpu::TextureView,
         timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        self.record_within(
+            device, encoder, mix, renders, depth, target, timestamps, None,
+        );
+    }
+
+    /// [`Composite::record`] inside `within` (px `[x, y, w, h]`) alone, over what `target`
+    /// already holds outside it (#463).
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_within(
+        &mut self,
+        device: &Wgpu,
+        encoder: &mut wgpu::CommandEncoder,
+        mix: &Mix,
+        renders: &[&wgpu::TextureView],
+        depth: Depth<'_>,
+        target: &wgpu::TextureView,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+        within: Option<[u32; 4]>,
     ) {
         let mut frame = mix.frame;
         let (view, at) = match depth {
@@ -859,7 +1025,10 @@ impl Composite {
                 resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    load: match within {
+                        Some(_) => wgpu::LoadOp::Load,
+                        None => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    },
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -868,6 +1037,9 @@ impl Composite {
         });
         pass.set_pipeline(&pipeline);
         pass.set_bind_group(0, &bind, &[]);
+        if let Some([x, y, w, h]) = within {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         pass.draw(0..3, 0..1);
     }
 }
@@ -894,8 +1066,214 @@ pub fn scratch(device: &Wgpu, size: [u32; 2], label: &'static str) -> wgpu::Text
     })
 }
 
+/// View depths read back (f32 a pixel, `size`) as the texture the composite reads: nothing drew
+/// where the depth is infinite, 0, which the pass reads as open ground.
+fn view_z_texture(device: &Wgpu, queue: &Queue, z: &[u8], size: [u32; 2]) -> wgpu::TextureView {
+    let extent = wgpu::Extent3d {
+        width: size[0],
+        height: size[1],
+        depth_or_array_layers: 1,
+    };
+    let t = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("look.regions view depth"),
+        size: extent,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let finite: Vec<u8> = z
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|b| {
+            let v = f32::from_le_bytes(*b);
+            (if v.is_finite() { v } else { 0.0 }).to_le_bytes()
+        })
+        .collect();
+    queue.write_texture(
+        t.as_image_copy(),
+        &finite,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * size[0]),
+            rows_per_image: None,
+        },
+        extent,
+    );
+    t.create_view(&Default::default())
+}
+
+/// #463: each look's bounds in a 3D frame, by its index in `mix.keys`: the px rectangle
+/// `[x0, y0, x1, y1]` (inclusive) where a region gives it a share of the frame, as the composite
+/// reads coverage from the frame's view depths `view_z`; `None` where none does. A look's side
+/// covers its side whole, which this leaves to the caller.
+pub fn bounds_read_back(
+    device: &Wgpu,
+    queue: &Queue,
+    composite: &mut Composite,
+    mix: &Mix,
+    view_z: &[u8],
+    size: [u32; 2],
+) -> Result<Vec<Option<[u32; 4]>>, String> {
+    let (layout, pipeline) = composite
+        .bounds
+        .get_or_insert_with(|| bounds_pipeline(device))
+        .clone();
+    let depth = view_z_texture(device, queue, view_z, size);
+    let mut frame = mix.frame;
+    frame.size[2] = 1.0;
+    frame.size[3] = 1.0;
+    let init = |label, contents: &[u8], usage| {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(label),
+            contents,
+            usage,
+        })
+    };
+    let uniform = init(
+        "look.regions bounds frame",
+        bytemuck::bytes_of(&frame),
+        wgpu::BufferUsages::UNIFORM,
+    );
+    let none = [<RegionU as bytemuck::Zeroable>::zeroed()];
+    let regions = init(
+        "look.regions bounds regions",
+        bytemuck::cast_slice(if mix.regions.is_empty() {
+            &none
+        } else {
+            &mix.regions
+        }),
+        wgpu::BufferUsages::STORAGE,
+    );
+    let start: Vec<u32> = (0..MOST_LOOKS)
+        .flat_map(|_| [u32::MAX, u32::MAX, 0, 0])
+        .collect();
+    let found = init(
+        "look.regions bounds",
+        bytemuck::cast_slice(&start),
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+    );
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("look.regions bounds"),
+        layout: &layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: regions.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(&depth),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: found.as_entire_binding(),
+            },
+        ],
+    });
+    let bytes = (start.len() * 4) as u64;
+    let read = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("look.regions bounds read back"),
+        size: bytes,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("look.regions bounds"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &bind, &[]);
+        pass.dispatch_workgroups(size[0].div_ceil(8), size[1].div_ceil(8), 1);
+    }
+    encoder.copy_buffer_to_buffer(&found, 0, &read, 0, bytes);
+    queue.submit([encoder.finish()]);
+    let words: Vec<u32> =
+        crate::print2d::map_rows(device, &read, bytes as usize, bytes as usize, 1)?
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| u32::from_le_bytes(*b))
+            .collect();
+    Ok(mix
+        .keys
+        .iter()
+        .enumerate()
+        .map(|(j, _)| {
+            let b = &words[4 * j..4 * j + 4];
+            (b[0] <= b[2] && b[1] <= b[3]).then(|| [b[0], b[1], b[2], b[3]])
+        })
+        .collect())
+}
+
+fn bounds_pipeline(device: &Wgpu) -> (wgpu::BindGroupLayout, wgpu::ComputePipeline) {
+    let cs = wgpu::ShaderStages::COMPUTE;
+    let buffer = |binding, ty| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: cs,
+        ty: wgpu::BindingType::Buffer {
+            ty,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("look.regions bounds"),
+        entries: &[
+            buffer(0, wgpu::BufferBindingType::Uniform),
+            buffer(1, wgpu::BufferBindingType::Storage { read_only: true }),
+            wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: cs,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            buffer(7, wgpu::BufferBindingType::Storage { read_only: false }),
+        ],
+    });
+    let depth =
+        "texture_2d<f32>;\nfn view_z(at: vec2<i32>) -> f32 { return textureLoad(depth, at, 0).r; }";
+    let source = format!("{}\n{BOUNDS_SOURCE}", SOURCE.replace("DEPTH;", depth));
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("look.regions bounds"),
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("look.regions bounds"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("look.regions bounds"),
+        layout: Some(&pipeline_layout),
+        module: &module,
+        entry_point: Some("cs_bounds"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    (layout, pipeline)
+}
+
 /// `view3d`'s composite: its looks' read-back renders (BGRA rows, `size`, one per key of `mix`)
-/// mixed on the device through the view depths `view_z` read back with the first, read back.
+/// mixed on the device through the frame's view depths `view_z`, read back. With `profiler`
+/// (#463) the composite pass is timed, and its GPU ms return beside the frame. With `within`
+/// (px `[x, y, w, h]`, #463), outside which every look but the first has no share, the frame is
+/// the first look's render there and the composite runs inside it alone.
+#[allow(clippy::too_many_arguments)]
 pub fn mix_read_back(
     device: &Wgpu,
     queue: &Queue,
@@ -904,7 +1282,9 @@ pub fn mix_read_back(
     renders: &[&[u8]],
     view_z: Option<&[u8]>,
     size: [u32; 2],
-) -> Result<Vec<u8>, String> {
+    profiler: Option<deep_scene3d_render::Profiler>,
+    within: Option<[u32; 4]>,
+) -> Result<(Vec<u8>, Option<f64>), String> {
     let extent = wgpu::Extent3d {
         width: size[0],
         height: size[1],
@@ -934,45 +1314,47 @@ pub fn mix_read_back(
         .iter()
         .map(|t| t.create_view(&Default::default()))
         .collect();
-    let depth = view_z.map(|z| {
-        let t = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("look.regions view depth"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        // Nothing drew where the depth is infinite: 0, which the pass reads as open ground.
-        let finite: Vec<u8> = z
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .flat_map(|b| {
-                let v = f32::from_le_bytes(*b);
-                (if v.is_finite() { v } else { 0.0 }).to_le_bytes()
-            })
-            .collect();
-        upload(&t, &finite);
-        t.create_view(&Default::default())
-    });
+    let depth = view_z.map(|z| view_z_texture(device, queue, z, size));
     let out = scratch(device, size, "look.regions mix");
     let out_view = out.create_view(&Default::default());
     let mut encoder = device.create_command_encoder(&Default::default());
     let refs: Vec<&wgpu::TextureView> = views.iter().collect();
-    composite.record(
-        device,
-        &mut encoder,
-        mix,
-        &refs,
-        depth
-            .as_ref()
-            .map_or(Depth::None, |d| Depth::ViewZ(d, size)),
-        &out_view,
-        None,
-    );
+    let depth = depth
+        .as_ref()
+        .map_or(Depth::None, |d| Depth::ViewZ(d, size));
+    if within.is_some() {
+        encoder.copy_texture_to_texture(textures[0].as_image_copy(), out.as_image_copy(), extent);
+    }
+    let mut timer = profiler
+        .as_ref()
+        .map(|p| p.lock().unwrap_or_else(|e| e.into_inner()));
+    match timer.as_mut() {
+        Some(t) => {
+            let q = t.begin_pass_query(COMPOSITE_PASS, &mut encoder);
+            let ts = q.render_pass_timestamp_writes();
+            composite.record_within(
+                device,
+                &mut encoder,
+                mix,
+                &refs,
+                depth,
+                &out_view,
+                ts,
+                within,
+            );
+            t.end_query(&mut encoder, q);
+        }
+        None => composite.record_within(
+            device,
+            &mut encoder,
+            mix,
+            &refs,
+            depth,
+            &out_view,
+            None,
+            within,
+        ),
+    }
     let row = (size[0] * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("look.regions read back"),
@@ -993,14 +1375,35 @@ pub fn mix_read_back(
         extent,
     );
     queue.submit([encoder.finish()]);
-    crate::print2d::map_rows(
+    let bytes = crate::print2d::map_rows(
         device,
         &buffer,
         row as usize,
         (size[0] * 4) as usize,
         size[1] as usize,
-    )
+    )?;
+    let mut ms = None;
+    if let Some(t) = timer.as_mut() {
+        let mut enc = device.create_command_encoder(&Default::default());
+        t.resolve_queries(&mut enc);
+        queue.submit([enc.finish()]);
+        let _ = t.end_frame();
+        let _ = device.poll(wgpu::PollType::wait_indefinitely());
+        while let Some(results) = t.process_finished_frame(queue.get_timestamp_period()) {
+            if let Some(span) = results
+                .iter()
+                .filter(|r| r.label == COMPOSITE_PASS)
+                .find_map(|r| r.time.clone())
+            {
+                ms = Some((span.end - span.start) * 1e3);
+            }
+        }
+    }
+    Ok((bytes, ms))
 }
+
+/// The composite's pass as a frame's timings name it (#463).
+pub const COMPOSITE_PASS: &str = PASS;
 
 #[cfg(test)]
 mod tests {
@@ -1017,5 +1420,39 @@ mod tests {
         let inv = inverse(&m).unwrap();
         assert!((signed_distance(&v, &inv, [-1.0, 0.5, 0.0]) - 1.0).abs() < 1e-12);
         assert!((signed_distance(&v, &inv, [0.5, 0.5, 0.0]) + 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_look_names_its_own_edge_before_one_is_derived() {
+        assert_eq!(
+            own_edge(&json!({"basis": "drawing", "edge": "pixel"})),
+            Edge::Pixel
+        );
+        assert_eq!(own_edge(&json!({"basis": "drawing"})), Edge::Torn);
+    }
+
+    #[test]
+    fn a_look_change_between_meeting_shots_takes_the_incoming_looks_transition() {
+        let looks = json!({
+            "a": {"transition": {"kind": "wipe", "span": "0.5s"}},
+            "b": {"transition": {"kind": "cross_fade", "span": "0.8s"}},
+        });
+        let def = |n: &str| looks.get(n);
+        let doc = json!({"shots": {
+            "one": {"start": "0s", "end": "2s", "look": "a"},
+            "two": {"start": "2s", "end": "4s", "look": "b"},
+            "three": {"start": "5s", "end": "6s", "look": "a"},
+        }});
+        let signed = signature_transitions(doc.as_object().unwrap(), &def).expect("one pair meets");
+        let added = signed["transitions"].as_object().unwrap();
+        assert_eq!(added.len(), 1, "only the shots that meet and change look");
+        assert_eq!(
+            added["look_one_two"],
+            json!({"from": "one", "to": "two", "kind": "cross_fade", "span": "0.8s"})
+        );
+        // A transition of the document's own between them keeps its place.
+        let mut own = doc.clone();
+        own["transitions"] = json!({"t": {"from": "one", "to": "two", "kind": "cut"}});
+        assert!(signature_transitions(own.as_object().unwrap(), &def).is_none());
     }
 }

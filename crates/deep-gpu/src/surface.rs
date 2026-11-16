@@ -55,6 +55,16 @@ pub fn allocate(device: &Device, path: Path, size: [u32; 2]) -> Result<Box<dyn H
     }
 }
 
+/// What a view presenting HDR paints in its place (#177): one transparent texel, which the GPUI
+/// patch draws with blending off once it's registered as a clear region, so the window stays
+/// clear there over the HDR surface's layer beneath.
+#[cfg(target_os = "macos")]
+pub fn clear_region() -> Result<Shown, String> {
+    let buffer = macos::pixel_buffer([1, 1])?;
+    macos::write(&buffer, |bytes, _| bytes.fill(0));
+    Ok(buffer)
+}
+
 /// Rows of a read-back buffer are padded to wgpu's copy alignment.
 pub(crate) fn padded_row(width: u32) -> u32 {
     let row = width * 4;
@@ -92,7 +102,9 @@ impl Copy {
         let texture = texture(
             device,
             size,
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         );
         let view = texture.create_view(&Default::default());
         let readback = device.device.create_buffer(&wgpu::BufferDescriptor {
@@ -422,7 +434,10 @@ pub(crate) mod macos {
 
     impl ZeroCopy {
         pub fn new(device: &Device, size: [u32; 2]) -> Result<Self, String> {
-            let (buffer, texture) = aliased(device, size, wgpu::TextureUsages::RENDER_ATTACHMENT)?;
+            // The HDR surface's pass reads the finished slot (#177).
+            let usage =
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+            let (buffer, texture) = aliased(device, size, usage)?;
             let view = texture.create_view(&Default::default());
             Ok(Self {
                 size,
