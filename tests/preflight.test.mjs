@@ -194,9 +194,12 @@ test('the unit lane runs each reference-Mac budget file alone, after the paralle
   assert.ok(!parallel.includes('--no-file-parallelism') && alone.includes('--no-file-parallelism'), 'the parallel block runs first');
   const covers = (pattern, file) => pattern === file || (pattern.endsWith('/**') ? file.startsWith(pattern.slice(0, -2)) : file.startsWith(pattern));
   const excluded = parallel.flatMap((part, i) => (parallel[i - 1] === '--exclude' ? [part] : []));
-  const named = alone.slice(alone.indexOf('--no-file-parallelism') + 1);
+  const serial = alone.slice(alone.indexOf('--no-file-parallelism') + 1);
+  const named = serial.filter((part, i) => !part.startsWith('--') && serial[i - 1] !== '--exclude');
+  const serialExcluded = serial.filter((_, i) => serial[i - 1] === '--exclude');
   for (const file of gated) {
     assert.ok(excluded.some((pattern) => covers(pattern, file)), `${file} runs in the parallel block`);
     assert.ok(named.some((pattern) => covers(pattern, file)), `${file} is not run alone`);
+    assert.ok(!serialExcluded.some((pattern) => covers(pattern, file)), `${file} is excluded from the serial block`);
   }
 });
