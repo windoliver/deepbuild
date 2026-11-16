@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 
 type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;

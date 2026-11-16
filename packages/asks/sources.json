@@ -980,6 +980,46 @@
     }
   },
   {
+    "source": "work.call",
+    "kind": "taste",
+    "fixture": {
+      "ask": {
+        "kind": "taste",
+        "question": "Is \"the look of #100's change is right to you\" true of #100's change? Before: main at 0123456789ab; after: PR #7 at 89abcdef0123, which lands now and Send back reverts.",
+        "options": [
+          {
+            "id": "yes",
+            "label": "Yes",
+            "decision": "none"
+          },
+          {
+            "id": "send_back",
+            "label": "Send back",
+            "decision": "none"
+          }
+        ],
+        "recommended": "yes",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "yes",
+        "provisional": false,
+        "owner": "you",
+        "key": "3f1e9a7c5b2d8e0f4a6c1b3d5e7f9a2c4b6d8e0f1a3c5e7b9d2f4a6c8e0b1d3f",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "89abcdef0123456789abcdef0123456789abcdef"
+        },
+        "subject": {
+          "screen": "acme/shop#100",
+          "element": "the look of #100's change is right to you"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {

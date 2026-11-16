@@ -17,6 +17,7 @@ pub mod dof;
 pub mod emitters;
 pub mod fixtures;
 pub mod flare;
+pub mod flow;
 pub mod frames;
 /// The look's finish in f64, which the look module owns (#418).
 pub use deep_canvas_marks::finish;

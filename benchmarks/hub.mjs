@@ -2,7 +2,7 @@
 // Each starts `deep hub run` on a temp home, does its work, prints its readings as one JSON line, and stops
 // the hub it started by PID.
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -125,6 +125,54 @@ async function stop(hub) {
 }
 
 const modes = {
+  // The core's ready line, not its earlier socket hello. The counter excludes children and shutdown.
+  async 'start-to-ready'(home) {
+    // Same kernel counter as the perf lane, compiled outside the hub's measured interval.
+    const counter = join(home, 'read-instructions');
+    let readable = false;
+    if (process.platform === 'darwin') try {
+      execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', counter, fileURLToPath(new URL('./read-instructions.c', import.meta.url))], { stdio: 'pipe' });
+      readable = true;
+    } catch { /* no compiler: the count below stays missing */ }
+    const readInstructions = (pid) => {
+      if (!readable) return null;
+      try {
+        const count = Number(execFileSync(counter, [String(pid)], { encoding: 'utf8' }).trim());
+        return Number.isSafeInteger(count) && count > 0 ? count : null;
+      } catch { return null; }
+    };
+    mkdirSync(join(home, '.deepbuild'), { recursive: true });
+    writeFileSync(join(home, '.deepbuild', 'rules.json'), readFileSync(new URL('../crates/deep-hook/default-rules.json', import.meta.url)));
+    const t0 = performance.now();
+    const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const ended = new Promise((resolve) => hub.once('exit', resolve));
+    let output = '', error = '';
+    hub.stderr.on('data', (chunk) => { error += chunk; });
+    let timer;
+    try {
+      return await new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(Error('the hub did not become core-ready within 60 s')), 60_000);
+        hub.once('error', reject);
+        hub.once('exit', (code) => reject(Error(`the hub exited ${code} before ready: ${error}`)));
+        hub.stdout.on('data', (chunk) => {
+          output += chunk;
+          for (let at = output.indexOf('\n'); at >= 0; at = output.indexOf('\n')) {
+            const text = output.slice(0, at); output = output.slice(at + 1);
+            let line;
+            try { line = JSON.parse(text); } catch { continue; }
+            if (line.ready !== true || line.pid !== hub.pid) continue;
+            const readyMs = performance.now() - t0;
+            const instructions = readInstructions(hub.pid);
+            resolve({ readyMs, instructions, ...(instructions === null ? { status: 'INCONCLUSIVE', reason: 'hub instruction counter unavailable' } : {}) });
+          }
+        });
+      });
+    } finally {
+      clearTimeout(timer);
+      hub.kill('SIGTERM');
+      await ended;
+    }
+  },
   // From spawning the hub to its socket answering.
   async 'cold-start'(home) {
     const { hub, coldMs } = await start(home);

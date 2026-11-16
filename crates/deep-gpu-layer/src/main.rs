@@ -47,6 +47,7 @@ mod levels;
 mod live;
 mod liveview;
 mod lod;
+mod look_ops;
 mod marks2d;
 mod opframe;
 mod paintfx;
@@ -208,6 +209,8 @@ pub enum Planted {
     ShoreFieldFromCentre,
     /// #268: waves at full amplitude by the shore, ignoring its field.
     ShoreCalmIgnoresField,
+    /// #968: the flow's noise moved in one phase, jumping back at every wrap.
+    WaterFlowSinglePhase,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -312,6 +315,9 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    /// #463's wrong program (tests/acceptance/463/README.md: Planted programs): `art.halftone_pop`
+    /// drawn with `art.dot`'s passes.
+    HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
     DropsClouds,
@@ -566,6 +572,7 @@ impl Planted {
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
+            "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -653,6 +660,7 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,

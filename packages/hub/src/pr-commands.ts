@@ -3,7 +3,6 @@
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import { gitEnv } from '@deepbuild/gate';
 import { forgeOf } from './paths.js';
 import { closingIssues } from './forge.js';
 
@@ -206,6 +205,8 @@ function flags(pr: PrCommand): Map<string, string> {
 
 /** Read-only git, by argv, never a shell evaluation of the guarded command. */
 async function git(cwd: string, args: string[]): Promise<string> {
+  // Parsing a command on the socket thread needs no gate; only a PR body read needs its Git environment.
+  const { gitEnv } = await import('@deepbuild/gate');
   return new Promise((done, fail) => execFile('git', args, { cwd, env: gitEnv(), timeout: 2000, maxBuffer: 1 << 20 }, (error, out) => error ? fail(error) : done(out.trimEnd())));
 }
 

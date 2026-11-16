@@ -1,0 +1,57 @@
+# Base 0e5572731 (origin/main, the merge of #2529, 2026-11-14), run once on this Mac, 18 cores:
+#   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1345 --no-file-parallelism --testTimeout=600000
+# Started 2026-11-15T19:09:36Z at a 1-minute load of 392; stopped 23:23:31Z (SIGINT, exit 130) at a load of 109.
+# 5 of 6 files ran to their failure: 7 of 8 tests failed, each at its own first wait in its own test file, and the
+# 8th, AC1 (lands.test.ts), was not run to its end on the base (below). The run was stopped before its summary, so
+# vitest printed no failure messages: each test's duration, just past its 25-minute first wait (1500 s) plus its world's
+# setup, places it there, and the base worlds' records, read while they ran, show why (below).
+#
+# AC1 lands.test.ts:15     NOT RUN ON THE BASE TO ITS END. Something outside the suite removed this checkout's target/
+#                          (with deep-hook) twice during the run; lands.test.ts's builds() then waited 80 minutes for a
+#                          build grant (the machine's throttle drained for a timed run). The grant came at 23:17Z, its
+#                          world started and its standing run's first attempt started; its hub and the run were stopped
+#                          at 23:20Z-23:23Z, on the coordinator's word not to wait. It would wait at line 15, as AC4's
+#                          does at deadline.test.ts:13: no change lands on the base.
+# AC2 held.test.ts:16      no merge of #100's reversible change within 25 minutes (4009 s in all: 41 min of it waited on
+#                          the throttle and rebuilt deep-hook and the drives after target/ was removed between files)
+# AC3 batch.test.ts:21     none of the five reversible changes merged within 25 minutes (1513 s)
+# AC4 deadline.test.ts:13  no merge of #100's reversible change within 25 minutes (1505 s)
+# AC5 no.test.ts:13        no taste call (an ask.created of kind taste) for #100 within 25 minutes (1503 s)
+# AC6 blocked.test.ts:16   no merge of #100's reversible change within 25 minutes (1506 s)
+# AC7 batch.test.ts:21     the same shared world's failure as AC3 (0 ms: it awaited the same world)
+# AC8 batch.test.ts:21     the same shared world's failure as AC3 (0 ms)
+#
+# Why, at the base. The verdict engine leaves a requirement whose oracle is a person `pending` ("waits on your answer to
+# its ask"), and the hub raises no ask for it. The landing judgement (#1331, stop-judging.ts judgeMerge) waits up to 30
+# minutes of wall time for a verdict that is no longer pending, holding the repo's landings and the run's pass while it
+# waits, and then holds the change BLOCKED, "no verdict was made on its merge with main". The worlds' records, read with
+# events.read while they ran (read-only): in the five-issue world at 19:10Z all five attempts had worked, pushed their
+# branches and opened their pull requests; their claims were made (claim.made), and so was the lander's first judgement
+# claim (`land…x100x1`); the record held no verdict.made, no landing.made and no ask but the run's approval; `deep work
+# show` read each issue `working`. Each world set up on the base first: forge, repo, the Pages site and release paths,
+# hub, standing run and its approval, played agents, your visits and the stepped clock.
+#
+# Found on the base in an earlier, aborted run (18:38Z, load 351, the same five-issue world, before the played agent
+# thought before its first call): one of the five sessions pushed its branch before the hub had recorded its
+# start.session, since deep-hook had spooled the session's first hooks; push-needs-ask held the push with an authority
+# ask ("It pushes, and no request in this thread names that"), and the attempt gave up its slot. The played agent now
+# thinks for 20 s before its first call (fixtures/turns.mjs), and in this run no push was held.
+
+# started 2026-11-15T19:09:36Z at 0e5572731 load 391.86 417.62 378.83
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1345
+
+ ❯ batch.test.ts (3 tests | 3 failed) 1513853ms
+   × AC3 #1345.9c5710a8 Five calls from five issues reach one person as one card, and that day raises one notification 1513222ms
+   × AC7 #1345.aaa324a9 Five calls from five issues draw as #328's card with five rows, and the tree holds no second batch card. A row whose Send back would revert says so before it's pressed. A planted row that reverts unannounced fails, naming the issue 0ms
+   × AC8 #1345.69fa185d On the five-row card each row shows when its recommended answer applies, and the five rows add up to the count. A planted card with no time on a row fails, naming the row 0ms
+ ❯ deadline.test.ts (1 test | 1 failed) 1505112ms
+   × AC4 #1345.464309b0 A call unanswered at its deadline takes its recommended answer, the issue closes, and the record reads default, never your answer 1504858ms
+ ❯ held.test.ts (1 test | 1 failed) 4008896ms
+   × AC2 #1345.ba6681c8 A change that reaches a release, or a published page, stays held. A planted lander that lets it through fails, naming the change 4008059ms
+ ❯ blocked.test.ts (1 test | 1 failed) 1506233ms
+   × AC6 #1345.45221c69 Issues blocked by a landed change with an open call start. Issues blocked by a held one don't 1505989ms
+ ❯ no.test.ts (1 test | 1 failed) 1502988ms
+   × AC5 #1345.cdb5061b A "no" starts an attempt on that issue and raises no second ask 1502656ms
+vitest exit=130
+# ended 2026-11-15T23:23:31Z load 109.30 120.82 141.71

@@ -557,6 +557,17 @@ export class GateRunner {
   }
   /** The commit a claim's checks run on: its snapshot, once taken (#1537: what its review reads the diff to). */
   snapshotOf(claim: string): string | undefined { return this.claimOf(claim)?.snapshot; }
+  /**
+   * The call that asks you a requirement whose oracle is you (#1345), and once it closes your answer, or `unanswered`
+   * when it took its default: the claim's verdict reads them from now on. Whether the claim and the requirement were found.
+   */
+  answered(claim: string, req: string, ask: string, answer?: 'PASS' | 'FAIL' | 'unanswered'): boolean {
+    const q = this.claimOf(claim)?.requirements.find((r) => r.req === req && r.oracle === 'person');
+    if (!q) return false;
+    q.ask = ask;
+    if (answer) q.answer = answer;
+    return true;
+  }
   private claimOf(claim: string): Claim | undefined {
     for (const list of this.claims.values()) { const c = list.find((x) => x.claim === claim); if (c) return c; }
     return undefined;

@@ -12,7 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, normalize } from 'node:path';
-import { checkSpeed, type Side, type SpeedClaim, type TimingCheck, type Toolchain } from '@deepbuild/checks-numbers';
+import type { Side, SpeedClaim, TimingCheck, Toolchain } from '@deepbuild/checks-numbers';
 import type { CheckContext, CheckResult, CheckSpec, Failure } from '@deepbuild/conformance';
 import { gitEnv } from '@deepbuild/gate';
 import type { TimingReport } from '@deepbuild/verdicts';
@@ -175,6 +175,7 @@ export async function runSpeed(spec: SpeedSpec, ctx: CheckContext, repo: ClaimRe
     const baseline = sideOf(repo, 'baseline', checkout?.dir ?? ctx.checkout, file.steps, temps[0]!, deadline, stop);
     const change = sideOf(repo, 'change', ctx.checkout, file.steps, temps[1]!, deadline, stop);
     if (resolved) { await baseline.report(); await change.report(); }
+    const { checkSpeed } = await import('@deepbuild/checks-numbers');
     const timed = await checkSpeed(claim, { baseline: baseline.side, change: change.side }, { ...ctx, checkout: repo.store });
     // The repeats a side, in ms, kept with the failure: what the stated speed was judged on.
     const repeats = ` (repeats in ms: baseline ${timed.repeats.baseline.map((x) => x.toFixed(0)).join(', ')}; change ${timed.repeats.change.map((x) => x.toFixed(0)).join(', ')})`;

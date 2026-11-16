@@ -55,6 +55,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         water: deep_scene3d_render::water::Planted {
             foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
             calm_ignores_shore: p == Some(Planted::ShoreCalmIgnoresField),
+            flow_single_phase: p == Some(Planted::WaterFlowSinglePhase),
         },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
@@ -581,6 +582,8 @@ pub struct Drawn {
     pub reflection: Option<Vec<u8>>,
     /// #268: the water's foam share, f32 a pixel.
     pub foam: Option<Vec<u8>>,
+    /// #968: the water's shaded normal, f32 x, y, z a pixel.
+    pub normal: Option<Vec<u8>>,
     /// #468: the depth of field's signed circle of confusion in px, f32 a pixel.
     pub coc: Option<Vec<u8>>,
 }
@@ -609,6 +612,23 @@ pub fn draw(
         read_targets,
         read_moved,
     )
+}
+
+/// #463: the view depth of the frame the session drew last, read back alone: what a look region's
+/// coverage reads, without the frame's other targets.
+pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
+    if app.backend == Backend::Noop {
+        return Ok(None);
+    }
+    app.worker
+        .call(move |state| -> Result<Option<Vec<u8>>, String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let shared = lock(&s.shared);
+            let r = shared.renderer.as_ref().ok_or("no renderer")?;
+            Ok(r.read_view_depth(&device))
+        })
+        .map_err(|e| refused("render_failed", e))
 }
 
 /// [`draw`] on `on`.
@@ -725,6 +745,11 @@ pub fn draw_on(
                 },
                 foam: if read_targets && !noop {
                     r.read_foam(&device)
+                } else {
+                    None
+                },
+                normal: if read_targets && !noop {
+                    r.read_normal(&device)
                 } else {
                     None
                 },
