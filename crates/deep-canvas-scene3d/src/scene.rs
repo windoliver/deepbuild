@@ -842,6 +842,10 @@ pub struct Scene {
     pub light_cut: Option<crate::light::Policy>,
     /// The first `cutaway@1` (#424), which the solids it reaches are cut by in every pass.
     pub cutaway: Option<crate::cut::Cutaway>,
+    /// #463: the share of the frame a look region's other side shows, `[x0, y0, x1, y1]` in 0 to
+    /// 1 from the top left; its per-pixel passes draw inside it alone, so an edge in view costs
+    /// the region's pixels, not a second whole frame. `None` draws the whole frame.
+    pub crop: Option<[f64; 4]>,
     /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
     /// the class's GPU memory holds at 16 B each.
     pub fragments: [u64; 2],
@@ -872,6 +876,8 @@ pub struct Scene {
     pub read_reflection: bool,
     /// #268: whether the view reads back the water's foam share (view3d's `foam`).
     pub read_foam: bool,
+    /// #968: whether a frame reads the water's shaded normal (view3d's `normal` target).
+    pub read_normal: bool,
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
@@ -4235,6 +4241,7 @@ pub(crate) fn evaluate_compiled(
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
         cutaway: None,
+        crop: None,
         fragments,
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
@@ -4253,6 +4260,7 @@ pub(crate) fn evaluate_compiled(
         water: None,
         read_reflection: false,
         read_foam: false,
+        read_normal: false,
         probes,
         tints: crate::tints::tints(map, look, t)?,
         volumes,
@@ -4295,6 +4303,11 @@ pub(crate) fn evaluate_compiled(
                 w.level,
                 crate::shore::Planted::None,
             )?);
+        }
+        // #968: the flow sampled over the plates.
+        if let Some(flow) = &mut w.flow {
+            let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
+            flow.grid = Some(crate::flow::grid(map, &w.material, flow, &plates)?);
         }
         if scene.mirror.is_none() {
             scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);

@@ -1,0 +1,10 @@
+{
+ "fixture": "art.flow_brush.3d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "92e1f7433d74d50a76613b005a612a1c25d368e3a86e477332d9022fff493e97"
+}
