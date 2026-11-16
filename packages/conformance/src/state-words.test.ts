@@ -36,12 +36,12 @@ function planted(schema: string, keys: string[], change: (node: Json, parent: Js
 }
 const adding = (word: string) => (node: Json): void => { node.enum = [...(node.enum as string[]), word]; };
 
-it('names nothing over the published schemas, whose state lists are the eight the issue found', () => {
+it('names nothing over the published schemas, whose state lists are the eight the issue found and work.attempt@2', () => {
   expect(unmappedCodes()).toEqual([]);
   expect(stateLists.map(name).sort()).toEqual([
     'landing.made@1 /properties/data/properties/outcome', 'row.set@1 /properties/data/properties/word', 'row.set@2 /properties/data/properties/word',
     'row.set@3 /properties/data/properties/word', 'row.set@4 /properties/data/properties/word', 'session.state@2 /properties/data/properties/state',
-    'work.attempt@1 /properties/data/properties/cause', 'work.state@1 /properties/data/properties/word',
+    'work.attempt@1 /properties/data/properties/cause', 'work.attempt@2 /properties/data/properties/cause', 'work.state@1 /properties/data/properties/word',
   ]);
 });
 
