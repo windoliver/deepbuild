@@ -104,7 +104,7 @@ pub(crate) fn plants(p: Option<Planted>) -> (Plants, u32, Option<u32>) {
 }
 
 /// The check's issues as the reply holds them.
-fn issues_json(issues: &[deep_canvas::document::Issue]) -> Vec<Value> {
+pub(crate) fn issues_json(issues: &[deep_canvas::document::Issue]) -> Vec<Value> {
     issues
         .iter()
         .map(|i| {
@@ -169,6 +169,10 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         return Ok(json!({"outcome": "refused", "issues": broken}));
     }
     deep_canvas_effects::effect::lower(&mut doc);
+    // #451: a document with 2D particles places them along curves laid out at each time.
+    if crate::flows2d::any(&doc) {
+        return crate::flows2d::answer(&doc, call, app.planted);
+    }
     crate::physics::bake(&mut doc)?;
     let (plants, flags, every) = plants(app.planted);
     // The rules that read the document alone refuse it before anything evaluates.
@@ -414,11 +418,60 @@ pub(crate) fn baked(
         planted: plants,
     };
     let spec = closed::spec::read(doc, id, p)?;
-    let key = format!("{}{:?}", bake::key(&inputs, &spec), plants);
+    // #451: a world-space emitter reads its anchor at every birth bucket, so its bake is keyed by
+    // the whole document that moves the anchor, and a flow by the curves it runs along.
+    let world = p["emit"]["anchor"]
+        .as_str()
+        .filter(|_| spec.space == closed::spec::Space::World);
+    // #451: a flow along many curves, each as the scene lays it out.
+    let flows = match &spec.motion {
+        closed::spec::Motion::Along { many: Some(m), .. } => {
+            let names: Vec<String> = match &m.collection {
+                Some(c) => doc["collections"][c]["members"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect(),
+                None => m.curves.clone(),
+            };
+            names
+                .iter()
+                .map(|n| {
+                    scene
+                        .curves
+                        .get(n)
+                        .map(|pts| closed::flows::Curve::new(pts.clone()))
+                        .ok_or_else(|| {
+                            Refusal::new(
+                                "ref_unresolved",
+                                format!("items/{id}/params/motion/along/curves"),
+                                format!("{id}: along.curves names {n}, which is no curve"),
+                            )
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        }
+        _ => Vec::new(),
+    };
+    let mut h = deep_canvas::schedule::Hasher::new("particles.flows");
+    if world.is_some() {
+        h.bytes(doc.to_string().as_bytes());
+    }
+    for x in flows.iter().flat_map(|c| c.points.iter().flatten()) {
+        h.bytes(&x.to_le_bytes());
+    }
+    let moved = h.finish().hex();
+    let key = format!("{}{:?}{moved}", bake::key(&inputs, &spec), plants);
     if let Some(h) = BAKED.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
         return Ok(h.clone());
     }
-    let b = bake::bake(&inputs)?;
+    let mut b = bake::bake(&inputs)?;
+    b.flows = flows;
+    if let Some(anchor) = world {
+        b.anchors = Some(anchors(doc, id, anchor, spec.span)?);
+    }
     let tables = pack::tables(&b);
     let held: Held = Arc::new((b, tables));
     let mut kept = BAKED.lock().unwrap_or_else(|e| e.into_inner());
@@ -427,6 +480,47 @@ pub(crate) fn baked(
     }
     kept.insert(key, held.clone());
     Ok(held)
+}
+
+/// A world-space emitter's anchor at each birth bucket of the document's span: the scene
+/// evaluated at each whole multiple of its frame interval, through the chain a trail reads
+/// (channels, drivers, constraints, a physics bake's outputs), never a pose kept from a frame.
+fn anchors(doc: &Value, id: &str, anchor: &str, emits: f64) -> Result<eval::Anchors, Refusal> {
+    let (p, q) = doc
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .unwrap_or((60, 1));
+    let per = i64::from(q) * FLICKS as i64 / i64::from(p);
+    let span = doc
+        .pointer("/transport/span")
+        .and_then(|v| deep_canvas::document::duration(doc, v).ok())
+        .map_or(10.0, |f| f as f64 / FLICKS)
+        .min(emits);
+    let step = per as f64 / FLICKS;
+    let n = ((span / step).ceil() as usize + 1).min(1 << 16);
+    let bad = |what: String| {
+        Refusal::new(
+            "ref_unresolved",
+            format!("items/{id}/params/emit/anchor"),
+            what,
+        )
+    };
+    let look = Look3::read(&closed::neutral_look(doc)).map_err(|e| bad(format!("{id}: {e}")))?;
+    let mut at = Vec::with_capacity(n);
+    for k in 0..n {
+        let scene = evaluate(doc, k as i64 * per, &look, &mut Labels::new()).map_err(|r| {
+            bad(format!(
+                "{id}: its anchor's scene at bucket {k}: {}",
+                r.path
+            ))
+        })?;
+        at.push(item_pos(&scene, anchor).ok_or_else(|| {
+            bad(format!(
+                "{id}: emit.anchor names {anchor}, which isn't placed"
+            ))
+        })?);
+    }
+    Ok(eval::Anchors { step, at })
 }
 
 /// Whether `bx`, grown by `reach` m and by `pad` px across the view, lies wholly outside what

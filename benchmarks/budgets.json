@@ -1081,6 +1081,23 @@
       ]
     },
     {
+      "id": "canvas-water-flow",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-flow"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "flow_sheet_gpu_ms": 0.4
+      },
+      "initialReason": "Issue #968 first measurement: the merge base has no flow on water and no such task. A release deep-gpu draws a 30 m x 20 m sheet of water of 256 x 256 cells with flow along a straight curve down its middle (speed 1.5, cycle 2, a 3 m/s breeze's waves and the default ripples), seen straight down so it fills a third of a 1080p frame, against the same sheet with plain water, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time is what the flow adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#968.3dca895d"
+      ]
+    },
+    {
       "id": "canvas-ground",
       "command": [
         "node",
@@ -1606,6 +1623,24 @@
       ]
     },
     {
+      "id": "physics-behavior-kit",
+      "command": [
+        "node",
+        "benchmarks/physics.mjs",
+        "kit"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "kit_native_s": 60,
+        "kit_wasm32_s": 60
+      },
+      "initialReason": "Issue #191 first measurement: the merge base has no behavior kit. Release deep-physics runs the whole kit on Rapier in one process, and scripts/physics-wasm32.mjs runs it in wasm32; each run's wall time, one warm-up and five runs each. physics.mjs judge holds each target, 60 s per backend and target, on a reference Mac. The trial's 15 minutes and the bakes' no added work stay in tests/acceptance/191/ac8-budgets.test.ts. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#191.8b5fd147"
+      ]
+    },
+    {
       "id": "canvas-logic-budgets",
       "command": [
         "node",
@@ -1679,6 +1714,111 @@
       "initialReason": "Issue #213 first measurement: the merge base has no between-step services or mirror reads and no such task. Release deep-show's logic call reads each step's service_ns, the CPU time physics.cast@1 took answering a logic item's 256 rays in a level of 300 static boxes (cast_256_ms, the median of steps 0 to 58); release deep-logic's bake reads each step's mirror_ns, the time updating a mirror of a 1,000,000-element f64 array whose writer changed 1% in 64 runs (mirror_1pct_ms, the median of steps 1 to 63); and an item with neither counts its steps that read either time (idle_work). Five runs after a warm-up one; canvas.mjs judge holds the times on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#213.16543e66"
+      ]
+    },
+    {
+      "id": "playtest-maze",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "playtest-maze"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "maze_40_runs_s": 300,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #184 first measurement: the merge base has no play mode and no playtest. On release builds, the playtest's own runner (packages/checks/playtest/run.ts) plays the plug-in's kit maze in 40 runs of 120 s, 20 by its route bot and 20 by a policy of seeded presses every 0.25 s, each run then replayed without its bot, on two deep-drive replicas: maze_40_runs_s, five runs after a warm-up, which canvas.mjs judge holds to 300 s on a reference Mac. idle_work counts the steps at which the maze played with no bot spends other fuel than deep-logic's own bake of it, judged anywhere: a piece played without the plug-in gains no work.",
+      "criteria": [
+        "#184.0bdc1a84"
+      ]
+    },
+    {
+      "id": "playtest-throughput",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "playtest-throughput"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "fixture_realtime_x": 50
+      },
+      "initialReason": "Issue #184 first measurement: the merge base has no play mode. On release builds, 20 runs of the 2-minute kit maze by a policy of seeded presses, each run then replayed to its full-state hash, on four deep-drive replicas: fixture_realtime_x, 20 × 120 s over the batch's seconds, five runs after a warm-up, a floor canvas.mjs judge holds at 50 times or faster on a reference Mac. With --planted renders-unkept-frames the replicas render a frame every step and fall under it.",
+      "criteria": [
+        "#184.694b8a04"
+      ]
+    },
+    {
+      "id": "canvas-art-frames",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "art-frames"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 10,
+        "frame_cpu_p95_ms": 4
+      },
+      "initialReason": "Issue #463 first measurement: the merge base has no art@1 pack. A release deep-gpu plays the shared test scene (tests/acceptance/463/fixtures/scene.json) in each art@1 look by ID, the pack installed, at 1080p, in 2D through film2d and in 3D through view3d, 300 timed frames after 30 warm ones, and the worst look's p95s are held to the showpiece class's limits; five runs after a warm-up one, each a fresh process. tests/acceptance/463/ac2-budgets.test.ts holds the issue's numbers by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#463.7c8d3f4b"
+      ]
+    },
+    {
+      "id": "canvas-art-regions",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "art-regions"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "edge_frame_ratio": 2
+      },
+      "initialReason": "Issue #463 first measurement: the merge base has no art@1 pack. A release deep-gpu plays each art@1 look, the next look of the list, and the scene with a region in that next look whose edge stays in view (tests/acceptance/463/fixtures/scene-region.json), at 1080p in 2D and 3D, 300 timed frames after 30 warm ones, and the worst pair's p95 GPU with the edge over the costlier look alone is held to twice; five runs after a warm-up one, each a fresh process. tests/acceptance/463/ac2-budgets.test.ts holds the issue's numbers by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#463.7c8d3f4b"
+      ]
+    },
+    {
+      "id": "canvas-art-switch",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "art-switch"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "switch_ms": 100
+      },
+      "initialReason": "Issue #463 first measurement: the merge base has no art@1 pack. A release deep-gpu plays the shared test scene's 2D film and switches between every ordered pair of art@1 looks, each switch timed from its request to the first frame drawn in the new look, read back from the window, and the slowest is held to switch_ms; five runs after a warm-up one, each a fresh process. tests/acceptance/463/ac2-budgets.test.ts holds the issue's numbers by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#463.7c8d3f4b"
+      ]
+    },
+    {
+      "id": "canvas-math",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "math"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "math_over_hand": 1.05,
+        "frame_expansions": 0
+      },
+      "initialReason": "Issue #233 first measurement (#233.f4f81b7b): the merge base has no math@1 pack. A release deep-gpu draws criterion 11's math@1 document (math.axes on x [-3, 3] and y [0, 9] over 8 x 5 units, x squared plotted on them, and a square a channel moves) and the same document's expansion written by hand, each under frame_budget at 1920 x 1080 for 5 s at 60 fps in look clean, in alternating order, one warm-up and five runs; a release deep-show evaluates the math document at 0.55 s and counts the nodes that ran for an instance itself. canvas.mjs judge holds the math document's median GPU p95 to 1.05 x the hand-written one's (math_over_hand) and the instance nodes to 0 (frame_expansions, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#233.f4f81b7b"
       ]
     }
   ]

@@ -6,7 +6,7 @@ import { backgrounded } from './hub-shared.js';
 import type { Questions } from './questions.js';
 import { STOP_HOLD_MS } from './claude-settings.js';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { liveFetch, readIssue, recordedFetch } from './github-source.js';
 import type { Outcome } from './landing.js';
 import { homedir } from 'node:os';
@@ -55,7 +55,7 @@ import { HubCanvas } from './hub-canvas.js';
 import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { Live, Counter, Routes } from './session-types.js';
-import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN } from "./hub-shared.js";
+import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN, inCheckout, writeApproved } from "./hub-shared.js";
 
 /** How long a landing's judgement waits for its verdict (#1331). */
 const VERDICT_WAIT_MS = 30 * 60_000;
@@ -111,7 +111,7 @@ export class StopJudging {
     const readclaimRequirements = () => this.claimRequirements;
     const readverdictWrites = () => this.verdictWrites;
     const readlanes = () => this.lanes;
-    this.reply = new StopReply({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel, schedule: options.schedule, delivery: options.delivery, state: options.state, judging: () => ({ judging: (meta) => this.judging(meta), laneOf: (claim, until) => this.laneOf(claim, until), requirementsOf: (session) => this.requirementsOf(session), completion: (meta, claim, sendBack) => this.completion(meta, claim, sendBack), prDelivery: (judged) => this.prDelivery(judged), noWorkOnce: (session, claim) => this.noWorkOnce(session, claim), stallGate: (meta, claim, sendBack) => this.stallGate(meta, claim, sendBack), sizedAt: (claim, meta, deadline) => this.sizedAt(claim, meta, deadline), idleOrResumed: (meta, judged, sentBack) => this.idleOrResumed(meta, judged, sentBack), questionHolds: (session) => this.questionHolds(session), slowStop: (meta, r, claim, held) => this.slowStop(meta, r, claim, held), provisionalCarried: (session) => this.provisionalCarried(session), smallestOf: (claim) => this.smallestOf(claim), stopHold: (meta, r, until) => this.stopHold(meta, r, until), stillNeeded: (meta, claim) => this.stillNeeded(meta, claim), judgedLine: (live) => this.judgedLine(live), heldLine: (session, line) => this.heldLine(session, line), get claimRequirements() { return readclaimRequirements(); }, get verdictWrites() { return readverdictWrites(); }, get lanes() { return readlanes(); } }) });
+    this.reply = new StopReply({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel, schedule: options.schedule, delivery: options.delivery, state: options.state, judging: () => ({ judging: (meta) => this.judging(meta), laneOf: (claim, until) => this.laneOf(claim, until), requirementsOf: (session) => this.requirementsOf(session), completion: (meta, claim, sendBack) => this.completion(meta, claim, sendBack), prDelivery: (judged) => this.prDelivery(judged), noWorkOnce: (session, claim) => this.noWorkOnce(session, claim), stallGate: (meta, claim, sendBack) => this.stallGate(meta, claim, sendBack), sizedAt: (claim, meta, deadline) => this.sizedAt(claim, meta, deadline), idleOrResumed: (meta, judged, sentBack) => this.idleOrResumed(meta, judged, sentBack), questionHolds: (session) => this.questionHolds(session), slowStop: (meta, r, claim, held, turnEnds) => this.slowStop(meta, r, claim, held, turnEnds), provisionalCarried: (session) => this.provisionalCarried(session), smallestOf: (claim) => this.smallestOf(claim), stopHold: (meta, r, until) => this.stopHold(meta, r, until), stillNeeded: (meta, claim) => this.stillNeeded(meta, claim), judgedLine: (live) => this.judgedLine(live), heldLine: (session, line) => this.heldLine(session, line), get claimRequirements() { return readclaimRequirements(); }, get verdictWrites() { return readverdictWrites(); }, get lanes() { return readlanes(); } }) });
   }
 
   /** The commands each claim's final message told you to run, which its gate ran as the agent's own checks (#323). */
@@ -714,7 +714,7 @@ export class StopJudging {
    * entry's timeout, so a FAIL reaches the agent in the same turn; otherwise replied at once, with the row saying why,
    * and the verdict comes with the next message. What it is sent back with, or nothing.
    */
-  async slowStop(meta: HookMeta, r: Routes, claim: string, held: number): Promise<string | undefined> {
+  async slowStop(meta: HookMeta, r: Routes, claim: string, held: number, turnEnds: () => Promise<void>): Promise<string | undefined> {
     const timeoutS = stopTimeoutS(this.options.services.root.dir) ?? 600;
     const slowClaims = (r.slowClaims ??= []);
     const verdictLater = async (why: string) => {
@@ -726,25 +726,27 @@ export class StopJudging {
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
     const waiting = () => this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(meta.session));
     if (r.sendBacks.length || (await waiting()).length) return undefined;
-    const deadlines = this.options.services.gate.slowDeadlines(claim);
+    await turnEnds();
+    // A check held in its place for the session's loop or its background work (#965, #907) starts later: no stop is held for it.
+    const waits = this.options.services.gate.slowHeld(claim);
+    const deadlines = this.options.services.gate.slowDeadlines(claim).filter((c) => !waits.includes(c.check));
     const late = deadlines.find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
-    await this.options.services.gate.turnEnded(claim);
     if (late) {
       const deadline = late.deadline_ms === null ? 'has no deadline' : `has a deadline of ${words(late.deadline_ms)}`;
       await verdictLater(`${late.check} ${deadline}, which must end at least 5 s before Codex's Stop hook timeout, ${timeoutS} s`);
       return undefined;
     }
     // Measured from now, with the check started: `held` already ends 5 s before the timeout, counted from the stop.
-    const unstarted = this.options.services.gate.slowUnstarted(claim);
+    const unstarted = this.options.services.gate.slowUnstarted(claim).filter((check) => !waits.includes(check));
     if (unstarted.length) { await verdictLater(`${unstarted[0]} is waiting for a CPU slot, so its deadline can't be kept before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
     const tight = deadlines.find((c) => Date.now() + c.deadline_ms! > held);
     if (tight) { await verdictLater(`${tight.check} has a deadline of ${words(tight.deadline_ms!)}, which no longer ends at least 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
-    while (Date.now() < held && this.options.services.gate.slowStanding(claim).pending) {
+    while (Date.now() < held && this.options.services.gate.slowStanding(claim, waits).pending) {
       await this.options.services.gate.slowEnded(claim, Math.min(held, Date.now() + 500));
       // An answer goes back at once; the check's verdict then comes with your next message.
       if (r.sendBacks.length || (await waiting()).length) { if (!slowClaims.includes(claim)) slowClaims.push(claim); return undefined; }
     }
-    const standing = this.options.services.gate.slowStanding(claim);
+    const standing = this.options.services.gate.slowStanding(claim, waits);
     if (standing.pending) { await verdictLater(`its checks were still going when the hold ended, 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
     return standing.failed.length ? `DeepBuild sent this claim back: ${standing.failed.join(', ')}.` : undefined;
   }
@@ -1311,23 +1313,17 @@ export class StopJudging {
    */
   async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant }): Promise<string> {
     // A spec check is a command alone: nothing of it is written. A drafted check and each expected output it
-    // references are written from their approved bytes (#322).
+    // references are written from their approved bytes (#322), never through a link that leaves the checkout.
     if (r.approved !== null && this.options.settings.plant !== 'runs-disk-bytes') {
       for (const { path, sha256 } of [{ path: r.check, sha256: r.approved }, ...(r.references ?? [])]) {
-        const file = join(r.cwd, path);
-        mkdirSync(dirname(file), { recursive: true });
-        writeFileSync(`${file}.tmp`, await this.options.services.store.read(sha256), { mode: path === r.check ? 0o500 : 0o400 });
-        renameSync(`${file}.tmp`, file);
+        writeApproved(r.cwd, path, await this.options.services.store.read(sha256), path === r.check ? 0o500 : 0o400);
       }
     }
     // A held-out variant's files (#1018), from the store by their digests, over the snapshot's in its own checkout.
     // Its folder is resolved through any link the snapshot holds and must still lie in the checkout, and a link in the
     // file's place is removed, never written through: the agent never reaches the variant's bytes.
     for (const [path, sha] of Object.entries(r.overlay ?? {})) {
-      const file = join(r.cwd, path);
-      let folder = dirname(file);
-      while (!existsSync(folder)) folder = dirname(folder);
-      if (!`${realpathSync(folder)}/`.startsWith(`${realpathSync(r.cwd)}/`) || !`${file}/`.startsWith(`${r.cwd}/`)) throw Error(`a held-out variant's file ${path} lies outside its checkout`);
+      const file = inCheckout(r.cwd, path, "a held-out variant's file");
       mkdirSync(dirname(file), { recursive: true });
       rmSync(file, { force: true });
       writeFileSync(file, await this.options.services.store.read(sha), { flag: 'wx' });
@@ -1390,7 +1386,7 @@ export class StopJudging {
    * reading, claims the merge commit in a worktree of its own, as `session` did a stop; its slow checks start, and its
    * verdict is read once made. Each check whose key the merge didn't change carries from the run that made it (#1018).
    */
-  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
+  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle?: string | null }[] } | undefined> {
     const [owner, name] = r.repo.split('/') as [string, string];
     const fetch = this.options.settings.github ? recordedFetch(this.options.settings.github) : liveFetch(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
     // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
@@ -1428,10 +1424,12 @@ export class StopJudging {
         await this.verdictWrites.get(made.claim)?.catch(() => undefined);
         const v = this.options.services.gate.verdictOf(made.claim);
         const [row] = v && v.outcome !== 'pending' ? (await this.options.services.record.raw(`SELECT outcome, requirements FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [made.claim.slice(6)])) as { outcome: Outcome; requirements: string | null }[] : [];
-        if (row) {
-          const settled = new Map((await this.options.services.tasks.lockedRequirements(made.task)).map((q) => [q.req, q]));
-          const reqs = (JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string }[]).map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome }));
-          return { claim: made.claim, outcome: row.outcome, requirements: reqs };
+        // A verdict that waits only on your answer to requirements whose oracle is you, every other one passed, waits on
+        // no check (#1345): it's judged now, INCONCLUSIVE, with those requirements pending, and never recorded as made.
+        const calls = !row && v && v.requirements.some((q) => q.oracle === 'person' && q.outcome === 'pending') && v.requirements.every((q) => q.outcome === 'PASS' || (q.oracle === 'person' && q.outcome === 'pending'));
+        if (row || calls) {
+          const read = row ? JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string; oracle?: string }[] : v!.requirements;
+          return { claim: made.claim, outcome: row?.outcome ?? 'INCONCLUSIVE', requirements: await this.landingRequirements(made.task, read) };
         }
         if (Date.now() > until) return undefined;
         await new Promise((done) => setTimeout(done, 200));
@@ -1440,6 +1438,25 @@ export class StopJudging {
       this.options.state().live.delete(r.session);
       if (!r.keep) await worktree('remove', '--force', tree).catch(() => undefined);
     }
+  }
+
+  /** A verdict's requirements as the landing reads them: each one's text and what alone settles it, from the task's locked definition, and whose word decides it. */
+  private async landingRequirements(task: string, read: { req: string; outcome: string; oracle?: string }[]): Promise<{ req: string; text: string; settled_by: string | null; outcome: string; oracle: string | null }[]> {
+    const settled = new Map((await this.options.services.tasks.lockedRequirements(task)).map((q) => [q.req, q]));
+    return read.map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome, oracle: q.oracle ?? null }));
+  }
+  /** A landed claim's newest recorded verdict (#1345): one your answers to its calls made; undefined while none is recorded. */
+  async recorded(claim: string): Promise<{ outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle: string | null }[] } | undefined> {
+    const [row] = (await this.options.services.record.raw(`SELECT v.outcome AS outcome, v.requirements AS requirements, c.subject_ref AS task FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE v.claim_id = ? ORDER BY v.created DESC LIMIT 1`, [claim.slice(6)])) as { outcome: Outcome; requirements: string | null; task: string | null }[];
+    if (!row?.task) return undefined;
+    return { outcome: row.outcome, requirements: await this.landingRequirements(row.task, JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string; oracle?: string }[]) };
+  }
+  /**
+   * A call on a requirement whose oracle is you (#1345), and once it closed your answer (`unanswered` for a default):
+   * the claim's verdict reads them from now on, and the one they make is recorded.
+   */
+  async answered(claim: string, req: string, ask: string, answer?: 'PASS' | 'FAIL' | 'unanswered'): Promise<void> {
+    if (this.options.services.gate.answered(claim, req, ask, answer) && answer) await this.judged(claim);
   }
 
   /** The validity floor's INVALID and snapshot budget's INCONCLUSIVE, recorded before checks count. */

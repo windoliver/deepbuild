@@ -1677,8 +1677,21 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             }
             Kind::FollowPath {
                 points,
-                fraction: crate::constraint::Fraction::of(c.get("fraction"))
-                    .or_else(|code| refuse(code, at("fraction")))?,
+                // #1960: `fraction: {path}` is the number at that path, as a driver's var reads one.
+                fraction: match c
+                    .get("fraction")
+                    .and_then(Value::as_object)
+                    .filter(|f| f.len() == 1)
+                    .and_then(|f| f.get("path"))
+                {
+                    Some(Value::String(text)) => crate::constraint::Fraction::Path(target_of(
+                        text,
+                        false,
+                        &at("fraction/path"),
+                    )?),
+                    _ => crate::constraint::Fraction::of(c.get("fraction"))
+                        .or_else(|code| refuse(code, at("fraction")))?,
+                },
                 orient: flag("orient"),
                 offset: pair(c.get("offset"), &at("offset"))?,
             }

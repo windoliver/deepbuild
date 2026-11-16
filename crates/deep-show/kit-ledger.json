@@ -254,7 +254,8 @@
       "carried_state": "PASS",
       "late_entry": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "behavior": "PASS"
     }
   },
   "record": {

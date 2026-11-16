@@ -1,0 +1,276 @@
+#1164's acceptance suite on the base (HEAD dc9b43154, which holds main's 0e5572731), run once, November 15, 2026:
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/1164 --no-file-parallelism --testTimeout=600000
+11 of 11 fail, each at an assertion or INCONCLUSIVE, none at a build:
+  AC1 (2): the game is refused (ref_unresolved at drivers/o1_shown/vars/b: a driver can't read rules.board[n]); deep_query names no hash
+  AC2 (2), AC4 main, AC6 (2): the same refusal of the game
+  AC3, AC5: the whole scenario is bad_input (no 'track' call)
+  AC4 planted: bad_input (no planted restore_zeroes_move_count, no list form of planted)
+  AC7: INCONCLUSIVE, no docs/evidence/1164/ and no TASTE.json
+
+Two debug runs, made to learn what lies behind the refusal and undone before the commit (README: What the base has):
+  without the drivers: each digit key appends nothing (a press control's keys don't reach it); AC1's presentation passes,
+  its region map holds c1..c9 at 0, 264, ..., 2112, and only deep_query's hash is missing.
+  without the drivers, presses sent as {type: control, control: cN, value: 1} (AC2, AC4, AC6): 3 passed (both AC2 tests,
+  AC6's first: presses at steps 30..210, the issue's boards, winner 1 from step 180, takes_taken_cell failing at step 60
+  naming rules.board, every step far under half its fuel), 3 failed:
+         × AC6 #1164.9ffde386 wrong program: a program that loops forever on a press of 9 (loops_on_9) traps with kind fuel at the same function and offset in two runs, the board keeps its last good values, logic.trap names the step, the function, the offset and the press, and the claim reads FAIL 33336ms
+         × AC4 #1164.bfcc143f seeking to each press's flick and to 50 random times gives the frame hash and full-state hash playing gives, and logic.determinism reads PASS keyed to the revision 1386455ms
+         × AC4 #1164.bfcc143f wrong programs: a restore that zeroes the move count on a seek to 7.5 s (restore_zeroes_move_count) fails on checkpoint 240's full-state hash, and a check comparing step hashes alone (check_compares_step_hashes) passes it and fails this test 187ms
+    AssertionError: AC4: logic: seeks[0].steps (README: chosen) is an array, got null: expected false to be true // Object.is equality
+    AssertionError: AC4: planted restore_zeroes_move_count (planted "restore_zeroes_move_count"): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+    AssertionError: AC6: run 1: the claim reads FAIL, never PASS: {"result":"PASS","key":{"revisions":[{"doc":"01JB1164D00000000000000001","rev":1,"hash":"8c5b978faeee541be1c04da53e4a428b5d60b864ba6b5c47a48a9ae5dfdc933a"}]},"requirements":[{"id":"req:01JB1164Q00000000000000001","kind":"logic.determinism","issues":[],"machines":"any","determinism":"exact","results":[{"kind":"logic.determinism","steps":
+
+================ the base run ================
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1164 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1164-3cbb5e/agent-a0e2d53013a4a3ece/tests/acceptance/1164
+
+ ❯ ac1-present.test.ts (2 tests | 2 failed) 4311ms
+   ❯ AC1 #1164.29c6a1db presented, run only as sandbox@1's rewrite, and a program importing a function refused (2)
+     × AC1 #1164.29c6a1db the piece is presented with no issues and runs as sandbox@1's rewritten bytes; the importing program is refused with sandbox@1's report naming rules, and the last good revision stays shown 2335ms
+     × AC1 #1164.29c6a1db wrong program: the rules program built to import a function (imports_function) fails AC1's judgement, naming the criterion and rules 324ms
+ ❯ ac4-seek.test.ts (2 tests | 2 failed) 3316ms
+   ❯ AC4 #1164.bfcc143f seeking equals playing, by frame and full-state hash (2)
+     × AC4 #1164.bfcc143f seeking to each press's flick and to 50 random times gives the frame hash and full-state hash playing gives, and logic.determinism reads PASS keyed to the revision 2274ms
+     × AC4 #1164.bfcc143f wrong programs: a restore that zeroes the move count on a seek to 7.5 s (restore_zeroes_move_count) fails on checkpoint 240's full-state hash, and a check comparing step hashes alone (check_compares_step_hashes) passes it and fails this test 169ms
+ ❯ ac6-budget.test.ts (2 tests | 2 failed) 4474ms
+   ❯ AC6 #1164.9ffde386 the budget, and a program that loops forever (2)
+     × AC6 #1164.9ffde386 logic.budget passes with the busiest step under half its fuel 2382ms
+     × AC6 #1164.9ffde386 wrong program: a program that loops forever on a press of 9 (loops_on_9) traps with kind fuel at the same function and offset in two runs, the board keeps its last good values, logic.trap names the step, the function, the offset and the press, and the claim reads FAIL 269ms
+ ❯ ac2-board.test.ts (2 tests | 2 failed) 3386ms
+   ❯ AC2 #1164.fb851e24 the board and the winner at each press's step (2)
+     × AC2 #1164.fb851e24 deep_query reads rules.board and rules.winner at each press's step: the taken cell and the press after the win change nothing, the winner reads 1 from step 180, the board ends [1, 1, 1, 2, 2, 0, 0, 0, 0] 1918ms
+     × AC2 #1164.fb851e24 wrong program: a program that takes a press on a taken cell (takes_taken_cell) writes 2 to cell 1 at step 60 and fails, naming the step and the array 228ms
+ ❯ ac5-fork.test.ts (1 test | 1 failed) 3120ms
+   ❯ AC5 #1164.535ab8f5 a seek back and a press fork the track; seeks and scrubs alone don't (1)
+     × AC5 #1164.535ab8f5 seeking back to 2.5 s and pressing 5 forks the track at that flick, drops the five later entries and changes its hash, and the full-state hash from there equals a straight run of the forked track; seeks and scrubs alone never change the track's hash 2054ms
+ ❯ ac3-replay.test.ts (1 test | 1 failed) 3607ms
+   ❯ AC3 #1164.636499d1 a recorded track replayed in a fresh headless process (1)
+     × AC3 #1164.636499d1 replaying the recorded input track in a fresh headless process gives the same track hash, full-state hashes at each checkpoint, step hashes and snapshots at 0.1 s after each press, by hash 2262ms
+ ❯ ac7-shown.test.ts (1 test | 1 failed) 6ms
+   ❯ AC7 #1164.6ccc5166 the check run's pictures and the one taste call on them (1)
+     × AC7 #1164.6ccc5166 the check run's screenshots at the reference window and its recording exist in docs/evidence/1164/, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right 5ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-present.test.ts > AC1 #1164.29c6a1db presented, run only as sandbox@1's rewrite, and a program importing a function refused > AC1 #1164.29c6a1db the piece is presented with no issues and runs as sandbox@1's rewritten bytes; the importing program is refused with sandbox@1's report naming rules, and the last good revision stays shown
+AssertionError: AC1: the good piece:
+  AC1 #1164.29c6a1db item rules: the piece isn't presented (outcome "refused"): [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]
+  AC1 #1164.29c6a1db item rules: deep_query names no hash of the bytes the engine runs: {"code":"no_revision","core":"core@0.0.0","set_digest":"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC1 #1164.29c6a1db item rules: the piece isn't presented (outcome \"refused\"): [{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"drivers/o1_shown/vars/b\",\"actual\":{\"driver\":\"o1_shown\",\"array\":\"rules.board[0]\",\"why\":\"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands\"},\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}]",
++   "AC1 #1164.29c6a1db item rules: deep_query names no hash of the bytes the engine runs: {\"code\":\"no_revision\",\"core\":\"core@0.0.0\",\"set_digest\":\"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98\"}",
++ ]
+
+ ❯ none helpers.ts:73:73
+     71| /** No failures; the message lists them. */
+     72| export function none(failures: readonly string[], what: string): void {
+     73|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     74| }
+     75| /** A wrong program's run: the criterion's judgement fails it, and one…
+ ❯ ac1-present.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  ac1-present.test.ts > AC1 #1164.29c6a1db presented, run only as sandbox@1's rewrite, and a program importing a function refused > AC1 #1164.29c6a1db wrong program: the rules program built to import a function (imports_function) fails AC1's judgement, naming the criterion and rules
+AssertionError: AC1: the real program passes the judgement first:
+  AC1 #1164.29c6a1db item rules: the piece isn't presented (outcome "refused"): [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]
+  AC1 #1164.29c6a1db item rules: deep_query names no hash of the bytes the engine runs: {"code":"no_revision","core":"core@0.0.0","set_digest":"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "AC1 #1164.29c6a1db item rules: the piece isn't presented (outcome \"refused\"): [{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"drivers/o1_shown/vars/b\",\"actual\":{\"driver\":\"o1_shown\",\"array\":\"rules.board[0]\",\"why\":\"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands\"},\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}]",
++   "AC1 #1164.29c6a1db item rules: deep_query names no hash of the bytes the engine runs: {\"code\":\"no_revision\",\"core\":\"core@0.0.0\",\"set_digest\":\"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98\"}",
++ ]
+
+ ❯ none helpers.ts:73:73
+     71| /** No failures; the message lists them. */
+     72| export function none(failures: readonly string[], what: string): void {
+     73|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     74| }
+     75| /** A wrong program's run: the criterion's judgement fails it, and one…
+ ❯ ac1-present.test.ts:89:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  ac2-board.test.ts > AC2 #1164.fb851e24 the board and the winner at each press's step > AC2 #1164.fb851e24 deep_query reads rules.board and rules.winner at each press's step: the taken cell and the press after the win change nothing, the winner reads 1 from step 180, the board ends [1, 1, 1, 2, 2, 0, 0, 0, 0]
+AssertionError: AC2: the game: the game is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playedOf helpers.ts:396:102
+    394| /** A played run's presentation (with no error) and each press's one e…
+    395| export function playedOf(r: JsonObject[], s: Script, what: string): En…
+    396|   expect(r[0]!['outcome'], `${what}: the game is presented: ${show(r[0…
+       |                                                                                                      ^
+    397|   return s.presses.map((i, n) => {
+    398|     const e = appendedOf(r[i]!, `${what}: ${pressName(PRESSES[n]!)}`);
+ ❯ playAndRead ac2-board.test.ts:46:19
+ ❯ ac2-board.test.ts:54:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  ac2-board.test.ts > AC2 #1164.fb851e24 the board and the winner at each press's step > AC2 #1164.fb851e24 wrong program: a program that takes a press on a taken cell (takes_taken_cell) writes 2 to cell 1 at step 60 and fails, naming the step and the array
+AssertionError: AC2: the program that takes a taken cell: the game is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playedOf helpers.ts:396:102
+    394| /** A played run's presentation (with no error) and each press's one e…
+    395| export function playedOf(r: JsonObject[], s: Script, what: string): En…
+    396|   expect(r[0]!['outcome'], `${what}: the game is presented: ${show(r[0…
+       |                                                                                                      ^
+    397|   return s.presses.map((i, n) => {
+    398|     const e = appendedOf(r[i]!, `${what}: ${pressName(PRESSES[n]!)}`);
+ ❯ playAndRead ac2-board.test.ts:46:19
+ ❯ ac2-board.test.ts:58:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  ac3-replay.test.ts > AC3 #1164.636499d1 a recorded track replayed in a fresh headless process > AC3 #1164.636499d1 replaying the recorded input track in a fresh headless process gives the same track hash, full-state hashes at each checkpoint, step hashes and snapshots at 0.1 s after each press, by hash
+AssertionError: AC3: the first run, played with keys: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:337:88
+    335|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    336|   const out = obj(parsed, `${tag}: the answer`);
+    337|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok; go…
+       |                                                                                        ^
+    338|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    339|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ ac3-replay.test.ts:36:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  ac4-seek.test.ts > AC4 #1164.bfcc143f seeking equals playing, by frame and full-state hash > AC4 #1164.bfcc143f seeking to each press's flick and to 50 random times gives the frame hash and full-state hash playing gives, and logic.determinism reads PASS keyed to the revision
+AssertionError: AC4: the first run: the game is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playedOf helpers.ts:396:102
+    394| /** A played run's presentation (with no error) and each press's one e…
+    395| export function playedOf(r: JsonObject[], s: Script, what: string): En…
+    396|   expect(r[0]!['outcome'], `${what}: the game is presented: ${show(r[0…
+       |                                                                                                      ^
+    397|   return s.presses.map((i, n) => {
+    398|     const e = appendedOf(r[i]!, `${what}: ${pressName(PRESSES[n]!)}`);
+ ❯ ac4-seek.test.ts:57:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  ac4-seek.test.ts > AC4 #1164.bfcc143f seeking equals playing, by frame and full-state hash > AC4 #1164.bfcc143f wrong programs: a restore that zeroes the move count on a seek to 7.5 s (restore_zeroes_move_count) fails on checkpoint 240's full-state hash, and a check comparing step hashes alone (check_compares_step_hashes) passes it and fails this test
+AssertionError: AC4: planted restore_zeroes_move_count (planted "restore_zeroes_move_count"): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:337:88
+    335|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    336|   const out = obj(parsed, `${tag}: the answer`);
+    337|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok; go…
+       |                                                                                        ^
+    338|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    339|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ run ac4-seek.test.ts:95:23
+ ❯ ac4-seek.test.ts:101:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  ac5-fork.test.ts > AC5 #1164.535ab8f5 a seek back and a press fork the track; seeks and scrubs alone don't > AC5 #1164.535ab8f5 seeking back to 2.5 s and pressing 5 forks the track at that flick, drops the five later entries and changes its hash, and the full-state hash from there equals a straight run of the forked track; seeks and scrubs alone never change the track's hash
+AssertionError: AC5: the game played, seeked, scrubbed, then forked: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:337:88
+    335|   try { parsed = JSON.parse(lines[0]!) as JsonValue; } catch { parsed …
+    336|   const out = obj(parsed, `${tag}: the answer`);
+    337|   expect(out['ok'], `${tag}: deep-show run answers the scenario ok; go…
+       |                                                                                        ^
+    338|   const list = arr(out['replies'], `${tag}: replies`).map((x, i) => ob…
+    339|   expect(list.length, `${tag}: one reply per call`).toBe(arr(sc['calls…
+ ❯ ac5-fork.test.ts:35:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  ac6-budget.test.ts > AC6 #1164.9ffde386 the budget, and a program that loops forever > AC6 #1164.9ffde386 logic.budget passes with the busiest step under half its fuel
+AssertionError: AC6: the game: the game is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playedOf helpers.ts:396:102
+    394| /** A played run's presentation (with no error) and each press's one e…
+    395| export function playedOf(r: JsonObject[], s: Script, what: string): En…
+    396|   expect(r[0]!['outcome'], `${what}: the game is presented: ${show(r[0…
+       |                                                                                                      ^
+    397|   return s.presses.map((i, n) => {
+    398|     const e = appendedOf(r[i]!, `${what}: ${pressName(PRESSES[n]!)}`);
+ ❯ play ac6-budget.test.ts:31:21
+ ❯ ac6-budget.test.ts:51:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  ac6-budget.test.ts > AC6 #1164.9ffde386 the budget, and a program that loops forever > AC6 #1164.9ffde386 wrong program: a program that loops forever on a press of 9 (loops_on_9) traps with kind fuel at the same function and offset in two runs, the board keeps its last good values, logic.trap names the step, the function, the offset and the press, and the claim reads FAIL
+AssertionError: AC6: loops_on_9, run 1: the game is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"drivers/o1_shown/vars/b","actual":{"driver":"o1_shown","array":"rules.board[0]","why":"motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands"},"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playedOf helpers.ts:396:102
+    394| /** A played run's presentation (with no error) and each press's one e…
+    395| export function playedOf(r: JsonObject[], s: Script, what: string): En…
+    396|   expect(r[0]!['outcome'], `${what}: the game is presented: ${show(r[0…
+       |                                                                                                      ^
+    397|   return s.presses.map((i, n) => {
+    398|     const e = appendedOf(r[i]!, `${what}: ${pressName(PRESSES[n]!)}`);
+ ❯ play ac6-budget.test.ts:31:21
+ ❯ ac6-budget.test.ts:55:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  ac7-shown.test.ts > AC7 #1164.6ccc5166 the check run's pictures and the one taste call on them > AC7 #1164.6ccc5166 the check run's screenshots at the reference window and its recording exist in docs/evidence/1164/, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/1164/: x-and-o.png, taken-cell.png, win.png, game-keys.mp4; run node scripts/checkpoint-1164-shots.mjs; this is not a pass
+ ❯ inconclusive helpers.ts:81:60
+     79| }
+     80| /** A test that can't be judged here fails with this, never passes (AG…
+     81| export const inconclusive = (why: string): never => expect.fail(`INCON…
+       |                                                            ^
+     82| /** A host or tool this machine lacks: the test fails with this, never…
+     83| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+ ❯ ac7-shown.test.ts:28:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  11 failed (11)
+   Start at  12:42:42
+   Duration  23.54s (tests 99%, transform 1%, import 1%)
+
+exit 1

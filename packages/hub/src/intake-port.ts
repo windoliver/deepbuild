@@ -4,6 +4,7 @@ import type { Asks, Delivery } from '@deepbuild/asks';
 import type { Runner } from '@deepbuild/runner';
 import type { Plant } from './plant.js';
 import type { Row } from './rows.js';
+import type { SignedIn } from './sign-in.js';
 import type { WorkspaceService } from './workspaces-port.js';
 
 type Obj = Record<string, unknown>;
@@ -20,6 +21,8 @@ export interface IntakeDeps {
   keep(bytes: Uint8Array, source: string): Promise<string>;
   /** Where the research job runs. */
   runner(): Runner;
+  /** The agent's sign-in probe, on the recorded login PATH (#1349). */
+  signedIn(agent: string): Promise<SignedIn>;
   asks(): Asks;
   spaces(): WorkspaceService;
   /** The run your yes on the card approved, under that card's ask: no second ask (Work.under). */
