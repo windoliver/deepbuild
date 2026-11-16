@@ -24,6 +24,7 @@ use objc2_app_kit::NSView;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use serde_json::{json, Value};
 
+use crate::chrome::{self, Typed};
 use crate::hdr_layer::{self, HdrLayer};
 
 fn planted(name: &str) -> bool {
@@ -307,7 +308,9 @@ struct Root {
 }
 
 impl Render for Root {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let colors = *chrome::of(window);
+        let sizes = chrome::sizes();
         let [r, g, b] = self.page.map(|c| f32::from(c) / 255.);
         let paint = self.paint.clone();
         div().size_full().bg(Rgba { r, g, b, a: 1. }).child(
@@ -332,7 +335,6 @@ impl Render for Root {
             .size_full(),
         )
         .children(self.card.clone().map(|(question, options, [x, y, w, h])| {
-            let ink = Rgba { r: 0.08, g: 0.08, b: 0.08, a: 1. };
             div()
                 .absolute()
                 .left(px(x))
@@ -340,16 +342,16 @@ impl Render for Root {
                 .w(px(w))
                 .h(px(h))
                 .overflow_hidden()
-                .rounded(px(12.))
-                .bg(Rgba { r: 0.98, g: 0.98, b: 0.97, a: 1. })
-                .p(px(20.))
+                .rounded(sizes.radius)
+                .bg(colors.raised)
+                .p(sizes.space(4))
                 .flex()
                 .flex_col()
-                .gap(px(16.))
-                .text_color(ink)
-                .child(div().text_size(px(18.)).child(question))
-                .child(div().flex().gap(px(12.)).children(options.into_iter().map(|o| {
-                    div().px(px(14.)).py(px(8.)).rounded(px(8.)).bg(Rgba { r: 0.91, g: 0.93, b: 0.94, a: 1. }).child(o)
+                .gap(sizes.space(3))
+                .text_color(colors.ink_primary)
+                .child(div().typed(sizes.title).child(question))
+                .child(div().flex().gap(sizes.space(2)).children(options.into_iter().map(|o| {
+                    div().px(sizes.space(3)).py(sizes.space(1)).rounded(sizes.radius).bg(colors.hover).typed(sizes.body).child(o)
                 })))
         }))
     }
