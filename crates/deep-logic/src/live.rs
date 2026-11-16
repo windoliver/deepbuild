@@ -50,8 +50,22 @@ fn baked(world: &World, rec: &Record) -> Value {
             o.remove("ns");
         }
     }
-    let stored = json!({"steps": rec.steps_json(piece), "checkpoints": checkpoints,
-        "ranges": rec.ranges_json(piece), "occurrences": rec.occurrences(piece)});
+    let mut steps = rec.steps_json(piece, None);
+    // #213: a step's mirror and service times are readings, never the bake's bytes.
+    for s in steps.as_array_mut().into_iter().flatten() {
+        for row in s["items"]
+            .as_object_mut()
+            .into_iter()
+            .flat_map(|m| m.values_mut())
+        {
+            if let Some(o) = row.as_object_mut() {
+                o.remove("mirror_ns");
+                o.remove("service_ns");
+            }
+        }
+    }
+    let stored = json!({"steps": steps, "checkpoints": checkpoints,
+        "ranges": rec.ranges_json(piece, None), "occurrences": rec.occurrences(piece)});
     let bytes = serde_json::to_vec(&stored).unwrap_or_default();
     json!({"ok": true, "track": world.track_entries(), "steps": stored["steps"], "checkpoints": rec.checkpoints,
         "bake": crate::B64.encode(bytes)})
@@ -206,6 +220,8 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
                 value: value.into(),
                 writer: "you".into(),
                 player: 1,
+                as_of: None,
+                arrived: 0,
             };
             stamped = e.to_json();
             world.fork_track(k, &[e]);
@@ -260,7 +276,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         draws.extend(world.previews());
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
-            "previews": previews, "blends": world.blends(t), "traps": traps,
+            "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
             "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
             "draws": draws, "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) },
             "drawn": hashes(at - 1, &world.arrays())});
@@ -323,6 +339,8 @@ fn logic(line: Value, planted: Planted, inbox: Receiver<Latched>, up: Sender<Up>
                     value: value.into(),
                     writer: "you".into(),
                     player: 1,
+                    as_of: None,
+                    arrived: 0,
                 };
                 took = Some((e.to_json(), k * len));
                 world.fork_track(k, &[e]);

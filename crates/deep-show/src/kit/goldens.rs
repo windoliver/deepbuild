@@ -215,7 +215,12 @@ pub fn render(hub: &Hub<'_>, doc: &Value, backend: &str, t: i64) -> Render {
 /// The environment a backend renders in, as this run reports it: the scenario's OS and driver
 /// over the machine's.
 pub fn environment(hub: &Hub<'_>, backend: &str) -> (String, String) {
-    let env = &hub.scenario.environment;
+    environment_of(&hub.scenario.environment, backend)
+}
+
+/// The environment a backend renders in: `env`'s OS and driver over the machine's; with none,
+/// the machine's own, where its pixels are drawn (#1938).
+pub fn environment_of(env: &serde_json::Map<String, Value>, backend: &str) -> (String, String) {
     let os = env
         .get("os")
         .and_then(Value::as_str)
@@ -681,6 +686,12 @@ impl<'a> Hub<'a> {
             // The corpus file keeps the decision beside the result it accepted.
             reply["fixtures"] = json!([format!("corpus/{name}")]);
             return reply;
+        } else if let Some((kind, d)) = ["switch", "keep", "drop"]
+            .into_iter()
+            .find_map(|k| Some((k, decision.get(k)?)))
+        {
+            // #191: the trial's record keeps the decision beside the goldens it moved.
+            return self.switch(kind, d, &id);
         } else {
             return refused("out_of_range");
         }

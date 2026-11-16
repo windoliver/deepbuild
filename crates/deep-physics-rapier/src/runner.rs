@@ -15,7 +15,8 @@ use crate::scene::Scene;
 use crate::{fp, Rapier, Twin};
 use base64::Engine;
 use deep_canvas_physics::backend::{
-    Backend, BodyState, Canonical, Checkpoint, Input, JointState, Query, ShapeRef, Targets, FIELDS,
+    Backend, BodyState, Canonical, Checkpoint, Hit, Input, JointState, Query, ShapeRef, Targets,
+    FIELDS,
 };
 use deep_canvas_physics::bake::{self, Build, Parts};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -31,6 +32,7 @@ use serde_json::{json, Map, Value};
 
 mod audit;
 mod held;
+pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 mod replay;
@@ -100,6 +102,11 @@ pub struct Run {
     all_steps: bool,
     /// #524's twin: a soft volume is built without its volume constraint.
     no_volume: bool,
+    /// #191: the test backend it runs in Rapier's place, and the planted kit.
+    test: Option<&'static kit::TestBackend>,
+    kit_planted: deep_canvas_physics::kit::Planted,
+    /// #191 criterion 12's planted recipe: it leaves a flagged body's ccd off.
+    leave_ccd_off: bool,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -393,6 +400,8 @@ struct Trace {
     shaped: Vec<Value>,
     /// #524: each soft body's particles, every `every` steps, as `{addresses, positions}`.
     particles: Map<String, Value>,
+    /// #191: the lint physics.fast_body over the run.
+    fast: deep_canvas_physics::fast::FastBodies,
 }
 
 /// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
@@ -484,6 +493,9 @@ impl Run {
             late_forks: false,
             all_steps: false,
             no_volume: false,
+            test: None,
+            kit_planted: deep_canvas_physics::kit::Planted::None,
+            leave_ccd_off: false,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -514,7 +526,8 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
-            Some(_) => return None,
+            Some(name) if !kit::planted(name, &mut run) => return None,
+            Some(_) => {}
         }
         Some(run)
     }
@@ -597,6 +610,7 @@ impl Run {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
             twin: self.twin,
+            test: self.test.map(|t| (t.name, t.caps)),
             ..Rapier::default()
         };
         b.soft.no_volume = self.no_volume;
@@ -631,6 +645,10 @@ impl Run {
         let c = b.canonical();
         let joints = b.joints();
         t.step_hashes.push(self.hash(&c, &joints));
+        for x in c.iter().filter(|x| x.values.len() == FIELDS.len()) {
+            t.fast
+                .at(k, &x.id, [0, 1, 2].map(|i| f64::from(x.values[i])));
+        }
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read == Read::Position) {
             if let Some(body) = c.iter().find(|x| x.id == o.from) {
                 let p = [body.values[0], body.values[1], body.values[2]];
@@ -742,6 +760,7 @@ impl Run {
         let mut t = Trace {
             bodies,
             particles,
+            fast: deep_canvas_physics::fast::FastBodies::new(&w),
             ..Trace::default()
         };
         self.run(&mut b, &w, plan, &mut t).map_err(|s| match s {
@@ -811,6 +830,7 @@ impl Run {
                     Err(e) => json!({"ok": true, "issues": e["issues"]}),
                 },
             ),
+            "backend" | "behavior_fixtures" | "behavior_kit" | "expand" => self.kit_call(call),
             "runtime" => {
                 let b = &self.build;
                 Some(
@@ -867,6 +887,7 @@ impl Run {
                 }
                 done(self.bake(call, &world, &plan).map(|(key, t, record)| {
                     let mut reply = json!({"ok": true, "key": key, "bodies": t.bodies, "particles": t.particles,
+                                           "issues": t.fast.issues(),
                                            "step_hashes": t.step_hashes, "outputs": record["outputs"],
                                            "occurrences": record["occurrences"],
                                            "occurrences_hash": record["occurrences_hash"], "ring": record["ring"]});
@@ -1445,5 +1466,27 @@ impl Live {
         self.steps = k;
         let rows = occurrence::sorted(k as u32, self.b.occurrences(), &self.rank);
         Ok(occurrence::timed(&occurrence::listed(&rows), &self.w))
+    }
+
+    /// #213: what `q` meets among `groups` in the state the last step left, through the backend
+    /// interface's `query()`, each hit with its body's rank (the u32 ID occurrence rows name it by)
+    /// and its shape use, sorted by distance, then ID, then shape use.
+    pub fn cast(&self, q: &Query, groups: u32) -> Vec<(u32, u32, Hit)> {
+        let mut out: Vec<(u32, u32, Hit)> = self
+            .b
+            .query(q, groups)
+            .into_iter()
+            .map(|h| {
+                let id = self.rank.get(&h.shape.body).copied().unwrap_or(u32::MAX);
+                (id, h.shape.index as u32, h)
+            })
+            .collect();
+        out.sort_by(|a, b| {
+            a.2.distance
+                .total_cmp(&b.2.distance)
+                .then(a.0.cmp(&b.0))
+                .then(a.1.cmp(&b.1))
+        });
+        out
     }
 }

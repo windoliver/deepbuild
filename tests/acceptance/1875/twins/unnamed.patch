@@ -1,0 +1,54 @@
+--- a/scripts/affected.mjs
++++ b/scripts/affected.mjs
+@@ -39,6 +39,19 @@
+ const EVERY = ['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'];
+ // A folder holding more files than this, as tests/acceptance, is named as a pattern, not as what a file reads.
+ const WIDE = 400;
++// The setup files a runner config names: they run before every file, so they feed every suite as EVERY's do.
++const SETUP_KEYS = ['setupFiles', 'globalSetup'];
++function setupNamed(cwd) {
++  const named = [];
++  for (const config of ['vitest.config.ts', 'vitest.config.mts', 'vitest.config.js', 'vitest.config.mjs']) {
++    let text;
++    try { text = readFileSync(join(cwd, config), 'utf8'); } catch { continue; }
++    for (const key of SETUP_KEYS) for (const [, body] of text.matchAll(new RegExp(`\\b${key}\\s*:\\s*\\[([^\\]]*)\\]`, 'g'))) {
++      for (const [, value] of body.matchAll(/['"`]([^'"`]+)['"`]/g)) named.push(posix.normalize(posix.join(posix.dirname(config), value)));
++    }
++  }
++  return named;
++}
+ // Repository paths in a literal: relative ones, and those from the root, as `${root}/packages/hub/dist/main.js`.
+ const PATHS = /(?<![\w.@-])(?:\.{1,2}\/[\w@.\/-]*|\/?(?:packages|crates|scripts|tests|contracts|lint|adapters|skills)\/[\w@.\/-]+)/g;
+ const PACKAGE = /@deepbuild\/[\w-]+(?:\/[\w.-]+)*/g;
+@@ -239,8 +252,9 @@
+     return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)) };
+   };
+   const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [];
++  const feeds = [...EVERY, ...setupNamed(cwd)];
+   for (const path of changed) {
+-    if (EVERY.includes(path)) every.push(path);
++    if (feeds.includes(path)) every.push(path);
+     let { found, wide: far } = reach(path);
+     // A fixture no test names by path is read by the tests of its own folder.
+     if (!found.length && underTestPaths(path)) {
+@@ -250,7 +264,7 @@
+     // A test the change deletes has nothing to run.
+     for (const node of found) if (node.startsWith('crate:') || existsSync(join(cwd, node))) (node.startsWith('crate:') ? reached : tests).add(node.replace(/^crate:/, ''));
+     for (const node of far) wide.add(node.replace(/^crate:/, 'cargo test -p '));
+-    if (!found.length && !far.length && !path.endsWith('.md') && !EVERY.includes(path)) none.push(path);
++    if (!found.length && !far.length && !path.endsWith('.md') && !feeds.includes(path)) none.push(path);
+   }
+   const owners = [...new Set(changed.filter((path) => path.endsWith('.rs')).flatMap(ownersOf))].map((node) => node.slice(6));
+   return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners };
+@@ -504,9 +518,10 @@
+     for (const path of selection.every) console.log(`INCONCLUSIVE ${path} feeds every suite; run npm run preflight`);
+     if (selection.wide.length) console.log(`INCONCLUSIVE ${selection.wide.length} suites that see the change through another package's process were not run; the release preflight or --wide runs them`);
+     if (unrunTimed.length) console.log(`INCONCLUSIVE ${unrunTimed.length} timed ${unrunTimed.length === 1 ? 'file was' : 'files were'} not run; --timed runs them under a timed grant: ${unrunTimed.join(' ')}`);
++    if (skipped.length) console.log(`INCONCLUSIVE ${skipped.length} selected ${skipped.length === 1 ? 'file was' : 'files were'} left to a person or a lane of its own`);
+     if (unrunSlow.length) console.log(`INCONCLUSIVE ${unrunSlow.length} slow ${unrunSlow.length === 1 ? 'file was' : 'files were'} not run; --slow runs them: ${unrunSlow.join(' ')}`);
+     console.log(`TIMED the timed list, from scripts/lanes.mjs (${timed.length}): ${timed.join(' ')}`);
+-    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || unrunTimed.length || unrunSlow.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
++    const state = fresh.length ? 'FAIL' : worst(unsure.map(({ state }) => state)) ?? (selection.every.length || selection.wide.length || unrunTimed.length || unrunSlow.length || skipped.length ? 'INCONCLUSIVE' : known.length ? 'NO NEW FAILURES' : 'PASS');
+     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
+     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
+   } catch (error) {

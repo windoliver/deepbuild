@@ -214,6 +214,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
       }),
       description: 'What the script does, step by step.',
     },
+    sudo_rule: maybe({ type: 'boolean', description: 'true to allow this one script by a sudo rule naming its sha256 digest, so the person\'s user runs its root-only copy with sudo -n and sudo refuses it once a byte changes; the rule is a host change with its undo. null for none.' }),
   }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),

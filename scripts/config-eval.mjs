@@ -8,7 +8,8 @@
 //   node scripts/config-eval.mjs gate
 // plan freezes a plan: the change's files at the merge base against the working tree, the newest tasks of this repo
 // from after the cutoff (and a few from before it, reported but never deciding). run replays it and keeps the report
-// under ~/.deepbuild/evals/, by the digest of the two variants. gate reads that report for the change as it is now:
+// under ~/.deepbuild/evals/, by the digest of the two variants, and through the hub as evidence, printing its handle.
+// gate reads that report for the change as it is now:
 // none is BLOCKED, a regression FAIL with the tasks it broke. Exit codes: 0 pass, 1 held, blocked or failed, 2 usage,
 // 3 refused.
 import { createHash } from 'node:crypto';
@@ -117,8 +118,17 @@ async function run(args) {
   const digest = createHash('sha256').update(canonical({ base: input.plan.variants.base.files, change: input.plan.variants.change.files })).digest('hex');
   mkdirSync(evals(), { recursive: true });
   const kept = join(evals(), `${digest}.json`);
-  writeFileSync(kept, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(`${report.after.outcome} config eval: ${report.after.reason}\n  before the cutoff: ${report.before.outcome}; ${report.runs.length} runs in ${(report.usage.ms / 60_000).toFixed(1)} min, plan share ${report.usage.plan_share ?? 'unread'}${report.diverged.length ? `; diverged (a call not in the recording): ${report.diverged.map((d) => d.task).join(', ')}` : ''}\n${kept}`);
+  const bytes = `${JSON.stringify(report, null, 2)}\n`;
+  writeFileSync(kept, bytes);
+  let handle;
+  try {
+    const { storeEvalReport } = await import('@deepbuild/hub');
+    handle = await storeEvalReport(bytes);
+  } catch (error) {
+    console.error(`BLOCKED config eval: the report could not be kept as evidence: ${error instanceof Error ? error.message : String(error)}\n  The local report is kept at ${kept}`);
+    return 1;
+  }
+  console.log(`${report.after.outcome} config eval: ${report.after.reason}\n  before the cutoff: ${report.before.outcome}; ${report.runs.length} runs in ${(report.usage.ms / 60_000).toFixed(1)} min, plan share ${report.usage.plan_share ?? 'unread'}${report.diverged.length ? `; diverged (a call not in the recording): ${report.diverged.map((d) => d.task).join(', ')}` : ''}\n${kept}\n${handle}`);
   return report.after.outcome === 'refused' ? 3 : report.held ? 1 : 0;
 }
 

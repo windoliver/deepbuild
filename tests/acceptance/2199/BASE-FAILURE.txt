@@ -1,0 +1,146 @@
+Issue: #2199 (deep inbox shows the option IDs that deep inbox answer takes)
+Base: 72fe11a11e9b40da5d138688cac52df193af4933 (a clean worktree, no implementation)
+Acceptance tests: tests/acceptance/2199, a blind draft from the issue, the design and the base.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2199 --no-file-parallelism
+When: 2026-11-14T23:20:43Z to 23:21:08Z, from <repo>.
+Machine: Linux 7.0.0-1025-nvidia aarch64, 20 cores; Node v24.22.0. 1-minute load average 76.5 at the start and 77.9
+at the end (other sessions' work); no timing is judged here.
+Built first: npm ci --ignore-scripts; npm run build --workspaces; cargo build --locked -p deep-hook.
+Result: Test Files 1 failed | 1 passed (2); Tests 4 failed | 6 passed (10); 23.42 s; exit 1.
+Paths: <repo> is the checkout the run was made in. Nothing else is cut; the last line, "exit 1", is the wrapper's.
+vitest's "Start at" is local time.
+
+This is the second run. The first, at 23:20:03Z, had the same four failures in inbox.test.ts at the same expects, and
+a fifth in judges.test.ts: that file's own case called its sample-text builder with an argument in the wrong place
+(the files ID put on the border ask's line). That one line of judges.test.ts was corrected and the suite run once
+more. helpers.ts and inbox.test.ts did not change in between.
+
+What the output shows. Each failure is at an expect of the test's own; the line given is that expect's.
+
+1 #2199.bff55edb  FAIL at inbox.test.ts:32. The ask's line holds neither thin nor thick as an ID (its question's
+                  "thin or thick" and its default's label "Thin" don't count).
+2 #2199.3ebf26b3  FAIL at inbox.test.ts:46. deep inbox printed no ID with the ask, so there is none "it printed" to
+                  answer with; the test stops before deep inbox answer. (On this base the answer itself works: #1463's
+                  "deep inbox answer <handle> still works" passed here at 23:21Z, run alone.)
+3 #2199.e1f74e0f  FAIL at inbox.test.ts:64. The line holds the label "Plain files" in its default sentence and no ID
+                  files.
+3 #2199.e1f74e0f  FAIL at inbox.test.ts:73, the plant's half. The base has no plant inbox-labels-only: with the
+                  variable set it prints its usual lines, no option's label where an ID belongs, so the judge says
+                  "lacks its option ID" and not "by its label". This half can pass only once the plant exists.
+4 #2199.4b672bc1  PASS, as the issue expects of the base (#1463's line order holds today).
+  judges.test.ts  PASS (5 tests, no criterion tag).
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2199
+
+stdout | inbox.test.ts > #2199.bff55edb > #2199.bff55edb: with an open taste ask whose options are thin and thick, deep inbox holds both IDs with the ask
+deep inbox:
+Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT
+Which border for the card, thin or thick?  taste  work  dc1f6922-c7b5-4e1e-8ea8-be518725a80a  0s  If you don't answer: Thin, on Tue 17 Nov at 05:00  ask:01M7E6CJB1QNM1F2JX3G8TE00K
+2 asks need you
+
+
+stdout | inbox.test.ts > #2199.e1f74e0f > #2199.e1f74e0f: with an option whose label is "Plain files" and whose ID is files, deep inbox shows files
+deep inbox:
+Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT
+Which border for the card, thin or thick?  taste  work  dc1f6922-c7b5-4e1e-8ea8-be518725a80a  0s  If you don't answer: Thin, on Tue 17 Nov at 05:00  ask:01M7E6CJB1QNM1F2JX3G8TE00K
+2 asks need you
+
+
+stdout | inbox.test.ts > #2199.e1f74e0f > #2199.e1f74e0f: a planted line that prints only labels fails, naming the ask
+deep inbox, DEEP_HUB_PLANT=inbox-labels-only:
+Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT
+Which border for the card, thin or thick?  taste  work  dc1f6922-c7b5-4e1e-8ea8-be518725a80a  0s  If you don't answer: Thin, on Tue 17 Nov at 05:00  ask:01M7E6CJB1QNM1F2JX3G8TE00K
+2 asks need you
+
+
+ ❯ inbox.test.ts (5 tests | 4 failed) 22209ms
+   ❯ #2199.bff55edb (1)
+     × #2199.bff55edb: with an open taste ask whose options are thin and thick, deep inbox holds both IDs with the ask 12118ms
+   ❯ #2199.3ebf26b3 (1)
+     × #2199.3ebf26b3: deep inbox answer with the ask's handle and an ID deep inbox printed answers the ask with that option 8458ms
+   ❯ #2199.e1f74e0f (2)
+     × #2199.e1f74e0f: with an option whose label is "Plain files" and whose ID is files, deep inbox shows files 379ms
+     × #2199.e1f74e0f: a planted line that prints only labels fails, naming the ask 124ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  inbox.test.ts > #2199.bff55edb > #2199.bff55edb: with an open taste ask whose options are thin and thick, deep inbox holds both IDs with the ask
+AssertionError: deep inbox's ask ask:01M7E6CJB1QNM1F2JX3G8TE00K, whose options are thin and thick: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep inbox's ask ask:01M7E6CJB1QNM1F2JX3G8TE00K (\"Which border for the card, thin or thick?\") lacks its option ID thin: \"Which border for the card, thin or thick?  taste  work  dc1f6922-c7b5-4e1e-8ea8-be518725a80a  0s  If you don't answer: Thin, on Tue 17 Nov at 05:00  ask:01M7E6CJB1QNM1F2JX3G8TE00K\"",
++   "deep inbox's ask ask:01M7E6CJB1QNM1F2JX3G8TE00K (\"Which border for the card, thin or thick?\") lacks its option ID thick: \"Which border for the card, thin or thick?  taste  work  dc1f6922-c7b5-4e1e-8ea8-be518725a80a  0s  If you don't answer: Thin, on Tue 17 Nov at 05:00  ask:01M7E6CJB1QNM1F2JX3G8TE00K\"",
++ ]
+
+ ❯ inbox.test.ts:32:128
+     30|     console.log(`deep inbox:\n${r.stdout}`);
+     31|     expect(r.code, `deep inbox exits 0: ${shown(r)}`).toBe(0);
+     32|     expect(optionFailures(r.stdout, asShown(ask), all(w)), `deep inbox…
+       |                                                                                                                                ^
+     33|   }, 300_000);
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  inbox.test.ts > #2199.3ebf26b3 > #2199.3ebf26b3: deep inbox answer with the ask's handle and an ID deep inbox printed answers the ask with that option
+AssertionError: deep inbox prints, with ask:01M7E6CVEJQFB9X6EX2M5949XV, an ID to answer it with other than its default; it prints the IDs []: Where does the cart keep its data?  choice  shop  846ca498-45c1-4f45-840d-75fb0643a182  0s  If you don't answer: Plain files, tomorrow at 05:01  ask:01M7E6CVEJ64MW0SXS5S4P1DFP
+Which border for the card, thin or thick?  taste  work  00d9aa64-dbba-4a4e-ad54-b5dfda4a7f5d  0s  If you don't answer: Thin, on Tue 17 Nov at 05:01  ask:01M7E6CVEJQFB9X6EX2M5949XV
+2 asks need you
+: expected [] to include 'thick'
+ ❯ inbox.test.ts:46:174
+     44|     // An ID it printed, and not the ask's default (thin), so a defaul…
+     45|     const printed = idsShown(listed.stdout, asShown(ask), all(w));
+     46|     expect(printed, `deep inbox prints, with ${ask.handle}, an ID to a…
+       |                                                                                                                                                                              ^
+     47|     const r = await deep(w, ['inbox', 'answer', ask.handle, 'thick']);
+     48|     expect(r.code, `deep inbox answer ${ask.handle} thick exits 0, onc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  inbox.test.ts > #2199.e1f74e0f > #2199.e1f74e0f: with an option whose label is "Plain files" and whose ID is files, deep inbox shows files
+AssertionError: deep inbox's ask ask:01M7E6CJB1KK8Z9AVK6N53AFVT, whose option files has the label "Plain files": expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep inbox's ask ask:01M7E6CJB1KK8Z9AVK6N53AFVT (\"Where does the cart keep its data?\") lacks its option ID files: \"Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT\"",
++ ]
+
+ ❯ inbox.test.ts:64:153
+     62|     console.log(`deep inbox:\n${r.stdout}`);
+     63|     expect(r.code, `deep inbox exits 0: ${shown(r)}`).toBe(0);
+     64|     expect(optionFailures(r.stdout, asShown(ask), all(w), ['files']), …
+       |                                                                                                                                                         ^
+     65|   }, 300_000);
+     66|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  inbox.test.ts > #2199.e1f74e0f > #2199.e1f74e0f: a planted line that prints only labels fails, naming the ask
+AssertionError: DEEP_HUB_PLANT=inbox-labels-only must print ask:01M7E6CJB1KK8Z9AVK6N53AFVT's options by their labels alone, and so fail naming it: ["deep inbox's ask ask:01M7E6CJB1KK8Z9AVK6N53AFVT (\"Where does the cart keep its data?\") lacks its option ID sqlite: \"Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT\"","deep inbox's ask ask:01M7E6CJB1KK8Z9AVK6N53AFVT (\"Where does the cart keep its data?\") lacks its option ID files: \"Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT\""]; exit 0, stdout "Where does the cart keep its data?  choice  shop  1365967c-76ec-4b23-b488-7e31fc67376f  0s  If you don't answer: Plain files, tomorrow at 05:00  ask:01M7E6CJB1KK8Z9AVK6N53AFVT\nWhich border for the card, thin or thick?  taste  work  dc1f6922-c7b5-4e1e-8ea8-be518725a80a  0s  If you don't answer: Thin, on Tue 17 Nov at 05:00  ask:01M7E6CJB1QNM1F2JX3G8TE00K\n2 asks need you\n", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ inbox.test.ts:73:278
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 6 passed (10)
+   Start at  15:20:44
+   Duration  23.42s (tests 98%, import 1%, transform 1%)
+
+exit 1

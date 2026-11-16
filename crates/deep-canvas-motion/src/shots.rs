@@ -417,12 +417,20 @@ fn regions_of(s: &Map<String, Value>, path: &str) -> Result<Vec<Region>, Refused
     Ok(out)
 }
 
-/// The transition kinds (Transition); whip is #493's.
+mod kinds;
+pub use kinds::{
+    placed, reveal_offset, Align, Center, Dip, Iris, IrisAt, Operator, Radius, Under,
+    READS as OPERATOR_READS,
+};
+
+/// The transition kinds (Transition); whip is #493's, operator, iris and the dip's fields #466's.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
     Cut,
     CrossFade,
-    Dip,
+    Dip(Dip),
+    Iris(Iris),
+    Operator(Operator),
     Wipe { angle: f64, feather: f64 },
     Push { angle: f64 },
     ZoomThrough { center: [f64; 2] },
@@ -439,10 +447,12 @@ pub struct Transition {
     pub kind: Kind,
     /// The cut, where the outgoing shot ends and the incoming one starts.
     pub cut: i64,
-    /// The window, centred on the cut.
+    /// The window, placed on the cut by `align`.
     pub start: i64,
     pub end: i64,
     pub ease: Ease,
+    /// Where the window sits on the cut.
+    pub align: Align,
 }
 
 impl Transition {
@@ -550,15 +560,11 @@ fn vec3(v: &Value, path: &str) -> Result<Vec3, Refused> {
 pub(crate) fn ease_named(v: Option<&Value>, path: &str) -> Result<Ease, Refused> {
     match v {
         None => Ok(Ease::InOutCubic),
-        Some(Value::String(name)) => Ease::NAMES
-            .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, e)| *e)
-            .ok_or_else(|| Refused {
-                code: "bad_interp",
-                path: path.into(),
-                detail: None,
-            }),
+        Some(Value::String(name)) => Ease::named(name).ok_or_else(|| Refused {
+            code: "bad_interp",
+            path: path.into(),
+            detail: None,
+        }),
         Some(other) => crate::doc::ease_of(other, path),
     }
 }
@@ -1380,44 +1386,34 @@ impl Plan {
                 None => 0,
                 v => time(v, &ctx, &format!("{path}/span"))?,
             };
-            let angle_of = |o: Option<&Value>, f: &str| {
-                num(o.and_then(|o| o.get(f)), &format!("{path}/{f}")).map(|v| v.unwrap_or(0.0))
-            };
             let kind_name = tr.get("kind").and_then(Value::as_str).unwrap_or("cut");
-            let fields = tr.get(kind_name);
-            let kind = match kind_name {
-                "cut" => Kind::Cut,
-                "cross_fade" => Kind::CrossFade,
-                "dip" => Kind::Dip,
-                "wipe" => Kind::Wipe {
-                    angle: angle_of(fields, "angle")?,
-                    feather: angle_of(fields, "feather")?,
-                },
-                "push" => Kind::Push {
-                    angle: angle_of(fields, "angle")?,
-                },
-                "zoom_through" => {
-                    let center = match fields.and_then(|f| f.get("center")) {
-                        Some(Value::Array(c)) if c.len() == 2 => {
-                            [c[0].as_f64().unwrap_or(0.5), c[1].as_f64().unwrap_or(0.5)]
-                        }
-                        _ => [0.5, 0.5],
-                    };
-                    Kind::ZoomThrough { center }
+            let mut kind = kinds::kind_of(kind_name, tr.get(kind_name), &path, &ctx)?;
+            // #466: a document channel on the iris's radius keys it.
+            if let Kind::Iris(iris) = &mut kind {
+                let owner = format!("data/{}", crate::doc::iris_radius(&id));
+                if let Some(c) = program
+                    .motion
+                    .channels
+                    .iter()
+                    .find(|c| c.target.owner == owner)
+                {
+                    iris.radius = Radius::Channel(c.id.clone());
                 }
-                "whip" => Kind::Whip {
-                    angle: angle_of(fields, "angle")?,
-                    sweep: num(
-                        fields.and_then(|f| f.get("sweep")),
-                        &format!("{path}/whip/sweep"),
-                    )?
-                    .unwrap_or(26.0),
-                },
-                "iris" | "match_morph" | "text_diff" | "operator" => {
-                    Kind::Other(kind_name.to_string())
+            }
+            let align = kinds::align_from(tr.get("align"), &format!("{path}/align"))?;
+            if let Kind::Iris(Iris {
+                center: Center::Item { id: item, .. },
+                ..
+            }) = &kind
+            {
+                if !program.items.iter().any(|x| x == item) {
+                    return refused(
+                        "ref_unresolved",
+                        format!("{path}/iris/center"),
+                        json!({"transition": id}),
+                    );
                 }
-                _ => return refused("transition_kind", format!("{path}/kind"), Value::Null),
-            };
+            }
             let (a, b) = (&shots[from], &shots[to]);
             if span > (a.end - a.start).min(b.end - b.start) {
                 return refused(
@@ -1470,17 +1466,26 @@ impl Plan {
                     incoming.framed = matched(&incoming.framed, &tb, c, bx[3] - bx[1], &frame);
                 }
             }
-            let (start, end) = (cut - span / 2, cut + (span - span / 2));
-            transitions.push(Transition {
+            let mut tr = Transition {
                 id,
                 from,
                 to,
                 kind,
                 cut,
-                start,
-                end,
+                start: cut - span / 2,
+                end: cut + (span - span / 2),
                 ease,
-            });
+                align,
+            };
+            kinds::place(&mut tr, span, rate, &path)?;
+            if tr.start < shots[from].start || tr.end > shots[to].end {
+                return refused(
+                    "transition_span",
+                    format!("{path}/align"),
+                    json!({"transition": tr.id}),
+                );
+            }
+            transitions.push(tr);
         }
         // #504: each stage's shot, framed once (its kept items bounded over the document's span).
         let transport = program.motion.transport;
@@ -2346,3 +2351,70 @@ impl Plan {
         Some(out)
     }
 }
+
+/// A 3D document with its envelope camera posed as its shots write it at t (Shot: a shot alone
+/// writes its camera's pose), for the 3D frame and the checks that read it (#506); `None` when no timeline shot writes it.
+/// Each timeline shot of the envelope camera, its span in flicks, as the compiled plan reads
+/// them (the document's frame rate and tempo applied); `None` when the document doesn't compile
+/// or names no envelope camera with shots (#506: what the framing check samples).
+pub fn spans(doc: &Value) -> Option<Vec<(i64, i64)>> {
+    let program = Program::compile(doc.as_object()?).ok()?;
+    let plan = program.shots.as_deref()?;
+    let cam = plan.camera(doc.get("camera")?.as_str()?)?;
+    Some(
+        plan.shots
+            .iter()
+            .filter(|s| s.camera == cam)
+            .map(|s| (s.start, s.end))
+            .collect(),
+    )
+}
+
+pub fn posed(doc: &Value, t: i64) -> Option<Value> {
+    let shots = doc.get("shots")?.as_object()?;
+    // #504: a stage's shot poses the camera too: the default stage's from the start, and the one
+    // an entry on the played form's track chooses from its entry.
+    let staged = doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .is_some_and(|c| {
+            c.values().any(|c| {
+                c.get("stages")
+                    .and_then(Value::as_object)
+                    .is_some_and(|s| s.values().any(|s| s.get("shot").is_some()))
+            })
+        });
+    if !shots.values().any(|s| s.get("start").is_some()) && !staged {
+        return None;
+    }
+    let program = Program::compile(doc.as_object()?).ok()?;
+    let plan = program.shots.as_deref()?;
+    let id = doc.get("camera")?.as_str()?;
+    let cam = plan.camera(id)?;
+    let mut state = program.state();
+    program.evaluate(t, Validity::Full, &mut state);
+    let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
+    let pose = plan.shown(cam, t, &At {
+        reduced: false,
+        planted: Planted::None,
+        indexed: None,
+        keyed: &keyed,
+    }).pose;
+    let mut out = doc.clone();
+    let params = out
+        .pointer_mut(&format!("/items/{id}/params"))?
+        .as_object_mut()?;
+    for k in ["orbit", "view_width", "kick"] {
+        params.remove(k);
+    }
+    params.insert("position".into(), json!(pose.position));
+    params.insert("target".into(), json!(pose.target));
+    params.insert("roll".into(), json!(pose.roll));
+    if pose.perspective() {
+        params.insert("fov".into(), json!(pose.fov));
+    } else {
+        params.insert("view_width".into(), json!(pose.view_width));
+    }
+    Some(out)
+}
+

@@ -1,0 +1,21 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ✓ packages/hub/test/prompt-start-replay.test.ts > starts when a live issue hook arrives after the startup spool was renamed 1795ms
+ ✓ packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent 2821ms
+ ✓ packages/hub/test/prompt-items.test.ts > does not read the forge again for a spooled copy of a prompt whose live read is still pending 2984ms
+ ✓ packages/hub/test/prompt-items.test.ts > records a prompt whose spooled copy starts replay before its live read joins intake 1701ms
+ ✓ packages/hub/test/prompt-items.test.ts > processes a fresh hook normally after the spool it triggers, including queued words 1469ms
+ ✓ packages/hub/test/prompt-items.test.ts > retains criteria when GitHub returns a canonical HTTPS link for an HTTP prompt link 1823ms
+ ✓ packages/hub/test/prompt-items.test.ts > keeps issue criteria when an authenticated app note is carried by the prompt 1721ms
+ ✓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write 4850ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > says so when deep-hook spooled as late a call the hub had answered and recorded 1189ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > says so when the spooled copy comes while the live one is still being recorded 1391ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > replays the spool once a hook reaches it, with no restart 1180ms
+ ✓ packages/hub/test/replay.test.ts > a running hub > replays a kept file before the spool after it, whatever the clock says 1524ms
+
+ Test Files  3 passed (3)
+      Tests  12 passed (12)
+   Start at  12:52:17
+   Duration  25.98s (tests 98%, transform 1%, import 1%)
+

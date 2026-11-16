@@ -24,8 +24,9 @@ export function namedIn(text: string): Set<Named> {
 }
 
 /**
- * Where a shell push goes: its refs' branches, or `current` when it names none or names HEAD; `*`, which no branch is
- * named, for a jj push of every bookmark (`--all`, `--tracked`).
+ * Where a shell push goes: its refs' branches, force mark and `refs/heads/` dropped, or `current` when it names none or
+ * names HEAD; `*`, which no branch is named, for a push of every branch (git's `--all`, `--mirror`, `--branches`; jj's
+ * `--all`, `--tracked`).
  */
 export function pushBranches(command: string, current: string): string[] {
   // jj and sl name a push's branch by its flag (#1523); gt and git town push the current branch's.
@@ -36,6 +37,8 @@ export function pushBranches(command: string, current: string): string[] {
     const named = [...flagged[1]!.matchAll(/(?:^|\s)(?:--bookmark|--branch|-b|--to|-t)(?:=|\s+)(\S+)/g)].map((m) => m[1]!);
     return named.length ? named : [current];
   }
-  const refs = /\bgit\b[^;&|]*?\bpush\b([^;&|]*)/.exec(command)?.[1]?.trim().split(/\s+/).filter((w) => w && !w.startsWith('-')).slice(1) ?? [];
-  return refs.length ? refs.map((r) => r.split(':').at(-1)!.replace(/^refs\/heads\//, '')).map((b) => (b === 'HEAD' ? current : b)) : [current];
+  const words = /\bgit\b[^;&|]*?\bpush\b([^;&|]*)/.exec(command)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
+  if (words.some((w) => w === '--all' || w === '--mirror' || w === '--branches')) return ['*'];
+  const refs = words.filter((w) => !w.startsWith('-')).slice(1);
+  return refs.length ? refs.map((r) => r.replace(/^\+/, '').split(':').at(-1)!.replace(/^refs\/heads\//, '')).map((b) => (b === 'HEAD' ? current : b)) : [current];
 }

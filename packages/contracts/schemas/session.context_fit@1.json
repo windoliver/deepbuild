@@ -60,7 +60,7 @@
         "event": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 64,
+          "maxLength": 8192,
           "description": "The hook event the reply answered, such as SessionStart."
         },
         "cap": {
@@ -81,7 +81,7 @@
           "items": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 8192
           },
           "description": "The parts that went inline, by name, such as rules or requirement IDs."
         },
@@ -101,14 +101,15 @@
           "items": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 8192
           },
           "description": "The parts that went by handle, by name."
         },
         "handle": {
           "type": "string",
           "pattern": "^ev:[0-9a-f]{64}$",
-          "description": "The evidence file the parts by handle are in, read with deep read."
+          "description": "The evidence file the parts by handle are in, read with deep read.",
+          "maxLength": 8192
         }
       },
       "required": [

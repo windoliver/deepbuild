@@ -131,7 +131,16 @@ export function alive(pid: number): boolean {
 export interface Proc { pid: number; pgid: number; args: string }
 /** Every process whose command line names `needle` (`ps -A -ww`, LC_ALL=C). */
 export function processesNaming(needle: string): Proc[] {
-  const out = execFileSync('ps', ['-A', '-ww', '-o', 'pid=,pgid=,args='], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
+  // A busy machine's table runs past the default 1 MiB (other sessions' linker command lines), so the buffer is larger,
+  // and a failure throws its cause alone, never the table it read: vitest prints a thrown error's properties, and a
+  // 50 ms timer calling this filled one log with 941 MB of them (#2634).
+  let out: string;
+  try {
+    out = execFileSync('ps', ['-A', '-ww', '-o', 'pid=,pgid=,args='], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (error) {
+    const { code, status, signal } = error as NodeJS.ErrnoException & { status?: number | null; signal?: string | null };
+    throw Error(`ps -A -ww failed: ${code ?? (signal ? `signal ${signal}` : `exit ${status}`)}`);
+  }
   return out.split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => m !== null)
     .map((m) => ({ pid: Number(m[1]), pgid: Number(m[2]), args: m[3]! })).filter((p) => p.args.includes(needle) && p.pid !== process.pid);
 }

@@ -184,7 +184,7 @@ fn check_by(
                     migrate_item(key, item, &mut notices, kinds);
                 }
             }
-            super::pack_kinds::migrate::at_load(items, &resolved, &mut notices);
+            super::pack_kinds::migrate::at_load(items, &resolved, packs.planted, &mut notices);
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
@@ -192,8 +192,20 @@ fn check_by(
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
             // A canvas module's own kinds expanded at check, after recipes (#222).
             let planted = packs.planted.expander;
-            let module = super::expands::run(doc, items, sealed, &resolved, planted, &mut issues);
+            // A film recipe's markers and shots are there for the module's expansions (#142).
+            let with_sections;
+            let seen = if expansions.iter().any(|e| !e.sections.is_empty()) {
+                let mut d = doc.clone();
+                super::expands::merge(&mut d, &expansions);
+                with_sections = d;
+                &with_sections
+            } else {
+                doc
+            };
+            let module = super::expands::run(seen, items, sealed, &resolved, planted, &mut issues);
             expansions.extend(module);
+            // A film recipe's shots and transitions timed on its cue list's markers (#142).
+            super::expands::resolve_times(doc, &mut expansions, &mut issues);
             // A broken-out item its instance's version no longer derives stays the writer's
             // own, and the load says so (Pack: migrations as data; #1961).
             for e in &expansions {
@@ -214,7 +226,7 @@ fn check_by(
                 }
             }
             // The core's `kind_rules` check: each instance's rules once, after its expansion (#202).
-            let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted);
+            let rules = kind_rules(doc, items, &expansions, &resolved, packs.planted, sealed);
             issues.extend(rules.issues);
             rules_ran = rules.ran;
             let derived: BTreeSet<&str> = expansions
@@ -296,6 +308,8 @@ fn check_by(
         )),
     }
 
+    // A rename carries every path that names the param it renames (#1960).
+    super::pack_kinds::migrate::carry_paths(&mut lowered, &resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
     let recipe_channels: Map<String, Value> =
         expansions.iter().flat_map(|e| e.channels.clone()).collect();
@@ -328,12 +342,14 @@ fn check_by(
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, sealed, &mut issues);
+                    check_constraints(&lowered, sealed, &mut issues);
                     check_assemblies(&lowered, &mut issues);
                     check_card(&lowered, &mut issues);
                     super::variants::check(&lowered, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
+                    super::reads::check(&lowered, kinds, &mut issues);
                     super::rules::check(&lowered, &mut issues, |entries, work| {
                         in_chunks(entries, work)
                     });
@@ -1330,6 +1346,10 @@ struct ItemContext<'a> {
     facts: &'a BTreeMap<String, KindFacts<'a>>,
 }
 
+/// The canvas modules whose kinds a document uses without naming the module in
+/// `requires.modules`.
+const UNDECLARED_MODULES: &[&str] = &["logic"];
+
 /// What the build says about one kind text, worked out once per check: a document holds few
 /// kinds and many items.
 struct KindFacts<'a> {
@@ -1445,8 +1465,9 @@ fn check_item(
         return false;
     }
     // A document declares the canvas modules its kinds need (Document envelope), so a
-    // build without the module has the name to refuse with.
-    if let Some(module) = facts.module {
+    // build without the module has the name to refuse with. Logic `logic@1` items need no
+    // declaration (Document envelope: `requires`); one the build lacks is refused above.
+    if let Some(module) = facts.module.filter(|m| !UNDECLARED_MODULES.contains(m)) {
         let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
         // #222: an item its module expands at check never reaches a frame; what it expands to
         // (channels, markers) needs no declaration, so neither does it.
@@ -2144,6 +2165,34 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
         };
         for key in entries.keys() {
             check_key(section, key, issues);
+        }
+    }
+}
+
+/// A constraint kind the design gives a module other than motion (#225: `follow_stream`, the
+/// data module's) in a build that left that module out is refused with `module_missing` at
+/// `constraints/<id>/kind`, naming the module.
+fn check_constraints(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "constraints").and_then(Value::as_object) else {
+        return;
+    };
+    for (key, entry) in entries {
+        let Some(kind) = entry.get("kind").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(module) = registry::core_lists::constraint_owner(kind) else {
+            continue;
+        };
+        if sealed.lacks(module) {
+            issues.push(Issue::error(
+                "module_missing",
+                key,
+                format!("constraints/{key}/kind"),
+                json!(kind),
+                &format!(
+                    "constraint kind `{kind}` is the {module} module's, which this build lacks"
+                ),
+            ));
         }
     }
 }

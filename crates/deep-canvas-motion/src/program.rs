@@ -191,6 +191,12 @@ pub enum Planted {
     PerLoopRoundsPeriod,
     /// A transition that restarts from its old target, not from where the value is.
     TransitionRestarts,
+    /// #466: a dip that cross-fades its two sides under its color at half weight.
+    DipCrossFadesUnderInk,
+    /// #466: an iris centred where its item stood at the window's first flick.
+    IrisCenterAtWindowStart,
+    /// #466: a motif's rate in beats counted at the tempo map's first segment's BPM throughout.
+    MotifBeatsAtFirstTempo,
     /// #490: a table's interval form from 8 samples between its range's ends.
     TableFormSamples8,
     /// #1646: cells takes its seed with the time, so a still point's outputs move.
@@ -927,7 +933,7 @@ impl Program {
                 }
                 _ => [owner; 2],
             };
-            let table = match &c.kind {
+            let mut table = match &c.kind {
                 Kind::FollowPath {
                     points, fraction, ..
                 } => Some(crate::constraint::PathRead::compile(
@@ -938,6 +944,18 @@ impl Program {
                 )?),
                 _ => None,
             };
+            // #1960: a fraction read at a path takes that field's slot, as a driver's var does.
+            if let Kind::FollowPath {
+                fraction: crate::constraint::Fraction::Path(t),
+                ..
+            } = &c.kind
+            {
+                let slot = program.slot(items_json, &t.owner, t, 1);
+                table = table.map(|read| crate::constraint::PathRead {
+                    from: Some(slot),
+                    ..read
+                });
+            }
             program.constraints.push(Compiled {
                 owner,
                 other,
@@ -3083,16 +3101,15 @@ impl Program {
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
                     }
-                    // #1183: a logic item's scalar output its host baked into the document.
+                    // #1183, #1164: a logic output its host baked, or one element of it.
                     if let Some(read) = doc
                         .get("arrays")
-                        .and_then(|a| a.get(array.as_str()))
-                        .and_then(crate::array::Read::of)
+                        .and_then(|a| crate::array::Read::of_var(a, array))
                     {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
                         continue;
                     }
-                    let why = "motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands";
+                    let why = "motion's drivers read only a logic item's scalar f64 output or one element of an i32 or f64 one, baked into the document, or a spectrum's bands";
                     let detail = Some(Box::new(
                         json!({"driver": driver.id, "array": array, "why": why}),
                     ));
@@ -3141,7 +3158,10 @@ impl Program {
                 }
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));
-                    let range = c.and_then(|c| c.get("range")).and_then(Value::as_array);
+                    // #542: a scroll control's range is its `scroll.range`, in steps.
+                    let range = c
+                        .and_then(|c| c.get("range").or_else(|| c.pointer("/scroll/range")))
+                        .and_then(Value::as_array);
                     let (Some(c), Some([lo, hi])) = (c, range.map(Vec::as_slice)) else {
                         return Err(Refused {
                             code: "ref_unresolved",

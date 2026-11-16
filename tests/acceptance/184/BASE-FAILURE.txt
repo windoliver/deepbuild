@@ -1,0 +1,49 @@
+The #184 suite at base commit 0e5572731 (the worktree at dc9b43154, whose only later changes are #2578's ambient-
+occlusion docs, evidence and lanes lines), macOS 27.2 arm64, Node 24.22.2. Not run end to end: the surfaces plainly
+don't exist at the base, and a cold build of deep-replica (on deep-app and gpui) on this shared machine would take far
+longer than the answer is worth. What each test reaches first at the base, read from the code (probes below):
+
+- The playtest plug-in: `packages/checks/playtest` doesn't exist. Every test that opens a hub with it (ac01-ac07, ac09,
+  ac11, ac14, budgets' criterion 13 part) fails at its first assertion in `openHub`, "the playtest plug-in is a
+  first-party package at packages/checks/playtest", after its replicas started.
+- The play mode: `deep-drive`'s dispatch (crates/deep-replica/src/drive/mod.rs) answers any call but launch, ui_check and
+  motion_check with no replica as `{"ok": false, "error": {"code": "refused", "message": "no replica runs here: launch
+  one first"}}`, so every direct play (ac05's clean maze, ac06's unplanted runs, ac10, budgets) fails `played`'s first
+  assertion ("the play answers ok"). `DEEP_DRIVE_PLANT=drops-first-bot-entry` and `entry-on-change` are unknown
+  plants: deep-drive answers `{"ready": false, "error": "no planted replica …"}` and exits 2, which `Replica.start`
+  reports (ac06, ac10). Cargo has no feature `test-renders-unkept-frames` (budgets, reference Mac only).
+- The host: `ExtensionHostOptions` has no `replica`, the host no `deep.canvas.play` (an unknown method of the API) and
+  no `plays-any-seed` plant; the maze player's manifest requires a preview entry the API doesn't list, so its
+  conformance or its calls fail (ac08 part 3, ac11, ac12). The validator rules for plays don't exist.
+- The plug-in off (ac08 part 2): with no package to install, `openHub` fails its first assertion as above; were one
+  there, `runCheck` answers `missing` with "no loaded extension registered the check kind playtest", which names no
+  plug-in, and "the run names deepbuild/playtest" fails. (Part 1, the canvas kit with nothing of the playtest in it, is
+  expected to pass at the base; it guards against the work reaching into the canvas.)
+- The record: benchmarks/budgets.json has no task `playtest-maze` or `playtest-throughput`, and scripts/lanes.mjs
+  doesn't list budgets.test.ts as timed (budgets, both tests, before any timing).
+- ac14's Linux leg fails `INCONCLUSIVE:` everywhere, at the base and after, by design.
+
+Off macOS every test that plays fails `INCONCLUSIVE:` first; none passes.
+
+Probes, at the base:
+
+  $ ls packages/checks/playtest
+  ls: packages/checks/playtest: No such file or directory
+  $ grep -c "deep.canvas.play\|plays-any-seed\|replica?:" packages/extension-host/src/host.ts
+  0
+  $ node -e '…budgets.json tasks matching /playtest/…'
+  playtest tasks: 0
+  $ grep -n '"play"\|drops-first-bot-entry\|entry-on-change' crates/deep-replica/src/drive/*.rs
+  (nothing)
+  $ grep -n test-renders-unkept-frames crates/deep-replica/Cargo.toml
+  (nothing)
+  crates/deep-replica/src/drive/mod.rs: (_, None) => Err(fail("refused", "no replica runs here: launch one first")),
+  packages/extension-host/src/host.ts:2978: return nothing('missing', `no loaded extension registered the check kind ${kind}`);
+
+What does run at the base, checked once with a scratch test (deleted): every program assembles, `deep-logic check`
+admits the layout probe, and `deep-logic bake` plays the clean maze on the route's ten presses to (5, 5) with won from
+step 10, the stuck twin to (3, 4) and no further, the trap twin to a `divide` trap at step 40 naming maze and the
+40th press, and sizes the heavy twin to 9,000,006 fuel a step.
+
+The suite type-checks at the base (`npx tsc -p tests/acceptance/184/tsconfig.json`): the plug-in's entry is imported by
+a computed path and the host's new options and plant through casts, so each test fails on its own at run time.

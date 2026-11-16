@@ -1,0 +1,147 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17, detached, with nothing changed but new test folders (this one
+and the other blind jobs' *-redraft-2073 and 2073 folders). November 13, 2026, PST. Node 24.22.0, macOS, 18 cores, on
+a Mac shared with other sessions (1-minute load between 100 and 170 through the runs). Workspaces built;
+target/debug/deep-hook built, so the helper's own cargo build had nothing to do; target/debug/deep-app not built.
+
+Commands, from the checkout's root (written <repo> below):
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/326-redraft-2073 first-command.test.ts --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/326-redraft-2073 click.test.ts -t '<pattern>' --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/326-redraft-2073/tsconfig.json
+
+The runs:
+
+- first-command.test.ts, run 1, 15:27, 31 s: this job's first draft, the fixture trusted and its check still #326's
+  `exit 1`. Same results as run 2.
+- click.test.ts, run 1, 15:28, 70 s, -t '#326 \((control|wrong program) ': the same first draft, every test but the
+  real click. Same results as runs 2 and 3.
+- Then this job's own fix: `exit 1` is uncounted as a claim's checks run (tests/acceptance/19-redraft-2073/
+  BASE-RESULTS.txt, scratch reading 2), so the check became `node checks/unit.mjs`.
+- first-command.test.ts, run 2, 15:34, 29 s: kept, below.
+- click.test.ts, run 2, 15:35, 38 s, -t '#326 \((control right-set-up|wrong program gating-set-up|wrong program watch-rules-set-up)\)':
+  the three tests that reach the changed check. Kept, below.
+- click.test.ts, run 3, 15:38, 35 s, -t '#326 \(wrong program (chatty-set-up|no-hub-set-up)\)': the two that don't,
+  on the final fixture. Kept, below.
+  After run 2 only comment lines of scenario.ts were reworded; no statement changed, and the type check was run again.
+
+Per test, on the kept runs:
+
+  click.test.ts
+  NOT RUN  #326.523de34e the Set up click says one line; then a session that claims done and fails the drafted
+           check stops unheld and unblocked, its next calls go through, and its pkill -f vite is denied with the hub
+           up and down (redraft 2073)
+           It needs target/debug/deep-app, which this checkout doesn't have. #326's helper builds it inside the test:
+           a cold build of some 680 crates, on this machine at this load far past the test's 600 s. Not started.
+  FAIL     #326 (control right-set-up) a right click built from merged code passes these checks (redraft 2073)   13.2 s
+           At "the hub held the Stop of session <id> (hold_until_ms ...)". The twin exited 0 and said one line, the
+           hooks were in place, the hub answered, the trust record stood, the claim was recorded and deep_run of
+           `node checks/unit.mjs` came back failed. The hub then acknowledged the Stop with a hold.
+  PASS     #326 (wrong program chatty-set-up) a click that shows all of deep setup's output fails, naming the line
+           count                                                                                                  2.6 s
+  PASS     #326 (wrong program no-hub-set-up) a click that adds the hooks but leaves no hub running fails, naming
+           the hub                                                                                               32.0 s
+  PASS     #326 (wrong program gating-set-up) a click whose hub gates unapproved checks fails, naming the stop
+           (redraft 2073)                                                                                        12.2 s
+  FAIL     #326 (wrong program watch-rules-set-up) a click that leaves the fast safety rules in watch mode fails,
+           naming pkill -f vite (redraft 2073)                                                                   12.4 s
+           The twin's checks failed, but at the held Stop, before pkill -f vite was tried, so the message isn't the
+           twin's own.
+
+  first-command.test.ts
+  FAIL     #326.523de34e the first deep status in a fresh home sets DeepBuild up and says so in one line, the second
+           says nothing and writes nothing, and then a failed claim stops unheld and unblocked while pkill -f vite is
+           denied with the hub up and down (redraft 2073)                                                        13.3 s
+           At "the hub held the Stop of session <id> (hold_until_ms ...)". The first command set up, exited 0 and
+           said one line on stderr; the second said and wrote nothing; the claim was recorded and the run came back
+           failed.
+  FAIL     #326 (control deep-sets-up-once) a right first command built from merged code passes these checks
+           (redraft 2073)                                                                                        12.3 s
+           The same.
+  PASS     #326 (wrong program deep-sets-up-every-time) a deep that sets up again on every command fails, naming the
+           second command                                                                                         3.2 s
+
+None ended BLOCKED or INCONCLUSIVE. Each test's folder under /tmp/da326s-* was gone after its run, and no process a
+test started was left.
+
+Why four fail on the base. They fail at one assertion, and the hold behind it has nothing to do with trust or with
+#2073. The scenario's prompt, "Make the header green, then claim it done.", opens a task, and the base holds the
+stops of a session whose prompt opened one, for the core's reply (packages/hub/src/core.ts promptDraft, server.ts
+holdFor; #82 by the code's own note). tests/acceptance/19-redraft-2073/BASE-RESULTS.txt has the scratch reading: the
+same Stop is held with the fixture trusted and untrusted alike, and not with a prompt that opens no task. This job
+did not run the originals. scripts/known-failures.json lists the original first-command #326.523de34e test under
+timing.
+
+Type check: clean (exit 0, no output); with a planted type error in the folder it exits 2, naming the line.
+
+Not run: the real click (above), and any implementation of #2073; none exists here.
+
+==== first-command.test.ts, run 2 (the checkout written <repo>; each message's second copy, its "→" line, left out)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/326-redraft-2073
+
+ × first-command.test.ts > #326 setup: the first deep command sets up as the click does, without a click > #326.523de34e the first deep status in a fresh home sets DeepBuild up and says so in one line, the second says nothing and writes nothing, and then a failed claim stops unheld and unblocked while pkill -f vite is denied with the hub up and down (redraft 2073) 13301ms
+ × first-command.test.ts > #326 setup: the first deep command sets up as the click does, without a click > #326 (control deep-sets-up-once) a right first command built from merged code passes these checks (redraft 2073) 12290ms
+ ✓ first-command.test.ts > #326 setup: the first deep command sets up as the click does, without a click > #326 (wrong program deep-sets-up-every-time) a deep that sets up again on every command fails, naming the second command 3247ms
+
+ FAIL  first-command.test.ts > #326 setup: the first deep command sets up as the click does, without a click > #326.523de34e the first deep status in a fresh home sets DeepBuild up and says so in one line, the second says nothing and writes nothing, and then a failed claim stops unheld and unblocked while pkill -f vite is denied with the hub up and down (redraft 2073)
+AssertionError: #326 after the first deep command (deep status) the hub held the Stop of session cb6a54a7-8634-4190-9a76-2c167f710b89 (hold_until_ms 1794612965861) in a repo whose checks nobody approved: the hooks must be watch-only, so no stop is held until a repo's checks are approved
+ ❯ stopGoesThrough ../326/setup/scenario.ts:56:12
+ ❯ watchOnlyFromTheStart ../326/setup/scenario.ts:89:3
+ ❯ watchOnlyInATrustedRepo scenario.ts:46:3
+ ❯ firstDeep first-command.test.ts:40:3
+ ❯ first-command.test.ts:45:5
+
+ FAIL  first-command.test.ts > #326 setup: the first deep command sets up as the click does, without a click > #326 (control deep-sets-up-once) a right first command built from merged code passes these checks (redraft 2073)
+AssertionError: #326 after the first deep command (deep status) the hub held the Stop of session 221766ec-59ec-4fed-99c3-ed771e583ac3 (hold_until_ms 1794612978152) in a repo whose checks nobody approved: the hooks must be watch-only, so no stop is held until a repo's checks are approved
+ ❯ stopGoesThrough ../326/setup/scenario.ts:56:12
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  15:34:52
+   Duration  29.23s (tests 100%)
+
+==== click.test.ts, run 2
+
+ RUN  v5.0.5 <repo>/tests/acceptance/326-redraft-2073
+
+ ↓ click.test.ts > … > #326.523de34e the Set up click says one line; then a session that claims done and fails the drafted check stops unheld and unblocked, its next calls go through, and its pkill -f vite is denied with the hub up and down (redraft 2073)
+ × click.test.ts > … > #326 (control right-set-up) a right click built from merged code passes these checks (redraft 2073) 13177ms
+ ↓ click.test.ts > … > #326 (wrong program chatty-set-up) a click that shows all of deep setup's output fails, naming the line count
+ ↓ click.test.ts > … > #326 (wrong program no-hub-set-up) a click that adds the hooks but leaves no hub running fails, naming the hub
+ ✓ click.test.ts > … > #326 (wrong program gating-set-up) a click whose hub gates unapproved checks fails, naming the stop (redraft 2073) 12192ms
+ × click.test.ts > … > #326 (wrong program watch-rules-set-up) a click that leaves the fast safety rules in watch mode fails, naming pkill -f vite (redraft 2073) 12442ms
+
+ FAIL  click.test.ts > … > #326 (control right-set-up) a right click built from merged code passes these checks (redraft 2073)
+AssertionError: #326 after the Set up click (deep-app --set-up) the hub held the Stop of session 0f571f66-7ddc-4594-8e32-f09e21fd293d (hold_until_ms 1794612995681) in a repo whose checks nobody approved: the hooks must be watch-only, so no stop is held until a repo's checks are approved
+ ❯ stopGoesThrough ../326/setup/scenario.ts:56:12
+ ❯ watchOnlyFromTheStart ../326/setup/scenario.ts:89:3
+ ❯ watchOnlyInATrustedRepo scenario.ts:46:3
+ ❯ setUpClick click.test.ts:30:3
+ ❯ click.test.ts:51:5
+
+ FAIL  click.test.ts > … > #326 (wrong program watch-rules-set-up) a click that leaves the fast safety rules in watch mode fails, naming pkill -f vite (redraft 2073)
+AssertionError: expected '#326 after the Set up click (deep-app…' to match /^#326 after the Set up click \(deep-a…/
+- Expected:
+/^#326 after the Set up click \(deep-app --set-up\) the fast safety rules must apply from the start: with the hub up DeepBuild let the agent's pkill -f vite through/
++ Received:
+"#326 after the Set up click (deep-app --set-up) the hub held the Stop of session a3ebc296-c1af-457d-be8b-75fc442e4b9e (hold_until_ms 1794613020316) in a repo whose checks nobody approved: the hooks must be watch-only, so no stop is held until a repo's checks are approved"
+ ❯ click.test.ts:65:53
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed | 3 skipped (6)
+   Start at  15:35:22
+   Duration  38.13s (tests 100%)
+
+==== click.test.ts, run 3
+
+ ✓ click.test.ts > … > #326 (wrong program chatty-set-up) a click that shows all of deep setup's output fails, naming the line count 2594ms
+ ✓ click.test.ts > … > #326 (wrong program no-hub-set-up) a click that adds the hooks but leaves no hub running fails, naming the hub 32014ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 4 skipped (6)
+   Start at  15:38:45
+   Duration  35.10s (tests 100%)
+
+("…" stands for the describe titles: "#326 setup: after the one Set up click the hooks are watch-only, nothing is held
+or blocked before approval, and the fast safety rules apply", and for the four twins "wrong programs: each planted twin
+of the click fails these checks, with its own message".)

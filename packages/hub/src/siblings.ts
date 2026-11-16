@@ -94,6 +94,8 @@ export interface SiblingOptions {
   /** Runs work in the core's queue. */
   queue(work: () => Promise<void>): void;
   now(): number;
+  /** Whether a session DeepBuild started has ended: its agent is gone, though it may have sent no SessionEnd. */
+  over(session: string): boolean;
 }
 /** A merged pull request's first line, as GitHub writes it: the number and the branch, nothing of its title. */
 const MERGED = /^Merge pull request #(\d+) from [^/\s]+\/(\S+)$/;
@@ -545,7 +547,8 @@ export class Siblings {
     if (!m.issue || m.ended) return;
     const key = `${m.common}\0${m.issue}`;
     const settled = this.o.now() - ISSUE_SETTLE_MS;
-    const peers = [...this.others(m)].filter((s) => s.issue === m.issue && s.first <= settled);
+    // A started session whose agent ended is no peer: the next attempt on its issue goes on in its place.
+    const peers = [...this.others(m)].filter((s) => s.issue === m.issue && s.first <= settled && !this.o.over(s.id));
     const seen = `${key}\0${[m, ...peers].map((s) => s.id).sort().join('\0')}`;
     if (this.asked.has(key) || m.first > settled || !peers.length || this.exempt.has(seen)) return;
     const raced = (await this.o.raw(`SELECT 1 FROM events WHERE kind = 'race.started' AND json_extract(data, '$.issue') = ? LIMIT 1`, [m.issue])).length > 0;

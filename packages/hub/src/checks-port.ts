@@ -2,6 +2,7 @@
 import type { CheckContext, CheckResult, CheckSpec } from '@deepbuild/conformance';
 import type { Checkouts } from '@deepbuild/gate';
 import type { Host, Supervisor } from '@deepbuild/supervisor';
+import type { ExtensionHost } from '@deepbuild/extension-host';
 import type { JobRecord, JobSpec } from '@deepbuild/runner';
 import type { TimingReport } from '@deepbuild/verdicts';
 import type { ClaimCheck } from './gate-runner.js';
@@ -52,6 +53,8 @@ export interface KindsOptions {
   wait(job: string): Promise<JobRecord>;
   cancel(job: string): Promise<JobRecord>;
   plant?: string | undefined;
+  /** The extension host a first-party plug-in's kind runs in (#184), once the hub opened it. */
+  extensions(): ExtensionHost | undefined;
 }
 export interface CheckKinds {
   list(): { kind: string; routes: string[] }[];

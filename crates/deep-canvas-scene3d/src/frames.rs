@@ -16,9 +16,13 @@ use serde_json::{Map, Value};
 
 use crate::look::Look3;
 use crate::scene::{
-    corners8, corners_into, evaluate, evaluate_compiled, local_of, matmul, near_far, num, posed,
-    Affine3, Labels, Refused, Scene,
+    corners8, corners_into, evaluate_any, evaluate_compiled, local_of, matmul, near_far, num,
+    posed, Affine3, Assets, Labels, Refused, Scene,
 };
+
+/// An asset store a document's frames read their `mesh.asset@1` files and HDRs through, by hash
+/// (#1729).
+pub type Reader = std::sync::Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
 
 /// A solid the motion program moves: its place in the scene and what its world matrix is made of.
 struct Solid {
@@ -80,12 +84,13 @@ pub struct Frames {
     bounds: Vec<Vec3>,
     /// Whether the last [`Frames::at`] gave a scene other than the one before it (#421).
     changed: bool,
+    assets: Option<Reader>,
 }
 
 impl Frames {
     /// Compiles `doc` (stamped) and evaluates it whole at t = 0.
     pub fn new(doc: &Value, look: &Look3, labels: &mut Labels) -> Result<Frames, Refused> {
-        Frames::with_program(doc, Frames::compile(doc)?, look, labels)
+        Frames::with_program(doc, Frames::compile(doc)?, look, labels, None)
     }
 
     /// The motion program [`Frames::new`] compiles of `doc`, which reads neither the look nor
@@ -102,18 +107,20 @@ impl Frames {
     }
 
     /// [`Frames::new`] with `program` from [`Frames::compile`] of `doc`, or of `doc` before its
-    /// `size` was set, which the program doesn't read.
+    /// `size` was set, which the program doesn't read; its assets read through `assets`.
     pub fn with_program(
         doc: &Value,
         program: Program,
         look: &Look3,
         labels: &mut Labels,
+        assets: Option<Reader>,
     ) -> Result<Frames, Refused> {
         let map = doc.as_object().ok_or(Refused {
             code: "out_of_range",
             path: String::new(),
         })?;
-        let scene = evaluate_compiled(map, &program, 0, look, labels, None, Default::default())?;
+        let read = assets.as_deref().map(|a| a as Assets<'_>);
+        let scene = evaluate_compiled(doc, &program, 0, look, labels, read, Default::default())?;
         let state = program.state();
         // #462: a look's motifs move items the fast path doesn't rewrite.
         let moving = !look.motifs.is_empty() && map.get("motif_slots").is_some();
@@ -139,6 +146,7 @@ impl Frames {
             fast,
             bounds,
             changed: true,
+            assets,
         })
     }
 
@@ -266,27 +274,16 @@ impl Frames {
         offsets: &Offsets,
         labels: &mut Labels,
     ) -> Result<&Scene, Refused> {
-        let mut doc = self.doc.clone();
-        doc["size"] = Value::from(vec![size[0], size[1]]);
-        let mut scene = evaluate(&doc, t, &self.look, labels)?;
+        // The kept document is read by this path alone, so the frame's size is set in it.
+        self.doc["size"] = Value::from(vec![size[0], size[1]]);
+        let (doc, read) = (&self.doc, self.assets.as_deref().map(|a| a as Assets<'_>));
+        let mut scene = evaluate_any(doc, t, &self.look, labels, read, Default::default())?;
         if *offsets != Offsets::default() {
-            scene.camera = self.turned_whole(&doc, &scene, t, size, offsets)?;
+            scene.camera = turned_camera(doc, &self.program, &scene, t, size, offsets)?;
         }
         self.changed = scene != self.scene;
         self.scene = scene;
         Ok(&self.scene)
-    }
-
-    /// The camera at `t` turned by `offsets`, around `scene`'s solids.
-    fn turned_whole(
-        &mut self,
-        doc: &Value,
-        scene: &Scene,
-        t: i64,
-        size: [u32; 2],
-        offsets: &Offsets,
-    ) -> Result<crate::scene::Camera, Refused> {
-        turned_camera(doc, &self.program, scene, t, size, offsets)
     }
 }
 
@@ -315,10 +312,7 @@ pub fn turned_camera(
         .cloned()
         .unwrap_or_default();
     let path = format!("items/{id}/params");
-    let spec = Spec::read(&with_defaults("camera@1", &params), &path).map_err(|r| Refused {
-        code: r.code,
-        path: r.path,
-    })?;
+    let spec = crate::scene::lensed(&params, [f64::from(size[0]), f64::from(size[1])], &path)?;
     let mut bounds = Vec::new();
     for l in &scene.layers {
         for s in &l.solids {
@@ -370,6 +364,10 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     // A light's place and power (#421) and another module's items (#380) move with fields
     // this path doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
+        // #468: a depth of field's focus and a lens's field of view follow the whole scene.
+        || scene.dof.is_some()
+        || scene.optics.focal_length.is_some()
+        || scene.exposure.is_some()
         || !scene.lights.is_empty()
         || !scene.others.is_empty()
         // A builder's solid isn't a unit mesh its size scales (#420).
@@ -511,6 +509,7 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene::evaluate;
     use serde_json::json;
 
     fn look() -> Look3 {
