@@ -1032,7 +1032,7 @@ impl Hub<'_> {
         match op {
             "list" => self.kinds_list(text("registry"), cursor),
             "word" => match text("word") {
-                Some(w) => self.kinds_word(w),
+                Some(w) => crate::kinds_word::answer(&self.packs.all().collect::<Vec<_>>(), w),
                 None => refused(
                     "required",
                     "/word",
@@ -1268,46 +1268,6 @@ impl Hub<'_> {
             })
             .collect();
         Value::Array(packs)
-    }
-
-    /// A word from a familiar-names pack installed here: the kind it maps to and the conversion
-    /// the pack states, as `mapped`; else its state in a pack's census, `refused` with its
-    /// reason or `open` (#1493); or `no_match`. Never a mapping by spelling.
-    fn kinds_word(&self, word: &str) -> Value {
-        for p in self.packs.all() {
-            if let Some(alias) = p.aliases.get(word) {
-                let mut out = json!({"word": word, "state": "mapped", "target": alias["target"],
-                                     "conversion": alias["conversion"], "pack": p.id.text()});
-                if let Some(old) = alias.get("renamed_from") {
-                    out["renamed_from"] = old.clone();
-                }
-                return out;
-            }
-        }
-        // A pack that decided the word answers before one that left it open.
-        let rows = || {
-            self.packs
-                .all()
-                .flat_map(|p| p.census.iter().map(move |r| (p, r)))
-                .filter(|(_, r)| r.word == word)
-        };
-        let Some((p, row)) = rows()
-            .find(|(_, r)| r.state != "open")
-            .or_else(|| rows().next())
-        else {
-            return json!({"word": word, "code": "no_match"});
-        };
-        let mut out = json!({"word": word, "state": row.state, "pack": p.id.text()});
-        for (key, value) in [
-            ("reason", &row.reason),
-            ("target", &row.target),
-            ("of", &row.of),
-        ] {
-            if let Some(v) = value {
-                out[key] = json!(v);
-            }
-        }
-        out
     }
 
     /// Hits for every word of `query`, best first: the gallery's examples, the guides, then the
