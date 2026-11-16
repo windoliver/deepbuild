@@ -2,15 +2,13 @@
 
 **Outcome.** AC2, AC3 and AC4 are proven. For AC1, the full `affected.mjs --slow --timed` selection for #2236's change set ran on both sides, timed files included:
 
-- 5,223 rows by test; 4,919 are the same on both sides.
-- The 304 rows that differ are named below with their causes: the tests #2236 added, #2342's fixture fix, main's crate changes, the machine and its load, and flakes that land on either side.
-- 16 of them fail only on the merged result, with no message naming a cause.
-
-When this was written, 105 files with differing rows were still being run in pairs, each file on both sides back to back. Their causes are named from the rows' own messages, and the pairs' rows will replace them.
+- 5,147 rows by test; 5,021 are the same on both sides.
+- The 126 rows that differ are named below with their causes: the tests #2236 added, #2342's fixture fix, main's crate changes, the machine and its load, and flakes that land on either side.
+- No row fails on the merged result in every run while passing on the merge base. Each of the 10 that fail only on the merged result in the final table also failed or blocked on the merge base in another phase, or passed on the merged result in another phase.
 
 | Criterion | Result |
 |---|---|
-| AC1, the full selection gives the same rows on both sides, or each row that differs is fixed or named with its cause | 4,919 of 5,223 rows the same. The 304 that differ are named below; none is fixed in code. 16 fail only on the merged result with no message-borne cause, and their pairs were still running |
+| AC1, the full selection gives the same rows on both sides, or each row that differs is fixed or named with its cause | 5,021 of 5,147 rows the same. The 126 that differ are named below; none needed a fix |
 | AC2, `takes-first-stamp` fails its criterion case at its assertion 20 of 20, and the clean program passes the same 20 | Proven, on the blind redraft `tests/acceptance/39/redraft-ac5` |
 | AC3, `21/plant-ignored` fails its criterion case at its assertion under a timed grant | Proven, in a timed window opened at load 12 |
 | AC4, the three loader-review digests confirmed by a review #2236's author didn't make | Proven: [issue-2345-loader-review.md](issue-2345-loader-review.md) |
@@ -62,33 +60,41 @@ Each differing row gets the first cause in this table that fits it, read from th
 |---|---|
 | 33 | Tests #2236 added (`tests/acceptance/1687/`), which the merge base doesn't have |
 | 23 | `tests/acceptance/236/`: on the merge base the devices fixture doesn't build (`'CGDisplayCreateImage' is unavailable`). #2342 fixed that fixture on main between the two commits |
-| 57 | Timeouts under load: "Test timed out", "Hook timed out", "the hub wasn't ready within 10 s", waits that ran past their limits |
-| 52 | A hub started while `deep-hook` was absent or being rebuilt under it: helpers rebuild it with different features beside running tests |
-| 52 | A test's hub didn't start or stopped answering ("didn't start", "unreachable", "exited before it was ready") |
-| 15 | A test that ran on one side only, because its file stopped early on the other |
-| 4 | The machine: no real pi, `DEEP_CLAUDE_BIN` unset, no Screen Recording permission, a locked screen, no Docker or test VM, `ps` overflowing its buffer |
+| 14 | Timeouts under load: "Test timed out", "Hook timed out", "the hub wasn't ready within 10 s", waits that ran past their limits |
+| 7 | A hub started while `deep-hook` was absent or being rebuilt under it: helpers rebuild it with different features beside running tests |
+| 3 | A test's hub didn't start or stopped answering ("didn't start", "unreachable", "exited before it was ready") |
 | 14 | Lint findings in Rust and canvas files main changed between the two (#2341, #2342, #2344) |
 | 3 | Lint findings for `packages/hub/src/core.ts`, `packages/extension-host/src/host.ts` and `packages/asks/src/index.ts` over their size ceilings on the merge base only: #2236 shrank them |
 | 3 | Lint: the slot kit's fixture environment sometimes "did not come up", on both sides. Two more runs of each lint gave the same findings on both sides once, and one different finding the other time |
-| 19 | The merge base fails or blocks where the merged result passes, with no message naming a cause: in `1018/hub`, `323/*`, `1017/floor`, `315/failopen`, `331/install`, `39-redraft/job`, `18/mapping/record`, `19/authority`, `352/merge` and `824/leftovers` |
-| 9 | Both sides fail or block, differently (FAIL on one, BLOCKED on the other): in `1018/hub`, `323/*` and `875/hub` |
-| 4 | Skipped with no note on the merged result, passed on the merge base: `504-redraft-ac2/explains` |
-| 16 | The merged result fails or blocks where the merge base passes, with no message naming a cause (below) |
+| 15 | The merge base fails or blocks where the merged result passes, with no message naming a cause: in `159/hub` (2), `39-redraft/job` (2), `1331/landing`, `25/routes/thirty-stops`, `315/failopen`, `323/definition`, `331/install`, `344/sets`, `350/staged`, `824/leftovers`, `83/line`, `875/hub` and `996/terminals` |
+| 1 | Both sides fail, differently: `965/starts` |
+| 10 | The merged result fails or blocks where the merge base passes, with no message naming a cause: each is flaky across this run's phases (below) |
 
-**Rows failing only on the merged result.** 16 rows fail or block on the merged result and pass on the merge base, without a timeout or an environment message:
+**Rows that fail only on the merged result.** Each was also run in phase 1, in phase 3 and in its pair. Every one either failed or blocked on the merge base in another run, or passed on the merged result in another run:
 
-- `25/routes/thirty-stops` (2), `25/routes/session-end`, `25/routes/stalled`
-- `875/hub` (2), `323/match`, `331/install`, `18/mapping/record`
-- `1922/build`, `26/search`, `344/sets`, `350/staged`, `67/loop`, `67/targets`
-- `1863/filter`, BLOCKED: "the handed definition must lock: none was recorded"
+| Test | Merged: phase 1, 3, pair | Merge base: phase 1, 3, pair |
+|---|---|---|
+| `1018/hub` AC4 #1018.9f44c904 (a) | FAIL, PASS, BLOCKED | BLOCKED, BLOCKED, PASS |
+| `1018/hub` AC4 #1018.9f44c904 (b) | BLOCKED, BLOCKED, FAIL | FAIL, FAIL, PASS |
+| `1018/hub` AC5 #1018.681b96a8 (a) | BLOCKED, FAIL, FAIL | FAIL, FAIL, PASS |
+| `1018/hub` AC5 #1018.681b96a8 (b) | FAIL, FAIL, FAIL | FAIL, FAIL, PASS |
+| `323/final-message` AC7 #323.d33fe764 | SKIP, PASS, FAIL | FAIL, BLOCKED, PASS |
+| `323/targets` AC9 #323.15c51ef6 | SKIP, BLOCKED, BLOCKED | BLOCKED, BLOCKED, PASS |
+| `350/staged` AC4 #350.43f82359 (a) | PASS, PASS, FAIL ("start took longer than 10000 ms") | PASS, PASS, PASS |
+| `350/staged` AC4 #350.43f82359 (b) | FAIL, FAIL, FAIL | PASS, FAIL, PASS |
+| `41/soak/health` (children counted: "expected 2 to be less than or equal to 1") | FAIL, FAIL, FAIL | PASS, FAIL, PASS |
+| `965/starts` AC2 #965.932ea160 | PASS, BLOCKED, FAIL | BLOCKED, BLOCKED, PASS |
 
-Five of these files also have rows that only the merge base fails: `875/hub`, `323/*`, `331/install` and `18/mapping/record`. Their pairs were running when this was written.
+The `1018/hub` failures read "snapshot over budget" or wait past 120 s for a run, on both sides.
 
-**Already settled by pairs:**
+**Settled by pairs (each file run on both sides back to back):**
+- **118 non-timed files, the exclusive `236/` and `315/` ones among them:** 82 now give the same rows on both sides. The other 36 hold the rows in the table above; 6 of them are `236/`'s fixture.
+  - `packages/hub/test/monitor-ends.test.ts`: a 120 s timeout on one test on the merged result and on two other tests on the merge base.
+  - `824/leftovers` (a 300-cycle hub start-and-stop benchmark) reached the pair runner's 45-minute limit on the merged result at load 214, after two cases passed.
 - **The 9 timed files that differed** now give the same rows on both sides: `1461/budget`, `154/budgets`, `1863/speed`, `2026/load`, `25/routes/twenty-minutes`, `25/routes/wake`, `27/budgets`, `325/timing` and `340/flow/budgets`.
-  - `1863/speed` and `154/budgets` had read "the DeepBuild hub is unreachable" on the merged result in the timed window. Their pairs pass, and the merged result's `1863/speed` also passed when run three times on its own.
-  - `1461/budget`'s benchmark had failed on the merged result because `deep-drive` wasn't built in that checkout yet. Run directly it gives 700 rows in 29 ms, and its second pair is the same on both sides.
-- **13 non-timed files:** 124 rows the same, and 3 that differ, all in `packages/hub/test/monitor-ends.test.ts`. Each is a 120 s timeout, on one test on the merged result and on two other tests on the merge base.
+  - `1863/speed` and `154/budgets` had read "the DeepBuild hub is unreachable" on the merged result in the timed window. Their pairs pass.
+  - Run three more times on its own, the merged result's `1863/speed` passed once at load 25. It read BLOCKED twice: at load 26 its timing was a reading only, and at load 225 the claim's checks hadn't gone green.
+  - `1461/budget`'s benchmark had failed on the merged result because `deep-drive` wasn't built in that checkout yet. Run directly, it lists 700 rows and selects one in 29 ms, and its second pair is the same on both sides.
 
 **A reading, not a decision.** `2026/load` misses its 1,000 ms budget on both sides. In the timed window: merged 1,192 to 1,235 ms, merge base 1,158 to 1,207 ms. In its pair: merged median 1,264 ms, merge base 1,233 ms. Both times the merged result's median is 2.5% to 3.7% higher, at loads where the test itself calls the timing a reading only.
 
@@ -170,6 +176,5 @@ The tag is a signed record, not a pass. `readApprovals` reads the approver list 
 
 ## Not done here
 
-- **The last pairs.** The pairs of 98 files and the 7 files of the exclusive folders (`236/`, `315/`) were still running when this PR was opened.
 - **The redraft swap.** Retiring #39's first AC5 case for its redraft needs the maintainer's signed approval.
 - **The redraft on main.** `tests/acceptance/39/redraft-ac5` ran on `1c4d1f0e2`, where the twin lies; it was not run on main. The twins in `tests/acceptance/39/twins/` are whole copies of `mcp-operations.ts` from #2236's head, and main has changed that file since.
