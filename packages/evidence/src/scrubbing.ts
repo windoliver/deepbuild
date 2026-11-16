@@ -1,6 +1,6 @@
 // The pure text surface, also used by the archive worker without loading the store, zstd or a second worker.
 import { patternMatches as matchesOf, scrub, scrubList, type Run } from './scrub.js';
-export { scrubPrefix } from './scrub.js';
+export { scrubPrefix, scrubReach } from './scrub.js';
 
 /** Text scrubbed by held/env values in every printed form, then by pattern, as intake does. */
 export function scrubText(text: string, run?: Run): string {
