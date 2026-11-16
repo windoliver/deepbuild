@@ -1,0 +1,33 @@
+{
+  "id": "math.value_tracker",
+  "version": "1.0",
+  "title": "ValueTracker",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "ValueTracker(value) as a named value, data/<id>.value: a formula reads it through its vars and a cue keys it (set_value over a play), so whatever reads it follows in closed form; an updater that reads it is code and has no mapping.",
+  "inputs": {
+    "value": {
+      "type": "number",
+      "default": 0,
+      "about": "the value it starts at"
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2"
+  },
+  "steps": {
+    "value": {
+      "op": "value",
+      "params": {
+        "value": "value",
+        "source": "story"
+      }
+    }
+  },
+  "refuses": {
+    "add_updater": "An updater is code with no closed form: read the value through a formula's vars, or drive it with a driver (driver@1), or bake the frames with the bake route."
+  }
+}

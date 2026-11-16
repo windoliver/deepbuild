@@ -42,6 +42,8 @@ mod input;
 mod jobs;
 mod kept;
 mod kinds;
+mod kinds_word;
+mod math_twins;
 mod kit;
 mod lengths;
 mod logic;
@@ -95,6 +97,7 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod tour;
 mod track_call;
 #[cfg(any(
     feature = "test-json",
@@ -770,6 +773,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
                 carried: flag("carried")?,
+                tour_pointer: flag("tour_pointer")?,
             })));
         }
         "frames" => {
@@ -1348,7 +1352,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let pack_planted = input
         .get("planted")
         .and_then(Value::as_str)
-        .filter(|p| familiar::PLANTED.contains(p))
+        .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let logic_planted = crate::logic::planted(input.get("planted"))?;
     let planted = match input.get("planted").map(Value::as_str) {
@@ -3287,6 +3291,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
+        "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
+        "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,

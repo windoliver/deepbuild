@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 import { run } from './children.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 
