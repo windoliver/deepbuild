@@ -1,0 +1,31 @@
+{
+  "wasm_bindgen": "0.2.129",
+  "files": {
+    "player.js": "ae4ffb32a8d6015f05a438eeb171599e28a01caad64b4c86a96452567073f948",
+    "player_bg.wasm": "8bd9a23026bbb5a1cce1823d40d3658b3c18b79e55a3a97e3f8fa392cd36bfc8"
+  },
+  "core_version": "0.0.0",
+  "set_digest": "352a1a96afe1582d8656e4aa1fc1e4cd5c9e442b8dc37ecf05ad79216b3c02f1",
+  "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
+  "modules": [
+    "building",
+    "cells",
+    "data",
+    "effects",
+    "graph",
+    "input",
+    "logic",
+    "look",
+    "loop",
+    "marks2d",
+    "media",
+    "motion",
+    "physics",
+    "record",
+    "sandbox",
+    "scene3d",
+    "sheet",
+    "text",
+    "vector"
+  ]
+}
