@@ -599,13 +599,14 @@ class SqliteRecord implements RecordStore {
       if (CORE_ONLY.has(input.kind) || this.resumes([prepared])) {
         return new Promise<Appended>((resolve, reject) => {
           this.fulls.push({ prepared, resolve, reject });
-          if (this.fulls.length === 1) queueMicrotask(() => void this.inOrder(() => this.commitFulls()));
+          if (this.fulls.length === 1) queueMicrotask(() => { const fulls = this.takeFulls(); void this.inOrder(() => this.commitFulls(fulls)); });
         });
       }
       // It takes its place now, so it commits after what arrived before it and before what arrives after, even while a
-      // FULL commit ahead syncs its evidence (#1410). The FULL appends of this turn commit before it.
+      // FULL commit ahead syncs its evidence (#1410). The FULL appends that arrived before it commit just before it.
+      const fulls = this.takeFulls();
       return this.inOrder(async () => {
-        await this.commitFulls();
+        await this.commitFulls(fulls);
         while (this.syncing) await this.syncing;
         // Its mode is read from the log as it is now: a stop committed ahead of it can make it resume a session.
         const mode = this.resumes([prepared]) ? 'full' : 'normal';
@@ -661,9 +662,10 @@ class SqliteRecord implements RecordStore {
    */
   private async flush(): Promise<void> {
     const batch = this.queue.splice(0);
+    const fulls = this.takeFulls();
     try {
       await this.inOrder(async () => {
-        await this.commitFulls();
+        await this.commitFulls(fulls);
         await this.commitPending(batch, false);
       });
     } finally {
@@ -682,11 +684,19 @@ class SqliteRecord implements RecordStore {
     return run;
   }
 
-  /** Commits the FULL appends made in this turn in one FULL commit (#22); a settle waits for it while it syncs. */
-  private async commitFulls(): Promise<void> {
+  /**
+   * The FULL appends that arrived so far, taken as their batch takes its place in the commit order, so a FULL append
+   * that arrives later never commits ahead of what arrived before it. A settle waits for the batch from here.
+   */
+  private takeFulls(): Pending[] {
     const batch = this.fulls.splice(0);
+    if (batch.length) this.committingFulls++;
+    return batch;
+  }
+
+  /** Commits a batch of FULL appends made in one turn in one FULL commit (#22). */
+  private async commitFulls(batch: Pending[]): Promise<void> {
     if (!batch.length) return;
-    this.committingFulls++;
     try {
       await this.commitPending(batch, true);
     } finally {
