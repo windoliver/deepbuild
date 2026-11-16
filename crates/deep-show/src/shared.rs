@@ -899,8 +899,15 @@ impl Hub<'_> {
             }
         };
         let shared = self.shared.get_mut(&call.doc).expect("open");
+        // The patch applies to the writer's layer as the load migrated it (#1960), so an op
+        // names a param by its current name: the layer's pack-kind items take their migrated
+        // kind and params first, and come back as stored when the patch doesn't commit.
+        let stored = pack_kinds::store_migrations(&mut shared.doc, &layer, &self.packs);
         let take_back = |shared: &mut Shared, patched: &Patched| {
             rollback(&mut shared.doc, patched);
+            for (id, was) in &stored {
+                shared.doc["items"][id.as_str()] = was.clone();
+            }
             if let Some((fields, owners)) = &added {
                 let items = shared.doc["items"].take();
                 shared.doc = Value::Object(fields.clone());
@@ -1084,6 +1091,16 @@ impl Hub<'_> {
         // A pack kind's items at an earlier major of their pinned pack's kind, too (#1956).
         for (id, was) in pack_kinds::store_migrations(&mut shared.doc, &layer, &self.packs) {
             patched.before.entry(id).or_insert(Some(was));
+        }
+        // Each item the layer's migration moved before the ops, as the revision before held it.
+        for (id, was) in &stored {
+            // Planted (#1960): the store keeps its migrated params under the major it was saved at.
+            if planted == Some(Planted::StoreMigratedParamsUnderSavedMajor) {
+                if let Some(item) = shared.doc["items"].get_mut(id) {
+                    item["kind"] = was["kind"].clone();
+                }
+            }
+            patched.before.insert(id.clone(), Some(was.clone()));
         }
         let patch_id = patch["patch"].as_str().unwrap_or_default().to_string();
         let current_at = self.scenario.clock.map(|c| c.latch_from(checked));
@@ -1622,6 +1639,9 @@ impl Hub<'_> {
             .get_or_init(|| check_packed(&shown, &self.startup.sealed, &self.packs).notices);
         reply.insert("notices".into(), json!(self.notices_reply(doc, notices)));
         reply.insert("files".into(), json!(files(doc, &shown, &owners)));
+        // The document as the load's migration left it, before expansion (#1960).
+        let opened = pack_kinds::loaded(&shown, &self.startup.sealed, &self.packs);
+        reply.insert("opened".into(), opened);
         reply.insert("document".into(), shown.into_owned());
         if let Some(w) = reader {
             self.take_lost(doc, &w, &mut reply);

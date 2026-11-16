@@ -310,6 +310,8 @@ fn check_by(
         )),
     }
 
+    // A rename carries every path that names the param it renames (#1960).
+    super::pack_kinds::migrate::carry_paths(&mut lowered, &resolved, packs.planted);
     // A recipe's channels join the document's, targeting the items it derived (#420).
     let recipe_channels: Map<String, Value> =
         expansions.iter().flat_map(|e| e.channels.clone()).collect();
@@ -349,6 +351,7 @@ fn check_by(
                     check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
+                    super::reads::check(&lowered, kinds, &mut issues);
                     super::rules::check(&lowered, &mut issues, |entries, work| {
                         in_chunks(entries, work)
                     });

@@ -63,6 +63,10 @@ pub struct Planted {
     pub migrate_one_major: bool,
     /// #1959: the migrator treats a param set to 0 as one the document leaves out.
     pub migrate_zero_as_absent: bool,
+    /// #1960: the migrator renames params only, and carries no path that names one.
+    pub migrate_params_only: bool,
+    /// #1960: the migrator carries channel targets, and no other path that names a param.
+    pub migrate_channels_only: bool,
     /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
@@ -1681,6 +1685,8 @@ impl Packs {
                 alone.planted.expander = None;
                 alone.planted.migrate_one_major = false;
                 alone.planted.migrate_zero_as_absent = false;
+                alone.planted.migrate_params_only = false;
+                alone.planted.migrate_channels_only = false;
                 // #1493: a parameter a pack's census maps must reach the frame, so each meets
                 // field.effect on its recipe as a kind's field does.
                 super::pack_kinds::alias_effect(&pack, sealed, &alone)?;

@@ -29,6 +29,12 @@ pub struct Baked {
     /// length.
     pub curve: Vec<V3>,
     pub curve_len: f64,
+    /// The curves a flow along many runs on (#451), as laid out at the time read.
+    pub flows: Vec<super::flows::Curve>,
+    /// A world-space emitter's anchor at each birth bucket (#451).
+    pub anchors: Option<Anchors>,
+    /// `per_edge` (#451): each curve its own emitter, one lane a curve, in the curves' order.
+    pub lanes: Vec<Lane>,
     /// The landing map, when the item lands.
     pub map: Option<heightmap::Map>,
     /// The bursts, when the item bursts rather than emitting at its rate.
@@ -53,6 +59,9 @@ impl Baked {
             origin,
             curve: Vec::new(),
             curve_len: 0.0,
+            flows: Vec::new(),
+            anchors: None,
+            lanes: Vec::new(),
             map: None,
             bursts: None,
             turbulence: None,
@@ -61,6 +70,53 @@ impl Baked {
             drawn: Vec::new(),
             planted: Planted::default(),
         }
+    }
+}
+
+/// A world-space emitter's anchor at each birth bucket: buckets fall on whole multiples of the
+/// document's frame interval `step`, bucket k's place `at[k]` (Particles `particles@1`: space and
+/// paths), so nothing is stored between frames.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Anchors {
+    pub step: f64,
+    pub at: Vec<V3>,
+}
+
+impl Anchors {
+    /// The bucket a birth at `born` falls in.
+    pub fn bucket(&self, born: f64) -> usize {
+        let k = (born / self.step + 1e-9).floor().max(0.0) as usize;
+        k.min(self.at.len().saturating_sub(1))
+    }
+
+    /// Where the anchor was at the bucket of a birth at `born`.
+    pub fn at(&self, born: f64) -> V3 {
+        self.at.get(self.bucket(born)).copied().unwrap_or([0.0; 3])
+    }
+}
+
+/// One curve's own emitter under `per_edge`: rows `first..first + slots`, born at `rate` per s.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Lane {
+    pub first: u32,
+    pub slots: u32,
+    pub rate: f64,
+}
+
+/// The lane row `e` belongs to, and its index (the curve it moves along).
+fn lane_of(b: &Baked, e: u32) -> Option<(usize, Lane)> {
+    b.lanes
+        .iter()
+        .copied()
+        .enumerate()
+        .find(|(_, l)| e >= l.first && e < l.first + l.slots)
+}
+
+/// The curve a particle in row `e` with key `h` moves along: its lane's, or one picked.
+pub fn curve_of(b: &Baked, m: &super::spec::Many, e: u32, h: u32) -> usize {
+    match lane_of(b, e) {
+        Some((j, _)) => j,
+        None => super::flows::pick(&m.pick, b.flows.len(), h),
     }
 }
 
@@ -97,12 +153,16 @@ pub(crate) fn birth(b: &Baked, e: u32, t: f64) -> Option<Birth> {
             })
         }
         None => {
-            let (generation, age) = born(spec, b.births.as_ref(), e, t)?;
+            let (generation, age) = match lane_of(b, e) {
+                Some((_, l)) => born_in(l.slots, l.rate, spec.span, None, e - l.first, t)?,
+                None if !b.lanes.is_empty() => return None,
+                None => born(spec, b.births.as_ref(), e, t)?,
+            };
             Some(Birth {
                 generation,
                 born: t - age,
                 h: hash(&[b.seed, e, generation]),
-                at: b.origin,
+                at: b.anchors.as_ref().map_or(b.origin, |a| a.at(t - age)),
                 push: [0.0; 3],
                 age,
             })
@@ -143,24 +203,36 @@ fn mix(a: f64, b: f64, t: f64) -> f64 {
 /// allows births up to n(span): slot e's latest is k = e + count ⌊(min(⌊n⌋, ⌊n(span)⌋) − e) ÷
 /// count⌋, born when n reached k (the shipped graph's slots, in whole numbers).
 pub fn born(spec: &Spec, births: Option<&Births>, e: u32, t: f64) -> Option<(u32, f64)> {
-    if spec.count == 0 || (births.is_none() && spec.rate <= 0.0) {
+    born_in(spec.count, spec.rate, spec.span, births, e, t)
+}
+
+/// [`born`] for `count` slots emitting at `rate` until `span`: an item's, or one lane's.
+fn born_in(
+    count: u32,
+    rate: f64,
+    span: f64,
+    births: Option<&Births>,
+    e: u32,
+    t: f64,
+) -> Option<(u32, f64)> {
+    if count == 0 || (births.is_none() && rate <= 0.0) {
         return None;
     }
     let (n, n_span) = match births {
-        Some(b) => (b.n(t), b.n(spec.span)),
-        None => (spec.rate * t, spec.rate * spec.span),
+        Some(b) => (b.n(t), b.n(span)),
+        None => (rate * t, rate * span),
     };
     let last = n.floor().min(last_birth(n_span));
     let e = f64::from(e);
     if last < e {
         return None;
     }
-    let count = f64::from(spec.count);
+    let count = f64::from(count);
     let gen = ((last - e) / count).floor();
     let k = e + gen * count;
     let age = match births {
         Some(b) => t - b.time_of(k),
-        None => (n - k) / spec.rate,
+        None => (n - k) / rate,
     };
     Some((gen as u32, age))
 }
@@ -330,6 +402,13 @@ pub(crate) fn particle(
                 let p = solve::ballistic(arc, age, life, bounce, ground, kill, b.planted)?;
                 (p.pos, p.vel, p.contacts, p.resting)
             }
+        }
+        Motion::Along { many: Some(m), .. } => {
+            let c = curve_of(b, m, e, h);
+            let (speed, off) = super::flows::seeded(m.speed, m.lateral, h);
+            let curve = b.flows.get(c)?;
+            let (p, v) = super::flows::place(curve, speed * age, off, speed);
+            (p, v, 0, false)
         }
         Motion::Along { speed, .. } => {
             let l = b.curve_len.max(1e-6);
@@ -514,6 +593,8 @@ pub struct Record {
     pub rest: Option<(f64, V3)>,
     /// When it stops being live.
     pub ends: f64,
+    /// The curve it moves along, by its index among the flow's curves (#451).
+    pub curve: Option<usize>,
 }
 
 /// Every particle born by `until` (s), in order of birth, ties by row.
@@ -535,6 +616,10 @@ pub fn records(b: &Baked, until: f64) -> Vec<Record> {
             hits: Vec::new(),
             rest: None,
             ends: birth.born + life,
+            curve: match &spec.motion {
+                Motion::Along { many: Some(m), .. } => Some(curve_of(b, m, row, h)),
+                _ => None,
+            },
         };
         if let Motion::Ballistic { gravity, drag, .. } = &spec.motion {
             let begin = self::start(b, &birth);
@@ -598,6 +683,34 @@ pub fn records(b: &Baked, until: f64) -> Vec<Record> {
                 }
             }
         }
+        None if !b.lanes.is_empty() => {
+            for l in &b.lanes {
+                if l.slots == 0 || l.rate <= 0.0 {
+                    continue;
+                }
+                let last = (l.rate * until)
+                    .floor()
+                    .min(last_birth(l.rate * spec.span))
+                    .min(1e7);
+                for k in 0..=last.max(-1.0) as i64 {
+                    let k = k as u64;
+                    let row = l.first + (k % u64::from(l.slots)) as u32;
+                    let generation = (k / u64::from(l.slots)) as u32;
+                    let born = k as f64 / l.rate;
+                    one(
+                        row,
+                        Birth {
+                            generation,
+                            born,
+                            h: hash(&[b.seed, row, generation]),
+                            at: b.anchors.as_ref().map_or(b.origin, |a| a.at(born)),
+                            push: [0.0; 3],
+                            age: 0.0,
+                        },
+                    );
+                }
+            }
+        }
         None if spec.count > 0 => {
             let (n_end, n_span) = match &b.births {
                 Some(bt) => (bt.n(until), bt.n(spec.span)),
@@ -622,7 +735,7 @@ pub fn records(b: &Baked, until: f64) -> Vec<Record> {
                         generation,
                         born,
                         h: hash(&[b.seed, row, generation]),
-                        at: b.origin,
+                        at: b.anchors.as_ref().map_or(b.origin, |a| a.at(born)),
                         push: [0.0; 3],
                         age: 0.0,
                     },

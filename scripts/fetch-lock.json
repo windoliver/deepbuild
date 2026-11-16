@@ -237,6 +237,20 @@
       "sha256": "60d854c4c7f4506e8e0fd5951a2e631aa3d1dfce5c2d632084cb7cf8b27cbb68",
       "size": 13835,
       "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "app/node-v24.22.2-darwin-arm64.tar.gz",
+      "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.gz",
+      "sha256": "aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a",
+      "size": 53068959,
+      "credit": "Node.js 24.22.2 for macOS on Apple silicon, from nodejs.org (MIT licence and the bundled projects' notices in its LICENSE), shipped in the app's runtime folder (#1349)"
+    },
+    {
+      "path": "app/git-2.56.1.tar.gz",
+      "url": "https://codeload.github.com/git/git/tar.gz/03b41523c576f26ad34085378717a0c1b287470f",
+      "sha256": "234c011d07f7a7c8420ad3a1b692e71ec5b5a62a4626b07bc8d20a332eb3b1a8",
+      "size": 12804471,
+      "credit": "git 2.56.1's source, the v2.56.1 tag of github.com/git/git (GPL-2.0, COPYING), built into the app's runtime folder as a program of its own (#1349)"
     }
   ]
 }

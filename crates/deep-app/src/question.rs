@@ -71,6 +71,10 @@ pub enum Target {
     Send,
     Undo,
     Step(usize),
+    /// A sign-in task's one button (#1349).
+    SignIn,
+    /// A sign-in task's plan line, which opens the maker's price page (#1349).
+    Page,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,6 +108,11 @@ pub enum Did {
     NeedsConfirmation(String),
     Undone,
     Switched,
+    /// Sign in was pressed on an agent's sign-in task (#1349), named by its handle: the shell starts that agent's sign-in,
+    /// which answers nothing.
+    SignIn(String),
+    /// The plan line was pressed (#1349): the shell opens the maker's price page, from the app's own facts.
+    Page(String),
 }
 
 /// One row the card draws: a line of text, or a control with its label.
@@ -122,16 +131,27 @@ pub enum Row {
     },
     Send,
     Undo,
+    /// A row of the batched taste card (#1345): its ask, its lines, and the lines as one label.
+    Call {
+        ask: String,
+        label: String,
+        lines: Vec<String>,
+    },
+    /// A sign-in task's one button (#1349).
+    SignIn,
+    /// A sign-in task's plan line (#1349), which opens the maker's price page.
+    Page(String),
 }
 
 impl Row {
     /// The row's words, what an assistive client reads.
     pub fn label(&self) -> &str {
         match self {
-            Row::Text(text) => text,
-            Row::Option { label, .. } | Row::Step { label, .. } => label,
+            Row::Text(text) | Row::Page(text) => text,
+            Row::Option { label, .. } | Row::Step { label, .. } | Row::Call { label, .. } => label,
             Row::Send => "Send",
             Row::Undo => "Undo",
+            Row::SignIn => "Sign in",
         }
     }
 
@@ -139,6 +159,7 @@ impl Row {
     fn marked(self) -> Row {
         match self {
             Row::Text(text) => Row::Text(visible(&text)),
+            Row::Page(text) => Row::Page(visible(&text)),
             Row::Option {
                 index,
                 label,
@@ -152,6 +173,11 @@ impl Row {
                 index,
                 label: visible(&label),
                 on,
+            },
+            Row::Call { ask, label, lines } => Row::Call {
+                ask,
+                label: visible(&label),
+                lines: lines.iter().map(|line| visible(line)).collect(),
             },
             row => row,
         }
@@ -324,6 +350,11 @@ impl Controller {
         }
         fresh.scope = self.model.scope.clone();
         fresh.applies = self.model.applies.clone();
+        for call in &mut fresh.calls {
+            if let Some(was) = self.model.calls.iter().find(|was| was.ask == call.ask) {
+                call.applies = was.applies.clone();
+            }
+        }
         let was = |member: usize| {
             let handle = &fresh.batch.get(member)?.0;
             let before = self.model.batch.iter().position(|(ask, _)| ask == handle)?;
@@ -396,6 +427,24 @@ impl Controller {
             }
             return rows;
         }
+        // An agent's sign-in task (#1349): one button, Sign in, then its steps, the plan line among them. Nothing on it
+        // answers the task: only the agent's probe closes it.
+        if let Some(steps) = &self.model.sign_in {
+            rows.push(Row::SignIn);
+            // The step naming the price page's host is the plan line, and opens that page: the address is the app's own,
+            // from the facts it ships, never one the record carries.
+            let host = self
+                .model
+                .price_page
+                .as_deref()
+                .and_then(|page| page.strip_prefix("https://"))
+                .and_then(|rest| rest.split('/').next());
+            rows.extend(steps.iter().cloned().map(|step| match host {
+                Some(host) if step.contains(host) => Row::Page(step),
+                _ => Row::Text(step),
+            }));
+            return rows;
+        }
         for (index, option) in self.model.options.iter().enumerate() {
             let mut label = option.label.clone();
             if option.recommended {
@@ -445,6 +494,30 @@ impl Controller {
         }
         if let Some(label) = self.model.approve_label() {
             rows.push(Row::Text(label));
+        }
+        // The batched taste card's rows (#1345): one per call, with its two answers, what Send back does here before
+        // it's pressed, and when its recommended answer applies. Its two planted twins leave the words off the first
+        // row that reverts, and the time off the first row.
+        let mut unannounced = crate::plain::planted("card-row-reverts-unannounced");
+        let mut timeless = crate::plain::planted("card-row-without-time");
+        for call in &self.model.calls {
+            let mut lines = vec![call.question.clone(), format!("{} (recommended)", call.yes)];
+            if unannounced && call.sends == crate::kinds::REVERTS {
+                unannounced = false;
+                lines.push(call.back.clone());
+            } else {
+                lines.push(format!("{} · {}", call.back, call.sends));
+            }
+            if timeless {
+                timeless = false;
+            } else {
+                lines.push(format!("{} applies at {}", call.yes, call.applies));
+            }
+            rows.push(Row::Call {
+                ask: call.ask.clone(),
+                label: lines.join(" · "),
+                lines,
+            });
         }
         for call in &self.model.past {
             rows.push(Row::Text(format!(
@@ -577,6 +650,15 @@ impl Controller {
             State::Presented { .. } | State::Armed { .. }
         );
         match target {
+            // Sign in starts the agent's own sign-in (#1349): it answers nothing, so it needs no arming or confirmation.
+            Target::SignIn => match (&self.model.sign_in, phase) {
+                (Some(_), Phase::Up) if shown => Did::SignIn(self.model.ask.clone()),
+                _ => Did::Nothing,
+            },
+            Target::Page => match (&self.model.price_page, phase) {
+                (Some(page), Phase::Up) if shown => Did::Page(page.clone()),
+                _ => Did::Nothing,
+            },
             // An approval whose own steps are off runs nothing the core would take: the card holds it back.
             Target::Option(index) if self.is_allow(index) && !self.model.own_on() => {
                 self.switch_first = true;
@@ -1043,6 +1125,75 @@ mod tests {
             Did::Nothing => controller.press(hardware(t + 30, target, Phase::Up), events, t + 30),
             other => other,
         }
+    }
+
+    #[test]
+    fn a_sign_in_task_draws_one_button_and_its_steps_and_its_press_starts_the_agents_sign_in_answering_nothing(
+    ) {
+        let events = vec![ask(
+            "S",
+            "unblock",
+            json!([{"id": "done", "label": "I did it", "decision": "none"}, {"id": "wait", "label": "Leave it blocked", "decision": "none"}]),
+            json!({
+                "steps": ["Press Sign in: Claude Code opens its own window or browser page", "Claude Code needs a paid plan."],
+                "where": "Claude Code's own window or browser page", "why": "w", "unblocks": ["req:0"], "proves": "claude-code sign-in probe",
+            }),
+        )];
+        let mut card = Controller::present(&events, "ask:S", NOW, SLOT, Faults::default()).unwrap();
+        let controls: Vec<Row> = card
+            .rows()
+            .into_iter()
+            .filter(|row| !matches!(row, Row::Text(_)))
+            .collect();
+        assert_eq!(
+            controls,
+            vec![Row::SignIn],
+            "one button, Sign in: no option and no Send"
+        );
+        assert!(card
+            .lines()
+            .contains(&"Claude Code needs a paid plan.".to_owned()));
+        assert_eq!(
+            click(&mut card, &events, NOW + 10, Target::SignIn),
+            Did::SignIn("ask:S".into())
+        );
+        assert!(card.take_answers().is_empty(), "Sign in answers nothing");
+    }
+
+    #[test]
+    fn a_sign_in_tasks_plan_line_opens_the_makers_price_page_from_the_apps_own_facts() {
+        // The record's step names the page's host; the address opened is the one the app ships, whatever the record says.
+        let events = vec![ask(
+            "P",
+            "unblock",
+            json!([{"id": "done", "label": "I did it", "decision": "none"}]),
+            json!({
+                "steps": ["Press Sign in", "Claude Code needs a paid plan. Its plans: claude.com/pricing"],
+                "where": "w", "why": "w", "unblocks": ["req:0"], "proves": "claude-code sign-in probe",
+            }),
+        )];
+        let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
+        let controls: Vec<Row> = card
+            .rows()
+            .into_iter()
+            .filter(|row| !matches!(row, Row::Text(_)))
+            .collect();
+        assert_eq!(
+            controls,
+            vec![
+                Row::SignIn,
+                Row::Page("Claude Code needs a paid plan. Its plans: claude.com/pricing".into())
+            ],
+            "Sign in, and the plan line as the way to the price page"
+        );
+        assert_eq!(
+            click(&mut card, &events, NOW + 10, Target::Page),
+            Did::Page("https://claude.com/pricing".into())
+        );
+        assert!(
+            card.take_answers().is_empty(),
+            "the price page answers nothing"
+        );
     }
 
     #[test]

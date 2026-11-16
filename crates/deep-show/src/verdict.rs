@@ -20,8 +20,8 @@ use crate::shared::knows;
 
 /// A document the hub holds, at its current revision.
 pub(crate) struct Current<'h> {
-    rev: u64,
-    hash: &'h str,
+    pub(crate) rev: u64,
+    pub(crate) hash: &'h str,
     pub(crate) doc: &'h Value,
 }
 
@@ -252,6 +252,8 @@ impl<'a> Hub<'a> {
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
         let shapes = self.geometry_shape_runs(c);
+        // #456: render.review's readings, each from its model in a fresh context.
+        let reviews = self.review_rows(claim, c);
         // #407: the film audit and the flicker check on every deliverable, the brief's own checks,
         // and the frame each honest-numbers subject first shows in.
         let films = self.film_audit_runs(c);
@@ -292,6 +294,9 @@ impl<'a> Hub<'a> {
                     (Some(j), _, _) if !missing && !docs.is_empty() => self.judge_audit(r, j),
                     _ if !missing && !docs.is_empty() && shapes.contains_key(&r.id) => {
                         shapes[&r.id].clone()
+                    }
+                    _ if !missing && !docs.is_empty() && reviews.contains_key(&r.id) => {
+                        reviews[&r.id].clone()
                     }
                     (_, Some(a), _) if !missing && !docs.is_empty() => {
                         film_row(r, &a.issues, &a.blocked, &a.not_run)
@@ -760,7 +765,7 @@ impl<'a> Hub<'a> {
 
     /// One requirement's row: its check input's kind run on every deliverable, with the machines
     /// its result holds on and the determinism class of what it read (#411).
-    fn judge(
+    pub(crate) fn judge(
         &self,
         r: &Requirement,
         docs: &[(String, Current)],
@@ -987,9 +992,18 @@ impl<'a> Hub<'a> {
                             blocked.push(in_doc(json!({"code": "not_drawn", "kind": kind})));
                             Default::default()
                         }
+                        // #1164: a report reads the revision as played, its input track inlined.
                         (None, _) => check
                             .report
-                            .map(|run| run(&checked.lowered, &input))
+                            .map(|run| {
+                                run(
+                                    &crate::played::with_track(
+                                        &checked.lowered,
+                                        &self.track_json(doc),
+                                    ),
+                                    &input,
+                                )
+                            })
                             .unwrap_or_default(),
                     };
                     for (id, r, actual) in out.raised {

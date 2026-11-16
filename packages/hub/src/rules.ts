@@ -49,7 +49,7 @@ const tokensOf = (text: string): number =>
   (text.match(/[A-Za-z]+|\d+|[^\sA-Za-z\d]/g) ?? []).reduce((n, piece) => n + (/^[A-Za-z]+$/.test(piece) ? Math.ceil(piece.length / 5) : 1), 0);
 
 /** A glob as rule files write one: `**` any folders, `*` within a name, `?` one character; several apart by commas. */
-function globMatches(glob: string, path: string): boolean {
+export function globMatches(glob: string, path: string): boolean {
   let res = GLOBS.get(glob);
   if (!res) {
     res = glob.split(',').map((g) => g.trim()).filter(Boolean).map((g) => {

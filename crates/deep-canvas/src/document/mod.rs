@@ -25,6 +25,7 @@ mod order;
 pub mod pack_kinds;
 pub mod packs;
 pub mod patch_schema;
+mod reads;
 mod requires;
 mod rows;
 mod rules;
