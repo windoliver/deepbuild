@@ -1,0 +1,57 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ packages/archive/test/multiline-tail.test.ts (2 tests | 2 failed) 3890ms
+   × a multiline key split across passes waits from its opening line, then is scrubbed whole 1613ms
+   × a held value divided at a newline between passes is never kept as separate raw halves 1620ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/archive/test/multiline-tail.test.ts > a multiline key split across passes waits from its opening line, then is scrubbed whole
+AssertionError: expected '{"parentUuid":null,"isSidechain":fals…' to be '{"parentUuid":null,"isSidechain":fals…' // Object.is equality
+
+- Expected
++ Received
+
+- {"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"public first line"},"uuid":"m1","timestamp":"2026-10-05T09:00:00.000Z","userType":"external","entrypoint":"cli","cwd":"/tmp/dh20-work/shop","sessionId":"93a08d27-c73e-4529-933f-2d68af1d0279","version":"2.1.304","gitBranch":"main"}
++ {"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"public first line"},"uuid":"m1","timestamp":"2026-10-05T09:00:00.000Z","userType":"external","entrypoint":"cli","cwd":"/tmp/dh20-work/shop","sessionId":"93a08d27-c73e-4529-933f-2d68af1d0279","version":"2.1.304","gitBranch":"main"}
++ -----BEGIN OPENSSH PRIVATE KEY-----
++ synthetickeybodysynthetickeybodysynthetickeybodysynthetickeybodysynthetickeybodysynthetickeybodysynthetickeybody
+
+
+ ❯ packages/archive/test/multiline-tail.test.ts:18:88
+     16|     await archive.pass();
+     17|     const first = (await archivedOf(w.record, t.id)).at(-1)!;
+     18|     expect(Buffer.from(await w.store.read(String(dataOf(first).evidenc…
+       |                                                                                        ^
+     19|     appendFileSync(t.path, `${keyMarker('END')}\nfinished\n`);
+     20|     await archive.pass();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/archive/test/multiline-tail.test.ts > a held value divided at a newline between passes is never kept as separate raw halves
+AssertionError: expected 'public\nupper-half-of-held-value\n' to be 'public\n' // Object.is equality
+
+- Expected
++ Received
+
+- public
++ public
++ upper-half-of-held-value
+
+
+ ❯ packages/archive/test/multiline-tail.test.ts:36:88
+     34|     await archive.pass();
+     35|     const first = (await archivedOf(w.record, t.id)).at(-1)!;
+     36|     expect(Buffer.from(await w.store.read(String(dataOf(first).evidenc…
+       |                                                                                        ^
+     37|     appendFileSync(t.path, 'lower-half-of-held-value\nlast\n');
+     38|     await archive.pass();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  16:19:45
+   Duration  8.90s (tests 55%, transform 28%, import 13%, worker 2%, setup 1%)
