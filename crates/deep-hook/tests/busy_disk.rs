@@ -35,18 +35,20 @@ fn main() {
     println!("\nrunning {} test{plural}", chosen.len());
     let (mut passed, mut failed, mut unproven) = (0, 0, Vec::new());
     for (name, case) in chosen {
+        // A run that proved nothing gives its reason on its own line, so the lanes, which read the bare word as a
+        // reasonless state, read it once: from the `test result: INCONCLUSIVE` line, with the reason.
         let word = match std::panic::catch_unwind(case) {
             Ok(Ok(())) => {
                 passed += 1;
-                "ok"
+                "ok".to_string()
             }
             Ok(Err(reason)) => {
                 unproven.push(format!("{name}: {reason}"));
-                "INCONCLUSIVE"
+                format!("INCONCLUSIVE: {reason}")
             }
             Err(_) => {
                 failed += 1;
-                "FAILED"
+                "FAILED".to_string()
             }
         };
         println!("test {name} ... {word}");
