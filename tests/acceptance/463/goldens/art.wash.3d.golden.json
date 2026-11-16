@@ -1,0 +1,10 @@
+{
+ "fixture": "art.wash.3d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "f27898a60919257ea107af5b0668c149f59391a48ce9a1dd0d32f4ae392be9e0"
+}

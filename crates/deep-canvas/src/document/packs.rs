@@ -20,14 +20,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::pack_kinds::check_kinds;
+pub(super) use inputs::input_fault;
 use super::{member, Issue};
 use crate::expr::MAX_NEST;
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+mod aliases;
 pub mod deps;
 mod entries;
+mod inputs;
+mod parts;
+mod place;
+mod refused;
 pub mod module_fields;
 pub mod retired;
 
@@ -193,6 +199,8 @@ pub struct Recipe {
     /// Its kind rules (#490), read by the core's `kind_rules` check at rest: each instance
     /// whose params make one read 0 raises the rule's code.
     pub rules: Vec<KindRule>,
+    /// The parameters it refuses by name, each with its fix (#233).
+    pub refuses: BTreeMap<String, String>,
 }
 
 /// A recipe's kind rule: `<pack>.<rule>`, an expression of the closed function list over the
@@ -295,11 +303,13 @@ const STEP_OPS: &[&str] = &[
     "strip",
     "transition",
     "driver",
+    "place",
+    "value",
 ];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
     "number", "integer", "bool", "choice", "vec3", "range", "text", "asset", "ID", "records",
-    "record",
+    "record", "word",
 ];
 
 /// The document map a film recipe's step op writes into, for the ops that write no item.
@@ -310,6 +320,8 @@ pub fn section_of(op: &str) -> Option<&'static str> {
         "strip" => Some("strips"),
         "transition" => Some("transitions"),
         "driver" => Some("drivers"),
+        // #233: a named value, such as a ValueTracker's, which formulas read and cues key.
+        "value" => Some("data"),
         _ => None,
     }
 }
@@ -495,10 +507,6 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             check_entries(&id, e, &assets, recipes, sealed, &mut issues)
         }
     };
-    let aliases = match fields.get("aliases") {
-        None => BTreeMap::new(),
-        Some(a) => check_aliases(a, &mut issues),
-    };
     let kinds = check_kinds(
         &id,
         fields,
@@ -507,6 +515,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         (sealed, planted),
         &mut issues,
     );
+    let aliases = match fields.get("aliases") {
+        None => BTreeMap::new(),
+        Some(a) => {
+            let (pack, requires) = (id.name.as_str(), requires_packs.as_slice());
+            let holds = aliases::Holds { pack, recipes: &recipes, kinds: &kinds, requires, sealed };
+            aliases::check(a, &holds, &mut issues)
+        }
+    };
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -523,41 +539,6 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         aliases,
         kinds,
     })
-}
-
-/// A pack's `aliases`: each word maps to a kind as `name@major`, with the conversion the pack
-/// states as text; anything else is refused at `aliases/<word>`, so no mapping is inferred.
-fn check_aliases(aliases: &Value, issues: &mut Vec<Issue>) -> BTreeMap<String, Value> {
-    let mut out = BTreeMap::new();
-    let Some(words) = aliases.as_object() else {
-        issues.push(Issue::envelope(
-            "out_of_range",
-            "aliases".into(),
-            aliases.clone(),
-            "not an object",
-        ));
-        return out;
-    };
-    for (word, alias) in words {
-        let target = alias.get("target").and_then(Value::as_str);
-        let conversion = alias.get("conversion").and_then(Value::as_str);
-        let keys_ok = alias.as_object().is_some_and(|a| {
-            a.keys()
-                .all(|k| matches!(k.as_str(), "target" | "conversion" | "renamed_from"))
-        });
-        match (target.and_then(crate::kinds::parse_kind), conversion) {
-            (Some(_), Some(_)) if keys_ok => {
-                out.insert(word.clone(), alias.clone());
-            }
-            _ => issues.push(Issue::envelope(
-                "out_of_range",
-                format!("aliases/{word}"),
-                alias.clone(),
-                "an alias is {target: name@major, conversion: text, renamed_from?}",
-            )),
-        }
-    }
-    out
 }
 
 /// A pack's registry entries (Registry and seal: registries), each checked at the pack check: in
@@ -758,6 +739,7 @@ const RECIPE_KEYS: &[&str] = &[
     "channels",
     "rules",
     "twins",
+    "refuses",
 ];
 /// A step's keys in this slice.
 const STEP_KEYS: &[&str] = &[
@@ -909,7 +891,7 @@ fn check_recipe(
                 }
                 let kind = s.get("kind").and_then(Value::as_str).unwrap_or_default();
                 let parsed = match op {
-                    "cue" => Some((String::new(), 0)),
+                    "cue" | "place" => Some((String::new(), 0)),
                     _ if section_of(op).is_some() => Some((String::new(), 0)),
                     _ => crate::kinds::parse_kind(kind),
                 };
@@ -1165,6 +1147,7 @@ fn check_recipe(
         Some(other) => issues.push(bad("channels", other.clone(), "not an object")),
     }
     let rules = read_rules(pack, fields, &inputs, sealed, path, &mut issues);
+    let refuses = refused::read(fields, &inputs, path, &mut issues);
     if !issues.is_empty() {
         return Err(issues);
     }
@@ -1177,6 +1160,7 @@ fn check_recipe(
         steps,
         channels,
         rules,
+        refuses,
     })
 }
 
@@ -1450,63 +1434,6 @@ fn read_lets(
     }
 }
 
-/// Why `value` is no value of `input`, if it isn't.
-pub(super) fn input_fault(input: &Input, value: &Value) -> Option<String> {
-    let range = |n: f64| -> Option<String> {
-        let below = input.min.is_some_and(|min| n < min);
-        let above = input.max.is_some_and(|max| n > max);
-        (below || above || !n.is_finite()).then(|| {
-            format!(
-                "outside {} to {}",
-                input.min.unwrap_or(f64::NEG_INFINITY),
-                input.max.unwrap_or(f64::INFINITY)
-            )
-        })
-    };
-    match input.ty.as_str() {
-        "number" => match value.as_f64() {
-            Some(n) => range(n),
-            None => Some("not a number".into()),
-        },
-        "integer" => match value.as_f64() {
-            Some(n) if n.fract() == 0.0 => range(n),
-            _ => Some("not an integer".into()),
-        },
-        "bool" => (!value.is_boolean()).then(|| "not a bool".to_string()),
-        "choice" => match value.as_str() {
-            Some(s) if input.options.iter().any(|o| o == s) => None,
-            _ => Some(format!("not one of {}", input.options.join(", "))),
-        },
-        "vec3" | "range" => {
-            let (len, what) = match input.ty.as_str() {
-                "vec3" => (3, "not three numbers"),
-                _ => (2, "not two numbers"),
-            };
-            let ok = value.as_array().is_some_and(|a| {
-                a.len() == len && a.iter().all(|v| v.as_f64().is_some_and(f64::is_finite))
-            });
-            (!ok).then(|| what.to_string())
-        }
-        "text" | "ID" => (!value.is_string()).then(|| "not a string".to_string()),
-        // An asset by its hash (#142).
-        "asset" => {
-            let hex = value
-                .as_str()
-                .map(|s| s.strip_prefix("sha256:").unwrap_or(s));
-            let ok = hex.is_some_and(|h| {
-                h.len() == 64
-                    && h.bytes()
-                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            });
-            (!ok).then(|| "not a sha256".to_string())
-        }
-        // A list of rows, such as points, and one row, such as another tool's mesh (#433).
-        "records" => (!value.is_array()).then(|| "not a list".to_string()),
-        "record" => (!value.is_object()).then(|| "not an object".to_string()),
-        _ => None,
-    }
-}
-
 /// A pack folder's manifest as the pack check reads it (#142, moved from the hub so every host
 /// reads a folder alike): `pack.json` with its `id`, each asset's bytes in hex once its sha256
 /// and size match what the manifest lists (network assets are fetched on first use, never here),
@@ -1722,6 +1649,8 @@ pub struct Resolved<'a> {
     elements: BTreeMap<String, registry::Elements>,
     /// The listed versions this build lacks, whose instances are kept and skipped (#1958).
     pub missing: Vec<retired::Missing>,
+    /// The document's design size in u, which a recipe reads as `fw` and `fh` (#233).
+    pub frame: [f64; 2],
 }
 
 impl<'a> Resolved<'a> {
@@ -1766,7 +1695,11 @@ pub fn resolve<'a>(
     sealed: Option<&Sealed>,
     issues: &mut Vec<Issue>,
 ) -> Resolved<'a> {
-    let mut out = Resolved::default();
+    let (fw, fh) = super::check::frame_of(doc).unwrap_or((1920, 1080));
+    let mut out = Resolved {
+        frame: [f64::from(fw), f64::from(fh)],
+        ..Resolved::default()
+    };
     if let Some(sealed) = sealed {
         for m in &sealed.modules {
             for (kind, f) in &m.shapes.elements {
@@ -1884,6 +1817,8 @@ pub struct Expansion {
     /// The section entries an expansion wrote, by section: a module kind's (#222), or a film
     /// recipe's shots, markers, strips and transitions (#142).
     pub sections: Map<String, Value>,
+    /// The items it placed by relation or parent, in order: its parts (#233).
+    pub placed: Vec<String>,
 }
 
 impl Expansion {
@@ -1955,6 +1890,7 @@ pub fn expand(
         };
         out.push(expansion);
     }
+    parts::resolve(items, &out);
     out
 }
 
@@ -2202,6 +2138,11 @@ fn expand_one(
             continue;
         }
         let Some(input) = recipe.inputs.get(name) else {
+            if let Some(fix) = recipe.refuses.get(name) {
+                issues.push(refused::refusal(id, &recipe.id, name, value, fix));
+                ok = false;
+                continue;
+            }
             issues.push(Issue::error(
                 "unknown_field",
                 id,
@@ -2331,8 +2272,11 @@ fn expand_one(
     let key = key.finish().hex();
     // The instance's own ID first, so a film recipe's shots, transitions and cue list can name
     // the items it derives (#142); an input of that name shadows it.
-    let mut env: Vec<(String, Value)> = std::iter::once(("instance".to_string(), json!(id)))
+    let [fw, fh] = resolved.frame;
+    let scope = [("instance", json!(id)), ("fw", json!(fw)), ("fh", json!(fh))];
+    let mut env: Vec<(String, Value)> = (scope.into_iter().map(|(k, v)| (k.to_string(), v)))
         .chain(inputs.iter().map(|(k, v)| (k.clone(), v.clone())))
+        .chain(inputs::named(recipe, &inputs, items))
         .collect();
     for (name, expr) in &recipe.lets {
         match expr.eval(&env) {
@@ -2350,6 +2294,7 @@ fn expand_one(
         }
     }
     let mut derived = Vec::new();
+    let mut placed = Vec::new();
     let mut derived_items = Map::new();
     // Each step's derived IDs, which the recipe's channels target, and the channels.
     let mut ids_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -2664,6 +2609,14 @@ fn expand_one(
                 derived.retain(|d| d.id != derived_id);
                 continue;
             }
+            // #233: an item the document holds, placed by relation or parent: no derived item.
+            if step.op == "place" {
+                let (target, item) = place::apply(items, id, &step.id, &params, issues)?;
+                derived_items.insert(target.clone(), item);
+                placed.push(target);
+                derived.retain(|d| d.id != derived_id);
+                continue;
+            }
             if items.contains_key(&derived_id) && !broken_out.contains(&derived_id) {
                 issues.push(Issue::error(
                     "bad_id",
@@ -2946,6 +2899,7 @@ fn expand_one(
         orphaned,
         channels,
         sections,
+        placed,
     })
 }
 
@@ -3357,7 +3311,7 @@ impl Expr {
                 word(&args[2], bound, out, words);
             }
             // `id(…)` and `at(…)`: a bare name nothing binds is its own text (#142).
-            Expr::Call(name, args) if name == "id" || name == "at" || name == "path" => {
+            Expr::Call(name, args) if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") => {
                 for a in args {
                     word(a, bound, out, words);
                 }
@@ -3482,7 +3436,7 @@ impl Expr {
             // An ID joined from its parts, `id(instance, shot, i)` → `film.shot.3`, a time
             // anchored on a marker, `at(cues, c.id, end)` → `@cues.c3.end`, and a document path,
             // `path(items, id(instance, row0), at, pos, 0)` → `items/film.row0/at/pos/0` (#142).
-            Expr::Call(name, args) if name == "id" || name == "at" || name == "path" => {
+            Expr::Call(name, args) if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") => {
                 let mut parts = Vec::new();
                 for a in args {
                     let part = match a {
@@ -3492,6 +3446,7 @@ impl Expr {
                             Value::Number(x) if x.as_f64().is_some_and(|f| f.fract() == 0.0) => {
                                 format!("{}", x.as_f64().unwrap_or(0.0) as i64)
                             }
+                            Value::Number(x) if name == "part" || name == "cat" => x.to_string(),
                             other => {
                                 return Err(format!("`{}` is no part of an ID", shown(&other)))
                             }
@@ -3502,11 +3457,26 @@ impl Expr {
                 Ok(json!(match name.as_str() {
                     "at" => format!("@{}", parts.join(".")),
                     "path" => parts.join("/"),
+                    // #233: a part of an item, `part(axis, tick, 3)` → `axis#tick:3`.
+                    "part" => format!("{}#{}", parts[0], parts[1..].join(":")),
+                    // #233: text joined, such as a label and its unit: `cat(shown(30, 0), deg)`.
+                    "cat" => parts.concat(),
                     _ => parts.join("."),
                 }))
             }
             // Path data through points, `polyline(x0, y0, x1, y1, …)` → `M x0 y0 L x1 y1 …`, so a
             // recipe draws a line from numbers it computes (#142).
+            // #233: or through a list of [x, y] points, as a repeat writes them.
+            Expr::Call(name, args) if name == "polyline" && args.len() == 1 => {
+                let points = args[0].value(scope)?;
+                let held: Option<Vec<Expr>> = points.as_array().and_then(|l| {
+                    let xy = l.iter().flat_map(|p| [p.get(0), p.get(1)]);
+                    xy.map(|v| v?.as_f64().map(Expr::Num)).collect()
+                });
+                let held = held.filter(|h| h.len() >= 4 && h.len() % 2 == 0);
+                let held = held.ok_or("polyline(points) takes a list of two or more [x, y]")?;
+                Expr::Call(name.clone(), held).value(scope)
+            }
             Expr::Call(name, args) if name == "polyline" => {
                 if args.len() < 4 || args.len() % 2 != 0 {
                     return Err("polyline(x0, y0, x1, y1, …) takes two or more points".into());
@@ -3542,6 +3512,23 @@ impl Expr {
                             shown(&want)
                         )
                     })
+            }
+            // #233: a number as a label shows it, `shown(-3, 0)` → `−3`, at its decimal places.
+            Expr::Call(name, args) if name == "shown" && args.len() == 2 => {
+                let (v, places) = (args[0].eval(scope)?, args[1].eval(scope)?);
+                let text = format!("{:.*}", places.clamp(0.0, 12.0) as usize, v);
+                Ok(json!(text.replace('-', "\u{2212}")))
+            }
+            // #233: a function of x in the closed function list at a number, `value_at(f, 2)`.
+            Expr::Call(name, args) if name == "value_at" && args.len() == 2 => {
+                let (f, x) = (args[0].value(scope)?, args[1].eval(scope)?);
+                let f = f.as_str().ok_or("value_at(f, x) takes f as text")?;
+                let e = crate::expr::Expr::compile(f, &crate::expr::Nothing, 256)
+                    .map_err(|e| format!("`{f}`: {}", e.why))?;
+                if let Some(v) = e.vars.iter().find(|v| *v != "x") {
+                    return Err(format!("`{f}` reads `{v}`; a function here reads only x"));
+                }
+                n(e.eval_num(&vec![x; e.vars.len()]))
             }
             // A point's coordinates as text, `pair(1, 2)` → `(1, 2)` (#142).
             Expr::Call(name, args) if name == "pair" && args.len() == 2 => {
@@ -3604,6 +3591,14 @@ impl Expr {
                     ("acos", [a]) => ops::acos(*a),
                     ("atan", [a]) => ops::atan(*a),
                     ("atan2", [a, b]) => ops::atan2(*a, *b),
+                    // #233: whole numbers' greatest common divisor, as a fraction's label reduces.
+                    ("gcd", [a, b]) => {
+                        let (mut x, mut y) = (a.abs().round() as u64, b.abs().round() as u64);
+                        while y != 0 {
+                            (x, y) = (y, x % y);
+                        }
+                        x.max(1) as f64
+                    }
                     ("deg", [a]) => ops::deg(*a),
                     ("rad", [a]) => ops::rad(*a),
                     _ => return Err(format!("no function `{name}` of {} arguments", vals.len())),

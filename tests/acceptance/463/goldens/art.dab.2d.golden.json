@@ -1,0 +1,10 @@
+{
+ "fixture": "art.dab.2d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "88764d68c0c9b3bd969e50ef421cde7efffed3f69b02f848551e499647245135"
+}
