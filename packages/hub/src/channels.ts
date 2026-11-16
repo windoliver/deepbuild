@@ -333,6 +333,7 @@ export class Channels {
     } finally {
       t.inflight = false;
     }
+    if (typeof said !== 'object' || said === null) said = { outcome: 'stalled' };
     const ack = said.outcome === 'delivered' && typeof said.ack === 'string' && said.ack ? said.ack.slice(0, 2000) : null;
     const outcome = said.outcome === 'delivered' ? (ack ? 'delivered' : 'stalled') : ['stalled', 'timed_out', 'conflict'].includes(said.outcome) ? said.outcome : 'stalled';
     await this.deps.append('channel.delivered', { channel: c.name, thread_key: item.thread_key, item, outcome, ack }, item.thread_key);

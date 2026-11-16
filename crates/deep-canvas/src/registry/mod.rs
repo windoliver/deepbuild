@@ -170,6 +170,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("scale", "data"),
     // #226: 3D axes are the data module's too, beside its scales and axes.
     ("axes3d", "data"),
+    // #225: a vector field is the data module's, beside its scales and 3D axes.
+    ("vector_field", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
@@ -436,6 +438,9 @@ pub struct Fixture {
     pub sidecar: Value,
     /// The assets its items name by hash (#453), which a kit hands a check that reports.
     pub assets: Vec<Vec<u8>>,
+    /// A planted document: one the check must refuse with the codes its sidecar names. The kit
+    /// runs it; the `fixtures` call, every document of which presents, leaves it out (#2085).
+    pub planted: bool,
 }
 
 /// A kind's drawing as `rect@1` params, from the item's params.
@@ -784,6 +789,8 @@ pub struct Registrar {
     pub elements: Vec<(String, Elements)>,
     /// Its kinds expanded at check, by kind (`family.name`; #222).
     pub expands: Vec<(String, crate::document::expands::Expand)>,
+    /// Its reading of a cue list's times, for a pack kind's rule over it (#142).
+    pub cue_rows: Vec<crate::document::expands::CueRows>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -1027,7 +1034,16 @@ impl Registrar {
             category: String::new(),
             sidecar: Value::Null,
             assets: Vec::new(),
+            planted: false,
         });
+        self
+    }
+
+    /// The last fixture as a planted document, which the check must refuse (#2085).
+    pub fn planted(&mut self) -> &mut Self {
+        if let Some(last) = self.fixtures.last_mut() {
+            last.planted = true;
+        }
         self
     }
 
@@ -1275,6 +1291,8 @@ pub struct RegistryRefusal {
     pub entries: Vec<Value>,
     pub rules: Vec<String>,
     pub passes: Vec<String>,
+    /// What each failing kit rule read on the entry (#213: a service's fixture names its request).
+    pub report: serde_json::Map<String, Value>,
 }
 
 // Each refusal is boxed as it is made: a `SealError` is large, and a `Result` carries only its pointer.
@@ -1315,6 +1333,7 @@ impl SealError {
             entries,
             rules: rules.iter().map(|r| r.to_string()).collect(),
             passes: Vec::new(),
+            report: Default::default(),
         }));
         self
     }

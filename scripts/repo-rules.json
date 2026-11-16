@@ -1,27 +1,20 @@
 {
   "advisories": {
-    "ignore": [
-      {
-        "id": "RUSTSEC-2026-0194",
-        "package": "quick-xml",
-        "why": "citationberg 0.7.0 requires ^0.38.1, holding quick-xml at 0.38.4 below fixed 0.41.0. Typst typeset input can pass inline CSL bytes to citationberg's NsReader deserializer, so quadratic attribute checking is reachable; this is a deferred fix, not a claim of safety.",
-        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
-      },
-      {
-        "id": "RUSTSEC-2026-0195",
-        "package": "quick-xml",
-        "why": "citationberg 0.7.0 requires ^0.38.1, holding quick-xml at 0.38.4 below fixed 0.41.0. Typst typeset input can pass inline CSL bytes to citationberg's NsReader deserializer, so namespace-allocation denial of service is reachable despite restricted file reads.",
-        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
-      },
-      {
-        "id": "RUSTSEC-2026-0235",
-        "package": "rkyv",
-        "why": "mitex-spec 0.2.7 requires ^0.7.42, holding rkyv at 0.7.46 below fixed 0.8.17. deep-typeset supplies no custom MiTeX spec; only the compiled-in default.rkyv is deserialized, with no document, pack or panel archive bytes accepted by this entry.",
-        "issue": "https://github.com/windoliver/deepbuild/issues/2359"
-      }
-    ]
+    "ignore": []
   },
   "deps": {
+    "tests/mitex-archive/Cargo.toml": {
+      "dependencies": {
+        "new-spec": {
+          "spec": "* package=mitex-spec path=../../vendor/mitex-spec",
+          "why": "Issue #2359: decode the shipped migrated archive through its public API and compare all command values with the original pinned archive's exported map; test-only."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2359: compare all decoded command, alias, argument-shape and environment values, independent of archive layout; already in the tree, test-only."
+        }
+      }
+    },
     "lean-toolchain": {
       "toolchain": {
         "leanprover/lean4": {
@@ -247,6 +240,18 @@
         "accesskit_macos": {
           "spec": "^0.26",
           "why": "Issue #1462: the window forwards an assistive client's question of what is focused to gpui's view, so the row or control the keys are on is what VoiceOver and Full Keyboard Access follow (the version gpui uses, vendored)."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #177: the hdr-fixture build (in no shipped build) draws a scene document in a live 3D view in the app's real window, its HDR surface beneath GPUI's layer, for the acceptance tests' live legs."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #177: the hdr-fixture build (in no shipped build) draws a scene document in a live 3D view in the app's real window, its HDR surface beneath GPUI's layer, for the acceptance tests' live legs."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #177: the hdr-fixture build times each frame's passes, the HDR pass among them, for the budgets' added GPU per frame."
         }
       }
     },
@@ -303,6 +308,14 @@
         "crc32fast": {
           "spec": "^1",
           "why": "Issue #124: the chunk checksums of a deep_drive recording's animated PNG, assembled from its frames. Already in the png crate's tree."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #184: the replica's play mode steps a piece's logic items and a logic bot's, as the logic module does (deep_logic::play)."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #184: a play's programs arrive inline, base64 by their hash. Already in the workspace tree through deep-logic."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -509,6 +522,10 @@
         "@deepbuild/checks-work": {
           "spec": "0.0.0",
           "why": "Issue #1537: the service, data, document and message check kinds (#68), held in the hub's kind table where a definition's drafted check names one."
+        },
+        "@deepbuild/config-eval": {
+          "spec": "0.0.0",
+          "why": "Issue #2077: the outer knowledge provider freezes and runs a removal lesson's configuration eval; only its recorded adopt permits the line to leave."
         },
         "@deepbuild/conformance": {
           "spec": "0.0.0",
@@ -2313,6 +2330,18 @@
         "libc": {
           "spec": "^0.2",
           "why": "Issue #532: reads thread CPU time for logic.budget's fixed cost; already in the tree."
+        }
+      }
+    },
+    "tests/acceptance/190/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #190's blind suite: its own assembler for the fixtures, from #532's, apart from the linker under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #190's blind suite: validates each fixture and reads an object's linking and reloc.CODE sections back."
         }
       }
     },

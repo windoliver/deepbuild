@@ -17,6 +17,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::OnceLock;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas::kinds::{Entry as KindEntry, Param, ParamType, Version};
@@ -27,8 +28,10 @@ use deep_canvas::registry::{
 use deep_canvas::schedule::{canonical, sha256_hex, Canonical, OpError, Val, View};
 use serde_json::{json, Map, Value};
 
+use crate::bake::handed;
 use crate::piece::{self, History, Piece};
-use crate::world::{handed, track_of, Entry, Record, World};
+use crate::services::Service;
+use crate::world::{track_of, Entry, Record, World};
 use crate::Planted;
 
 /// The interface this module implements, apart from the logic item kind of that name.
@@ -41,7 +44,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 15] = [
+const PARAMS: [(&str, &str); 17] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -68,6 +71,8 @@ const PARAMS: [(&str, &str); 15] = [
         "preview",
         "{reads?: [control ID | path], writes?: {name → {type, count?: u32}}}",
     ),
+    ("services", "{service@major → {max_per_step: u16}}"),
+    ("mirrors", "[{array: path, at: name}]"),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 
@@ -297,6 +302,16 @@ impl Canonical for State {
 /// How many checked pieces a thread keeps.
 const PIECES_KEPT: usize = 8;
 
+/// The between-step services `logic.step` hands a document's logic items (Logic: between-step
+/// services): the build that links the modules answering them binds them once; with none bound,
+/// an item asking one is refused at check, naming it.
+static SERVICES: OnceLock<fn(&Value) -> Vec<Service>> = OnceLock::new();
+
+/// Binds the services a document's logic items may ask; only the first call counts.
+pub fn bind_services(bind: fn(&Value) -> Vec<Service>) {
+    let _ = SERVICES.set(bind);
+}
+
 thread_local! {
     /// Checked pieces by the hash of the logic they hold: what each step reads, checked once.
     static PIECES: RefCell<BTreeMap<String, Rc<Piece>>> = const { RefCell::new(BTreeMap::new()) };
@@ -306,7 +321,9 @@ thread_local! {
 fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
     let mut items = Map::new();
     let mut assets = Map::new();
+    let mut asks = false;
     for (id, item) in logic_items(doc) {
+        asks |= item.pointer("/params/services").is_some();
         let mut params = item
             .get("params")
             .and_then(Value::as_object)
@@ -340,18 +357,31 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
     // The document's controls, so an item that reads one reads its input entries (#544's Fire).
     let controls = doc.get("controls").cloned().unwrap_or(json!({}));
     let piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
-    let key = sha256_hex(&canonical(&piece));
+    // A service answers on the document's worlds, so a piece that asks one is the document's.
+    let key = match asks {
+        true => sha256_hex(&canonical(&json!([piece, doc]))),
+        false => sha256_hex(&canonical(&piece)),
+    };
     if let Some(p) = PIECES.with(|c| c.borrow().get(&key).cloned()) {
         return Ok(p);
     }
-    let p = piece::check(&piece, &Planted::default(), &mut Default::default())
-        .map(Rc::new)
-        .map_err(|r| {
-            OpError::new(
-                "logic_refused",
-                r.0["item"].as_str().unwrap_or("").to_string(),
-            )
-        })?;
+    let services = match SERVICES.get() {
+        Some(bind) if asks => bind(doc),
+        _ => Vec::new(),
+    };
+    let p = piece::check_bound(
+        &piece,
+        &Planted::default(),
+        &mut Default::default(),
+        &services,
+    )
+    .map(Rc::new)
+    .map_err(|r| {
+        OpError::new(
+            "logic_refused",
+            r.0["item"].as_str().unwrap_or("").to_string(),
+        )
+    })?;
     PIECES.with(|c| {
         let mut c = c.borrow_mut();
         // A few documents' pieces at once; an edited one's old pieces go.
@@ -498,6 +528,8 @@ fn planted(r: &mut Registrar, code: &str, body: &str) {
         },
     });
     r.fixture(&format!("logic-{}", &code[6..]), doc, None)
+        // Planted: the kit runs it, and the `fixtures` call leaves it out (#2085, #2362).
+        .planted()
         // The module registers its own kind (#533), so the kit's seal of this module alone knows
         // logic@1 and the fixture raises its code and no other.
         .sidecar(json!({"codes": [code], "checks": [{"kind": code}]}))
@@ -592,9 +624,8 @@ fn determinism(doc: &Value, input: &Value) -> Report {
         Err(e) => out.blocked.push(e),
     }
     out.raised = raised("logic.determinism", &failures, &piece);
-    match input.get("compare").and_then(Value::as_str) {
-        Some(c @ ("cross_machine" | "web")) => out.blocked.push(json!({"compare": c, "ask": format!("logic.determinism {c} replays the golden on another host; it hasn't run")})),
-        _ => {}
+    if let Some(c @ ("cross_machine" | "web")) = input.get("compare").and_then(Value::as_str) {
+        out.blocked.push(json!({"compare": c, "ask": format!("logic.determinism {c} replays the golden on another host; it hasn't run")}));
     }
     out.results.push(json!({"kind": "logic.determinism", "steps": steps, "at": at}));
     out

@@ -1,0 +1,8 @@
+0bd6e7d369acaf88b340db533a329f21cc278ef7570d02f6582543c14a846b4e  tests/acceptance/2122/canvas.test.ts
+2ba48521aa521d64e40bd31dfc842f4e8755f28097f0ebe6c6c374a035e5721e  tests/acceptance/2122/heavy-queue.test.ts
+d2d3950583ea490befabe97253a07f2927873e158508954d3549e973ced7fe51  tests/acceptance/2122/never-ends.test.ts
+3cd7d67fcb6c345dd00801141c0cfc0e4d8caaa3b03a76e42bb4f386bcdaee79  tests/acceptance/2122/product-index.test.ts
+9682bb9a0c30aa7bad572f41314192fa188a91f91ac9fbd3e559250d3adaf0aa  tests/acceptance/2122/product-session.test.ts
+ca60775a87bd706c178b405cbdc8159f0848a88efb04590355fffbab3a77e949  tests/acceptance/2122/products-helper.ts
+8dcc41c2bee24935386d8652e7e58ad06a1dbb856cbdfcee65aeb7d01ad2637c  tests/acceptance/2122/canvas-core-standin.mjs
+2d435cfc944725eac8d8f1121dd22b23eb82fd61b7a4ff23ee3b4c75a13f0a3a  tests/acceptance/2122/canvas-probe.mjs

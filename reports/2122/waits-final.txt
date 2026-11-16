@@ -1,0 +1,14 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/waits-command-position.test.ts packages/hub/test/waits.test.ts tests/acceptance/2122/never-ends.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+··stderr | packages/hub/test/waits.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  30353 (node)
+
+·············
+
+ Test Files  3 passed (3)
+      Tests  15 passed (15)
+   Start at  16:29:06
+   Duration  426ms (tests 76%, transform 15%, setup 4%, worker 2%, import 2%)

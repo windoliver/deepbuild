@@ -210,14 +210,15 @@ impl Config {
 /// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
 /// GPU's scene with its own.
 pub(crate) trait Glyphs: Canvas {
-    /// A glyph at `size`, slanted `skew` degrees (#1964: a faux italic).
-    fn glyph(
+    /// `glyphs` of one face at `size`, slanted `skew` degrees (#1964: a faux italic), filled in
+    /// the current paint as one glyph run.
+    fn fill_run(
         &mut self,
         resources: &mut Resources,
         font: &FontData,
         size_skew: (f32, f32),
         coords: &[i16],
-        glyph: vello_cpu::Glyph,
+        glyphs: &[vello_cpu::Glyph],
     );
 
     /// #496: a glyph's outline stroked `width` px wide in the current paint.
@@ -239,13 +240,13 @@ pub(crate) trait Glyphs: Canvas {
 }
 
 impl Glyphs for RenderContext {
-    fn glyph(
+    fn fill_run(
         &mut self,
         resources: &mut Resources,
         font: &FontData,
         (size, skew): (f32, f32),
         coords: &[i16],
-        glyph: vello_cpu::Glyph,
+        glyphs: &[vello_cpu::Glyph],
     ) {
         let run = self.glyph_run(resources, font);
         let _ = run
@@ -253,7 +254,7 @@ impl Glyphs for RenderContext {
             .hint(false)
             .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
-            .fill_glyphs(std::iter::once(glyph));
+            .fill_glyphs(glyphs.iter().copied());
     }
 
     fn glyph_stroke(
@@ -419,7 +420,9 @@ impl<C: Glyphs> Painter<'_, C> {
         self.glyphs(&shaped, origin, (None, color), (&[], None));
     }
 
-    /// A shaped run's glyphs at `origin`, each in its run's role or the text's.
+    /// A shaped run's glyphs at `origin`, each in its run's role or the text's: one glyph run for
+    /// each stretch of them in one face, size, slant and paint (#468: a drop's copy of the run is
+    /// one more glyph run).
     fn glyphs(
         &mut self,
         shaped: &deep_text::Shaped,
@@ -427,19 +430,33 @@ impl<C: Glyphs> Painter<'_, C> {
         (role, color): (Option<&str>, Rgb),
         (runs, lang): (&[scene::TextRun], Option<&str>),
     ) -> Vec<Value> {
-        let mut out = Vec::with_capacity(shaped.glyphs.len());
-        for g in &shaped.glyphs {
-            let (role, color) = scene::run_paint(runs, g.grapheme, role, color);
-            let opacity = scene::run_opacity(runs, g.grapheme);
+        let paint = |g: &deep_text::Glyph| {
+            let (_, color) = scene::run_paint(runs, g.grapheme, role, color);
+            (color, scene::run_opacity(runs, g.grapheme))
+        };
+        for stretch in shaped.glyphs.chunk_by(|a, b| {
+            (&a.font, a.size, a.skew, &a.coords, paint(a))
+                == (&b.font, b.size, b.skew, &b.coords, paint(b))
+        }) {
+            let g = &stretch[0];
+            let (color, opacity) = paint(g);
             self.ctx.set_paint(solid_at(color, opacity));
-            let glyph = vello_cpu::Glyph {
-                id: g.id,
-                x: g.x + origin[0] as f32,
-                y: g.y + origin[1] as f32,
-            };
+            let placed: Vec<vello_cpu::Glyph> = stretch
+                .iter()
+                .map(|g| vello_cpu::Glyph {
+                    id: g.id,
+                    x: g.x + origin[0] as f32,
+                    y: g.y + origin[1] as f32,
+                })
+                .collect();
             let size = (g.size, g.skew);
             self.ctx
-                .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
+                .fill_run(&mut self.resources, &g.font, size, &g.coords, &placed);
+        }
+        let mut out = Vec::with_capacity(shaped.glyphs.len());
+        for g in &shaped.glyphs {
+            let (role, _) = scene::run_paint(runs, g.grapheme, role, color);
+            let opacity = scene::run_opacity(runs, g.grapheme);
             let mut row = glyph_row(g, role, lang);
             // #496: the glyph's advance, outline and place, upright and unclipped here.
             let e = origin[0] + f64::from(g.x);
@@ -526,7 +543,7 @@ impl<C: Glyphs> Painter<'_, C> {
             match p.paint.write {
                 None => self
                     .ctx
-                    .glyph(&mut self.resources, &g.font, size, &g.coords, glyph),
+                    .fill_run(&mut self.resources, &g.font, size, &g.coords, &[glyph]),
                 // #1969: a glyph a write is drawing: its fill as far as it has come in, under its
                 // outline drawn from its start, in its own stroke, else a hairline in its fill's
                 // paint that fades as the fill comes in (Text `text@1`: write mode). The outline's
@@ -535,7 +552,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     if filled > 0.0 {
                         self.ctx.push_layer(None, None, Some(filled as f32), None);
                         self.ctx
-                            .glyph(&mut self.resources, &g.font, size, &g.coords, glyph);
+                            .fill_run(&mut self.resources, &g.font, size, &g.coords, &[glyph]);
                         self.ctx.pop_layer();
                     }
                     let own = p.paint.stroke.as_ref().filter(|(_, w)| *w > 0.0);
@@ -1460,6 +1477,33 @@ pub(crate) fn picture(marks: &[&scene::Drawn], size: [u32; 2]) -> Result<image::
         .ok_or_else(|| refused("not_written", "picture"))
 }
 
+/// #506: `marks` over transparent black at `size` px and zoom 1, moved by `shift` px, their
+/// images read from `store` (flat: `<64 hex>`), as the raster draws them: premultiplied alpha.
+pub(crate) fn premultiplied(
+    marks: &[&scene::Drawn],
+    size: [u32; 2],
+    shift: [f64; 2],
+    store: Option<&std::path::Path>,
+) -> Result<image::RgbaImage, Value> {
+    let (Ok(w), Ok(h)) = (u16::try_from(size[0]), u16::try_from(size[1])) else {
+        return Err(refused("out_of_range", "size"));
+    };
+    let mut p = Painter::on(RenderContext::new_with(w, h, settings()));
+    p.store = store;
+    p.ctx.set_transform(Affine::translate((shift[0], shift[1])));
+    let new_ctx = || RenderContext::new_with(w, h, settings());
+    composite(&mut p, marks, &new_ctx, rasterizer())?;
+    let mut pixmap = Pixmap::new(w, h);
+    p.ctx
+        .render_with(&mut pixmap, &mut p.resources, rasterizer());
+    image::RgbaImage::from_raw(
+        size[0],
+        size[1],
+        pixmap.take_rgba8(ImageAlphaType::AlphaPremultiplied),
+    )
+    .ok_or_else(|| refused("not_written", "picture"))
+}
+
 /// Every look role a document names, in black: geometry needs the outline, never its colors.
 fn any_roles(value: &Value, palette: &mut scene::Palette) {
     match value {
@@ -1780,6 +1824,7 @@ pub fn planted_path(name: &str) -> Option<Planted> {
         "repeater",
     ];
     match name {
+        deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
         "merge_zero_fills" => Some(Planted::MergeZeroFills),
         "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
         _ => {
@@ -1787,6 +1832,29 @@ pub fn planted_path(name: &str) -> Option<Planted> {
             OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
         }
     }
+}
+
+/// Whether a group of `doc` carries a warp (#223).
+fn has_warp(doc: &Map<String, Value>) -> bool {
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| {
+            items
+                .values()
+                .any(|i| i.pointer("/params/warp").is_some_and(|w| !w.is_null()))
+                // #225: a vector field's frame fields are bound at t the same way.
+                || deep_canvas_marks::vector_field::any(items)
+        })
+}
+
+/// Milliseconds on a monotonic clock, for timing a frame's warps (#223).
+pub(crate) fn clock_ms() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+        * 1000.0
 }
 
 /// Answers a `path` line: one frame per time, in order; `built` holds the digests this process
@@ -1812,7 +1880,16 @@ pub fn path_answer(
         let (palette, ty) = (&palette, &ty);
         let mut frames = Vec::with_capacity(req.times.len());
         for &t in &req.times {
-            let placed = crate::place::evaluated(&req.doc, &program, t, &req.vectors)?;
+            // #223: what the warps map is counted until the frame reports it, the evaluation's
+            // placing pass included, which carries them first (the line's first frame from before
+            // its check, which draws the document); the scene's build then finds them kept.
+            deep_canvas_marks::warp::time_with(req.timing.then_some(clock_ms as fn() -> f64));
+            // #223: a path function lowered and each warp's vars bound at t, as a frame draws them.
+            let placed = if crate::formulas::has_formulas(&req.doc) || has_warp(&req.doc) {
+                crate::formulas::evaluated(&req.doc, t, &req.vectors, &Default::default())?.0
+            } else {
+                crate::place::evaluated(&req.doc, &program, t, &req.vectors)?
+            };
             let items = deep_canvas_vector::lower_items(
                 &placed,
                 &req.vectors,
@@ -1833,6 +1910,7 @@ pub fn path_answer(
                     .map_err(|r| refused(r.code, &r.path))?
                     .ok_or_else(|| refused("ref_unresolved", &format!("items/{}", req.item)))?;
             let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let mapped = deep_canvas_marks::warp::take_mapped();
             let rebuilt = built.insert(report.digest);
             let subpaths: Vec<Value> = report
                 .placed
@@ -1861,9 +1939,21 @@ pub fn path_answer(
             if !report.ends.is_empty() {
                 let mut ends = Map::new();
                 for h in &report.ends {
+                    // #223: the head's drawn outline, its corners in document u.
+                    let outline: Vec<[f64; 2]> = h
+                        .verbs
+                        .iter()
+                        .filter_map(|v| match *v {
+                            deep_canvas_marks::path::Verb::Move(p)
+                            | deep_canvas_marks::path::Verb::Line(p)
+                            | deep_canvas_marks::path::Verb::Quad(_, p)
+                            | deep_canvas_marks::path::Verb::Cubic(_, _, p) => Some(p),
+                            deep_canvas_marks::path::Verb::Close => None,
+                        })
+                        .collect();
                     ends.insert(
                         h.at.to_string(),
-                        json!({"kind": h.kind, "tip": h.tip, "angle": h.angle, "length": h.length, "width": h.width}),
+                        json!({"kind": h.kind, "tip": h.tip, "angle": h.angle, "length": h.length, "width": h.width, "outline": outline}),
                     );
                 }
                 frame["ends"] = Value::Object(ends);
@@ -1895,7 +1985,13 @@ pub fn path_answer(
             }
             if req.timing {
                 frame["build_ms"] = json!(if rebuilt { ms } else { 0.0 });
+                // #223: the points a warp over the item mapped this frame and the time it took.
+                if let Some((points, warp_ms)) = mapped {
+                    frame["warp_points"] = json!(points);
+                    frame["warp_ms"] = json!(warp_ms);
+                }
             }
+            deep_canvas_marks::warp::time_with(None);
             frames.push(frame);
         }
         Ok(json!({"ok": true, "frames": frames}))

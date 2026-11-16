@@ -1,0 +1,34 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/checks-not-started.test.ts` runs unleased
+
+ RUN  v5.0.5 <CHECKOUT>
+
+x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/checks-not-started.test.ts > a claim whose checkout fails is BLOCKED, naming the failure and you as owner
+AssertionError: expected [ 'INCONCLUSIVE' ] to deeply equal [ 'BLOCKED' ]
+
+- Expected
++ Received
+
+  [
+-   "BLOCKED",
++   "INCONCLUSIVE",
+  ]
+
+ ❯ packages/hub/test/checks-not-started.test.ts:49:55
+     47|   } finally { chmodSync(sealed, 0o755); }
+     48|   expect(events.some((e) => e.kind === 'claim.made'), 'the stop made i…
+     49|   expect(verdicts(events).map((e) => e.data.outcome)).toEqual(['BLOCKE…
+       |                                                       ^
+     50|   expect(JSON.stringify(verdicts(events)[0]?.data.reasons)).toContain(…
+     51|   expect(JSON.stringify(verdicts(events)[0]?.data.reasons)).toMatch(/o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:40:17
+   Duration  4.32s (tests 97%, transform 2%)

@@ -16,10 +16,10 @@ import { readFacts } from '@deepbuild/adapters';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
-import { after, alive as pidAlive, badDeadline, groupCpu, groupMembers, type Grant } from '@deepbuild/supervisor';
+import { after, alive as pidAlive, badDeadline, groupCpu, groupMembers, type Grant, type Launch } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import { AGENTS, codexRefused, programRoot, shownVersion, type AgentParts } from './agents.js';
-import type { Agent, Blocked, JobRecord, JobSpec, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
+import type { Agent, Blocked, EvaluationWork, JobRecord, JobSpec, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
 
 // Keep the existing internal test surface; the package's public entry still exposes only the runner.
 export { codexLogRefused, codexReach, codexRefused, codexSignIn, codexWindows, programRoot, shownVersion } from './agents.js';
@@ -39,7 +39,7 @@ const NO_READING_PER_DAY = 10;
 const POLL_MS = 100;
 /** A result's own subtype that names its stop. */
 const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
-const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance']);
+const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance', 'eval']);
 /** All a blind job may read (#1328): nothing of a branch, a transcript or a session has a handle here. */
 const INPUTS = new Set(['issue', 'design', 'base', 'criterion']);
 /** What refuses a kind's spec before anything of it is recorded: only an acceptance job writes, and only its issue's folder. */
@@ -117,6 +117,7 @@ interface Job {
   temp?: string;
   /** The text of a pi job's last answer: its result once it has settled. */
   said?: string;
+  evaluation?: { work: EvaluationWork; stop: AbortController; running?: Promise<void>; unread: Set<string>; processes: Set<string>; cost?: number; unpriced?: boolean };
 }
 interface Account { windows: Map<string, { used: number; resets: number | null; at: number }> }
 interface Asked { handle: string; answer?: string }
@@ -202,8 +203,12 @@ class LocalRunner implements Runner {
         case 'default.undone':
           if (this.answers.delete(e.subject ?? '')) this.waiting.add(e.subject ?? '');
           break;
-        case 'ask.superseded':
         case 'ask.moot':
+          // An account whose sign-in task closed on its probe (#1349): its jobs run without a window reading, under the cap.
+          if (d.because === 'signed_in' && typeof d.account === 'string') this.signedIn.add(d.account);
+          this.waiting.delete(e.subject ?? '');
+          break;
+        case 'ask.superseded':
         case 'ask.cancelled':
         case 'ask.escalated':
           this.waiting.delete(e.subject ?? '');
@@ -246,6 +251,8 @@ class LocalRunner implements Runner {
   /** The asks of the kinds a job waits on, until they are answered. */
   private readonly waiting = new Set<string>();
   private readonly answers = new Map<string, { answer: string; decision: string }>();
+  /** Accounts whose sign-in task closed on the agent's probe in DeepBuild, from the record (#1349). */
+  private readonly signedIn = new Set<string>();
 
   async open(): Promise<void> {
     await this.fold(true);
@@ -259,9 +266,10 @@ class LocalRunner implements Runner {
 
   // ---- Jobs.
 
-  async submit(spec: JobSpec): Promise<JobRecord> {
+  async submit(spec: JobSpec, evaluate?: EvaluationWork): Promise<JobRecord> {
     if (this.closed) throw Error('the runner is closed');
-    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke or acceptance, not ${String(isObj(spec) ? spec.kind : spec)}`);
+    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke, acceptance or eval, not ${String(isObj(spec) ? spec.kind : spec)}`);
+    if ((spec.kind === 'eval') !== (typeof evaluate === 'function')) throw Error('an eval needs its trusted evaluator, never an agent prompt alone');
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
     const bad = badWrites(spec);
     if (bad) throw Error(`an ${bad}`);
@@ -279,6 +287,7 @@ class LocalRunner implements Runner {
     const account = spec.account ?? (parts && home ? parts.account(home, this.o.env) : null);
     const rec: JobRecord = { job: id, kind: spec.kind, agent: spec.agent, account, state: 'waiting', folder, ...(spec.inputs ? { inputs: spec.inputs } : {}) };
     const job = this.make(rec, spec);
+    if (evaluate) job.evaluation = { work: evaluate, stop: new AbortController(), unread: new Set(), processes: new Set() };
     if (spec.checkout) job.preparing = true;
     this.jobs.set(id, job);
     // Recorded before anything of it starts.
@@ -286,6 +295,7 @@ class LocalRunner implements Runner {
       job: id, kind: spec.kind, agent: spec.agent, account, folder, prompt: sha256(spec.prompt), waiting: [spec.task, spec.claim].filter((x): x is string => typeof x === 'string'),
       ...(spec.inputs ? { inputs: spec.inputs as unknown as JsonValue } : {}),
     }, id);
+    if (evaluate) await this.o.record.sync();
     if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
     if (spec.writes && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
     if (spec.checkout) {
@@ -296,7 +306,7 @@ class LocalRunner implements Runner {
       if (failed) return this.refuse(job, `its base checkout failed: ${failed}`);
     }
     await this.pump();
-    if (job.launching) await Promise.race([job.launching, this.held(job, job.launching)]);
+    if (job.launching && !job.evaluation) await Promise.race([job.launching, this.held(job, job.launching)]);
     return { ...job.rec };
   }
   /** Resolves once its start is held by the supervisor for a lease, which it then shows as BLOCKED. */
@@ -337,6 +347,11 @@ class LocalRunner implements Runner {
   async cancel(id: string): Promise<JobRecord> {
     const job = this.find(id);
     job.cancelled = true;
+    if (job.evaluation?.running) {
+      job.evaluation.stop.abort();
+      await job.evaluation.running;
+      return { ...job.rec };
+    }
     if (job.rec.state === 'waiting' && job.launching) {
       // A start the supervisor holds for a lease is given up on; one already through is stopped once it reads running.
       await this.o.supervisor.cleanup(job.rec.job).catch(() => undefined);
@@ -387,12 +402,212 @@ class LocalRunner implements Runner {
       else if ('blocked' in verdict) job.rec.blocked = verdict.blocked;
       else {
         delete job.rec.blocked;
-        if (job.noReading) (this.unread.get(job.rec.account ?? '') ?? this.unread.set(job.rec.account ?? '', []).get(job.rec.account ?? '')!).push(this.o.now());
-        job.launching = this.launch(job, verdict.binary).catch(async (error: unknown) => {
+        if (job.noReading) this.countUnread(job, job.rec.account ?? 'unknown');
+        job.launching = (job.evaluation ? this.evaluate(job) : this.launch(job, verdict.binary)).catch(async (error: unknown) => {
           if (job.rec.state === 'waiting') await this.refuse(job, `it couldn't start: ${error instanceof Error ? error.message : String(error)}`);
         });
       }
     }
+  }
+
+  private countUnread(job: Job, account: string): void {
+    if (job.evaluation?.unread.has(account)) return;
+    (this.unread.get(account) ?? this.unread.set(account, []).get(account)!).push(this.o.now());
+    job.evaluation?.unread.add(account);
+  }
+
+  private evalAccount(job: Job, agent: Agent): string | null {
+    return agent === job.spec.agent ? job.rec.account : this.account(agent);
+  }
+
+  account(agent: Agent): string | null {
+    return AGENTS[agent]?.account(this.o.env.HOME ?? '', this.o.env) ?? null;
+  }
+
+  /** One trusted orchestration job; its model turns remain in the evaluator's existing sandboxed launcher. */
+  private evaluate(job: Job): Promise<void> {
+    const evaluation = job.evaluation!;
+    job.rec.state = 'running';
+    const checkpoint = async (agent: Agent): Promise<void> => {
+      const parts = AGENTS[agent];
+      if (!parts) throw Error(`no agent ${agent}`);
+      const account = this.evalAccount(job, agent);
+      const turn = { ...job, spec: { ...job.spec, agent }, rec: { ...job.rec, agent, account } };
+      for (;;) {
+        evaluation.stop.signal.throwIfAborted();
+        const held = parts.windowless ? undefined : await this.window(turn);
+        if (!held) {
+          if (turn.noReading) this.countUnread(job, account ?? 'unknown');
+          delete job.rec.blocked; job.rec.state = 'running'; return;
+        }
+        turn.rec.blocked = job.rec.blocked = held.blocked;
+        job.rec.state = 'waiting';
+        await sleep(POLL_MS);
+      }
+    };
+    const gated = async (agent: Agent, deadline: number): Promise<Verified> => {
+      const turn = { ...job, spec: { ...job.spec, agent, deadline_ms: Math.max(1, deadline - Date.now()) }, rec: { ...job.rec, agent, account: this.evalAccount(job, agent) } };
+      for (;;) {
+        evaluation.stop.signal.throwIfAborted();
+        if (Date.now() >= deadline) throw Error('eval process deadline elapsed');
+        const verdict = await this.gate(turn);
+        job.reserved = turn.reserved;
+        if ('refused' in verdict) throw Error(verdict.refused);
+        if (!('blocked' in verdict)) {
+          if (turn.noReading) this.countUnread(job, turn.rec.account ?? 'unknown');
+          delete job.rec.blocked; job.rec.state = 'running'; return verdict.binary;
+        }
+        turn.rec.blocked = job.rec.blocked = verdict.blocked;
+        job.rec.state = 'waiting';
+        await sleep(POLL_MS);
+      }
+    };
+    const execute = async (launch: Launch, grant: Grant, prompt: string, deadline: number) => {
+      const binary = await gated(job.spec.agent, deadline);
+      // The trusted evaluator chooses argv (never RPC); bind its gate to the same pre-launch and pre-input checks as read.
+      // The evaluator gets no billing key. Only the gated subprocess gets its agent's credentials.
+      const keys = this.facts(job.spec.agent).billing.apiKeyVariables;
+      const env = { ...launch.env, ...Object.fromEntries(keys.flatMap((k) => this.o.env[k] ? [[k, this.o.env[k]!]] : [])) };
+      return this.evaluationProcess(job, job.spec.agent, { ...launch, env }, grant, prompt, deadline, binary);
+    };
+    const read = async (agent: Agent, model: string, prompt: string, deadline: number): Promise<unknown[]> => {
+      const binary = await gated(agent, deadline);
+      const parts = AGENTS[agent]!;
+      const temp = mkdtempSync(join(realpathSync(tmpdir()), 'deep-eval-read-'));
+      try {
+        const home = this.o.env.HOME ?? '';
+        const forwarder = await openForwarder(new Set(parts.hosts), this.o.env.HTTPS_PROXY ?? this.o.env.https_proxy);
+        try {
+          const billsKey = this.facts(agent).billing.apiKeyVariables.some((k) => this.o.env[k]);
+          const token = !billsKey && home && this.o.keychain ? await parts.token(home, this.o.keychain, this.o.env) : undefined;
+          const env = { ...this.env(agent), ...parts.reach({ temp, home, env: this.o.env, proxy: `http://127.0.0.1:${forwarder.port}`, ...(token ? { token } : {}) }) };
+          // Read-only Claude jobs must not load the user's hooks or write their transcripts into that home.
+          if (agent === 'claude-code') {
+            const config = join(temp, 'claude-home'); mkdirSync(config);
+            env.HOME = temp; env.CLAUDE_CONFIG_DIR = config;
+            const credentials = join(this.o.env.CLAUDE_CONFIG_DIR || join(home, '.claude'), '.credentials.json');
+            if (!billsKey && existsSync(credentials)) {
+              const value = JSON.parse(readFileSync(credentials, 'utf8')) as { claudeAiOauth?: { accessToken?: string } };
+              if (value.claudeAiOauth?.accessToken) env.CLAUDE_CODE_OAUTH_TOKEN = value.claudeAiOauth.accessToken;
+            }
+            writeFileSync(join(config, 'settings.json'), '{}');
+          }
+          const args = [...this.facts(agent).launch.readOnlyJob.args];
+          const m = Math.max(args.indexOf('--model'), args.indexOf('-m'));
+          if (m >= 0) args[m + 1] = model; else args.push('--model', model);
+          const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
+          return await this.evaluationProcess(job, agent, { argv: [binary.path, ...args, ...parts.confine({}, {}), ...stdin], cwd: temp, env },
+            { read: [...this.programs(binary.real, parts), ...parts.signIn(home, this.o.env)], write: [temp], hosts: [`127.0.0.1:${forwarder.port}`] }, prompt, deadline, binary);
+        } finally { await forwarder.close(); }
+      } finally { rmSync(temp, { recursive: true, force: true }); }
+    };
+    const timer = job.spec.deadline_ms ? setTimeout(() => evaluation.stop.abort(), job.spec.deadline_ms) : undefined;
+    evaluation.running = (async () => {
+      try {
+        const env = this.env(job.spec.agent);
+        for (const key of this.facts(job.spec.agent).billing.apiKeyVariables) delete env[key];
+        const billsKey = this.facts(job.spec.agent).billing.apiKeyVariables.some((k) => this.o.env[k]);
+        const token = !billsKey && this.o.keychain && await AGENTS[job.spec.agent]!.token(env.HOME ?? '', this.o.keychain, this.o.env);
+        if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token;
+        const result = await evaluation.work({ job: job.rec.job, folder: job.rec.folder, env, signal: evaluation.stop.signal, checkpoint, execute, read });
+        evaluation.stop.signal.throwIfAborted();
+        if (evaluation.processes.size) throw Error('eval returned with subprocess cleanup unconfirmed');
+        job.stdout = job.rec.result = result;
+        job.rec.state = 'finished';
+      } catch (error) {
+        job.rec.state = evaluation.processes.size ? 'stopping' : evaluation.stop.signal.aborted ? 'stopped' : 'refused';
+        if (evaluation.processes.size) evaluation.stop.abort();
+        job.rec.refused = `INCONCLUSIVE: ${error instanceof Error ? error.message : String(error)}`;
+        job.stdout = job.rec.refused;
+      } finally {
+        clearTimeout(timer);
+        delete job.rec.blocked;
+        if (!evaluation.unpriced && evaluation.cost !== undefined) {
+          job.rec.cost_usd = evaluation.cost;
+          if (job.reserved) await this.o.ledger.charge(CORE, job.rec.job, evaluation.cost);
+        }
+        if (!evaluation.processes.size) await this.finish(job);
+      }
+    })();
+    return Promise.resolve();
+  }
+
+  /** Every eval process is supervisor-owned, including its sandbox and the judge. Cleanup confirms its descendants gone. */
+  private async evaluationProcess(job: Job, agent: Agent, launch: Launch, grant: Grant, prompt: string, deadline: number, binary?: Verified): Promise<unknown[]> {
+    const evaluation = job.evaluation!;
+    const signal = evaluation.stop.signal;
+    signal.throwIfAborted();
+    if (Date.now() >= deadline) throw Error('eval process deadline elapsed');
+    if (binary && !this.unchanged(binary)) throw Error(`${binary.path} changed after it was verified`);
+    const run = `run:${ulid(this.o.now())}`;
+    const rows: unknown[] = [];
+    let pending = '', timedOut = false, swapped = false;
+    let cost: number | undefined;
+    let grace: NodeJS.Timeout | undefined;
+    let wake!: () => void;
+    const stopping = new Promise<void>((resolve) => { wake = resolve; });
+    let cleaned: Promise<import('@deepbuild/supervisor').Cleanup> | undefined;
+    const cleanup = () => cleaned ??= Promise.resolve().then(async () => {
+      try {
+        const result = await this.o.supervisor.cleanup(run);
+        if (result.outcome !== 'clean' || result.left.length) throw Error(`eval cleanup unconfirmed: ${result.left.join(', ') || run}`);
+        return result;
+      } catch (error) {
+        // A caught failed sample must not let the evaluator apply before the outer job sees its leftovers.
+        evaluation.stop.abort(error);
+        throw error;
+      }
+    });
+    const abort = () => { wake(); void cleanup().catch(() => undefined); };
+    const decoder = new StringDecoder('utf8');
+    const readings: Promise<void>[] = [];
+    // Event callbacks never leave a rejected promise unobserved, even while the process is still alive.
+    const report = (reading: WindowReport) => readings.push(this.report(reading).catch((error: unknown) => { evaluation.stop.abort(error); }));
+    const stdout = (chunk: Buffer) => {
+      const lines = (pending + decoder.write(chunk)).split('\n'); pending = lines.pop()!;
+      for (const line of lines) {
+        let value: unknown;
+        try { value = JSON.parse(line); } catch { continue; }
+        rows.push(value);
+        if (!isObj(value)) continue;
+        const limits = isObj(value.rate_limit_info) ? value.rate_limit_info : undefined;
+        const name = limits?.rateLimitType;
+        const account = this.evalAccount(job, agent);
+        if (account && limits && (name === 'five_hour' || name === 'seven_day') && typeof limits.utilization === 'number') {
+          report({ agent, account, rate_limits: { [name]: { used_percentage: limits.utilization * 100, resets_at: limits.resetsAt ?? null } } });
+        }
+        if (account && value.rate_limits) report({ agent, account, rate_limits: value.rate_limits });
+        if (value.type === 'result' && typeof value.total_cost_usd === 'number' && Number.isFinite(value.total_cost_usd) && value.total_cost_usd >= 0) cost = value.total_cost_usd;
+        if (value.type === 'result' || value.type === 'turn.completed' || value.type === 'turn.failed' || value.type === 'agent_settled') grace ??= setTimeout(abort, GRACE_MS);
+      }
+    };
+    evaluation.processes.add(run);
+    const starting = this.o.supervisor.start({ run, ...launch, inherit: false, grant,
+      input: () => {
+        swapped = !!binary && !this.unchanged(binary);
+        return signal.aborted || timedOut || swapped ? undefined : Buffer.from(prompt);
+      }, output: { stdout, stderr() {} } });
+    // Install cancellation before awaiting start: the supervisor can be holding a lease indefinitely.
+    const timer = setTimeout(() => { timedOut = true; abort(); }, Math.max(0, deadline - Date.now()));
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    try {
+      const started = await starting;
+      if (started.status !== 'started') throw Error(`eval waits for ${started.kind}`);
+      if (swapped) throw Error(`${binary!.path} changed after it was verified`);
+      await Promise.race([this.o.supervisor.wait(run), stopping]);
+    } finally {
+      const result = await cleanup().catch(() => undefined);
+      clearTimeout(timer); clearTimeout(grace); signal.removeEventListener('abort', abort);
+      await Promise.all(readings);
+      if (cost === undefined) evaluation.unpriced = true; else evaluation.cost = (evaluation.cost ?? 0) + cost;
+      if (!result || result.outcome !== 'clean' || result.left.length) throw Error(`eval cleanup unconfirmed: ${result?.left.join(', ') ?? run}`);
+      evaluation.processes.delete(run);
+      if (result.stopped.length) job.rec.lingered = [...(job.rec.lingered ?? []), ...result.stopped.map((pid) => `pid:${pid}`)];
+    }
+    signal.throwIfAborted();
+    if (timedOut) throw Error('eval process deadline elapsed');
+    return rows;
   }
 
   private blocked(job: Job, cause: string, extra: Partial<Blocked> = {}): { blocked: Blocked } {
@@ -428,8 +643,8 @@ class LocalRunner implements Runner {
   private async outlives(job: Job): Promise<{ refused: string } | undefined> {
     const parts = AGENTS[job.spec.agent];
     const home = this.o.env.HOME ?? '';
-    if (!job.spec.deadline_ms || !parts || !home || !this.o.keychain) return undefined;
-    const expires = await parts.expires(home, this.o.keychain).catch(() => undefined);
+    if (!job.spec.deadline_ms || !parts || !home) return undefined;
+    const expires = await parts.expires(home, this.o.keychain ?? (async () => undefined), this.o.env).catch(() => undefined);
     const ends = this.o.now() + job.spec.deadline_ms;
     if (expires === undefined || expires >= ends) return undefined;
     return { refused: `your ${job.spec.agent} sign-in token expires at ${new Date(expires).toISOString()}, before the run's planned end at ${new Date(ends).toISOString()}, so it would stop halfway; sign in again, then run it again` };
@@ -537,10 +752,11 @@ class LocalRunner implements Runner {
       if (asked) this.windowAsks.set(account, asked);
       const answer = asked ? this.answers.get(asked.handle)?.answer : undefined;
       const since = job.rec.blocked?.cause === 'first reading' ? job.rec.blocked.since : now;
-      if (answer === 'run') {
+      // A sign-in DeepBuild saw needs no ask (#1349): one made only in the app has no session that could report a window.
+      if (answer === 'run' || this.signedIn.has(account)) {
         const today = (this.unread.get(account) ?? []).filter((at) => at > now - DAY);
         this.unread.set(account, today);
-        if (today.length < NO_READING_PER_DAY) { job.noReading = true; return undefined; }
+        if (job.evaluation?.unread.has(account) || today.length < NO_READING_PER_DAY) { job.noReading = true; return undefined; }
         return this.blocked(job, 'first reading', { account, why: `${account} has no window reading, and ${NO_READING_PER_DAY} jobs ran without one today` });
       }
       if (!asked && now - since >= NO_READING_ASK_MS) await this.askWindow(account, job);
@@ -689,7 +905,7 @@ class LocalRunner implements Runner {
   private env(agent: Agent): Record<string, string> {
     const env: Record<string, string> = {};
     const facts = this.facts(agent);
-    for (const name of [...ALLOWED_ENV, ...facts.billing.apiKeyVariables]) {
+    for (const name of [...ALLOWED_ENV, ...facts.billing.apiKeyVariables, ...(agent === 'claude-code' ? ['CLAUDE_CONFIG_DIR'] : [])]) {
       const v = this.o.env[name];
       if (typeof v === 'string') env[name] = v;
     }
@@ -721,7 +937,7 @@ class LocalRunner implements Runner {
     }
     const { port } = await forwarder;
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
-    const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
+    const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain, this.o.env).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
     // An acceptance job's one folder, there before the sandbox names it.
     const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : undefined;
@@ -1068,7 +1284,13 @@ class LocalRunner implements Runner {
   async tick(): Promise<void> {
     if (this.closed) return;
     for (const job of this.jobs.values()) {
-      if (job.rec.state === 'stopping' && job.unconfirmed) {
+      if (job.rec.state === 'stopping' && job.evaluation) {
+        for (const run of job.evaluation.processes) {
+          const cleaned = await this.o.supervisor.cleanup(run).catch(() => undefined);
+          if (cleaned?.outcome === 'clean' && !cleaned.left.length) job.evaluation.processes.delete(run);
+        }
+        if (!job.evaluation.processes.size) { job.rec.state = 'refused'; await this.finish(job); }
+      } else if (job.rec.state === 'stopping' && job.unconfirmed) {
         const cleaned = await this.o.supervisor.cleanup(job.rec.job).catch(() => undefined);
         if (cleaned) await this.confirm(job, cleaned.left);
       } else if (job.rec.state === 'stopping' && job.left && !job.left.some(pidAlive)) await this.confirm(job, []);
@@ -1081,6 +1303,7 @@ class LocalRunner implements Runner {
     clearInterval(this.timer);
     for (const job of this.jobs.values()) for (const cancel of job.timers) cancel();
     await this.chain;
+    await Promise.all([...this.jobs.values()].filter((j) => j.evaluation?.running && !j.finished).map((j) => this.cancel(j.rec.job)));
     for (const forwarder of this.forwarders.values()) await (await forwarder.catch(() => undefined))?.close();
   }
 }

@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/344/lessons.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+····
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  17:14:47
+   Duration  6.29s (tests 94%, transform 4%, import 2%)

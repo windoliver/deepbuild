@@ -1,0 +1,86 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "Ship with a click",
+  "description": "Ship with a click: explain@1's keynote_ui.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "6s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.keynote_ui@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "k1",
+            "kind": "fade_in",
+            "text": "Ship with a click",
+            "span": "0.5s",
+            "sub": "the new release flow"
+          },
+          {
+            "id": "k2",
+            "kind": "fade_in",
+            "text": "Pick a branch",
+            "span": "0.5s",
+            "data": {
+              "section": true
+            },
+            "sub": "every branch builds"
+          },
+          {
+            "id": "k3",
+            "kind": "fade_in",
+            "text": "Press ship",
+            "span": "0.5s",
+            "sub": "checks run first"
+          },
+          {
+            "id": "k4",
+            "kind": "fade_out",
+            "targets": [
+              "k3"
+            ],
+            "span": "0.25s",
+            "gap": "0.5s"
+          },
+          {
+            "id": "k5",
+            "kind": "fade_in",
+            "text": "Done",
+            "span": "0.5s",
+            "data": {
+              "section": true
+            },
+            "sub": "live in minutes"
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}
