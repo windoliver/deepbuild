@@ -1,6 +1,6 @@
 # #2332: hub startup
 
-The measurements below are historical, from main `9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff`, not closure proof for the current candidate. The branch `perf/2332-hub-startup` is now committed and rebased onto main `d8c46f0d58162ff0a4a483544149316aec960637`. The original checkout's unrelated edits were not changed. See [closure.md](closure.md) for the remaining gates and latest corrections.
+The measurements below are historical, from main `9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff`. The latest strict proof compares candidate `fdedb13fd7d24d48698e6f48a10147571fb31074` with pinned main `031292bf15c0b9a32260413793f3b2d17e87115b`: startup −27.594%, SessionStart −4.873%, prompt −5.695%, PreToolUse −6.116%, all PASS over 20 pairs. See [strict-instructions.json](strict-instructions.json). Memory under valid conditions and complete regression verification remain open; the measurements below do not close them. The original checkout's unrelated edits were not changed.
 
 ## Requirement → change → proof
 
@@ -31,4 +31,4 @@ The final measured tree includes the memoized check-kind factory in the composit
 
 The diff exceeds the approximately 400-line guideline, chiefly because the original 375-line acceptance kit and two later blind closure drafts must remain unchanged. Runtime edits and build-time conversion serve the same startup/first-hook/memory criteria; splitting them would lose the paired comparison. The invalid closure draft is retained as dispute evidence, not passing proof.
 
-**Delivery status: BLOCKED for closure.** The earlier performance check passed its measured candidate, but strict first-hook non-increase, nominal-thermal memory and completed verification of the current-main candidate remain open. The branch is suitable only for a draft `Part of #2332` PR until those checks finish.
+**Delivery status: BLOCKED for closure.** Startup and strict first-hook non-increase now pass on the pinned-base candidate; nominal-thermal memory, unresolved timing checks and any later-main integration remain open. The branch is suitable only for a draft `Part of #2332` PR until those checks finish.

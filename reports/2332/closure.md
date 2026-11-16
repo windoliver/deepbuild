@@ -1,41 +1,49 @@
-# #2332 closure attempt on current main
+# #2332 closure progress
 
-**BLOCKED / draft only.** Base `d8c46f0d58162ff0a4a483544149316aec960637`; implementation correction `c5b6ac163`. The earlier −26.056% reading in `measurements.json` is historical, not a verdict for this merge base.
+Pinned main: `031292bf15c0b9a32260413793f3b2d17e87115b`.
+Measured candidate: `fdedb13fd7d24d48698e6f48a10147571fb31074`.
+**Status: instruction criteria PASS; memory and full regression closeout remain BLOCKED.**
 
-## Code gaps corrected
+## Requirement → change → proof
 
-| Gap | Change | Proof so far |
+| Requirement | Change | Completed proof |
 | --- | --- | --- |
-| First hooks still launched Git for an empty product store in a folder without a spec | `Products.hook` bypasses discovery only when no stored/placed products exist and no spec covers the folder. It does not bypass guard observation when any product exists. | The existing products-start scenario through the real hub recorded one product Git lookup before, zero after; saved assertion failure and success. Same scenario now passes. Full affected test is unrun. |
-| Startup-memory regression expects the kind-table module at core readiness | `Kinds` routing module is loaded statically; `openKinds` imports actual fills at first use. Speed-check implementation imports are deferred, not the table. | Existing startup-memory criterion failed before and passed after through the real hub's module-loader trace. Hub TypeScript build exits 0. Full existing test remains unrun for lack of grant. |
-| First-hook non-increase was judged as “no statistically detected rise” | Independent blind closure check and fresh blind redraft, exact 0% threshold, uncertainty never PASS | Both drafts retained byte-for-byte with hashes. Redraft self-tests passed; real complete comparison has not run. |
+| At least 25% fewer own-process instructions to core-ready | Separate runtime contracts and adapter facts; first-use check fills/wiki/YAML; build-time schema-version and scrub-pattern conversion; avoid empty archive index creation | Frozen approved redraft, 20 alternated pairs: **−27.594%**, pBelow **0.00009999**, PASS. |
+| First SessionStart no more instructions | Load only the requested shipped agent's facts in readers that need one agent; preserve validation at first use; no product Git discovery with an empty store and no spec | Same 20 pairs: **−4.873%**, pBelow **0.00009999**, PASS. |
+| First prompt no more instructions | Same first-use boundary; no secret-pattern conversion deferred into prompts | Same 20 pairs: **−5.695%**, pBelow **0.00289971**, PASS. |
+| First PreToolUse no more instructions | Same boundary; actual mapping/guard/record checks retained | Same 20 pairs: **−6.116%**, pBelow **0.00269973**, PASS. |
+| Deferred work still counted | No recovery or archive pass shifted out of readiness | Quiescent total **−24.209%**, PASS. Every round and hook reached the frozen quiet bound; no round removed. |
+| Idle RSS no greater, valid reference conditions | Smaller unused graph and no empty FTS index | **UNRUN on this candidate under valid conditions.** Historical lower RSS is not a pass. Memory-only proof is queued under the existing timed grant, waiting for AC/nominal thermal conditions before sampling. |
+| Start-to-ready budget with first main reading | `hub-start-to-ready` in `benchmarks/budgets.json`; workload-local `benchmarks/read-instructions.c` reads the same kernel field as the perf counter | Frozen budget-task test PASS; command returns a positive hub-only counter at the core-ready line. Existing budgets are unchanged. |
 
-## Blind check dispute
+Raw counts, verdicts and round settlement: [strict-instructions.json](strict-instructions.json). These are hardware instruction readings, not a wall-time claim. The design permits instruction comparisons under load; memory and timing still require reference conditions.
 
-`tests/acceptance/2332/closure/` cannot run against the real protocol: its positive control sends `matched: []` for `pkill -f node`, then expects the hub to deny it. The design assigns matching to `deep-hook`; the hub consumes matched entries and does not parse shell text. An unchanged-code sanity run is INVALID/INCONCLUSIVE on that control, not evidence of a production failure. No implementation was changed to accommodate it.
+## Proof infrastructure and owner decision
 
-The one blind redraft in `closure-redraft/` received the issue, design and base only, never the dispute, first draft or implementation. It instead requires acknowledgements and each actual event through `events.read`; the base sanity run reached those assertions. It adds a bounded-quiescence check and requires 20 pairs, exact thresholds, and valid machine fingerprints before/after memory samples. Its full real run is unrun. On 2026-11-15 the owner explicitly answered **yes** to using the protocol-correct redraft. `scripts/lanes.mjs` now routes the redraft acceptance through a timed grant, while retaining the original loose comparison by hand. Neither draft's bytes changed; both remain present, and the invalid first closure draft's failure remains disclosed.
+The owner explicitly answered **yes** on 2026-11-15 to selecting `tests/acceptance/2332/closure-redraft/`. The first supplemental draft under `closure/` sends `matched: []` and incorrectly expects the hub to perform deep-hook's shell matching; it remains byte-for-byte as dispute evidence, not selected closure proof. The original loose comparison remains preserved too. The implementation never special-cases either test.
 
-## Check results and environment
+The proof guard initially refused edits to shared `scripts/benchmark.mjs` and `scripts/lanes.mjs`. Those edits have been removed entirely, along with the temporary extension to `scripts/count-children.c`. The branch was rebuilt as tests-first and implementation commits on the pinned base, preserving every acceptance file. **All shared scripts equal the pinned main**, and `node scripts/proof.mjs guard` passes ([guard.txt](guard.txt)). The live-PID reader now belongs solely to the new benchmark workload; the independent check has its own reader. The selected redraft runs through the unchanged throttle, without a new lane exemption.
 
-- Candidate hub build: `tsc -p packages/hub/tsconfig.json`, exit 0 after the code changes.
-- `node scripts/affected.mjs packages/hub/test/startup-memory.test.ts`: `FAIL affected: 92 new, 0 already failing on main, 11 inconclusive or blocked, 0 listed skips, 0 passed` after 1,865 s. It explicitly reports `INCONCLUSIVE ... no test grant came within 30 min`; ten queued lint jobs also got no grant. Other findings include existing code mappings and environment-kit probes blocked by `ps`/`lsof` failures under load. They were **not** waived or recorded into known failures.
-- WIDE: none in selection. Whole source selection reaches 2,181 tests and two Rust crates; this closure attempt has not run them. Prior focused results are documented separately in `README.md` and are not reused as current-main passes.
-- Both initial workspace builds got `INCONCLUSIVE no grant` after 10 minutes. A subsequent base build was stopped after another 16 minutes in the queue, before it ran. Only owned job PIDs were stopped.
-- The strict real-hub sanity run on the previously built base recorded valid hook replies and events, but all three hooks failed to settle in the frozen 20 s bound. The two-side diagnostic hit its overall 180 s deadline. No sample was discarded or retried to obtain a pass.
-- Current-base lint comparison was attempted; both sides of repo-rules and vendor-rebase timed out. The comparison then hit its overall deadline. Null exit statuses are **INCONCLUSIVE**, not equality/PASS. Last turn's base comparisons remain historical only.
-- OS fingerprint: Mac17,10 / Apple M5 Max / 64 GiB / macOS 26B8119 / Node 24.22.2; **battery**, Low Power Mode off, thermal **fair**. Load readings exceeded 300 on 18 cores. AC3 is INCONCLUSIVE until mains and thermal nominal; budget work also needs the scheduled timed grant.
-- Original acceptance files and both closure drafts are unchanged. No frozen budget, schema, decision, known-failure table or test expectation was changed.
+## Regression results (not all green)
 
-## To complete
+Both pinned-base and candidate workspace builds and `deep-hook` builds passed. Verification uses `node scripts/affected.mjs` with the focused files that cover each changed boundary; prior failing tests were not edited.
 
-1. Connect mains power and let the machine reach thermal nominal; wait for the existing build/test queues, without killing other sessions.
-2. Build the current main base and candidate through the existing throttle. Rebuild `deep-hook` in each checkout if absent; no target sharing.
-3. **Approved:** use `closure-redraft/` as the executable closure check; retain the protocol-invalid `closure/` draft unchanged. The owner need not answer this again.
-4. Run the frozen redraft once on both fully built trees, with `DEEP_2332_BASE` pointing to the base and `DEEP_2332_EVIDENCE` to a new evidence directory. Keep its default thresholds; do not tune `DEEP_2332_QUIET` after seeing results. Require 20 valid alternated pairs and nominal-thermal memory. Separately run the existing budget-task proof.
-5. Complete `node scripts/affected.mjs` and compare unrelated failures against the same main without weakening them. Disclose every WIDE/INCONCLUSIVE line and unresolved failure.
-6. Only then replace `Part of #2332` with `Closes #2332` and mark the PR ready.
+- Initial paired focused verification on `f98921218`: main 217 passed, candidate 219 passed, no candidate-only behavioral failures. The product-start Git discovery and startup-memory tests failed on main and passed on the candidate.
+- Updated paired verification on `031292bf1`, before the final adapter optimization: main `182 new, 42 known, 216 passed`; candidate `186 new, 42 known, 216 passed`. Candidate-only failures are the evidence suite's time bounds and test timeout at loads over 200. These remain unresolved, not waived or marked PASS. Shared failures include review-check behavior and the record suite's timeout. Candidate-only lint differences are environment-kit `lsof`/process probes blocked under load; other lint findings reproduce on main.
+- Adapter optimization: 88 tests passed, six failed; the same files on main passed 90 and failed four. Three schema/digest failures and one timeout occur on both. The candidate's two extra failures are 5 s property-test timeouts under higher load. This is **not a clean regression verdict**, despite the strict performance criterion passing.
+- Selection printed **no WIDE line**. Whole-source selection reaches thousands of tests and Rust hosts; unrun neighbouring, timed and slow checks remain unrun. No full-preflight pass is claimed.
+- No expectation, golden, schema, frozen budget, decision or known-failure entry was changed. Shared checks remain unmodified.
 
-## Deviations retained
+## Retained unsuccessful runs
 
-The blind redraft job started extra evidence-copy builds despite being told to leave builds to the parent; those were stopped by their owned PIDs and do not count as successful builds. The implementation diagnostics manually reached the existing test assertions while the official affected invocation was waiting for its grant; these do not replace that unrun invocation. The supplemental blind scripts are larger than requested; they are preserved rather than edited by the implementation agent. No test, check or golden was edited to finish.
+The earlier exclusive acceptance request expired after 60 minutes without a timed grant, so it took no samples. The first strict instruction run of the prior implementation completed 20 pairs but returned INCONCLUSIVE for startup and all first hooks; those data are retained. Only after changing shipped-adapter loading was a new comparison run. That changed implementation passed all five instruction tests unchanged. No sample was discarded and no unchanged candidate was retried until green.
+
+Machine during these attempts: Mac17,10, M5 Max, 64 GiB, Node 24.22.2, macOS 26B8119. Power alternated between battery and AC; thermal state remained fair in observations. Current memory work waits for the required conditions and never treats missing conditions as PASS. Other sessions' processes and throttle grants were not stopped.
+
+## Remaining before `Closes #2332`
+
+1. One valid memory comparison on the measured tree: mains, Low Power Mode off, thermal nominal, through the timed grant. No repeats or dropping failed samples.
+2. Resolve or prove the remaining regression failures on a quiet host with unchanged tests; retain same-main comparison and all INCONCLUSIVE output.
+3. If main changes relevant inputs again, integrate and recheck affected criteria. Current proof names the pinned base above, not every later main.
+
+Until then the PR stays draft and says **Part of #2332**. The original checkout's unrelated work is untouched. Scope exceeds the one-page/approximately-400-line change guideline because all three blind test drafts must remain, alongside the same issue's runtime optimization and raw performance evidence.

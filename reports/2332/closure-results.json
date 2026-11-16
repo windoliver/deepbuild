@@ -1,79 +1,505 @@
 {
-  "base": "d8c46f0d58162ff0a4a483544149316aec960637",
-  "candidate": "c5b6ac163",
+  "base": "031292bf15c0b9a32260413793f3b2d17e87115b",
+  "candidate": "fdedb13fd7d24d48698e6f48a10147571fb31074",
   "status": "BLOCKED",
-  "machine": {
-    "model": "Mac17,10",
-    "chip": "Apple M5 Max",
-    "memoryBytes": 68719476736,
-    "power": "battery",
-    "lowPowerMode": false,
-    "thermalState": "fair",
-    "macosBuild": "26B8119"
-  },
-  "affected": {
-    "summary": "FAIL: 92 new, 0 known, 11 inconclusive/blocked, 0 passed",
-    "WIDE": [],
-    "inconclusive": [
-      "INCONCLUSIVE packages/hub/test/startup-memory.test.ts \u203a (file): no test grant came within 30 min",
-      "INCONCLUSIVE lint scripts/vendor-rebase.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/canvas-lint.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/size-ratchet.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/render-lint.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/plant-lint.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/blocking-call-guard.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/keymap-guard.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/panel-catalog.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/known-failures-check.mjs job: no grant",
-      "INCONCLUSIVE lint scripts/fetch-lock.mjs job: no grant"
-    ]
-  },
-  "hubTypecheck": 0,
-  "products": {
-    "before": {
-      "reads": 1,
-      "status": "FAIL"
-    },
-    "after": {
-      "reads": 0,
-      "status": "PASS"
-    }
-  },
-  "kindsAtReady": {
-    "before": "FAIL",
-    "after": "PASS"
-  },
-  "strictBaseSanity": {
-    "side": "previous-base",
-    "result": {
-      "atReady": 5292533143,
-      "settledTotal": 5980590876,
-      "readySettled": true,
-      "steps": [
+  "instructionVerdicts": {
+    "ready": {
+      "status": "PASS",
+      "threshold": 0.75,
+      "pairs": 20,
+      "medianRatio": 0.7240596583345364,
+      "pAbove": 1,
+      "pBelow": 9.999000099990002e-05,
+      "seed": 2332,
+      "counts": [
         {
-          "event": "SessionStart",
-          "instructions": 1067615512,
-          "settled": false
+          "change": 3613971212,
+          "base": 4710957218
         },
         {
-          "event": "UserPromptSubmit",
-          "instructions": 392839293,
-          "settled": false
+          "change": 3542322050,
+          "base": 4954054034
         },
         {
-          "event": "PreToolUse",
-          "instructions": 313873667,
-          "settled": false
+          "change": 3559696023,
+          "base": 4948069456
+        },
+        {
+          "change": 3635527281,
+          "base": 4933312020
+        },
+        {
+          "change": 3604252018,
+          "base": 5004438261
+        },
+        {
+          "change": 3631799764,
+          "base": 4875267171
+        },
+        {
+          "change": 3575567671,
+          "base": 5052925752
+        },
+        {
+          "change": 3592389064,
+          "base": 4985991779
+        },
+        {
+          "change": 3563722964,
+          "base": 4967358314
+        },
+        {
+          "change": 3610436288,
+          "base": 4824694984
+        },
+        {
+          "change": 3576625173,
+          "base": 4927279021
+        },
+        {
+          "change": 3616132385,
+          "base": 4887657632
+        },
+        {
+          "change": 3547293499,
+          "base": 4911537293
+        },
+        {
+          "change": 3597571219,
+          "base": 4818676426
+        },
+        {
+          "change": 3568454504,
+          "base": 4886916890
+        },
+        {
+          "change": 3642931602,
+          "base": 4851114669
+        },
+        {
+          "change": 3569193743,
+          "base": 5033438928
+        },
+        {
+          "change": 3588485510,
+          "base": 4986805298
+        },
+        {
+          "change": 3574315763,
+          "base": 4974628855
+        },
+        {
+          "change": 3594190841,
+          "base": 4762026799
         }
-      ],
-      "replies": [
-        0,
-        0,
-        0
+      ]
+    },
+    "sessionStart": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.9512698816589025,
+      "pAbove": 1,
+      "pBelow": 9.999000099990002e-05,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 730115604,
+          "base": 774375300
+        },
+        {
+          "change": 729404182,
+          "base": 761566623
+        },
+        {
+          "change": 729423265,
+          "base": 763288174
+        },
+        {
+          "change": 735755967,
+          "base": 774698547
+        },
+        {
+          "change": 735244094,
+          "base": 767508284
+        },
+        {
+          "change": 729297985,
+          "base": 765099491
+        },
+        {
+          "change": 738540864,
+          "base": 789691141
+        },
+        {
+          "change": 730160290,
+          "base": 773878170
+        },
+        {
+          "change": 735718759,
+          "base": 764453431
+        },
+        {
+          "change": 730822017,
+          "base": 768622918
+        },
+        {
+          "change": 731909830,
+          "base": 760098883
+        },
+        {
+          "change": 732116896,
+          "base": 755866531
+        },
+        {
+          "change": 734273775,
+          "base": 757076708
+        },
+        {
+          "change": 722062334,
+          "base": 762340539
+        },
+        {
+          "change": 728527854,
+          "base": 770617525
+        },
+        {
+          "change": 733059846,
+          "base": 779978283
+        },
+        {
+          "change": 737935807,
+          "base": 775370870
+        },
+        {
+          "change": 731310878,
+          "base": 770412875
+        },
+        {
+          "change": 723426798,
+          "base": 762295810
+        },
+        {
+          "change": 734826752,
+          "base": 767538577
+        }
+      ]
+    },
+    "prompt": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.9430497158103622,
+      "pAbove": 0.9972002799720028,
+      "pBelow": 0.0028997100289971,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 63540074,
+          "base": 67426582
+        },
+        {
+          "change": 64520259,
+          "base": 67761234
+        },
+        {
+          "change": 65150124,
+          "base": 68542524
+        },
+        {
+          "change": 64917209,
+          "base": 71239253
+        },
+        {
+          "change": 78914219,
+          "base": 67160066
+        },
+        {
+          "change": 64530708,
+          "base": 67144071
+        },
+        {
+          "change": 67326404,
+          "base": 74199955
+        },
+        {
+          "change": 66860705,
+          "base": 77187636
+        },
+        {
+          "change": 65647676,
+          "base": 68110751
+        },
+        {
+          "change": 66047294,
+          "base": 66253743
+        },
+        {
+          "change": 64950433,
+          "base": 70218650
+        },
+        {
+          "change": 66065072,
+          "base": 70108140
+        },
+        {
+          "change": 65184235,
+          "base": 69492643
+        },
+        {
+          "change": 65279979,
+          "base": 69171570
+        },
+        {
+          "change": 66280821,
+          "base": 70407666
+        },
+        {
+          "change": 64445194,
+          "base": 67882584
+        },
+        {
+          "change": 65302227,
+          "base": 70932651
+        },
+        {
+          "change": 67170681,
+          "base": 67064013
+        },
+        {
+          "change": 70383068,
+          "base": 67076455
+        },
+        {
+          "change": 65082892,
+          "base": 69128847
+        }
+      ]
+    },
+    "preToolUse": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.9388378171962082,
+      "pAbove": 0.9974002599740026,
+      "pBelow": 0.0026997300269973002,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 75210016,
+          "base": 74497047
+        },
+        {
+          "change": 70838520,
+          "base": 89387775
+        },
+        {
+          "change": 72117595,
+          "base": 88300691
+        },
+        {
+          "change": 70975016,
+          "base": 82991460
+        },
+        {
+          "change": 78633880,
+          "base": 74004414
+        },
+        {
+          "change": 71063770,
+          "base": 74995268
+        },
+        {
+          "change": 79902457,
+          "base": 95696153
+        },
+        {
+          "change": 71425410,
+          "base": 107240808
+        },
+        {
+          "change": 71575573,
+          "base": 90642171
+        },
+        {
+          "change": 70852310,
+          "base": 83067507
+        },
+        {
+          "change": 71204770,
+          "base": 91363781
+        },
+        {
+          "change": 73155439,
+          "base": 75708155
+        },
+        {
+          "change": 77630921,
+          "base": 76314204
+        },
+        {
+          "change": 71122771,
+          "base": 75759140
+        },
+        {
+          "change": 72228896,
+          "base": 76874077
+        },
+        {
+          "change": 77646925,
+          "base": 93279575
+        },
+        {
+          "change": 78456900,
+          "base": 83564848
+        },
+        {
+          "change": 87741324,
+          "base": 83396559
+        },
+        {
+          "change": 87580078,
+          "base": 75701958
+        },
+        {
+          "change": 78341642,
+          "base": 73320169
+        }
+      ]
+    },
+    "settledTotal": {
+      "status": "PASS",
+      "threshold": 1,
+      "pairs": 20,
+      "medianRatio": 0.7579128510394588,
+      "pAbove": 1,
+      "pBelow": 9.999000099990002e-05,
+      "seed": 2332,
+      "counts": [
+        {
+          "change": 4534636105,
+          "base": 5651523942
+        },
+        {
+          "change": 4415797765,
+          "base": 5923228910
+        },
+        {
+          "change": 4490810786,
+          "base": 6032764465
+        },
+        {
+          "change": 4472928422,
+          "base": 5877151319
+        },
+        {
+          "change": 4499944046,
+          "base": 5932617536
+        },
+        {
+          "change": 4464262549,
+          "base": 5842322453
+        },
+        {
+          "change": 4458816744,
+          "base": 6050128015
+        },
+        {
+          "change": 4523375821,
+          "base": 6000921463
+        },
+        {
+          "change": 4385259223,
+          "base": 5933068201
+        },
+        {
+          "change": 4502545483,
+          "base": 5782957086
+        },
+        {
+          "change": 4437661215,
+          "base": 5875284257
+        },
+        {
+          "change": 4467216473,
+          "base": 5851176713
+        },
+        {
+          "change": 4434398460,
+          "base": 5859082381
+        },
+        {
+          "change": 4442438405,
+          "base": 5740569984
+        },
+        {
+          "change": 4405927360,
+          "base": 5817813861
+        },
+        {
+          "change": 4464894328,
+          "base": 5830971214
+        },
+        {
+          "change": 4477051587,
+          "base": 5975206087
+        },
+        {
+          "change": 4764489005,
+          "base": 5922143728
+        },
+        {
+          "change": 4559065471,
+          "base": 6117280452
+        },
+        {
+          "change": 4493162117,
+          "base": 5730578835
+        }
       ]
     }
   },
-  "updatedMainBuild": "INCONCLUSIVE: no grant",
-  "memory": "INCONCLUSIVE: battery, thermal fair",
-  "comparison": "UNRUN on updated base"
+  "memory": "UNRUN: awaiting nominal reference conditions and timed grant",
+  "guard": "PASS; all shared scripts unchanged",
+  "regressions": [
+    {
+      "side": "closure-base",
+      "step": "build",
+      "status": 0
+    },
+    {
+      "side": "closure-base",
+      "step": "hook",
+      "status": 0
+    },
+    {
+      "side": "closure-base",
+      "step": "affected",
+      "status": 1,
+      "logs": "external local evidence/closure-base",
+      "summary": "FAIL affected: 182 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 216 passed, in 96 s at load 239; logs in /var/folders/nc/jmp2w2vj46gg_dcwvxj_4msh0000gn/T/deep-affected-0kccSV"
+    },
+    {
+      "side": "work",
+      "step": "build",
+      "status": 0
+    },
+    {
+      "side": "work",
+      "step": "hook",
+      "status": 0
+    },
+    {
+      "side": "work",
+      "step": "affected",
+      "status": 1,
+      "logs": "external local evidence/work",
+      "summary": "FAIL affected: 186 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 216 passed, in 125 s at load 230; logs in /var/folders/nc/jmp2w2vj46gg_dcwvxj_4msh0000gn/T/deep-affected-EK97U4"
+    }
+  ],
+  "adapterChecks": {
+    "candidate": "88 passed, 6 failed",
+    "base": "90 passed, 4 failed",
+    "candidateOnly": "two 5 s property-test timeouts, unresolved"
+  }
 }
