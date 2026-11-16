@@ -7,14 +7,19 @@
 // stays open naming it; every other result holds the change. An issue closes when its change lands, never before. After
 // each landing the default branch is read back: a tree other than the one its verdict covered stops landings, names the
 // files and takes the path a red main takes (#1333), whatever the forge says it merged. DeepBuild never closes a PR.
+// Under a standing rule or a topic's card (#1345), a change whose only open requirements are calls on you lands too
+// when it reaches no release and no published page, its issue left open naming the calls; one that reaches either
+// waits for your answer. Your Send back on a landed one reverts it through the forge.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { gitEnv } from '@deepbuild/gate';
 import type { AppKey } from './forge-port.js';
 import type { Plant } from './plant.js';
+import { globMatches } from './rules.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
@@ -30,10 +35,17 @@ const STALE_MS = 7 * 86_400_000;
 const LINKS = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of):?\s+#(\d+)\b/i;
 
 export type Outcome = 'PASS' | 'FAIL' | 'INVALID' | 'BLOCKED' | 'INCONCLUSIVE';
-/** A requirement as a verdict and its definition hold it: its handle, its text, what alone settles it, and its outcome. */
-interface Requirement { req: string; text: string; settled_by: string | null; outcome: string }
-/** One judgement of a change: its claim's verdict on the merge of its head with main, and what that merge was. */
-export interface Judged { claim: string; outcome: Outcome; requirements: Requirement[]; commit: string; tree: string; head: string; main: string; at: number; why?: string }
+/** A requirement as a verdict and its definition hold it: its handle, its text, what alone settles it, its outcome and whose word decides it. */
+interface Requirement { req: string; text: string; settled_by: string | null; outcome: string; oracle?: string | null }
+/**
+ * One judgement of a change: its claim's verdict on the merge of its head with main, and what that merge was. One that
+ * waits only on calls (#1345) names what its landing would reach that a revert can't take back, and the calls it raised.
+ */
+export interface Judged { claim: string; outcome: Outcome; requirements: Requirement[]; commit: string; tree: string; head: string; main: string; at: number; why?: string; reaches?: string | null; calls?: string[] }
+/** A call a change waits on (#1345): one requirement whose oracle is you, still pending on the change's merge with main. */
+export interface Call { issue: number; pr: number; head: string; main: string; commit: string; claim: string; req: string; text: string; reaches: string | null }
+/** Raises the call for a requirement, or finds the one raised for it already: its handle. Given only where calls are on. */
+export type RaiseCall = (call: Call) => Promise<string>;
 /** A change as the lander keeps it: its pull request, its issue and the newest judgement of it. */
 interface Change { pr: number; issue: number; branch: string; judged?: Judged; passedAt?: number }
 /** What the lander keeps of a repo across rounds and restarts: its changes and how many judgements it made. Why landings stopped is main watch's. */
@@ -43,7 +55,8 @@ interface Stop { commit: string; files: string[] }
 /** One round's report, as `deep land --json` prints it. */
 export interface Round {
   landed: { pr: number; issue: number; commit: string }[];
-  held: { pr: number; issue: number; reason: string }[];
+  /** Each change held, why, and the calls it waits on where calls are on (#1345). */
+  held: { pr: number; issue: number; reason: string; calls?: string[] }[];
   sent_back: { pr: number; issue: number; files: string[] }[];
   stopped: Stop | null;
 }
@@ -64,6 +77,8 @@ export interface LandingOptions {
    * resolves with its verdict once it's made, or undefined when none was made in time.
    */
   judge(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: Requirement[] } | undefined>;
+  /** A claim's newest recorded verdict, made once your answers to its calls came (#1345); undefined while it still waits. */
+  verdict(claim: string): Promise<{ outcome: Outcome; requirements: Requirement[] } | undefined>;
   /** A change sent back to its own attempt: the session a run started on the issue in the checkout, if one is live, hears it. */
   sendBack(r: { checkout: string; issue: number; pr: number; files: string[]; text: string }): Promise<void>;
   appendCore(kind: string, data: Obj, extra?: { subject?: string }): Promise<void>;
@@ -171,15 +186,19 @@ export class Landing {
     const repo = await this.repoOf(checkout);
     return this.inTurn(repo, () => this.judgeIn(checkout, repo));
   }
-  /** A work run's turn (#1332): only the pull requests that link its issues judged, then one round of landings. */
-  async work(checkout: string, issues: number[]): Promise<Round> {
+  /**
+   * A work run's turn (#1332): only the pull requests that link its issues judged, then one round of landings. With
+   * `calls`, as under a standing rule or a topic's card (#1345), a change that waits only on calls raises them and lands
+   * when nothing it reaches is past a revert.
+   */
+  async work(checkout: string, issues: number[], calls?: RaiseCall): Promise<Round> {
     const repo = await this.repoOf(checkout);
-    const judged = await this.inTurn(repo, () => this.judgeIn(checkout, repo, issues));
-    const round = await this.land(checkout);
+    const judged = await this.inTurn(repo, () => this.judgeIn(checkout, repo, issues, calls));
+    const round = await this.inTurn(repo, () => this.landIn(checkout, repo, calls));
     const seen = (pr: number): boolean => round.landed.some((l) => l.pr === pr) || round.held.some((h) => h.pr === pr);
     return { ...round, held: [...round.held, ...judged.held.filter((h) => !seen(h.pr))], sent_back: [...judged.sent_back, ...round.sent_back] };
   }
-  private async judgeIn(checkout: string, repo: string, issues?: number[]): Promise<Round> {
+  private async judgeIn(checkout: string, repo: string, issues?: number[], calls?: RaiseCall): Promise<Round> {
     const s = this.load(repo);
     const round: Round = { landed: [], held: [], sent_back: [], stopped: mainWatch(await topOf(checkout)) };
     const pulls = (await this.pulls(repo)).filter((p) => p.issue !== undefined && (!issues || issues.includes(p.issue)));
@@ -188,16 +207,21 @@ export class Landing {
     for (const p of pulls) {
       const c: Change = s.changes[p.pr] ??= { pr: p.pr, issue: p.issue!, branch: p.branch };
       const head = await must(checkout, ['rev-parse', `refs/remotes/origin/${p.branch}`]);
-      const judged = await this.judgeOne(s, checkout, c, head, main);
+      const judged = await this.judgeOne(s, checkout, c, head, main, calls);
       this.save(s);
       if ('files' in judged) round.sent_back.push({ pr: c.pr, issue: c.issue, files: judged.files });
-      else if (judged.outcome !== 'PASS' && !onlyWindow(judged)) round.held.push({ pr: c.pr, issue: c.issue, reason: heldWhy(judged) });
+      else if (!this.lands(judged, calls)) round.held.push({ pr: c.pr, issue: c.issue, reason: heldWhy(judged), ...(judged.calls?.length ? { calls: judged.calls } : {}) });
     }
     this.save(s);
     return round;
   }
+  /** Whether a judgement lands: a PASS, one whose only open requirement the budget window settles, or, where calls are on, one waiting only on calls that reaches nothing a revert can't take back. */
+  private lands(j: Judged, calls: RaiseCall | undefined): boolean {
+    // The planted wrong program lands a change waiting on calls whatever it reaches.
+    return j.outcome === 'PASS' || onlyWindow(j) || (calls !== undefined && onlyCalls(j) && (!j.reaches || this.o.plant === 'lands-unreversible'));
+  }
   /** One change judged on its merge with `main`, or sent back with the files that conflict. */
-  private async judgeOne(s: State, checkout: string, c: Change, head: string, main: string): Promise<Judged | { files: string[] }> {
+  private async judgeOne(s: State, checkout: string, c: Change, head: string, main: string, calls?: RaiseCall): Promise<Judged | { files: string[] }> {
     const merged = await mergeOf(checkout, main, head);
     if ('files' in merged) {
       await this.step('sent_back', s.repo, c, { head, main, files: merged.files });
@@ -206,8 +230,13 @@ export class Landing {
       delete c.passedAt;
       return { files: merged.files };
     }
-    // The same merge judged already stands: nothing runs again.
-    if (c.judged?.commit === merged.commit) return c.judged;
+    if (c.judged?.commit === merged.commit) {
+      // The same merge judged already stands: nothing runs again. One that waited on your calls takes the verdict your
+      // answers made, once they made one (#1345).
+      const answered = onlyCalls(c.judged) && c.judged.claim ? await this.o.verdict(c.judged.claim) : undefined;
+      if (!answered) return c.judged;
+      return this.judgedAs(s, checkout, c, { ...c.judged, outcome: answered.outcome, requirements: answered.requirements, at: Date.now() }, calls);
+    }
     // Each judgement is a session of its own, so a check whose key didn't change carries from the last one (#1018).
     const session = `land${letters(s.repo)}x${c.issue}x${++s.judgements}`;
     const v = await this.o.judge({ repo: s.repo, checkout, issue: c.issue, pr: c.pr, commit: merged.commit, session });
@@ -215,16 +244,50 @@ export class Landing {
       ? { claim: v.claim, outcome: v.outcome, requirements: v.requirements, commit: merged.commit, tree: merged.tree, head, main, at: Date.now() }
       // No verdict, as when its definition didn't lock: nothing passed, so it's held, never landed (invariant 2).
       : { claim: '', outcome: 'BLOCKED', requirements: [], commit: merged.commit, tree: merged.tree, head, main, at: Date.now(), why: 'no verdict was made on its merge with main: its definition did not lock or its checks did not end' };
-    const passed = judged.outcome === 'PASS' || onlyWindow(judged);
+    // A change that waits only on calls asks them, where calls are on, whether it lands or waits for your answers (#1345).
+    if (calls && onlyCalls(judged)) {
+      judged.reaches = await this.reaches(checkout, s.repo, main, merged.commit);
+      judged.calls = [];
+      for (const q of judged.requirements.filter(waitsOnYou)) {
+        judged.calls.push(await calls({ issue: c.issue, pr: c.pr, head, main, commit: merged.commit, claim: judged.claim, req: q.req, text: q.text, reaches: judged.reaches }));
+      }
+    }
+    return this.judgedAs(s, checkout, c, judged, calls);
+  }
+  /** A change's newest judgement kept and recorded, and its verdict's status posted where it lands. */
+  private async judgedAs(s: State, checkout: string, c: Change, judged: Judged, calls: RaiseCall | undefined): Promise<Judged> {
+    const passed = this.lands(judged, calls);
     // Its place in the order is its first PASS: a judgement again on a moved head keeps it.
     if (passed) c.passedAt ??= judged.at;
     else delete c.passedAt;
     c.judged = judged;
-    await this.step('judged', s.repo, c, { head, main, commit: merged.commit, tree: merged.tree, claim: judged.claim || null, outcome: judged.outcome });
+    await this.step('judged', s.repo, c, { head: judged.head, main: judged.main, commit: judged.commit, tree: judged.tree, claim: judged.claim || null, outcome: judged.outcome });
     // The planted wrong program closes the issue once its pull request is judged, before anything landed.
     if (this.o.plant === 'closes-on-open') await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'closed' });
-    if (passed) await this.post(checkout, s.repo, merged.commit, judged);
+    if (passed) await this.post(checkout, s.repo, judged.commit, judged);
     return judged;
+  }
+  /**
+   * What landing a change reaches that a revert can't take back (#1345), read from structure and never from words: a
+   * file the repo's release ships, by `release.paths` in main's `.deepbuild/done.yaml`, or a file the forge's Pages site
+   * is built from. Null when it reaches neither.
+   */
+  private async reaches(checkout: string, repo: string, main: string, commit: string): Promise<string | null> {
+    const files = (await must(checkout, ['diff', '--name-only', main, commit])).split('\n').filter(Boolean);
+    let spec: unknown;
+    try { spec = parseYaml(await must(checkout, ['show', `${main}:.deepbuild/done.yaml`])); } catch { spec = undefined; }
+    const paths = isObj(spec) && isObj(spec.release) && Array.isArray(spec.release.paths) ? spec.release.paths.map(String) : [];
+    const shipped = files.filter((f) => paths.some((g) => globMatches(g, f)));
+    if (shipped.length) return `a release: done.yaml's release ships ${shipped.join(', ')}`;
+    const pages = await this.call('GET', `/repos/${repo}/pages`);
+    // No site is a 404; an answer that says neither leaves what it reaches unknown, so it waits for you.
+    if (pages.status === 404) return null;
+    if (pages.status !== 200 || !isObj(pages.body)) return `the published page: the forge answered ${pages.status} for the repo's Pages site`;
+    const source = isObj(pages.body.source) ? pages.body.source : null;
+    // A site a workflow builds can publish anything on main; one built from a branch, its folder there.
+    const folder = source ? String(source.path ?? '/').replace(/^\/+|\/+$/g, '') : '';
+    const published = pages.body.build_type === 'workflow' || !source ? files : source.branch === 'main' ? files.filter((f) => !folder || f.startsWith(`${folder}/`)) : [];
+    return published.length ? `the published page: the Pages site is built from ${source ? `${String(source.branch)}:/${folder}` : 'a workflow'}, which holds ${published.join(', ')}` : null;
   }
   /**
    * The verdict's status on the merge commit it covers, with the gate's own identity (#1325): the merge commit is
@@ -238,7 +301,7 @@ export class Landing {
     const res = await fetch(`${this.o.api}/repos/${repo}/statuses/${commit}`, {
       method: 'POST', signal: AbortSignal.timeout(30_000),
       headers: { accept: 'application/vnd.github+json', 'content-type': 'application/json', ...(by ? { authorization: `Bearer ${by}` } : {}) },
-      body: JSON.stringify({ context: CONTEXT, state: 'success', description: `${judged.outcome}${onlyWindow(judged) ? '; the budget window settles the rest' : ''}`.slice(0, 140) }),
+      body: JSON.stringify({ context: CONTEXT, state: 'success', description: `${judged.outcome}${onlyWindow(judged) ? '; the budget window settles the rest' : onlyCalls(judged) ? '; your calls settle the rest' : ''}`.slice(0, 140) }),
     });
     if (!res.ok) throw Error(`the forge refused the verdict's status on ${commit}: ${res.status}`);
   }
@@ -250,7 +313,7 @@ export class Landing {
     const repo = await this.repoOf(checkout);
     return this.inTurn(repo, () => this.landIn(checkout, repo));
   }
-  private async landIn(checkout: string, repo: string): Promise<Round> {
+  private async landIn(checkout: string, repo: string, calls?: RaiseCall): Promise<Round> {
     const s = this.load(repo);
     const top = await topOf(checkout);
     // A red main pauses every landing (#1333), a read-back's among them, until main watch clears it.
@@ -267,15 +330,15 @@ export class Landing {
       // The planted wrong program lands the branch's head as it stands, though the gate judged an older one: it takes its
       // own merge of that head for the judged one, so its read-back finds nothing to stop on.
       const stale = c.judged!.head !== head || c.judged!.main !== main;
-      let judged: Judged | { files: string[] } = stale && this.o.plant !== 'lands-unjudged-commit' ? await this.judgeOne(s, checkout, c, head, main) : c.judged!;
+      let judged: Judged | { files: string[] } = stale && this.o.plant !== 'lands-unjudged-commit' ? await this.judgeOne(s, checkout, c, head, main, calls) : c.judged!;
       if (stale && this.o.plant === 'lands-unjudged-commit') {
         const m = await mergeOf(checkout, main, head);
         if (!('files' in m)) judged = { ...c.judged!, ...m, head, main };
       }
       this.save(s);
       if ('files' in judged) { round.sent_back.push({ pr: c.pr, issue: c.issue, files: judged.files }); continue; }
-      if (judged.outcome !== 'PASS' && !onlyWindow(judged)) {
-        round.held.push({ pr: c.pr, issue: c.issue, reason: heldWhy(judged) });
+      if (!this.lands(judged, calls)) {
+        round.held.push({ pr: c.pr, issue: c.issue, reason: heldWhy(judged), ...(judged.calls?.length ? { calls: judged.calls } : {}) });
         await this.step('held', repo, c, { head, main, commit: judged.commit, tree: judged.tree, claim: judged.claim || null, outcome: judged.outcome });
         continue;
       }
@@ -292,9 +355,12 @@ export class Landing {
     // The gate's own identity lands what it passed, once your settings name it; until then your login (#1325). The planted
     // wrong program merges with your login though the gate's app is named.
     const gate = this.o.gateApp() && this.o.plant !== 'lands-as-person' ? await this.o.landingToken(s.repo) : undefined;
-    const open = judged.requirements.filter((q) => q.outcome !== 'PASS' && q.settled_by === 'budget-window').map((q) => q.text);
-    // A change the budget window still settles part of leaves its issue open (#1332): its PR's closing words become
-    // `Part of` before the merge, and an issue the forge closed at the merge anyway is opened again.
+    const window = judged.requirements.filter((q) => q.outcome !== 'PASS' && q.settled_by === 'budget-window').map((q) => q.text);
+    // The calls a change landed with stay open on its issue, as the budget window's requirement does (#1345).
+    const asked = onlyCalls(judged) ? judged.requirements.filter(waitsOnYou).map((q) => q.text) : [];
+    const open = [...window, ...asked];
+    // A change the budget window or your calls still settle part of leaves its issue open (#1332): its PR's closing
+    // words become `Part of` before the merge, and an issue the forge closed at the merge anyway is opened again.
     if (open.length) {
       const pr = await this.call('GET', `/repos/${s.repo}/pulls/${c.pr}`);
       const body = isObj(pr.body) && typeof pr.body.body === 'string' ? pr.body.body : '';
@@ -308,7 +374,9 @@ export class Landing {
     // Landed as the forge merged it, recorded at once (#1332): the forge may close the issue at the merge, and the
     // record holds the landing as soon as it does. The read-back below stops landings if main holds another tree.
     const took = SHA.test(said) ? said : null;
-    await this.step('landed', s.repo, c, { head, main: took, commit: took, tree: null, claim: judged.claim, outcome: judged.outcome, open });
+    // The planted wrong program records a change landed with its calls open as a PASS.
+    const outcome = asked.length && this.o.plant === 'lands-as-pass' ? 'PASS' : judged.outcome;
+    await this.step('landed', s.repo, c, { head, main: took, commit: took, tree: null, claim: judged.claim, outcome, open });
     delete s.changes[c.pr];
     await this.fetch(checkout, []);
     const main = await must(checkout, ['rev-parse', 'refs/remotes/origin/main']);
@@ -321,11 +389,58 @@ export class Landing {
       stopMain(top, main, c.issue, files, said);
       return { commit: main, stopped: { commit: main, files } };
     }
-    // The issue closes now that its change landed, unless the budget window still settles part of it.
-    if (open.length) await this.call('POST', `/repos/${s.repo}/issues/${c.issue}/comments`, { body: `DeepBuild landed #${c.pr} at ${main}; this issue stays open until the scheduled budget window settles: ${open.map((t) => `"${t}"`).join(', ')}.` }, gate);
-    else await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'closed' }, gate);
+    // The issue closes now that its change landed, unless the budget window or your calls still settle part of it.
+    if (window.length) await this.call('POST', `/repos/${s.repo}/issues/${c.issue}/comments`, { body: `DeepBuild landed #${c.pr} at ${main}; this issue stays open until the scheduled budget window settles: ${window.map((t) => `"${t}"`).join(', ')}.` }, gate);
+    if (asked.length) await this.call('POST', `/repos/${s.repo}/issues/${c.issue}/comments`, { body: `DeepBuild landed #${c.pr} at ${main}; this issue stays open until you answer its calls: ${asked.map((t, i) => `"${t}" (deepbuild://ask/${(judged.calls?.[i] ?? '').replace(/^ask:/, '')})`).join(', ')}. Each takes its recommended answer at its deadline, and Send back reverts this change.` }, gate);
+    if (!open.length) await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'closed' }, gate);
     this.save(s);
     return { commit: main, stopped: null };
+  }
+
+  // ---- Your answers to the calls a change landed with (#1345).
+
+  /**
+   * Your Send back on a call whose change landed: the landing taken back on main as it stands, as a change of its own
+   * that lands in turn. The revert goes on a branch, a pull request that closes nothing merges it with the gate's
+   * landing identity, it's recorded as the issue's landing with no verdict, and the issue says so. Why it couldn't, if
+   * it couldn't.
+   */
+  async revert(checkout: string, r: { issue: number; pr: number; commit: string; ask: string; words: string | null }): Promise<string | undefined> {
+    const repo = await this.repoOf(checkout);
+    return this.inTurn(repo, async () => {
+      const token = await this.o.token();
+      await this.fetch(checkout, []);
+      const main = await must(checkout, ['rev-parse', 'refs/remotes/origin/main']);
+      // The landing's own change undone on main's head: a three-way merge from the landing to the main it landed on.
+      const before = await must(checkout, ['rev-parse', `${r.commit}^1`]);
+      const m = await git(checkout, ['merge-tree', '--write-tree', '--name-only', '--no-messages', `--merge-base=${r.commit}`, main, before]);
+      const [tree, ...files] = m.out.split('\n').filter(Boolean);
+      if (m.code === 1) return `its revert conflicts with main at ${main.slice(0, 12)}: ${files.join(', ')}`;
+      if (m.code !== 0 || !tree || !SHA.test(tree)) throw Error(`git merge-tree: ${m.err || m.out}`);
+      const commit = await must(checkout, ['commit-tree', tree, '-p', main, '-m', `Revert #${r.pr}: sent back on ${r.ask}`], FIXED);
+      const branch = `deepbuild/revert-${r.commit.slice(0, 12)}`;
+      await must(checkout, ['push', '-q', '--no-verify', 'origin', `+${commit}:refs/heads/${branch}`], authEnv(token));
+      const gate = this.o.gateApp() ? await this.o.landingToken(repo) : undefined;
+      const opened = await this.call('POST', `/repos/${repo}/pulls`, { title: `Revert #${r.pr}`, head: branch, base: 'main', body: `Reverts #${r.pr}, sent back on ${r.ask}.` }, gate);
+      const pr = isObj(opened.body) ? Number(opened.body.number) : NaN;
+      if (opened.status !== 201 || !Number.isSafeInteger(pr)) return `the forge refused the revert's pull request (${opened.status})`;
+      const merged = await this.call('PUT', `/repos/${repo}/pulls/${pr}/merge`, { sha: commit, merge_method: 'merge' }, gate);
+      if (merged.status !== 200) return `the forge refused the revert's merge (${merged.status})`;
+      const said = isObj(merged.body) && typeof merged.body.sha === 'string' && SHA.test(merged.body.sha) ? merged.body.sha : null;
+      await this.step('landed', repo, { pr, issue: r.issue }, { head: commit, main: said, commit: said, tree: null, claim: null, outcome: 'none', open: [] });
+      await this.call('POST', `/repos/${repo}/issues/${r.issue}/comments`, { body: `DeepBuild reverted #${r.pr} through #${pr} on your Send back on deepbuild://ask/${r.ask.replace(/^ask:/, '')}${r.words ? `: "${r.words}"` : ''}. This issue goes back to the run.` }, gate);
+      return undefined;
+    });
+  }
+
+  /** An issue whose change landed with calls open, once each closed with no Send back: it closes, saying how they closed. */
+  async closeAnswered(checkout: string, issue: number, how: string): Promise<void> {
+    const repo = await this.repoOf(checkout);
+    await this.inTurn(repo, async () => {
+      const gate = this.o.gateApp() ? await this.o.landingToken(repo) : undefined;
+      await this.call('POST', `/repos/${repo}/issues/${issue}/comments`, { body: `DeepBuild closes this issue: ${how}.` }, gate);
+      await this.call('PATCH', `/repos/${repo}/issues/${issue}`, { state: 'closed' }, gate);
+    });
   }
 
   // ---- A run over a fixed set.
@@ -376,10 +491,18 @@ export function onlyWindow(j: Pick<Judged, 'outcome' | 'requirements'>): boolean
   const open = j.requirements.filter((q) => q.outcome !== 'PASS');
   return j.outcome !== 'PASS' && open.length > 0 && open.every((q) => q.settled_by === 'budget-window');
 }
-/** Why a change is held: its verdict and what isn't PASS. */
+/** A requirement whose oracle is you, still waiting on your answer: a call (#1345). */
+const waitsOnYou = (q: Requirement): boolean => q.oracle === 'person' && q.outcome === 'pending';
+/** Whether a verdict's only open requirements wait on your answers (#1345): every other one passed. */
+export function onlyCalls(j: Pick<Judged, 'outcome' | 'requirements'>): boolean {
+  const open = j.requirements.filter((q) => q.outcome !== 'PASS');
+  return j.outcome !== 'PASS' && open.length > 0 && open.every(waitsOnYou);
+}
+/** Why a change is held: its verdict and what isn't PASS, and for one waiting on calls what its landing would reach. */
 const heldWhy = (j: Judged): string => {
   const open = j.requirements.filter((q) => q.outcome !== 'PASS' && q.settled_by !== 'budget-window');
-  return `${j.outcome}${j.why ? `: ${j.why}` : open.length ? `: ${open.map((q) => `${q.req} ${q.outcome}`).join(', ')}` : ''}`;
+  const reaches = j.reaches ? `; it reaches ${j.reaches}, so it waits for your answer to ${j.calls?.join(', ') || 'its calls'}` : '';
+  return `${j.outcome}${j.why ? `: ${j.why}` : open.length ? `: ${open.map((q) => `${q.req} ${q.outcome}`).join(', ')}` : ''}${reaches}`;
 };
 
 // ---- The path a red main takes (#1333): main watch's own state for the checkout, which its `status` reads.

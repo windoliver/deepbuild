@@ -1707,14 +1707,14 @@ pub struct Renderer {
     /// The camera's view axis this frame (#166's `depth` target reads along it).
     forward: [f64; 3],
     pub profiler: Option<Profiler>,
+    /// #463: the scene's crop (Scene::crop) this frame.
+    crop: Option<[f64; 4]>,
     /// The next frame's HDR surface and the headroom it rolls off to (#177), and the pass once
     /// a view first presents HDR.
     pub hdr: Option<HdrFrame>,
     hdr_pass: Option<hdr::HdrPass>,
     /// The look's deband amplitude, which the HDR pass allows between the slot and the output.
     deband: f32,
-    /// #463: the scene's crop (Scene::crop) this frame.
-    crop: Option<[f64; 4]>,
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
     pub upscale: Option<Arc<Upscale>>,
