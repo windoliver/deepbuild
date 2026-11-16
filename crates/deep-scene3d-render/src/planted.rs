@@ -7,6 +7,8 @@ use crate::{ao, cull, dof, flare, local, surface, water};
 pub struct Planted {
     /// Depth cleared to 1, compared less, with a finite far plane at 10 km.
     pub forward_z: bool,
+    /// #177's wrong HDR passes (hdr.wgsl's `plant`): 0 none.
+    pub hdr: u32,
     /// #506: keep the preceding view's backdrop or mirror (see [`crate::Renderer::keep_first`]).
     pub keeps_backdrop: bool,
     pub keeps_mirror: bool,

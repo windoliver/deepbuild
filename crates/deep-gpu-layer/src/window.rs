@@ -31,6 +31,9 @@ pub struct Paint {
     pub size: [u32; 2],
     /// The GPU-layer view, unless the call draws the page alone.
     pub ui: Option<Ui>,
+    /// The view presents through its HDR surface beneath the window, which leaves its region
+    /// clear (#177).
+    pub hdr: bool,
     pub card: Option<Card>,
     /// The planted UI thread that waits on the frame's `gpu_done` fence.
     pub waits_on_gpu: bool,
@@ -126,7 +129,11 @@ fn paint_view(p: &mut Paint, ui: &Ui, window: &mut Window) {
         p.size[0] as f32,
         p.size[1] as f32,
     );
-    p.shown = deep_app::gpu_view::paint(ui, bounds, window);
+    p.shown = if p.hdr {
+        deep_app::gpu_view::paint_clear(ui, bounds, window)
+    } else {
+        deep_app::gpu_view::paint(ui, bounds, window)
+    };
     p.ui_time += started.elapsed();
 }
 
@@ -223,6 +230,8 @@ impl Render for Root {
                     .top(px(y))
                     .w(px(w))
                     .h(px(h))
+                    // #177: the card stays in its slot; what doesn't fit is clipped there.
+                    .overflow_hidden()
                     .bg(rgb([250, 250, 247]))
                     .border_1()
                     .border_color(rgb([60, 60, 60]))
@@ -263,6 +272,7 @@ impl Win {
             view: [0, 0],
             size: [0, 0],
             ui: None,
+            hdr: false,
             card: None,
             waits_on_gpu: false,
             ui_time: Duration::ZERO,
