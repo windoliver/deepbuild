@@ -1231,70 +1231,6 @@ fn composite<'s>(
         p.marks(marks.iter().copied())?;
         return Ok(Vec::new());
     }
-    // #2031: a layer whose only isolated groups are lights draws in place: everything outside a
-    // lit run straight into the frame, as with no light, and each lit run drawn alone, lit and
-    // laid in at its place in the draw order.
-    let only_lights = marks.iter().all(|d| {
-        d.scopes
-            .iter()
-            .all(|s| lit_scope(s) || !matches!(s, Scope::Opacity { blend: Some(_), .. }))
-    });
-    if only_lights {
-        let mut i = 0;
-        while i < marks.len() {
-            let found = marks[i..]
-                .iter()
-                .enumerate()
-                .find_map(|(k, d)| d.scopes.iter().position(lit_scope).map(|at| (i + k, at)));
-            let Some((start, at)) = found else {
-                p.marks(marks[i..].iter().copied())?;
-                break;
-            };
-            p.marks(marks[i..start].iter().copied())?;
-            let group = marks[start].scopes[at].item().to_string();
-            let end = marks[start..]
-                .iter()
-                .position(|d| !d.scopes.iter().any(|s| s.item() == group))
-                .map_or(marks.len(), |n| start + n);
-            let Scope::Opacity {
-                effect: Some(e), ..
-            } = &marks[start].scopes[at]
-            else {
-                return Err(refused("bad_input", "a light's scope is a group's"));
-            };
-            let light = e.light.clone().expect("a lit scope holds its light");
-            let mut content = Painter {
-                store: p.store,
-                kept: p.kept,
-                zoom: p.zoom,
-                spans_apart: p.spans_apart,
-                anim: p.anim.clone(),
-                ..Painter::on(new_ctx())
-            };
-            let placed = *content.ctx.transform();
-            let inside: Vec<Drawn> = marks[start..end]
-                .iter()
-                .map(|d| Drawn {
-                    scopes: d.scopes[at + 1..].to_vec(),
-                    ..(*d).clone()
-                })
-                .collect();
-            content.marks(inside.iter())?;
-            p.texts.append(&mut content.texts);
-            let mut pixmap = Pixmap::new(content.ctx.width(), content.ctx.height());
-            content
-                .ctx
-                .render_with(&mut pixmap, &mut content.resources, raster);
-            let source = lit(&pixmap, &light, placed);
-            let outer = &marks[start].scopes[..at];
-            p.scopes.enter(&mut p.ctx, &mut p.resources, outer);
-            put(&mut p.ctx, source);
-            p.scopes.enter(&mut p.ctx, &mut p.resources, &[]);
-            p.scopes.offscreen += 1;
-            i = end;
-        }
-        return Ok(Vec::new());
-    }
     let sub = |p: &Painter<'s, RenderContext>| Painter {
         store: p.store,
         kept: p.kept,
@@ -1308,6 +1244,50 @@ fn composite<'s>(
         q.ctx.render_with(&mut pixmap, &mut q.resources, raster);
         pixmap
     };
+    // #2031: a layer whose only isolated groups are lights draws in place: everything outside a
+    // lit run straight into the frame, as with no light, and each lit run drawn alone, lit and
+    // laid in at its place in the draw order.
+    let isolates =
+        |s: &Scope| light_of(s).is_none() && matches!(s, Scope::Opacity { blend: Some(_), .. });
+    if !marks.iter().any(|d| d.scopes.iter().any(isolates)) {
+        let mut i = 0;
+        while i < marks.len() {
+            let found = marks[i..].iter().enumerate().find_map(|(k, d)| {
+                let at = d.scopes.iter().position(|s| light_of(s).is_some())?;
+                Some((i + k, at))
+            });
+            let Some((start, at)) = found else {
+                p.marks(marks[i..].iter().copied())?;
+                break;
+            };
+            p.marks(marks[i..start].iter().copied())?;
+            let group = marks[start].scopes[at].item();
+            let end = marks[start..]
+                .iter()
+                .position(|d| !d.scopes.iter().any(|s| s.item() == group))
+                .map_or(marks.len(), |n| start + n);
+            let mut content = sub(p);
+            let placed = *content.ctx.transform();
+            let inside: Vec<Drawn> = marks[start..end]
+                .iter()
+                .map(|d| Drawn {
+                    scopes: d.scopes[at + 1..].to_vec(),
+                    ..(*d).clone()
+                })
+                .collect();
+            content.marks(inside.iter())?;
+            p.texts.append(&mut content.texts);
+            let light = light_of(&marks[start].scopes[at]).expect("found lit");
+            let source = lit(&render(&mut content), &light, placed);
+            let outer = &marks[start].scopes[..at];
+            p.scopes.enter(&mut p.ctx, &mut p.resources, outer);
+            put(&mut p.ctx, source);
+            p.scopes.enter(&mut p.ctx, &mut p.resources, &[]);
+            p.scopes.offscreen += 1;
+            i = end;
+        }
+        return Ok(Vec::new());
+    }
     let mut inputs = Vec::new();
     let mut layer = sub(p);
     let mut i = 0;
@@ -1345,7 +1325,10 @@ fn composite<'s>(
             })
             .collect();
         // #2031: a lit group's light around the run reaches lit children inside a blended group.
-        if inside.iter().any(|d| d.scopes.iter().any(lit_scope)) {
+        if inside
+            .iter()
+            .any(|d| d.scopes.iter().any(|s| light_of(s).is_some()))
+        {
             let inside: Vec<&Drawn> = inside.iter().collect();
             composite(&mut content, &inside, new_ctx, raster)?;
         } else {
@@ -1365,12 +1348,7 @@ fn composite<'s>(
             None => source,
         };
         // #2031: a lit group's run of lit children, lit at each pixel.
-        let light = match &marks[start].scopes[at] {
-            Scope::Opacity {
-                effect: Some(e), ..
-            } => e.light.clone(),
-            _ => None,
-        };
+        let light = light_of(&marks[start].scopes[at]);
         let source = match &light {
             Some(l) => lit(&source, l, placed),
             None => source,
@@ -1407,39 +1385,31 @@ fn composite<'s>(
     Ok(inputs)
 }
 
-/// Whether `s` is a lit group's light around its lit children (#2031).
-fn lit_scope(s: &Scope) -> bool {
-    matches!(s, Scope::Opacity { effect: Some(e), .. } if e.light.is_some())
+/// The light of a lit group's scope around its lit children (#2031).
+fn light_of(s: &Scope) -> Option<Arc<light::Light>> {
+    match s {
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => e.light.clone(),
+        _ => None,
+    }
 }
 
 /// #2031: `source`, a lit group's lit children drawn alone (premultiplied) through `placed`, lit
-/// at each pixel's centre: unpremultiplied, lit in linear light, encoded once and premultiplied.
+/// at each pixel's centre.
 fn lit(source: &Pixmap, l: &light::Light, placed: Affine) -> Pixmap {
-    let w = usize::from(source.width());
     let back = placed.inverse();
     let mut out = source.data_as_u8_slice().to_vec();
-    for (i, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-        if px[3] == 0 {
-            continue;
-        }
-        let a = f64::from(px[3]) / 255.0;
-        let p = back * vello_cpu::kurbo::Point::new((i % w) as f64 + 0.5, (i / w) as f64 + 0.5);
-        let at = [p.x, p.y];
-        let rgb = [0, 1, 2].map(|k| (f64::from(px[k]) / 255.0 / a).min(1.0));
-        let c = l.lit(rgb, at);
-        for k in 0..3 {
-            px[k] = (c[k] * a * 255.0).round().clamp(0.0, 255.0) as u8;
-        }
-    }
-    Pixmap::from_parts(
-        out,
-        source.width(),
-        source.height(),
-        PixelMetadata {
-            may_have_transparency: true,
-            alpha_type: ImageAlphaType::AlphaPremultiplied,
-        },
-    )
+    l.light_pixels(&mut out, usize::from(source.width()), true, |x, y| {
+        let p = back * vello_cpu::kurbo::Point::new(x, y);
+        [p.x, p.y]
+    });
+    let alpha_type = ImageAlphaType::AlphaPremultiplied;
+    let metadata = PixelMetadata {
+        may_have_transparency: true,
+        alpha_type,
+    };
+    Pixmap::from_parts(out, source.width(), source.height(), metadata)
 }
 
 /// #467: each text's bounds grown by what its paint draws past its run (a drop's copy, an outer

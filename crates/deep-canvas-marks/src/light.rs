@@ -105,6 +105,32 @@ impl Light {
         }
         std::array::from_fn(|k| encode(linear[k] * sum[k]))
     }
+
+    /// `rgba`'s pixels, `width` px a row, lit as a lit child is where each draws: at the point
+    /// `at` gives for its centre; premultiplied or straight alpha.
+    pub fn light_pixels(
+        &self,
+        rgba: &mut [u8],
+        width: usize,
+        premultiplied: bool,
+        at: impl Fn(f64, f64) -> [f64; 2],
+    ) {
+        for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+            if px[3] == 0 {
+                continue;
+            }
+            let a = if premultiplied {
+                f64::from(px[3]) / 255.0
+            } else {
+                1.0
+            };
+            let rgb = [0, 1, 2].map(|k| (f64::from(px[k]) / 255.0 / a).min(1.0));
+            let c = self.lit(rgb, at((i % width) as f64 + 0.5, (i / width) as f64 + 0.5));
+            for k in 0..3 {
+                px[k] = (c[k] * a * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
 }
 
 /// A refusal of a lit group the check reports: its code, the item it names, the path, what it

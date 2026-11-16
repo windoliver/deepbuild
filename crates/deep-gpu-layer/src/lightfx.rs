@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use deep_canvas_marks::light::{Light, Plant, MAX_LIGHTS};
-use deep_canvas_marks::scene::{self, Palette, Rgb};
+use deep_canvas_marks::scene::{self, Palette};
 use deep_gpu::device::Device;
 use serde_json::{Map, Value};
 
@@ -60,21 +60,15 @@ pub fn lit_status(
         let Some(light) = deep_canvas_marks::light::around(items, &m.item, palette) else {
             continue;
         };
+        // Only the pixels inside the mark's box (u at 1 px a u).
         let [x, y, w, h] = m.bounds;
-        let (x0, y0) = (x.floor().max(0.0) as u32, y.floor().max(0.0) as u32);
-        let x1 = ((x + w).ceil() as u32).min(picture.width());
-        let y1 = ((y + h).ceil() as u32).min(picture.height());
-        for py in y0..y1 {
-            for px in x0..x1 {
-                let p = picture.get_pixel_mut(px, py);
-                let rgb: Rgb = [p[0], p[1], p[2]];
-                let c = light.lit(
-                    rgb.map(|v| f64::from(v) / 255.0),
-                    [f64::from(px) + 0.5, f64::from(py) + 0.5],
-                );
-                for k in 0..3 {
-                    p[k] = (c[k] * 255.0).round().clamp(0.0, 255.0) as u8;
-                }
+        let width = picture.width() as usize;
+        let mut inside = picture.clone();
+        light.light_pixels(&mut inside, width, false, |px, py| [px, py]);
+        for (px, py, p) in picture.enumerate_pixels_mut() {
+            let (cx, cy) = (f64::from(px) + 0.5, f64::from(py) + 0.5);
+            if cx >= x && cx < x + w && cy >= y && cy < y + h {
+                *p = *inside.get_pixel(px, py);
             }
         }
     }
