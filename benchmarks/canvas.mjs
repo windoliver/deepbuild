@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -591,9 +591,13 @@ workloads['cell-grid-60hz'] = terminal(true);
 // the task's targets in benchmarks/budgets.json, refusing a reading of any other build. The perf lane compares each
 // command with the merge base as it does every task.
 const RUNS = 5;
+// Each run carries the one-minute load at its start and end, as measureOnce names them: judgeLimit's loads (#1830).
 const runs = (once) => {
   once(true);
-  return Array.from({ length: RUNS }, () => once(false));
+  return Array.from({ length: RUNS }, () => {
+    const loadStart = loadavg()[0];
+    return { ...once(false), loadStart, loadEnd: loadavg()[0] };
+  });
 };
 const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
 function release(pkg, bin) {
