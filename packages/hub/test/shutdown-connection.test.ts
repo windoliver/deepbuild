@@ -38,7 +38,7 @@ async function connect(root: string) {
   return { socket, next, closed, send };
 }
 
-it('only the stop requester stays open while a real record write keeps core shutdown pending', async () => {
+it.each([false, true])('only the stop requester stays open while cleanup is pending (queued frame: %s)', async (queued) => {
   const home = mkdtempSync('/tmp/stop-connection-'), root = join(home, 'dev');
   mkdirSync(root);
   const hub = spawn(process.execPath, ['--import', fileURLToPath(new URL('./source-hub.mjs', import.meta.url)),
@@ -61,7 +61,8 @@ it('only the stop requester stays open while a real record write keeps core shut
     let closed = false;
     void requester.closed.then(() => { closed = true; });
     try {
-      requester.send({ id: 'stop', method: 'hub.stop', params: {} });
+      if (queued) requester.socket.write(`${JSON.stringify({ v: 1, id: 'stop', method: 'hub.stop', params: {} })}\n${JSON.stringify({ v: 1, origin: 'test', id: 'after-stop' })}\n`);
+      else requester.send({ id: 'stop', method: 'hub.stop', params: {} });
       expect((await requester.next()).result).toEqual({ stopping: true });
       // Unrelated connections still close at once (#823); only the requester's lifetime changes.
       await other.closed;
