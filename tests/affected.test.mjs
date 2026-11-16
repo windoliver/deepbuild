@@ -107,6 +107,38 @@ test('a Rust change reaches its crate and the crates depending on it, their [[te
   assert.deepEqual(select(root, ['packages/a/src/leaf.ts'], { files, workspace }).crates, ['r2']);
 });
 
+test('a budget task runs when the change reaches its script or its binary\'s crates, when it can\'t be placed, and when the change feeds every suite', (t) => {
+  const { root, files } = repo(t, { ...cargo, 'benchmarks/bench.mjs': "import './helper.mjs';\n", 'benchmarks/helper.mjs': 'export {};\n', 'benchmarks/r2.mjs': "const R2 = 'target/release/r2';\n", 'Cargo.lock': '' });
+  const workspace = crates(root);
+  const tasks = [
+    { id: 'binary', command: ['target/debug/r2', '--version'] }, { id: 'script', command: ['node', 'benchmarks/bench.mjs'] },
+    { id: 'script-runs-r2', command: ['node', 'benchmarks/r2.mjs'] }, { id: 'nowhere', command: ['/bin/sh', '-c', 'true'] },
+  ];
+  const run = (path) => select(root, [path], { files, workspace, tasks }).tasks;
+  // r2's binary links r1, so a selector that reaches only a crate whose own source changed, as for tests, drops the
+  // script that runs it.
+  assert.deepEqual(run('crates/r1/src/lib.rs'), ['binary', 'script-runs-r2', 'nowhere']);
+  assert.deepEqual(run('crates/r3/src/lib.rs'), ['nowhere']);
+  assert.deepEqual(run('benchmarks/helper.mjs'), ['script', 'nowhere']);
+  assert.deepEqual(run('Cargo.lock'), tasks.map(({ id }) => id));
+});
+
+test('the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does', (t) => {
+  const { root, files } = repo(t, {
+    'vitest.config.ts': "import { globs } from './scripts/globs.mjs';\nexport default { test: { include: globs, setupFiles: ['./tests/boot', './tests/gone.ts'] } };\n",
+    'scripts/globs.mjs': '// Read by defineConfig callers.\nexport const globs = [];\n',
+    'tests/boot.ts': "import './boot-helper.ts';\n",
+    'tests/boot-helper.ts': 'export {};\n',
+    'tests/acceptance/1/vitest.config.ts': "export default { test: { globalSetup: '../../hold.ts' } };\n",
+    'tests/hold.ts': 'export default () => {};\n',
+  });
+  // Named by the root config through extension resolution, imported by that setup file, a config module the config
+  // imports, and named by a nested config. A selector holding the repo's own setup path by name fails here.
+  for (const path of ['tests/boot.ts', 'tests/boot-helper.ts', 'scripts/globs.mjs', 'tests/hold.ts']) assert.deepEqual(select(root, [path], { files, workspace: [] }).every, [path], path);
+  // The change deletes tests/gone.ts, which the config still lists: the change's paths hold it, the worktree doesn't.
+  assert.deepEqual(select(root, ['tests/gone.ts'], { files: [...files, 'tests/gone.ts'], workspace: [] }).every, ['tests/gone.ts']);
+});
+
 test('each test runs with its own runner, alone or in parallel as lanes.mjs says, and never one it leaves to a person', (t) => {
   const { root } = repo(t, {
     'tests/acceptance/348/a.test.ts': vitest(''),

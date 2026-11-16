@@ -203,8 +203,12 @@ class LocalRunner implements Runner {
         case 'default.undone':
           if (this.answers.delete(e.subject ?? '')) this.waiting.add(e.subject ?? '');
           break;
-        case 'ask.superseded':
         case 'ask.moot':
+          // An account whose sign-in task closed on its probe (#1349): its jobs run without a window reading, under the cap.
+          if (d.because === 'signed_in' && typeof d.account === 'string') this.signedIn.add(d.account);
+          this.waiting.delete(e.subject ?? '');
+          break;
+        case 'ask.superseded':
         case 'ask.cancelled':
         case 'ask.escalated':
           this.waiting.delete(e.subject ?? '');
@@ -247,6 +251,8 @@ class LocalRunner implements Runner {
   /** The asks of the kinds a job waits on, until they are answered. */
   private readonly waiting = new Set<string>();
   private readonly answers = new Map<string, { answer: string; decision: string }>();
+  /** Accounts whose sign-in task closed on the agent's probe in DeepBuild, from the record (#1349). */
+  private readonly signedIn = new Set<string>();
 
   async open(): Promise<void> {
     await this.fold(true);
@@ -411,7 +417,11 @@ class LocalRunner implements Runner {
   }
 
   private evalAccount(job: Job, agent: Agent): string | null {
-    return agent === job.spec.agent ? job.rec.account : AGENTS[agent]!.account(this.o.env.HOME ?? '', this.o.env);
+    return agent === job.spec.agent ? job.rec.account : this.account(agent);
+  }
+
+  account(agent: Agent): string | null {
+    return AGENTS[agent]?.account(this.o.env.HOME ?? '', this.o.env) ?? null;
   }
 
   /** One trusted orchestration job; its model turns remain in the evaluator's existing sandboxed launcher. */
@@ -742,7 +752,8 @@ class LocalRunner implements Runner {
       if (asked) this.windowAsks.set(account, asked);
       const answer = asked ? this.answers.get(asked.handle)?.answer : undefined;
       const since = job.rec.blocked?.cause === 'first reading' ? job.rec.blocked.since : now;
-      if (answer === 'run') {
+      // A sign-in DeepBuild saw needs no ask (#1349): one made only in the app has no session that could report a window.
+      if (answer === 'run' || this.signedIn.has(account)) {
         const today = (this.unread.get(account) ?? []).filter((at) => at > now - DAY);
         this.unread.set(account, today);
         if (job.evaluation?.unread.has(account) || today.length < NO_READING_PER_DAY) { job.noReading = true; return undefined; }

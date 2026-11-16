@@ -19,6 +19,7 @@ mod hubcopy;
 mod locate;
 mod motion;
 mod plant;
+mod play;
 
 use std::{
     cell::{Cell, RefCell},
@@ -122,6 +123,8 @@ impl Drive {
             }
             ("ui_check", None) => check::run(self, &call["ui_check"]),
             ("motion_check", None) => motion::run(self, &call["motion_check"]),
+            // #184: a piece played headless on the play mode's own clock, with or without a launched replica.
+            ("play", _) => play::run(call, self.plant, &self.out),
             (_, None) => Err(fail("refused", "no replica runs here: launch one first")),
             (_, Some(replica)) if call["replica"].as_str().is_some_and(|r| r != replica.id) => {
                 Err(fail(
@@ -250,6 +253,17 @@ impl Replica {
             "",
         )?;
         let hub_state = word("hub", &["answering", "stopped", "slow"], "answering")?;
+        // Issue #1349: the folder that stands for the app's Contents/Resources/runtime, whose bin/deep Set up runs.
+        let runtime = match &args["runtime"] {
+            Value::Null => None,
+            Value::String(folder) if Path::new(folder).is_absolute() => Some(PathBuf::from(folder)),
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.runtime is an absolute folder, not {other}"),
+                ))
+            }
+        };
         let area = match &args["area"] {
             Value::Null => None,
             Value::String(a) if ["sidebar", "home", "line"].contains(&a.as_str()) => {
@@ -452,6 +466,9 @@ impl Replica {
         });
         if setup == "unfinished" {
             deep_app::setup::assume_unfinished();
+        }
+        if let Some(runtime) = runtime {
+            deep_app::setup::assume_runtime(runtime);
         }
         deep_app::record::set_local_hub(match hub_state.as_str() {
             "stopped" => deep_app::record::LocalHub::Stops,

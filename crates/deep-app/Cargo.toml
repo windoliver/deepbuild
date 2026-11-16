@@ -68,6 +68,9 @@ fixtures = []
 # wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
 # budget run needs.
 chrome-fixture = []
+# Issue #177: `--hdr <scenario.json>`, the live HDR fixture its acceptance tests drive, in no shipped build; it draws a
+# scene document, so it brings the scene3d renderer.
+hdr-fixture = ["dep:deep-scene3d-render", "dep:deep-canvas-scene3d", "dep:wgpu-profiler"]
 # Issue #1485: the canvas panel in the app's real window, fed a scenario's revisions and its frames timed (`deep-app
 # --canvas`), with the planted decode its acceptance tests time and the wrong program DEEP_CANVAS_PLANT selects, in no
 # shipped build. It builds in release, which the frame-time run needs.
@@ -156,11 +159,11 @@ security-framework = { version = "3", default-features = false }
 accesskit_macos = "0.26"
 # Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
 # menu-bar template from the kit's bytes.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue", "NSNotification", "NSOperation", "NSDate", "NSRunLoop", "block2"] }
 # Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent", "UNNotificationSettings"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell", "NSScreen", "NSGraphics", "NSSound", "NSWorkspace", "NSMenu", "NSMenuItem"] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString", "CFRunLoop"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "CGDisplayConfiguration", "CGSession", "libc"] }
 block2 = "0.6"
 raw-window-handle = "0.6"
@@ -176,9 +179,12 @@ deep-effects-render = { path = "../deep-effects-render" }
 libc = "0.2"
 # Issue #140: the color seam tags every Metal layer the app presents through, a surface wgpu
 # configures among them (the versions already in the tree).
-objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-core-graphics"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "CATransaction", "objc2-core-foundation", "objc2-core-graphics"] }
 wgpu = { version = "30", default-features = false, features = ["std", "metal"] }
 pollster = "0.4"
+deep-scene3d-render = { path = "../deep-scene3d-render", optional = true }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d", optional = true }
+wgpu-profiler = { version = "0.28", optional = true }
 
 [dev-dependencies]
 deep-app = { path = ".", features = ["spike", "fixtures"] }

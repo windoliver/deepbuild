@@ -4086,6 +4086,10 @@ export interface AskMootV2 {
   } | {
     because: "network_reached";
     host: string;
+  } | {
+    because: "signed_in";
+    agent: string;
+    account: string | null;
   };
   evidence?: Array<string>;
 }
@@ -11162,6 +11166,35 @@ export interface WorkAttempt {
     branch: string | null;
     reason: string | null;
     cause: "none" | "PASS" | "landed with the budget window open" | "gave up its slot" | "replaced by you" | "sent back past its rounds" | "stalled" | "context full" | "plan window or spend cap" | "crashed or interrupted";
+    verdict: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** work.attempt@2 */
+export interface WorkAttemptV2 {
+  v: 2;
+  id: string;
+  kind: "work.attempt";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "started" | "ended";
+    issue: number;
+    attempt: number;
+    run: string;
+    agent: string;
+    model: string | null;
+    worktree: string | null;
+    branch: string | null;
+    reason: string | null;
+    cause: "none" | "PASS" | "landed with the budget window open" | "landed with your call open" | "gave up its slot" | "replaced by you" | "sent back past its rounds" | "stalled" | "context full" | "plan window or spend cap" | "crashed or interrupted";
     verdict: string | null;
   };
   evidence?: Array<string>;

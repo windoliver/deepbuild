@@ -18,6 +18,7 @@ pub mod env;
 pub mod exposure;
 pub mod flare;
 mod glass;
+pub mod hdr;
 pub mod held;
 pub mod history;
 pub mod local;
@@ -62,7 +63,7 @@ use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
-pub use crate::module::{draw_offscreen, timed, AfterFrame, Counts, Module3, PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX};
+pub use crate::module::{draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX};
 pub use crate::planted::Planted;
 use crate::mesh::Mesh;
 use crate::set::Set;
@@ -564,6 +565,9 @@ struct ToneUniform {
     deband: f32,
     saturation: f32,
     graded: u32,
+    /// Where the curves end: 1 for SDR (#177).
+    top: f32,
+    _pad: [u32; 3],
     wb: [[f32; 4]; 3],
     slope: [f32; 4],
     offset: [f32; 4],
@@ -1657,6 +1661,8 @@ pub struct Renderer {
     reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// #268: view3d's `foam` target while a frame asks for it: the water's foam share.
     foam: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
+    /// #968: view3d's `normal` target while a frame asks for it: the water's shaded normal.
+    normal: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
     /// resolve_accumulates_frames' blend of the previous frame.
     resolve: wgpu::RenderPipeline,
@@ -1701,6 +1707,14 @@ pub struct Renderer {
     /// The camera's view axis this frame (#166's `depth` target reads along it).
     forward: [f64; 3],
     pub profiler: Option<Profiler>,
+    /// #463: the scene's crop (Scene::crop) this frame.
+    crop: Option<[f64; 4]>,
+    /// The next frame's HDR surface and the headroom it rolls off to (#177), and the pass once
+    /// a view first presents HDR.
+    pub hdr: Option<HdrFrame>,
+    hdr_pass: Option<hdr::HdrPass>,
+    /// The look's deband amplitude, which the HDR pass allows between the slot and the output.
+    deband: f32,
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
     pub upscale: Option<Arc<Upscale>>,
@@ -3104,6 +3118,7 @@ impl Renderer {
             watering: false,
             reflection: None,
             foam: None,
+            normal: None,
             resolve,
             accumulate,
             compiled: 2,
@@ -3137,6 +3152,7 @@ impl Renderer {
             targets: None,
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
+            crop: None,
             counts: Counts::default(),
             busy,
             shadow: Shadow {
@@ -3150,6 +3166,9 @@ impl Renderer {
             camera: ([0.0; 16], [0.0; 3], 0.1),
             forward: [0.0, 0.0, -1.0],
             profiler: None,
+            hdr: None,
+            hdr_pass: None,
+            deband: 0.0,
             surface: Surface::default(),
             upscale: None,
             history: false,
@@ -4250,6 +4269,7 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.crop = scene.crop;
         self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
         // levels draws what scene3d's pure choice resolves them to.
@@ -4314,6 +4334,22 @@ impl Renderer {
                     "scene3d foam",
                     internal,
                     water::FOAM,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                );
+                let view = texture.create_view(&Default::default());
+                Some((texture, view, internal))
+            }
+            _ => None,
+        };
+        // #968: view3d's `normal` target, made while a frame asks for it.
+        self.normal = match self.normal.take() {
+            Some(n) if scene.read_normal && n.2 == internal => Some(n),
+            _ if scene.read_normal => {
+                let texture = texture2d(
+                    &device.device,
+                    "scene3d normal",
+                    internal,
+                    water::NORMAL,
                     wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 );
                 let view = texture.create_view(&Default::default());
@@ -4898,6 +4934,7 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
+        self.crop = scene.crop;
         self.planted_per_item(device, scene);
         // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
         // so does one whose level of detail the view chooses (#425).
@@ -5615,6 +5652,8 @@ impl Renderer {
             deband: look.deband.unwrap_or(0.0) as f32,
             saturation: look.grade.saturation as f32,
             graded: u32::from(!look.grade.is_identity()),
+            top: 1.0,
+            _pad: [0; 3],
             wb: look
                 .grade
                 .white_balance()
@@ -5623,6 +5662,7 @@ impl Renderer {
             offset: rgb4(look.grade.offset),
             power: rgb4(look.grade.power),
         };
+        self.deband = tone.deband;
         deep_gpu::alloc::outside(|| {
             device.queue.write_changed(
                 &self.tone_buffer,
@@ -7077,6 +7117,7 @@ impl Renderer {
             .filter_map(|id| self.batches.get(id)?.bundle.clone())
             .collect();
         let drawn = t.drawn.clone();
+        let crop = self.crop.map(|c| crop_px(c, t.size));
         let (linear, ids, depth) = (
             t.linear_view.clone(),
             drawn.ids.clone(),
@@ -7145,9 +7186,11 @@ impl Renderer {
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let reflection = self.reflection.as_ref().map(|r| r.1.clone());
         let foam = self.foam.as_ref().map(|f| f.1.clone());
+        let normal = self.normal.as_ref().map(|n| n.1.clone());
         let geometry: Job = Box::new(move |encoder| {
-            // #166: the `reflection` target starts each frame at 0, as #268's `foam` does.
-            for view in reflection.iter().chain(&foam) {
+            // #166: the `reflection` target starts each frame at 0, as #268's `foam` and #968's
+            // `normal` do.
+            for view in reflection.iter().chain(&foam).chain(&normal) {
                 drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(GEOMETRY_PASS),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -7175,6 +7218,7 @@ impl Renderer {
                     bundles.iter(),
                     puffs.as_ref(),
                     timestamps,
+                    crop,
                 )
             });
             if let Some((append, _, info, pipeline, fallback, binds, draws)) = &resolve {
@@ -7360,6 +7404,7 @@ impl Renderer {
                 depth_ms: t.drawn.depth_ms.clone(),
                 reflection: self.reflection.as_ref().map(|r| r.1.clone()),
                 foam: self.foam.as_ref().map(|f| f.1.clone()),
+                normal: self.normal.as_ref().map(|n| n.1.clone()),
                 resolve: Box::new(move |encoder, timestamps| {
                     resolve_ids(encoder, &drawn, clear, Some(rect), timestamps)
                 }),
@@ -7402,6 +7447,7 @@ impl Renderer {
                     .into_iter()
                     .filter_map(|n| Some((n, self.core_target(n)?)))
                     .collect(),
+                crop: self.crop.map(|c| crop_px(c, t.size)),
             };
             let (more, source) = post.jobs(device, &frame);
             jobs.extend(more);
@@ -7466,6 +7512,8 @@ impl Renderer {
         };
         let profiler = self.profiler.clone();
         let (busy, busy_slot) = (self.busy.clone(), slot.clone());
+        // #463: a region's other side writes the frame inside its crop alone.
+        let output_crop = self.crop.map(|c| crop_px(c, size));
         let output: Job = Box::new(move |encoder| {
             // The planted slow frame's pass, inside the frame's span of timed passes; it writes
             // the slot, which the output or the passes after it write again.
@@ -7488,7 +7536,7 @@ impl Renderer {
             }
             timed(&profiler, OUTPUT_PASS, encoder, |encoder, timestamps| {
                 let black = wgpu::LoadOp::Clear(wgpu::Color::BLACK);
-                full_pass(
+                full_pass_in(
                     encoder,
                     OUTPUT_PASS,
                     &target,
@@ -7496,6 +7544,7 @@ impl Renderer {
                     &pipeline,
                     &bind,
                     timestamps,
+                    output_crop,
                 )
             });
             if let (Some(p), Some(into)) = (&printing, &printed_into) {
@@ -7633,7 +7682,60 @@ impl Renderer {
             ));
         }
         jobs.extend(colors);
+        if let Some(job) = self.hdr_job(device, slot) {
+            jobs.push((hdr::HDR_PASS.into(), job));
+        }
         jobs
+    }
+
+    /// The HDR surface's pass (#177), last, over the finished slot; none without a surface.
+    fn hdr_job(&mut self, device: &Device, slot: &wgpu::TextureView) -> Option<Job> {
+        let frame = self.hdr.take()?;
+        let prepared = self.hdr_prepare(device, slot, frame.headroom)?;
+        let profiler = self.profiler.clone();
+        Some(Box::new(move |encoder| {
+            timed(&profiler, hdr::HDR_PASS, encoder, |encoder, timestamps| {
+                hdr::record(encoder, &prepared, &frame.into, timestamps)
+            })
+        }))
+    }
+
+    /// The HDR pass recorded straight into `encoder`, for a view that records its own passes
+    /// (the live window's, #177).
+    pub fn record_hdr(
+        &mut self,
+        device: &Device,
+        encoder: &mut wgpu::CommandEncoder,
+        slot: &wgpu::TextureView,
+        frame: &HdrFrame,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        if let Some(prepared) = self.hdr_prepare(device, slot, frame.headroom) {
+            hdr::record(encoder, &prepared, &frame.into, timestamps);
+        }
+    }
+
+    fn hdr_prepare(
+        &mut self,
+        device: &Device,
+        slot: &wgpu::TextureView,
+        headroom: f32,
+    ) -> Option<(wgpu::RenderPipeline, wgpu::BindGroup)> {
+        let t = self.targets.as_ref()?;
+        let internal = self.internal();
+        let scale = [0, 1].map(|i| internal[i] as f32 / self.size[i].max(1) as f32);
+        let pass = self
+            .hdr_pass
+            .get_or_insert_with(|| hdr::HdrPass::new(device, OUTPUT));
+        Some(pass.prepare(
+            device,
+            &self.tone_buffer,
+            [&t.linear_view, &self.covered.1, slot],
+            headroom,
+            self.deband,
+            scale,
+            self.planted.hdr,
+        ))
     }
 
     /// Makes or remakes the targets below scale 1 when the surface needs them: whether the
@@ -8009,6 +8111,7 @@ impl Renderer {
             bundles,
             self.puff_draw().as_ref(),
             timestamps,
+            None,
         );
         if let Some(core) = self.core_draws() {
             core.record(encoder);
@@ -8204,6 +8307,20 @@ impl Renderer {
         read_texture(device, &f.0, f.2, 4)
     }
 
+    /// #968: view3d's `normal` target, f32 x, y, z a pixel, rows top-down: the water's shaded
+    /// normal, (0, 0, 0) where no water is drawn.
+    pub fn read_normal(&self, device: &Device) -> Option<Vec<u8>> {
+        let n = self.normal.as_ref()?;
+        let raw = read_texture(device, &n.0, n.2, 16)?;
+        Some(
+            raw.as_chunks::<16>()
+                .0
+                .iter()
+                .flat_map(|p| p[..12].to_vec())
+                .collect(),
+        )
+    }
+
     /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the
     /// distance in m along the view axis from the eye to what the depth target holds there;
     /// infinite where nothing is drawn.
@@ -8339,6 +8456,8 @@ pub fn tone(
         deband: 0.0,
         saturation: grade.saturation as f32,
         graded: u32::from(!grade.is_identity()),
+        top: 1.0,
+        _pad: [0; 3],
         wb: grade
             .white_balance()
             .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
@@ -8534,6 +8653,7 @@ fn geometry_pass<'a>(
     bundles: impl Iterator<Item = &'a wgpu::RenderBundle>,
     puffs: Option<&PuffDraw>,
     timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    crop: Option<[u32; 4]>,
 ) {
     let (color, resolve_target) = &drawn.color;
     // A resolved color is all that's kept of the multisampled one.
@@ -8575,6 +8695,9 @@ fn geometry_pass<'a>(
             timestamp_writes: timestamps,
             ..Default::default()
         });
+        if let Some([x, y, w, h]) = crop {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         // The sky first, behind everything (#422).
         if let Some((pipeline, binds)) = sky {
             pass.set_pipeline(pipeline);
@@ -8795,6 +8918,39 @@ pub(crate) fn full_pass(
     bind: &wgpu::BindGroup,
     timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
 ) {
+    full_pass_in(
+        encoder, label, target, load, pipeline, bind, timestamps, None,
+    );
+}
+
+/// #463: a frame's scene crop (`[x0, y0, x1, y1]` in 0 to 1) as a scissor in a `size` target's px.
+pub fn crop_px(crop: [f64; 4], size: [u32; 2]) -> [u32; 4] {
+    let at = |v: f64, n: u32, up: bool| {
+        let px = v.clamp(0.0, 1.0) * f64::from(n);
+        (if up { px.ceil() } else { px.floor() }) as u32
+    };
+    let (x0, y0) = (at(crop[0], size[0], false), at(crop[1], size[1], false));
+    let (x1, y1) = (at(crop[2], size[0], true), at(crop[3], size[1], true));
+    [
+        x0,
+        y0,
+        x1.saturating_sub(x0).max(1),
+        y1.saturating_sub(y0).max(1),
+    ]
+}
+
+/// [`full_pass`] inside `scissor`, px of the target.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn full_pass_in(
+    encoder: &mut wgpu::CommandEncoder,
+    label: &'static str,
+    target: &wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
+    pipeline: &wgpu::RenderPipeline,
+    bind: &wgpu::BindGroup,
+    timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    scissor: Option<[u32; 4]>,
+) {
     deep_gpu::alloc::outside(|| {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(label),
@@ -8812,6 +8968,9 @@ pub(crate) fn full_pass(
         });
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, bind, &[]);
+        if let Some([x, y, w, h]) = scissor {
+            pass.set_scissor_rect(x, y, w, h);
+        }
         pass.draw(0..3, 0..1);
     });
 }

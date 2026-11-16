@@ -34,7 +34,7 @@ const stateFile = (touch: string): string => `.deepbuild/state/${touch}.json`;
 const mapOf = (items: readonly StateItem[]): string => JSON.stringify(Object.fromEntries(items.map((i) => [i.id, i.value])));
 /** A run task's ref, as a landing opens it from its item (#1331). */
 const taskRefOf = (source_id: string): string => `task:${letters(source_id)}`;
-const git = (cwd: string, ...args: string[]): Promise<string> => new Promise((done, fail) => execFile('git', ['-C', cwd, ...args], { encoding: 'utf8', env: gitEnv(), timeout: 60_000 }, (error, out, err) => (error ? fail(Error(String(err || error.message).trim())) : done(String(out).trim()))));
+const git = (cwd: string, ...args: string[]): Promise<string> => new Promise((done, fail) => execFile('git', ['-C', cwd, ...args], { encoding: 'utf8', env: gitEnv(), timeout: 60_000 }, (error, out, err) => (error ? fail(Error(`git ${args[0]} failed: ${String(err || error.message).trim()}`)) : done(String(out).trim()))));
 
 export class Workspaces {
   private readonly spaces = new Map<string, Space>();

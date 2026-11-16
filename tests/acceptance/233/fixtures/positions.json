@@ -1,0 +1,13 @@
+{
+  "about": "Criterion 4's positions fixture (#233.ca1d4667): math@1 objects placed by the upstream math-film library's layout words on a portrait frame of 1080 x 1920 u (1 u = 1 px at 1x), each with the box it must take in u, [x, y, w, h], y down from the top left. Every number comes from the issue's stated conversions (a math@1 unit is the frame's short side / 8 = 135 u; y flips and the origin moves to the frame's centre, (540, 960) u) and the upstream library's defaults: Square side_length 2, Circle radius 1, Rectangle width 4 and height 2, Dot radius 0.08, and to_edge's and to_corner's buff DEFAULT_MOBJECT_TO_EDGE_BUFFER = MED_LARGE_BUFF = 0.5 units (67.5 u). Computed by hand from those, by this suite's blind job; no program of ours wrote them. The labels are the instances' IDs, in the order the judge names the first one off.",
+  "size": [1080, 1920],
+  "entries": [
+    { "label": "ur_square", "kind": "math.square@1", "params": { "side_length": 2, "to_corner": "UR" }, "box": [742.5, 67.5, 270, 270] },
+    { "label": "ul_circle", "kind": "math.circle@1", "params": { "radius": 1, "to_corner": "UL" }, "box": [67.5, 67.5, 270, 270] },
+    { "label": "up_dot", "kind": "math.dot@1", "params": { "move_to": [1, 2, 0] }, "box": [664.2, 679.2, 21.6, 21.6] },
+    { "label": "top_rect", "kind": "math.rectangle@1", "params": { "width": 4, "height": 2, "to_edge": "UP" }, "box": [270, 67.5, 540, 270] },
+    { "label": "dl_square", "kind": "math.square@1", "params": { "side_length": 2, "to_corner": "DL" }, "box": [67.5, 1582.5, 270, 270] },
+    { "label": "left_circle", "kind": "math.circle@1", "params": { "radius": 1, "to_edge": "LEFT" }, "box": [67.5, 825, 270, 270] },
+    { "label": "down_dot", "kind": "math.dot@1", "params": { "move_to": [-2, -3, 0] }, "box": [259.2, 1354.2, 21.6, 21.6] }
+  ]
+}
