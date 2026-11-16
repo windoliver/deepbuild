@@ -104,6 +104,7 @@ impl Hub<'_> {
                 data_hash: false,
                 texts: false,
                 carried: false,
+                tour_pointer: false,
             };
             let r = self.eval(&e);
             if r["outcome"] != "evaluated" {

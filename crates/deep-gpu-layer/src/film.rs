@@ -151,6 +151,7 @@ fn marks_at(
     snap: Option<f64>,
     motifs: Option<(&Motifs, bool)>,
     planted: Option<Planted>,
+    origin: Option<[u32; 2]>,
 ) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
     let mut items = eval::items(doc, program, state);
@@ -184,6 +185,13 @@ fn marks_at(
             let origin = v.center[i] - v.target[i] * v.k;
             v.target[i] = (v.center[i] - (origin / scale).round() * scale) / v.k;
         }
+    }
+    // #463: a region's look drawn at its crop sees the frame from the crop's corner on.
+    if let Some([x, y]) = origin {
+        let mut v = view.unwrap_or(View::NONE);
+        v.center[0] -= f64::from(x);
+        v.center[1] -= f64::from(y);
+        view = Some(v);
     }
     if let Some(v) = &view {
         drawn::through(v, &mut items);
@@ -481,9 +489,18 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         snap(&ix),
         motifs.as_ref().map(|m| (m, reduced_motion)),
         planted,
+        None,
     )?;
     // The paper's fields hold still; only where the pixels land moves with the camera.
-    let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
+    let mut page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
+    // #463: each look a switch takes draws on its own paper, built before any frame plays.
+    let mut pages = BTreeMap::from([(def.to_string(), page.clone())]);
+    for (_, (l, d)) in events.clone() {
+        pages.insert(
+            d.to_string(),
+            page_of(&l.1, view.as_ref(), &doc, &roles(&l), call)?,
+        );
+    }
     for n in named.values_mut() {
         n.page = page_of(&n.look.1, view.as_ref(), &doc, &roles(&n.look), call)?;
     }
@@ -531,7 +548,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Option<View>,
                 BTreeMap<String, Volume>,
             );
-            let mut one = |d: Drawing<'_>| -> Result<One, Value> {
+            let mut one = |d: Drawing<'_>, origin: Option<[u32; 2]>| -> Result<One, Value> {
                 let (drawn, ground, view, lamps, items, volumes) = marks_at(
                     &doc,
                     &program,
@@ -541,6 +558,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     snap(d.ix),
                     d.motifs.map(|m| (m, reduced_motion)),
                     planted,
+                    origin,
                 )?;
                 let print = printing_at(n, d.def, d.look, &items, view.as_ref(), ground)?;
                 let index = index_frame(d.ix, &drawn, &items);
@@ -551,14 +569,28 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 Ok((frame, ground, items, view, volumes))
             };
             let (mut frame, ground, items, view, volumes) =
-                one(pick(sides.as_ref().and_then(|s| s[0].look)))?;
+                one(pick(sides.as_ref().and_then(|s| s[0].look)), None)?;
             if let (Some(tl), Some(sides)) = (&timeline, &sides) {
                 let seen = seen_of(view.as_ref(), size);
-                let mix = crate::regions::mix(tl, sides, &seen, &volumes, t, independent)?;
+                let mut mix = crate::regions::mix(tl, sides, &seen, &volumes, t, independent)?;
                 if mix.keys.len() > 1 {
                     let mut frames = Vec::new();
-                    for key in &mix.keys[1..] {
-                        frames.push(Arc::new(one(pick(key.as_deref()))?.0));
+                    for (j, key) in mix.keys.clone().iter().enumerate().skip(1) {
+                        // #463: a region's look draws its frame inside where it can show alone,
+                        // unless a print finish reads the whole frame's pixels (grain, vignette).
+                        let d = pick(key.as_deref());
+                        let prints =
+                            deep_canvas_marks::print::read(d.def, &d.look.0, f64::from(size[0]))
+                                .is_ok_and(|p| !p.is_identity());
+                        let crop = match prints {
+                            true => None,
+                            false => crate::regions::crop_2d(sides, &seen, &volumes, key)?,
+                        };
+                        if let Some([x, y, ..]) = crop {
+                            mix.set_origin(j, [x, y]);
+                        }
+                        let f = one(d, crop.map(|c| [c[0], c[1]]))?.0;
+                        frames.push((Arc::new(f), crop.map(|c| [c[2], c[3]])));
                     }
                     frame.mix = Some(Arc::new(Mix2 { frames, mix }));
                 }
@@ -604,6 +636,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     request = Some(asked);
                 }
                 (look, def) = next;
+                page = pages.get(&def.to_string()).cloned().flatten();
                 ix = indexed(&def, &look)?;
                 motifs = motifs_of(&def)?;
             }

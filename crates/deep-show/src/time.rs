@@ -592,7 +592,12 @@ impl Hub<'_> {
         let document = match current.map(|doc| match &d.track {
             Some(track) => crate::present::with_track_only(&doc, track),
             None if d.session => self.played(&d.doc, &doc),
-            None => doc,
+            // #903: with no one's input, the document's tour plays.
+            None => {
+                let mut doc = doc;
+                crate::tour::inline(&mut doc);
+                doc
+            }
         }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
@@ -704,7 +709,7 @@ impl Hub<'_> {
     ) -> Result<Value, String> {
         let started = std::time::Instant::now();
         let (drawing, nodes, video, cells, sides) = self.evaluate(doc, view, times, seek)?;
-        let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
+        let (mut rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
             self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
                 .map_err(|u| u.code.to_string())?
@@ -717,6 +722,8 @@ impl Hub<'_> {
             .map_err(|u| u.code.to_string())?;
             (rgba, size)
         };
+        // #903: the tour's pointer is in what both sides hash.
+        self.pointer_over(doc, times.last().copied().unwrap_or(0), &mut rgba, size);
         let rendered = started.elapsed();
         let pixel_hash = self.render_hash(&rgba, size)?;
         let hashed = started.elapsed() - rendered;

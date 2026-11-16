@@ -9,6 +9,7 @@
       "scene3d": ">=0.0.0"
     }
   },
+  "census": "census.json",
   "recipes": {
     "familiar.box@1": "box@1.json",
     "familiar.rounded_box@1": "rounded_box@1.json",

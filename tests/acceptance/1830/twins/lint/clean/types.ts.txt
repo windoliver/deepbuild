@@ -1,0 +1,6 @@
+// A planted suite's types for #1830 AC1: signatures of judgeLimit, never a call.
+export interface Bench {
+  judgeLimit(input: { limit: number; runs: number[]; fingerprint: object }): { status: string };
+}
+export declare function judgeLimit({ limit, runs, fingerprint }: { limit: number; runs: number[]; fingerprint: object }): { status: string };
+export type Judge = typeof judgeLimit;
