@@ -72,14 +72,24 @@ pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
     ("emits_at", "with emits"),
     ("preview", "with preview: preview(k: i64)"),
     ("preview_at", "with preview"),
-    ("regions_digest", "optional: the layout digest, which check compares"),
+    (
+        "regions_digest",
+        "optional: the layout digest, which check compares",
+    ),
 ];
 
 /// What `deep_kinds` lists of `logic@1` (#548): its exports, the one subset and its budgets.
 pub fn listing() -> Value {
     use deep_canvas_sandbox::check::{role_exports, MAX_PROGRAM, MAX_TABLE};
-    let required: Vec<&str> = role_exports("logic").into_iter().flatten().map(|(n, _)| *n).collect();
-    let optional: Vec<Value> = OPTIONAL_EXPORTS.iter().map(|(n, when)| json!({"name": n, "when": when})).collect();
+    let required: Vec<&str> = role_exports("logic")
+        .into_iter()
+        .flatten()
+        .map(|(n, _)| *n)
+        .collect();
+    let optional: Vec<Value> = OPTIONAL_EXPORTS
+        .iter()
+        .map(|(n, when)| json!({"name": n, "when": when}))
+        .collect();
     json!({
         "exports": {"required": required, "optional": optional, "imports": "none once its libraries are linked"},
         "subset": {"features": "WebAssembly 2.0 without vector instructions", "memory": "one, whose maximum is its minimum",
@@ -364,15 +374,33 @@ impl Preview {
                 ));
                 continue;
             };
-            let ty = if r.ends_with(".hover") { "hover" } else { "control" };
-            entries.push(Region { region: "preview.reads", name: r.clone(), offset: off, size, ty: ty.into(), read: Read::Control });
+            let ty = if r.ends_with(".hover") {
+                "hover"
+            } else {
+                "control"
+            };
+            entries.push(Region {
+                region: "preview.reads",
+                name: r.clone(),
+                offset: off,
+                size,
+                ty: ty.into(),
+                read: Read::Control,
+            });
             off = align8(off + size);
         }
         let reads_size = off;
         let mut written = Vec::new();
         let mut off = 0;
         for w in writes {
-            written.push(Region { region: "preview.writes", name: w.name.clone(), offset: off, size: w.ty.size() * w.count, ty: w.ty.name().into(), read: Read::None });
+            written.push(Region {
+                region: "preview.writes",
+                name: w.name.clone(),
+                offset: off,
+                size: w.ty.size() * w.count,
+                ty: w.ty.name().into(),
+                read: Read::None,
+            });
             off = align8(off + w.ty.size() * w.count);
         }
         if at.is_none() {
@@ -383,28 +411,63 @@ impl Preview {
             ));
         }
         let at = at.unwrap_or(0);
-        Preview { reads: entries, writes: writes.to_vec(), entries: written, at, writes_at: at + reads_size, refused }
+        Preview {
+            reads: entries,
+            writes: writes.to_vec(),
+            entries: written,
+            at,
+            writes_at: at + reads_size,
+            refused,
+        }
     }
 
     /// Bytes of the preview's read and write regions together.
     pub fn size(&self) -> u32 {
-        (self.writes_at - self.at) + self.entries.iter().map(|e| e.offset + e.size).max().unwrap_or(0)
+        (self.writes_at - self.at)
+            + self
+                .entries
+                .iter()
+                .map(|e| e.offset + e.size)
+                .max()
+                .unwrap_or(0)
     }
 
     /// Refusals: a program without `preview(i64)`, a region past memory or over another region.
     fn check(&self, given: &[u8], memory: u64, regions: &[(&str, u32, u32)]) -> Vec<Value> {
         let mut out = self.refused.clone();
         if !exports_func(given, "preview") {
-            out.push(refusal("region", "an item with a preview exports preview(k: i64)".into(), json!({"field": "preview"})));
+            out.push(refusal(
+                "region",
+                "an item with a preview exports preview(k: i64)".into(),
+                json!({"field": "preview"}),
+            ));
         }
-        let (start, end) = (u64::from(self.at), u64::from(self.at) + u64::from(self.size()));
+        let (start, end) = (
+            u64::from(self.at),
+            u64::from(self.at) + u64::from(self.size()),
+        );
         if end > memory {
-            out.push(refusal("region", format!("the preview region, {} bytes at {}, passes the end of memory at {memory}", self.size(), self.at), json!({"region": "preview"})));
-        } else if let Some((name, r, n)) = regions
-            .iter()
-            .find(|(_, r, n)| *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end)
-        {
-            out.push(refusal("region", format!("the preview region, {} bytes at {}, overlaps {name}, {n} bytes at {r}", self.size(), self.at), json!({"region": "preview"})));
+            out.push(refusal(
+                "region",
+                format!(
+                    "the preview region, {} bytes at {}, passes the end of memory at {memory}",
+                    self.size(),
+                    self.at
+                ),
+                json!({"region": "preview"}),
+            ));
+        } else if let Some((name, r, n)) = regions.iter().find(|(_, r, n)| {
+            *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end
+        }) {
+            out.push(refusal(
+                "region",
+                format!(
+                    "the preview region, {} bytes at {}, overlaps {name}, {n} bytes at {r}",
+                    self.size(),
+                    self.at
+                ),
+                json!({"region": "preview"}),
+            ));
         }
         out
     }
@@ -1211,7 +1274,10 @@ fn preview_of(v: &Value) -> Result<(Vec<String>, Vec<Write>), Vec<Value>> {
     let Some(o) = v.as_object() else {
         return Err(vec![what("preview is {reads, writes}".into())]);
     };
-    if let Some(k) = o.keys().find(|k| !["reads", "writes"].contains(&k.as_str())) {
+    if let Some(k) = o
+        .keys()
+        .find(|k| !["reads", "writes"].contains(&k.as_str()))
+    {
         return Err(vec![what(format!("preview has no field {k}"))]);
     }
     let reads: Vec<String> = o
@@ -1221,13 +1287,22 @@ fn preview_of(v: &Value) -> Result<(Vec<String>, Vec<Write>), Vec<Value>> {
         .ok_or_else(|| vec![what("preview.reads is a list of control IDs".into())])?;
     let mut writes = Vec::new();
     let mut refused = Vec::new();
-    for (name, w) in o.get("writes").and_then(Value::as_object).into_iter().flatten() {
+    for (name, w) in o
+        .get("writes")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let ty = w.get("type").and_then(Value::as_str).and_then(Ty::named);
         let count = w
             .get("count")
             .map_or(Some(1), Value::as_u64)
             .filter(|c| *c >= 1 && *c <= u32::MAX as u64);
-        let extra = w.as_object().into_iter().flatten().any(|(k, _)| k != "type" && k != "count");
+        let extra = w
+            .as_object()
+            .into_iter()
+            .flatten()
+            .any(|(k, _)| k != "type" && k != "count");
         match (ty, count) {
             (Some(ty), Some(count)) if own_name(name) && ty != Ty::Quat && !extra => {
                 writes.push(Write { name: name.clone(), ty, count: count as u32, linear: false })
@@ -1470,7 +1545,10 @@ fn declarations(piece: &Value) -> Result<Declarations, Refused> {
 
 /// Each item's region map and the kinds it emits, from the piece's declarations alone: what a
 /// program is built against before it exists (#548's bindings).
-pub fn region_maps(piece: &Value, planted: &Planted) -> Result<Vec<(String, Layout, Vec<Emit>)>, Refused> {
+pub fn region_maps(
+    piece: &Value,
+    planted: &Planted,
+) -> Result<Vec<(String, Layout, Vec<Emit>)>, Refused> {
     let (controls, decls, _) = declarations(piece)?;
     let sources = sources_of(piece)?;
     let mut out = Vec::new();
@@ -1628,7 +1706,8 @@ pub fn check_in(
                 }
             }
         };
-        let (layout, mut refused, mut mirrors) = region_map(idx, &decls, &controls, &sources, planted);
+        let (layout, mut refused, mut mirrors) =
+            region_map(idx, &decls, &controls, &sources, planted);
         let past = history.entry(id.clone()).or_default();
         if !past.iter().any(|l| l.digest == layout.digest) {
             past.push(layout.clone());

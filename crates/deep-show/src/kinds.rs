@@ -793,8 +793,13 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
         named.push("logic@1".into());
         push("logic@1".into(), "logic".into(), None, &mut out);
         if let Some(row) = out.last_mut() {
-            let text = INSTALLED.iter().find(|(f, _)| *f == "logic-counter.json").map(|(_, t)| t.to_string());
-            if let (Some(o), Value::Object(l)) = (row.entry.as_object_mut(), deep_logic::piece::listing()) {
+            let text = INSTALLED
+                .iter()
+                .find(|(f, _)| *f == "logic-counter.json")
+                .map(|(_, t)| t.to_string());
+            if let (Some(o), Value::Object(l)) =
+                (row.entry.as_object_mut(), deep_logic::piece::listing())
+            {
                 o.extend(l);
             }
             row.entry["example"] = json!(text.as_deref().map(|t| sha256_hex(t.as_bytes())));
@@ -1085,20 +1090,48 @@ impl Hub<'_> {
     /// `op: bindings` (#548): a document's logic item's typed bindings in the pinned language, Rust,
     /// from its region map in declaration order, which its declarations alone give, so a program
     /// is built against them before it exists.
-    fn kinds_bindings(&self, doc: Option<&str>, item: Option<&str>, language: Option<&str>) -> Value {
+    fn kinds_bindings(
+        &self,
+        doc: Option<&str>,
+        item: Option<&str>,
+        language: Option<&str>,
+    ) -> Value {
         if language != Some("rust") {
-            return refused("enum", "/language", "Give language as rust, the pinned language.", language.unwrap_or_default());
+            return refused(
+                "enum",
+                "/language",
+                "Give language as rust, the pinned language.",
+                language.unwrap_or_default(),
+            );
         }
         let (Some(doc), Some(item)) = (doc, item) else {
-            return refused("required", "/item", "Give doc and item, the logic item whose bindings these are.", "");
+            return refused(
+                "required",
+                "/item",
+                "Give doc and item, the logic item whose bindings these are.",
+                "",
+            );
         };
         let Some(form) = self.forms.get(doc) else {
-            return refused("ref_unresolved", "/doc", "Give doc, a document the hub holds.", doc);
+            return refused(
+                "ref_unresolved",
+                "/doc",
+                "Give doc, a document the hub holds.",
+                doc,
+            );
         };
         let maps = crate::logic::piece_json(form)
             .map(|p| deep_logic::piece::region_maps(&p, &Default::default()));
-        let Some((_, layout, emits)) = maps.and_then(Result::ok).and_then(|m| m.into_iter().find(|(id, _, _)| id == item)) else {
-            return refused("ref_unresolved", "/item", "Give item, a logic item of the document that check admits.", item);
+        let Some((_, layout, emits)) = maps
+            .and_then(Result::ok)
+            .and_then(|m| m.into_iter().find(|(id, _, _)| id == item))
+        else {
+            return refused(
+                "ref_unresolved",
+                "/item",
+                "Give item, a logic item of the document that check admits.",
+                item,
+            );
         };
         let by_name = self.kinds_planted() == Some(Planted::BindingsByName);
         json!({"bindings": deep_logic::bindings::rust(item, &layout, &emits, by_name)})

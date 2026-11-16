@@ -117,9 +117,10 @@ impl Screen {
     #[cfg(target_os = "macos")]
     fn open(app: &App, size: [u32; 2]) -> Result<Screen, Value> {
         let gpu = app.worker.call(|state| state.gpu.clone());
-        let instance = gpu.seam().map(|c| c.instance.clone()).ok_or_else(|| {
-            refused("unsupported_platform", "the noop backend has no display")
-        })?;
+        let instance = gpu
+            .seam()
+            .map(|c| c.instance.clone())
+            .ok_or_else(|| refused("unsupported_platform", "the noop backend has no display"))?;
         let layer = deep_app::hdr_layer::ScreenLayer::main(&instance)
             .map_err(|e| refused("unsupported_platform", e))?;
         // Configured here, the surface asks the display for EDR before the headroom is read, so
@@ -638,10 +639,12 @@ fn play(
             let t = (k as f64 * FLICKS_PER_SECOND / rate).round() as i64;
             // #177: the frame through the main display's HDR surface, beside every other pass.
             let hdr = screen.and_then(|s| Some((s.frame()?, s.headroom)));
-            view.hdr = hdr.as_ref().map(|(t, headroom)| deep_scene3d_render::HdrFrame {
-                into: t.texture.create_view(&Default::default()),
-                headroom: *headroom,
-            });
+            view.hdr = hdr
+                .as_ref()
+                .map(|(t, headroom)| deep_scene3d_render::HdrFrame {
+                    into: t.texture.create_view(&Default::default()),
+                    headroom: *headroom,
+                });
             let (cpu, resolved) = draw(device, &kit, &args.look, &mut view, t, labels, &mut timer)?;
             if timed {
                 played.timed_frames += 1;

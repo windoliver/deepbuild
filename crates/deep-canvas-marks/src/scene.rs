@@ -4484,7 +4484,12 @@ pub fn frame_planted(
     // #1653: terrain drawn as its atlas set, and each animated atlas row at its frame.
     let tiled = crate::atlas::apply(doc, items, record.pinned)?;
     // #538: keyed copy at the record's time, in the document's locale.
-    let copied = crate::copy::apply(doc, tiled.as_ref().unwrap_or(items), record.pinned, doc.get("locale").and_then(Value::as_str).unwrap_or("en"));
+    let copied = crate::copy::apply(
+        doc,
+        tiled.as_ref().unwrap_or(items),
+        record.pinned,
+        doc.get("locale").and_then(Value::as_str).unwrap_or("en"),
+    );
     let items = copied.as_ref().or(tiled.as_ref()).unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
@@ -5278,15 +5283,40 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             // its children.
             let mut out = Vec::new();
             if let Some(fill) = fill {
-                let (bounds, radius) = (place.rect(frame_box(id, item)?), num(params.get("radius")));
-                let fill = ctx.paints.paint(id, fill, &format!("{paint_path}/fill"), bounds, Place::NONE, false)?;
-                out.push(Mark::Rect { item: id.clone(), bounds, radius: radius.unwrap_or(0.0), fill });
+                let (bounds, radius) =
+                    (place.rect(frame_box(id, item)?), num(params.get("radius")));
+                let fill = ctx.paints.paint(
+                    id,
+                    fill,
+                    &format!("{paint_path}/fill"),
+                    bounds,
+                    Place::NONE,
+                    false,
+                )?;
+                out.push(Mark::Rect {
+                    item: id.clone(),
+                    bounds,
+                    radius: radius.unwrap_or(0.0),
+                    fill,
+                });
             }
             let rules = crate::grid_rules::rules(id, params, ctx.items);
             for [a, b] in rules.lines {
-                let [a, b] = [a, b].map(|p| <[f64; 2]>::try_from(&place.rect([p[0], p[1], 0.0, 0.0])[..2]).unwrap_or(p));
-                let color = role(ctx.palette, Some(&rules.role), &format!("{path}/params/rules/role"))?;
-                out.push(crate::ticks::line(format!("{id}#rule"), a, b, rules.width, color));
+                let [a, b] = [a, b].map(|p| {
+                    <[f64; 2]>::try_from(&place.rect([p[0], p[1], 0.0, 0.0])[..2]).unwrap_or(p)
+                });
+                let color = role(
+                    ctx.palette,
+                    Some(&rules.role),
+                    &format!("{path}/params/rules/role"),
+                )?;
+                out.push(crate::ticks::line(
+                    format!("{id}#rule"),
+                    a,
+                    b,
+                    rules.width,
+                    color,
+                ));
             }
             if out.is_empty() {
                 return Ok(None);

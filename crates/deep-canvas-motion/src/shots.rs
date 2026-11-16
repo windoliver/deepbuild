@@ -2406,12 +2406,18 @@ pub fn posed(doc: &Value, t: i64) -> Option<Value> {
     let mut state = program.state();
     program.evaluate(t, Validity::Full, &mut state);
     let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
-    let pose = plan.shown(cam, t, &At {
-        reduced: false,
-        planted: Planted::None,
-        indexed: None,
-        keyed: &keyed,
-    }).pose;
+    let pose = plan
+        .shown(
+            cam,
+            t,
+            &At {
+                reduced: false,
+                planted: Planted::None,
+                indexed: None,
+                keyed: &keyed,
+            },
+        )
+        .pose;
     let mut out = doc.clone();
     let params = out
         .pointer_mut(&format!("/items/{id}/params"))?
@@ -2429,4 +2435,3 @@ pub fn posed(doc: &Value, t: i64) -> Option<Value> {
     }
     Some(out)
 }
-

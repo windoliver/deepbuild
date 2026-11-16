@@ -855,7 +855,8 @@ impl Renderer {
                     let (sx, sy) = scales(at);
                     let [x, y, w, h] = *bounds;
                     let size = [w * sx, h * sy].map(|v| v.ceil().clamp(1.0, 4096.0) as u16);
-                    let mut rgba = Vec::with_capacity(usize::from(size[0]) * usize::from(size[1]) * 4);
+                    let mut rgba =
+                        Vec::with_capacity(usize::from(size[0]) * usize::from(size[1]) * 4);
                     for j in 0..size[1] {
                         for i in 0..size[0] {
                             let p = [

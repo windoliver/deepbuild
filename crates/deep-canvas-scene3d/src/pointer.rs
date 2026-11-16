@@ -530,7 +530,10 @@ mod tests {
         let s = scene_of(json!({}), cam, [640, 480], 0);
         let g = Ground::Plane(0.0);
         let centre = ground(&g, &ray(&s.camera, [320.0, 240.0]), None).unwrap();
-        assert!(near(centre, [0.0, 0.0, -17.3205], 1.0 / 1024.0), "{centre:?}");
+        assert!(
+            near(centre, [0.0, 0.0, -17.3205], 1.0 / 1024.0),
+            "{centre:?}"
+        );
         let up = ray(&s.camera, [320.0, 0.0]);
         assert!(up.dir[1] > 0.0);
         assert_eq!(ground(&g, &up, None), None);
@@ -572,7 +575,10 @@ mod tests {
         let hit = surface(&s, "cube", &r, None).unwrap();
         assert_eq!(hit.face, 8);
         let uv = hit.uv.unwrap();
-        assert!((uv[0] - 0.7).abs() < 1e-9 && (uv[1] - 0.4).abs() < 1e-9, "{uv:?}");
+        assert!(
+            (uv[0] - 0.7).abs() < 1e-9 && (uv[1] - 0.4).abs() < 1e-9,
+            "{uv:?}"
+        );
         let planted = surface(&s, "cube", &r, Some(NEAREST_VERTEX_UV)).unwrap();
         assert_eq!(planted.uv, Some([1.0, 0.0]));
     }

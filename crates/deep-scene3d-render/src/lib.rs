@@ -21,11 +21,12 @@ mod glass;
 pub mod hdr;
 pub mod held;
 pub mod history;
+pub mod inset;
 pub mod local;
 pub mod maps;
 mod mesh;
-mod module;
 pub mod mirror;
+mod module;
 mod motion;
 mod oit;
 mod op;
@@ -40,7 +41,6 @@ mod sway;
 pub mod targets;
 mod ties;
 mod tint;
-pub mod inset;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -63,9 +63,12 @@ use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
-pub use crate::module::{draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX};
-pub use crate::planted::Planted;
 use crate::mesh::Mesh;
+pub use crate::module::{
+    draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
+    LIGHT, PYRAMID_NS_PER_PX,
+};
+pub use crate::planted::Planted;
 use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
@@ -6122,7 +6125,11 @@ impl Renderer {
             let started = std::time::Instant::now();
             set.finish(device, &mut next, &mut written);
             if layer.fed.contains_key(&key.3) {
-                let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
+                let owner = set
+                    .owners
+                    .first()
+                    .and_then(|o| o.split('#').next())
+                    .unwrap_or_default();
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
                 *self.counts.upload_ms.entry(owner.to_string()).or_default() += ms;
             }
@@ -7391,7 +7398,15 @@ impl Renderer {
             let (linear, ids) = (t.linear_view.clone(), t.ids_view.clone());
             let reflection = self.reflection.as_ref().map(|r| r.1.clone());
             let keep = self.planted.keeps_mirror;
-            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler, keep));
+            jobs.extend(m.jobs(
+                device,
+                slot,
+                &linear,
+                &ids,
+                reflection,
+                &self.profiler,
+                keep,
+            ));
         }
         // #166: the water over the bed the geometry left, under the mirror's picture.
         if let (true, Some(w), Some(t)) =

@@ -20,21 +20,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::pack_kinds::check_kinds;
-pub(super) use inputs::input_fault;
 use super::{member, Issue};
 use crate::expr::MAX_NEST;
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
+pub(super) use inputs::input_fault;
 
 mod aliases;
 pub mod deps;
 mod entries;
 mod inputs;
+pub mod module_fields;
 mod parts;
 mod place;
 mod refused;
-pub mod module_fields;
 pub mod retired;
 
 /// The most derived items one repeat makes (Recipe: cost).
@@ -519,7 +519,13 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => {
             let (pack, requires) = (id.name.as_str(), requires_packs.as_slice());
-            let holds = aliases::Holds { pack, recipes: &recipes, kinds: &kinds, requires, sealed };
+            let holds = aliases::Holds {
+                pack,
+                recipes: &recipes,
+                kinds: &kinds,
+                requires,
+                sealed,
+            };
             aliases::check(a, &holds, &mut issues)
         }
     };
@@ -2273,7 +2279,11 @@ fn expand_one(
     // The instance's own ID first, so a film recipe's shots, transitions and cue list can name
     // the items it derives (#142); an input of that name shadows it.
     let [fw, fh] = resolved.frame;
-    let scope = [("instance", json!(id)), ("fw", json!(fw)), ("fh", json!(fh))];
+    let scope = [
+        ("instance", json!(id)),
+        ("fw", json!(fw)),
+        ("fh", json!(fh)),
+    ];
     let mut env: Vec<(String, Value)> = (scope.into_iter().map(|(k, v)| (k.to_string(), v)))
         .chain(inputs.iter().map(|(k, v)| (k.clone(), v.clone())))
         .chain(inputs::named(recipe, &inputs, items))
@@ -3311,7 +3321,9 @@ impl Expr {
                 word(&args[2], bound, out, words);
             }
             // `id(…)` and `at(…)`: a bare name nothing binds is its own text (#142).
-            Expr::Call(name, args) if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") => {
+            Expr::Call(name, args)
+                if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") =>
+            {
                 for a in args {
                     word(a, bound, out, words);
                 }
@@ -3436,7 +3448,9 @@ impl Expr {
             // An ID joined from its parts, `id(instance, shot, i)` → `film.shot.3`, a time
             // anchored on a marker, `at(cues, c.id, end)` → `@cues.c3.end`, and a document path,
             // `path(items, id(instance, row0), at, pos, 0)` → `items/film.row0/at/pos/0` (#142).
-            Expr::Call(name, args) if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") => {
+            Expr::Call(name, args)
+                if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") =>
+            {
                 let mut parts = Vec::new();
                 for a in args {
                     let part = match a {

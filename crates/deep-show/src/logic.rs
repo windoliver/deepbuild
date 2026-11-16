@@ -85,7 +85,11 @@ impl Hub<'_> {
         issues.extend(grid_glyphs(form));
         issues.extend(readers(form, entries));
         if issues.iter().all(|i| i.code != "module_missing") {
-            let locale = form.get("locale").and_then(Value::as_str).unwrap_or("en").to_string();
+            let locale = form
+                .get("locale")
+                .and_then(Value::as_str)
+                .unwrap_or("en")
+                .to_string();
             issues.extend(raised_at(form, None, &locale));
         }
         issues
@@ -93,7 +97,13 @@ impl Hub<'_> {
 
     /// The document check's view of `form`'s readers ([`Hub::column_view`]), and #538's fit
     /// check over its copy tables, its time written to `timing` when the call asked for it.
-    pub(crate) fn checked_view(&mut self, doc: &str, form: &mut Value, t: i64, timing: Option<&mut Map<String, Value>>) -> Vec<Issue> {
+    pub(crate) fn checked_view(
+        &mut self,
+        doc: &str,
+        form: &mut Value,
+        t: i64,
+        timing: Option<&mut Map<String, Value>>,
+    ) -> Vec<Issue> {
         self.keep_first_positions(doc, form);
         let mut issues = self.column_view(form, t);
         let (unfit, ms) = copy_fit(form);
@@ -108,17 +118,30 @@ impl Hub<'_> {
     /// position in the order the document's first revision stored it, and a later revision's key
     /// reads the entry now at that position. Without the plant, nothing changes.
     pub(crate) fn keep_first_positions(&mut self, doc: &str, form: &mut Value) {
-        if self.scenario.module_planted.as_deref() != Some(deep_canvas_marks::copy::KEEPS_FIRST_POSITION) {
+        if self.scenario.module_planted.as_deref()
+            != Some(deep_canvas_marks::copy::KEEPS_FIRST_POSITION)
+        {
             return;
         }
-        let Some(copy) = form.pointer_mut("/data/copy").and_then(Value::as_object_mut) else {
+        let Some(copy) = form
+            .pointer_mut("/data/copy")
+            .and_then(Value::as_object_mut)
+        else {
             return;
         };
         for (locale, tables) in copy.iter_mut() {
             for (name, t) in tables.as_object_mut().into_iter().flatten() {
                 let Some(t) = t.as_object_mut() else { continue };
-                let now: Vec<String> = t.keys().filter(|k| k.parse::<i32>().is_ok()).cloned().collect();
-                let first = self.first_orders.entry(format!("{doc}/{locale}/{name}")).or_insert_with(|| now.clone()).clone();
+                let now: Vec<String> = t
+                    .keys()
+                    .filter(|k| k.parse::<i32>().is_ok())
+                    .cloned()
+                    .collect();
+                let first = self
+                    .first_orders
+                    .entry(format!("{doc}/{locale}/{name}"))
+                    .or_insert_with(|| now.clone())
+                    .clone();
                 let entries: Vec<Value> = now.iter().map(|k| t[k].clone()).collect();
                 for (pos, k) in first.iter().enumerate() {
                     if let (Some(e), true) = (entries.get(pos), t.contains_key(k)) {
@@ -223,9 +246,17 @@ impl Hub<'_> {
         }
         // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
         for (id, compares) in &rec.compares {
-            let first = piece.items.iter().find(|i| &i.id == id).and_then(|i| i.writes.first()).map(|w| format!("{id}.{}", w.name));
+            let first = piece
+                .items
+                .iter()
+                .find(|i| &i.id == id)
+                .and_then(|i| i.writes.first())
+                .map(|w| format!("{id}.{}", w.name));
             if let Some(a) = first.and_then(|f| arrays.get_mut(&f)) {
-                a["compares"] = json!(compares.iter().map(|(k, bytes, ms)| json!([k, bytes, ms])).collect::<Vec<_>>());
+                a["compares"] = json!(compares
+                    .iter()
+                    .map(|(k, bytes, ms)| json!([k, bytes, ms]))
+                    .collect::<Vec<_>>());
             }
         }
         // #1918: beside the readings of the worlds the document lists.
@@ -274,16 +305,29 @@ impl Hub<'_> {
     /// (and to the last step asked): its region map with its layout digest, each asked step's
     /// arrays as that step left them and the fuel it used, its trap, null when none, and the
     /// hash of the bytes it runs.
-    pub(crate) fn logic_read(&self, form: &Value, items: &[String], steps: &[i64], track: &[Value]) -> Value {
+    pub(crate) fn logic_read(
+        &self,
+        form: &Value,
+        items: &[String],
+        steps: &[i64],
+        track: &[Value],
+    ) -> Value {
         let piece = match self.logic_piece(form, track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let Some(entries) = track.iter().filter(|e| e.get("present").is_none()).map(Entry::parse).collect::<Option<Vec<_>>>() else {
+        let Some(entries) = track
+            .iter()
+            .filter(|e| e.get("present").is_none())
+            .map(Entry::parse)
+            .collect::<Option<Vec<_>>>()
+        else {
             return json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"});
         };
-        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span")).unwrap_or(0).max(0);
+        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
+            .unwrap_or(0)
+            .max(0);
         let count = piece
             .items
             .iter()
@@ -292,7 +336,14 @@ impl Hub<'_> {
             .max()
             .unwrap_or(0);
         let mut rec = Record::default();
-        let mut world = match World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) {
+        let mut world = match World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Default::default(),
+            &mut rec,
+            None,
+        ) {
             Ok(w) => w,
             Err(e) => return e,
         };
@@ -301,7 +352,10 @@ impl Hub<'_> {
         let planted = self.scenario.module_planted.as_deref() == Some(MAP_READS_BY_NAME);
         let by_name = planted
             .then(|| {
-                let p = deep_logic::Planted { map_reads_by_name: true, ..Default::default() };
+                let p = deep_logic::Planted {
+                    map_reads_by_name: true,
+                    ..Default::default()
+                };
                 deep_logic::piece::region_maps(&piece_json(form)?, &p).ok()
             })
             .flatten();
@@ -311,7 +365,10 @@ impl Hub<'_> {
                 return json!({"code": "ref_unresolved", "item": id});
             };
             let region_map = match &by_name {
-                Some(maps) => maps.iter().find(|(m, _, _)| m == id).map_or(Value::Null, |(_, l, _)| l.to_json()),
+                Some(maps) => maps
+                    .iter()
+                    .find(|(m, _, _)| m == id)
+                    .map_or(Value::Null, |(_, l, _)| l.to_json()),
                 None => piece.items[i].layout.to_json(),
             };
             let prefix = format!("{id}.");
@@ -319,12 +376,23 @@ impl Hub<'_> {
             let read: Vec<Value> = steps
                 .iter()
                 .map(|k| {
-                    let arrays: Map<String, Value> = rec.arrays_at(&piece, *k).into_iter().filter(|(n, _)| n.starts_with(&prefix)).collect();
-                    let f = fuel.and_then(|f| f.iter().find(|(s, _)| s == k)).map(|(_, f)| *f);
+                    let arrays: Map<String, Value> = rec
+                        .arrays_at(&piece, *k)
+                        .into_iter()
+                        .filter(|(n, _)| n.starts_with(&prefix))
+                        .collect();
+                    let f = fuel
+                        .and_then(|f| f.iter().find(|(s, _)| s == k))
+                        .map(|(_, f)| *f);
                     json!({"step": k, "arrays": arrays, "fuel": f})
                 })
                 .collect();
-            let trap = rec.traps.iter().find(|t| t["item"] == json!(id)).cloned().unwrap_or(Value::Null);
+            let trap = rec
+                .traps
+                .iter()
+                .find(|t| t["item"] == json!(id))
+                .cloned()
+                .unwrap_or(Value::Null);
             // #1164: `hash`, the SHA-256 of the bytes the engine runs (sandbox@1's rewrite).
             out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap, "hash": piece.items[i].hash}));
         }
@@ -368,13 +436,20 @@ pub(crate) fn piece_json(form: &Value) -> Option<Value> {
 fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) -> Vec<Issue> {
     let worlds = form.get("worlds").unwrap_or(&Value::Null);
     let mut out = Vec::new();
-    for (id, item) in form.get("items").and_then(Value::as_object).into_iter().flatten() {
+    for (id, item) in form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let mut paths: Vec<(String, String)> = Vec::new();
         if let Some(a) = item.pointer("/params/flip/array").and_then(Value::as_str) {
             paths.push(("flip/array".into(), a.into()));
         }
         for (field, v) in deep_canvas_marks::copy::lookups_of(item) {
-            let Ok(l) = deep_canvas_marks::copy::lookup(&v) else { continue };
+            let Ok(l) = deep_canvas_marks::copy::lookup(&v) else {
+                continue;
+            };
             paths.push((field.clone(), l.key.into()));
             for a in &l.args {
                 let p = match a {
@@ -385,9 +460,13 @@ fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) 
             }
         }
         for (field, path) in paths.into_iter().filter(|(_, p)| !p.contains('/')) {
-            let Some((name, _)) = deep_canvas::columns::element_path(&path) else { continue };
+            let Some((name, _)) = deep_canvas::columns::element_path(&path) else {
+                continue;
+            };
             let at = format!("items/{id}/params/{field}");
-            if let Err(issue) = deep_canvas::columns::source((&form["arrays"], worlds), entries, id, &at, name) {
+            if let Err(issue) =
+                deep_canvas::columns::source((&form["arrays"], worlds), entries, id, &at, name)
+            {
                 out.push(*issue);
             }
         }
@@ -400,14 +479,24 @@ fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) 
 fn grid_glyphs(form: &Value) -> Vec<Issue> {
     let mut shaper: Option<deep_text::Shaper> = None;
     let mut out = Vec::new();
-    for (id, item) in form.get("items").and_then(Value::as_object).into_iter().flatten() {
+    for (id, item) in form
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         if item["kind"] != "cells@1" {
             continue;
         }
-        let Ok(Some(spec)) = deep_canvas_cells::logic_grid::spec(&item["params"]) else { continue };
+        let Ok(Some(spec)) = deep_canvas_cells::logic_grid::spec(&item["params"]) else {
+            continue;
+        };
         let shaper = shaper.get_or_insert_with(deep_text::Shaper::new);
         for (i, g) in spec.glyphs.iter().enumerate() {
-            let run = deep_text::Spec { family: deep_text::Role::Mono.family(), ..deep_text::Spec::label(g) };
+            let run = deep_text::Spec {
+                family: deep_text::Role::Mono.family(),
+                ..deep_text::Spec::label(g)
+            };
             if shaper.missing(&run, g).is_empty() {
                 continue;
             }
@@ -429,7 +518,11 @@ pub(crate) fn copy_fit(form: &Value) -> (Vec<Issue>, f64) {
     let started = std::time::Instant::now();
     let mut out = Vec::new();
     if let Some(doc) = form.as_object() {
-        deep_canvas_marks::copy::fit_issues(doc, &deep_canvas_marks::scene::Type::default(), &mut out);
+        deep_canvas_marks::copy::fit_issues(
+            doc,
+            &deep_canvas_marks::scene::Type::default(),
+            &mut out,
+        );
     }
     (out, started.elapsed().as_secs_f64() * 1000.0)
 }
@@ -439,7 +532,9 @@ pub(crate) fn copy_fit(form: &Value) -> (Vec<Issue>, f64) {
 pub(crate) fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
     let empty = Map::new();
     let map = form.as_object().unwrap_or(&empty);
-    let mut out = t.map_or_else(Vec::new, |t| deep_canvas_cells::logic_grid::raised_at(form, t));
+    let mut out = t.map_or_else(Vec::new, |t| {
+        deep_canvas_cells::logic_grid::raised_at(form, t)
+    });
     out.extend(deep_canvas_motion::held::unmapped(form, t));
     out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
     out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));

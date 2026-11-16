@@ -124,7 +124,10 @@ pub fn advance_em(family: &str) -> Option<f32> {
     let font = skrifa::FontRef::new(face.bytes).ok()?;
     let em = f32::from(font.head().ok()?.units_per_em().max(1));
     let glyph = font.charmap().map('0')?;
-    let metrics = font.glyph_metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    let metrics = font.glyph_metrics(
+        skrifa::instance::Size::unscaled(),
+        skrifa::instance::LocationRef::default(),
+    );
     Some(metrics.advance_width(glyph)? / em)
 }
 

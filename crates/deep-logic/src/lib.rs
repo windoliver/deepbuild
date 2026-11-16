@@ -1193,20 +1193,35 @@ impl Logic {
         };
         // #548: point controls' hovers from this frame on, `[cx, cy]` or null: viewer state.
         let mut hover = Vec::new();
-        for (control, cell) in line.get("hover").and_then(Value::as_object).into_iter().flatten() {
+        for (control, cell) in line
+            .get("hover")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
             let cell = match cell {
                 Value::Null => None,
                 c => match c.as_array().map(Vec::as_slice) {
-                    Some([x, y]) => Some([x.as_f64().ok_or_else(|| bad("hover"))?, y.as_f64().ok_or_else(|| bad("hover"))?]),
+                    Some([x, y]) => Some([
+                        x.as_f64().ok_or_else(|| bad("hover"))?,
+                        y.as_f64().ok_or_else(|| bad("hover"))?,
+                    ]),
                     _ => return Err(bad("hover")),
                 },
             };
             hover.push((control.clone(), cell));
         }
         let mut ui_ns = budget::cpu_ns() - ui;
-        let mut out = v.frame(live::Latched { t: v.t, set, hover, baked: false }).ok_or_else(
-            || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
-        )?;
+        let mut out = v
+            .frame(live::Latched {
+                t: v.t,
+                set,
+                hover,
+                baked: false,
+            })
+            .ok_or_else(
+                || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
+            )?;
         let ui = budget::cpu_ns();
         if out.get("ok") == Some(&json!(false)) {
             return Err(out);
@@ -1223,11 +1238,20 @@ impl Logic {
     /// A view session's bake of the steps it has run (#548): its input track, step records,
     /// checkpoints and the bake's bytes, as a `bake` of the same piece and track gives them.
     fn view_bake(&mut self, line: &Value) -> Result<Value, Value> {
-        let session = line.get("session").and_then(Value::as_str).ok_or_else(|| bad("session"))?;
+        let session = line
+            .get("session")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("session"))?;
         let v = self.views.get_mut(session).ok_or_else(|| bad("session"))?;
-        let latched = live::Latched { t: v.t, set: None, hover: Vec::new(), baked: true };
-        v.frame(latched)
-            .ok_or_else(|| json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}))
+        let latched = live::Latched {
+            t: v.t,
+            set: None,
+            hover: Vec::new(),
+            baked: true,
+        };
+        v.frame(latched).ok_or_else(
+            || json!({"ok": false, "code": "run_failed", "what": "the render worker stopped"}),
+        )
     }
 
     fn open(&mut self, line: &Value) -> Result<Value, Value> {
@@ -1487,7 +1511,8 @@ mod tests {
                 document: String::new(),
             };
             let entries = track(&piece, &json!({}), 0).expect("a track");
-            let played: Vec<(i64, world::Given)> = entries.iter().map(|e| (e.t, e.value.clone())).collect();
+            let played: Vec<(i64, world::Given)> =
+                entries.iter().map(|e| (e.t, e.value.clone())).collect();
             tx.send(played).ok();
         });
         let got = rx.recv_timeout(std::time::Duration::from_secs(1));

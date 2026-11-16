@@ -1506,9 +1506,13 @@ fn run_view(
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // #506's planted core: a view overlay shaded with the main view's light cut.
             if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
-                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
-                scene.light_cut = Some(deep_canvas_scene3d::light::policy(&scene.lights, &main.camera));
+                let main =
+                    evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
+                        .map_err(|r| refused(r.code, r.path))?;
+                scene.light_cut = Some(deep_canvas_scene3d::light::policy(
+                    &scene.lights,
+                    &main.camera,
+                ));
             }
             // How many times this frame derived each mesh-edge line's edge set (#1640).
             let edge_sets_derived: Map<String, Value> = scene
@@ -1646,7 +1650,10 @@ fn run_view(
                     };
                     shown.push(OverlayPicture {
                         at,
-                        size: [w.min(u32::from(u16::MAX)) as u16, h.min(u32::from(u16::MAX)) as u16],
+                        size: [
+                            w.min(u32::from(u16::MAX)) as u16,
+                            h.min(u32::from(u16::MAX)) as u16,
+                        ],
                         image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
                     });
                 }
@@ -2050,10 +2057,20 @@ fn run_view(
             if let (Some(s), true) = (sub.as_ref(), keeping) {
                 let mut main = s.main.clone();
                 main["size"] = json!(size);
-                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut first =
+                    evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
+                        .map_err(|r| refused(r.code, r.path))?;
                 first.texels.clone_from(&scene.texels);
-                session3::draw(app, &opened, Arc::new(first), args.look.clone(), n, 0, false, false)?;
+                session3::draw(
+                    app,
+                    &opened,
+                    Arc::new(first),
+                    args.look.clone(),
+                    n,
+                    0,
+                    false,
+                    false,
+                )?;
                 session3::keep_first(app, keeps[0], keeps[1]);
             }
             let mut drawn = match (hist.as_mut(), &planned) {

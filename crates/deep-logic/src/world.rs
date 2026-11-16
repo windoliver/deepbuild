@@ -969,7 +969,9 @@ impl World {
                     let mut o = at + 8;
                     for x in list {
                         let v = x.value.bytes();
-                        if !matches!(x.value, Given::Point(_)) || o + 8 + v.len() > at + e.size as usize {
+                        if !matches!(x.value, Given::Point(_))
+                            || o + 8 + v.len() > at + e.size as usize
+                        {
                             continue;
                         }
                         region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
@@ -1177,7 +1179,10 @@ impl World {
         let started = std::time::Instant::now();
         let mut changed = bake::ranges(item, k, &l.arrays, &fresh);
         let ms = started.elapsed().as_secs_f64() * 1000.0;
-        rec.compares.entry(item.id.clone()).or_default().push((k, n, ms));
+        rec.compares
+            .entry(item.id.clone())
+            .or_default()
+            .push((k, n, ms));
         if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
             changed.remove(1);
         }
@@ -1223,7 +1228,14 @@ impl World {
                 }
             }
             let k = l.last;
-            let key = (if self.planted.preview_runs_on_hover_only { 0 } else { k }, region);
+            let key = (
+                if self.planted.preview_runs_on_hover_only {
+                    0
+                } else {
+                    k
+                },
+                region,
+            );
             if l.previewed.as_ref() == Some(&key) {
                 continue;
             }
@@ -1246,7 +1258,10 @@ impl World {
             let runner = match l.spare.as_mut() {
                 Some(spare) if !self.planted.preview_writes_item_memory => {
                     let from = l.runner.memory("memory").expect("a memory");
-                    spare.memory_mut("memory").expect("a memory").copy_from_slice(from);
+                    spare
+                        .memory_mut("memory")
+                        .expect("a memory")
+                        .copy_from_slice(from);
                     for (n, _) in &l.names.globals {
                         let v = l.runner.global(n).unwrap_or(Val::I32(0));
                         let _ = spare.set(n, v);
@@ -1293,7 +1308,11 @@ impl World {
 
     /// How many elements of linear writes a frame at `t` blends (Logic: interpolated writes).
     pub fn blends(&self, t: i64) -> usize {
-        blends(&self.piece, self.lives.iter().map(|l| (l.last, l.prev.is_empty())), t)
+        blends(
+            &self.piece,
+            self.lives.iter().map(|l| (l.last, l.prev.is_empty())),
+            t,
+        )
     }
 
     /// The input track's entries, in its order.
@@ -1311,9 +1330,14 @@ impl World {
             for (w, e) in p.writes.iter().zip(&p.entries) {
                 let size = w.ty.size() as usize;
                 let values: Vec<Value> = (0..w.count as usize)
-                    .map(|n| w.ty.value(&l.preview[e.offset as usize + n * size..][..size]))
+                    .map(|n| {
+                        w.ty.value(&l.preview[e.offset as usize + n * size..][..size])
+                    })
                     .collect();
-                out.insert(format!("{}.preview.{}", item.id, w.name), Value::Array(values));
+                out.insert(
+                    format!("{}.preview.{}", item.id, w.name),
+                    Value::Array(values),
+                );
             }
         }
         out
@@ -1951,8 +1975,16 @@ pub fn blends(piece: &Piece, shown: impl Iterator<Item = (i64, bool)>, t: i64) -
         .items
         .iter()
         .zip(shown)
-        .filter(|(item, (last, no_prev))| !no_prev && *last >= 0 && (t - last * item.step).clamp(0, item.step) < item.step)
-        .map(|(item, _)| item.writes.iter().filter(|w| w.linear).map(|w| w.count as usize).sum::<usize>())
+        .filter(|(item, (last, no_prev))| {
+            !no_prev && *last >= 0 && (t - last * item.step).clamp(0, item.step) < item.step
+        })
+        .map(|(item, _)| {
+            item.writes
+                .iter()
+                .filter(|w| w.linear)
+                .map(|w| w.count as usize)
+                .sum::<usize>()
+        })
         .sum()
 }
 

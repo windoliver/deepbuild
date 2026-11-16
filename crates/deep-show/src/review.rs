@@ -135,7 +135,12 @@ impl Hub<'_> {
         out
     }
 
-    fn review_row(&mut self, claim: &str, c: &Claim, r: &Requirement) -> Result<Map<String, Value>, Value> {
+    fn review_row(
+        &mut self,
+        claim: &str,
+        c: &Claim,
+        r: &Requirement,
+    ) -> Result<Map<String, Value>, Value> {
         let [doc] = c.deliverables.as_slice() else {
             return Err(json!({"code": "one_deliverable", "ids": c.deliverables}));
         };
@@ -171,10 +176,17 @@ impl Hub<'_> {
         for f in &frames {
             let snap = crate::snapshot::png(f.rgba.clone(), size);
             let sha = self.put(&snap)?;
-            snapshots.push(json!({"sha256": sha, "w": size[0], "h": size[1], "camera": camera, "t": f.t}));
+            snapshots.push(
+                json!({"sha256": sha, "w": size[0], "h": size[1], "camera": camera, "t": f.t}),
+            );
             // The check input's kept items that the table doesn't list are numbered too, with no mark.
             let mut table = self.id_table(&document, f, size);
-            for k in r.check["keep"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            for k in r.check["keep"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
                 if !table.iter().any(|t| t == k) {
                     table.push(k.to_string());
                 }
@@ -201,7 +213,10 @@ impl Hub<'_> {
             shown.push((f.rgba.clone(), view.items));
         }
         let asks: Vec<String> = match r.check["asks"].as_array() {
-            Some(a) => a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+            Some(a) => a
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect(),
             None => ASKS.map(str::to_string).to_vec(),
         };
         // The fresh context: the brief, the outline and the images, never the session.
@@ -214,8 +229,13 @@ impl Hub<'_> {
                 .into_iter()
                 .flat_map(|s| s.revs.iter().map(|r| r.reason.clone()))
                 .collect();
-            let name = self.scenario.sessions.get(&c.session).map(|s| s.name.clone());
-            context["session"] = json!({"name": name, "messages": self.messages(&c.session), "reasons": reasons});
+            let name = self
+                .scenario
+                .sessions
+                .get(&c.session)
+                .map(|s| s.name.clone());
+            context["session"] =
+                json!({"name": name, "messages": self.messages(&c.session), "reasons": reasons});
         }
         let context_sha = self.put(context.to_string().as_bytes())?;
         let (model, reply) = self.review_reply()?;
@@ -226,13 +246,23 @@ impl Hub<'_> {
         }
         let mut m = row(r, "INCONCLUSIVE", Vec::new());
         if let Some(words) = reply.get("unreadable") {
-            reading["why"] = json!(format!("the model couldn't read its images: {}", words.as_str().unwrap_or_default()));
+            reading["why"] = json!(format!(
+                "the model couldn't read its images: {}",
+                words.as_str().unwrap_or_default()
+            ));
             m.insert("reading".into(), reading);
             return Ok(m);
         }
         // Observations, by the numbers of the first snapshot's ID view.
-        let observations = reply["observations"].as_array().cloned().unwrap_or_default();
-        let numbered: &[Numbered] = if grounded { shown.first().map_or(&[], |s| &s.1) } else { &[] };
+        let observations = reply["observations"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let numbered: &[Numbered] = if grounded {
+            shown.first().map_or(&[], |s| &s.1)
+        } else {
+            &[]
+        };
         let (kept, mut dropped) = lr::sift(&observations, numbered, &[]);
         let mut listed: Vec<Value> = kept
             .iter()
@@ -243,8 +273,14 @@ impl Hub<'_> {
             .collect();
         if self.planted(Planted::KeepsBadObservation) {
             for o in &observations {
-                let known = o["item"].as_u64().is_some_and(|n| numbered.iter().any(|v| u64::from(v.n) == n));
-                if !known && o["category"].as_str().is_some_and(|c| lr::OBSERVE.contains(&c)) {
+                let known = o["item"]
+                    .as_u64()
+                    .is_some_and(|n| numbered.iter().any(|v| u64::from(v.n) == n));
+                if !known
+                    && o["category"]
+                        .as_str()
+                        .is_some_and(|c| lr::OBSERVE.contains(&c))
+                {
                     listed.push(json!({"category": o["category"], "item": o["item"], "id": null}));
                     dropped = dropped.saturating_sub(1);
                 }
@@ -267,12 +303,25 @@ impl Hub<'_> {
             let (Some(snap), Some((rgba, _))) = (snapshots.get(k), shown.get(k)) else {
                 continue;
             };
-            let b: Vec<i64> = f["crop"].as_array().into_iter().flatten().filter_map(Value::as_i64).collect();
-            let b = if let [x, y, w, h] = b[..] { [x, y, w, h] } else { [0, 0, i64::from(size[0]), i64::from(size[1])] };
+            let b: Vec<i64> = f["crop"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64)
+                .collect();
+            let b = if let [x, y, w, h] = b[..] {
+                [x, y, w, h]
+            } else {
+                [0, 0, i64::from(size[0]), i64::from(size[1])]
+            };
             let (cut, px) = crop(rgba, size, b);
             let crop_sha = self.put(&crate::snapshot::png(px, [cut[2], cut[3]]))?;
             let what = json!([f["symptom"], f["fix"], f["accept"], k, f["crop"]]).to_string();
-            let id = format!("{}.{}", &hash[..12.min(hash.len())], &sha256_hex(what.as_bytes())[..8]);
+            let id = format!(
+                "{}.{}",
+                &hash[..12.min(hash.len())],
+                &sha256_hex(what.as_bytes())[..8]
+            );
             findings.push(json!({"id": id, "rev": rev, "severity": f["severity"], "symptom": f["symptom"], "fix": f["fix"],
                 "accept": f["accept"], "snapshot": snap["sha256"], "crop": {"box": cut, "sha256": crop_sha}}));
         }
@@ -280,7 +329,10 @@ impl Hub<'_> {
         let key = (claim.to_string(), r.id.clone(), doc.clone());
         let mut earlier = Vec::new();
         let mut past = self.review.found.remove(&key).unwrap_or_default();
-        for k in past.iter_mut().filter(|k| k.finding["rev"].as_u64() < Some(rev)) {
+        for k in past
+            .iter_mut()
+            .filter(|k| k.finding["rev"].as_u64() < Some(rev))
+        {
             let passes = self.accepted(doc, &k.finding["accept"]);
             let status = match (passes, k.resolved_once) {
                 (true, _) => "resolved",
@@ -292,7 +344,10 @@ impl Hub<'_> {
         }
         for f in &findings {
             if !past.iter().any(|k| k.finding["id"] == f["id"]) {
-                past.push(Kept { finding: f.clone(), resolved_once: false });
+                past.push(Kept {
+                    finding: f.clone(),
+                    resolved_once: false,
+                });
             }
         }
         self.review.found.insert(key, past);
@@ -313,8 +368,11 @@ impl Hub<'_> {
                 && self.audit_asks.get(&id).is_some_and(Option::is_some);
             if !self.audit_asks.contains_key(&id) || again {
                 self.audit_asks.insert(id.clone(), None);
-                m.insert("asks".into(), json!([{"kind": "taste", "id": id, "requirement": r.id, "key": hash,
-                    "why": format!("a model doubts revision {rev}: is it right?")}]));
+                m.insert(
+                    "asks".into(),
+                    json!([{"kind": "taste", "id": id, "requirement": r.id, "key": hash,
+                    "why": format!("a model doubts revision {rev}: is it right?")}]),
+                );
             } else if self.audit_asks.get(&id) == Some(&None) {
                 m.insert("pending".into(), json!([id]));
             }
@@ -342,7 +400,11 @@ impl Hub<'_> {
                     .collect();
             }
         }
-        let mut ids: Vec<String> = f.picks.values().map(|p| p.split('#').next().unwrap_or(p).to_string()).collect();
+        let mut ids: Vec<String> = f
+            .picks
+            .values()
+            .map(|p| p.split('#').next().unwrap_or(p).to_string())
+            .collect();
         ids.sort();
         ids.dedup();
         ids
@@ -354,9 +416,16 @@ impl Hub<'_> {
         if kind == KIND || !accept.is_object() {
             return false;
         }
-        let r = Requirement { id: "accept".into(), check: accept.clone() };
+        let r = Requirement {
+            id: "accept".into(),
+            check: accept.clone(),
+        };
         let mut drawn = BTreeMap::new();
-        let frames = self.startup.sealed.check_kind(kind).and_then(|(_, c)| c.frames.map(|(d, _)| d));
+        let frames = self
+            .startup
+            .sealed
+            .check_kind(kind)
+            .and_then(|(_, c)| c.frames.map(|(d, _)| d));
         if let (Some(draws), Some(cur)) = (frames, self.current_of(doc).map(|c| c.doc.clone())) {
             let at = crate::pixels::times(accept);
             drawn.insert(doc.to_string(), self.frames_of(&cur, &at, draws));
@@ -366,7 +435,15 @@ impl Hub<'_> {
         };
         let docs = [(doc.to_string(), cur)];
         let session = String::new();
-        let row = self.judge(&r, &docs, false, &BTreeMap::new(), &session, None, Some(&drawn));
+        let row = self.judge(
+            &r,
+            &docs,
+            false,
+            &BTreeMap::new(),
+            &session,
+            None,
+            Some(&drawn),
+        );
         row["result"] == "PASS"
     }
 }

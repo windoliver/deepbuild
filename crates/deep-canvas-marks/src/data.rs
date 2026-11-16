@@ -1972,8 +1972,11 @@ pub fn axis(
     }
     let width = crate::ticks::width(p);
     // #233: an axis that states its ticks draws them and its line as stroked open paths.
-    let rule: fn(String, [f64; 2], [f64; 2], f64, [u8; 3]) -> Mark =
-        if p.contains_key("tick") { crate::ticks::line } else { rule };
+    let rule: fn(String, [f64; 2], [f64; 2], f64, [u8; 3]) -> Mark = if p.contains_key("tick") {
+        crate::ticks::line
+    } else {
+        rule
+    };
     let (from, to) = (point(scale.range[0], 0.0), point(scale.range[1], 0.0));
     marks.push(rule(format!("{id}#line"), from, to, width, color));
     let ticks: Vec<(f64, String)> = faded.iter().map(|(v, l, _)| (*v, l.clone())).collect();

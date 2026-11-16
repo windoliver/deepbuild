@@ -10,8 +10,8 @@ pub mod exposure;
 mod fixtures;
 pub mod framing;
 pub mod noise;
-pub mod review;
 mod pixels;
+pub mod review;
 pub mod scale;
 mod scene;
 pub mod uv;
@@ -117,27 +117,42 @@ fn register(r: &mut Registrar) {
     })
     .check_report(report);
     // #1938's kinds on evaluated data: they hold on any machine.
-    r.check(scale::KIND, "any", &[scale::CODE, "loop.unreadable"], |l, i| {
-        issues(scale::report(l, i))
-    })
+    r.check(
+        scale::KIND,
+        "any",
+        &[scale::CODE, "loop.unreadable"],
+        |l, i| issues(scale::report(l, i)),
+    )
     .check_report(scale::report);
-    r.check(framing::KIND, "any", &[framing::CODE, "loop.unreadable"], |l, i| {
-        issues(framing::report(l, i))
-    })
+    r.check(
+        framing::KIND,
+        "any",
+        &[framing::CODE, "loop.unreadable"],
+        |l, i| issues(framing::report(l, i)),
+    )
     .check_report(framing::report);
     // #1938's kinds on pixels: they hold on the machine that drew them.
-    r.check(exposure::KIND, "same", &[exposure::CODE, "loop.unreadable"], |l, i| {
-        issues(exposure::report(l, i, &[]))
-    })
+    r.check(
+        exposure::KIND,
+        "same",
+        &[exposure::CODE, "loop.unreadable"],
+        |l, i| issues(exposure::report(l, i, &[])),
+    )
     .check_frames(1, exposure::report);
-    r.check(contrast::KIND, "same", &[contrast::CODE, "loop.unreadable"], |l, i| {
-        issues(contrast::report(l, i, &[]))
-    })
+    r.check(
+        contrast::KIND,
+        "same",
+        &[contrast::CODE, "loop.unreadable"],
+        |l, i| issues(contrast::report(l, i, &[])),
+    )
     .check_frames(1, contrast::report);
     // Noise reads each checked time drawn twice: the time, and the next frame.
-    r.check(noise::KIND, "same", &[noise::CODE, "loop.unreadable"], |l, i| {
-        issues(noise::report(l, i, &[]))
-    })
+    r.check(
+        noise::KIND,
+        "same",
+        &[noise::CODE, "loop.unreadable"],
+        |l, i| issues(noise::report(l, i, &[])),
+    )
     .check_frames(2, noise::report);
     // #456's: a model's reading only its host makes, with the model it names; run anywhere else
     // it reads nothing, so it is BLOCKED, never passed.

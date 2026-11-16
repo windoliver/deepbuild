@@ -11,8 +11,10 @@ mod access;
 mod ask;
 mod audio;
 mod bake;
+mod caption_design;
 mod capture;
 mod costs;
+mod data_hash;
 mod defaults;
 mod determinism;
 mod efficiency;
@@ -21,13 +23,12 @@ mod export;
 mod extended;
 mod familiar;
 mod fields;
-mod caption_design;
 mod film;
-mod film_operator;
-mod films;
 mod film_audit;
 mod film_layout;
+mod film_operator;
 mod film_viewer;
+mod films;
 mod forms;
 mod frames;
 mod function;
@@ -43,19 +44,19 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kinds_word;
-mod math_twins;
 mod kit;
 mod lengths;
 mod logic;
 mod maps;
+mod math_twins;
 mod media;
 mod mixdown;
 mod modes;
 #[cfg(target_os = "macos")]
 mod momentum;
 mod narration;
-mod over3d;
 mod net;
+mod over3d;
 mod packs;
 mod physics;
 mod picks;
@@ -65,12 +66,11 @@ mod placement;
 mod planted;
 mod played;
 mod points;
-mod preview;
 mod present;
+mod preview;
 mod print;
 mod probe;
 mod query;
-mod data_hash;
 mod registries;
 mod retired;
 mod review;
@@ -412,7 +412,10 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             Some(p) => Some(p.as_str()?.to_string()),
         },
         track: optional(c.get("track"), |t| t.as_array().cloned())?.unwrap_or_default(),
-        steps: optional(c.get("steps"), |s| s.as_array()?.iter().map(Value::as_i64).collect())?.unwrap_or_default(),
+        steps: optional(c.get("steps"), |s| {
+            s.as_array()?.iter().map(Value::as_i64).collect()
+        })?
+        .unwrap_or_default(),
         t: match c.get("t") {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
@@ -1643,7 +1646,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "at"
             };
             // #548: a call that names no `arrives` may give its arrival as a number `at`.
-            let when = c.get(arrives).or_else(|| c.get("at").filter(|t| t.is_number() && arrives == "arrives"));
+            let when = c.get(arrives).or_else(|| {
+                c.get("at")
+                    .filter(|t| t.is_number() && arrives == "arrives")
+            });
             (when, &clock)
         })
         .map(|(at, clock)| match (at, clock) {
@@ -3350,7 +3356,11 @@ fn coefficients(path: Option<&str>) -> Result<Coefficients, cost::Refused> {
 /// Milliseconds on a monotonic clock, which times a vector field's integration (#225).
 fn clock_ms() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+        * 1000.0
 }
 
 fn main() {

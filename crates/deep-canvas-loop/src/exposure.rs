@@ -204,7 +204,8 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
         let picks = pixels::picks_of(&f.picks, &subject);
         let at = |exposure: f64| measure(f, &query(Some(picks.clone()), exposure));
         let Some(r) = at(f.exposure) else {
-            out.blocked.push(blocked("subject_unseen", KIND, &subject, "subject"));
+            out.blocked
+                .push(blocked("subject_unseen", KIND, &subject, "subject"));
             return out;
         };
         let ok = limits.passes(&r);
@@ -222,10 +223,17 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
         // The incident meter's: middle grey under the light falling on the subject shows as
         // middle grey. Where the subject's light is its own (unlit, or emitting), no light falls
         // on it to meter, and the reading is the subject's own, its key brought to middle grey.
-        let incident = scene::evaluate(lowered, input, f.t, KIND).ok().and_then(|s| {
-            let e = incident(&s, centre(&s, &subject)?);
-            (e > 0.0).then(|| (round(log2(e / (1.2 * std::f64::consts::PI))), "the light falling on it"))
-        });
+        let incident = scene::evaluate(lowered, input, f.t, KIND)
+            .ok()
+            .and_then(|s| {
+                let e = incident(&s, centre(&s, &subject)?);
+                (e > 0.0).then(|| {
+                    (
+                        round(log2(e / (1.2 * std::f64::consts::PI))),
+                        "the light falling on it",
+                    )
+                })
+            });
         let reflected = (round(now + r.key_ev), "its own light");
         // Named as ops only when the frame, exposed at that EV, reads inside the limits.
         let cures = |ev: f64| at(exposure_scale(ev)).is_some_and(|r| limits.passes(&r));
