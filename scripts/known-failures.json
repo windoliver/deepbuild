@@ -103,7 +103,7 @@
     "canvas-lint: crates/deep-text/src/fonts.rs a raw pointer (ptr::), an address that differs per process and target": 1,
     "canvas-lint: crates/deep-text/src/fonts.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-text/src/lib.rs a build predicate (feature), code that computes differently per build": 1,
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1,
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
