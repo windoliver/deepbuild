@@ -1,0 +1,55 @@
+Captured check output; paths redacted, trailing padding removed.
+
+✖ #1624 AC3 the unit lane runs no block that lists tests/acceptance/1330/start.live.test.ts (69421.324375ms)
+✖ #1624 AC3 the unit lane still runs #1330 siblings, and the listing excludes an existing by-hand live file (0.4665ms)
+✔ #1624 AC1 tests/acceptance/308, 45 and 1017 budgets.test.ts run in the alone block and not the parallel one (0.152792ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 70315.743375
+
+✖ failing tests:
+
+test at tests/acceptance/1624/lanes.test.mjs:44:1
+✖ #1624 AC3 the unit lane runs no block that lists tests/acceptance/1330/start.live.test.ts (69421.324375ms)
+  AssertionError [ERR_ASSERTION]: the parallel block lists tests/acceptance/1330/start.live.test.ts, which skips with no note unless DEEP_1330_LIVE=1
+
+  true !== false
+
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1624/lanes.test.mjs:47:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1624/lanes.test.mjs:52:1
+✖ #1624 AC3 the unit lane still runs #1330 siblings, and the listing excludes an existing by-hand live file (0.4665ms)
+  AssertionError [ERR_ASSERTION]: the listing includes a file lanes.mjs already keeps by hand, so it reads the lane wrongly
+
+  true !== false
+
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1624/lanes.test.mjs:57:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

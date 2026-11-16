@@ -1,0 +1,86 @@
+{
+ "id": "figure-workshop",
+ "format": 1,
+ "basis": "physical",
+ "license": "Apache-2.0",
+ "description": "The look of the #508 fixture figures: a dark workshop with one accent.",
+ "palette": {
+  "night": "#101114",
+  "graphite": "#1b1d22",
+  "slate": "#8b8f97",
+  "stone": "#d9dde3",
+  "white": "#ffffff",
+  "steel": "#5b616b",
+  "amber": "#f2a33a"
+ },
+ "roles": {
+  "ground": "night",
+  "ink": "graphite",
+  "muted": "slate",
+  "stone": "stone",
+  "caption": "white",
+  "raised": "steel",
+  "accent": "amber"
+ },
+ "themes": {
+  "light": {},
+  "dark": {}
+ },
+ "fonts": {
+  "body": {
+   "family": "Inter",
+   "file": "Inter-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "mono": {
+   "family": "JetBrains Mono",
+   "file": "JetBrainsMono-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  }
+ },
+ "status": {
+  "pass": "#3fbf6a",
+  "fail": "#ff6b6b",
+  "invalid": "#c58cf0",
+  "blocked": "#f08a3a",
+  "inconclusive": "#c9c94a",
+  "running": "#5aa8ff",
+  "needs_you": "#e0b04a",
+  "stale": "#5fc4c8",
+  "idle": "#a8a8a8"
+ },
+ "status_treatment": {
+  "core_min_px": 4,
+  "glyph": {
+   "pass": "✓",
+   "fail": "✗",
+   "invalid": "⊘",
+   "blocked": "■",
+   "inconclusive": "?",
+   "running": "↻",
+   "needs_you": "!",
+   "stale": "◇",
+   "idle": "○"
+  }
+ },
+ "min_distance": 0.1,
+ "attention_treatment": {
+  "line": "dashed",
+  "role": "ink",
+  "glyph": "⚠"
+ },
+ "legend": "auto",
+ "tone_map": "none",
+ "exposure": -0.2630344058337938,
+ "finish": [],
+ "deband": "none",
+ "bloom": "none",
+ "ao": "none",
+ "ground_3d": {
+  "kind": "none"
+ }
+}

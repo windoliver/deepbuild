@@ -6,10 +6,7 @@ use super::*;
 /// the contract diff sees a change to either.
 #[test]
 fn the_pack_schema_holds_the_checks_keys_and_lists() {
-    let schema: Value = serde_json::from_str(include_str!(
-        "../../../../../packages/contracts/canvas-schemas/pack@1.json"
-    ))
-    .expect("JSON");
+    let schema: Value = serde_json::from_str(PACK_SCHEMA).expect("JSON");
     let keys = |v: &Value| -> Vec<String> {
         let mut k: Vec<String> = v["properties"]
             .as_object()

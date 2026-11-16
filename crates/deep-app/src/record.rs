@@ -33,6 +33,9 @@ fn holds(row: &Value) -> bool {
     row["holder"] == true
 }
 
+/// The hub methods this reader calls, which the app's hello check lists (`hub::NEEDS`); no other module names them.
+pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
+
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
 /// The newest events a view keeps.

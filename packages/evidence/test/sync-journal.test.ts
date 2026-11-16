@@ -26,7 +26,7 @@ vi.mock('node:fs/promises', async (original) => {
 const { openEvidenceStore } = await import('../src/index.js');
 
 const roots: string[] = [];
-afterEach(() => { synced.length = 0; fail.path = undefined; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { synced.length = 0; delete fail.path; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 async function stored(text: string) {
   const root = mkdtempSync(join(tmpdir(), 'deep-evidence-journal-'));
   roots.push(root);
@@ -49,7 +49,7 @@ it('a file whose journal sync failed is synced again by the next sync that names
   const { store, sha, journal } = await stored('a log');
   fail.path = journal;
   await expect(store.sync([sha])).rejects.toThrow('EIO');
-  fail.path = undefined;
+  delete fail.path;
   synced.length = 0;
   await store.sync([sha]);
   expect(synced, 'the journal it failed on').toContain(journal);

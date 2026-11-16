@@ -513,6 +513,7 @@ impl Hub<'_> {
                 r#in: *r#in,
                 out: *end,
                 rate: (1, 1),
+                ramp: None,
                 gain: Gain::Db(0.0),
                 pan: 0.0,
                 fade_in: None,

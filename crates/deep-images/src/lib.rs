@@ -15,7 +15,7 @@ mod source;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::Instant;
+use web_time::Instant;
 
 pub use level::{keeps, level_for, level_size, reduce, Level};
 pub use source::{crop_px, hash_of, Refused, Store, DECODE_CAP, SIDE};
@@ -522,7 +522,8 @@ impl Images {
     }
 
     fn start(&self, s: &mut State) {
-        if s.threads > 0 {
+        // The web player's one thread decodes each level itself, before it's ready (#172).
+        if s.threads > 0 || cfg!(target_arch = "wasm32") {
             return;
         }
         s.threads = s.workers;
@@ -661,13 +662,15 @@ fn work(shared: &Arc<Shared>) {
     }
 }
 
-/// The proxy rows of the sources whose hash starts with one byte: one line per stored level,
+/// The proxy rows of the sources whose hash starts with one byte (the store's file it is kept in):
+/// one line per stored level,
 /// `source level x y w h flip tool sha256`.
-fn rows_file(store: &Store, hash: &[u8; 32]) -> std::path::PathBuf {
-    store.file(&format!("proxies/{:02x}", hash[0]))
+pub fn rows_file(hash: &[u8; 32]) -> String {
+    format!("proxies/{:02x}", hash[0])
 }
 
-fn row_of(key: &Key) -> String {
+/// The proxy row that names `key`'s stored level (#172: the web player's bundle carries it).
+pub fn row_of(key: &Key) -> String {
     let [x, y, w, h] = key.crop;
     let source = source::hex(&key.hash);
     format!("{source} {} {x} {y} {w} {h} {} {TOOL}", key.level, key.flip)
@@ -675,7 +678,7 @@ fn row_of(key: &Key) -> String {
 
 /// The stored level a proxy row names for `key`, if any.
 fn stored(store: &Store, key: &Key) -> Option<Level> {
-    let rows = std::fs::read_to_string(rows_file(store, &key.hash)).ok()?;
+    let rows = store.text(&rows_file(&key.hash))?;
     let want = row_of(key);
     let sha = rows.lines().find_map(|line| {
         let (row, sha) = line.rsplit_once(' ')?;
@@ -745,14 +748,14 @@ fn make(
     };
     if plant != Plant::DecodesPerDraw && store.write(&level.sha256, &level.blob()).is_ok() {
         let _one = shared.rows.lock().unwrap_or_else(|p| p.into_inner());
-        let path = rows_file(store, &key.hash);
-        let mut rows = std::fs::read_to_string(&path).unwrap_or_default();
+        let path = rows_file(&key.hash);
+        let mut rows = store.text(&path).unwrap_or_default();
         rows.push_str(&format!(
             "{} {}\n",
             row_of(&key),
             source::hex(&level.sha256)
         ));
-        let _ = Store::put(&path, rows.as_bytes());
+        let _ = store.put_text(&path, &rows);
     }
     Ok((level, true, start.elapsed().as_secs_f64() * 1000.0))
 }

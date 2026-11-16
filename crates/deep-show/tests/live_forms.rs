@@ -15,11 +15,21 @@ fn the_dump_lists_every_live_game_state_form_with_its_default() {
         .status()
         .expect("deep-show starts");
     assert!(status.success());
-    let file = std::fs::read_dir(&dir).expect("the dump folder").next().expect("one dump").expect("an entry").path();
-    let dump: Value = serde_json::from_slice(&std::fs::read(file).expect("the dump")).expect("JSON");
+    let file = std::fs::read_dir(&dir)
+        .expect("the dump folder")
+        .next()
+        .expect("one dump")
+        .expect("an entry")
+        .path();
+    let dump: Value =
+        serde_json::from_slice(&std::fs::read(file).expect("the dump")).expect("JSON");
     let _ = std::fs::remove_dir_all(&dir);
     let kind = |name: &str| -> Vec<Value> {
-        let kinds = dump["registries"].as_array().into_iter().flatten().filter(|r| r["name"] == "kind@1");
+        let kinds = dump["registries"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|r| r["name"] == "kind@1");
         let entries = kinds.flat_map(|r| r["entries"].as_array().into_iter().flatten());
         let found: Vec<&Value> = entries.filter(|e| e["name"] == name).collect();
         assert_eq!(found.len(), 1, "one entry {name}");

@@ -1,6 +1,6 @@
 // The playtest's codes in the check catalog, under the plug-in (Check input: playtest), each with its meaning and fix.
 // playtest.not_live's subject and planted twin are #1046's; it is catalogued here so the kind's codes are whole.
-// The bands, expectations and the play interface's codes are #555's.
+// The bands, expectations and the play interface's codes are #555's; the soak's, rules.legal's and logic.edges' #1048's.
 
 export const CODES = {
   'playtest.not_live': {
@@ -40,8 +40,28 @@ export const CODES = {
     fix: 'Publish the named array as the interface locked in the brief declares it; the interface itself doesn\'t change.',
   },
   'play.out_of_range': {
-    meaning: 'A published value of a name the play interface gives a range lay outside it.',
-    fix: 'Keep the named value within its range at the step named, in the row named.',
+    meaning: 'A published value of a name the play interface gives a range lay outside it, or a link named a cell off the grid.',
+    fix: 'Keep the named value within its range at the step named, in the row named, and each link within the grid\'s cells.',
+  },
+  'playtest.soak': {
+    meaning: 'In a soak\'s long run, a window\'s logic memory, save size or p99 step time passed the brief\'s limit.',
+    fix: 'Open the window named: free what the piece keeps growing, or keep a step\'s work and a save within the limits.',
+  },
+  'rules.listed_refused': {
+    meaning: 'A row the piece listed, put as its entry from a state a run reached, wasn\'t taken: accepted didn\'t rise, refused did, or nothing else changed.',
+    fix: 'List only what the piece takes from that state, or take what it lists, at the run and step named.',
+  },
+  'rules.unlisted_taken': {
+    meaning: 'An entry no listed row held, put from a state a run reached, was taken or changed a declared name instead of raising refused.',
+    fix: 'Turn down every entry the piece doesn\'t list, at the run and step named, raising refused and changing nothing else.',
+  },
+  'logic.trap': {
+    meaning: 'A control put at one of its kind\'s edge values, from a state a run reached, trapped the piece\'s logic.',
+    fix: 'Play the track named and handle that value in the function and offset named, such as a zero divisor or an empty text.',
+  },
+  'logic.non_finite': {
+    meaning: 'A control put at one of its kind\'s edge values wrote a NaN or an infinity to a declared array.',
+    fix: 'Play the track named and keep the array named finite for that value.',
   },
 } as const;
 export type Code = keyof typeof CODES;

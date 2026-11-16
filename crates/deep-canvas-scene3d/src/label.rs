@@ -36,7 +36,8 @@ pub struct Glyph {
     pub rect: [f32; 4],
 }
 
-/// One atlas page as a frame samples it: its alpha bytes (`PAGE` wide) at a generation.
+/// One atlas page as a frame samples it: its alpha bytes (`PAGE` wide) at a generation, a
+/// number no copy of any page had before, so it changes whenever the bytes do.
 #[derive(Clone, Debug)]
 pub struct AtlasPage {
     pub generation: u32,
@@ -54,8 +55,12 @@ impl PartialEq for AtlasPage {
 pub struct Labels {
     shaper: Shaper,
     atlas: Atlas,
-    /// The pages as frames last took them, copied again only at a new generation.
-    pages: Vec<AtlasPage>,
+    /// The pages as frames last took them, each with the atlas page's generation and the rects
+    /// written to it when copied; copied again when either moves on, as glyphs a frame never
+    /// placed before are written to a page an earlier frame took (#508).
+    pages: Vec<(AtlasPage, (u32, u64))>,
+    /// The generation the next copy takes.
+    copies: u32,
     runs: BTreeMap<(String, Role, u32), Arc<Shaped>>,
     /// #381 AC1's wrong program (`deep-gpu run --planted label_mask`): the base's path, each label
     /// shaped at a fixed em for a mask of its own, with nothing placed in the atlas.
@@ -77,6 +82,7 @@ impl Labels {
             shaper: Shaper::new(),
             atlas: Atlas::new(),
             pages: Vec::new(),
+            copies: 0,
             runs: BTreeMap::new(),
             fixed_em: false,
             trails: BTreeMap::new(),
@@ -88,22 +94,20 @@ impl Labels {
         let pages: &[Page] = self.atlas.pages();
         self.pages.truncate(pages.len());
         for (i, page) in pages.iter().enumerate() {
-            if self
-                .pages
-                .get(i)
-                .is_none_or(|p| p.generation != page.generation())
-            {
+            let source = (page.generation(), page.written());
+            if self.pages.get(i).is_none_or(|(_, s)| *s != source) {
                 let fresh = AtlasPage {
-                    generation: page.generation(),
+                    generation: self.copies,
                     bytes: Arc::from(page.bytes()),
                 };
+                self.copies += 1;
                 match self.pages.get_mut(i) {
-                    Some(p) => *p = fresh,
-                    None => self.pages.push(fresh),
+                    Some(p) => *p = (fresh, source),
+                    None => self.pages.push((fresh, source)),
                 }
             }
         }
-        self.pages.clone()
+        self.pages.iter().map(|(p, _)| p.clone()).collect()
     }
 
     /// Starts a frame: pages none of its labels draw from age for eviction.
@@ -229,4 +233,46 @@ impl Labels {
 /// box's top left falls a whole number of px from, which the renderer snaps (#1174).
 pub fn half_fraction(bounds: [f64; 2]) -> [f32; 2] {
     bounds.map(|b| (b / 2.0).fract() as f32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A frame's labels and the pages it hands the renderer: each glyph's place, and the page
+    /// as the frame samples it.
+    fn frame(labels: &mut Labels, text: &str) -> (Vec<Glyph>, Vec<AtlasPage>) {
+        labels.begin();
+        let (bounds, mut glyphs) = labels.run(text, Role::Body, 13.0);
+        labels.place(text, Role::Body, &mut glyphs, bounds, 13.0, false);
+        (glyphs, labels.pages())
+    }
+
+    /// #508: a readout whose text changes between frames ("Spread 0.6" to "Spread 0.3") places
+    /// glyphs it never placed before on a page an earlier frame already took; the frame's page
+    /// carries their ink, at a generation the earlier frame's page didn't have, so the GPU
+    /// uploads it again.
+    #[test]
+    fn a_glyph_placed_after_a_frame_took_its_page_is_on_the_page_the_next_frame_samples() {
+        let mut labels = Labels::new();
+        let (_, before) = frame(&mut labels, "Spread 0.6");
+        let (glyphs, after) = frame(&mut labels, "Spread 0.3");
+        let three = glyphs
+            .iter()
+            .filter_map(|g| g.atlas)
+            .next_back()
+            .expect("the 3 has ink");
+        let page = &after[three.page as usize];
+        let ink = (three.y..three.y + three.h)
+            .flat_map(|y| (three.x..three.x + three.w).map(move |x| (x, y)))
+            .any(|(x, y)| page.bytes[(y * PAGE + x) as usize] != 0);
+        assert!(
+            ink,
+            "the 3 at {three:?} is blank on the page the frame samples"
+        );
+        assert_ne!(
+            before[three.page as usize], *page,
+            "the page took new ink at the generation the GPU already holds"
+        );
+    }
 }

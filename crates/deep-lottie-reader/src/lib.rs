@@ -8,7 +8,8 @@ use std::io::Write;
 use thorvg::{ColorSpace, EngineOption, Paint, Picture, Thorvg};
 
 /// The engine the reader pins, as the receipt names it.
-pub const ENGINE: &str = "thorvg 1.1.2 (thorvg-sys 0.4.0, thorvg 0.6.0), drawn at 2x and box-filtered";
+pub const ENGINE: &str =
+    "thorvg 1.1.2 (thorvg-sys 0.4.0, thorvg 0.6.0), drawn at 2x and box-filtered";
 
 /// How many times the size the engine draws at before each frame is box-filtered down: 2, or 1
 /// for a frame over about 8 million pixels drawn twice as large. The engine snaps an axis-aligned rectangle's
@@ -16,7 +17,11 @@ pub const ENGINE: &str = "thorvg 1.1.2 (thorvg-sys 0.4.0, thorvg 0.6.0), drawn a
 /// and filtered, it misses by a fraction of that.
 pub fn supersample(w: u32, h: u32) -> u32 {
     let area = u64::from(w.max(1)) * u64::from(h.max(1));
-    if area * 4 <= 8_000_000 { 2 } else { 1 }
+    if area * 4 <= 8_000_000 {
+        2
+    } else {
+        1
+    }
 }
 
 /// Renders `frames` of the Lottie file at `path` at `w` × `h`, each frame's straight-alpha RGBA
@@ -50,9 +55,9 @@ fn down(big: &[u8], w: u32, h: u32, f: u32) -> Vec<u8> {
                 }
             }
             let o = (y * w + x) * 4;
-            if acc[3] > 0 {
-                for c in 0..3 {
-                    out[o + c] = ((acc[c] + acc[3] / 2) / acc[3]) as u8;
+            for c in 0..3 {
+                if let Some(v) = (acc[c] + acc[3] / 2).checked_div(acc[3]) {
+                    out[o + c] = v as u8;
                 }
             }
             out[o + 3] = ((acc[3] + n / 2) / n) as u8;

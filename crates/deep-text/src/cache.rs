@@ -87,7 +87,7 @@ fn font_hash(family: &str, fallback: &[&str], lang: Option<&str>) -> u64 {
             .map(|face| {
                 let mut h = DefaultHasher::new();
                 face.weight.hash(&mut h);
-                face.bytes.hash(&mut h);
+                face.bytes().hash(&mut h);
                 h.finish()
             })
             .collect()

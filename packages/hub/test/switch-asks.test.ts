@@ -41,7 +41,7 @@ it('two first Closes checks in linked worktrees raise only one switch ask', asyn
     const judging = new StopJudging({ settings: {}, services: { record, asks, tasks, openItems, now }, state: () => ({ live }), mcp: () => mcp,
       events: { connection: (_writer: string, extra: object = {}) => ({ ...core, ...extra }) },
     } as unknown as StopJudgingOptions);
-    const reasons = await Promise.all([judging.closesGate('S1', 'gh pr create --body "Closes #41"'), judging.closesGate('S2', 'gh pr create --body "Closes #42"')]);
+    const reasons = await Promise.all([judging.closesGate('S1', 'gh pr create --body "Closes #41"', repo), judging.closesGate('S2', 'gh pr create --body "Closes #42"', other)]);
     expect(reasons.every((r) => r?.includes('feature')), 'both calls are held by the deployed-off switch').toBe(true);
     expect(await record.read({ after: 0, kinds: ['ask.created'] }), 'one repo/name is one question, even across threads').toHaveLength(1);
   } finally { await record.close(); rmSync(dir, { recursive: true, force: true }); }
