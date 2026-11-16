@@ -1,0 +1,424 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1830
+
+ ❯ ac2-timing.test.ts (1 test | 1 failed) 17ms
+   × AC2 #1830.c69ecf39 on a fit reference Mac, #311's redrafted AC12 reads PASS with runs inside its limit, FAIL with runs over it and INCONCLUSIVE at a planted load, naming it, and the original reads INCONCLUSIVE, naming the load 15ms
+ ❯ ac2-redrafts.test.ts (18 tests | 18 failed) 18ms
+   × AC2 #1830.c69ecf39 103: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 7ms
+   × AC2 #1830.c69ecf39 124: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 1ms
+   × AC2 #1830.c69ecf39 148: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 149: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 166: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 262: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 311/redraft-ac12: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 365: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 417: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 465: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 568/judge.test.mjs: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 761: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 1018/redraft-ac6: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 1098: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 1425: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 1ms
+   × AC2 #1830.c69ecf39 1427: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 0ms
+   × AC2 #1830.c69ecf39 268: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 2ms
+   × AC2 #1830.c69ecf39 968: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads 1ms
+ ❯ ac3-judge.test.ts (2 tests | 2 failed) 12ms
+   × AC3 #1830.7a035631 #568's redrafted judge suite passes on this machine, loaded or not, and on planted machines of 2 cores at load 300 and 256 cores at load 0.1 8ms
+   × AC3 #1830.7a035631 a copy of #568's redrafted judge suite passes beside the real judgeLimit and fails beside a planted judgeLimit that ignores loads 1ms
+ ❯ ac1-lint.test.ts (4 tests | 4 failed) 2653ms
+   × AC1 #1830.c80971bc the lint fails each planted judgeLimit call that gives no loads, by name, through its module, through a variable and inside a lane string, naming its file and line 707ms
+   × AC1 #1830.c80971bc calls that give loads or a spread, a local judgeLimit called with positional arguments, type signatures, comments, a README and a twins/ folder are not findings: the lint prints PASS loads 144ms
+   × AC1 #1830.c80971bc an original a redraft replaced is listed with its file and line until its redraft folder exists under the root 1797ms
+   × AC1 #1830.c80971bc over this checkout the lint lists none once the redrafts land, and the lint lane runs it 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-lint.test.ts > AC1 #1830.c80971bc the lint fails each planted judgeLimit call that gives no loads, by name, through its module, through a variable and inside a lane string, naming its file and line
+AssertionError: scripts/loads-lint.mjs is missing: no lint over tests/acceptance finds a judgeLimit call that gives no loads: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lint helpers.ts:88:146
+     86| /** Runs `node scripts/loads-lint.mjs`, with `--root <at>` when `at` i…
+     87| export function lint(at?: string): Lint {
+     88|   expect(existsSync(lintScript), 'scripts/loads-lint.mjs is missing: n…
+       |                                                                                                                                                  ^
+     89|   const result = spawnSync(process.execPath, [lintScript, ...(at === u…
+     90|   const output = show(result);
+ ❯ ac1-lint.test.ts:41:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/25]⎯
+
+ FAIL  ac1-lint.test.ts > AC1 #1830.c80971bc calls that give loads or a spread, a local judgeLimit called with positional arguments, type signatures, comments, a README and a twins/ folder are not findings: the lint prints PASS loads
+AssertionError: scripts/loads-lint.mjs is missing: no lint over tests/acceptance finds a judgeLimit call that gives no loads: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lint helpers.ts:88:146
+     86| /** Runs `node scripts/loads-lint.mjs`, with `--root <at>` when `at` i…
+     87| export function lint(at?: string): Lint {
+     88|   expect(existsSync(lintScript), 'scripts/loads-lint.mjs is missing: n…
+       |                                                                                                                                                  ^
+     89|   const result = spawnSync(process.execPath, [lintScript, ...(at === u…
+     90|   const output = show(result);
+ ❯ ac1-lint.test.ts:50:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/25]⎯
+
+ FAIL  ac1-lint.test.ts > AC1 #1830.c80971bc an original a redraft replaced is listed with its file and line until its redraft folder exists under the root
+AssertionError: scripts/lanes.mjs's redrafted maps tests/acceptance/568/judge.test.mjs to tests/acceptance/568-redraft-1830/: expected undefined to be 'tests/acceptance/568-redraft-1830/' // Object.is equality
+
+- Expected:
+"tests/acceptance/568-redraft-1830/"
+
++ Received:
+undefined
+
+ ❯ ac1-lint.test.ts:60:97
+     58|   const redraft = 'tests/acceptance/568-redraft-1830/';
+     59|   const { redrafted } = await lanes();
+     60|   expect(redrafted?.[original], `scripts/lanes.mjs's redrafted maps ${…
+       |                                                                                                 ^
+     61|   // The original's calls, each on one line as judgeLimit({ ... }); it…
+     62|   const calls = readFileSync(join(root, original), 'utf8').split('\n')…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/25]⎯
+
+ FAIL  ac1-lint.test.ts > AC1 #1830.c80971bc over this checkout the lint lists none once the redrafts land, and the lint lane runs it
+AssertionError: scripts/loads-lint.mjs is missing: no lint over tests/acceptance finds a judgeLimit call that gives no loads: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lint helpers.ts:88:146
+     86| /** Runs `node scripts/loads-lint.mjs`, with `--root <at>` when `at` i…
+     87| export function lint(at?: string): Lint {
+     88|   expect(existsSync(lintScript), 'scripts/loads-lint.mjs is missing: n…
+       |                                                                                                                                                  ^
+     89|   const result = spawnSync(process.execPath, [lintScript, ...(at === u…
+     90|   const output = show(result);
+ ❯ ac1-lint.test.ts:79:47
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 103: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/103-redraft-1830/ is missing: #103 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 124: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/124-redraft-1830/ is missing: #124 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 148: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/148-redraft-1830/ is missing: #148 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 149: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/149-redraft-1830/ is missing: #149 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 166: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/166-redraft-1830/ is missing: #166 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 262: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/262-redraft-1830/ is missing: #262 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 311/redraft-ac12: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/311-redraft-1830/ is missing: #311/redraft-ac12 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 365: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/365-redraft-1830/ is missing: #365 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 417: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/417-redraft-1830/ is missing: #417 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 465: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/465-redraft-1830/ is missing: #465 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 568/judge.test.mjs: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/568-redraft-1830/ is missing: #568/judge.test.mjs has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 761: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/761-redraft-1830/ is missing: #761 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 1018/redraft-ac6: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/1018-redraft-1830/ is missing: #1018/redraft-ac6 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 1098: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/1098-redraft-1830/ is missing: #1098 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 1425: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/1425-redraft-1830/ is missing: #1425 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 1427: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/1427-redraft-1830/ is missing: #1427 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 268: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/268-redraft-1830/ is missing: #268 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/25]⎯
+
+ FAIL  ac2-redrafts.test.ts > AC2 #1830.c69ecf39 968: the lint lists the original's judgeLimit calls, which give no loads, and its blind redraft, listed in redrafted, gives loads
+AssertionError: tests/acceptance/968-redraft-1830/ is missing: #968 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-redrafts.test.ts:10:100
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/25]⎯
+
+ FAIL  ac2-timing.test.ts > AC2 #1830.c69ecf39 on a fit reference Mac, #311's redrafted AC12 reads PASS with runs inside its limit, FAIL with runs over it and INCONCLUSIVE at a planted load, naming it, and the original reads INCONCLUSIVE, naming the load
+AssertionError: tests/acceptance/311-redraft-1830/ is missing: #311's AC12 has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-timing.test.ts:70:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/25]⎯
+
+ FAIL  ac3-judge.test.ts > AC3 #1830.7a035631 #568's redrafted judge suite passes on this machine, loaded or not, and on planted machines of 2 cores at load 300 and 256 cores at load 0.1
+AssertionError: tests/acceptance/568-redraft-1830/judge.test.mjs is missing: #568's judge suite has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac3-judge.test.ts:39:103
+     37|
+     38| test('AC3 #1830.7a035631 #568\'s redrafted judge suite passes on this …
+     39|   expect(existsSync(join(root, FILE)), `${FILE} is missing: #568's jud…
+       |                                                                                                       ^
+     40|   passes(nodeTest(root), `on this machine (${availableParallelism()} c…
+     41|   for (const [cores, load] of [[2, 300], [256, 0.1]] as const) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/25]⎯
+
+ FAIL  ac3-judge.test.ts > AC3 #1830.7a035631 a copy of #568's redrafted judge suite passes beside the real judgeLimit and fails beside a planted judgeLimit that ignores loads
+AssertionError: tests/acceptance/568-redraft-1830/judge.test.mjs is missing: #568's judge suite has no blind redraft: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac3-judge.test.ts:48:103
+     46|
+     47| test('AC3 #1830.7a035631 a copy of #568\'s redrafted judge suite passe…
+     48|   expect(existsSync(join(root, FILE)), `${FILE} is missing: #568's jud…
+       |                                                                                                       ^
+     49|   passes(nodeTest(beside('honest.mjs')), 'in a scratch checkout beside…
+     50|   const wrong = nodeTest(beside('ignores-loads.mjs'));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/25]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  25 failed (25)
+   Start at  18:01:44
+   Duration  5.86s (tests 47%, transform 41%, import 11%)
+

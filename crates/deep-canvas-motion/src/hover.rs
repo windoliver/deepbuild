@@ -35,6 +35,7 @@ pub(crate) fn read(defaults: &[(String, f64)], key: &str) -> CoreInput {
         .map_or(f64::NAN, |(_, v)| *v);
     CoreInput::Control {
         entries: Vec::new(),
+        ramps: Vec::new(),
         default,
         range: (f64::NEG_INFINITY, f64::INFINITY),
     }

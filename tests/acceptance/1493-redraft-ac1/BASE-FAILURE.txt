@@ -1,0 +1,24 @@
+Base commit: 0e5572731 ("Merge pull request #2529 from windoliver/fix/2362-kit-seal"), this job's worktree at its base,
+with only tests/acceptance/1493/ (commit 784d2f5c2) and tests/acceptance/1493-redraft-ac1/ added.
+Date: 2026-11-15  darwin-arm64, Node 24.22.2
+
+Commands (from the checkout root, after npm ci and npm run build --workspaces):
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1493-redraft-ac1 --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1493-redraft-ac1/tsconfig.json
+
+The reference cache was not warmed: the test fails before it reads the cache.
+
+Result: Test Files 1 failed (1); Tests 1 failed (1); vitest exit 1, in 0.2 s. tsc exit 0. The test ran and failed on
+an assertion it names.
+
+census.test.ts
+  × #1493.943e1d6c every listed name has exactly one row, totals sum to the listing's length, mapped equals the aliases;
+      a planted alias with no row and a planted mapped row with no alias each fail, naming the word
+      census.test.ts:24  "familiar@1's pack.json names its census file: [name, version, license, description, requires,
+      recipes, aliases]": expected 'undefined' to be 'string'. The base's familiar@1 has no census.
+
+A check of the redrafted lister (not part of the suite), run once on a made-up source holding each form the rule
+names: it listed A, C, D (from `export { A, B as C, default as D } from`), BoxGeometry (a local `export { X };`), the
+three names of a multi-line local list, gen, f, L, V, K, Q (`export function*|function|let|var|const|class`) and
+MathUtils (`export * as X from`), and nothing for a bare `export * from`, `export { X as default }`, or exports inside
+comments.

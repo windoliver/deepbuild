@@ -396,7 +396,8 @@ impl Hub<'_> {
             }
         }
         // #506: Enter on a focused toggle or press control presses it, as its own UI would: a
-        // toggle turns over from the value it holds, a press gives 1.
+        // toggle turns over from the value it holds, a press gives 1. A pick control on rows
+        // (#539) is a press too, but its Enter picks its focused row, below.
         if let (
             Event::Key {
                 key, cmd: false, ..
@@ -409,7 +410,8 @@ impl Hub<'_> {
                 .get(panel)
                 .and_then(|s| s.scope.focus.clone())
                 .filter(|(_, option)| option.is_none())
-                .map(|(c, _)| c);
+                .map(|(c, _)| c)
+                .filter(|c| !crate::picks::pickers(&doc).iter().any(|p| p.id == *c));
             let control = focused
                 .as_deref()
                 .and_then(|c| Some((c, doc.get("controls")?.get(c)?)));

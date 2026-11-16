@@ -28,6 +28,7 @@ use crate::schedule::{canonical, Hasher};
 pub(super) use inputs::input_fault;
 
 mod aliases;
+pub mod census;
 pub mod deps;
 mod entries;
 mod inputs;
@@ -284,6 +285,9 @@ pub struct Pack {
     /// A familiar-names pack's words (Pack: math@1's `aliases`): each word, the kind it maps to
     /// and the conversion the pack states for it, `{target, conversion, renamed_from?}`, by word.
     pub aliases: BTreeMap<String, Value>,
+    /// Its census (#1493): each name of its reference, and each parameter of a name it maps,
+    /// mapped, refused or open.
+    pub census: Vec<census::Row>,
     /// Its kinds backed by recipes, by `<pack>.<name>@<major>`, each with its kit's result (#202).
     pub kinds: BTreeMap<String, super::pack_kinds::PackKind>,
 }
@@ -529,6 +533,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             aliases::check(a, &holds, &mut issues)
         }
     };
+    let census = match fields.get("census") {
+        None => Vec::new(),
+        Some(c) => census::read(c, &aliases, &mut issues),
+    };
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -543,6 +551,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         digest: digest(manifest),
         entries,
         aliases,
+        census,
         kinds,
     })
 }
@@ -717,6 +726,7 @@ const PACK_KEYS: &[&str] = &[
     "recipes",
     "entries",
     "aliases",
+    "census",
     "assets",
     "providers",
     "layouts",
@@ -1522,6 +1532,20 @@ pub fn manifest_of(
             }
         }
     }
+    // #1493: a familiar-names pack's census, read in place of its file's name.
+    if let Some(file) = fields
+        .get("census")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    {
+        let census = json(&file).map_err(|mut issues| {
+            for i in &mut issues {
+                i.path = "census".into();
+            }
+            issues
+        })?;
+        fields.insert("census".into(), census);
+    }
     Ok(manifest)
 }
 
@@ -1587,7 +1611,7 @@ impl Packs {
         // checks documents of the pack beside the versions it requires.
         let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
             deps::cycle(self, &pack)?;
-            if !pack.kinds.is_empty() {
+            if !pack.kinds.is_empty() || !pack.census.is_empty() {
                 let mut alone = deps::store(self, &pack);
                 // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
                 // load migrator (#1959) is a document's wrong program, never the kit's.
@@ -1596,7 +1620,12 @@ impl Packs {
                 alone.planted.migrate_zero_as_absent = false;
                 alone.planted.migrate_params_only = false;
                 alone.planted.migrate_channels_only = false;
-                super::pack_kinds::kit(&mut pack, sealed, alone)?;
+                // #1493: a parameter a pack's census maps must reach the frame, so each meets
+                // field.effect on its recipe as a kind's field does.
+                super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
+                if !pack.kinds.is_empty() {
+                    super::pack_kinds::kit(&mut pack, sealed, alone)?;
+                }
             }
             Ok(pack)
         });
