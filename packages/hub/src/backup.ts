@@ -11,6 +11,7 @@ import { call, withPrompt } from './client.js';
 import { Confirmer } from './confirm.js';
 import { takeLock } from './lock.js';
 import { dropTestSettings, hubAddress, installedRoot, rootOf } from './paths.js';
+import { activePlant } from './plant.js';
 import { Devices } from './trusted.js';
 import { startOf } from './wire.js';
 import { copySynced, syncPath, writeSynced } from './vfs.js';
@@ -20,8 +21,10 @@ const FOLDERS = ['evidence', 'wiki'] as const;
 
 /** `deep backup <folder>`: through the running hub, into an empty folder. */
 export async function backupCommand(args: readonly string[]): Promise<number> {
-  // A flag where the folder goes is a usage error, never a folder named for it (#2200).
-  if (args.length !== 1 || !args[0] || args[0].startsWith('-')) {
+  // A flag where the folder goes is a usage error, never a folder named for it (#2200). The planted
+  // dispatches-before-help (#1359) still hands its flag on, as the wrong program it plants.
+  const flag = args[0]?.startsWith('-') && activePlant() !== 'dispatches-before-help';
+  if (args.length !== 1 || !args[0] || flag) {
     process.stderr.write('Usage: deep backup <folder>\n');
     return 2;
   }
