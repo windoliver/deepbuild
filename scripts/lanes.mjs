@@ -846,6 +846,8 @@ alone.push(...['103', '365', '262', '761', '1098', '417', '149', '124', '1427', 
 timed.push(...['103', '365', '262', '761', '1098', '148', '417', '1425', '149', '311', '1018', '166', '268', '465', '968'].map((n) => `tests/acceptance/${n}-redraft-1830/budgets.test.ts`),
   'tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts', 'tests/acceptance/1830/ac2-timing.test.ts');
 byHand.push('tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts');
+// #2444: these two landed calling the reference-Mac timing helpers with no entry here, so #1114's grep failed on main.
+timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance/903/ac6-export.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
