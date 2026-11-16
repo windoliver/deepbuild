@@ -1,0 +1,25 @@
+{
+  "attempts": [
+    {
+      "kind": "fixed-path bay",
+      "state": "INCONCLUSIVE",
+      "output": "INCONCLUSIVE no grant: no bay pair came within 30 min",
+      "testsRun": 0
+    },
+    {
+      "kind": "fixed-path shard under test grant",
+      "state": "INCONCLUSIVE",
+      "output": "INCONCLUSIVE no grant: no test grant came within 60 min",
+      "exit": 3,
+      "testsRun": 0
+    }
+  ],
+  "notProven": [
+    "complete integrated #1463 result",
+    "valid reference-Mac timing",
+    "integrated affected result",
+    "new regression-wrapper run",
+    "registered-twin trace run"
+  ],
+  "note": "No pending, missing or unrun check is PASS. Prior individual results remain recorded separately."
+}
