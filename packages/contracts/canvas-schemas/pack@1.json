@@ -272,6 +272,11 @@
             "properties": { "params": { "type": "object" }, "expect": { "type": "string" } },
             "required": ["params", "expect"]
           }
+        },
+        "refuses": {
+          "$comment": "#233: each parameter the recipe's reference takes that no primitive behind it can honor, mapped to its fix; an instance that writes one is refused by name, never dropped.",
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
         }
       },
       "required": ["version", "steps"],

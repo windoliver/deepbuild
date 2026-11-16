@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { strictObject, target, writeThrough } from './agent-files.js';
 import { HOLD_MARGIN_MS, readJson, words } from './claude-settings.js';
 import { shellQuote as q } from './shell.js';
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj } from '@deepbuild/contracts/runtime';
 
 type Obj = Record<string, unknown>;
 

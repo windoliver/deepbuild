@@ -4,7 +4,7 @@
 // replaying it. An event's ID is its identity; its `seq` is its order within its session; its `log_pos`
 // is its position in the log, assigned here at append inside the commit that writes it.
 import { ulid } from '@deepbuild/record/ids';
-import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, renameSync, rmSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contracts';
@@ -242,7 +242,7 @@ function versionsOf(entries: readonly SchemaEntry[], into: Map<string, number[]>
   }
   return into;
 }
-/** The published schemas' versions, read once: they never change in a process, so a record opened again reads none. */
+/** Published versions generated from the schemas at build: one small read, with no work deferred to a hook. */
 let published: ReadonlyMap<string, number[]> | undefined;
 /** A string cut to at most `max` UTF-16 units without splitting a surrogate pair. */
 function cut(text: string, max: number): string {
@@ -329,7 +329,7 @@ class SqliteRecord implements RecordStore {
     this.stale = this.projector.ensure();
     const extra = options.schemas ?? [];
     this.registry = registry([...listSchemas(), ...extra]);
-    published ??= versionsOf(listSchemas(), new Map());
+    published ??= new Map(JSON.parse(readFileSync(new URL('../dist/versions.json', import.meta.url), 'utf8')) as [string, number[]][]);
     this.versions = versionsOf(extra, new Map(published));
     for (const m of options.migrations ?? []) {
       // Forward only, one step per version, so a replay through them always ends.
