@@ -1,0 +1,63 @@
+# #518 acceptance suite, each file once on the merged tree (merge of origin/main into feat/518-encode-job)
+# Run one file at a time under the machine throttle: node node_modules/vitest/vitest.mjs run --root tests/acceptance/518 <file> --testTimeout=600000
+
+== registered.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== av1.test.ts
+     × AC2 #518.3c98d3de on a machine whose decode worker can't decode AV1, the test AV1 tool doesn't qualify and the export is BLOCKED, naming the codec av1, and never delivered 4ms
+AssertionError: BLOCKED: this leg is judged on a machine whose decode worker can't decode AV1, and this one's decoded a frame of an AV1 file; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+
+== trust.test.ts
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+
+== handoff.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== slots.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+== planes.test.ts
+     × AC7 #518.c5c5c15e the 60 s fixture film's 1,440 frames and the 1080p ramp's ten convert to exactly the CPU reference's Y and CbCr planes, on the reference Mac and on the software adapter 27050ms
+AssertionError: BLOCKED: no software adapter can be opened here, so the criterion's software leg isn't judged: {"outcome":"refused","code":"software_adapter_unavailable","adapter":"software","why":"no software adapter opens in this build (#230); the frames draw and hash on the GPU only","core":"core@0.0.0","set_digest":"d29853678ee979b83de6eda48acaed9f8bc6a3610cbb19afc2a976e9b68361d9"}; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== budgets.test.ts
+     × AC8 #518.b0585e2f on the reference Mac a 10 s 1080p60 export as H.264 with AAC takes under 1.05 times the merge base's time (five pairs after a warm-up) 391ms
+AssertionError: BLOCKED: this criterion compares with the merge base, and deep-show at the merge base d8c46f0d58162ff0a4a483544149316aec960637 did not build (cargo build --locked --offline --bin deep-show --no-default-features --features full …, exit 101):
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== blocked.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== open.test.ts
+AC10 #518.f259d9bf the 60 s fixture film: 16.41, 16.50, 16.61 s with the 2.0 s open, 15.41, 15.72, 15.51 s with the 0 s open; growth 1.00 s; the open timed at 2.15, 2.17, 2.14 s
+     × AC10 #518.f259d9bf with a stub tool whose open takes 2.0 s the 60 s fixture film's wall time grows by at most 0.2 s over a stub whose open takes 0 s, and the receipt times the open 114000ms
+AssertionError: INCONCLUSIVE: encoder open: the film's wall time grew by 1.00 s with a 2.0 s open, over 0.2 s (the 2.0 s stub: 16.41, 16.50, 16.61 s; the 0 s stub: 15.41, 15.72, 15.51 s); and the one-minute load is 30.6, above the 18 cores, so the clock readings don't count; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== taste.test.ts
+     × AC11 #518.2feca46b the recorded call on exactly the check run's two screenshots and its recording says they look right; with none the run is INCONCLUSIVE, never PASS 4ms
+AssertionError: INCONCLUSIVE: the check run's screenshots and recording are not in docs/evidence/518/: h264-aac.png, av1.png, both-films.mp4; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+== memory.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+== base.test.ts
+     × AC1 #518.7ecf15cf the 60 s fixture film exported as H.264 with AAC gives the same 1,440 frame hashes and 1,440 PCM hashes as on the merge base 17214ms
+AssertionError: BLOCKED: this criterion compares with the merge base, and deep-show at the merge base d8c46f0d58162ff0a4a483544149316aec960637 did not build (cargo build --locked --offline --bin deep-show --no-default-features --features full …, exit 101):
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
