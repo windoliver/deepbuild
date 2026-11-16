@@ -32,6 +32,9 @@ export type Plant =
   | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
   // #1347's: a run over a workspace's tasks that reads or writes a forge.
   | 'workspace-calls-forge'
+  // #1345's: a lander that records a change landed with its taste calls open as a PASS, and one that lands such a
+  // change though it reaches a release or a published page.
+  | 'lands-as-pass' | 'lands-unreversible'
   // #1349's: a setup that installs another agent than the one the first screen named.
   | 'installs-other-agent'
   // #1342's: a flow that asks whether the work is a workspace or a repo before its card, one that makes the project
@@ -370,6 +373,7 @@ const PLANTS: readonly string[] = [
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
   'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
   'workspace-calls-forge',
+  'lands-as-pass', 'lands-unreversible',
   'asks-which-home', 'creates-before-approval', 'repo-public-by-default', 'empty-list-while-researching',
   'installs-other-agent', 'closes-on-return',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
