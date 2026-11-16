@@ -99,6 +99,8 @@ pub struct Planted {
     pub pointer_glide_before_key: bool,
     /// #903: the tour pointer is a hit target, and a press on it reaches no control.
     pub pointer_takes_hits: bool,
+    /// #1048: the kind's entry declares no edge values.
+    pub no_edges: bool,
 }
 
 impl Planted {
