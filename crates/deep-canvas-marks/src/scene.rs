@@ -27,6 +27,7 @@ use serde_json::{json, Map, Value};
 
 use crate::data;
 use crate::ends;
+use crate::grid_rules::frame_box;
 use crate::key::{ContentKey, KeyBuilder};
 use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
@@ -39,13 +40,27 @@ use deep_canvas::template;
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
-    "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
-    "group@1", "star@1", "frame@1", "series@1", "matte@1", "axes3d@1",
+    "rect@1",
+    "circle@1",
+    "path@1",
+    "text@1",
+    "image@1",
+    "marks@1",
+    "axis@1",
+    "scale@1",
+    "mask@1",
+    "group@1",
+    "star@1",
+    "frame@1",
+    "series@1",
+    "matte@1",
+    "axes3d@1",
+    "vector_field@1",
 ];
 
 /// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
 /// draws for it (the data module's manifest). A build without the data module lacks them.
-pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1"];
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1", "vector_field@1"];
 
 /// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
 pub fn module_of(kind: &str) -> &'static str {
@@ -3910,21 +3925,6 @@ fn ancestor_scope(
     })
 }
 
-fn frame_box(id: &str, item: &Value) -> Result<[f64; 4], Refused> {
-    let b: Option<Vec<f64>> = item
-        .get("params")
-        .and_then(|p| p.get("box"))
-        .and_then(Value::as_array)
-        .map(|b| b.iter().map(|v| num(Some(v))).collect())
-        .unwrap_or(None);
-    b.as_deref()
-        .and_then(|b| <[f64; 4]>::try_from(b).ok())
-        .ok_or(Refused {
-            code: "bad_doc",
-            path: format!("items/{id}/params/box"),
-        })
-}
-
 /// Whether `id` is `root` or has it among its ancestors.
 fn is_under(items: &Map<String, Value>, id: &str, root: &str) -> bool {
     let mut at = Some(id);
@@ -5274,22 +5274,24 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             )?]
         }
         "frame@1" => {
-            // A frame draws its background; its overflow mask scopes its children.
-            let Some(fill) = fill else { return Ok(None) };
-            let bounds = place.rect(frame_box(id, item)?);
-            vec![Mark::Rect {
-                item: id.clone(),
-                bounds,
-                radius: num(params.get("radius")).unwrap_or(0.0),
-                fill: ctx.paints.paint(
-                    id,
-                    fill,
-                    &format!("{paint_path}/fill"),
-                    bounds,
-                    Place::NONE,
-                    false,
-                )?,
-            }]
+            // A frame draws its background, then a grid's rules (#233); its overflow mask scopes
+            // its children.
+            let mut out = Vec::new();
+            if let Some(fill) = fill {
+                let (bounds, radius) = (place.rect(frame_box(id, item)?), num(params.get("radius")));
+                let fill = ctx.paints.paint(id, fill, &format!("{paint_path}/fill"), bounds, Place::NONE, false)?;
+                out.push(Mark::Rect { item: id.clone(), bounds, radius: radius.unwrap_or(0.0), fill });
+            }
+            let rules = crate::grid_rules::rules(id, params, ctx.items);
+            for [a, b] in rules.lines {
+                let [a, b] = [a, b].map(|p| <[f64; 2]>::try_from(&place.rect([p[0], p[1], 0.0, 0.0])[..2]).unwrap_or(p));
+                let color = role(ctx.palette, Some(&rules.role), &format!("{path}/params/rules/role"))?;
+                out.push(crate::ticks::line(format!("{id}#rule"), a, b, rules.width, color));
+            }
+            if out.is_empty() {
+                return Ok(None);
+            }
+            out
         }
         "circle@1" if params.get("arc").is_some() => {
             let center = center()?;
@@ -5382,6 +5384,14 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             fades = drawing.fades;
             drawing.marks
         }
+        "vector_field@1" => crate::vector_field::marks(
+            id,
+            item,
+            ctx.items,
+            ctx.palette,
+            pos,
+            crate::vector_field::Method::Rk4,
+        )?,
         "axis@1" => {
             let channels = ctx.paints.doc.get("channels");
             let drawing = data::axis(id, item, (ctx.items, channels), ctx.palette, pos, ctx.size)?;

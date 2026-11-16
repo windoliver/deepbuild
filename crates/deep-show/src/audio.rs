@@ -665,10 +665,20 @@ impl Hub<'_> {
             })
             .ok_or_else(|| refused("no_display"))?;
         let piece = match piece {
-            Some(p) => Some(Rc::new(
-                deep_logic::piece::check(&p, &Default::default(), &mut History::new())
-                    .map_err(|r| r.0)?,
-            )),
+            Some(p) => {
+                // #213: physics.cast@1 answers on the document's worlds, as they play live.
+                let services: Vec<_> = (doc.as_ref())
+                    .map(|d| crate::physics::cast::service(d, &[], false))
+                    .into_iter()
+                    .collect();
+                let checked = deep_logic::piece::check_bound(
+                    &p,
+                    &Default::default(),
+                    &mut History::new(),
+                    &services,
+                );
+                Some(Rc::new(checked.map_err(|r| r.0)?))
+            }
             None => None,
         };
         let master = mix.buses.iter().position(|b| b.id == "master").unwrap_or(0);
@@ -799,7 +809,7 @@ impl Hub<'_> {
                 let Some(deep) = deep else {
                     return refused("not_reached");
                 };
-                let rows = l.rec.steps_json(&l.piece);
+                let rows = l.rec.steps_json(&l.piece, None);
                 let arrays = rows
                     .as_array()
                     .and_then(|r| r.iter().find(|r| r["step"].as_i64() == Some(step - 1)))

@@ -1,0 +1,19 @@
+== git rev-parse HEAD: 57499bf1852ae85186da0b5462c5f14623549035
+== command: npx vitest run tests/acceptance/190/ac07-no-links.test.ts --no-file-parallelism --reporter=verbose
+== sw_vers: 27.2.1
+Now drawing from 'AC Power'
+== start 2026-11-15 01:37:10  1:37  up 1 day, 18:39, 2 users, load averages: 38.05 33.31 28.37 thermalState 1
+
+
+ RUN  v5.0.5 ~/private/dbc-190
+
+ ✓ tests/acceptance/190/ac07-no-links.test.ts > #190.2d024832 a piece without links is untouched by the linker > #190.2d024832 a piece without links keeps the merge base's rewritten program hash, bake key and golden, and a planted linker that adds an empty linking section to every program changes that hash and fails, naming the piece 55307ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  01:37:10
+   Duration  57.25s (tests 100%)
+
+
+== end 2026-11-15 01:38:08  1:38  up 1 day, 18:40, 2 users, load averages: 42.91 35.65 29.58 thermalState 1
+vitest exit=0

@@ -47,6 +47,8 @@ pub struct PanelScope {
     pub(crate) points: crate::points::Viewer,
     /// #548: the world its logic previews run on.
     pub(crate) preview: Option<crate::preview::Previewer>,
+    /// #542: its text fields and the scroll gesture under way.
+    pub(crate) fields: crate::fields::Viewer,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -95,6 +97,9 @@ pub fn event(v: &Value) -> Option<Event> {
             alt: mods()?.contains(&"alt"),
         },
         "text" => Event::Text(v.get("text")?.as_str()?.to_string()),
+        // #542: a paste, and the input seam's test backend's input method.
+        "paste" => Event::Paste(v.get("text")?.as_str()?.to_string()),
+        "ime" => Event::Ime(v.get("marked")?.as_str()?.to_string()),
         "control" => Event::Control {
             control: v.get("control")?.as_str()?.to_string(),
             value: v.get("value")?.clone(),
@@ -208,6 +213,7 @@ impl Hub<'_> {
                     picks: Default::default(),
                     points: Default::default(),
                     preview: None,
+                    fields: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -339,6 +345,10 @@ impl Hub<'_> {
         // The router's serial, your latest input for the card's display, and the gesture a
         // pop-out needs (#400, #401). A key goes to the panel that holds keyboard focus.
         let (serial, reached) = self.route(panel, event);
+        // #542: any key press of yours ends a scroll's momentum tail, wherever the key goes.
+        if matches!(event, Event::Key { .. }) {
+            self.key_ends_tails();
+        }
         // #507: present mode takes its keys first, Esc included.
         if let Some(reply) = self.present_key(panel, event, serial) {
             return reply;
@@ -367,6 +377,22 @@ impl Hub<'_> {
                         "commits": [{"gesture": serial}], "appended": entry.into_iter().collect::<Vec<_>>()}),
                     Err(e) => e,
                 };
+            }
+        }
+        // #542: the focused text field takes the keys, and a scroll control the wheel over its
+        // area; a press off the field commits it before the scope takes the press.
+        let mut fielded = match self.field_input(panel, &doc, event, g, serial) {
+            Ok((true, appended)) => {
+                return json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                    "commits": [], "appended": appended})
+            }
+            Ok((false, appended)) => appended,
+            Err(e) => return e,
+        };
+        if matches!(event, Event::Down { .. }) {
+            match self.press_leaves_fields(panel, serial) {
+                Ok(c) => fielded.extend(c),
+                Err(e) => return e,
             }
         }
         // #506: Enter on a focused toggle or press control presses it, as its own UI would: a
@@ -408,6 +434,47 @@ impl Hub<'_> {
                 };
             }
         }
+        // #1164: a key a press control binds in its `keys` presses it with the value bound, as
+        // the input module's key rule does, and a logic item reading it bakes again on the
+        // track; every press control that binds it, in key order,
+        // stamped at the playhead where the transport is paused there (Input track: a new entry
+        // where later entries exist forks the track).
+        if let (
+            Event::Key {
+                key,
+                cmd: false,
+                alt: false,
+            },
+            Some(id),
+        ) = (event, doc_id.as_deref())
+        {
+            let at = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.playhead())
+                .unwrap_or(now);
+            let bound: Vec<(String, Value)> = doc
+                .get("controls")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter(|(_, c)| c.get("kind").and_then(Value::as_str) == Some("press"))
+                .filter_map(|(c, spec)| {
+                    Some((c.clone(), spec.get("keys")?.get(key.as_str())?.clone()))
+                })
+                .collect();
+            if !bound.is_empty() {
+                let mut appended = Vec::new();
+                for (c, value) in bound {
+                    match self.pick(id, &c, value, at, serial) {
+                        Ok(entry) => appended.extend(entry),
+                        Err(e) => return e,
+                    }
+                }
+                return json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                    "commits": [{"gesture": serial}], "appended": appended});
+            }
+        }
         // #540: a press of a point control's button, and the drag and release it starts, are the
         // control's entries and never the scope's pan or turn.
         match self.point_pointer(panel, &doc, event, g, serial) {
@@ -424,6 +491,8 @@ impl Hub<'_> {
             Ok(a) => a,
             Err(e) => return e,
         };
+        fielded.append(&mut appended);
+        let mut appended = fielded;
         let picked: Vec<String> = crate::picks::pickers(&doc)
             .into_iter()
             .flat_map(|p| p.sets)

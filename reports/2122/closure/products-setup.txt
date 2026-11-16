@@ -1,0 +1,4 @@
+SETUP real hub product build: OK
+SETUP real worktree placement: OK
+SETUP real hub restart: OK
+SETUP real Products.keep + clone + guards: OK

@@ -1,0 +1,260 @@
+{
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "title": "A bookcase saved at shelf.bookcase@1, dividers 3",
+    "description": "One shelf.bookcase@1 item with width 0.8 and levels 4, dividers 3, as acme/shelf@1.0.0 saved it: a corpus document of the #1959 acceptance suite's shelf pack.",
+    "size": [
+      320,
+      360
+    ],
+    "packs": [
+      "acme/shelf@1.0.0"
+    ],
+    "items": {
+      "shelf-3": {
+        "id": "shelf-3",
+        "name": "Bookcase",
+        "order": "a0",
+        "kind": "shelf.bookcase@1",
+        "params": {
+          "width": 0.8,
+          "levels": 4,
+          "dividers": 3
+        }
+      }
+    }
+  },
+  "values": {
+    "shelf-3.sides.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "shelf-3.sides.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          78,
+          0,
+          0
+        ]
+      }
+    },
+    "shelf-3.boards.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          38,
+          0
+        ]
+      }
+    },
+    "shelf-3.boards.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          78,
+          0
+        ]
+      }
+    },
+    "shelf-3.boards.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          118,
+          0
+        ]
+      }
+    },
+    "shelf-3.boards.3": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          158,
+          0
+        ]
+      }
+    },
+    "shelf-3.walls.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          19,
+          0,
+          0
+        ]
+      }
+    },
+    "shelf-3.walls.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          39,
+          0,
+          0
+        ]
+      }
+    },
+    "shelf-3.walls.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          59.00000000000001,
+          0,
+          0
+        ]
+      }
+    },
+    "shelf-3.plan": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          20
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          170,
+          0
+        ]
+      }
+    }
+  }
+}

@@ -16,7 +16,7 @@ import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import type { Up } from './environment-port.js';
 import type { TimingReport } from '@deepbuild/verdicts';
-import { isRoot, type Hosts } from './hosts.js';
+import { isRoot, type Declared, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
 import type { RunKey } from './gate-runner.js';
 import { FINDINGS, findingOf, type KeyFacts } from './shared-runs.js';
@@ -42,7 +42,9 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
   /** It outlives the hub (#70): a hub's stop leaves it running, and the next hub adopts it rather than running it again. */
   keep?: boolean;
   /** A host your SSH config names, where it runs as the user service named by its run token (#1942), which the journal keeps so a later hub follows it again. */
-  host?: string; token?: string }
+  host?: string; token?: string;
+  /** The changes a run on a host declares it makes, each with its undo as you, recorded once it ends (#1946). */
+  changes?: Declared[] }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -121,6 +123,10 @@ function recordable(run: Run, held: string[]): { spec: Obj; withheld: string[] }
   const stand_ins = run.stand_ins && list('stand_ins', run.stand_ins, 1024, false);
   const deadline = run.deadline !== undefined && Number.isFinite(run.deadline) && run.deadline >= 0 ? run.deadline : null;
   if (run.deadline !== undefined && deadline === null) withheld.push('deadline');
+  // A check of another kind (#1537) and one your spec runs outside the sandbox (#33) aren't kept: rebuilt from the
+  // record, either would run as a plain command inside it.
+  if (run.spec) withheld.push('spec');
+  if (run.outside) withheld.push('outside');
   return {
     spec: {
       argv: argv.length ? argv : ['-'], cwd: cwd || '/', env, grant: grant as JsonValue, deadline_ms: deadline,
@@ -211,7 +217,7 @@ export class Runs {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
   async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, host, cwd = host === undefined ? process.cwd() : '', grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false } = params;
+    const { check, claim, commit, argv, env = {}, host, cwd = host === undefined ? process.cwd() : '', grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false, changes } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
@@ -237,11 +243,15 @@ export class Runs {
       if (isRoot(argv as string[])) throw new Refused(refusal('denied', '/params/argv', `Root on ${String(host)} is never a run's: it comes only as a root plan you approve.`, argv));
       await this.o.hosts().granted(host as string);
     }
+    const declared = changes === undefined || changes === null ? undefined : changes;
+    if (declared !== undefined && (host === undefined || !Array.isArray(declared) || declared.some((c) => !isObj(c) || typeof c.does !== 'string' || !c.does || !Array.isArray(c.changes) || c.changes.some((t) => typeof t !== 'string' || !t) || (c.undo !== null && (typeof c.undo !== 'string' || !c.undo))))) {
+      throw new Refused(refusal('type', '/params/changes', 'Give changes only with host: a list of {does, changes, undo}, each what the run does, what it touches (files by absolute path) and its undo as you there, or null when it has none.', changes));
+    }
     const handle = id ?? `run:${ulid(this.o.now())}`;
     if (heldOut) this.heldOut.add(handle);
     const run = await this.launch({
       run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
-      ...(keep ? { keep } : {}), ...(host !== undefined ? { host: host as string } : {}),
+      ...(keep ? { keep } : {}), ...(host !== undefined ? { host: host as string } : {}), ...(declared?.length ? { changes: declared as Declared[] } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
@@ -306,7 +316,7 @@ export class Runs {
     let ended: Promise<{ code: number | null; failed?: string; missing?: string; record?: CommandRun }>;
     if (run.host) {
       // On a host your SSH config names (#1942): a user service there named by its token, followed to its end.
-      const remote = this.o.hosts().run({ host: run.host, token, argv: run.argv, ...(run.cwd ? { cwd: run.cwd } : {}), env: run.env, output, ...(adopt ? { adopt } : {}) });
+      const remote = this.o.hosts().run({ host: run.host, run: run.run, token, argv: run.argv, ...(run.changes ? { changes: run.changes } : {}), ...(run.cwd ? { cwd: run.cwd } : {}), env: run.env, output, ...(adopt ? { adopt } : {}) });
       ended = remote.ended;
       stop = remote.stop;
     } else if (run.command !== undefined) {
@@ -508,9 +518,12 @@ export class Runs {
         await this.launch(run, true);
         continue;
       }
-      // A kept run is never run again: it runs on, or it ended between the hubs.
-      if (run.keep) {
-        if (await this.o.supervisor().lives(run.run)) this.adopt(run);
+      // A kept run is never run again: it runs on, or it ended between the hubs. One rebuilt from the record doesn't say
+      // it was kept (run.started@3 has no keep), so any run the supervisor still holds alive is one: the others were
+      // reaped when it opened.
+      const lives = await this.o.supervisor().lives(run.run);
+      if (run.keep || lives) {
+        if (lives) this.adopt(run);
         else await this.keptEnded(run);
         continue;
       }

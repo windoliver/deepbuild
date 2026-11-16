@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "23ccefca24e42df0e84b40c312fa8dd8c5bc14c198a82a1fd87da1a23e62602a",
+  "set_digest": "3adf72f78f75f74752fdaabc9bcc738d1fdda6b8c559d80f4fc8f195f27c0b46",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "cells@1": {
@@ -35,7 +35,7 @@
       }
     },
     "data@1": {
-      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
+      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -238,7 +238,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "7f54bcff64a6dcd286b8f8105b80fe7a82577c72a20f6374a84671e452e6e75d",
+      "digest": "734bbdf586002e6672af9efdac8e7dfd67a721aa68f8799fb3ab0154e94ea41b",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -486,6 +486,32 @@
         "writes": [
           "data.columns",
           "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.follow_stream",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.vector_field",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.vector_field"
         ],
         "per": "item"
       },
@@ -973,6 +999,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.vector_field",
       "marks2d.warp",
       "motion.fields",
       "motion.flip",
@@ -985,6 +1012,7 @@
       "look.status"
     ],
     "core.transform": [
+      "data.follow",
       "motion.at",
       "motion.placed",
       "scene3d.rested"

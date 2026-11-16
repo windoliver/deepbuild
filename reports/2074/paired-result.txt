@@ -1,0 +1,7 @@
+base: FAIL affected: 155 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 1284 s at load 134
+candidate: FAIL affected: 152 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 39 passed, in 958 s at load 149
+Candidate-only findings (counted, excluding the expected base acceptance failures):
+2x KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)
+1x KNOWN canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)
+Base-only findings:
+none
