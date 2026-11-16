@@ -19,3 +19,22 @@ exit=0
 == 5. this branch with brief.uncited@1 in the catalogue (#2583, commit c8db2afbb; 1212 open issues)
 catalogue drift: 2 docs and 1212 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (13 listed)
 exit=0
+== 6. the blind live test (node --test tests/acceptance/2405/ac4-contributing.live.test.mjs): the three doc lanes in a
+== copy with CONTRIBUTING.md as the change, through runLanes, the machine's throttle and the lease
+1. 07:43 to 08:22 UTC, the one build slot held by another session's build for the first 30 minutes: no verdict
+﹣ #2405.bb6d2053 AC4 (live): CONTRIBUTING.md says a study adds its names before it files, and the doc lanes pass with CONTRIBUTING.md as the change and every real open issue (2325980.558875ms) # INCONCLUSIVE: a doc lane couldn't read the open issues of windoliver/deepbuild or didn't finish, so it has no verdict
+INCONCLUSIVE catalogue drift: no grant: no build grant came within 30 min
+design links and names: 4345 links checked from 2 docs and 1208 open issues, each landing on a heading or an <a id>; 356 `deep` commands and agent tools named, each in the design or planned (1 planned)
+PASS design links and names (423.16 s)
+public text: 160 dependency and adapter names read as not listed
+public text: 1 changed files, 1 commit messages and 1208 open issues name no studied product
+PASS public text (31.31 s)
+2. 08:21 UTC, once the slot was free
+✔ #2405.bb6d2053 AC4 (live): CONTRIBUTING.md says a study adds its names before it files, and the doc lanes pass with CONTRIBUTING.md as the change and every real open issue (204743.2375ms)
+catalogue drift: 2 docs and 1207 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (13 listed)
+PASS catalogue drift (153.99 s)
+design links and names: 4337 links checked from 2 docs and 1207 open issues, each landing on a heading or an <a id>; 356 `deep` commands and agent tools named, each in the design or planned (1 planned)
+PASS design links and names (0.98 s)
+public text: 160 dependency and adapter names read as not listed
+public text: 1 changed files, 1 commit messages and 1207 open issues name no studied product
+PASS public text (4.11 s)
