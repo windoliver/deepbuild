@@ -11,6 +11,15 @@
 //! other than 0 wakes it first. The controller, each wheel's spin rate and contact, and the drive,
 //! steer and brake each body holds are wrapper state: they ride in the checkpoint after the
 //! world's bytes, and in the canonical state after every body's.
+//!
+//! #2306: ground that moves. A wheel's ray meets any shape but its own chassis's, within the
+//! chassis's collision groups. Its spring's damper, its brake and its grip read the chassis's
+//! velocity at the contact less the touched body's there, a kinematic body's over the coming step
+//! (the pose it is set to reach), which the controller reads only for a dynamic body's grip; and
+//! what its spring, drive, brake and grip push the chassis with goes back, equal and opposite, at
+//! the contact, to a dynamic body under it, as an impulse over the step, and the wheel spins by
+//! its travel over that body. A static or kinematic body takes nothing, so a car on static ground
+//! moves exactly as before.
 
 use std::f32::consts::PI;
 
@@ -19,7 +28,8 @@ use deep_canvas_physics::backend::{
 };
 use deep_canvas_physics::doc::{self, World};
 use deep_canvas_physics::occurrence::{self, Payload, Raw};
-use rapier3d::control::{DynamicRayCastVehicleController, WheelTuning};
+use rapier3d::control::{DynamicRayCastVehicleController, Wheel, WheelTuning};
+use rapier3d::dynamics::RigidBodyPosition;
 use rapier3d::math::Rotation;
 use rapier3d::prelude::*;
 
@@ -50,6 +60,11 @@ pub enum Plant {
     PlaceKeepsAngular,
     /// A check that refuses only a vehicle body's wheel too many (the runner's).
     WheelsOnly,
+    /// #2306: the controller as it is: nothing goes back to the body under a wheel, and a kinematic
+    /// one's velocity is read as the last step left it, by the brake only.
+    GroundTakesNothing,
+    /// #2306: each wheel's grip reads the chassis's velocity alone, whatever is under it.
+    GripChassisOnly,
 }
 
 /// One vehicle body: its chassis, its wheels as written (by name, the controller's order), the
@@ -143,13 +158,68 @@ fn steers(v: &doc::Vehicle, steer: f64, plant: Plant) -> Vec<f64> {
     }
 }
 
+/// What a wheel's ray of `chassis` meets: a shape on any body but its own, dynamic bodies'
+/// included, within the collision groups of the chassis's shape uses taken together.
+fn meets(world: &PhysicsWorld, chassis: RigidBodyHandle) -> QueryFilter<'static> {
+    let none = InteractionGroups::new(Group::empty(), Group::empty(), InteractionTestMode::And);
+    let groups = world.bodies[chassis].colliders().iter().fold(none, |g, h| {
+        let c = world.colliders[*h].collision_groups();
+        InteractionGroups::new(
+            g.memberships | c.memberships,
+            g.filter | c.filter,
+            InteractionTestMode::And,
+        )
+    });
+    QueryFilter::default()
+        .exclude_rigid_body(chassis)
+        .groups(groups)
+}
+
+/// The body under a wheel's contact `p` on `ground`, when it isn't static: a kinematic one's
+/// velocity there over the coming step, from its pose to the pose it is set to reach, and none to
+/// push back; a dynamic one, whose velocity there is read as it changes, and which takes back
+/// what the wheel pushes the chassis with.
+fn under(world: &PhysicsWorld, ground: ColliderHandle, p: Vector) -> Option<Under> {
+    let h = world.colliders.get(ground)?.parent()?;
+    let rb = world.bodies.get(h)?;
+    if rb.is_dynamic() {
+        return Some(Under::Dynamic(h));
+    }
+    if !rb.is_kinematic() {
+        return None;
+    }
+    let local = rb.mass_properties().local_mprops.local_com;
+    let poses = RigidBodyPosition {
+        position: *rb.position(),
+        next_position: *rb.next_position(),
+    };
+    let v = poses.interpolate_velocity(world.integration_parameters.inv_dt(), local);
+    Some(Under::Kinematic(
+        v.velocity_at_point(p, *rb.position() * local),
+    ))
+}
+
+/// A body under a wheel that isn't static (`under`).
+#[derive(Clone, Copy, Debug)]
+enum Under {
+    Kinematic(Vector),
+    Dynamic(RigidBodyHandle),
+}
+
+/// How much an impulse along `dir` at `p` changes the velocity of body `rb` there, along `dir`.
+fn reach(rb: &RigidBody, p: Vector, dir: Vector) -> f32 {
+    let m = rb.mass_properties();
+    let d = p - m.world_com;
+    let turn = (m.effective_world_inv_inertia * d.cross(dir)).cross(d);
+    m.local_mprops.inv_mass + dir.dot(turn)
+}
+
 /// Each wheel's ray cast down its chassis from its mount over its rest length and radius,
 /// against the world as it stands: the point and normal it meets, and the shape's collider.
 fn rays(world: &PhysicsWorld, c: &Car) -> Vec<Option<(Vector, Vector, ColliderHandle)>> {
     let pose = *world.bodies[c.chassis].position();
     let down = pose.rotation * -Vector::Y;
-    let filter = QueryFilter::default().exclude_rigid_body(c.chassis);
-    let queries = world.query_pipeline_with_filter(filter);
+    let queries = world.query_pipeline_with_filter(meets(world, c.chassis));
     c.spec
         .wheels
         .values()
@@ -165,13 +235,16 @@ fn rays(world: &PhysicsWorld, c: &Car) -> Vec<Option<(Vector, Vector, ColliderHa
 /// impulse along its heading that brings its contact's rolling to rest against the ground, taken
 /// in turn over the wheels a few times so they hold together, each wheel's whole impulse within
 /// `most` (its share of the brake over the step) and never past rest, so it never pushes a wheel
-/// backwards. The impulses change the chassis's velocity before the step, as a contact's do.
-fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32) {
+/// backwards. The impulses change the chassis's velocity before the step, as a contact's do; a
+/// dynamic body under a wheel takes each back at the contact, and its own velocity and give join
+/// the rule's.
+fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32, plant: Plant) {
     // Each braking wheel on the ground: its contact, heading (its axle turned by its steer, on
-    // the ground's plane, crossed into the normal) and the ground's velocity there.
+    // the ground's plane, crossed into the normal), the velocity there of a static or kinematic
+    // body under it, and a dynamic body under it.
     let rot = *world.bodies[c.chassis].rotation();
     let hits = rays(world, c);
-    let wheels: Vec<(Vector, Vector, Vector)> = hits
+    let wheels: Vec<(Vector, Vector, Vector, Option<RigidBodyHandle>)> = hits
         .iter()
         .zip(c.spec.wheels.values())
         .zip(steer)
@@ -185,24 +258,72 @@ fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32) {
                 .get(g)?
                 .parent()
                 .and_then(|b| world.bodies.get(b));
-            let v = ground.map_or(Vector::ZERO, |b| b.velocity_at_point(p));
-            Some((p, n.cross(axle).normalize_or_zero(), v))
+            let forward = n.cross(axle).normalize_or_zero();
+            let (v, back) = match under(world, g, p).filter(|_| plant != Plant::GroundTakesNothing)
+            {
+                Some(Under::Kinematic(v)) => (v, None),
+                Some(Under::Dynamic(h)) => (Vector::ZERO, Some(h)),
+                None => (
+                    ground.map_or(Vector::ZERO, |b| b.velocity_at_point(p)),
+                    None,
+                ),
+            };
+            Some((p, forward, v, back))
         })
         .collect();
-    let rb = &mut world.bodies[c.chassis];
     let mut total = vec![0.0f32; wheels.len()];
     for _ in 0..HOLD_PASSES {
-        for ((p, forward, ground), sum) in wheels.iter().zip(&mut total) {
-            let m = rb.mass_properties();
-            let d = *p - m.world_com;
-            let turn = (m.effective_world_inv_inertia * d.cross(*forward)).cross(d);
-            let denominator = m.local_mprops.inv_mass + forward.dot(turn);
-            let j = -forward.dot(rb.velocity_at_point(*p) - *ground) / denominator;
+        for ((p, forward, ground, back), sum) in wheels.iter().zip(&mut total) {
+            let rb = &world.bodies[c.chassis];
+            let mut denominator = reach(rb, *p, *forward);
+            let mut rel = rb.velocity_at_point(*p) - *ground;
+            if let Some(b) = back.map(|h| &world.bodies[h]) {
+                denominator += reach(b, *p, *forward);
+                rel -= b.velocity_at_point(*p);
+            }
+            let j = -forward.dot(rel) / denominator;
             let next = (*sum + j).clamp(-most, most);
-            rb.apply_impulse_at_point(*forward * (next - *sum), *p, false);
+            let impulse = *forward * (next - *sum);
+            world.bodies[c.chassis].apply_impulse_at_point(impulse, *p, false);
+            if let Some(h) = back {
+                world.bodies[*h].apply_impulse_at_point(-impulse, *p, true);
+            }
             *sum = next;
         }
     }
+}
+
+/// A touching wheel's spring push on a chassis `rb` (at the velocities the controller read) with
+/// its damper reading the chassis's velocity at the contact less `ground`'s there, by the
+/// controller's own rule.
+fn sprung(w: &Wheel, rb: &RigidBody, ground: Vector) -> f32 {
+    let r = w.raycast_info();
+    let n = r.contact_normal_ws;
+    let denominator = n.dot(w.suspension());
+    let (inv, rel) = if denominator >= -0.1 {
+        (1.0 / 0.1, 0.0)
+    } else {
+        let inv = -1.0 / denominator;
+        (
+            inv,
+            n.dot(rb.velocity_at_point(r.contact_point_ws) - ground) * inv,
+        )
+    };
+    let spring = w.suspension_stiffness * (w.suspension_rest_length - r.suspension_length) * inv;
+    let damper = if rel < 0.0 {
+        w.damping_compression
+    } else {
+        w.damping_relaxation
+    };
+    ((spring - damper * rel) * rb.mass()).max(0.0)
+}
+
+/// The controller's grip impulse along `axle` at `p` on a chassis `rb` alone, by its own rule
+/// (a fifth of the impulse that stops the slip there), for the slip velocity `slip` along it.
+fn grip(rb: &RigidBody, p: Vector, axle: Vector, slip: f32) -> f32 {
+    let m = rb.mass_properties();
+    let iaj = m.effective_world_inv_inertia * (p - m.world_com).cross(axle);
+    -0.2 * slip / (m.local_mprops.inv_mass + iaj.dot(iaj))
 }
 
 /// How many times the brake takes its wheels in turn.
@@ -345,7 +466,7 @@ impl Vehicles {
         // A brake above 0 keeps every wheel from driving, and holds each touching braking wheel
         // first, so the controller works from the velocities it leaves.
         if c.brake > 0.0 {
-            hold(world, c, &steer, brake_share * dt);
+            hold(world, c, &steer, brake_share * dt, plant);
         }
         let rb = &world.bodies[h];
         let (v0, w0) = (rb.linvel(), rb.angvel());
@@ -356,7 +477,7 @@ impl Vehicles {
             (w.engine_force, w.brake) = (0.0, 0.0);
         }
         let spun: Vec<f32> = c.ctl.wheels().iter().map(|w| w.rotation).collect();
-        let filter = QueryFilter::default().exclude_rigid_body(h);
+        let filter = meets(world, h);
         let queries = world.broad_phase.as_query_pipeline_mut(
             world.narrow_phase.query_dispatcher(),
             &mut world.bodies,
@@ -364,6 +485,22 @@ impl Vehicles {
             filter,
         );
         c.ctl.update_vehicle(dt, queries);
+        // A touching wheel spins by its contact's forward travel over the body under it, which
+        // the controller takes over the world.
+        for w in c.ctl.wheels_mut().iter_mut() {
+            let r = w.raycast_info();
+            let (p, n, g) = (r.contact_point_ws, r.contact_normal_ws, r.ground_object);
+            let under = g
+                .filter(|_| r.is_in_contact)
+                .and_then(|g| under(world, g, p));
+            let ground = match under.filter(|_| plant != Plant::GroundTakesNothing) {
+                Some(Under::Kinematic(v)) => v,
+                Some(Under::Dynamic(h)) => world.bodies[h].velocity_at_point(p),
+                None => continue,
+            };
+            let forward = n.cross(w.axle()).normalize_or_zero();
+            w.rotation -= forward.dot(ground) * dt / w.radius;
+        }
         for ((t, w), s) in c.turned.iter_mut().zip(c.ctl.wheels()).zip(spun) {
             *t = w.rotation - s;
         }
@@ -373,9 +510,48 @@ impl Vehicles {
         rb.set_angvel(w0, false);
         // Rapier keeps a torque from step to step until it is reset; `push` resets forces only.
         rb.reset_torques(false);
+        // Each touching wheel's spring push and grip impulse: the controller's on static ground;
+        // on a body that isn't, its damper and grip read the chassis's velocity less that body's.
+        let pushes: Vec<(f32, f32, Option<RigidBodyHandle>)> = c
+            .ctl
+            .wheels()
+            .iter()
+            .map(|w| {
+                let r = w.raycast_info();
+                let (load, side) = (w.wheel_suspension_force, w.side_impulse);
+                let below = r.ground_object.filter(|_| r.is_in_contact);
+                let below = below.and_then(|g| under(world, g, r.contact_point_ws));
+                let rb = &world.bodies[h];
+                let n = r.contact_normal_ws;
+                let axle = (w.axle() - n * w.axle().dot(n)).normalize_or_zero();
+                let p = r.contact_point_ws;
+                match (below, plant) {
+                    (None, _) | (_, Plant::GroundTakesNothing) => (load, side, None),
+                    (Some(Under::Dynamic(g)), Plant::GripChassisOnly) => {
+                        let ground = world.bodies[g].velocity_at_point(p);
+                        let slip = axle.dot(rb.velocity_at_point(p));
+                        (sprung(w, rb, ground), grip(rb, p, axle, slip), Some(g))
+                    }
+                    // The controller's grip already reads a dynamic body's velocity.
+                    (Some(Under::Dynamic(g)), _) => {
+                        let ground = world.bodies[g].velocity_at_point(p);
+                        (sprung(w, rb, ground), side, Some(g))
+                    }
+                    (Some(Under::Kinematic(_)), Plant::GripChassisOnly) => {
+                        (sprung(w, rb, Vector::ZERO), side, None)
+                    }
+                    (Some(Under::Kinematic(v)), _) => {
+                        let carried = side - grip(rb, p, axle, axle.dot(v));
+                        (sprung(w, rb, v), carried, None)
+                    }
+                }
+            })
+            .collect();
+        let mut back = Vec::new();
         let rb = &mut world.bodies[h];
         let (up, com) = (*rb.rotation() * Vector::Y, rb.center_of_mass());
-        for (w, spec) in c.ctl.wheels().iter().zip(c.spec.wheels.values()) {
+        let wheels = c.ctl.wheels().iter().zip(c.spec.wheels.values());
+        for ((w, spec), (load, side, below)) in wheels.zip(pushes) {
             let r = w.raycast_info();
             if !r.is_in_contact {
                 continue;
@@ -384,20 +560,30 @@ impl Vehicles {
             let axle = (w.axle() - n * w.axle().dot(n)).normalize_or_zero();
             let p = r.contact_point_ws;
             let forward = n.cross(axle).normalize_or_zero();
-            rb.add_force_at_point(n * w.wheel_suspension_force, p, false);
+            let mut pushed = n * load;
+            rb.add_force_at_point(pushed, p, false);
             // A drive pushes each touching driving wheel along its heading by its share.
             if c.brake <= 0.0 && spec.drives && c.drive != 0.0 {
-                rb.add_force_at_point(forward * (c.drive / drives), p, false);
+                let drive = forward * (c.drive / drives);
+                rb.add_force_at_point(drive, p, false);
+                pushed += drive;
             }
-            if w.side_impulse != 0.0 {
+            if side != 0.0 {
                 // Its grip resists the sideways slip up to grip × the load its spring carries; at
                 // the point the controller applies it, lifted toward the centre of mass by its
                 // roll influence of 0.1.
-                let most = spec.grip as f32 * w.wheel_suspension_force;
-                let side = (w.side_impulse / dt).clamp(-most, most);
+                let most = spec.grip as f32 * load;
+                let side = (side / dt).clamp(-most, most);
                 let q = p - up * (up.dot(p - com) * 0.9);
                 rb.add_force_at_point(axle * side, q, false);
+                pushed += axle * side;
             }
+            back.extend(below.map(|g| (g, pushed, p)));
+        }
+        // A dynamic body under a wheel takes back what the wheel pushed the chassis with, over
+        // the step, at its contact.
+        for (g, pushed, p) in back {
+            world.bodies[g].apply_impulse_at_point(-pushed * dt, p, true);
         }
         Some(())
     }
