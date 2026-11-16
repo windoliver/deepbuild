@@ -1,10 +1,10 @@
 parallel node: tests/acceptance/2314/probes.test.mjs
-INVALID deps: cargo metadata could not read research_notes/<redacted>:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
-INVALID deps: cargo metadata could not read research_notes/<redacted>:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
-INVALID deps: cargo metadata could not read research_notes/<redacted>:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
-INVALID deps: cargo metadata could not read research_notes/<redacted>:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
-INVALID deps: cargo metadata could not read research_notes/<redacted>: Alternatively, to keep it out of the workspace, add the package to the `workspace.exclude` array, or add an empty `[workspace]` table to the package's manifest.
-INVALID deps: cargo metadata could not read research_notes/<redacted>:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
+INVALID deps: cargo metadata could not read research_notes/<private study>/probe/Cargo.toml:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
+INVALID deps: cargo metadata could not read research_notes/<private study>/probe/Cargo.toml:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
+INVALID deps: cargo metadata could not read research_notes/<private study>/probe/Cargo.toml:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
+INVALID deps: cargo metadata could not read research_notes/<private study>/probe/brtable/Cargo.toml:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
+INVALID deps: cargo metadata could not read research_notes/<private study>/probe/eigen/Cargo.toml: Alternatively, to keep it out of the workspace, add the package to the `workspace.exclude` array, or add an empty `[workspace]` table to the package's manifest.
+INVALID deps: cargo metadata could not read research_notes/<private study>/round/probe/profile/Cargo.toml:   either src/lib.rs, src/main.rs, a [lib] section, or [[bin]] section must be present
 NEW FAIL tests/acceptance/2314/probes.test.mjs › (file): reported no test
 NEW FAIL secrets: packages/archive/test/scrub-boundary.test.ts: private key
 NEW FAIL secrets: packages/evidence/test/scrub-prefix.test.ts: private key
@@ -35,78 +35,78 @@ NEW FAIL secrets: reports/2365/first-change.txt: home path
 NEW FAIL secrets: reports/2365/redraft5.txt: home path
 NEW FAIL secrets: reports/2365/regressions.txt: home path
 NEW FAIL secrets: reports/2365/tail-identity.txt: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
-NEW FAIL secrets: research_notes/<redacted>: home path
+NEW FAIL secrets: research_notes/<private study>/A-geometry.md: home path
+NEW FAIL secrets: research_notes/<private study>/A-geometry.md: home path
+NEW FAIL secrets: research_notes/<private study>/B-nodes-data.md: home path
+NEW FAIL secrets: research_notes/<private study>/B-nodes-data.md: home path
+NEW FAIL secrets: research_notes/<private study>/B-nodes-data.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/C-render.md: home path
+NEW FAIL secrets: research_notes/<private study>/C-render.md: home path
+NEW FAIL secrets: research_notes/<private study>/D-anim-physics.md: home path
+NEW FAIL secrets: research_notes/<private study>/D-anim-physics.md: home path
+NEW FAIL secrets: research_notes/<private study>/E-io-app.md: home path
+NEW FAIL secrets: research_notes/<private study>/F-sentiment.md: home path
+NEW FAIL secrets: research_notes/<private study>/I-second-pass-data-physics-review.md: home path
+NEW FAIL secrets: research_notes/<private study>/A-foundation.md: home path
+NEW FAIL secrets: research_notes/<private study>/B-rendering.md: home path
+NEW FAIL secrets: research_notes/<private study>/C-animation-physics-audio.md: home path
+NEW FAIL secrets: research_notes/<private study>/D-scene-gui-scripting.md: home path
+NEW FAIL secrets: research_notes/<private study>/E-editor-tests-tooling.md: home path
+NEW FAIL secrets: research_notes/<private study>/E-editor-tests-tooling.md: home path
+NEW FAIL secrets: research_notes/<private study>/F-sentiment.md: home path
+NEW FAIL secrets: research_notes/<private study>/F-sentiment.md: home path
+NEW FAIL secrets: research_notes/<private study>/G-our-packages.md: home path
+NEW FAIL secrets: research_notes/<private study>/G-our-packages.md: home path
+NEW FAIL secrets: research_notes/<private study>/A-foundation.md: home path
+NEW FAIL secrets: research_notes/<private study>/B-rendering.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/D-gameplay-world-ui.md: home path
+NEW FAIL secrets: research_notes/<private study>/E-editor-testing-agents.md: home path
+NEW FAIL secrets: research_notes/<private study>/F-sentiment.md: home path
+NEW FAIL secrets: research_notes/<private study>/G-our-packages.md: home path
+NEW FAIL secrets: research_notes/<private study>/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/probe/archive/build.mjs: home path
+NEW FAIL secrets: research_notes/<private study>/probe/lanes/build.mjs: home path
+NEW FAIL secrets: research_notes/<private study>/probe/spawn/build.mjs: home path
+NEW FAIL secrets: research_notes/<private study>/12-deepbuild-inventory.md: home path
+NEW FAIL secrets: research_notes/<private study>/3-remote-trust.md: home path
+NEW FAIL secrets: research_notes/<private study>/5-sync-orchestration.md: home path
+NEW FAIL secrets: research_notes/<private study>/6-desktop-providers.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/A-scene-shading-motion.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/B-renderers-nodes-post.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/BRIEF.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/C-formats-geometry.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/D-interaction-xr-project.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/E-our-packages.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/E-our-packages.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/F-sentiment-users.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/F-sentiment-users.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/F-sentiment-users.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/F-sentiment-users.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/F-sentiment-users.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/F-sentiment-users.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/G-project-record.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/G-project-record.md: home path
+NEW FAIL secrets: research_notes/<private study>/round2/G-project-record.md: home path
 NEW FAIL secrets: tests/acceptance/1575-redraft-ac1/BASE-FAILURE.txt: home path
 NEW FAIL deps: crates/deep-codecs/Cargo.toml dependencies deep-canvas-cells * path=../deep-canvas-cells is not in scripts/repo-rules.json
 NEW FAIL deps: crates/deep-app/Cargo.toml dependencies deep-images * path=../deep-images is not in scripts/repo-rules.json
