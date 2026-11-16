@@ -106,3 +106,13 @@ planted twin or a mutant for new code"). Not verified by a run.
 
 Temp folders are the `/tmp/dh20-*` ones #20's helpers make and remove; its helpers also clear the agents' variables
 and point `HOME` at a temp folder. All data is generated; there are no keys and no home data.
+
+## Repair (2026-11-15, owner-approved plumbing repair)
+
+One defect in how a failure is reported, found on the first run at the base, was repaired by a separate maintenance
+job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and no test's name or limit.
+
+- `helpers.ts`, `copiedAgainFromStart`: when the archived transcript differs from the rewritten file, it now throws
+  its own message with `firstDifference`'s text in full. It asserted through `expect(…).toBeUndefined()`, whose message
+  the runner cut to `expected 'line 3 (session:…' to be undefined`, so the twin's test never saw `line 3
+  (session:<id>#m3) differs`. `firstDifference`, what it compares and the check's other assertions are unchanged.

@@ -49,8 +49,10 @@ async function readsNone(w: World, pass: () => Promise<void>, sources: readonly 
     watch.stop();
   }
   const read = sources.map((s) => ({ s, bytes: watch.bytes(s.path) })).filter((r) => r.bytes > 0);
-  expect(read.map((r) => `${r.s.what} (${r.s.path}): ${r.bytes} bytes by ${[...new Set(watch.reads.filter((x) => x.path === r.s.path).map((x) => x.how))].join(', ')}`),
-    `${AC5} a second pass over unchanged transcripts reads none of them`).toEqual([]);
+  // Thrown with each source in full: the runner's own message for a list that should be empty cuts it to `[ …(3) ]`.
+  if (read.length) {
+    throw Error(`${AC5} a second pass over unchanged transcripts reads none of them, but it read ${read.map((r) => `${r.s.what} (${r.s.path}): ${r.bytes} bytes by ${[...new Set(watch.reads.filter((x) => x.path === r.s.path).map((x) => x.how))].join(', ')}`).join('; ')}`);
+  }
 }
 
 // benchmarks/archive.mjs's transcript(seed, size), reproduced byte for byte: the perf tasks' inputs.

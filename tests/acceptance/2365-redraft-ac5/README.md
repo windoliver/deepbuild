@@ -132,3 +132,16 @@ requires them to hold. Both twins are built only on the record's and the store's
 - `wrong.ts`: the two twins.
 - `suite.test.ts`: #20's suite and the twin tests. `perf.test.ts`: #20's perf tasks and budget transcripts.
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
+
+## Repair (2026-11-15, owner-approved plumbing repair)
+
+One defect in how the merge base is run, found on the first run at the base, was repaired by a separate maintenance
+job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and no test's name or limit.
+
+- `base-copy.mjs`: the child now registers a module-resolution hook (`registerHooks`, as `scripts/lifecycle-sim.mjs`
+  does) that resolves a relative `.js` import made from a `.ts` file to the `.ts` beside it. The merge base's sources
+  import their siblings as `.js` (`./intake.js` from `packages/evidence/src/index.ts`), which Node's
+  `--experimental-transform-types` doesn't map to `.ts`, so the child ended with `ERR_MODULE_NOT_FOUND` and every test
+  that needs the merge base's copies was BLOCKED. The child still runs the merge base's exported sources on the same
+  files, the copies are compared byte for byte as before, and a child that doesn't run is still BLOCKED (`base.ts`,
+  unchanged).

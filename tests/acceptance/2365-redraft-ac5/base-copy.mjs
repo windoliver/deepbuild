@@ -5,8 +5,20 @@
 // pass of its archive over the homes in `env`, and writes each copy every transcript.archived event links, read back
 // from its store, to `out`, with out/manifest.json naming them in log order. It never writes to the test's world.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { registerHooks } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+// The merge base's sources import their siblings as .js; the source beside each is .ts, which Node doesn't try
+// (resolved as scripts/lifecycle-sim.mjs resolves them).
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.startsWith('.') && specifier.endsWith('.js') && context.parentURL?.endsWith('.ts')) {
+      try { return next(`${specifier.slice(0, -3)}.ts`, context); } catch { /* a real .js */ }
+    }
+    return next(specifier, context);
+  },
+});
 
 const job = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const load = (path) => import(pathToFileURL(join(job.base, path)).href);

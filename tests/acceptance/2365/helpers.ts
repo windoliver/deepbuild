@@ -130,6 +130,7 @@ export interface Diff {
   ended?: 'actual' | 'expected';
 }
 const HEAD = 240;
+const UUID = /"uuid":"([^"]+)"/;
 /** Compares two byte streams; where they differ, the line and both sides of it. */
 export async function compareBytes(actual: Bytes, expected: Bytes): Promise<Diff> {
   const a = new Reader(actual[Symbol.asyncIterator]());
@@ -137,10 +138,15 @@ export async function compareBytes(actual: Bytes, expected: Bytes): Promise<Diff
   let matched = 0;
   let line = 1;
   let head = Buffer.alloc(0);
+  // The current line's `uuid`, once the bytes matched on it hold one, and the last bytes matched on it until then:
+  // `head` keeps only the line's start, so a `uuid` past it and before the first difference would be lost.
+  let uuid: string | undefined;
+  let tail = Buffer.alloc(0);
   const differ = async (ended?: 'actual' | 'expected'): Promise<Diff> => {
-    const exp = Buffer.concat([head, await b.restOfLine()]).toString('utf8');
+    const rest = await b.restOfLine();
+    const exp = Buffer.concat([head, rest]).toString('utf8');
     const act = Buffer.concat([head, await a.restOfLine()]).toString('utf8');
-    const uuid = /"uuid":"([^"]+)"/.exec(exp)?.[1];
+    uuid ??= UUID.exec(Buffer.concat([tail, rest]).toString('utf8'))?.[1];
     return { equal: false, matched, line, expectedLine: exp, actualLine: act, ...(uuid ? { uuid } : {}), ...(ended ? { ended } : {}) };
   };
   for (;;) {
@@ -158,6 +164,12 @@ export async function compareBytes(actual: Bytes, expected: Bytes): Promise<Diff
     let last = -1;
     for (let nl = same.indexOf(10); nl >= 0; nl = same.indexOf(10, nl + 1)) { line++; last = nl; }
     head = last >= 0 ? Buffer.from(same.subarray(last + 1, last + 1 + HEAD)) : head.length < HEAD ? Buffer.concat([head, same.subarray(0, HEAD - head.length)]) : head;
+    if (last >= 0) { uuid = undefined; tail = Buffer.alloc(0); }
+    if (uuid === undefined) {
+      const seen = Buffer.concat([tail, same.subarray(last + 1)]);
+      uuid = UUID.exec(seen.toString('utf8'))?.[1];
+      tail = Buffer.from(seen.subarray(-HEAD));
+    }
     matched += k;
     a.pos += k;
     b.pos += k;

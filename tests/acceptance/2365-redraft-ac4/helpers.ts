@@ -200,7 +200,9 @@ export function copiedAgainFromStart(r: Rewritten): void {
   const session = handle(r.s.id);
   expect(r.passError === undefined ? undefined : String((r.passError as Error)?.message ?? r.passError), `${session}: the pass after the rewrite completes`).toBeUndefined();
   expect(firstDifference(r.firstReading, messagesOf(LINES, () => 'draft'), session), `${session}: before the rewrite, the archived transcript reads as the file first written`).toBeUndefined();
-  expect(firstDifference(r.reading, messagesOf(TOTAL, versionAfter(r.rewritten)), session), `${session}: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line`).toBeUndefined();
+  // Thrown with the difference in full: the runner's own message for a value that should be undefined cuts it short.
+  const differs = firstDifference(r.reading, messagesOf(TOTAL, versionAfter(r.rewritten)), session);
+  if (differs !== undefined) throw Error(`${session}: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line: ${differs}`);
   for (const p of r.probes) {
     expect(p.text, `${p.handle} resolves through the new parts to message ${p.n} of the rewritten file (${versionAfter(r.rewritten)(p.n)})`).toBe(said(p.n, versionAfter(r.rewritten)(p.n)).text);
   }

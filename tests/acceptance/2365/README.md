@@ -184,3 +184,17 @@ Each twin test passes when its check fails as named; it holds on the base too, s
   evidence bytes are judged on any machine.
 - **What a held hook waits during a pass**, which the issue says its probe didn't measure, is not measured here either.
 - **The Proof's table** (`probe/proof.mjs`) prints the probe's passes for the base and the change; it judges nothing.
+
+## Repair (2026-11-15, owner-approved plumbing repair)
+
+Two defects in how a failure is reported, found on the first run at the base, were repaired by a separate maintenance
+job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and no test's name or limit.
+
+- `helpers.ts`, `compareBytes`: it now keeps the `uuid` of the line it is comparing, so the failure names the first
+  differing line and its message. It kept only the line's first 240 bytes and the bytes from the first difference on,
+  so a `uuid` between them was lost: the append-tail twin's failure read `first differs at line 6, byte …` with no
+  `(message <uuid>)`. Every byte is compared as before, a chunk at a time.
+- `identity.test.ts`, `readsNone`: it now throws its own message naming each source read, its path, its bytes and how
+  it was read. It asserted through `expect(list).toEqual([])`, whose message the runner cut to `expected [ …(3) ] to
+  deeply equal []`, so the re-reading twin's test never saw the names. It fails on the same condition as before: a
+  watched source with bytes read.
