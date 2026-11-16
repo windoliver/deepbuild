@@ -21,7 +21,7 @@
       "default": "./dist/meta.js"
     }
   },
-  "scripts": { "build": "tsc -p tsconfig.json" },
+  "scripts": { "build": "node build-versions.mjs && tsc -p tsconfig.json" },
   "dependencies": {
     "@deepbuild/contracts": "0.0.0",
     "@deepbuild/evidence": "0.0.0",

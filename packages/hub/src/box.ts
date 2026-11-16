@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { parseDocument, isSeq } from 'yaml';
+import { yaml } from './yaml.js';
 import { ulid } from '@deepbuild/record';
 import type { Plant } from './plant.js';
 import { installedCodex, recordedHome } from './codex-settings.js';
@@ -213,6 +213,7 @@ export class Box {
   private specWithout(c: Extract<Change, { kind: 'spec' }>): string | undefined {
     const bytes = bytesOf(join(c.root, SPEC));
     if (!bytes) return undefined;
+    const { parseDocument, isSeq } = yaml();
     const doc = parseDocument(bytes.toString('utf8'));
     let changed = false;
     const claims = doc.get('claims');

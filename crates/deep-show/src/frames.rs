@@ -582,6 +582,15 @@ impl<'a> Hub<'a> {
                 }
             }
         }
+        // #903: the tour pointer as this frame draws it, in px of the frame at its own size.
+        if e.tour_pointer {
+            let form = self.played_form(&e.doc).map(|form| match &e.track {
+                Some(track) => crate::played::with_track(&form, track),
+                None => form,
+            });
+            let pointer = form.and_then(|f| self.tour_pointer(&f, t, reduced));
+            reply["tour_pointer"] = crate::tour::reading(pointer);
+        }
         // #504: an eval's own track lasts the call: the session goes back to the hub's.
         if e.track.is_some() {
             self.replay(&e.doc, t);

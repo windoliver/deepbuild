@@ -97,6 +97,7 @@ mod test_sim;
 mod test_threads;
 mod time;
 mod timings;
+mod tour;
 mod track_call;
 #[cfg(any(
     feature = "test-json",
@@ -772,6 +773,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 data_hash: flag("data_hash")?,
                 texts: flag("texts")?,
                 carried: flag("carried")?,
+                tour_pointer: flag("tour_pointer")?,
             })));
         }
         "frames" => {
@@ -3289,6 +3291,9 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
         "close_by_spelling" => Ok(StartPlanted::Seal(Fault::CloseBySpelling)),
+        "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
+        "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
+        "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,
