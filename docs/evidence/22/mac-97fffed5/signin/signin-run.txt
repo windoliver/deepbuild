@@ -1,0 +1,12 @@
+World: home /private/tmp/dh27-tRiFyP/h; machine darwin; 2026-11-16T02:28:22.580Z; batches as setup drafts them
+deep-app pid 60101
+
+$ deep inbox    # 2026-11-16T02:28:31.144Z
+Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.  unblock  repobaff  3bdc5ec0-8cee-43a2-9253-c677bf83f969  5s  If you don't answer: Leave it blocked, on Tue 17 Nov at 18:28  ask:01M7H2YCB5W37JK78HZQC3EPBF
+    answer with done (I did it), wait (Leave it blocked), agent (The agent can do it)
+    opens claude auth login
+1 ask needs you
+
+sign-in task ask:01M7H2YCB5W37JK78HZQC3EPBF "Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.": inbox shown, hub list listed
+taste call ask:01M7H2YC4B0DQ6A46V81DVGCAG: inbox queued, hub list not listed
+   screenshot 0-signin.png (window 25527)
