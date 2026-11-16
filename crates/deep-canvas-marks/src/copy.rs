@@ -147,11 +147,7 @@ pub fn keys(t: &Map<String, Value>) -> Vec<i32> {
 
 /// The table's string for `key`, its plural form picked by `rules` applied to the first
 /// argument as shown; `None` where the table lacks the key. Looked up by value.
-pub fn pick<'a>(
-    t: &'a Map<String, Value>,
-    key: i64,
-    plural: impl Fn() -> &'static str,
-) -> Option<&'a str> {
+pub fn pick(t: &Map<String, Value>, key: i64, plural: impl Fn() -> &'static str) -> Option<&str> {
     match t.get(&key.to_string())? {
         Value::String(s) => Some(s),
         Value::Object(forms) => forms
@@ -793,6 +789,7 @@ impl Frame<'_> {
 
     /// Each copy column of `set` as the str column it shows at the frame: each row's string
     /// looked up by its key column's value; and the rows whose key the table lacks.
+    #[allow(clippy::type_complexity)]
     pub fn columns(&self, set: &Value) -> Vec<(String, Value, Vec<(usize, Missing)>)> {
         let mut out = Vec::new();
         for (name, c) in copy_columns(set) {

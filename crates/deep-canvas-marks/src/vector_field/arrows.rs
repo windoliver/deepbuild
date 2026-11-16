@@ -513,9 +513,9 @@ pub(super) fn streams_of(
                 lo: [f64::INFINITY; 3],
                 hi: [f64::NEG_INFINITY; 3],
             });
-            for k in 0..3 {
-                b.lo[k] = b.lo[k].min(p[k] - pad);
-                b.hi[k] = b.hi[k].max(p[k] + pad);
+            for (k, v) in p.iter().enumerate().take(3) {
+                b.lo[k] = b.lo[k].min(v - pad);
+                b.hi[k] = b.hi[k].max(v + pad);
             }
             Some(b)
         }),

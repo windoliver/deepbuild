@@ -121,7 +121,7 @@ pub fn surface(scene: &Scene, id: &str, r: &Ray, planted: Option<&str>) -> Optio
         let (positions, uv0, indices) = drawn_mesh(s);
         let world: Vec<V3> = positions.iter().map(|p| apply(&s.model, *p)).collect();
         let uvs = (uv0.len() == positions.len()).then_some(&uv0);
-        for t in indices.chunks_exact(3) {
+        for t in indices.as_chunks::<3>().0 {
             let i = [t[0] as usize, t[1] as usize, t[2] as usize];
             let Some(tri) = i
                 .iter()
@@ -285,7 +285,9 @@ fn depth(scene: &Scene, id: &str, r: &Ray) -> f64 {
             let (positions, _, indices) = drawn_mesh(s);
             let world: Vec<V3> = positions.iter().map(|p| apply(&s.model, *p)).collect();
             indices
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .filter_map(|t| {
                     let tri = [0, 1, 2].map(|k| world.get(t[k] as usize).copied());
                     meet(r, [tri[0]?, tri[1]?, tri[2]?]).map(|m| m.0)

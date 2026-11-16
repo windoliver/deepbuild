@@ -77,7 +77,7 @@ pub(crate) fn check(doc: &Map<String, Value>) -> Result<(), Refused> {
 }
 
 /// #538: the child a value of a flip's array names in its `map`; `None` where the map lacks it.
-fn mapped_child<'a>(flip: &'a Value, value: f64) -> Option<&'a str> {
+fn mapped_child(flip: &Value, value: f64) -> Option<&str> {
     let key = (value.fract() == 0.0 && value.is_finite()).then(|| format!("{}", value as i64))?;
     flip.get("map")?.get(&key)?.as_str()
 }

@@ -4974,6 +4974,7 @@ struct ItemCtx<'a> {
 }
 
 /// #223: the warp of the nearest group over `id` that has one, with where that group draws.
+#[allow(clippy::type_complexity)]
 fn warp_over(
     ctx: &ItemCtx<'_>,
     id: &str,
@@ -5456,6 +5457,7 @@ pub fn item_placed(
 /// [`frame_with`] with `prebuilt` items placed as given and left out of `items`, and where each
 /// item's marks sit; `None` when a paint asks for boxes, which only a frame built from every item
 /// can give.
+#[allow(clippy::too_many_arguments)]
 pub fn frame_prebuilt(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,

@@ -1972,6 +1972,7 @@ pub fn axis(
     }
     let width = crate::ticks::width(p);
     // #233: an axis that states its ticks draws them and its line as stroked open paths.
+    #[allow(clippy::type_complexity)]
     let rule: fn(String, [f64; 2], [f64; 2], f64, [u8; 3]) -> Mark = if p.contains_key("tick") {
         crate::ticks::line
     } else {

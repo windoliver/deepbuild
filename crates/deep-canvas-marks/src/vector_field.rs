@@ -251,7 +251,7 @@ impl Grid {
             let r = match g.get(*name) {
                 Some(Value::Array(a)) if a.len() == 3 => {
                     let v: Vec<f64> = a.iter().filter_map(|x| num(Some(x))).collect();
-                    if v.len() != 3 || !(v[2] > 0.0) || v[1] < v[0] {
+                    if v.len() != 3 || v[2].is_nan() || v[2] <= 0.0 || v[1] < v[0] {
                         return refused("out_of_range", at);
                     }
                     [v[0], v[1], v[2]]
@@ -493,6 +493,7 @@ pub fn any(items: &Map<String, Value>) -> bool {
 // ---- placing: field units to the item's space
 
 /// How field points are placed: through a chart's two scales, or as they are.
+#[allow(clippy::large_enum_variant)]
 pub enum Place {
     Scales(crate::data::Scale, crate::data::Scale),
     Plain,
@@ -550,7 +551,7 @@ pub fn trimmed(points: &[[f64; 2]], a: f64, b: f64) -> Vec<[f64; 2]> {
         lengths.push(lengths.last().copied().unwrap_or(0.0) + d);
     }
     let total = lengths[lengths.len() - 1];
-    if !(total > 0.0) {
+    if total.is_nan() || total <= 0.0 {
         return Vec::new();
     }
     let at = |s: f64| -> [f64; 2] {
@@ -689,7 +690,7 @@ pub fn marks(
             let sub = format!("{id}#a{i}");
             let d = [h[0] - t[0], h[1] - t[1]];
             let len = deep_canvas::ops::hypot(d[0], d[1]);
-            if !(len > 0.0) {
+            if len.is_nan() || len <= 0.0 {
                 continue;
             }
             let u = [d[0] / len, d[1] / len];
