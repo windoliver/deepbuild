@@ -68,6 +68,6 @@ export interface CheckKinds {
 }
 export interface ChecksProvider {
   command(options: CommandCheck): Promise<CommandRun>;
-  kinds(options: KindsOptions): CheckKinds;
+  kinds(options: KindsOptions): () => Promise<CheckKinds>;
   reviewOutcomes(checkout: string, sent: { commit: string; items: ReviewItem[] }[], settled: string): Promise<(ReviewItem & { ended: 'fixed' | 'left'; commit: string })[]>;
 }

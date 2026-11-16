@@ -1,0 +1,19 @@
+// A planted suite's helpers for #1830 AC1: calls only in comments, and calls that give loads or carry them in a spread.
+// The base judged it as judgeLimit({ limit: 20, runs, fingerprint }), which reads INCONCLUSIVE since #1555.
+/* bench.judgeLimit({ limit: 1, runs, fingerprint: bench.fingerprint() }) was the lane's line. */
+import { loadavg } from 'node:os';
+import * as bench from '../../../scripts/benchmark.mjs';
+
+const runs = [11, 12, 11, 13, 12];
+const loads = runs.map(() => ({ start: loadavg()[0], end: loadavg()[0] }));
+const machine = bench.fingerprint();
+export const shorthand = bench.judgeLimit({ limit: 20, runs, fingerprint: machine, loads });
+export const keyed = bench.judgeLimit({
+  limit: 20,
+  runs,
+  fingerprint: machine,
+  loads: loads,
+});
+const reading = { limit: 20, runs, fingerprint: machine, loads };
+export const spread = bench.judgeLimit({ ...reading });
+export const spreadFirst = bench.judgeLimit({ ...reading, limit: 25 });
