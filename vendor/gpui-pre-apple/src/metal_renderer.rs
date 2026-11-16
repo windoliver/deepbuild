@@ -25,6 +25,7 @@ use parking_lot::Mutex;
 
 use std::{ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
 
+pub mod clear_surface; // DeepBuild patch (windoliver/deepbuild#177)
 // Exported to metal
 pub(crate) type PointF = gpui::Point<f32>;
 
@@ -560,6 +561,7 @@ impl MetalRenderer {
                 return;
             }
         };
+        clear_surface::settle(&layer); // DeepBuild patch (windoliver/deepbuild#177)
 
         // DeepBuild patch (windoliver/deepbuild#140): the drawable's read-back and presented time.
         let texture = reading.then(|| drawable.texture().to_owned());

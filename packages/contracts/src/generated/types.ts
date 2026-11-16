@@ -4086,6 +4086,10 @@ export interface AskMootV2 {
   } | {
     because: "network_reached";
     host: string;
+  } | {
+    because: "signed_in";
+    agent: string;
+    account: string | null;
   };
   evidence?: Array<string>;
 }
@@ -6331,6 +6335,42 @@ export interface HostChanged {
       sha256: string | null;
     }>;
     ask: string | null;
+    run: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** host.undone@1 */
+export interface HostUndone {
+  v: 1;
+  id: string;
+  kind: "host.undone";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    host: string;
+    grant: "you" | "root";
+    undone: Array<{
+      id: string;
+      change: string;
+      undo: string;
+    }>;
+    left: Array<{
+      id: string;
+      change: string;
+      undo: string;
+    }>;
+    partial: boolean;
+    stopped: {
+      change: string;
+      target: string | null;
+      backup: string | null;
+      why: string;
+    } | null;
     run: string | null;
   };
   evidence?: Array<string>;

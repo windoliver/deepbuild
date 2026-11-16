@@ -1,0 +1,12 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/2594/startup.test.ts (1 test) 6094ms
+   ✓ AC1 + AC2: real core directories retain 0700 during socket creation; the socket is private at creation 6088ms
+ ✓ tests/acceptance/2594/existing-root.test.ts (1 test) 5849ms
+   ✓ AC2: an existing permissive hub root protects the socket from its creation 5637ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+   Start at  23:36:45
+   Duration  14.69s (tests 94%, transform 3%, setup 2%)

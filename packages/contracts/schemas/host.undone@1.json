@@ -1,0 +1,234 @@
+{
+  "title": "host.undone@1",
+  "description": "Remove it on a host (#1946): one pass of undos with the grant that made the changes, your user's over SSH or root's as the root plan you ran; what it undid, what's left, and the step it stopped at with why. Only the core appends it.",
+  "x-since": "R3",
+  "x-stability": "preview",
+  "x-tracking": "#1946",
+  "x-preview_since": "R3",
+  "x-decide_by": "R6",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "host.undone"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The host, as your SSH config names it."
+        },
+        "grant": {
+          "type": "string",
+          "enum": [
+            "you",
+            "root"
+          ],
+          "description": "The grant the undos ran with: your user's, or the root plan's.",
+          "x-closure": {
+            "closed": "each value is a grant a change on a host is made under: changes as you, or root as one plan you approved",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "undone": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "ulid",
+                "description": "The host.changed event it undoes or leaves, by its id."
+              },
+              "change": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "What that change did, its host.changed's change."
+              },
+              "undo": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Its undo."
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "undo"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Each change undone, in the order its undo ran."
+        },
+        "left": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "ulid",
+                "description": "The host.changed event it undoes or leaves, by its id."
+              },
+              "change": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "What that change did, its host.changed's change."
+              },
+              "undo": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "Its undo."
+              }
+            },
+            "required": [
+              "id",
+              "change",
+              "undo"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Each change still to undo, from the one it stopped at."
+        },
+        "partial": {
+          "type": "boolean",
+          "description": "True when it stopped with changes left."
+        },
+        "stopped": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Where it stopped, null when nothing is left.",
+          "properties": {
+            "change": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The change it stopped at, the first left."
+            },
+            "target": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The file that changed since it was written, by its absolute path on the host; null when its undo failed instead."
+            },
+            "backup": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "Where on the host the file as it is now was copied before it stopped; null when none was kept."
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "Why it stopped."
+            }
+          },
+          "required": [
+            "change",
+            "target",
+            "backup",
+            "why"
+          ],
+          "additionalProperties": false
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The root plan run that undid them; null for undos as you."
+        }
+      },
+      "required": [
+        "host",
+        "grant",
+        "undone",
+        "left",
+        "partial",
+        "stopped",
+        "run"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -2,11 +2,11 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r1",
-  "set_digest": "d7bb7a40f362df1eaec955be9c6b2bb01398c5f3d78a910aad0a20599e43c89f",
+  "set_digest": "d10c2e1d11c0cf5a74f59b0e393d4715ba7ca9209849d101865ccd40ac25e522",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "data@1": {
-      "digest": "e92d9e517effb5e6c9053edd79963e62eef6ba92bdf05b0d2141018be8fa94cc",
+      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -327,6 +327,32 @@
         "writes": [
           "data.columns",
           "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.follow_stream",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.vector_field",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.vector_field"
         ],
         "per": "item"
       },
@@ -682,6 +708,7 @@
   "contributions": {
     "core.fields": [
       "data.columns",
+      "data.vector_field",
       "marks2d.warp",
       "motion.fields",
       "motion.flip",
@@ -691,6 +718,7 @@
       "look.status"
     ],
     "core.transform": [
+      "data.follow",
       "motion.at",
       "motion.placed"
     ]

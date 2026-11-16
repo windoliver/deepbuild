@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 
 import { availableParallelism, loadavg } from 'node:os';
-import { isAbsolute, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 
 import { readFacts } from '@deepbuild/adapters';
 
@@ -196,6 +196,26 @@ export const watching = (live: Live): string[] => [...live.background.values()].
 
 /** The reading a session's row shows while its monitors' watches run (#997). */
 export const waitingOn = (watches: string[]): string => `Waiting on its monitor ${backgrounded(watches)}: each event wakes it, and its stop is judged once the watch ends.`;
+
+/**
+ * Where the hub writes a file of a run into its checkout, by the file's path there: its folder, resolved through any
+ * link the snapshot holds, must still lie in the checkout (#1018), or nothing is written and the run never starts.
+ */
+export function inCheckout(cwd: string, path: string, what: string): string {
+  const file = join(cwd, path);
+  let folder = dirname(file);
+  while (!existsSync(folder)) folder = dirname(folder);
+  if (!`${realpathSync(folder)}/`.startsWith(`${realpathSync(cwd)}/`) || !`${file}/`.startsWith(`${cwd}/`)) throw Error(`${what} ${path} lies outside its checkout`);
+  return file;
+}
+/** An approved file of a run, written into its checkout from its bytes (#322): never through a link the snapshot holds, at its folder or at its temporary name. */
+export function writeApproved(cwd: string, path: string, bytes: Uint8Array, mode: number): void {
+  const file = inCheckout(cwd, path, 'the approved file');
+  mkdirSync(dirname(file), { recursive: true });
+  rmSync(`${file}.tmp`, { force: true });
+  writeFileSync(`${file}.tmp`, bytes, { mode, flag: 'wx' });
+  renameSync(`${file}.tmp`, file);
+}
 
 /** Background work as a session's row names it: each command in backticks, cut at 80 characters (#907). */
 export const backgrounded = (what: string[]): string => what.map((w) => `\`${w.length > 80 ? `${w.slice(0, 80)}…` : w}\``).join(', ');

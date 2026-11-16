@@ -1,0 +1,15 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6Y",
+  "kind": "ask.moot",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "because": "signed_in",
+    "agent": "claude-code",
+    "account": "4f6c2a9e-0b1d-4c3e-8a7f-5d2e1b0c9a8f"
+  }
+}

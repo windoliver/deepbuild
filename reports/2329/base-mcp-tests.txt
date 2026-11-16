@@ -1,0 +1,26 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/mcp-rebind.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+····x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/mcp-rebind.test.ts > a deep mcp whose session /clear rotated > binds a call after /clear by the stamp of its tool as Claude Code names it from the server deep setup registers, deepbuild
+Error: ENOTEMPTY, Directory not empty: '/private/tmp/hub-315-fz3BYd'
+ ❯ withHub packages/hub/test/hub.ts:98:5
+     96|   } finally {
+     97|     await stop();
+     98|     rmSync(home, { recursive: true, force: true });
+       |     ^
+     99|   }
+    100| }
+ ❯ packages/hub/test/mcp-rebind.test.ts:181:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  12:03:52
+   Duration  15.25s (tests 98%, transform 1%)
