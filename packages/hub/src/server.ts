@@ -14,6 +14,7 @@ import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record/meta';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import { stopTimeoutS } from './codex-settings.js';
+import { Conn, type Role } from './connection.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
@@ -48,8 +49,6 @@ const BEHIND = 10_000;
 const BEHIND_BYTES = 8 << 20;
 const STALL_MS = 100;
 
-/** A person's connection (#1337) reads only what that person may see. */
-type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   // A promotion (#1334): the drain, the health check's fixture claim and the rollback's one notice.
@@ -310,45 +309,6 @@ async function parserInline(held: string[], plant: Plant, dir: string): Promise<
     count: () => 0,
     close: async () => undefined,
   };
-}
-
-class Conn {
-  role: Role | undefined;
-  name = '';
-  session: string | null = null;
-  parent: { pid: number; start: string } | undefined;
-  /** For a deep mcp, the folder it runs in: which known worktree's spec an unbound deep_search reads. */
-  cwd: string | undefined;
-  /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
-  peer: { pid: number; start: string } | undefined;
-  /** The person whose credential the connection presented (#1337); none for the owner. */
-  person: string | undefined;
-  /**
-   * A connection over the network listener (#1338), with the ID of the key its TLS handshake proved, if any: it says
-   * hello first, with a credential bound to that key, or it gets nothing.
-   */
-  remote: { key: string | undefined } | undefined;
-  /** A network connection that carries hooks its machine spooled while the link was down (#1338), one per line. */
-  spool = false;
-  first = true;
-  done = false;
-  /** A waiter's connection: its close tells the core the waiter is gone. */
-  waiter = false;
-  queue: Promise<void> = Promise.resolve();
-  pending: Buffer[] = [];
-  size = 0;
-  readonly subs = new Set<string>();
-  /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
-  readonly calls = new Set<string>();
-  constructor(readonly id: number, readonly sock: net.Socket) {}
-  write(o: object): void {
-    if (!this.done && this.sock.writable) this.sock.write(line(o));
-  }
-  end(): void {
-    if (this.done) return;
-    this.done = true;
-    this.sock.end();
-  }
 }
 
 /**
