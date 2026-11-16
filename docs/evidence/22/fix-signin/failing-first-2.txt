@@ -1,0 +1,48 @@
+head b7f37a90942fa654346e35e6d8f7c49bb41eb840, the two tests added, no fix; Sun Nov 15 04:49:09 PM PST 2026
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ packages/asks/test/sign-in.test.ts (4 tests | 2 failed) 8612ms
+   × with no batches, a lapsed sign-in after the message you typed shows at once: the stopped agent takes no step that reads it (#22) 1490ms
+   × under setup's 8-hour batches a lapsed sign-in in a session that keeps asking shows at once, not folded into its exception (#22) 2063ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/asks/test/sign-in.test.ts > with no batches, a lapsed sign-in after the message you typed shows at once: the stopped agent takes no step that reads it (#22)
+AssertionError: the sign-in task is shown, not held for a step the stopped agent won't take: expected 'held' to be 'shown' // Object.is equality
+
+Expected: "shown"
+Received: "held"
+
+ ❯ packages/asks/test/sign-in.test.ts:163:112
+    161|   now += 1000;
+    162|   await lapses(S1);
+    163|   expect(await signInStatus(), 'the sign-in task is shown, not held fo…
+       |                                                                                                                ^
+    164| });
+    165|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/asks/test/sign-in.test.ts > under setup's 8-hour batches a lapsed sign-in in a session that keeps asking shows at once, not folded into its exception (#22)
+AssertionError: the sign-in task is shown at once, not folded to wait for the exception's batch: expected 'folded' to be 'shown' // Object.is equality
+
+Expected: "shown"
+Received: "folded"
+
+ ❯ packages/asks/test/sign-in.test.ts:184:116
+    182|   expect(rows.some((r) => r.kind === 'exception'), 'the sixth taste ca…
+    183|   await lapses(S1);
+    184|   expect(await signInStatus(), 'the sign-in task is shown at once, not…
+       |                                                                                                                    ^
+    185|   expect((await asks.inbox()).filter((r) => r.kind === 'taste' && r.st…
+    186| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  16:48:48
+   Duration  9.09s (tests 97%, transform 2%, import 1%)
+
