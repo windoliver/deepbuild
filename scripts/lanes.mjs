@@ -816,10 +816,16 @@ timed.push('tests/acceptance/184/budgets.test.ts');
 // replica's refusal before a play's first step is "before any run", its third draft runs; the first two by hand.
 alone.push('tests/acceptance/184-redraft-ac7-2/');
 byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/184-redraft-ac7/ac7-bots-refused.test.ts');
+// #555's files start replicas and a hub and play the crawler's 4,000-step runs for minutes.
+alone.push('tests/acceptance/555/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
+// #1636's files each build deep-show (full) and some deep-gpu; ac1-same-hash also builds deep-show for Linux x86_64
+// in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
+alone.push('tests/acceptance/1636/');
+timed.push('tests/acceptance/1636/ac8-budget.test.ts');
 
 /**
  * #1830: since #1555 judgeLimit reads INCONCLUSIVE when a call gives no loads, so these files' timing criteria read
@@ -880,7 +886,7 @@ export const checks = [
   { name: 'wasm32', commands: [[process.execPath, 'scripts/wasm32.mjs']], fix: 'Remove the threads or the native-only API from the crate each FAIL line names, or install the target (rustup target add wasm32-unknown-unknown).' },
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
-  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
+  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, write the name so it does not read as an event kind, or list a name that is no event kind in scripts/not-event-kinds.txt beside the open issue that names it, and remove each stale entry named above; offline, run again with network and gh signed in.' },
   // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910), and
   // every `deep` command and agent tool an open issue names is in the design or planned (#1329). It reads the open
   // issues the catalogue drift lane fetched.

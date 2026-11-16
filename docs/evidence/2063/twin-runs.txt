@@ -1,0 +1,35 @@
+# Each planted twin of tests/acceptance/2063/twins/ in place of scripts/catalogue-drift.mjs, in a scratch copy of 7afbdf1e3,
+# 2026-11-15, linux/arm64: node --test 'tests/acceptance/2063/*.test.mjs'. A twin proves a test when the test fails at its own assertion.
+== twin passes-any-name-once-listed
+✔ #2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it
+✖ #2063.d47f7c6f criterion 2: with the five listed names passing, an open issue (9605, the 36th of 40) that names the uncatalogued event kind ask.ghosted fails the lane, naming the kind and the issue
+✔ #2063.d47f7c6f criterion 2: listing ask.ghosted under #9606, an open issue that does not name it, while #9605 names it, fails the lane too, naming ask.ghosted
+✔ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608 is closed, naming move.feel, though the closed issue still names it and no open issue does
+✔ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608, still open, no longer names move.feel, naming move.feel
+✖ #2063.0d14edf8 criterion 4: with plan.overlay listed, an open issue (9605) that names plan.ghost, an unlisted name in the same family, fails the lane, naming plan.ghost and the issue
+ℹ pass 4
+ℹ fail 2
+AssertionError [ERR_ASSERTION]: the lane's verdict on an open issue naming ask.ghosted is FAIL:
+AssertionError [ERR_ASSERTION]: the lane let plan.ghost through: its verdict on an open issue naming plan.ghost, with only plan.overlay listed, is FAIL:
+== twin never-reads-entry-issue
+✔ #2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it
+✔ #2063.d47f7c6f criterion 2: with the five listed names passing, an open issue (9605, the 36th of 40) that names the uncatalogued event kind ask.ghosted fails the lane, naming the kind and the issue
+✖ #2063.d47f7c6f criterion 2: listing ask.ghosted under #9606, an open issue that does not name it, while #9605 names it, fails the lane too, naming ask.ghosted
+✖ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608 is closed, naming move.feel, though the closed issue still names it and no open issue does
+✖ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608, still open, no longer names move.feel, naming move.feel
+✔ #2063.0d14edf8 criterion 4: with plan.overlay listed, an open issue (9605) that names plan.ghost, an unlisted name in the same family, fails the lane, naming plan.ghost and the issue
+ℹ pass 3
+ℹ fail 3
+AssertionError [ERR_ASSERTION]: the lane's verdict with ask.ghosted listed under #9606, which does not name it, is FAIL:
+AssertionError [ERR_ASSERTION]: the lane's verdict with move.feel listed under the closed #9608 is FAIL:
+AssertionError [ERR_ASSERTION]: the lane's verdict with move.feel listed under #9608, which no longer names it, is FAIL:
+== twin passes-listed-families
+✔ #2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it
+✔ #2063.d47f7c6f criterion 2: with the five listed names passing, an open issue (9605, the 36th of 40) that names the uncatalogued event kind ask.ghosted fails the lane, naming the kind and the issue
+✔ #2063.d47f7c6f criterion 2: listing ask.ghosted under #9606, an open issue that does not name it, while #9605 names it, fails the lane too, naming ask.ghosted
+✔ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608 is closed, naming move.feel, though the closed issue still names it and no open issue does
+✔ #2063.0ccaf9ec criterion 3: the entry `move.feel #9608` fails the lane once #9608, still open, no longer names move.feel, naming move.feel
+✖ #2063.0d14edf8 criterion 4: with plan.overlay listed, an open issue (9605) that names plan.ghost, an unlisted name in the same family, fails the lane, naming plan.ghost and the issue
+ℹ pass 5
+ℹ fail 1
+AssertionError [ERR_ASSERTION]: the lane let plan.ghost through: its verdict on an open issue naming plan.ghost, with only plan.overlay listed, is FAIL:

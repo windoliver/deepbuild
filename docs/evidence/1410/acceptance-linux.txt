@@ -1,0 +1,17 @@
+# #1410 acceptance run at 12e05709 on spark-c89f (Linux arm64), 2026-11-07T11:36:32Z, load: 54.79 68.79 66.76
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1410-77182b
+
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC1: the shim sees each named evidence file and its folder synced before the WAL sync of the FULL commit that names it 1ms
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > AC2: with a power cut right after each FULL commit, every evidence hash that commit names reads back whole 16ms
+ ✓ tests/acceptance/1410/record.test.ts > #1410: evidence a FULL commit names is synced, with its folder, before that commit > Scope: an evidence write no FULL commit names is not synced, nor its folder (one cited by no event, one cited only by a stream event) 0ms
+stdout | tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens
+#1410 AC3: 185 hook calls, slowest PreToolUse 70 at 24 ms (the prompt 4 ms); each evidence sync takes 4000 ms; evidence syncs seen: 2
+
+ ✓ tests/acceptance/1410/hook.test.ts > #1410: a hook call never waits on an evidence sync > AC3: with each evidence sync slowed to 4 s, the resuming UserPromptSubmit (a FULL commit naming its whole text) and the tool calls after it each reply within 1 s, while the sync still happens 11230ms
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  03:36:33
+   Duration  11.34s (tests 99%)
+

@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
-use deep_canvas_physics::backend::{Canonical, SoftHeld, SoftState};
+use deep_canvas_physics::backend::{Canonical, SoftHeld, SoftState, PARTICLE_FIELDS};
 use deep_canvas_physics::doc::{Rule, Soft, SoftShape, Stiffness, World};
 use deep_canvas_physics::occurrence::{self, Payload, Raw};
 use rapier3d::prelude::*;
@@ -340,6 +340,7 @@ impl Softs {
                 out.push(Canonical {
                     id: format!("{id}#{name}"),
                     values: vec![p.x, p.y, p.z, v.x, v.y, v.z],
+                    names: &PARTICLE_FIELDS,
                 });
             }
         }
@@ -685,6 +686,7 @@ mod ours {
                     out.push(Canonical {
                         id: format!("{id}#{a}"),
                         values: vec![p.x, p.y, p.z, v.x, v.y, v.z],
+                        names: &PARTICLE_FIELDS,
                     });
                 }
             }
