@@ -18,6 +18,7 @@
 
 use std::sync::Arc;
 
+use deep_canvas::ops;
 use serde_json::{json, Value};
 
 use crate::geom::Mesh;
@@ -258,18 +259,18 @@ impl Ground<'_> {
                     Term::Curvature => self.curvature(c, r),
                     Term::Slope => {
                         let g = self.grad(self.h, c, r);
-                        g[0].hypot(g[1]).atan().to_degrees()
+                        ops::deg(ops::atan(ops::hypot(g[0], g[1])))
                     }
                     Term::Aspect(direction) => {
                         // The down-slope direction, (−∂h/∂x, −∂h/∂z); north is −Z, east +X.
                         let g = self.grad(self.h, c, r);
                         let (dx, dz) = (-g[0], -g[1]);
-                        let l = dx.hypot(dz);
+                        let l = ops::hypot(dx, dz);
                         if l < 1e-12 {
                             0.0
                         } else {
-                            let d = direction.to_radians();
-                            (dx / l) * d.sin() + (-dz / l) * d.cos()
+                            let d = ops::rad(direction);
+                            (dx / l) * ops::sin(d) + (-dz / l) * ops::cos(d)
                         }
                     }
                 });
@@ -288,7 +289,7 @@ impl Ground<'_> {
                 for c in 0..self.cols {
                     let s = r * self.cols + c;
                     let g = self.grad(&v, c, r);
-                    let slope = g[0].hypot(g[1]).max(1e-12);
+                    let slope = ops::hypot(g[0], g[1]).max(1e-12);
                     for (edge, sign) in [(range.min, 1.0), (range.max, -1.0)] {
                         let Some(edge) = edge else { continue };
                         d[s] = d[s].min(sign * (v[s] - edge) / slope);
@@ -330,7 +331,7 @@ fn smoothstep(x: f64) -> f64 {
 /// The triplanar weights for normal `n`: |n_i|^(1.5 × SHARPNESS), summing to 1.
 pub fn triplanar(n: [f64; 3]) -> [f64; 3] {
     let p = 1.5 * SHARPNESS;
-    let a = n.map(|x| x.abs().powf(p));
+    let a = n.map(|x| ops::pow(x.abs(), p));
     let sum = a[0] + a[1] + a[2];
     if sum <= 0.0 {
         return [0.0, 1.0, 0.0];
@@ -344,8 +345,9 @@ pub fn samples_triplanar(projection: Projection, geometric: [f64; 3]) -> bool {
         Projection::Uv => false,
         Projection::Triplanar => true,
         Projection::Auto => {
-            let l = (geometric[0].powi(2) + geometric[1].powi(2) + geometric[2].powi(2)).sqrt();
-            l > 0.0 && geometric[1].abs() / l < AUTO_SLOPE_DEG.to_radians().cos()
+            let [x, y, z] = geometric;
+            let l = ops::sqrt(x * x + y * y + z * z);
+            l > 0.0 && y.abs() / l < ops::cos(ops::rad(AUTO_SLOPE_DEG))
         }
     }
 }
@@ -616,7 +618,7 @@ impl Cover {
             n
         };
         let unit = |n: [f64; 3]| {
-            let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-300);
+            let l = ops::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).max(1e-300);
             n.map(|x| x / l)
         };
         let weighs_by = unit(match plant {

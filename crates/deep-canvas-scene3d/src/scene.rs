@@ -3700,7 +3700,7 @@ pub(crate) fn evaluate_compiled(
                                 metallic: m.metallic,
                             },
                             None => crate::cover::Shading {
-                                base: plate.color.map(|c| light::srgb_decode(c)),
+                                base: plate.color.map(light::srgb_decode),
                                 roughness: 0.5,
                                 metallic: 0.0,
                             },
