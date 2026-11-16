@@ -1,0 +1,10 @@
+// A planted suite's helpers for #1830 AC1: judgeLimit called inside code the suite runs in a child process. Each line
+// marked `finding` gives it no loads.
+import { spawnSync } from 'node:child_process';
+
+const bench = new URL('../../../scripts/benchmark.mjs', import.meta.url).href;
+export const lane = (body: string): string => spawnSync(process.execPath, ['--input-type=module', '-e', `import * as b from ${JSON.stringify(bench)}; const runs = [11, 12, 11, 13, 12]; console.log(JSON.stringify((() => { ${body} })()));`], { encoding: 'utf8' }).stdout;
+
+export const plain = (): string => lane('return b.judgeLimit({ limit: 1, runs, fingerprint: b.fingerprint() });'); // finding
+export const named = (): string => lane("const { judgeLimit } = b; return judgeLimit({ limit: 2, runs, fingerprint: b.fingerprint() });"); // finding
+export const loaded = (): string => lane(`return b.judgeLimit({ limit: 1, runs, fingerprint: b.fingerprint(), loads: runs.map(() => ({ start: 1, end: 1 })) });`);

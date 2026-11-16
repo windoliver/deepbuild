@@ -7,7 +7,7 @@ The adapter contract (#312): one adapter per agent, driven by its facts file (ad
 ## Where new code goes
 
 - `src/types.ts`: the shapes an adapter gives and takes, shared by the registry and the shipped parts so neither imports the other.
-- `src/index.ts`: the registry, `factsAdapter`, `shipped()` and facts drift. No rule here reads an agent's name.
+- `src/index.ts`: the registry, `factsAdapter`, `shipped()` and facts drift. `shipped()` lists all shipped names without loading every facts file; the first `get` or mapped hook loads that agent through the same registration checks, with per-registry turn state. Mapping rules remain facts-driven.
 - `src/shipped.ts`: the parts of a shipped adapter that aren't data (caps, unsupported operations, doctor items, usage reading). The mapping itself belongs in the agent's facts file in the repo's top-level `adapters/` folder, not here.
 - Tests: none in this package; the adapter contract is proven in `tests/acceptance/312/`, `tests/acceptance/18/` and the conformance package's adapter kit.
 
