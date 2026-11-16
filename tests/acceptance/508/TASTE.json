@@ -2,15 +2,15 @@
   "issue": 508,
   "criterion": "#508.745c64c0",
   "verdict": "looks_right",
-  "who": "Claude, on the owner's standing delegation of taste calls (as on #504, #506 and #507); the owner can overrule it on the PR",
-  "when": "2026-11-15T21:40:00Z",
+  "who": "Claude, on the owner's request of Nov 15 (\"validate screenshot for me and close whatever gaps\"); the owner can overrule it on the PR",
+  "when": "2026-11-16T03:30:00Z",
   "screenshots": {
-    "plume-haze.png": "abb15a840528854cfc5877761dd1a82663add2e56c2ea58c9e06f08ed78c48a6",
-    "turbofan.png": "78b081c6cc1367e4de659bb4a2373a452b6b92e583d8e1cf35b36534189870c9",
-    "image-layers.png": "f1bc78f219ab1b0cb70779fc1568cf0029ab155da4ecd6e7e39fdbdde5b63432"
+    "plume-haze.png": "c09db5dca72a088b68f36b906a902b815fc8c8e309ff8502e5eec7ccd931438f",
+    "turbofan.png": "85dea567091df3bd51b86b52f9593c75d178a7a22f67d0544017618a00873daa",
+    "image-layers.png": "80aae1760b94e1a7ae7857a08b051e4e06c70266c9060879a137c391a494b43c"
   },
   "recordings": {
-    "plume-haze.apng": "914d350f101c99a6ea7ce48446bb0c2f3631896875e21d0bb76737e52137b2c8"
+    "plume-haze.apng": "be2e1e8be64ea7cb51a10d4014f0bef750b42ba16b0964f39bb7d9a9ea1bfdcb"
   },
-  "note": "Each picture is a final frame deep-gpu's view3d drew, written by taste.test.ts. Plume haze: the tiles' edges bend inside the plume's footprint and stay straight outside it; the plume's core reads as a white-hot jet. Turbofan at 2 s: the engine on its test stand, the fan and compressor stages on the shaft, the exhaust plume and the intake airflow streaks. Image layers at 2 s: six labelled panes spread on the bench, the lazy tongs a linked lattice of crossed bars, the handwheel at the bench's end, the readouts top left. Validated after a first take showed the panes collapsed with their labels overprinted, the tongs as loose bars and the bench cut off; each was fixed in the fixture."
+  "note": "Each picture is a final frame deep-gpu's view3d drew, written by taste.test.ts. Plume haze: a translucent exhaust, brightest at the nozzle and fading to its tip, with the tiles behind it bending inside its footprint and straight outside it; the recording shows it grow from the nozzle and hold. Turbofan at 2 s: the engine on its test stand, fan and compressor on the shaft, the amber exhaust fading along its length, the intake streams entering the nacelle. Image layers at 2 s: six labelled panes spread on the bench, every label readable, the lazy tongs a linked lattice, the handwheel at the bench's end, the live readouts and the card top left. Validated over several takes: the first showed the panes collapsed, a plume clipped to a white slab, airflow specks at the nacelle's rear and a label hidden by the colour band; each was fixed in the product or the fixture. Also checked beyond these stills: the five stages through deep-show, each framed on its own pane; the throttle at 0.2 and 1; readouts at spread 0.3 and 0.99."
 }
