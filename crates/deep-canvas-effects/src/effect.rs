@@ -132,7 +132,8 @@ pub fn refusals(doc: &Value, id: &str, item: &Value) -> Vec<Refusal> {
     };
     let p = &item["params"];
     let path = |f: &str| format!("items/{id}/params/{f}");
-    let bad = |f: &str, what: String| Refusal::new("out_of_range", path(f), format!("{id}: {what}"));
+    let bad =
+        |f: &str, what: String| Refusal::new("out_of_range", path(f), format!("{id}: {what}"));
     let mut out = Vec::new();
     for x in fields(kind) {
         let v = at(&p[kind], x.path);
@@ -144,7 +145,12 @@ pub fn refusals(doc: &Value, id: &str, item: &Value) -> Vec<Refusal> {
             _ => out.push(
                 bad(
                     &format!("{kind}/{}", x.path),
-                    format!("{kind}.{} runs from {} to {}", x.path.replace('/', "."), x.min, x.max),
+                    format!(
+                        "{kind}.{} runs from {} to {}",
+                        x.path.replace('/', "."),
+                        x.min,
+                        x.max
+                    ),
                 )
                 .with(v.clone()),
             ),
@@ -153,35 +159,63 @@ pub fn refusals(doc: &Value, id: &str, item: &Value) -> Vec<Refusal> {
     if !p["resolution"].is_null()
         && !matches!(p["resolution"].as_str(), Some("full" | "half" | "quarter"))
     {
-        out.push(bad("resolution", "resolution is full, half or quarter".into()));
+        out.push(bad(
+            "resolution",
+            "resolution is full, half or quarter".into(),
+        ));
     }
     if !(p["seed"].is_null() || p["seed"] == "item" || p["seed"].is_u64()) {
         out.push(bad("seed", "seed is item or a whole number".into()));
     }
-    for (f, v) in [("axis", &p["axis"]), ("airflow/around/axis", at(p, "airflow/around/axis"))] {
-        let three = v.as_array().filter(|a| a.len() == 3 && a.iter().all(Value::is_number));
+    for (f, v) in [
+        ("axis", &p["axis"]),
+        ("airflow/around/axis", at(p, "airflow/around/axis")),
+    ] {
+        let three = v
+            .as_array()
+            .filter(|a| a.len() == 3 && a.iter().all(Value::is_number));
         let zero = three.is_some_and(|a| a.iter().all(|x| x.as_f64() == Some(0.0)));
         if !v.is_null() && (three.is_none() || zero) {
             out.push(bad(f, format!("{f} is three numbers, not all 0")));
         }
     }
     let items = &doc["items"];
-    let names = |v: &Value, kinds: &[&str]| v.as_str().is_some_and(|n| kinds.is_empty() || kinds.contains(&items[n]["kind"].as_str().unwrap_or("")));
+    let names = |v: &Value, kinds: &[&str]| {
+        v.as_str().is_some_and(|n| {
+            kinds.is_empty() || kinds.contains(&items[n]["kind"].as_str().unwrap_or(""))
+        })
+    };
     if kind == "arc" && !names(&p["arc"]["to"], &[]) {
-        out.push(Refusal::new("ref_unresolved", path("arc/to"), format!("{id}: arc.to names no item")));
+        out.push(Refusal::new(
+            "ref_unresolved",
+            path("arc/to"),
+            format!("{id}: arc.to names no item"),
+        ));
     }
     if kind == "airflow" {
-        let paths = p["airflow"]["paths"].as_array().map_or(&[][..], Vec::as_slice);
+        let paths = p["airflow"]["paths"]
+            .as_array()
+            .map_or(&[][..], Vec::as_slice);
         if paths.is_empty() || paths.len() > MAX_PATHS {
-            out.push(bad("airflow/paths", format!("airflow.paths names 1 to {MAX_PATHS} curves")));
+            out.push(bad(
+                "airflow/paths",
+                format!("airflow.paths names 1 to {MAX_PATHS} curves"),
+            ));
         }
         let copies = num(p, "airflow", "around/copies");
         for (j, c) in paths.iter().enumerate() {
             let f = format!("airflow/paths/{j}");
             if !names(c, &["curve@1"]) {
-                out.push(Refusal::new("ref_unresolved", path(&f), format!("{id}: {f} names no curve@1")));
+                out.push(Refusal::new(
+                    "ref_unresolved",
+                    path(&f),
+                    format!("{id}: {f} names no curve@1"),
+                ));
             } else if copies > 1.0 && literal(&items[c.as_str().unwrap_or("")]).is_none() {
-                out.push(bad(&f, format!("{f} is turned about an axis, so its curve gives literal points")));
+                out.push(bad(
+                    &f,
+                    format!("{f} is turned about an axis, so its curve gives literal points"),
+                ));
             }
         }
     }
@@ -204,12 +238,20 @@ fn literal(curve: &Value) -> Option<Vec<[f64; 3]>> {
 pub fn issues(doc: &Value) -> Vec<Value> {
     let mut out = Vec::new();
     for (id, item) in doc["items"].as_object().into_iter().flatten() {
-        for r in refusals(doc, id, item) {
-            out.push(json!({"code": r.code, "severity": "error", "ids": [id], "path": r.path,
-                            "actual": *r.actual, "what": r.what}));
-        }
+        out.extend(item_issues(doc, id, item));
     }
     out
+}
+
+/// Item `id`'s refusals as the check's issues: `item` may hold its params as evaluated at t.
+pub fn item_issues(doc: &Value, id: &str, item: &Value) -> Vec<Value> {
+    refusals(doc, id, item)
+        .into_iter()
+        .map(|r| {
+            json!({"code": r.code, "severity": "error", "ids": [id], "path": r.path,
+                   "actual": *r.actual, "what": r.what})
+        })
+        .collect()
 }
 
 /// A plume's particles: how many, and each one's life, s (its speed is its reach over its life).
@@ -286,7 +328,10 @@ pub fn lower(doc: &mut Value) {
                 let whole = (a1 - a0).abs() >= 360.0;
                 let around = axis(at(p, "airflow/around/axis"));
                 let life = n("length") / n("speed");
-                let paths = p["airflow"]["paths"].as_array().cloned().unwrap_or_default();
+                let paths = p["airflow"]["paths"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
                 for (j, c) in paths.iter().filter_map(Value::as_str).enumerate() {
                     for k in 0..copies {
                         let steps = if whole { copies } else { (copies - 1).max(1) };
@@ -443,16 +488,25 @@ mod tests {
                 let span = (x.max - x.min).max(1.0);
                 for v in [x.min - 1e-3 * span, x.max + 1e-3 * span] {
                     let d = base(v);
-                    let got: Vec<String> = rule(&d, "e", &d["items"]["e"]).into_iter().map(|r| r.path).collect();
+                    let got: Vec<String> = rule(&d, "e", &d["items"]["e"])
+                        .into_iter()
+                        .map(|r| r.path)
+                        .collect();
                     if got != [want.clone()] {
-                        return Some(format!("{kind}.{} = {v}: refused at {got:?}, not {want}", x.path));
+                        return Some(format!(
+                            "{kind}.{} = {v}: refused at {got:?}, not {want}",
+                            x.path
+                        ));
                     }
                 }
                 for v in [x.min, x.max, x.default] {
                     let d = base(v);
                     let got = rule(&d, "e", &d["items"]["e"]);
                     if !got.is_empty() {
-                        return Some(format!("{kind}.{} = {v} is in range, refused at {}", x.path, got[0].path));
+                        return Some(format!(
+                            "{kind}.{} = {v} is in range, refused at {}",
+                            x.path, got[0].path
+                        ));
                     }
                 }
             }
@@ -475,7 +529,10 @@ mod tests {
                 })
                 .collect()
         };
-        assert!(ranges_hold(&twin).is_some(), "the twin naming the kind's param passes");
+        assert!(
+            ranges_hold(&twin).is_some(),
+            "the twin naming the kind's param passes"
+        );
     }
 
     /// The farthest any live particle of `doc`'s item `id` stands from `origin` over 3 s.
@@ -507,11 +564,18 @@ mod tests {
         assert_eq!(derived["lowered"], "pl");
         let bound = 0.1 + 0.5 + 0.2;
         let far = farthest(&d, "pl.particles", [0.0; 3]);
-        assert!(far > 0.3 && far <= bound + 1e-9, "farthest {far} against {bound}");
+        assert!(
+            far > 0.3 && far <= bound + 1e-9,
+            "farthest {far} against {bound}"
+        );
         // The twin: a speed of 2 m/s whatever the reach.
         let mut twin = d.clone();
-        twin["items"]["pl.particles"]["params"]["motion"]["ballistic"]["velocity"] = json!([0.0, 2.0, 0.0]);
-        assert!(farthest(&twin, "pl.particles", [0.0; 3]) > bound, "the twin stays within reach");
+        twin["items"]["pl.particles"]["params"]["motion"]["ballistic"]["velocity"] =
+            json!([0.0, 2.0, 0.0]);
+        assert!(
+            farthest(&twin, "pl.particles", [0.0; 3]) > bound,
+            "the twin stays within reach"
+        );
         // Lowered again, it's the same document.
         let once = d.clone();
         lower(&mut d);
@@ -523,7 +587,10 @@ mod tests {
         (0..3)
             .map(|k| {
                 let pid = format!("fl.p0c{k}");
-                let curve = d["items"][&pid]["params"]["motion"]["along"]["curve"].as_str().unwrap_or_default().to_string();
+                let curve = d["items"][&pid]["params"]["motion"]["along"]["curve"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
                 let q = &d["items"][&curve]["params"]["points"][0];
                 let (x, z) = (q[0].as_f64().unwrap_or(0.0), q[2].as_f64().unwrap_or(0.0));
                 (deep_canvas::ops::atan2(-z, x).to_degrees() + 360.0) % 360.0
@@ -532,7 +599,10 @@ mod tests {
     }
 
     fn turned_by_thirds(a: &[f64]) -> bool {
-        a.len() == 3 && a.iter().zip([0.0, 120.0, 240.0]).all(|(x, w)| (x - w).abs() < 1e-9 || (x - w).abs() > 360.0 - 1e-9)
+        a.len() == 3
+            && a.iter()
+                .zip([0.0, 120.0, 240.0])
+                .all(|(x, w)| (x - w).abs() < 1e-9 || (x - w).abs() > 360.0 - 1e-9)
     }
 
     /// An airflow's streaks are gone once they run off their path: over 3 s no live streak stands
@@ -545,19 +615,26 @@ mod tests {
             "fl": effect("airflow", a),
         }));
         lower(&mut d);
-        let s = spec::read(&d, "fl.p0c0", &d["items"]["fl.p0c0"]["params"]).expect("the streaks read");
+        let s =
+            spec::read(&d, "fl.p0c0", &d["items"]["fl.p0c0"]["params"]).expect("the streaks read");
         let mut b = eval::Baked::new("fl.p0c0", s, 11, [0.0; 3]);
         b.curve = (0..16).map(|i| [f64::from(i) / 15.0, 0.0, 0.0]).collect();
         b.curve_len = 1.0;
         let (mut live, mut at_end) = (0, 0);
         for k in 0..30 {
-            for row in eval::columns(&b, 0.1 * f64::from(k)).chunks(eval::FLOATS).filter(|r| r[3] >= 0.0) {
+            for row in eval::columns(&b, 0.1 * f64::from(k))
+                .chunks(eval::FLOATS)
+                .filter(|r| r[3] >= 0.0)
+            {
                 live += 1;
                 at_end += usize::from((row[0] - 1.0).abs() < 1e-9);
             }
         }
         assert!(live > 0, "no streak lives");
-        assert_eq!(at_end, 0, "{at_end} of {live} live streaks stand at the path's end");
+        assert_eq!(
+            at_end, 0,
+            "{at_end} of {live} live streaks stand at the path's end"
+        );
     }
 
     /// An airflow's three copies of a path stand at 0, 120 and 240° about its axis; the twin
@@ -572,12 +649,79 @@ mod tests {
         lower(&mut d);
         assert!(turned_by_thirds(&angles(&d)), "angles {:?}", angles(&d));
         for k in 0..3 {
-            assert_eq!(d["items"][&format!("fl.p0c{k}")]["params"]["draw"], "streak");
+            assert_eq!(
+                d["items"][&format!("fl.p0c{k}")]["params"]["draw"],
+                "streak"
+            );
         }
         let mut twin = d.clone();
         for k in 0..3 {
             twin["items"][&format!("fl.p0c{k}")]["params"]["motion"]["along"]["curve"] = json!("c");
         }
-        assert!(!turned_by_thirds(&angles(&twin)), "the unturned twin passes");
+        assert!(
+            !turned_by_thirds(&angles(&twin)),
+            "the unturned twin passes"
+        );
+    }
+
+    /// The form at `path` under `form`: an object's field or a tuple's slot, through notes and
+    /// bounds.
+    fn form_at<'a>(
+        form: &'a deep_canvas::form::Form,
+        path: &str,
+    ) -> Option<&'a deep_canvas::form::Form> {
+        use deep_canvas::form::Form;
+        path.split('/').try_fold(form, |f, k| {
+            let mut f = f;
+            while let Form::Noted(inner, _) | Form::Bounded(inner, _) = f {
+                f = inner;
+            }
+            match f {
+                Form::Object(fields) => fields.iter().find(|x| x.name == k)?.form.as_ref(),
+                Form::Tuple(slots) => slots.get(k.parse::<usize>().ok()?).map(|(_, f)| f),
+                _ => None,
+            }
+        })
+    }
+
+    /// Each film kind's form in effect@1's schema, as deep_kinds and the skill print it, states
+    /// every ranged number's bounds as the check refuses them (`min to max`, then its unit), and
+    /// that an arc's `to` and an airflow's `paths` are required, so the form can't drift.
+    #[test]
+    fn each_kinds_form_states_its_ranges_and_required_fields() {
+        use deep_canvas::form::{parse, Form};
+        let spec = deep_canvas_scene3d::spec::of("effect@1").expect("effect@1's schema");
+        let form = |kind: &str| {
+            let p = spec
+                .params
+                .iter()
+                .find(|p| p.name == kind)
+                .expect("a param per kind");
+            parse(p.declared()).unwrap_or_else(|u| panic!("{kind}'s form doesn't parse: {}", u.why))
+        };
+        for kind in KINDS {
+            let whole = form(kind);
+            for x in fields(kind) {
+                let want = format!("{} to {}", x.min, x.max);
+                let got = form_at(&whole, x.path);
+                let states = matches!(got, Some(Form::Number(u)) if u == &want || u.starts_with(&format!("{want} ")));
+                assert!(
+                    states,
+                    "{kind}.{} reads {:?}, not {want}",
+                    x.path,
+                    got.map(Form::print)
+                );
+            }
+        }
+        for (kind, field) in [("arc", "to"), ("airflow", "paths")] {
+            let Form::Object(fields) = form(kind) else {
+                panic!("{kind}'s form is no object");
+            };
+            let f = fields.iter().find(|f| f.name == field).expect("the field");
+            assert!(
+                !f.optional,
+                "{kind}.{field} is required, but its form marks it optional"
+            );
+        }
     }
 }

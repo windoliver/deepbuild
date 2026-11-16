@@ -91,7 +91,8 @@ pub struct Settings {
 }
 
 /// #508: a wave field's or an arc's emission pass: its item, its kind, its operator and its
-/// params, its seed, and its resolution's scale of the view.
+/// params, its seed, its resolution's scale of the view, and the role its pass reads, its own
+/// item's color (two wave fields each draw in theirs), linear.
 #[derive(Clone, Debug)]
 pub struct Emit {
     pub item: String,
@@ -100,6 +101,7 @@ pub struct Emit {
     pub params: BTreeMap<String, Value>,
     pub seed: u32,
     pub scale: f64,
+    pub roles: BTreeMap<String, [f64; 3]>,
 }
 
 /// #508: a plume's haze: its item, its `haze.*` params and its seed.
@@ -401,6 +403,7 @@ impl Effects {
         id: &str,
         camera: &Camera,
         params: &BTreeMap<String, Value>,
+        roles: &BTreeMap<String, [f64; 3]>,
         textures: &BTreeMap<&str, wgpu::TextureView>,
         out: wgpu::TextureView,
         size: [u32; 2],
@@ -419,7 +422,7 @@ impl Effects {
             })
             .collect();
         let refs: Vec<&wgpu::TextureView> = views.iter().collect();
-        let values = interp::inputs(&runner.compiled.checked, params, &self.settings.roles);
+        let values = interp::inputs(&runner.compiled.checked, params, roles);
         // The run at this place in the frame binds what it bound last frame, while its stage is
         // the same.
         let place = self.passes;
@@ -816,7 +819,17 @@ impl Effects {
         let mut c = *camera;
         c.seed = e.seed;
         let tex = BTreeMap::from([("depth", depth)]);
-        let run = self.pass_job(device, label, e.op, &c, &e.params, &tex, out.clone(), small.1);
+        let run = self.pass_job(
+            device,
+            label,
+            e.op,
+            &c,
+            &e.params,
+            &e.roles,
+            &tex,
+            out.clone(),
+            small.1,
+        );
         self.spark_draw(device);
         let draw = self.sparks.as_ref().expect("made above");
         let pipeline = match e.scale {
@@ -873,6 +886,7 @@ impl Effects {
         size: [u32; 2],
         jobs: &mut Vec<(String, Job)>,
     ) {
+        let roles = self.settings.roles.clone();
         for h in self.settings.hazes.clone() {
             let out = self.target(device, *next, size);
             *next += 1;
@@ -880,7 +894,17 @@ impl Effects {
             c.seed = h.seed;
             let tex = BTreeMap::from([("color", cur.clone())]);
             let label = effect_label(&h.item);
-            let job = self.pass_job(device, label, "plume.haze@1", &c, &h.params, &tex, out.clone(), size);
+            let job = self.pass_job(
+                device,
+                label,
+                "plume.haze@1",
+                &c,
+                &h.params,
+                &roles,
+                &tex,
+                out.clone(),
+                size,
+            );
             jobs.push((HAZE.into(), job));
             *cur = out;
         }
@@ -935,7 +959,12 @@ impl Effects {
     /// #508: the last frame's check color readback, rgba16float rows top-down, 8 bytes a pixel.
     pub fn read_checks(&self, device: &Device) -> Option<Vec<u8>> {
         let (_, tex, _) = self.checks.as_ref()?;
-        Some(crate::reference::read(device, tex, wgpu::TextureAspect::All, 8))
+        Some(crate::reference::read(
+            device,
+            tex,
+            wgpu::TextureAspect::All,
+            8,
+        ))
     }
 
     /// Builds the document's operators on the device, the first frame that needs them.
@@ -996,6 +1025,7 @@ impl Post for Effects {
                     "grid.ground@1",
                     &camera,
                     grid,
+                    &s.roles,
                     &tex,
                     out.clone(),
                     size,
@@ -1025,6 +1055,7 @@ impl Post for Effects {
                     "shadow.resolve@1",
                     &c,
                     &params,
+                    &s.roles,
                     &tex,
                     out.clone(),
                     size,
@@ -1053,7 +1084,14 @@ impl Post for Effects {
         }
         for e in &s.emits {
             let small = size.map(|n| ((f64::from(n) * e.scale).ceil() as u32).max(1));
-            let job = self.emit_job(device, &camera, e, (next, small), cur.clone(), frame.depth.clone());
+            let job = self.emit_job(
+                device,
+                &camera,
+                e,
+                (next, small),
+                cur.clone(),
+                frame.depth.clone(),
+            );
             next += 1;
             jobs.push((emit_label(e.kind).into(), job));
         }
@@ -1087,6 +1125,7 @@ impl Post for Effects {
                     "outline.select@1",
                     &camera,
                     &params,
+                    &s.roles,
                     &tex,
                     out.clone(),
                     size,
@@ -1165,6 +1204,7 @@ impl Post for Effects {
                     ids[r.stage],
                     &camera,
                     &params,
+                    &s.roles,
                     &tex,
                     out.clone(),
                     r.size,
@@ -1187,6 +1227,7 @@ impl Post for Effects {
                         "glow.up@1",
                         &camera,
                         &params,
+                        &s.roles,
                         &tex,
                         out.clone(),
                         size,
@@ -1325,7 +1366,13 @@ impl Post for Shared {
             pass(SPARKS, "effects", 3, vec!["linear", "depth"], 0.05),
             // #508: the film effects' emission, after the particles, and a plume's haze after the
             // bloom and before the flare, display only.
-            pass(WAVE_FIELD, "effects", 3, vec!["linear", "depth"], ns(WAVE_FIELD)),
+            pass(
+                WAVE_FIELD,
+                "effects",
+                3,
+                vec!["linear", "depth"],
+                ns(WAVE_FIELD),
+            ),
             pass(ARC, "effects", 3, vec!["linear", "depth"], ns(ARC)),
             pass(OUTLINE, "effects", 4, vec!["linear", "ids"], 0.06),
             Pass {

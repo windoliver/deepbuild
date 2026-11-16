@@ -295,7 +295,6 @@ mod tests {
             right: [1.0, 0.0, 0.0],
             up: [0.0, 1.0, 0.0],
             forward: [0.0, 0.0, -1.0],
-            target: [1.0, 0.5, 3.0],
             perspective: true,
             scale: 400.0,
             centre: [160.0, 90.0],

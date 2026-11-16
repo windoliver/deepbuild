@@ -1313,8 +1313,7 @@ fn run_view(
             crate::axes::plant_name(app.planted),
         );
         tl.check(|t| {
-            let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)
-                .map_err(|r| refused(r.code, r.path))?;
+            let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)?;
             Ok((crate::regions::Seen::Camera(sc.camera), sc.volumes))
         })?;
     }
@@ -1418,14 +1417,12 @@ fn run_view(
                 ..deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant)
             };
             let mut scene =
-                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)?;
             // #450: mesh particles draw through an instancer's columns, read off the scene.
             if let Some(fed) =
                 crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
             {
-                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)?;
             }
             axes_mapped = memo.borrow_mut().take_mapped();
             if args.axes {
@@ -1526,8 +1523,7 @@ fn run_view(
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // #506's planted core: a view overlay shaded with the main view's light cut.
             if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
-                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)?;
                 scene.light_cut = Some(deep_canvas_scene3d::light::policy(&scene.lights, &main.camera));
             }
             // How many times this frame derived each mesh-edge line's edge set (#1640).
@@ -1791,8 +1787,7 @@ fn run_view(
                 edge_plant,
             );
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
-                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)?;
                 if drops_dispersion {
                     sc.plant_drops_dispersion();
                 }
@@ -2074,8 +2069,7 @@ fn run_view(
             if let (Some(s), true) = (sub.as_ref(), keeping) {
                 let mut main = s.main.clone();
                 main["size"] = json!(size);
-                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)?;
                 first.texels.clone_from(&scene.texels);
                 session3::draw(app, &opened, Arc::new(first), args.look.clone(), n, 0, false, false)?;
                 session3::keep_first(app, keeps[0], keeps[1]);
@@ -2249,8 +2243,7 @@ fn run_view(
                         None => (doc_look.clone(), doc_look_json.clone()),
                     };
                     let mut sc =
-                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)
-                            .map_err(|r| refused(r.code, r.path))?;
+                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)?;
                     sc.camera = scene.camera.clone();
                     sc.texels.clone_from(&scene.texels);
                     if args.window.is_some() {

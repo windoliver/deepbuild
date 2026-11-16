@@ -149,7 +149,12 @@ fn life_keys(v: Option<&Value>) -> Vec<(f64, f64)> {
         .flatten()
         .filter(|k| k.is_object())
         .take(12)
-        .map(|k| (k["at"].as_f64().unwrap_or(0.0), k["value"].as_f64().unwrap_or(1.0)))
+        .map(|k| {
+            (
+                k["at"].as_f64().unwrap_or(0.0),
+                k["value"].as_f64().unwrap_or(1.0),
+            )
+        })
         .collect()
 }
 
@@ -389,12 +394,15 @@ pub fn settings(
         let p = &o.params;
         let kind = p["kind"].as_str().unwrap_or_default();
         if let Some(cost) = deep_canvas_effects::effect::cost(kind) {
-            for sp in sparks.iter_mut().filter(|sp| lowered_from(&sp.item, &o.id, kind)) {
+            for sp in sparks
+                .iter_mut()
+                .filter(|sp| lowered_from(&sp.item, &o.id, kind))
+            {
                 sp.effect = Some(o.id.clone());
                 sp.cost_ns = Some(cost);
             }
         }
-        if let Some(e) = emit_of(scene, o, look, &mut roles, effect_seed(doc_seed, o, seeding)) {
+        if let Some(e) = emit_of(scene, o, look, effect_seed(doc_seed, o, seeding)) {
             emits.push(e);
         }
     }
@@ -456,12 +464,11 @@ pub(crate) fn effect_seed(
 }
 
 /// #508: a wave field's or an arc's emission pass from its params and the scene at t: its anchor
-/// (and an arc's end) where the scene puts them, its role's color as the pass reads it.
+/// (and an arc's end) where the scene puts them, its own role's color in the slot its pass reads.
 fn emit_of(
     scene: &Scene,
     o: &deep_canvas_scene3d::scene::Other,
     look: &Look3,
-    roles: &mut BTreeMap<String, [f64; 3]>,
     seed: u32,
 ) -> Option<fx::Emit> {
     use deep_canvas_effects::effect::{axis, num, scale};
@@ -508,10 +515,6 @@ fn emit_of(
         }
         _ => return None,
     };
-    roles.insert(
-        slot.into(),
-        role(look, p[kind]["role"].as_str(), "accent"),
-    );
     Some(fx::Emit {
         item: o.id.clone(),
         kind,
@@ -519,6 +522,7 @@ fn emit_of(
         params,
         seed,
         scale: k,
+        roles: BTreeMap::from([(slot.into(), role(look, p[kind]["role"].as_str(), "accent"))]),
     })
 }
 
@@ -582,7 +586,11 @@ pub fn operators(app: &App) -> Value {
             let (operator, preset, ns) = match *k {
                 "wave_field" => ("wave_field@1", Value::Null, None),
                 "arc" => ("arc@1", Value::Null, None),
-                other => ("particles.sparks@1", json!("particles@1"), effect::cost(other)),
+                other => (
+                    "particles.sparks@1",
+                    json!("particles@1"),
+                    effect::cost(other),
+                ),
             };
             let ns = ns.or_else(|| {
                 shipped::EFFECT_MEASURED_NS_PER_PX
@@ -1639,4 +1647,55 @@ pub fn cross_gpu(app: &App, call: &Value) -> Value {
         "families": families,
         "differs": differs,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #508: two wave fields each draw in their own role's color: A's pass reads ink, B's accent.
+    #[test]
+    fn each_wave_field_draws_in_its_own_role() {
+        let doc = json!({
+            "format": 1, "id": "two-waves", "profile": "scene", "title": "t", "description": "d",
+            "size": [320, 240], "camera": "cam", "seed": 508,
+            "requires": {"modules": {"scene3d": "^1", "effects": "^1"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "orthographic", "position": [0, 0, 10], "target": [0, 0, 0],
+                                   "view_width": 6.4, "near": 0.05, "far": 100}},
+                "a": {"id": "a", "kind": "effect@1", "order": "a1",
+                      "params": {"kind": "wave_field", "wave_field": {"role": "ink"}}},
+                "b": {"id": "b", "kind": "effect@1", "order": "a2",
+                      "params": {"kind": "wave_field", "wave_field": {"role": "accent"}}},
+            },
+        });
+        let look_json = json!({"roles": {"ink": "#202020", "accent": "#e04010"}});
+        let look = Look3::read(&look_json).expect("the look reads");
+        let scene = evaluate(&doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
+        let s = settings(&scene, &look_json, &look, &[], 0.0, 508, Seeding::Item);
+        let read = |id: &str| {
+            let e = s
+                .emits
+                .iter()
+                .find(|e| e.item == id)
+                .expect("its emission pass");
+            e.roles["wave"]
+        };
+        let (ink, accent) = (
+            role(&look, Some("ink"), "accent"),
+            role(&look, Some("accent"), "ink"),
+        );
+        assert_ne!(ink, accent);
+        assert_eq!(
+            read("a"),
+            ink,
+            "wave field a (role ink) draws in another color"
+        );
+        assert_eq!(
+            read("b"),
+            accent,
+            "wave field b (role accent) draws in another color"
+        );
+    }
 }

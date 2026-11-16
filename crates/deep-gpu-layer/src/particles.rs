@@ -36,23 +36,27 @@ pub(crate) fn evaluate_sourced(
     labels: &mut Labels,
     assets: deep_canvas_scene3d::scene::Assets<'_>,
     outlines: deep_canvas_scene3d::scene::Outlines<'_>,
-) -> Result<Scene, deep_canvas_scene3d::scene::Refused> {
+) -> Result<Scene, Value> {
     let mut scene =
-        deep_canvas_scene3d::scene::evaluate_sourced(doc, t, look, labels, assets, outlines)?;
-    follow_effects(&mut scene, doc);
+        deep_canvas_scene3d::scene::evaluate_sourced(doc, t, look, labels, assets, outlines)
+            .map_err(|r| refused(r.code, r.path))?;
+    follow_effects(&mut scene, doc)?;
     Ok(scene)
 }
 
 /// #508: a plume's and an airflow's particles follow their effect's params as evaluated at t, so
 /// a driver on a reach, a heat or a speed moves them: each particles item `effect::lower` wrote
 /// takes the params its effect's evaluated params lower to (an airflow's paths read from `doc`).
-/// The bake, the draw, the footprint and the readings all read them from the scene.
-fn follow_effects(scene: &mut Scene, doc: &Value) {
+/// The bake, the draw, the footprint and the readings all read them from the scene. A driven
+/// value out of its range refuses the frame as view3d refuses such a document, naming the field.
+fn follow_effects(scene: &mut Scene, doc: &Value) -> Result<(), Value> {
     use deep_canvas_effects::effect;
     let mut items = Map::new();
+    let mut broken = Vec::new();
     for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
         let mut item = doc["items"][&o.id].clone();
         item["params"] = o.params.clone();
+        broken.extend(effect::item_issues(doc, &o.id, &item));
         let paths: Vec<&str> = o.params["airflow"]["paths"]
             .as_array()
             .map_or(Vec::new(), |a| a.iter().filter_map(Value::as_str).collect());
@@ -64,8 +68,11 @@ fn follow_effects(scene: &mut Scene, doc: &Value) {
         }
         items.insert(o.id.clone(), item);
     }
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
     if items.is_empty() {
-        return;
+        return Ok(());
     }
     let mut lowered = json!({ "items": items });
     effect::lower(&mut lowered);
@@ -77,6 +84,7 @@ fn follow_effects(scene: &mut Scene, doc: &Value) {
             o.params = d["params"].clone();
         }
     }
+    Ok(())
 }
 
 /// The particle path's plants under `--planted`: the CPU and table switches, the kernel's flag
@@ -186,7 +194,9 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let look = Look3::read(&closed::neutral_look(&doc)).map_err(|e| bad(&format!("look: {e}")))?;
     let mut scene =
         evaluate(&doc, 0, &look, &mut Labels::new()).map_err(|r| refused(r.code, r.path))?;
-    follow_effects(&mut scene, &doc);
+    if let Err(r) = follow_effects(&mut scene, &doc) {
+        return Ok(json!({"outcome": "refused", "issues": r["issues"]}));
+    }
     let held = match checked(&doc, &scene, plants, every) {
         Ok(h) => h,
         Err(issues) => return Ok(json!({"outcome": "refused", "issues": issues_json(&issues)})),
@@ -686,7 +696,11 @@ pub(crate) fn frame(
 
 /// #508: the rect (px, x0 y0 x1 y1) holding a projected world box grown by `pad` px, clamped to
 /// the frame; the whole frame when a corner is behind the eye; `None` when it's empty.
-fn rect_of(cam: &deep_canvas_scene3d::scene::Camera, corners: &[[f64; 3]], pad: f64) -> Option<[f64; 4]> {
+fn rect_of(
+    cam: &deep_canvas_scene3d::scene::Camera,
+    corners: &[[f64; 3]],
+    pad: f64,
+) -> Option<[f64; 4]> {
     let [w, h] = cam.size;
     let projected: Option<Vec<[f64; 3]>> = corners.iter().map(|c| cam.project(*c)).collect();
     let r = match projected {
@@ -718,7 +732,11 @@ fn corners_of([lo, hi]: [[f64; 3]; 2]) -> Vec<[f64; 3]> {
 }
 
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 fn unit(a: [f64; 3]) -> [f64; 3] {
@@ -727,7 +745,14 @@ fn unit(a: [f64; 3]) -> [f64; 3] {
 }
 
 fn union(a: Option<[f64; 4]>, b: [f64; 4]) -> [f64; 4] {
-    a.map_or(b, |a| [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])])
+    a.map_or(b, |a| {
+        [
+            a[0].min(b[0]),
+            a[1].min(b[1]),
+            a[2].max(b[2]),
+            a[3].max(b[3]),
+        ]
+    })
 }
 
 /// #508: each film effect's screen footprint this frame (Surfaces this job invents, 5), by item:
@@ -751,7 +776,10 @@ pub(crate) fn effects(
     let doc_seed = doc["seed"].as_u64().unwrap_or(0);
     let mut out = Map::new();
     for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
-        let Some(kind) = o.params["kind"].as_str().filter(|k| effect::KINDS.contains(k)) else {
+        let Some(kind) = o.params["kind"]
+            .as_str()
+            .filter(|k| effect::KINDS.contains(k))
+        else {
             continue;
         };
         let p = &o.params;
@@ -760,7 +788,11 @@ pub(crate) fn effects(
         let mut centre = None;
         match kind {
             "plume" | "airflow" => {
-                for sp in settings.sparks.iter().filter(|s| s.effect.as_deref() == Some(&o.id)) {
+                for sp in settings
+                    .sparks
+                    .iter()
+                    .filter(|s| s.effect.as_deref() == Some(&o.id))
+                {
                     let pad = 0.5 * sp.size[0].max(sp.size[1]).max(1.0) * sp.size_px + 2.0;
                     let held = baked(doc, scene, &sp.item, sp.seed, plants, &mut Vec::new())
                         .map_err(|r| refusal(&r))?;
@@ -784,7 +816,11 @@ pub(crate) fn effects(
                 if kind == "wave_field" {
                     let (c, a, r) = (v3("wave.point"), v3("wave.normal"), n("radius"));
                     // Two directions across the axis.
-                    let other = if a[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
+                    let other = if a[0].abs() < 0.9 {
+                        [1.0, 0.0, 0.0]
+                    } else {
+                        [0.0, 1.0, 0.0]
+                    };
                     let u = unit(cross(a, other));
                     let w = cross(a, u);
                     let disc: Vec<[f64; 3]> = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
@@ -816,7 +852,10 @@ pub(crate) fn effects(
                 item: o.id.clone(),
                 params: std::collections::BTreeMap::from([
                     ("haze.strength".to_string(), json!(n("haze/strength"))),
-                    ("haze.cell".to_string(), json!((n("haze/scale") * px_per_m).max(1.0))),
+                    (
+                        "haze.cell".to_string(),
+                        json!((n("haze/scale") * px_per_m).max(1.0)),
+                    ),
                     ("haze.flow".to_string(), json!(flow)),
                     ("haze.rect".to_string(), json!(rect)),
                 ]),
@@ -949,6 +988,52 @@ mod tests {
         assert!(
             high > 1.8,
             "at the throttle's top the particles reach {high} m, not about 2 (the bottom's {low})"
+        );
+    }
+
+    /// #508: a driver that sets an airflow's speed to 0, below its range, refuses the frame as an
+    /// out-of-range document is refused, naming the field, instead of baking `length / 0`.
+    #[test]
+    fn a_driven_effect_value_out_of_range_refuses_the_frame() {
+        let mut doc = json!({
+            "format": 1, "id": "driven-airflow", "profile": "scene", "title": "t", "description": "d",
+            "size": [320, 240], "camera": "cam", "seed": 508, "transport": {"span": "4s"},
+            "requires": {"modules": {"scene3d": "^1", "motion": "^1", "input": "^1", "effects": "^1"}},
+            "controls": {"wind": {"kind": "slider", "class": "document", "label": "Wind",
+                                  "role": "slider", "range": [0, 1], "default": 0, "increment": 0.01}},
+            "drivers": {"flow-speed": {"target": "items/flow/params/airflow/speed", "expr": "2 * w",
+                                       "vars": {"w": "controls/wind/value"}}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "orthographic", "position": [0, 0, 10], "target": [0, 0, 0],
+                                   "view_width": 6.4, "near": 0.05, "far": 100}},
+                "path": {"id": "path", "kind": "curve@1", "order": "a1",
+                         "params": {"points": [[-1, 0, 0], [0, 0.5, 0], [1, 0, 0]]}},
+                "flow": {"id": "flow", "kind": "effect@1", "order": "a2",
+                         "params": {"kind": "airflow", "airflow": {"paths": ["path"], "speed": 1, "length": 2}}},
+            },
+        });
+        deep_canvas_effects::effect::lower(&mut doc);
+        let look = Look3::read(&closed::neutral_look(&doc)).expect("the look reads");
+        let got = evaluate_sourced(
+            &doc,
+            0,
+            &look,
+            &mut Labels::new(),
+            &|_| None,
+            Default::default(),
+        );
+        let Err(refusal) = got else {
+            panic!("a frame with airflow.speed driven to 0 evaluated instead of refusing");
+        };
+        assert_eq!(refusal["code"], "refused", "{refusal}");
+        let named =
+            refusal["issues"].as_array().into_iter().flatten().any(|i| {
+                i["code"] == "out_of_range" && i["path"] == "items/flow/params/airflow/speed"
+            });
+        assert!(
+            named,
+            "the refusal names no out_of_range airflow.speed: {refusal}"
         );
     }
 }

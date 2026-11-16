@@ -1206,13 +1206,13 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     .takes("item | u64"),
                 p("resolution", "full | half | quarter", "", json!("half"), S, json!("half"), json!("full")),
                 p("wave_field", "{amplitude, wavelength: m, speed: m/s, radius: m, role}", "", Value::Null, S, json!({"amplitude": 1}), json!({"amplitude": 2}))
-                    .takes("{amplitude?: f32, wavelength?: m, speed?: m/s, radius?: m, role?: role}"),
+                    .takes("{amplitude?: 0 to 64, wavelength?: 0.001 to 1000 m, speed?: -1000 to 1000 m/s, radius?: 0.001 to 10000 m, role?: role}"),
                 p("plume", "{radius: m, reach: m, heat, shock_cells, turbulence: m, seed, haze: {strength: px, scale: m}}", "", Value::Null, S, json!({"reach": 2}), json!({"reach": 3}))
-                    .takes("{radius?: m, reach?: m, heat?: f32, shock_cells?: u8, turbulence?: m, seed?: u32, haze?: {strength?: px, scale?: m}}"),
+                    .takes("{radius?: 0.001 to 100 m, reach?: 0 to 1000 m, heat?: 0 to 64, shock_cells?: 0 to 4, turbulence?: 0 to 100 m, seed?: 0 to 4294967295, haze?: {strength?: 0 to 32 px, scale?: 0.001 to 100 m}}"),
                 p("arc", "{to: ID, intensity, width: px, jitter: px, rate: Hz, waves, role}", "", Value::Null, S, json!({"intensity": 4}), json!({"intensity": 2}))
-                    .takes("{to?: ID, intensity?: f32, width?: px, jitter?: px, rate?: Hz, waves?: f32, role?: role}"),
+                    .takes("{to: ID, intensity?: 0 to 64, width?: 0.25 to 64 px, jitter?: 0 to 256 px, rate?: 0 to 120 Hz, waves?: 1 to 64, role?: role}"),
                 p("airflow", "{paths: [ID], around: {axis, copies, span: [deg, deg]}, count, speed: m/s, length: m, fade: {in: s, out: s}}", "", Value::Null, S, json!({"count": 64}), json!({"count": 128}))
-                    .takes("{paths?: [ID] ≤ 8, around?: {axis?: vec3, copies?: u8, span?: [deg, deg]}, count?: u32, speed?: m/s, length?: m, fade?: {in?: s, out?: s}}"),
+                    .takes("{paths: [curve ID] ≤ 8 (at least 1), around?: {axis?: vec3, copies?: 1 to 16, span?: [-360 to 360 deg, -360 to 360 deg]}, count?: 1 to 65536, speed?: 0.001 to 1000 m/s, length?: 0.001 to 1000 m, fade?: {in?: 0 to 60 s, out?: 0 to 60 s}}"),
                 p(
                     "dof",
                     "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
