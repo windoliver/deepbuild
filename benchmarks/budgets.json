@@ -1015,6 +1015,26 @@
       ]
     },
     {
+      "id": "canvas-figure-budgets",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "figure-budgets"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "redraw_wall_ms": 8.33,
+        "parts_wall_ms": 8.33,
+        "inset_lit_gpu_ms": 0.2,
+        "inset_unlit_gpu_ms": 0.3
+      },
+      "initialReason": "Issue #508 first measurement: the merge base has no figure fixtures, no view3d track and no such task. A release deep-gpu draws, at 1080p: the turbofan fixture at 120 fps with its throttle moved to the top at 1 s, the redrawn frame's wall ms; 500 boxes in five assemblies taken apart while the camera orbits, the worst frame's wall ms over 600 frames at 120 fps; and a projected inset over the left half of a floor, lit and unlit, less the floor alone, the difference of the median GPU ms over 120 frames. Five runs after a warm-up one, each a fresh process. canvas.mjs judge holds it on a reference Mac; tests/acceptance/508/ac4-budgets.test.ts holds the issue's numbers. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#508.822d5a2c"
+      ]
+    },
+    {
       "id": "canvas-water",
       "command": [
         "node",
