@@ -22,7 +22,7 @@
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { availableParallelism, loadavg, tmpdir } from 'node:os';
+import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -368,15 +368,22 @@ export function classify(failures, findings, baseline, load = loadavg()[0]) {
 // (LIGHT) reads files for seconds on one core, so it asks for no grant. It still runs under the session's cpu.slot. A
 // shard's job runs in its shard.
 const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-closures|record-reader-guard|color-literal-guard|guide)\.mjs$/;
+// The jobs running now, so a run stopped by its PID stops them too (main): they pass through on its one grant, which is
+// free once it has ended, so a job left running would run beside the next run uncounted. Once stopped, the run starts
+// no job: each reads as run by none.
+const live = new Set();
+let stopped = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
+  if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
   const descriptor = openSync(log, 'w');
   const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   const leased = [join(root, 'scripts/lease'), command, ...args];
   return new Promise((done) => {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
-    child.on('error', (error) => { closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
-    child.on('close', (status) => { closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
+    live.add(child);
+    child.on('error', (error) => { live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
+    child.on('close', (status) => { live.delete(child); closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
   });
 }
 
@@ -461,6 +468,13 @@ async function main(args) {
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
   if (!held) return queued(args, [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)], started);
+  // Stopped, the run passes the stop to its jobs, starts none, and ends once they have, through its own clean-up (its
+  // shards' locks too, which a shard still being made keeps till it is), so none runs on once its grant is given back.
+  // A stop that comes during a binary build is seen when that build ends.
+  for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => {
+    stopped ??= signal;
+    for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
+  });
 
   const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
   const binaries = new Map(), binRoot = join(logs, 'binaries');
@@ -516,6 +530,7 @@ async function main(args) {
     if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism'], 'vitest-timed', root, own));
     if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed', root, own));
 
+    if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [];
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);

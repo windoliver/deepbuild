@@ -1,0 +1,20 @@
+// A planted suite for #1830 AC1: judgeLimit called by name. Each line marked `finding` gives judgeLimit no loads.
+import { loadavg } from 'node:os';
+import { expect, test } from 'vitest';
+import { fingerprint, judgeLimit, measureOnce } from '../../../scripts/benchmark.mjs';
+
+const machine = fingerprint();
+
+test('a budget judged by name', () => {
+  const runs = Array.from({ length: 5 }, () => measureOnce(['true'], process.cwd()).elapsedMs);
+  const verdict = judgeLimit({ limit: 20, runs, fingerprint: machine }); // finding
+  const loads = runs.map(() => ({ start: loadavg()[0], end: loadavg()[0] }));
+  expect(verdict.status).toBe('PASS');
+  expect(judgeLimit({ limit: 20, runs, fingerprint: machine, loads }).status).toBe('PASS');
+  const wide = judgeLimit({ // finding
+    limit: 20,
+    runs,
+    fingerprint: machine,
+  });
+  expect(wide.status).toBe('PASS');
+});
