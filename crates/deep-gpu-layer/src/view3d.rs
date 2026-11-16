@@ -18,7 +18,7 @@ use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate_sourced, Labels, Scene};
+use deep_canvas_scene3d::scene::{Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
 use deep_scene3d_render::SHADOW_PASS;
@@ -28,6 +28,7 @@ use serde_json::{json, Map, Value};
 use crate::frames::{hex, Capture};
 use crate::levels::Levels;
 use crate::liveview::surface_of;
+use crate::particles::evaluate_sourced;
 use crate::session3::{self, lock};
 use crate::status;
 use crate::window::OverlayPicture;
@@ -265,6 +266,11 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
         .ok_or_else(|| bad("size is [w, h]"))?;
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
+        // #508: an input track applied to the document's controls on the frame clock, as a played
+        // form carries it inline (the motion module reads `track`).
+        if let Some(track) = call.get("track").filter(|t| !t.is_null()) {
+            d.insert("track".into(), track.clone());
+        }
     }
     // #443: each vector item's SVG from the store, inlined as deep_show's hub inlines it
     // (`params.outline.svg`), which vector's outline source reads.
@@ -297,13 +303,17 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
         };
         patches.push((frame, writer.to_string(), p["ops"].clone()));
     }
-    let targets = call["targets"]
+    let mut targets = call["targets"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
+    // #508: a capture that names no targets keeps each captured frame's final picture.
+    if call.get("targets").is_none() && call.get("capture").is_some() {
+        targets.insert("final".into());
+    }
     if targets.iter().any(|t| {
         !matches!(
             t.as_str(),
@@ -319,12 +329,13 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
                 | "foam"
                 | "normal"
                 | "coc"
+                | "checks"
                 | "surface"
                 | "window_linear"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface and window_linear",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear and checks",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -1097,7 +1108,14 @@ fn run_view(
         Some(_) => Vec::new(),
     };
     let mut drawn_k = 0usize;
-    crate::physics::bake(&mut args.doc)?;
+    // #508: a film effect's params out of range refuse the call, naming the field; a plume's and
+    // an airflow's particles are written beside them, drawn as any particles item.
+    let broken = deep_canvas_effects::effect::issues(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
+    deep_canvas_effects::effect::lower(&mut args.doc);
+    crate::physics::bake(&mut args.doc, &call["tracks"])?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
@@ -1208,6 +1226,7 @@ fn run_view(
         "foam",
         "normal",
         "coc",
+        "checks",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1294,8 +1313,7 @@ fn run_view(
             crate::axes::plant_name(app.planted),
         );
         tl.check(|t| {
-            let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)
-                .map_err(|r| refused(r.code, r.path))?;
+            let sc = evaluate_sourced(&args.doc, t, &args.look, &mut labels, &read, outlines)?;
             Ok((crate::regions::Seen::Camera(sc.camera), sc.volumes))
         })?;
     }
@@ -1354,6 +1372,7 @@ fn run_view(
                 }
             }
             if patched {
+                deep_canvas_effects::effect::lower(&mut args.doc);
                 holds = deep_canvas_scene3d::samples::holds(&args.doc);
             }
             // The patched document's bindings are the ones drawn (a slice op can't add or
@@ -1398,14 +1417,12 @@ fn run_view(
                 ..deep_canvas_scene3d::contributed::Fills::of(pack_sealed()?, plant)
             };
             let mut scene =
-                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                evaluate_sourced(&composed, t, &args.look, &mut labels, &read, outlines)?;
             // #450: mesh particles draw through an instancer's columns, read off the scene.
             if let Some(fed) =
                 crate::particles::meshes(&composed, &scene, t as f64 / 705_600_000.0, app.planted)?
             {
-                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                scene = evaluate_sourced(&fed, t, &args.look, &mut labels, &read, outlines)?;
             }
             axes_mapped = memo.borrow_mut().take_mapped();
             if args.axes {
@@ -1506,8 +1523,7 @@ fn run_view(
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // #506's planted core: a view overlay shaded with the main view's light cut.
             if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
-                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let main = evaluate_sourced(&s.main, t, &args.look, &mut Labels::new(), &read, outlines)?;
                 scene.light_cut = Some(deep_canvas_scene3d::light::policy(&scene.lights, &main.camera));
             }
             // How many times this frame derived each mesh-edge line's edge set (#1640).
@@ -1578,6 +1594,13 @@ fn run_view(
             // so a seek starts it again at zero; the shipped one reads t itself.
             let fx_t = match app.planted {
                 Some(Planted::ParticlesIntegrate) => (n - args.from) as f64 / args.fps as f64,
+                // #508's wrong program: the film effects' clock is the wall clock, its
+                // milliseconds read as seconds, so an effect that holds still between strikes
+                // (an arc at 12 a second) still moves between any two draws.
+                Some(Planted::EffectReadsWallClock) => {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+                    now.map_or(0.0, |d| (d.as_millis() % 1_000_000) as f64)
+                }
                 _ => n as f64 / args.fps as f64,
             };
             let settings = effects::settings(
@@ -1608,6 +1631,10 @@ fn run_view(
             last_camera = Some(scene.camera.clone());
             let particles =
                 crate::particles::frame(&mut settings, &args.doc, &scene, fx_t, call, app.planted)?;
+            // #508: each film effect's footprint this frame, and each plume's haze over its own.
+            let footprints =
+                crate::particles::effects(&mut settings, &args.doc, &scene, fx_t, app.planted, seeding)?;
+            settings.checks = args.capture.wants(n) && args.targets.contains("checks") && !noop;
             if dirt.is_some() {
                 settings.dirt = dirt.clone();
             }
@@ -1760,8 +1787,7 @@ fn run_view(
                 edge_plant,
             );
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
-                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)?;
                 if drops_dispersion {
                     sc.plant_drops_dispersion();
                 }
@@ -1962,14 +1988,7 @@ fn run_view(
             let mut drawn_over = None;
             if overlay {
                 let mut sc = (*sub_scene(0)).clone();
-                let readouts = std::mem::take(&mut sc.readouts);
-                match sc.layers.first_mut() {
-                    Some(l) => l.labels.extend(readouts),
-                    None => sc.layers.push(deep_canvas_scene3d::scene::Layer3 {
-                        labels: readouts,
-                        ..Default::default()
-                    }),
-                }
+                deep_scene3d_render::readouts_as_labels(&mut sc);
                 let plain = lock(&fx).settings.clone();
                 let mut with = plain.clone();
                 with.selection = effects::settings(
@@ -2050,8 +2069,7 @@ fn run_view(
             if let (Some(s), true) = (sub.as_ref(), keeping) {
                 let mut main = s.main.clone();
                 main["size"] = json!(size);
-                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)
-                    .map_err(|r| refused(r.code, r.path))?;
+                let mut first = evaluate_sourced(&main, t, &args.look, &mut Labels::new(), &read, outlines)?;
                 first.texels.clone_from(&scene.texels);
                 session3::draw(app, &opened, Arc::new(first), args.look.clone(), n, 0, false, false)?;
                 session3::keep_first(app, keeps[0], keeps[1]);
@@ -2225,8 +2243,7 @@ fn run_view(
                         None => (doc_look.clone(), doc_look_json.clone()),
                     };
                     let mut sc =
-                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)
-                            .map_err(|r| refused(r.code, r.path))?;
+                        evaluate_sourced(&composed, t, &look_k, &mut labels, &read, outlines)?;
                     sc.camera = scene.camera.clone();
                     sc.texels.clone_from(&scene.texels);
                     if args.window.is_some() {
@@ -2396,17 +2413,7 @@ fn run_view(
                 (&drawn_over, &plain0, drawn.bytes.as_mut())
             {
                 if let Some(ob) = &over.bytes {
-                    for ((o, p), b) in ob
-                        .as_chunks::<4>()
-                        .0
-                        .iter()
-                        .zip(plain.as_chunks::<4>().0)
-                        .zip(bytes.as_chunks_mut::<4>().0)
-                    {
-                        if o != p {
-                            *b = *o;
-                        }
-                    }
+                    deep_scene3d_render::lay_over(bytes, ob, plain);
                 }
             }
             // #506: each view overlay's frame over its rect; a view overlay's own run keeps its
@@ -2528,6 +2535,9 @@ fn run_view(
                 frame.insert("projected".into(), p);
             }
             frame.extend(particles.map(|p| ("particles".to_string(), p)));
+            if call["footprints"] == true {
+                frame.insert("footprints".into(), Value::Object(footprints));
+            }
             frame.extend(trails.map(|p| ("trails".to_string(), p)));
             if call["strokes"] == true {
                 let rows: Vec<Value> = stroke_rows
@@ -2694,6 +2704,27 @@ fn run_view(
                     })?;
                     frame.insert("read".into(), read);
                 }
+                // #508: what a check reads back from the frame, each as raw rows named by their
+                // SHA-256: the color where the document's operators read the chain (before any
+                // display-only pass), the object IDs and the view-axis depth.
+                if args.targets.contains("checks") && !noop {
+                    let fx2 = fx.clone();
+                    let color = app
+                        .worker
+                        .call(move |state| lock(&fx2).read_checks(&state.gpu.device()));
+                    let mut checks = Map::new();
+                    let parts = [
+                        ("color", color.as_deref()),
+                        ("ids", drawn.targets.as_ref().map(|(_, ids)| ids.as_slice())),
+                        ("depth", drawn.view_depth.as_deref()),
+                    ];
+                    for (name, bytes) in parts {
+                        if let Some(b) = bytes {
+                            checks.insert(name.into(), json!(write_named(out, b, "bin")?));
+                        }
+                    }
+                    frame.insert("checks".into(), Value::Object(checks));
+                }
                 if let Some((linear, ids)) = &drawn.targets {
                     if args.targets.contains("linear") {
                         frame.insert("linear".into(), json!(write_named(out, linear, "f32")?));
@@ -2766,6 +2797,14 @@ fn run_view(
                     .map(|(item, view, batch)| json!({"item": item, "view": view, "batch": batch}))
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
+                // #1636: each draw of a mesh the main view's color pass issues.
+                let draws: Vec<Value> = (c.draws.iter())
+                    .map(|(of, mesh, material, instances)| {
+                        json!({"pass": "color", "of": of, "mesh": mesh, "material": material,
+                            "instances": instances})
+                    })
+                    .collect();
+                frame.insert("draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("axes_mapped".into(), json!(axes_mapped));
                 frame.insert(
@@ -2865,10 +2904,17 @@ fn run_view(
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+                // #508: the film effects' passes at the size the effects drew.
+                let fx_size = match args.surface.scale < 1.0 {
+                    true => surface::scaled(size, args.surface.scale),
+                    false => size,
+                };
+                let effects_declared = lock(&fx).declared_ms(fx_size);
                 let declared: serde_json::Map<String, Value> = drawn
                     .declared
                     .iter()
                     .map(|(k, v)| (k.to_string(), json!(v)))
+                    .chain(effects_declared.iter().map(|(k, v)| (k.to_string(), json!(v))))
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));

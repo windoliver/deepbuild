@@ -1015,6 +1015,26 @@
       ]
     },
     {
+      "id": "canvas-figure-budgets",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "figure-budgets"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "redraw_wall_ms": 8.33,
+        "parts_wall_ms": 8.33,
+        "inset_lit_gpu_ms": 0.2,
+        "inset_unlit_gpu_ms": 0.3
+      },
+      "initialReason": "Issue #508 first measurement: the merge base has no figure fixtures, no view3d track and no such task. A release deep-gpu draws, at 1080p: the turbofan fixture at 120 fps with its throttle moved to the top at 1 s, the redrawn frame's wall ms; 500 boxes in five assemblies taken apart while the camera orbits, the worst frame's wall ms over 600 frames at 120 fps; and a projected inset over the left half of a floor, lit and unlit, less the floor alone, the difference of the median GPU ms over 120 frames. Five runs after a warm-up one, each a fresh process. canvas.mjs judge holds it on a reference Mac; tests/acceptance/508/ac4-budgets.test.ts holds the issue's numbers. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#508.822d5a2c"
+      ]
+    },
+    {
       "id": "canvas-water",
       "command": [
         "node",
@@ -1571,6 +1591,19 @@
       ]
     },
     {
+      "id": "web-export",
+      "command": [
+        "node",
+        "benchmarks/web.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #172 first measurement (#172.1e1f958d): the merge base has no web player. One `deep-show run` exports a 2D figure to the web and reads its bundle's player (the WebAssembly and JavaScript it is made of, fonts and assets aside), each compressed with Brotli at quality 11; it prints those bytes and the bundle's. The criterion's limits (the player under 12 MB compressed without fonts and assets, the lab's first frame under 3 s in Chrome, 60 fps at 1080p) are judged by tests/acceptance/172/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#172.1e1f958d"
+      ]
+    },
+    {
       "id": "physics-module",
       "command": [
         "node",
@@ -1806,6 +1839,59 @@
       "initialReason": "Issue #233 first measurement (#233.f4f81b7b): the merge base has no math@1 pack. A release deep-gpu draws criterion 11's math@1 document (math.axes on x [-3, 3] and y [0, 9] over 8 x 5 units, x squared plotted on them, and a square a channel moves) and the same document's expansion written by hand, each under frame_budget at 1920 x 1080 for 5 s at 60 fps in look clean, in alternating order, one warm-up and five runs; a release deep-show evaluates the math document at 0.55 s and counts the nodes that ran for an instance itself. canvas.mjs judge holds the math document's median GPU p95 to 1.05 x the hand-written one's (math_over_hand) and the instance nodes to 0 (frame_expansions, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#233.f4f81b7b"
+      ]
+    },
+    {
+      "id": "canvas-tree",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "tree"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "tree_build_ms": 20,
+        "forest_draws_per_variant_material": 1
+      },
+      "initialReason": "Issue #1636 first measurement: the merge base has no tree builder and no such task. Release deep-show's geometry call with timings builds a 4-level tree@1 of 4 children a fork, 12 sides and 10 rings (about 21,000 triangles) and reads its build_ms, the builder's own time with its count; and release deep-gpu draws a forest of 10,000 instances of 8 seeded tree variants, each in a bark and a leaf material, for one frame with counts, the reading the most color-pass draws any (variant, material) takes. Five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the time on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1636.2d5eb798"
+      ]
+    },
+    {
+      "id": "hub-lifecycle-start",
+      "command": [
+        "node",
+        "benchmarks/hub-lifecycle.mjs",
+        "start"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "start": 60
+      },
+      "initialReason": "Issue #2330 first measurement: the base has lifecycle commands but no registered lifecycle task, so an absent task is INITIAL, not retroactive base proof. Reuse the sealed redraft's real socket answering at spawn + 30 ms, its 30-35 ms qualification, silent CLI success and bracketed completion lag. One warm-up then five readings; judge all five upper bounds against 60 ms and failing lower bounds by the unchanged reference-Mac margin. The budget runner takes 20 samples per side when the task exists, retaining environment and instruction-counter evidence; p50 and peak memory get a 50% merge-base margin. Standalone --check is not budget proof; the original polling base still needs its authorized wrong-program run.",
+      "criteria": [
+        "#2330.c6939f4f"
+      ]
+    },
+    {
+      "id": "hub-lifecycle-stop",
+      "command": [
+        "node",
+        "benchmarks/hub-lifecycle.mjs",
+        "stop"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "stop": 30,
+        "early-close": 30
+      },
+      "initialReason": "Issue #2330 first measurement: the base has lifecycle commands but no registered lifecycle task, so an absent task is INITIAL, not retroactive base proof. Reuse the sealed redraft's normal stop, early control EOF with the socket still answering for 200 ms, and stubborn peer past the 15 s limit; preserve every safety assertion. One warm-up then five readings per timed scenario; judge all five upper bounds against 30 ms and failing lower bounds by the unchanged reference-Mac margin. The budget runner takes 20 samples per side when the task exists, retaining environment and instruction-counter evidence; p50 and peak memory get a 50% merge-base margin. Standalone --check is not budget proof; the original polling base still needs its authorized wrong-program run.",
+      "criteria": [
+        "#2330.c4ac049d"
       ]
     }
   ]

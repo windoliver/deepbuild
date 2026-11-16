@@ -38,8 +38,13 @@ fn world() -> Value {
 }
 
 fn built() -> (World, Rapier) {
-    let w = check(&world(), &RAPIER3D, &deep_canvas_physics::roles::TABLE)
-        .expect("the kit's world checks");
+    built_from(&world())
+}
+
+/// `doc` checked and built on Rapier; #251's course too (physics/lap.rs).
+pub(super) fn built_from(doc: &Value) -> (World, Rapier) {
+    let w =
+        check(doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE).expect("the kit's world checks");
     let mut b = Rapier::default();
     b.build(&w).expect("the kit's world builds");
     (w, b)
@@ -47,7 +52,7 @@ fn built() -> (World, Rapier) {
 
 /// A state: the world's whole checkpoint, and the rows its last step wrote, each break with its
 /// joint's `over_steps`.
-fn state_of(b: &Rapier, rows: Vec<Value>) -> Value {
+pub(super) fn state_of(b: &Rapier, rows: Vec<Value>) -> Value {
     let cp = b.checkpoint();
     let hex: String = cp.state.iter().map(|x| format!("{x:02x}")).collect();
     json!({"step": cp.step, "world": hex, "rows": rows})
@@ -60,7 +65,11 @@ fn bytes(hex: &str) -> Vec<u8> {
 }
 
 fn load(state: &Value) -> (World, Rapier) {
-    let (w, mut b) = built();
+    load_in(built(), state)
+}
+
+/// The world `built` as `state` holds it.
+pub(super) fn load_in((w, mut b): (World, Rapier), state: &Value) -> (World, Rapier) {
     let cp = Checkpoint {
         backend: RAPIER3D.backend.into(),
         version: RAPIER3D.version.into(),
@@ -77,7 +86,11 @@ fn init() -> Value {
 }
 
 fn step(state: &mut Value, input: &StepInput<'_>) {
-    let (w, mut b) = load(state);
+    step_on(load(state), state, input);
+}
+
+/// One step of the world `loaded`, which `state` held, with the entries `input` stamps.
+pub(super) fn step_on((w, mut b): (World, Rapier), state: &mut Value, input: &StepInput<'_>) {
     let inputs: Vec<Input> = input
         .entries
         .iter()

@@ -1,5 +1,6 @@
 //! #2010: a golden replayed on this machine (Golden), moved here from runner.rs whole; #524 lets it
-//! name a scene's world, keyed with the scene's reads as its bake is.
+//! name a scene's world, keyed with the scene's reads as its bake is; #251 replays it with the
+//! input track it was recorded with, keyed with that track as `golden` keys it.
 
 use super::*;
 
@@ -13,6 +14,14 @@ impl Run {
             Err(e) => return Some(e),
         };
         let (g, world) = (call.get("golden")?, &world);
+        let (w, mut b) = match self.build(world) {
+            Ok(x) => x,
+            Err(e) => return Some(e),
+        };
+        let track = match Track::read(&w, call) {
+            Ok(t) => t,
+            Err(e) => return Some(e),
+        };
         let shift = match call.get("shift") {
             None => None,
             Some(s) => Some((
@@ -34,7 +43,7 @@ impl Run {
                 .map(Value::as_u64)
                 .map_or(Some(None), |s| s.map(Some))?,
             shift,
-            track: &NO_TRACK,
+            track: &track,
         };
         let dir = call
             .get("store")
@@ -44,12 +53,8 @@ impl Run {
             Ok(r) => r,
             Err(e) => return Some(e),
         };
-        let (w, mut b) = match self.build(world) {
-            Ok(x) => x,
-            Err(e) => return Some(e),
-        };
         let reads = reads(&plan, plan.steps);
-        let key = self.key(world, &reads, &json!([]), &rate, plan.steps, None);
+        let key = self.key(world, &reads, &track.json(), &rate, plan.steps, None);
         let digest = self.build.runtime_digest();
         let here = machine(&self.build.target);
         let machines = golden::machines(g, &here);
@@ -94,7 +99,14 @@ impl Run {
             let target = g["record_on"].as_str()?;
             let bake = stored(
                 dir,
-                &self.key(world, &reads, &json!([]), &rate, plan.steps, Some(target)),
+                &self.key(
+                    world,
+                    &reads,
+                    &track.json(),
+                    &rate,
+                    plan.steps,
+                    Some(target),
+                ),
             )?;
             let cp = bake["checkpoints"]
                 .as_array()?

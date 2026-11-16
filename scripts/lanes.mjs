@@ -737,6 +737,14 @@ byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
 // full build needs (tests/acceptance/225-redraft-ac5/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/225-redraft-ac5/');
 byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
+// #172's files each build deep-show (full; the refusals also full,test-web-lacks) and drive headless Chrome with WebGPU on.
+alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
+timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
+// #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
+// never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
+// place.
+alone.push('tests/acceptance/172-redraft-ac2/');
+byHand.push('tests/acceptance/172/refusals.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
@@ -784,6 +792,11 @@ timed.push('tests/acceptance/468/ac5-budgets.test.ts');
 // role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
 alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
 byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #508's files build deep-gpu and deep-show and draw effects on the Metal GPU; ac4-budgets times release builds, and
+// ac1's live sessions start real Claude Code and Codex sessions on your plan.
+alone.push('tests/acceptance/508/');
+timed.push('tests/acceptance/508/ac4-budgets.test.ts');
+byHand.push('tests/acceptance/508/ac1-skill.live.test.ts');
 // #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
 alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
 timed.push('tests/acceptance/213/ac8-budgets.test.ts');
@@ -806,10 +819,21 @@ timed.push('tests/acceptance/184/budgets.test.ts');
 // replica's refusal before a play's first step is "before any run", its third draft runs; the first two by hand.
 alone.push('tests/acceptance/184-redraft-ac7-2/');
 byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/184-redraft-ac7/ac7-bots-refused.test.ts');
+// #555's files start replicas and a hub and play the crawler's 4,000-step runs for minutes.
+alone.push('tests/acceptance/555/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
+// #457's files each build deep-show; ac1, ac9 and ac10 draw on the Metal GPU. ac9-budgets judges the loop's budgets on
+// the reference Mac, and ac10-shots writes docs/evidence/457/ and waits on your taste call in tests/acceptance/457/TASTE.json.
+alone.push('tests/acceptance/457/');
+timed.push('tests/acceptance/457/ac9-budgets.test.ts');
+
+// #1636's files each build deep-show (full) and some deep-gpu; ac1-same-hash also builds deep-show for Linux x86_64
+// in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
+alone.push('tests/acceptance/1636/');
+timed.push('tests/acceptance/1636/ac8-budget.test.ts');
 
 /**
  * #1830: since #1555 judgeLimit reads INCONCLUSIVE when a call gives no loads, so these files' timing criteria read
@@ -870,7 +894,7 @@ export const checks = [
   { name: 'wasm32', commands: [[process.execPath, 'scripts/wasm32.mjs']], fix: 'Remove the threads or the native-only API from the crate each FAIL line names, or install the target (rustup target add wasm32-unknown-unknown).' },
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
-  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
+  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, write the name so it does not read as an event kind, or list a name that is no event kind in scripts/not-event-kinds.txt beside the open issue that names it, and remove each stale entry named above; offline, run again with network and gh signed in.' },
   // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910), and
   // every `deep` command and agent tool an open issue names is in the design or planned (#1329). It reads the open
   // issues the catalogue drift lane fetched.

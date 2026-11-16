@@ -213,6 +213,7 @@
     "tests/acceptance/16/address.test.ts › AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket › AC2 the app (#34): its socket client's tests pass against the hub through the forwarded socket the setting names"
   ],
   "skips": [
+    {"id": "tests/acceptance/2063/ac1-recorded-tracker.test.mjs › #2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it", "note": "", "reason": "retired with the owner's approval on #2063's PR #2572: its recorded list holds brief.uncited, which the owner ruled an event kind; ac1-recorded-tracker-exact.test.mjs is criterion 1's test", "approval": "#2063, owner's ruling on brief.uncited"},
     {
       "id": "packages/pi/test/lifecycle.test.ts › the pi package › a hub restarted mid-turn leaves the turn's stop judged",
       "note": "",

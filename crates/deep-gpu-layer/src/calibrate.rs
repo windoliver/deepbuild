@@ -524,11 +524,17 @@ pub fn calibrate(app: &mut App) -> Value {
     let (emit, check) = operator_plants(app.planted);
     let mut graphs: Vec<Graph> = shipped::library(karis)
         .into_iter()
-        .map(|s| Graph {
-            name: s.name.into(),
-            origin: "shipped",
-            stages: s.stages,
-            measured: false,
+        .map(|s| {
+            // #508: the film effects' passes are costed by a frame's measurement.
+            let measured = shipped::EFFECT_MEASURED_NS_PER_PX
+                .iter()
+                .any(|(n, _)| *n == s.name);
+            Graph {
+                name: s.name.into(),
+                origin: "shipped",
+                stages: s.stages,
+                measured,
+            }
         })
         .collect();
     graphs.extend(fixtures());

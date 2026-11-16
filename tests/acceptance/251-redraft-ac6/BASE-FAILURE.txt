@@ -1,0 +1,39 @@
+The #251 criterion 6 redraft run once at base commit a6e742ed0 ("Merge pull request #2708 …"; no implementation of
+#251), with the first draft's tests/acceptance/251/helpers.ts put back unchanged from bf254d0fc for the run (it is
+imported read only and isn't part of this folder's commit). macOS arm64 (Mac17,10, rustc 1.99.1, Node 24.22.2,
+vitest 5.0.5), heavily loaded (1-minute load near 400), run directly, without throttle or lease:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/251-redraft-ac6 --testTimeout=600000
+
+The base's deep-physics had been built just before with the same environment (`cargo build --locked --bin
+deep-physics`, 6 m 27 s cold), so the file's own build was a no-op.
+
+Result: Test Files 1 failed (1); Tests 2 failed (2); 3.6 s. Both fail at an assertion because the vehicle surface is
+absent. Neither failure is in the harness, and neither is BLOCKED. Each failure, trimmed:
+
+ac6-refusals.test.ts
+
+- #251.2e102906 (fields): at `none`, the judge's three failures:
+    AssertionError: the right vehicle bodies are admitted and each wrong one is refused, naming its field:
+      the four-wheeled kart: refused, where a right vehicle body is admitted: [{"code":"unknown_field",
+        "ids":["kart"],"path":"bodies/kart/vehicle", … "what":"bodies/kart/vehicle is not a field here; the fields are
+        kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active,
+        anchors, priority"}, {"code":"physics.unsupported","ids":["kart"],"path":"bodies/kart/kind",
+        "actual":"vehicle", "what":"a vehicle body isn't run by this backend interface yet; #251 brings it"}]
+      the eight-wheeled kart: refused, where a right vehicle body is admitted: [the same two errors]
+      the ninth wheel: no error refuses the vehicle body kart naming the field bodies/kart/vehicle/wheels (errors:
+        [the same two errors; bodies/kart/vehicle is refused whole, as an unknown field])
+    : expected [ …(3) ] to deeply equal []
+  The 2D world and the follow channel weren't among the failures at the base, and the test doesn't credit that: the
+  base refuses every vehicle body at bodies/kart/kind ("#251 brings it"), and any body that isn't kinematic at
+  bodies/<id>/follow. The test fails until the same program admits both right bodies.
+
+- #251.2e102906 (twin: check_counts_wheels_only): at #1918's runner, before any judging:
+    AssertionError: deep-physics --planted check_counts_wheels_only (check_counts_wheels_only) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+    ; stderr: : expected 2 to be +0
+  The base has no planted program of that name.
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/251-redraft-ac6/tsconfig.json` exits 0 (with
+the first draft's helpers.ts in place).

@@ -1193,12 +1193,26 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
         // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
-        // (Effect: dof).
+        // (Effect: dof). #508: the film kinds, which the effects module ranges and draws; each
+        // kind's params sit under its name.
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof | wave_field | plume | arc | airflow", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("anchor", "ID", "", Value::Null, S, json!("it"), json!("it")),
+                p("axis", "vec3", "", json!([0, 1, 0]), S, json!([0, 1, 0]), json!([1, 0, 0])),
+                p("seed", "item | u64", "", json!("item"), S, json!("item"), json!(7))
+                    .takes("item | u64"),
+                p("resolution", "full | half | quarter", "", json!("half"), S, json!("half"), json!("full")),
+                p("wave_field", "{amplitude, wavelength: m, speed: m/s, radius: m, role}", "", Value::Null, S, json!({"amplitude": 1}), json!({"amplitude": 2}))
+                    .takes("{amplitude?: 0 to 64, wavelength?: 0.001 to 1000 m, speed?: -1000 to 1000 m/s, radius?: 0.001 to 10000 m, role?: role}"),
+                p("plume", "{radius: m, reach: m, heat, shock_cells, turbulence: m, seed, haze: {strength: px, scale: m}}", "", Value::Null, S, json!({"reach": 2}), json!({"reach": 3}))
+                    .takes("{radius?: 0.001 to 100 m, reach?: 0 to 1000 m, heat?: 0 to 64, shock_cells?: 0 to 4, turbulence?: 0 to 100 m, seed?: 0 to 4294967295, haze?: {strength?: 0 to 32 px, scale?: 0.001 to 100 m}}"),
+                p("arc", "{to: ID, intensity, width: px, jitter: px, rate: Hz, waves, role}", "", Value::Null, S, json!({"intensity": 4}), json!({"intensity": 2}))
+                    .takes("{to: ID, intensity?: 0 to 64, width?: 0.25 to 64 px, jitter?: 0 to 256 px, rate?: 0 to 120 Hz, waves?: 1 to 64, role?: role}"),
+                p("airflow", "{paths: [ID], around: {axis, copies, span: [deg, deg]}, count, speed: m/s, length: m, fade: {in: s, out: s}}", "", Value::Null, S, json!({"count": 64}), json!({"count": 128}))
+                    .takes("{paths: [curve ID] ≤ 8 (at least 1), around?: {axis?: vec3, copies?: 1 to 16, span?: [-360 to 360 deg, -360 to 360 deg]}, count?: 1 to 65536, speed?: 0.001 to 1000 m/s, length?: 0.001 to 1000 m, fade?: {in?: 0 to 60 s, out?: 0 to 60 s}}"),
                 p(
                     "dof",
                     "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
@@ -1738,6 +1752,57 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("coil@1", json!({"radius": 0.2, "pitch": 0.05, "wire": 0.01, "turns": 3, "paint": {"fill": {"role": "accent"}}}))}),
         },
+        "tree@1" => Spec {
+            kind: "tree@1",
+            module: "scene3d",
+            params: vec![
+                p("seed", "u32", "", json!(0), G, json!(0), json!(1)),
+                ranged(p("levels", "u8", "", json!(4), G, json!(3), json!(4)), 1.0, 5.0),
+                ranged(p("length", "m", "m", json!(4), G, json!(4), json!(3)), 0.001, 1000.0),
+                ranged(
+                    p("radius", "m", "m", json!(0.15), G, json!(0.15), json!(0.2)),
+                    0.0001,
+                    100.0,
+                ),
+                ranged(
+                    p("exponent", "f32", "", json!(2.0), G, json!(2.0), json!(2.5)),
+                    1.0,
+                    4.0,
+                ),
+                ranged(p("split", "u8", "", json!(3), G, json!(3), json!(2)), 1.0, 8.0),
+                ranged(
+                    p("angle", "deg", "deg", json!(40), G, json!(40), json!(30)),
+                    0.0,
+                    90.0,
+                ),
+                ranged(
+                    p("roll", "deg", "deg", json!(137.5), G, json!(137.5), json!(90)),
+                    -360.0,
+                    360.0,
+                ),
+                ranged(
+                    p("gravity", "f32", "", json!(0), G, json!(0), json!(0.4)),
+                    -4.0,
+                    4.0,
+                ),
+                p(
+                    "leaves",
+                    "{per_twig: u8 ≤ 64, size: m}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"per_twig": 4, "size": 0.1}),
+                    json!({"per_twig": 6, "size": 0.15}),
+                )
+                .takes("{per_twig: u8, size: m}"),
+                ranged(p("segments", "u16", "", json!(8), G, json!(8), json!(6)), 3.0, 64.0),
+                ranged(p("rings", "u16", "", json!(8), G, json!(8), json!(6)), 2.0, 64.0),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item("tree@1", json!({"seed": 1, "levels": 3, "length": 2, "radius": 0.1, "leaves": {"per_twig": 4, "size": 0.1}, "paint": {"fill": {"role": "accent"}}}))}),
+        },
         "plate@1" => Spec {
             kind: "plate@1",
             module: "scene3d",
@@ -2038,7 +2103,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 27] = [
+pub const SCENE3D: [&str; 28] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -2063,6 +2128,7 @@ pub const SCENE3D: [&str; 27] = [
     "display@1",
     "hull@1",
     "surface@1",
+    "tree@1",
     "curve@1",
     "mesh.asset@1",
     "mesh.sequence@1",

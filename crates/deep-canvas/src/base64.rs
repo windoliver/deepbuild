@@ -23,30 +23,43 @@ pub fn encode(bytes: &[u8]) -> String {
 /// The bytes of base64 `text`, padded or not; `None` for a character outside the alphabet or a
 /// group of one character.
 pub fn decode(text: &str) -> Option<Vec<u8>> {
-    let value = |c: u8| -> Option<u32> {
-        Some(match c {
-            b'A'..=b'Z' => u32::from(c - b'A'),
-            b'a'..=b'z' => u32::from(c - b'a') + 26,
-            b'0'..=b'9' => u32::from(c - b'0') + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => return None,
-        })
+    // Each byte's value, or 64 outside the alphabet.
+    const VALUE: [u8; 256] = {
+        let mut t = [64u8; 256];
+        let mut i = 0;
+        while i < 64 {
+            t[ALPHABET[i] as usize] = i as u8;
+            i += 1;
+        }
+        t
+    };
+    // A group's bytes, as the low three of its 24 bits; `None` for a character outside the
+    // alphabet.
+    let group = |chunk: &[u8]| -> Option<[u8; 4]> {
+        let mut acc = 0u32;
+        let mut bad = 0u8;
+        for (k, &c) in chunk.iter().enumerate() {
+            let v = VALUE[usize::from(c)];
+            bad |= v;
+            acc |= u32::from(v) << (18 - 6 * k as u32);
+        }
+        (bad & 64 == 0).then(|| acc.to_be_bytes())
     };
     let body = text.trim_end_matches('=').as_bytes();
-    let mut out = Vec::with_capacity(body.len() * 3 / 4);
-    for chunk in body.chunks(4) {
-        let mut acc = 0u32;
-        for (k, &c) in chunk.iter().enumerate() {
-            acc |= value(c)? << (18 - 6 * k as u32);
-        }
-        let b = acc.to_be_bytes();
-        match chunk.len() {
-            4 => out.extend(&b[1..4]),
-            3 => out.extend(&b[1..3]),
-            2 => out.push(b[1]),
-            _ => return None,
-        }
+    let (whole, rest) = body.as_chunks::<4>();
+    let tail = match rest.len() {
+        0 => 0,
+        1 => return None,
+        n => n - 1,
+    };
+    let mut out = vec![0u8; whole.len() * 3 + tail];
+    let (bytes, last) = out.as_chunks_mut::<3>();
+    for (chunk, bytes) in whole.iter().zip(bytes) {
+        let b = group(chunk)?;
+        *bytes = [b[1], b[2], b[3]];
+    }
+    if tail > 0 {
+        last.copy_from_slice(&group(rest)?[1..=tail]);
     }
     Some(out)
 }

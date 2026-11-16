@@ -72,6 +72,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
     let expanded = roles::expand(doc, table)?;
     let doc = &expanded.doc;
     let mut out = refused_by(doc, caps);
+    out.extend(crate::doc::flat(doc));
     match read(doc) {
         Ok(w) if out.is_empty() => {
             out.extend(springs(&w));
@@ -192,6 +193,20 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                     caps,
                     "claims no swept collision (ccd)",
                 ));
+            }
+        }
+    }
+    // #251: a vehicle body on a backend with no vehicle controller, naming the body.
+    if !claims("vehicle_controller") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("kind").filter(|k| *k == "vehicle") {
+                let what = format!("claims no vehicle controller to move vehicle body {id}");
+                out.push(cap(format!("bodies/{id}/kind"), v, caps, &what));
             }
         }
     }
