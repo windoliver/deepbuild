@@ -1,4 +1,6 @@
-# #2444 — Part of, not Closes
+# #2444 — Closes, since its full-run criterion moved to #2737
+
+On Nov 16 the owner moved the full preflight run on a reference Mac to #2737, word for word. #2444 keeps the `LISTED` criterion, which the fixture runs below prove. What follows is the history from before that move; where it says AC2, read #2737.
 
 **Latest:** [progress-2026-11-16.md](progress-2026-11-16.md). The requested discovery/fixture corrections are applied; the real membership checks and color guard pass, and only three listed failures remain. Native/memory validation each timed out after 60 minutes **without starting**. Manual accessibility evidence, a proven wrong-loader replacement, protected-edit signatures and a complete clean-main budget run remain required. The notes below are chronological history, not the latest completion claim.
 
