@@ -1,0 +1,24 @@
+World: home /private/tmp/dh27-TlWynR/h; deep-app pid 36351; machine Mac15,12
+
+$ deep inbox    # before the batch, 2026-11-16T01:53:10.658Z
+Nothing needs you
+   screenshot 0-before-batch.png (window 25331)
+
+$ deep inbox    # after the 2026-11-16T01:54:00.000Z batch
+A1: which header colour for this checkout screen?  taste  repoeb38  97fa1d5f-6a5b-48ba-a009-d615575b7dbe  59s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XNRK28TN2TTDNFDZ1BT1
+    answer with blue (Blue header), green (Green header)
+B1: which header colour for this checkout screen?  taste  repoeb38  104464e0-a644-43d2-be90-924d8a32bb49  59s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XP3G625BFNN8B8FG7PBG
+    answer with blue (Blue header), green (Green header)
+D1: which header colour for this checkout screen?  taste  repoeb38  8ba5034d-eb54-4987-8886-3482aa9e4e13  58s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XPEJJ9V3FXH5KKD7XTT1
+    answer with blue (Blue header), green (Green header)
+D2: which header colour for this checkout screen?  taste  repoeb38  8ba5034d-eb54-4987-8886-3482aa9e4e13  58s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XPJ50NJ0KZZQM6XZ1SMX
+    answer with blue (Blue header), green (Green header)
+D3: which header colour for this checkout screen?  taste  repoeb38  8ba5034d-eb54-4987-8886-3482aa9e4e13  58s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XPRTYZXBH6FW3PNFDH4Y
+    answer with blue (Blue header), green (Green header)
+D4: which header colour for this checkout screen?  taste  repoeb38  8ba5034d-eb54-4987-8886-3482aa9e4e13  58s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XPZ4ZFN3TDZ08XQ6D53Y
+    answer with blue (Blue header), green (Green header)
+D5: which header colour for this checkout screen?  taste  repoeb38  8ba5034d-eb54-4987-8886-3482aa9e4e13  58s  If you don't answer: Green header, on Wed 18 Nov at 17:53  ask:01M7H0XQ5NW6DPNP0KKJ9A7GGD
+    answer with blue (Blue header), green (Green header)
+This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  exception  repoeb38  8ba5034d-eb54-4987-8886-3482aa9e4e13  57s  If you don't answer: Leave them to their defaults, on Wed 18 Nov at 17:53  ask:01M7H0XQBTXYP5SET2Q8SFQRX9
+    answer with together (Answer them together), pause (Pause the session), defaults (Leave them to their defaults)
+8 asks need you
