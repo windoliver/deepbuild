@@ -33,7 +33,12 @@ const indexed = (db: Db): boolean => db.prepare("SELECT count(*) AS n FROM sqlit
  * so the log's own writes go between them; `stopped` ends it early, as at a close.
  */
 export async function refreshIndex(db: Db, read: (sha: string) => Promise<Message[] | undefined>, commit: (work: () => void) => void, stopped: () => boolean): Promise<void> {
-  commit(() => db.exec(DDL));
+  // No copy has ever landed: do not build an empty trigram index at every fresh hub's first archive pass.
+  // An existing index still needs its deletion pass even when the last transcript has gone.
+  if (!indexed(db)) {
+    if (!db.prepare('SELECT 1 FROM sessions WHERE transcript IS NOT NULL LIMIT 1').get()) return;
+    commit(() => db.exec(DDL));
+  }
   const gone = db.prepare('SELECT a.session FROM archive_sessions a LEFT JOIN sessions s ON s.id = a.session WHERE s.transcript IS NULL').pluck().all() as string[];
   const stale = db.prepare('SELECT s.id, s.transcript FROM sessions s LEFT JOIN archive_sessions a ON a.session = s.id WHERE s.transcript IS NOT NULL AND a.transcript IS NOT s.transcript ORDER BY s.id').all() as { id: string; transcript: string }[];
   const drop = (session: string) => {

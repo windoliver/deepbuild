@@ -116,6 +116,8 @@ pub struct Effects {
     targets: Vec<([u32; 2], wgpu::TextureView)>,
     /// How many of the targets the frame being planned has asked for: the rest are released.
     used: usize,
+    /// #463: this frame's crop (PostFrame::crop), the scissor each pass draws inside.
+    crop: Option<[u32; 4]>,
     /// What each pass operator's run bound last frame, in the frame's order, with its stage's ID.
     bound: Vec<Option<(String, Bound)>>,
     /// How many of them the frame being planned has bound: the rest are released.
@@ -194,6 +196,7 @@ impl Effects {
             runners: BTreeMap::new(),
             targets: Vec::new(),
             used: 0,
+            crop: None,
             bound: Vec::new(),
             passes: 0,
             sparks: None,
@@ -331,10 +334,10 @@ impl Effects {
         let bound = runner.rebind(device, held, &camera.frame(), size, &values, &refs);
         let groups = bound.groups.clone();
         self.bound[place] = Some((stage, bound));
-        let profiler = self.profiler.clone();
+        let (profiler, crop) = (self.profiler.clone(), self.crop);
         Box::new(move |encoder| {
             timed(&profiler, label, encoder, |e, ts| {
-                runner.encode(e, &out, &groups, ts)
+                runner.encode_within(e, &out, &groups, ts, crop)
             });
         })
     }
@@ -727,6 +730,7 @@ impl Post for Effects {
         let mut cur = frame.linear.clone();
         let mut next = 1usize;
         self.used = 0;
+        self.crop = frame.crop;
         self.passes = 0;
         if let Some(grid) = &s.grid {
             let out = self.target(device, next, size);

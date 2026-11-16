@@ -171,7 +171,8 @@ impl<'a> Doc<'a> {
         let children = children
             .into_iter()
             .map(|(parent, mut kids)| {
-                kids.sort();
+                // #233: numbers in tied IDs read whole, so a recipe's derived cells flow in order.
+                kids.sort_by(|a, b| a.0.cmp(b.0).then_with(|| crate::grid_rules::natural(a.1, b.1)));
                 (parent, kids.into_iter().map(|(_, id)| id).collect())
             })
             .collect();
