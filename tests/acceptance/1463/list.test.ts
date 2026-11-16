@@ -1,9 +1,13 @@
 // AC1 #1463.f9ab70a8 and AC12 #1463.17f151eb: on one fixture, the app's list and `deep status --json` hold the same
 // rows, IDs, words, order and unread at one log_pos; a planted second order, a planted word and a planted unread each
 // fail, naming the row. The app's list is the replica's `see` over a copy of the same hub's record (README, Pinned 5),
-// and its window draws each of those rows by its id, in that order.
+// and its window draws each of those rows as the design's one list lays them out (#1461; One list and one page): the
+// heading Needs you and the asks in their order, each ask's kind in its word slot, then each project's heading with its
+// sessions in their order, each with its word, the quiet ones folded. The drawn-row judge is #2668's blind redraft
+// (tests/acceptance/2668/judges.ts, drawnRowFailures); the rest of this file is as the first draft wrote it.
 import { afterAll, describe, expect, test } from 'vitest';
-import { atOneLogPos, cleanup, drawnFailures, ID, jsonRows, MAIN, makeWorld, NOON, rowFailures, shapeFailures, type World } from './helpers.ts';
+import { drawnRowFailures } from '../2668/judges.ts';
+import { atOneLogPos, cleanup, ID, jsonRows, MAIN, makeWorld, NOON, rowFailures, shapeFailures, type World } from './helpers.ts';
 
 afterAll(cleanup, 60_000);
 
@@ -19,7 +23,7 @@ describe(ID.list, () => {
     expect([...shapeFailures(app.rows!, "the app's list"), ...shapeFailures(status.rows, 'deep status --json')], 'every row has the one row shape').toEqual([]);
     expect(status.rows.length, 'the fixture lists rows: its three open asks and its sessions').toBeGreaterThanOrEqual(5);
     expect(rowFailures(app.rows!, status.rows, 'deep status --json'), "the app's list and deep status --json, row by row").toEqual([]);
-    expect(drawnFailures(app.snapshot, app.rows!), "the window draws see's rows, by their ids, in their order").toEqual([]);
+    expect(drawnRowFailures(app.snapshot, app.rows!), "the window draws see's rows as its one list lays them out: Needs you's asks in their order, then each project's sessions in theirs, each with its word").toEqual([]);
   }, 900_000);
 
   test(`${ID.list}: a planted second order fails, naming the row`, async () => {
