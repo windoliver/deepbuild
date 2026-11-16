@@ -1314,6 +1314,14 @@
         "unicode-normalization": {
           "spec": "^0.1",
           "why": "Issue #542: the planted field text_normalizes_nfc, whose commit normalizes the text to NFC and which the text tests must refuse; the real field keeps the text's own code points."
+        },
+        "deep-marks-raster": {
+          "spec": "* path=../deep-marks-raster",
+          "why": "Issue #172: the 2D painter, moved out so the web player shares it."
+        },
+        "deep-play": {
+          "spec": "* path=../deep-play",
+          "why": "Issue #172: the played form, moved out so the web player shares it."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1420,6 +1428,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #140: the GPU seam's feature table, quirk table and adapter as JSON; already in the workspace tree."
+        },
+        "web-time": {
+          "spec": "=1.1.0",
+          "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1704,6 +1716,10 @@
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #2513: render.exposure's query and sums, which its GPU reduction answers; already in the tree."
+        },
+        "web-time": {
+          "spec": "=1.1.0",
+          "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
         }
       },
       "dev-dependencies": {
@@ -2083,10 +2099,6 @@
           "spec": "* path=../deep-canvas-sandbox",
           "why": "Issue #238: the check, the rewrite and the kit this engine runs, with no copy of its own."
         },
-        "wasmtime": {
-          "spec": "=49.0.5",
-          "why": "Issue #238: sandbox@1's engine in the app, the version the design pins (Logic: sandbox), cranelift and runtime only."
-        },
         "base64": {
           "spec": "^0.22",
           "why": "Issue #238: programs travel as base64 in deep-sandbox's JSON lines. Already in the workspace tree."
@@ -2098,6 +2110,30 @@
         "wat": {
           "spec": "=1.263.0",
           "why": "Issue #238: assembles sandbox@1's kit programs from their text; the version wasmtime 49.0.5 already pulls in."
+        },
+        "web-time": {
+          "spec": "=1.1.0",
+          "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
+        }
+      },
+      "target.'cfg(not(target_arch = \"wasm32\"))'.dependencies": {
+        "wasmtime": {
+          "spec": "=49.0.5",
+          "why": "Issue #238: sandbox@1's engine in the app, the version the design pins (Logic: sandbox), cranelift and runtime only."
+        }
+      },
+      "target.'cfg(target_arch = \"wasm32\")'.dependencies": {
+        "js-sys": {
+          "spec": "=0.3.106",
+          "why": "Issue #172: the browser's own WebAssembly engine, which runs logic in the web player; the wasm-bindgen pin's pair."
+        },
+        "wasm-bindgen": {
+          "spec": "=0.2.129",
+          "why": "Issue #172: the glue to the browser's WebAssembly engine in the web player, pinned with the CLI that builds it."
+        },
+        "wasmparser": {
+          "spec": "=0.258.3",
+          "why": "Issue #172: validates a logic module on wasm32, where wasmtime doesn't build; the version wasmtime 49 pins."
         }
       }
     },
@@ -2311,10 +2347,6 @@
           "spec": "* path=../deep-sandbox-wasmtime",
           "why": "Issue #531: the pinned wasmtime's version, named in a bake key and a report, and sandbox@1's web runner, served before the logic runtime."
         },
-        "wasmtime": {
-          "spec": "=49.0.5",
-          "why": "Issue #531: runs the rewritten program; the version deep-sandbox-wasmtime pins, cranelift and runtime only."
-        },
         "wasmparser": {
           "spec": "=0.258.3",
           "why": "Issue #531: reads a program's sections and its debug sidecar's, for traps by source line; the version deep-canvas-sandbox pins, so Cargo.lock holds one."
@@ -2343,9 +2375,19 @@
           "spec": "=1.263.0",
           "why": "Issue #532: assembles logic.budget's calibration programs."
         },
+        "web-time": {
+          "spec": "=1.1.0",
+          "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
+        }
+      },
+      "target.'cfg(not(target_arch = \"wasm32\"))'.dependencies": {
         "libc": {
           "spec": "^0.2",
           "why": "Issue #532: reads thread CPU time for logic.budget's fixed cost; already in the tree."
+        },
+        "wasmtime": {
+          "spec": "=49.0.5",
+          "why": "Issue #531: runs the rewritten program; the version deep-sandbox-wasmtime pins, cranelift and runtime only."
         }
       }
     },
@@ -2398,6 +2440,10 @@
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #1486: a picture's sha256 checked against the content store, and the hash that names each stored level; already in the tree."
+        },
+        "web-time": {
+          "spec": "=1.1.0",
+          "why": "Issue #172: a time read on the page's clock in the web player, the system's elsewhere."
         }
       }
     },
@@ -2690,6 +2736,224 @@
         "vitest": {
           "spec": "5.0.5",
           "why": "Issue #12's blind suite: this twin is the root package.json with a release:check that leaves DEEP_PREFLIGHT unset, laid over a copy of the checkout; vitest is the root's own entry, unchanged."
+        }
+      }
+    },
+    "crates/deep-player/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #172: the canvas core the web player builds for wasm32 on one thread."
+        },
+        "deep-canvas-seams": {
+          "spec": "* path=../deep-canvas-seams",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-graph": {
+          "spec": "* path=../deep-canvas-graph",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-record": {
+          "spec": "* path=../deep-canvas-record",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-sheet": {
+          "spec": "* path=../deep-canvas-sheet",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-input": {
+          "spec": "* path=../deep-canvas-input",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-media": {
+          "spec": "* path=../deep-canvas-media",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-loop": {
+          "spec": "* path=../deep-canvas-loop",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #172: a canvas module the web player seals and carries, so it plays what the app does."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #172: physics in process on the pinned backend, as the app bakes it."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #172: a bundle's logic items, stepped on the browser's WebAssembly engine."
+        },
+        "deep-play": {
+          "spec": "* path=../deep-play",
+          "why": "Issue #172: the played form, made as the app makes it."
+        },
+        "deep-marks-raster": {
+          "spec": "* path=../deep-marks-raster",
+          "why": "Issue #172: the 2D writer layers' painter, the same code the app's headless renders draw with."
+        },
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #172: the image service, reading pictures from the bundle held in memory."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #172: the GPU layer on the page's WebGPU device."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #172: the 3D renderer, on one thread in the web player."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #172: the bundled faces and shaping the marks draw with."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #172: the bundle's document and the probe's answer. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #172: the hashes a bundle names its parts by. Already in the workspace tree."
+        }
+      },
+      "target.'cfg(target_arch = \"wasm32\")'.dependencies": {
+        "js-sys": {
+          "spec": "=0.3.106",
+          "why": "Issue #172: the page's values the player's glue reads; the wasm-bindgen pin's pair."
+        },
+        "wasm-bindgen": {
+          "spec": "=0.2.129",
+          "why": "Issue #172: the glue to the page, pinned with the CLI that builds it."
+        },
+        "wasm-bindgen-futures": {
+          "spec": "=0.4.79",
+          "why": "Issue #172: awaits the page's promises, as the WebGPU device request; the wasm-bindgen pin's pair."
+        },
+        "web-sys": {
+          "spec": "=0.3.106",
+          "why": "Issue #172: the page's canvas element and console, and nothing else of the DOM."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #172: the workspace's wgpu on WebGPU, with the feature that makes its handles Send on wasm32 without atomics, since the player runs on one thread."
+        }
+      }
+    },
+    "crates/deep-marks-raster/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #172: the draw list the painter draws."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #172: the frame the painter draws marks at."
+        },
+        "deep-images": {
+          "spec": "* path=../deep-images",
+          "why": "Issue #172: the image service a mark's picture comes from."
+        },
+        "deep-marks-vello": {
+          "spec": "* path=../deep-marks-vello",
+          "why": "Issue #172: the marks as Vello scenes."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #172: the bundled faces and shaped runs the painter draws."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #172: the document values the painter reads. Already in the workspace tree."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #172: Vello CPU, the rasterizer the app's headless renders already use, shared with the web player."
+        }
+      }
+    },
+    "crates/deep-play/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-cells": {
+          "spec": "* path=../deep-canvas-cells",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-media": {
+          "spec": "* path=../deep-canvas-media",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #172: read to make a document's played form, the same in the app and the web player."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #172: steps a document's logic items over the transport's span."
+        },
+        "deep-marks-raster": {
+          "spec": "* path=../deep-marks-raster",
+          "why": "Issue #172: the painter the played form draws with."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #172: bakes a document's worlds on the pinned physics backend."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #172: the bundled faces the played form shapes with."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #172: the document and the played form. Already in the workspace tree."
         }
       }
     }
