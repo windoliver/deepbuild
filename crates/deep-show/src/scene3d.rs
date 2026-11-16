@@ -17,32 +17,7 @@ use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
 
-/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
-/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
-pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
-    let mut look = Look3::from_roles(palette.clone());
-    let camera = doc
-        .get("camera")
-        .and_then(Value::as_str)
-        .and_then(|id| doc.get("items")?.get(id));
-    // #468: `from_lens` exposes from the lens's aperture, shutter and ISO at the frame rate.
-    let rate = doc
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .filter(|(p, q)| *p > 0 && *q > 0)
-        .map_or(60.0, |(p, q)| f64::from(p) / f64::from(q));
-    let ev = camera
-        .and_then(|c| c.get("params")?.as_object())
-        .and_then(|p| {
-            deep_canvas_scene3d::lens::read(p, "", false)
-                .ok()?
-                .ev100(rate)
-        });
-    if let Some(ev) = ev {
-        look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
-    }
-    look
-}
+pub(crate) use deep_play::scene::look_of;
 
 /// The rows of a frame of `size` render.exposure's reduction reads: all of them, or, under
 /// #2513's planted reduction, those in whole 32-row groups.
@@ -143,26 +118,18 @@ impl Gpu3 {
         size: [u16; 2],
         assets: deep_canvas_scene3d::scene::Assets<'_>,
     ) -> Result<(Scene, Look3), Unfit> {
-        let mut doc = doc.clone();
-        if let Some(d) = doc.as_object_mut() {
-            d.insert("size".into(), json!(size));
-        }
-        deep_canvas_physics::skin::write(&mut doc, t);
-        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
             planted: self.planted.as_deref(),
             memo: None,
         };
-        let scene =
-            evaluate_any(&doc, t, &look, &mut self.labels, Some(assets), fills).map_err(|r| {
-                Unfit {
-                    code: r.code,
-                    path: r.path,
-                }
-            })?;
-        Ok((scene, look))
+        deep_play::scene::evaluate(doc, t, palette, size, &mut self.labels, assets, fills).map_err(
+            |r| Unfit {
+                code: r.code,
+                path: r.path,
+            },
+        )
     }
 
     /// #1401: an evaluated scene drawn offscreen as render-back draws it: straight RGBA, rows

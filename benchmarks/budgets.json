@@ -1591,6 +1591,19 @@
       ]
     },
     {
+      "id": "web-export",
+      "command": [
+        "node",
+        "benchmarks/web.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #172 first measurement (#172.1e1f958d): the merge base has no web player. One `deep-show run` exports a 2D figure to the web and reads its bundle's player (the WebAssembly and JavaScript it is made of, fonts and assets aside), each compressed with Brotli at quality 11; it prints those bytes and the bundle's. The criterion's limits (the player under 12 MB compressed without fonts and assets, the lab's first frame under 3 s in Chrome, 60 fps at 1080p) are judged by tests/acceptance/172/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#172.1e1f958d"
+      ]
+    },
+    {
       "id": "physics-module",
       "command": [
         "node",

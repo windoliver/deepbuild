@@ -6168,7 +6168,7 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             set.finish(device, &mut next, &mut written);
             if layer.fed.contains_key(&key.3) {
                 let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
