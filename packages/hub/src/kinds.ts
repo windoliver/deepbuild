@@ -13,6 +13,7 @@ import { workFill } from '@deepbuild/checks-work';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
 import { admitKind } from '@deepbuild/gate';
 import type { JobRecord } from '@deepbuild/runner';
+import { checkHost } from '@deepbuild/supervisor';
 import type { TimingReport } from '@deepbuild/verdicts';
 import { claimNumbers, numbersChecks, runClaimNumbers } from './claim-numbers.js';
 import type { ClaimCheck } from './gate-runner.js';
@@ -123,6 +124,13 @@ export class Kinds {
     return { kind: 'review', runner: 'second-model', inputs: [], depth: 'unit', oracle: 'model', contract: null, base, head, rubric, since: null };
   }
 
+  /** Built-in fills get the same supervised scope as extension-host checks, never the kit's local path. */
+  private async probe(fill: CheckRunnerFill, spec: CheckSpec, ctx: CheckContext): Promise<CheckResult> {
+    const scope = checkHost(this.o.supervisor());
+    try { return await fill.run(spec, { ...ctx, host: scope.host }); }
+    finally { await scope.close(); }
+  }
+
   /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim; a speed or added terms read the hub's store for `repo`'s run (#1863). */
   async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }> {
     const held = this.held.get(spec.kind);
@@ -135,9 +143,9 @@ export class Kinds {
         const t = await checkouts.checkout({ worktree: repo.worktree, commit, runs: [repo.run] });
         return { dir: t.dir, ended: () => checkouts.ended(t, repo.run) };
       };
-      return runClaimNumbers(spec, ctx, { supervisor: this.o.supervisor(), store: this.o.store, checkoutOf }, async (s, c) => held.fill.run(s, c), repo.stop);
+      return runClaimNumbers(spec, ctx, { supervisor: this.o.supervisor(), store: this.o.store, checkoutOf }, async (s, c) => this.probe(held.fill, s, c), repo.stop);
     }
-    if (spec.kind !== 'review') return held.fill.run(spec, ctx);
+    if (spec.kind !== 'review') return this.probe(held.fill, spec, ctx);
     let job: JobRecord | undefined;
     let waiting: string | undefined;
     const reviewer = async (request: { diff: string; rubric: string[] }): Promise<ReviewerAnswer> => {

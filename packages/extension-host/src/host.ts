@@ -44,7 +44,7 @@ import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, reg
 import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
-import { badDeadline, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
+import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
@@ -1200,7 +1200,7 @@ class Host implements ExtensionHost {
         const run = async (spec: CheckSpec, ctx: { deadline: number }): Promise<CheckResult> => {
           if (stuck) throw Error(stuck);
           try {
-            return await within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx: this.checkContext(ext, ctx) }) as Promise<CheckResult>);
+            return await this.checkRun(ext, ctx, (context) => within(ctx.deadline + KIT_GRACE_MS, `${entry.id}'s ${kind} at install`, ext.ask!('run', { type: kind, spec, ctx: context }))) as CheckResult;
           } catch (e) {
             if (e instanceof Overran) stuck = message(e);
             throw e;
@@ -2985,15 +2985,15 @@ class Host implements ExtensionHost {
    * the supervisor's, so its process starts only through it and the supervisor sandboxes it. A kind the sandbox runs
    * gets no host: its context crosses a wire, and it never starts a process of its own.
    */
-  private checkContext<C extends { deadline: number }>(ext: Ext, ctx: C): C | (C & { host: RunHost }) {
-    return ext.place === 'hub' ? { ...ctx, host: this.runHost() } : ctx;
+  private async checkRun<C extends { deadline: number }>(ext: Ext, ctx: C, call: (ctx: C | (C & { host: RunHost })) => Promise<unknown>): Promise<unknown> {
+    if (ext.place !== 'hub') return call(ctx);
+    const scope = checkHost(this.options.supervisor);
+    try { return await call({ ...ctx, host: scope.host }); }
+    finally {
+      // The outer deadline can win before the runner's own timer; never return while its processes remain.
+      await scope.close();
+    }
   }
-  /** host@1 and nothing more of the supervisor: its name, start, signal, wait and facts, bound to it. */
-  private runHost(): RunHost {
-    const s = this.options.supervisor;
-    return (this.hostOne ??= { name: s.name, start: (spec) => s.start(spec), signal: (run, signal) => s.signal(run, signal), wait: (run) => s.wait(run), facts: () => s.facts() });
-  }
-  private hostOne: RunHost | undefined;
   async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number; environment?: string }): Promise<CheckResult> {
     // Refused before any package is asked.
     const bad = badDeadline('deadline', ctx.deadline);
@@ -3004,7 +3004,7 @@ class Host implements ExtensionHost {
     if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
       this.canvasKeys.set(ext, []);
-      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
+      const result = await this.checkRun(ext, ctx, (context) => this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: context }));
       const read = this.canvasKeys.get(ext) ?? [];
       const { isCheckResult } = await import('@deepbuild/conformance');
       if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);

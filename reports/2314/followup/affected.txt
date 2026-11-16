@@ -1,0 +1,2 @@
+parallel vitest: packages/supervisor/src/check-host.test.ts
+parallel node: tests/acceptance/2314/probes.test.mjs

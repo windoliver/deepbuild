@@ -1,0 +1,30 @@
+
+ RUN  v5.0.5 <repo>
+
+ ❯ packages/checks-work/test/probe-host.test.ts (5 tests | 1 failed) 17991ms
+   × a supervised service reaches its declared loopback endpoint 1169ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/checks-work/test/probe-host.test.ts > a supervised service reaches its declared loopback endpoint
+AssertionError: {"outcome":"failed","testsRun":0,"evidence":[],"read":[],"mask":null,"failures":[{"test":"service: run","file":"http://127.0.0.1:55474/","line":1,"stack":"node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nError: bind EPERM 127.0.0.1\n    at internalConnect (node:net:1426:18)\n    at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:18)\n    at node:net:1791:9\n    at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {\n  errno: -1,\n  code: 'EPERM',\n  syscall: 'bind',\n  address: '127.0.0.1'\n}\n\nNode.js v24.22.2\n","assertion":false,"message":"the service check stopped before its assertion: Error: bind EPERM 127.0.0.1"}]}: expected 'failed' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "failed"
+
+ ❯ packages/checks-work/test/probe-host.test.ts:58:52
+     56|   try {
+     57|     const result = await workFill('service').run(spec, { checkout: dir…
+     58|     expect(result.outcome, JSON.stringify(result)).toBe('passed');
+       |                                                    ^
+     59|     expect(result.testsRun).toBe(3);
+     60|     expect(requests).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  16:06:29
+   Duration  26.30s (tests 74%, transform 17%, import 8%, setup 1%)
+

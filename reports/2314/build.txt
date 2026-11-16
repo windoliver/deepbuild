@@ -1,0 +1,60 @@
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/adapters@0.0.0 build
+> tsc -b tsconfig.json
+
+
+> @deepbuild/evidence@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/record@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/asks@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/leases@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/budget@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/supervisor@0.0.0 build
+> tsc -p tsconfig.json && node build-helper.mjs
+
+
+> @deepbuild/conformance@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/runner@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/extension-host@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/verdicts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-numbers@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/checks-work@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+

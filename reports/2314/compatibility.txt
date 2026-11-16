@@ -1,0 +1,151 @@
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/87/gate/review-notes.test.ts (1 test | 1 failed) 11189ms
+   ❯ AC8 #87.85a2cd4f review notes on the PR are open items, and the PR says Closes only once each is fixed or you accept it (1)
+     × AC8 #87.85a2cd4f maya's note and the Codex review agent's note on PR 21 become open items; gh pr edit to "Closes #7" is refused naming both, then naming only the agent's once maya's is fixed, and allowed once you accept the agent's 8577ms
+ ❯ tests/acceptance/87/gate/replay-lane.test.ts (1 test | 1 failed) 23727ms
+   ❯ AC21 #87.7649e9da a change to the review check's prompt is replayed on the merge base and the change, and every finding that moves is listed (1)
+     × AC21 #87.7649e9da the planted prompt change that drops the planted bug's finding fails no test, is listed with both runs and fails the preflight until the maintainer's yes on that list 22751ms
+ ❯ tests/acceptance/87/numbers/speed.test.ts (3 tests | 3 failed) 80440ms
+   ❯ a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches (3)
+     × "1.8× faster than the merge base" passes on a change twenty times faster and never on equal work; "the library" with no release is INVALID; another driver is INCONCLUSIVE; an unflushed repeat is INVALID 57429ms
+     × wrong program: a numbers check that accepts a baseline named only by library fails this test (the "the library" claim is not INVALID) 10728ms
+     × wrong program: a numbers check that counts a side run under a toolchain it doesn't name fails this test (another driver is not INCONCLUSIVE) 11521ms
+stderr | tests/acceptance/87/numbers/budget.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  58795 /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node <repo>/packages/checks-numbers/runtime/probe.mjs
+
+ ❯ tests/acceptance/87/numbers/budget.test.ts (1 test | 1 failed) 6865ms
+   ❯ budgets: a numbers re-run within twice the original query's time (1)
+     × re-running a dashboard number on 300,000 rows takes at most twice the query's own time, fastest of five each 5013ms
+ ❯ tests/acceptance/68/budgets.test.ts (4 tests | 1 failed) 13150ms
+   ❯ AC6 the service kind declares its time and cost budget, and the gate refuses it with none (1)
+     × AC6 service: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time 9967ms
+ ❯ tests/acceptance/68/model-opinion.test.ts (4 tests | 1 failed) 10331ms
+   ❯ AC5 the service kind can not turn a model's opinion into PASS (1)
+     × AC5 service: on the fixed work its check passes with code as its oracle, and is never PASS with a model as its oracle 3720ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/68/budgets.test.ts > AC6 the service kind declares its time and cost budget, and the gate refuses it with none > AC6 service: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time
+AssertionError: expected 'failed' to be 'passed' // Object.is equality
+
+Expected: "passed"
+Received: "failed"
+
+ ❯ tests/acceptance/68/budgets.test.ts:27:23
+     25|     const r = await fill.run(fix.spec, context(fix.checkout));
+     26|     const took = Date.now() - started;
+     27|     expect(r.outcome).toBe('passed');
+       |                       ^
+     28|     expect(took, `${kind}'s run took ${took} ms against its ${budget.t…
+     29|   }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  tests/acceptance/68/model-opinion.test.ts > AC5 the service kind can not turn a model's opinion into PASS > AC5 service: on the fixed work its check passes with code as its oracle, and is never PASS with a model as its oracle
+AssertionError: run failed, 3 run; failures: http://localhost:57031/orders/1042:1 (assertion) latency: the answers' p95 from 127.0.0.1 is 322 ms, over the 100 ms floor: expected 'FAIL' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "FAIL"
+
+ ❯ tests/acceptance/68/model-opinion.test.ts:11:68
+      9|     const fix = await piece(kind, 'fix');
+     10|     const byCode = await runOn(fix, 'code');
+     11|     expect(judge(byCode, fix.spec, 'code').outcome, shown(byCode)).toB…
+       |                                                                    ^
+     12|
+     13|     const byModel = await runOn(fix, 'model');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  tests/acceptance/87/gate/replay-lane.test.ts > AC21 #87.7649e9da a change to the review check's prompt is replayed on the merge base and the change, and every finding that moves is listed > AC21 #87.7649e9da the planted prompt change that drops the planted bug's finding fails no test, is listed with both runs and fails the preflight until the maintainer's yes on that list
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/gate/replay-lane.test.ts:78:3
+     76|
+     77| describe(`${AC21} a change to the review check's prompt is replayed on…
+     78|   it(`${AC21} the planted prompt change that drops the planted bug's f…
+       |   ^
+     79|     const s = scene(BASE, [{ files: { 'packages/checks-review/src/prom…
+     80|     const env = { ...process.env };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tests/acceptance/87/gate/review-notes.test.ts > AC8 #87.85a2cd4f review notes on the PR are open items, and the PR says Closes only once each is fixed or you accept it > AC8 #87.85a2cd4f maya's note and the Codex review agent's note on PR 21 become open items; gh pr edit to "Closes #7" is refused naming both, then naming only the agent's once maya's is fixed, and allowed once you accept the agent's
+Error: BLOCKED: the hub did not start: deep hub: the core stopped: Error: no deep-hook is built under <repo>/target; run cargo build -p deep-hook first
+    at deepHook (file://<repo>/packages/hub/dist/paths.js:216:15)
+    at Object.guard (file://<repo>/packages/hub/dist/core.js:370:75)
+    at Products.secure (file://<repo>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<repo>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<repo>/packages/hub/dist/core.js:816:29)
+    at async Core.init (file://<repo>/packages/hub/dist/core.js:562:9)
+
+ ❯ startHub tests/acceptance/322/helpers.ts:345:45
+    343|     sleep(120_000).then(() => undefined),
+    344|   ]);
+    345|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    346|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    347| }
+ ❯ tests/acceptance/87/gate/review-notes.test.ts:47:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tests/acceptance/87/numbers/budget.test.ts > budgets: a numbers re-run within twice the original query's time > re-running a dashboard number on 300,000 rows takes at most twice the query's own time, fastest of five each
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/numbers/budget.test.ts:19:3
+     17|
+     18| describe('budgets: a numbers re-run within twice the original query\'s…
+     19|   it('re-running a dashboard number on 300,000 rows takes at most twic…
+       |   ^
+     20|     const checkout = tempDir();
+     21|     const db = database(checkout, 'events.db', EVENTS);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > "1.8× faster than the merge base" passes on a change twenty times faster and never on equal work; "the library" with no release is INVALID; another driver is INCONCLUSIVE; an unflushed repeat is INVALID
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/numbers/speed.test.ts:37:3
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > wrong program: a numbers check that accepts a baseline named only by library fails this test (the "the library" claim is not INVALID)
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/numbers/speed.test.ts:71:3
+     69|   });
+     70|
+     71|   it('wrong program: a numbers check that accepts a baseline named onl…
+       |   ^
+     72|     const repo = speedCheckout();
+     73|     const planted = await speed(libraryClaim, repo.dir, { work: BASE_W…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > wrong program: a numbers check that counts a side run under a toolchain it doesn't name fails this test (another driver is not INCONCLUSIVE)
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/numbers/speed.test.ts:77:3
+     75|   });
+     76|
+     77|   it('wrong program: a numbers check that counts a side run under a to…
+       |   ^
+     78|     const repo = speedCheckout();
+     79|     const planted = await speed(mergeBaseClaim(repo.base), repo.dir, {…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  6 failed | 32 passed (38)
+      Tests  8 failed | 67 passed (75)
+   Start at  16:01:21
+   Duration  766.16s (tests 93%, import 4%, transform 2%, setup 1%)
+
+    Isolate  38 workers spawned · ~1.29s startup each (spawn + environment, per file)
+             at least ~47.60s faster with isolate: false — reuses workers across files instead of one per file
+

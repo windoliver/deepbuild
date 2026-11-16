@@ -3,15 +3,17 @@
 // JSON: {outcome, testsRun, failures, read}. A failure at the check's assertion is the work not holding; anything
 // that stops the work itself (an error, a source that isn't JSON, a mailbox that isn't a Maildir) leaves this
 // process with its error on stderr, which the runner keeps as the crash's output.
-import { request } from 'node:http';
-import { request as requestTls } from 'node:https';
+import { request, Agent } from 'node:http';
+import { request as requestTls, Agent as TlsAgent } from 'node:https';
 import { isIPv4 } from 'node:net';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 const input = JSON.parse(readFileSync(0, 'utf8'));
-const { kind, spec, checkout } = input;
+const { kind, spec, checkout, port } = input;
+// A supervised service has one granted source port: reuse its connection across the measured requests.
+const agent = port === undefined ? false : new (spec.url.startsWith('https:') ? TlsAgent : Agent)({ keepAlive: true, maxSockets: 1, localPort: port });
 const failures = [];
 const read = [];
 const at = (test, file, line, message) => failures.push({ test, file, line, stack: null, assertion: true, message });
@@ -27,7 +29,7 @@ function get(url, from) {
     const u = new URL(url);
     const send = u.protocol === 'https:' ? requestTls : request;
     const started = performance.now();
-    const req = send(u, { method: 'GET', localAddress: from, family: isIPv4(from) ? 4 : 6, agent: false }, (res) => {
+    const req = send(u, { method: 'GET', localAddress: from, ...(port === undefined ? {} : { localPort: port }), family: isIPv4(from) ? 4 : 6, agent }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (d) => { body += d; });
@@ -199,4 +201,4 @@ function message() {
 
 const run = { service, data, document, message }[kind];
 if (!run) throw new Error(`no such kind: ${kind}`);
-await run();
+try { await run(); } finally { if (agent) agent.destroy(); }

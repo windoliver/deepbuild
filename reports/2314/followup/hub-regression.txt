@@ -1,0 +1,35 @@
+
+> @deepbuild/supervisor@0.0.0 build
+> tsc -p tsconfig.json && node build-helper.mjs
+
+
+ RUN  v5.0.5 <proof>
+
+ × packages/hub/test/probe-lifecycle.test.ts > a built-in document run records its probe and end before its verdict 101264ms
+   → #2314 built-in work the prompt "check the source-backed report" must open one task under the session's thread (no thread recorded): a task.created with task_ref session:2f8b73ba114648bba776ba0e748972ff#0; the thread holds none
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/probe-lifecycle.test.ts > a built-in document run records its probe and end before its verdict
+Error: #2314 built-in work the prompt "check the source-backed report" must open one task under the session's thread (no thread recorded): a task.created with task_ref session:2f8b73ba114648bba776ba0e748972ff#0; the thread holds none
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ expectTask tests/acceptance/322/helpers.ts:451:3
+ ❯ openTask tests/acceptance/1537/helpers.ts:102:15
+ ❯ packages/hub/test/probe-lifecycle.test.ts:17:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:38:16
+   Duration  110.07s (tests 97%, transform 3%)
+
+
+HUB_REGRESSION_EXIT=1

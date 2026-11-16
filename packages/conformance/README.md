@@ -10,14 +10,14 @@ The one conformance runner and its kits (#313, #314, #349): the adapter kit with
 - `src/findings.ts`: the `./findings` entry, so a check kind's runner and kit take `fail`, `Finding` and `runProbe` without loading the kits, the runner and the generator into the hub that only runs its checks.
 - `src/slots/<slot>.ts`: a new hub slot's kit, listed in `src/slots/kits.ts`. Shared kit helpers go in `src/slots/shared.ts`.
 - `src/kit.ts`, `src/runner.ts`, `src/fake-agent.ts`, `src/shipped.ts`: the adapter kit (adapter@1).
-- `src/result.ts`, `src/probe.ts`: the check.kind@1 wire result's shape check, and the one run of a check kind's probe under its deadline that `checks-numbers` and `checks-work` share.
+- `src/result.ts`, `src/probe.ts`: the check.kind@1 wire result's shape check, and the probe runner `checks-numbers` and `checks-work` share: hub runs require the supplied check-scoped `host@1`, whose wait proves cleanup; the no-host path is only for standalone kit fixtures.
 - `runtime/<kit>/`: scripts a kit loads into or starts as other processes; `fixtures/<kit>/`: a kit's fixed cases.
 - `src/gate.ts`, `src/gate-play.ts`: the kit gate@1 (#33), `deep-conformance gate check|run`: its corpus in `fixtures/gate/`, played through `runtime/gate/agent.mjs` on the hub and deep-hook this checkout builds, started as processes, never imported.
 - Tests: `*.test.ts` beside the source they test, under `src/`; this package has no `test/` folder.
 
 ## What it may import
 
-Sits on the core: it reaches `@deepbuild/adapters` and `@deepbuild/contracts` through their package entries, plus `node:` built-ins. It never imports a fill it judges (checks-command, env-local), the extension host, the hub, the CLI or the app.
+Sits on the core: it reaches `@deepbuild/adapters`, `@deepbuild/contracts` and `@deepbuild/supervisor` (the check host contract and deadline helpers) through their package entries, plus `node:` built-ins. It never imports a fill it judges (checks-command, env-local), the extension host, the hub, the CLI or the app.
 
 ## Deviations
 

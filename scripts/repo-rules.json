@@ -1845,6 +1845,10 @@
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "The slot checks read the frozen API digests and error codes the contracts publish."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #2314: host@1's check context and deadline helpers; number and work probes start, signal and wait through the supplied host."
         }
       }
     },
