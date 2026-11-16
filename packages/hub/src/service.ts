@@ -6,8 +6,7 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, watch, writeFi
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf, underTemp } from './paths.js';
-import { onPath } from './setup-steps.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp } from './paths.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
