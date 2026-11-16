@@ -1,5 +1,7 @@
 # #2444 — Part of, not Closes
 
+**Latest:** [progress-2026-11-16.md](progress-2026-11-16.md). The requested discovery/fixture corrections are applied; the real membership checks and color guard pass, and only three listed failures remain. Native/memory validation each timed out after 60 minutes **without starting**. Manual accessibility evidence, a proven wrong-loader replacement, protected-edit signatures and a complete clean-main budget run remain required. The notes below are chronological history, not the latest completion claim.
+
 ## Continued prerequisite work
 
 The branch is now based on main `031292bf15c0b9a32260413793f3b2d17e87115b` (merged without changing main's tests). Two stale #1622 entries were removed only after unchanged tests passed on clean main. The missing 20 `timed` classifications and 11 automated `alone` classifications were corrected, with unchanged #1114 and blind #1624 AC2 checks passing. The Cargo reader now retains custom harness BLOCKED rows rather than letting a listed target hide them; its reproduced regression and four related checks pass.

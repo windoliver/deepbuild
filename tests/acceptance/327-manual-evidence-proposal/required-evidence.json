@@ -1,0 +1,80 @@
+{
+  "_status": "SPECIFICATION ONLY. Derived from issue #327 AC5 (#327.d3f997a2) and the three BLOCKED manual steps in tests/acceptance/327/card.rs lines 169-194. It is not evidence, holds no result, and is not read by any check. It fixes what a future validator would have to see before any of the three cases may stop being BLOCKED.",
+  "criterion": "#327.d3f997a2",
+  "kinds": [
+    { "id": "batched",    "name": "batched authority",          "fixture": "kinds/batched.events.jsonl" },
+    { "id": "taste",      "name": "taste",                      "fixture": "kinds/taste.events.jsonl" },
+    { "id": "unblock",    "name": "unblock",                    "fixture": "kinds/unblock.events.jsonl" },
+    { "id": "stalled",    "name": "stalled claim",              "fixture": "kinds/stalled.events.jsonl" },
+    { "id": "choice",     "name": "choice",                     "fixture": "kinds/choice.events.jsonl" },
+    { "id": "exception",  "name": "exception",                  "fixture": "kinds/exception.events.jsonl" },
+    { "id": "definition", "name": "early question about done",  "fixture": "kinds/definition.events.jsonl" }
+  ],
+  "cases": {
+    "ac5_with_voice_control_every_card_kind_can_be_answered_through_the_confirmation": {
+      "assistive_technology": "Voice Control",
+      "per_kind": {
+        "required_for": "all seven kinds, none omitted",
+        "observations": [
+          "the card was presented and armed",
+          "the person said \"Click <option label>\" for one option of that card",
+          "the OS Touch ID or password prompt appeared and the person passed it",
+          "the ask was afterwards answered with exactly that option, as shown by `deep inbox`"
+        ]
+      },
+      "once_for_the_method": {
+        "observations": [
+          "on one card the prompt was cancelled and the ask stayed open"
+        ]
+      }
+    },
+    "ac5_with_switch_control_every_card_kind_can_be_answered_through_the_confirmation": {
+      "assistive_technology": "Switch Control",
+      "per_kind": {
+        "required_for": "all seven kinds, none omitted",
+        "observations": [
+          "the card was presented and armed",
+          "the person selected one option of that card with the switch",
+          "the OS Touch ID or password prompt appeared and the person passed it",
+          "the ask was afterwards answered with exactly that option, as shown by `deep inbox`"
+        ]
+      },
+      "once_for_the_method": {
+        "observations": [
+          "on one card the prompt was cancelled and the ask stayed open"
+        ]
+      }
+    },
+    "ac5_voiceover_reads_each_cards_question_options_deadline_and_default": {
+      "assistive_technology": "VoiceOver",
+      "per_kind": {
+        "required_for": "all seven kinds, none omitted",
+        "observations": [
+          "VoiceOver spoke the card's question",
+          "VoiceOver spoke every option's label (the count of options spoken equals the card's option count)",
+          "VoiceOver spoke the deadline",
+          "VoiceOver spoke the default"
+        ]
+      },
+      "once_for_the_method": { "observations": [] }
+    }
+  },
+  "item_count": { "voice_control": 8, "switch_control": 8, "voiceover": 7, "total": 23 },
+  "binding_every_item_must_carry": [
+    "the tested commit's full 40-hex SHA, equal to the checkout's HEAD when the case runs",
+    "the kind id from `kinds` above (or the once-for-the-method marker)",
+    "the macOS build and the assistive technology's name",
+    "an outcome from a closed set; only `observed` counts, and an observed failure is not a pass"
+  ],
+  "must_be_rejected": [
+    "no evidence at all",
+    "evidence for fewer than all seven kinds, or without the method's cancelled-prompt item",
+    "a VoiceOver item missing any of question, options, deadline or default",
+    "evidence whose commit is not the checkout's HEAD (stale, different or later commit)",
+    "evidence whose signature does not verify, whose signing key is not on the approved list read at the merge base, or whose signature carries no touch or biometric flag",
+    "evidence for a different issue, criterion, case or method than the one being judged",
+    "an item whose outcome is anything but `observed`",
+    "a duplicated item that contradicts another item",
+    "evidence that exists only as unsigned text in the working tree, in this file, in a fixture, in a README, in BASE-FAILURE.txt, in an environment variable or in an agent's message"
+  ]
+}
