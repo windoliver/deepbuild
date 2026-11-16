@@ -1,0 +1,21 @@
+# Criterion 4: the doc lanes, 2026-11-15/16, macOS arm64, on the live tracker. Catalogue drift by hand
+# (node scripts/catalogue-drift.mjs) unless a run says otherwise; the open issues fetched once a run.
+== 1. #2572's lane and list (stacked here) on main's docs and the live tracker, before any restatement (1218 open issues)
+FAIL 10 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), delivery.later (#2669), agents.read (#2661), hub.listen (#2655), job.list (#2650), hub.health (#2647), build.mjs (#2627), brief.uncited (#2583), brief.uncited (#1193)
+exit=1
+Each is no event kind: hub methods (delivery.later, agents.read, job.list, hub.health), a setting (hub.listen), a
+fixture file (build.mjs) and the runner's config key (runner.login_path). They were restated in #2063's forms: methods
+with call marks, the file as a path, keys as "the `x` key under `y`" (the design in commit 975a20d55, the six issues
+live). brief.uncited is an event kind (the owner's ruling on #2063); #2583 catalogues it, here.
+== 2. this branch after the restatements (1213 open issues)
+FAIL 3 event kinds named in backticks are not in the catalogue, nor in scripts/not-event-kinds.txt: brief.uncited (docs/technical-design.md:539), brief.uncited (#2583), brief.uncited (#1193)
+exit=1
+== 3. for reference, main's own lane (b1fc9abb2, no list) on main's docs and the same tracker
+FAIL 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
+exit=1
+== 4. design links and names on this branch (1213 open issues)
+design links and names: 4364 links checked from 2 docs and 1213 open issues, each landing on a heading or an <a id>; 356 `deep` commands and agent tools named, each in the design or planned (1 planned)
+exit=0
+== 5. this branch with brief.uncited@1 in the catalogue (#2583, commit c8db2afbb; 1212 open issues)
+catalogue drift: 2 docs and 1212 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (13 listed)
+exit=0
