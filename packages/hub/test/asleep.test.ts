@@ -56,7 +56,7 @@ it('a hub that slept with an ask waiting for its batch moves its deadline later 
   const now = Date.now();
   const deadline = now + 2 * 86_400_000;
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
-  const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
+  const taste = askSources().find((row) => row.source === 'deep_ask.taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now);
   await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline } as never });
   await record.close();
@@ -93,7 +93,7 @@ it('a hub that stays up shows an ask waiting for its batch at the batch time, wi
   const now = Date.now();
   const batch = (Math.floor(now / 60_000) + 1) * 60_000;
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
-  const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
+  const taste = askSources().find((row) => row.source === 'deep_ask.taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now);
   await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
   await record.close();
@@ -127,7 +127,7 @@ it("the hub's list holds an ask from the batch that shows it, not while it waits
   const now = Date.now();
   const batch = (Math.floor(now / 60_000) + 1) * 60_000;
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });
-  const taste = askSources().find((row) => row.kind === 'taste')!.fixture.ask as Record<string, unknown>;
+  const taste = askSources().find((row) => row.source === 'deep_ask.taste')!.fixture.ask as Record<string, unknown>;
   const ask = ulid(now);
   await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ask, kind: 'ask.created', ts: now, data: { ...structuredClone(taste), deadline: now + 2 * 86_400_000 } as never });
   await record.close();
