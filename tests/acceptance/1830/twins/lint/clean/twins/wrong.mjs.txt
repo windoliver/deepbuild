@@ -1,0 +1,4 @@
+// A planted copy of a wrong program, not a suite: a lint over tests/acceptance never reads a twins/ folder.
+import { judgeLimit } from '../../../../scripts/benchmark.mjs';
+
+export const wrong = judgeLimit({ limit: 1, runs: [2, 2, 2, 2, 2], fingerprint: {} });

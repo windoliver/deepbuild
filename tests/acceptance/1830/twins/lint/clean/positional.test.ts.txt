@@ -1,0 +1,11 @@
+// A planted suite for #1830 AC1: a local judgeLimit of its own, called with positional arguments, is not benchmark's.
+import { expect, test } from 'vitest';
+
+function judgeLimit(limit: number, runs: number[]): 'PASS' | 'FAIL' {
+  return runs.every((run) => run <= limit) ? 'PASS' : 'FAIL';
+}
+
+test('a panel judged by its own rule', () => {
+  expect(judgeLimit(20, [11, 12, 11, 13, 12])).toBe('PASS');
+  expect(judgeLimit(10, [11, 12, 11, 13, 12])).toBe('FAIL');
+});
