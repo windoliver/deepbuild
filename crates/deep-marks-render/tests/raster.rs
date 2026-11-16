@@ -277,3 +277,45 @@ fn a_layout_frame_draws_its_children_where_its_layout_puts_them() {
     }
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// #2031: a lit group below full opacity draws its lit and unlit children as one unit, then takes
+/// its opacity once (Frame and group: "children then composite as today"), so where an unlit child
+/// covers a lit one only the unlit child shows through the group's opacity.
+#[test]
+fn a_lit_group_below_full_opacity_composites_its_children_as_one_unit() {
+    let dir = scratch("deep-raster", "lit-opacity");
+    let rect = |id: &str, order: &str, x: f64, role: &str, extra: Value| {
+        let mut params = json!({"box": [x, 0, 20, 20], "paint": {"fill": {"role": role}}});
+        params
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        json!({"id": id, "kind": "rect@1", "layer": "main", "name": id, "order": order,
+            "params": params, "parent": "g"})
+    };
+    let doc = figure(json!({
+        "back": {"id": "back", "kind": "rect@1", "layer": "main", "name": "back", "order": "a0",
+            "params": {"box": [0, 0, 40, 20], "paint": {"fill": {"role": "blue"}}}},
+        "g": {"id": "g", "kind": "group@1", "layer": "main", "name": "g", "order": "a1",
+            "params": {"opacity": 0.5, "light": {}}},
+        "lit": rect("lit", "a2", 0.0, "ground", json!({})),
+        "unlit": rect("unlit", "a3", 10.0, "ink", json!({"unlit": true})),
+    }));
+    let look = json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0], "blue": [0, 0, 255]}});
+    let out = dir.join("lit-opacity.png");
+    let answer = run("raster", &json!({"out": out, "doc": doc, "look": look}));
+    assert_eq!(answer["ok"], json!(true), "the lit group draws: {answer}");
+    let image = image::open(&out).unwrap().to_rgb8();
+    // Black over blue at half opacity; lit white (ambient 0.25: code 137) at half where it shows.
+    assert_eq!(
+        image.get_pixel(15, 10).0,
+        [0, 0, 128],
+        "where the unlit child covers the lit one"
+    );
+    assert_eq!(
+        image.get_pixel(5, 10).0,
+        [69, 69, 196],
+        "the lit child alone"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}

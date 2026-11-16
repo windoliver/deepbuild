@@ -3920,6 +3920,13 @@ fn ancestor_scope(
             let effect = Effect::read(id, p, blend, items)?;
             let isolated =
                 get("isolate") == Some(&Value::Bool(true)) || blend.is_some() || effect.is_some();
+            // #2031: an isolated lit group draws its lit and unlit children as one unit before its
+            // opacity, as any blended group does.
+            let lit = get("light").is_some_and(|l| !l.is_null());
+            let blend = match blend {
+                None if lit && (alpha < 1.0 || isolated) => Some(Blend::Normal),
+                b => b,
+            };
             (alpha < 1.0 || isolated).then(|| Scope::Opacity {
                 item: id.to_string(),
                 alpha,
