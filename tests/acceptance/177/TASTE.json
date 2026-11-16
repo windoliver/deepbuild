@@ -1,0 +1,13 @@
+{
+  "issue": 177,
+  "criterion": "#177.c861c4c9",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation (\"validate for me please\", Nov 15, 2026)",
+  "when": "2026-11-15T23:23:03Z",
+  "screenshots": {
+    "lamp-hdr-on.png": "58484af23c97588a0f4ae9fc40758c48a07399549006b36e93ea5d9e5045e5f4",
+    "lamp-hdr-off.png": "c8151bb49c3afdd5d8ce3057d298e379e9eb562f5253745a6a7c627cdda1ac01",
+    "card-over-view.png": "a669a76b72eaba5b83bc6b331e0df9202e0f5ae45cb2d1c1c51474c0c7629030"
+  },
+  "note": "Shot by docs/evidence/177/shoot.mjs from the app's real window on this Mac17,10's XDR display at headroom 4.475, each value divided by that headroom. Read back: the page (paper white) 130 in both; the lamp at 8x 255 with HDR on and 130 (clipped at paper white) with it off; the highlight at 2x 163 on (agx rolled off to 4.475) and 115 off (the SDR curve); mid-grey 57 in both (linear 0.183). The view meets the page in one step at its exact edges in all three, with no seam. The card reads its own SDR color divided by the headroom (127, 127, 126) and meets the HDR lamp in one step on every side, no halo; its rounded corners show the view beneath."
+}

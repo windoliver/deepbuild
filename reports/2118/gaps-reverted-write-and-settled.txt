@@ -1,0 +1,86 @@
+
+ RUN  v5.0.5 ~/doneright-2118
+
+ ❯ packages/hub/test/hook-replies.test.ts (3 tests | 1 failed) 2691ms
+   × keeps the settled reply's wait line and rewrite beside a standing rule's allow and an extension's context 4ms
+stderr | packages/hub/test/approved-write.test.ts
+vitest-setup: stopping 6 process(es) this file left running:
+  271 (node)
+  272 (node)
+  290 (node)
+  827 (node)
+  835 (node)
+  845 (node)
+
+ ❯ packages/hub/test/approved-write.test.ts (2 tests | 2 failed) 3242ms
+   × a link at the temporary name is replaced, never written through 148ms
+   × a referenced output whose folder is a link out of the checkout is refused, naming its path, and nothing is written there 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/approved-write.test.ts > a link at the temporary name is replaced, never written through
+AssertionError: expected 'approved\n' to be 'yours\n' // Object.is equality
+
+- Expected
++ Received
+
+- yours
++ approved
+
+
+ ❯ packages/hub/test/approved-write.test.ts:27:60
+     25|   symlinkSync(join(outside, 'yours.txt'), join(checkout, 'checks/run.s…
+     26|   writeApproved(checkout, 'checks/run.sh', approved, 0o500);
+     27|   expect(readFileSync(join(outside, 'yours.txt'), 'utf8')).toBe('yours…
+       |                                                            ^
+     28|   expect(readFileSync(join(checkout, 'checks/run.sh'), 'utf8')).toBe('…
+     29| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/hub/test/approved-write.test.ts > a referenced output whose folder is a link out of the checkout is refused, naming its path, and nothing is written there
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ packages/hub/test/approved-write.test.ts:34:78
+     32|   const { checkout, outside } = scene();
+     33|   symlinkSync(outside, join(checkout, 'expected'));
+     34|   expect(() => writeApproved(checkout, 'expected/out.txt', approved, 0…
+       |                                                                              ^
+     35|   expect(readdirSync(outside)).toEqual(['yours.txt']);
+     36| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  packages/hub/test/hook-replies.test.ts > keeps the settled reply's wait line and rewrite beside a standing rule's allow and an extension's context
+AssertionError: expected { hookSpecificOutput: { …(4) } } to deeply equal { …(2) }
+
+- Expected
++ Received
+
+@@ -3,7 +3,6 @@
+      "additionalContext": "DeepBuild allowed this by your standing rule decision:01K.",
+      "hookEventName": "PreToolUse",
+      "permissionDecision": "allow",
+      "permissionDecisionReason": "DeepBuild allowed this by your standing rule decision:01K.",
+    },
+-   "systemMessage": "DeepBuild: waiting on the command.",
+  }
+
+ ❯ packages/hub/test/hook-replies.test.ts:43:69
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 2 passed (5)
+   Start at  10:59:18
+   Duration  10.29s (transform 43%, tests 42%, import 13%, setup 1%)
+
+reverted-a exit 1

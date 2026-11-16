@@ -113,6 +113,27 @@ export class Replicas {
     }
     return reply.replica === undefined ? reply : { ...reply, replica: handle };
   }
+  /**
+   * One play of a check runner's `deep.canvas.play` (#184): the replica lease, refused naming it when the machine runs
+   * its two, a deep-drive process for the one call, its reply, and the process ended and the lease released.
+   */
+  async play(call: Obj): Promise<Obj> {
+    const id = ulid(this.o.now());
+    const got = await this.o.leases().lease({ holder: 'check:play' }, { host: 'local', kind: REPLICA_LEASE.name, key: `play:${id}` }, 'exclusive');
+    if (got.status !== 'granted') return { ok: false, error: { code: 'blocked', lease: REPLICA_LEASE.name, message: `Nothing was played: the ${REPLICA_LEASE.name} lease allows ${REPLICA_LEASE.cap} per machine, and ${got.message}.` } };
+    try {
+      const out = join(this.o.folder, id);
+      mkdirSync(out, { recursive: true });
+      const replica = new Replica(out);
+      try {
+        return await replica.call({ ...call, call: 'play' });
+      } finally {
+        await replica.end();
+      }
+    } finally {
+      await this.o.leases().release(got.lease.id, []);
+    }
+  }
   /** A session that ended takes its replicas with it, and their leases (#124). */
   endFor(session: string): void {
     for (const held of this.held.values()) if (held.session === session) void held.replica.end();

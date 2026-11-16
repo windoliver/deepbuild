@@ -1614,5 +1614,72 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "method": "deep.canvas.play",
+    "variants": null,
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#184",
+    "preview_since": "R6",
+    "decide_by": "R9",
+    "digest": "d1:3dfbdac3821e50ffa753bfa63103a9a73f8ba880acc84c15f5f7efc5c5211072",
+    "params": {
+      "type": "object",
+      "properties": {
+        "doc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "<doc>@<rev>: the piece played."
+        },
+        "run": {
+          "type": "object",
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "A seed the running check's input gives: its seed or hash(it, i) for one of its runs."
+            },
+            "span": {
+              "description": "Seconds, or {steps}."
+            },
+            "bot": {
+              "type": "object",
+              "description": "One of the input's bots: {policy} or {logic}."
+            },
+            "track": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Entries to play without a bot: one the input gives or a play of this run recorded."
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "frames": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "seed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "doc",
+        "run"
+      ],
+      "additionalProperties": false
+    }
   }
 ]

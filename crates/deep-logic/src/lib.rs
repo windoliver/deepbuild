@@ -24,6 +24,7 @@ pub mod live;
 pub mod mirrors;
 pub mod module;
 pub mod piece;
+pub mod play;
 pub mod point;
 pub mod saves;
 pub mod services;
@@ -95,6 +96,9 @@ pub struct Planted {
     pub preview_runs_on_hover_only: bool,
     /// #548: a region map that lays the reads out by name rather than in declaration order.
     pub map_reads_by_name: bool,
+    /// #1164: the restore a seek to step 225 starts from zeroes the u32 at the program's
+    /// `moves_at`, a count it keeps only in memory.
+    pub restore_zeroes_move_count: bool,
 }
 
 impl Planted {
@@ -145,6 +149,7 @@ impl Planted {
             "services_after_checkpoint" => p.services_after_checkpoint = true,
             "preview_writes_item_memory" => p.preview_writes_item_memory = true,
             "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
+            "restore_zeroes_move_count" => p.restore_zeroes_move_count = true,
             _ => return None,
         }
         Some(self)
