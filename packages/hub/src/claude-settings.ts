@@ -8,7 +8,7 @@ import { duration } from '@deepbuild/asks/duration';
 import { shellQuote } from './shell.js';
 import { statKey, writeThrough } from './agent-files.js';
 import { activePlant, type Plant } from './plant.js';
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj } from '@deepbuild/contracts/runtime';
 
 type Obj = Record<string, unknown>;
 
