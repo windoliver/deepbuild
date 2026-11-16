@@ -547,6 +547,11 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #518's files each build deep-show (most with test-encode-tools too) and export films through the GPU, an encode tool
+// and a fresh decode worker; registered.test.ts starts a hub, base.test.ts and budgets.test.ts build the merge base,
+// and budgets.test.ts, open.test.ts and slots.test.ts read a clock and the machine's load.
+alone.push('tests/acceptance/518/');
+timed.push('tests/acceptance/518/budgets.test.ts', 'tests/acceptance/518/open.test.ts', 'tests/acceptance/518/slots.test.ts');
 // #162's files each build deep-show (atomic.test.ts with test-export-guards) and export to Lottie through the pinned
 // reference renderer; the import legs start a hub and run its import job; budgets.test.ts times both.
 alone.push('tests/acceptance/162/', 'tests/acceptance/162-oracle/');

@@ -78,6 +78,18 @@ fn issue(check: &str, frame: Option<i64>, what: String) -> Value {
     json!({"check": check, "code": check, "severity": "error", "frame": frame, "what": what})
 }
 
+/// A delivery that holds `n` frames where the receipt holds `want`: with fewer, the issue names
+/// the first frame the delivery lacks by its count (#518).
+fn short(d: &Delivery, n: i64, want: i64) -> Value {
+    let lacks = (n < want).then_some(d.frames.start + n);
+    let first = lacks.map_or(String::new(), |k| format!(": it lacks frame {k}"));
+    issue(
+        "export.fidelity",
+        lacks,
+        format!("the delivery holds {n} frames, not the receipt's {want}{first}"),
+    )
+}
+
 /// Asks the worker to stream `path` (frames `range` only, when given): its header.
 fn stream(
     worker: &mut Helper,
@@ -174,10 +186,17 @@ impl Hub<'_> {
         let path = scratch.join(if alpha { "probe.mov" } else { "probe.mp4" });
         // The delivery's codec, colour properties and source format, at the encoder's highest
         // quality, so what the probe reads is the colour path and not the bitrate.
-        let ask = super::frames::transfer(json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "size": size, "quality": "master",
-            "keyframe_interval": job.keyframe_interval}), job);
-        let mut part = Part::open(self.encode_tool()?, ask, path.clone(), 0, 1, !alpha)?;
-        part.push(self.encode_tool()?, 0, &bgra, px, true)?;
+        let ask = super::frames::transfer(
+            json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "size": size, "quality": "master",
+            "keyframe_interval": job.keyframe_interval}),
+            job,
+        );
+        let stale = self.media.encoder_stale.clone();
+        let mut part = Part::open(self.encode_tool()?, ask, path.clone(), 0, 1, !alpha, stale)?;
+        // The probe's planes by the conversion's own formula, as a 4:2:0 delivery's frames are.
+        let planes = (!alpha).then(|| deep_gpu::frame_checks::nv12(&bgra, px[0], px[1]));
+        let frame = planes.as_deref().unwrap_or(&bgra);
+        part.push(self.encode_tool()?, 0, frame, true)?;
         part.finish(self.encode_tool()?)?;
         let mut worker = self.fresh_decoder(&Caps::default())?;
         let head = stream(&mut worker, &path, "bgra", None)?;
@@ -233,7 +252,7 @@ impl Hub<'_> {
             ..Caps::default()
         };
         let mut worker = self.fresh_decoder(&caps)?;
-        if d.job.target() == "png" {
+        if d.job.codec == "png_seq" {
             return self.read_pngs(d, &mut worker);
         }
         // The delivery's head and every sound sample, from a stream of no frames.
@@ -463,11 +482,7 @@ impl Hub<'_> {
     ) -> Result<Value, Value> {
         let want = d.frames.end - d.frames.start;
         if n != want {
-            issues.push(issue(
-                "export.fidelity",
-                None,
-                format!("the delivery holds {n} frames, not the receipt's {want}"),
-            ));
+            issues.push(short(d, n, want));
         }
         let px = d.size.map(u32::from);
         let plane = (px[0] * px[1]) as usize;
@@ -709,11 +724,7 @@ impl Hub<'_> {
         let mut issues = Vec::new();
         let want = d.frames.end - d.frames.start;
         if n != want {
-            issues.push(issue(
-                "export.fidelity",
-                None,
-                format!("the delivery holds {n} frames, not the receipt's {want}"),
-            ));
+            issues.push(short(d, n, want));
         }
         let gpu = self
             .gpu3()

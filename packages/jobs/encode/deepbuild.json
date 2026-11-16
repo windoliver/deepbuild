@@ -1,0 +1,24 @@
+{
+  "id": "deepbuild/encode",
+  "version": "1.0.0",
+  "digest": "d1:645d89680d038f3f9d82d44818c228152e22500c8b7049fd8c2fb2e9db08142f",
+  "jobs": [
+    "encode"
+  ],
+  "job_tools": [
+    {
+      "kind": "encode",
+      "tool": "videotoolbox@1.0.0"
+    },
+    {
+      "kind": "encode",
+      "tool": "png-sequence@1.0.0"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

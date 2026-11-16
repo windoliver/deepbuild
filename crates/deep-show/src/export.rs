@@ -18,8 +18,14 @@ mod guards;
 mod lottie;
 mod page;
 mod pdf;
+mod planes;
+mod program;
+mod qualify;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
+#[cfg(feature = "test-encode-tools")]
+pub(crate) mod test_tools;
+pub(crate) mod tools;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -68,12 +74,29 @@ pub enum Guard {
     PageTargetsOnImage,
     /// #468: the glTF export drops a camera's lens shift without a warning.
     GltfDropsShift,
+    /// #518: the hand-off never gives the encode job the last frame's buffer.
+    HandoffDropsLast,
+    /// #518: a frame waits for a free slot with no deadline.
+    WaitsForSlotForever,
+    /// #518: the conversion pass rounds each block's chroma down, not to nearest.
+    Nv12RoundsDown,
+    /// #518: the export removes what is at the destination before it finds its tool.
+    ClearsDestinationFirst,
+    /// #518: the encode tool's session opens only after the first frame is drawn.
+    OpensAfterFirstFrame,
+    /// #518: a slot's index is sent before the GPU has put the frame in it.
+    SendsBeforeHash,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
 
+/// #518: the encode job that reads every frame before it codes the first: the export hands a
+/// tool each frame as soon as it is hashed, and the PNG sequence writer keeps them all.
+pub(crate) const READS_ALL_FIRST: Guard = Guard::Codec("encode_reads_all_frames_first");
+
 /// The helper processes' wrong programs (#157), by the names they answer to.
-const CODEC_PLANTS: [&str; 18] = [
+const CODEC_PLANTS: [&str; 19] = [
+    "encode_reads_all_frames_first",
     "encode_full_range_bt601",
     "h264_full_range_under_limited_tags",
     "prores_fed_full_range",
@@ -127,13 +150,19 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
         "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
+        "handoff_drops_last_buffer" => Planted::Export(G::HandoffDropsLast),
+        "export_waits_for_slot_forever" => Planted::Export(G::WaitsForSlotForever),
+        "nv12_rounds_chroma_down" => Planted::Export(G::Nv12RoundsDown),
+        "export_clears_destination_first" => Planted::Export(G::ClearsDestinationFirst),
+        "export_opens_tool_after_first_frame" => Planted::Export(G::OpensAfterFirstFrame),
+        "handoff_sends_before_hash" => Planted::Export(G::SendsBeforeHash),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
 
 impl Hub<'_> {
     /// Whether #157's wrong program `g` is planted.
-    fn guard_planted(&self, g: Guard) -> bool {
+    pub(crate) fn guard_planted(&self, g: Guard) -> bool {
         self.scenario.planted == Some(Planted::Export(g))
     }
 }
@@ -328,6 +357,10 @@ pub struct Job {
     /// #169: the page's own clips are tagged with their pixels' transfer, sRGB, so a browser
     /// draws them as it draws the page's stills; never read from a request.
     pub srgb: bool,
+    /// #518: `tool: name@version`, the encode tool that encodes in place of the first qualified
+    /// one for the codec, and `brief: {tools}`, the tools the brief pins.
+    pub tool: Option<String>,
+    pub pins: Vec<String>,
 }
 
 impl Default for Job {
@@ -359,6 +392,8 @@ impl Default for Job {
             notes: false,
             page: Value::Null,
             srgb: false,
+            tool: None,
+            pins: Vec::new(),
         }
     }
 }
@@ -377,18 +412,6 @@ impl Default for Captions {
             profile: None,
             files: vec!["srt".into()],
             mode: "open".into(),
-        }
-    }
-}
-
-impl Job {
-    /// The export.target@1 entry that writes the job's codec: `video` for the movie codecs,
-    /// `png` for a PNG sequence, otherwise the target the codec names.
-    pub fn target(&self) -> &str {
-        match self.codec.as_str() {
-            "h264" | "hevc" | "hevc_alpha" | "prores_4444" | "gif" => "video",
-            "png_seq" => "png",
-            other => other,
         }
     }
 }
@@ -528,6 +551,15 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .cloned()
             .unwrap_or(Value::Null),
         srgb: false,
+        tool: crate::optional(c.get("tool"), |t| Some(t.as_str()?.to_string()))?,
+        pins: c
+            .get("brief")
+            .and_then(|b| b.get("tools"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str().map(str::to_string))
+            .collect(),
     })
 }
 
@@ -572,6 +604,9 @@ impl Hub<'_> {
         self.media.exports += 1;
         let result = self.export_inner(job, doc, &scratch);
         self.media.captions = None;
+        // #518: an encode job the export opened and didn't finish is ended first, so its tool
+        // has let go of what it wrote before that is removed.
+        self.end_stale_encoder();
         let _ = std::fs::remove_dir_all(&scratch);
         // All or nothing: a failed export leaves nothing at its temporary name (only #501's
         // planted export that starts and stops leaves its partial file).
@@ -622,17 +657,36 @@ impl Hub<'_> {
         if job.codec == "gltf" {
             return self.export_gltf(job, &doc);
         }
-        let target = job.target().to_string();
+        // #518: a named tool is one the brief pins, or the export is refused at check.
+        self.pinned(job)?;
+        // Planted: whatever is at the destination goes before the export finds its tool.
+        if self.guard_planted(Guard::ClearsDestinationFirst) {
+            let _ = std::fs::remove_file(&job.out);
+            let _ = std::fs::remove_dir_all(&job.out);
+        }
+        let targets = self.startup.sealed.registry("export.target@1");
+        let sealed = |name: &str| targets.and_then(|r| r.entry(name)).map(|e| e.value.clone());
+        // #518: a codec names an export target, or is one a qualified encode tool registers and
+        // media's video target, or its PNG sequence, is written through that tool. A codec with
+        // neither is BLOCKED here, before a frame is drawn or hashed.
+        let tool = match sealed(&job.codec) {
+            Some(_) if job.tool.is_none() => None,
+            _ => Some(self.tool_for(job)?),
+        };
+        // A codec this machine's decode worker can't decode can't be checked from its own bytes:
+        // BLOCKED, naming the codec, before a frame is drawn.
+        if tool.is_some() && !deep_codecs::decodes(&job.codec) {
+            return Err(tools::undecodable(&job.codec));
+        }
+        let target = match &tool {
+            Some(_) if job.codec == "png_seq" => "png".to_string(),
+            Some(_) => "video".to_string(),
+            None => job.codec.clone(),
+        };
         // The target, as this build sealed it.
-        let entry = self
-            .startup
-            .sealed
-            .registry("export.target@1")
-            .and_then(|r| r.entry(&target))
-            .map(|e| e.value.clone())
-            .ok_or_else(
-                || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
-            )?;
+        let entry = sealed(&target).ok_or_else(
+            || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
+        )?;
         // #162: a Lottie can't keep the status rule: refused before anything is written.
         if let Some(r) = lottie::refused(&doc).filter(|_| target == "lottie") {
             return Err(r);
@@ -651,9 +705,6 @@ impl Hub<'_> {
             .number(&job.timecode)
             .map_err(|why| json!({"code": "bad_timecode", "why": why}))?;
         if target == "video" {
-            if !matches!(job.codec.as_str(), "h264" | "hevc" | "prores_4444") {
-                return Err(json!({"code": "codec_unbuilt", "video": job.codec}));
-            }
             if !matches!(job.audio_codec.as_str(), "aac" | "pcm") {
                 return Err(json!({"code": "codec_unbuilt", "audio": job.audio_codec}));
             }
@@ -815,6 +866,44 @@ impl Hub<'_> {
         if target == "lottie" {
             return self.export_lottie(job, &doc, ((p, q), frame), frames, &out, &temp);
         }
+        // Shards: contiguous runs of frames, each from its own fresh session and player.
+        let len = frames.end - frames.start;
+        let n = i64::from(job.shards).min(len.max(1));
+        // #518: the encode job's session opens here, while the sound is rendered and before any
+        // frame is drawn, so the tool's open runs beside the export's preparing; nothing waits
+        // for its answer until the first frame is handed over.
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent).map_err(|_| refuse("export_unwritable"))?;
+        }
+        let chapters = chapters_of(&doc, frame, &frames);
+        let mut run = Run::new(
+            scratch,
+            chapters.iter().map(|c| c.2).collect(),
+            job.readback,
+        );
+        // Planted: the hand-off never gives the encode job the last frame's buffer.
+        if self.guard_planted(Guard::HandoffDropsLast) {
+            run.dropped = Some(frames.end - 1);
+        }
+        let mut sink = self.sink_for(
+            job,
+            &doc,
+            &target,
+            &entry,
+            &temp,
+            (p, q),
+            frames.clone(),
+            tool.as_ref(),
+        )?;
+        // Planted: the session opens only once the first frame is drawn.
+        let ahead = job
+            .size
+            .or_else(|| doc_size(&doc))
+            .filter(|_| !self.guard_planted(Guard::OpensAfterFirstFrame));
+        if let Some(size) = ahead {
+            let first = frames.start..frames.start + len / n;
+            self.sink_open(&mut sink, &first, size, &run)?;
+        }
         // #502: the script's lines, their captions laid out on this export's frames and held to
         // their profile, before any frame is drawn.
         if let Some(s) = self.script_of(&doc) {
@@ -934,9 +1023,6 @@ impl Hub<'_> {
                 items.retain(|id, i| sel.contains(&json!(id)) || i["kind"] == "camera@1");
             }
         }
-        // Shards: contiguous runs of frames, each from its own fresh session and player.
-        let len = frames.end - frames.start;
-        let n = i64::from(job.shards).min(len.max(1));
         let shards: Vec<Shard> = (0..n)
             .map(|i| Shard {
                 frames: frames.start + len * i / n..frames.start + len * (i + 1) / n,
@@ -1023,16 +1109,6 @@ impl Hub<'_> {
             Some(Planted::RangeRestartsTimecode) => start_number,
             _ => first,
         };
-        if let Some(parent) = out.parent() {
-            std::fs::create_dir_all(parent).map_err(|_| refuse("export_unwritable"))?;
-        }
-        let chapters = chapters_of(&doc, frame, &frames);
-        let mut run = Run::new(
-            scratch,
-            chapters.iter().map(|c| c.2).collect(),
-            job.readback,
-        );
-        let mut sink = self.sink_for(job, &doc, &target, &entry, &temp, (p, q), len)?;
         for shard in &shards {
             self.export_frames(&doc, shard, &mut run, &mut sink)?;
         }
@@ -1066,9 +1142,19 @@ impl Hub<'_> {
         let size = run.size;
         let encoder =
             self.sink_finish(sink, job, &target, &entry, &temp, &audio, hz, &tc, tc_start)?;
+        // #518: a delivery check that fails comes after every frame is hashed: its reply holds
+        // the hashes the receipt would have held.
+        let hashed = |mut e: Value| {
+            if e["outcome"] == "failed" {
+                e["frame_hashes"] = json!(hashes.iter().map(hex).collect::<Vec<_>>());
+            }
+            e
+        };
         // #157: the colour probe, and the delivery read back from its own bytes.
         let (mut probe, mut read, mut found) = (Value::Null, None, Vec::new());
-        if target == "video" {
+        // The probe is the build's own encoder's: a plug-in's tool is held to its delivery alone.
+        let own = matches!(tool.as_ref().map(|t| &t.run), Some(tools::Run::Own(_)));
+        if target == "video" && own {
             match self.color_probe(job, size, (p, q), scratch) {
                 Ok(p) => probe = p,
                 Err(e) if e["outcome"] == "failed" => {
@@ -1098,7 +1184,7 @@ impl Hub<'_> {
             };
             match self.read_delivery(&d) {
                 Ok(r) => read = Some(r),
-                Err(e) if e["outcome"] == "failed" && found.is_empty() => return Err(e),
+                Err(e) if e["outcome"] == "failed" && found.is_empty() => return Err(hashed(e)),
                 Err(e) if e["outcome"] == "failed" => {
                     found.extend(e["issues"].as_array().cloned().unwrap_or_default())
                 }
@@ -1107,7 +1193,9 @@ impl Hub<'_> {
         }
         // export.color and export.fidelity, each raised: every issue they found.
         if !found.is_empty() {
-            return Err(json!({"outcome": "failed", "code": "export.delivery", "issues": found}));
+            return Err(hashed(
+                json!({"outcome": "failed", "code": "export.delivery", "issues": found}),
+            ));
         }
         // #502: the readings of the decoded delivery, held to the profile too.
         let mut delivered = None;
@@ -1207,7 +1295,8 @@ impl Hub<'_> {
             "frame_hashes": hashes.iter().map(hex).collect::<Vec<_>>(),
             "timecode": {"start": self.label(&tc, tc_start), "last": self.label(&tc, tc_start + count.max(1) as u64 - 1), "drop_frame": job.drop_frame},
             "encoder": encoder["encoder"],
-            "handoff": "copy",
+            "handoff": encoder["handoff"].as_str().unwrap_or("copy"),
+            "timing": {"open": encoder["open"]},
             "adapter": adapter.unwrap_or_else(|| json!({"name": null, "software": false})),
             "shards": n,
             "hidden": hidden,

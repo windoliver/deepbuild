@@ -1,0 +1,147 @@
+// The #518 acceptance suite's encode tool (README: The suite's tools; How the export runs a memory-input tool): a tool
+// of the job kind `encode` with `input: memory`, a program of its own that the export starts with Node. It takes
+// BGRA8 frames by copy and writes a PNG sequence, the folder at `out` holding `000000.png` onward, as the first-party
+// PNG sequence writer does. What else it does is its plan's (`plan.json`, beside this file, `behaviour.does`):
+//
+//   frames      hashes each frame it is handed with BLAKE3 and reports the hashes in order (AC4)
+//   truncates   writes every frame before `cut_at` whole, cuts frame `cut_at`'s file to half its bytes, writes none
+//               after it, and still answers every frame and reports success for all of them (AC3)
+//   fails_open  fails at its open: one error line, exit 1, nothing written (AC9)
+//   keeps       answers every frame up to `after`, and never a later one (AC6)
+//   slow        from every `hold_every`th frame on, answers nothing until no frame has come for `quiet_ms`, then
+//               answers all it holds; it reports the most frames it held unanswered at once (AC12)
+//
+// Messages are one JSON object a line; a line whose object has "bytes": n is followed by exactly n raw bytes.
+//   in:  {"op":"open","format":"bgra8","size":[w,h],"frames":N,"first":k,"out":"<path>", …}
+//        {"frame":k,"key":bool,"bytes":n} + n bytes, in order      {"end":true}
+//   out: {"ready":true}      {"frame":k} once frame k is coded      {"done":true,"frames":n,"report":{…}} then exit 0
+//        {"error":"<text>"} then exit 1
+// It reads its own folder and stdin, and writes only under `out` and to stdout.
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { blake3, checked } from './blake3.mjs';
+import { png } from './png.mjs';
+
+const plan = JSON.parse(readFileSync(new URL('./plan.json', import.meta.url), 'utf8'));
+const does = plan.behaviour.does;
+
+let over = false;
+const say = (message, then) => process.stdout.write(`${JSON.stringify(message)}\n`, then);
+function fail(text) {
+  if (over) return;
+  over = true;
+  say({ error: text }, () => process.exit(1));
+}
+
+let job = null;        // the open message's size and out
+let handed = 0;        // frames taken
+let written = 0;       // PNG files written whole
+const hashes = [];     // `frames`: each frame's BLAKE3, in order
+const held = [];       // frames taken and not yet answered, oldest first
+let pendingMax = 0;
+let holds = 0;
+let holding = false;
+let quiet = null;
+
+function release() {
+  holding = false;
+  if (quiet) clearTimeout(quiet);
+  quiet = null;
+  while (held.length) say({ frame: held.shift() });
+}
+
+function open(message) {
+  if (job) return fail('a second open');
+  if (does === 'fails_open') return fail('the encoder could not be opened (the plan: fails_open)');
+  if (message.format !== 'bgra8') return fail(`this tool takes bgra8 frames, not ${JSON.stringify(message.format)}`);
+  const [w, h] = Array.isArray(message.size) ? message.size : [];
+  if (!Number.isSafeInteger(w) || !Number.isSafeInteger(h) || w < 1 || h < 1) return fail(`the open names no size: ${JSON.stringify(message.size)}`);
+  if (typeof message.out !== 'string' || !message.out) return fail('the open names no out');
+  if (does === 'frames') {
+    try { checked(); } catch (e) { return fail(e.message); }
+  }
+  mkdirSync(message.out, { recursive: true });
+  job = { w, h, out: message.out };
+  say({ ready: true });
+}
+
+function frame(head, bytes) {
+  if (!job) return fail('a frame came before the open');
+  const k = head.frame;
+  if (!Number.isSafeInteger(k) || k < 0) return fail(`a frame names no index: ${JSON.stringify(head)}`);
+  if (bytes.length !== job.w * job.h * 4) return fail(`frame ${k} holds ${bytes.length} bytes, not ${job.w * job.h * 4}`);
+  handed++;
+  if (does === 'frames') hashes.push(blake3(bytes));
+  const name = join(job.out, `${String(k).padStart(6, '0')}.png`);
+  if (does === 'truncates' && k >= plan.behaviour.cut_at) {
+    if (k === plan.behaviour.cut_at) {
+      const whole = png(bytes, job.w, job.h);
+      writeFileSync(name, whole.subarray(0, Math.floor(whole.length / 2)));
+    }
+  } else {
+    writeFileSync(name, png(bytes, job.w, job.h));
+    written++;
+  }
+  held.push(k);
+  pendingMax = Math.max(pendingMax, held.length);
+  if (does === 'keeps') {
+    // Every frame up to `after` is answered once it is coded; a later one is kept and never answered.
+    while (held.length && held[0] <= plan.behaviour.after) say({ frame: held.shift() });
+    return;
+  }
+  if (does === 'slow') {
+    if (!holding && k % plan.behaviour.hold_every === 0) { holding = true; holds++; }
+    if (holding) {
+      if (quiet) clearTimeout(quiet);
+      quiet = setTimeout(release, plan.behaviour.quiet_ms);
+      return;
+    }
+  }
+  while (held.length) say({ frame: held.shift() });
+}
+
+function end() {
+  if (!job) return fail('the end came before the open');
+  if (over) return;
+  over = true;
+  if (does !== 'keeps') release();
+  // The truncating tool says it wrote every frame it was handed, in its count and in its report.
+  const count = does === 'truncates' ? handed : written;
+  const report = does === 'frames' ? { frames: hashes } : does === 'slow' ? { pending_max: pendingMax, holds } : { written: count };
+  say({ done: true, frames: count, report }, () => process.exit(0));
+}
+
+// stdin: lines, and after a line with "bytes": n, n raw bytes.
+let buffer = Buffer.alloc(0);
+let waiting = null;    // the head whose bytes are still coming
+function drain() {
+  while (!over) {
+    if (waiting) {
+      if (buffer.length < waiting.bytes) return;
+      const head = waiting; const bytes = buffer.subarray(0, head.bytes);
+      buffer = buffer.subarray(head.bytes);
+      waiting = null;
+      frame(head, bytes);
+      continue;
+    }
+    const at = buffer.indexOf(10);
+    if (at < 0) return;
+    const line = buffer.subarray(0, at).toString('utf8');
+    buffer = buffer.subarray(at + 1);
+    if (line.trim() === '') continue;
+    let message;
+    try { message = JSON.parse(line); } catch { return fail(`a line that isn't JSON: ${line.slice(0, 120)}`); }
+    if (message === null || typeof message !== 'object') return fail(`a line that isn't an object: ${line.slice(0, 120)}`);
+    if (message.op === 'open') open(message);
+    else if (message.end === true) end();
+    else if (Number.isSafeInteger(message.frame) && Number.isSafeInteger(message.bytes) && message.bytes >= 0) waiting = message;
+    else return fail(`a message this tool doesn't read: ${line.slice(0, 120)}`);
+  }
+}
+process.stdin.on('data', (chunk) => {
+  buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
+  drain();
+});
+// stdin closing before the end is the export stopping the job: nothing more is answered or written.
+process.stdin.on('end', () => { if (!over) process.exit(1); });
+process.stdin.on('error', () => process.exit(1));

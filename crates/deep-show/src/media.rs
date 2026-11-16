@@ -90,6 +90,9 @@ pub fn caps(input: &Map<String, Value>) -> Option<Caps> {
 pub struct Media {
     decoder: Option<Helper>,
     encoder: Option<Helper>,
+    /// #518: set when an encode job the tool was asked to open is dropped unfinished: the tool
+    /// still waits for that job's frames, so its process is ended before anything else is asked.
+    pub(crate) encoder_stale: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Proxies and exports so far, which name their scratch files.
     pub(crate) exports: usize,
     /// #499: video assets' probes and decoded frames.
@@ -228,6 +231,7 @@ impl Hub<'_> {
                 deep_codecs::run(job.as_object().expect("a job"), &caps, &Default::default());
             return (reply, std::process::id());
         }
+        self.end_stale_encoder();
         let slot = match role {
             ENCODE_TOOL => &mut self.media.encoder,
             _ => &mut self.media.decoder,
@@ -253,8 +257,18 @@ impl Hub<'_> {
         (h.ask(&job), h.pid)
     }
 
+    /// #518: ends the encode tool's process when a job it was asked to open was dropped
+    /// unfinished: its stdin closes, it removes what it wrote, and it is waited for.
+    pub(crate) fn end_stale_encoder(&mut self) {
+        use std::sync::atomic::Ordering;
+        if self.media.encoder_stale.swap(false, Ordering::Relaxed) {
+            self.media.encoder = None;
+        }
+    }
+
     /// #157: the run's encode tool, started on first use, for a job that streams its frames.
     pub(crate) fn encode_tool(&mut self) -> Result<&mut Helper, Value> {
+        self.end_stale_encoder();
         if self.media.encoder.is_none() {
             let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
             let h = Helper::start(&exe, ENCODE_TOOL, &self.scenario.decode_caps, worker_planted(self.scenario.planted))

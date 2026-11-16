@@ -599,7 +599,7 @@ class Host implements ExtensionHost {
     for (const e of Object.values(this.entries)) e.holds ??= manifestOf(e.folder).checks ?? [];
     this.results = this.read('checked.json');
     this.keys = this.read('keys.json');
-    this.jobTools = new JobTools({ entries: this.entries, supervisor: options.supervisor, home: options.home, now: options.now, files: this.files, plant: options.plant });
+    this.jobTools = new JobTools({ entries: this.entries, supervisor: options.supervisor, home: options.home, now: options.now, files: this.files, plant: options.plant, ...(options.canvas ? { canvas: options.canvas } : {}) });
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
     const plant = options.plant;

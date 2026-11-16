@@ -229,7 +229,7 @@ function shape(world: CanvasWorld, evidence: string): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
   const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
-  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs']) if (world.file[key] !== undefined) out[key] = world.file[key];
+  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'job_tools']) if (world.file[key] !== undefined) out[key] = world.file[key];
   return out;
 }
 

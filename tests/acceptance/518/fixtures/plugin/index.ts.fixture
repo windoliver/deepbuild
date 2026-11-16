@@ -1,0 +1,37 @@
+// A test plug-in that adds one tool to the job kind `encode` through deep.registerJobTool (#518 acceptance; README:
+// The suite's tools). The tool is the program in ./tool, a PNG sequence writer that takes its frames by copy
+// (`input: memory`) and that the export runs with Node as a process of its own; ./tool/plan.json names the tool, its
+// version and its frame delay, and what it does to the frames it is handed. The descriptor's fields are the design's
+// (Export: encode job): name@version (the job API's `tool`), codecs, containers, hardware, input, frame_delay, run and
+// qualification, with the kind's params.
+import { readFileSync } from 'node:fs';
+
+interface Plan { tool: string; version: string; frame_delay: number }
+const plan: Plan = JSON.parse(readFileSync(new URL('./tool/plan.json', import.meta.url), 'utf8'));
+
+const PARAMS = {
+  type: 'object',
+  properties: {
+    codec: { enum: ['png_seq'] },
+    container: { enum: ['png'], default: 'png' },
+    keyframe_interval: { type: ['integer', 'null'], default: null },
+    quality: { enum: ['draft', 'standard', 'master'], default: 'standard' },
+    bitrate: { type: ['integer', 'null'], default: null },
+  },
+  required: ['codec'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool('encode', {
+    tool: `${plan.tool}@${plan.version}`,
+    params: PARAMS,
+    codecs: ['png_seq'],
+    containers: ['png'],
+    hardware: false,
+    input: 'memory',
+    frame_delay: plan.frame_delay,
+    run: { dir: 'tool', entry: 'encode.mjs' },
+    qualification: { same_bytes: false },
+  });
+}

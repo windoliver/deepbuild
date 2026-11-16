@@ -2729,6 +2729,7 @@ dependencies = [
 name = "deep-show"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
@@ -2768,6 +2769,7 @@ dependencies = [
  "libc",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
+ "rav1e",
  "raw-window-handle",
  "serde_json",
  "sha2 0.10.9",

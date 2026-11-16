@@ -100,6 +100,43 @@ impl Helper {
         }
     }
 
+    /// #518: sends one message without waiting for its reply, so a job's open runs beside what
+    /// the caller does next; false when the helper has gone.
+    pub fn send(&mut self, head: &Value) -> bool {
+        if let Some(op) = head["op"].as_str() {
+            self.jobs.push((op.to_string(), None));
+        }
+        (self.stdin.as_mut()).is_some_and(|s| writeln!(s, "{head}").is_ok() && s.flush().is_ok())
+    }
+
+    /// #518: the next reply line when it comes within `wait`; otherwise None, and the helper is
+    /// stopped by its own pid, as [`Helper::feed`] stops one that doesn't answer.
+    pub fn hear_within(&mut self, wait: Duration) -> Option<Value> {
+        let (Some(stdout), child) = (self.stdout.as_mut(), &mut self.child) else {
+            return None;
+        };
+        let line = std::thread::scope(|s| {
+            let (tx, rx) = mpsc::channel();
+            s.spawn(move || {
+                let mut line = String::new();
+                let ok = stdout.read_line(&mut line).is_ok_and(|n| n > 0);
+                let _ = tx.send(ok.then_some(line));
+            });
+            let line = rx.recv_timeout(wait).ok().flatten();
+            if line.is_none() {
+                let _ = child.kill();
+            }
+            line
+        });
+        match line {
+            Some(line) => Some(self.heard(&line)),
+            None => {
+                self.stop();
+                None
+            }
+        }
+    }
+
     /// The next reply line (the envelope's `reply`, with `file` merged in when present), or None.
     pub fn hear(&mut self) -> Option<Value> {
         let mut line = String::new();

@@ -102,6 +102,11 @@ test-peek = ["dep:deep-canvas-test-modules"]
 # Issue #157: `test.guards`, whose kinds plant a NaN in a frame's float target, lose the device at
 # a frame, and draw a frame differently the second time it is drawn.
 test-export-guards = ["dep:deep-canvas-test-modules"]
+# Issue #518: the native test encode tools of the #518 acceptance README, each a tool of the job
+# kind `encode` that encodes only for an export whose brief pins it. Its AV1 tools encode with
+# rav1e (BSD-2-Clause), which the image crate's AVIF writer already brings into the lock; its
+# surface tools hash what they read with the blake3 crate the canvas core hashes with.
+test-encode-tools = ["dep:rav1e", "dep:blake3"]
 # Issue #412: the #412 acceptance README's test canvas modules: a preview kind, a registry of cue
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
@@ -319,6 +324,8 @@ deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.
 deep-codecs = { path = "../deep-codecs" }
+rav1e = { version = "0.8.1", default-features = false, optional = true }
+blake3 = { version = "1", default-features = false, features = ["std"], optional = true }
 # Issue #309: the network seam's macOS backend and relay@1.
 deep-relay = { path = "../deep-relay" }
 deep-gpu = { path = "../deep-gpu" }

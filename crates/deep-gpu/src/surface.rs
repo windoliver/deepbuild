@@ -203,6 +203,9 @@ impl Handoff for Copy {
 }
 
 #[cfg(target_os = "macos")]
+pub use macos::Slot;
+
+#[cfg(target_os = "macos")]
 pub(crate) mod macos {
     use super::{Device, Handoff, Shown, FORMAT};
     use objc2_core_foundation::{CFDictionary, CFRetained, CFString, CFType};
@@ -294,8 +297,13 @@ pub(crate) mod macos {
     // SAFETY: the pixel buffer is only read or handed to GPUI, both thread-safe CoreVideo calls.
     unsafe impl Send for ZeroCopy {}
 
-    impl ZeroCopy {
-        pub fn new(device: &Device, size: [u32; 2]) -> Result<Self, String> {
+    /// A pixel buffer of `size` and the wgpu texture, of `usage`, that is its IOSurface.
+    fn aliased(
+        device: &Device,
+        size: [u32; 2],
+        usage: wgpu::TextureUsages,
+    ) -> Result<(Shown, wgpu::Texture), String> {
+        {
             let buffer = pixel_buffer(size)?;
             let surface =
                 CVPixelBufferGetIOSurface(Some(&buffer)).ok_or("pixel buffer has no IOSurface")?;
@@ -347,12 +355,74 @@ pub(crate) mod macos {
                             sample_count: 1,
                             dimension: wgpu::TextureDimension::D2,
                             format: FORMAT,
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                            usage,
                             view_formats: &[],
                         },
                         wgpu::TextureUses::UNINITIALIZED,
                     )
             };
+            Ok((buffer, texture))
+        }
+    }
+
+    /// #518: one slot of an export's ring, an IOSurface an encode tool's process reads in
+    /// place: the export's GPU writes a frame into it, and it is sent once that work is done.
+    pub struct Slot {
+        size: [u32; 2],
+        buffer: Shown,
+        texture: wgpu::Texture,
+    }
+
+    // SAFETY: as for `ZeroCopy`.
+    unsafe impl Send for Slot {}
+
+    impl Slot {
+        pub fn new(device: &Device, size: [u32; 2]) -> Result<Self, String> {
+            let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST;
+            let (buffer, texture) = aliased(device, size, usage)?;
+            Ok(Self {
+                size,
+                buffer,
+                texture,
+            })
+        }
+
+        /// The slot's `IOSurfaceRef`, which lives as long as the slot.
+        pub fn surface(&self) -> *mut std::ffi::c_void {
+            CVPixelBufferGetIOSurface(Some(&self.buffer)).map_or(std::ptr::null_mut(), |s| {
+                CFRetained::as_ptr(&s).as_ptr().cast()
+            })
+        }
+
+        /// Writes a frame's BGRA8 rows into the slot on the GPU and waits for that work, and so
+        /// for every submission before it, the frame's hash among them.
+        pub fn fill(&self, device: &Device, bgra: &[u8]) {
+            let [w, h] = self.size;
+            device.queue.write_texture(
+                self.texture.as_image_copy(),
+                bgra,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * 4),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+            let sent = device.queue.submit(std::iter::empty());
+            let _ = device.device.poll(wgpu::PollType::Wait {
+                submission_index: Some(sent),
+                timeout: None,
+            });
+        }
+    }
+
+    impl ZeroCopy {
+        pub fn new(device: &Device, size: [u32; 2]) -> Result<Self, String> {
+            let (buffer, texture) = aliased(device, size, wgpu::TextureUsages::RENDER_ATTACHMENT)?;
             let view = texture.create_view(&Default::default());
             Ok(Self {
                 size,

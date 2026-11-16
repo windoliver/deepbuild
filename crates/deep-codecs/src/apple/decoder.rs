@@ -145,6 +145,7 @@ impl Decoder {
         let codec = match &fourcc_ {
             b"avc1" | b"avc3" => fourcc(b"avc1"),
             b"hvc1" | b"hev1" => fourcc(b"hvc1"),
+            b"av01" if super::decodes_av1() => fourcc(b"av01"),
             b"ap4h" => fourcc(b"ap4h"),
             other => return Err(format!("no decoder for {}", String::from_utf8_lossy(other))),
         };

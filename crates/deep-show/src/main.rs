@@ -459,19 +459,22 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 set: c.get("set").cloned().filter(Value::is_object),
             })
         }
-        "frame_hash" => {
+        "encode_qualify" => return Some(Call::EncodeQualify(c.get("tool")?.as_str()?.to_string())),
+        "frame_hash" | "frame_planes" => {
             let frames = c.get("frames")?.as_array()?.iter().map(|f| {
                 let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
                 let w = u32::try_from(size[0].as_u64()?).ok()?;
                 let h = u32::try_from(size[1].as_u64()?).ok()?;
                 Some(([w, h], f.get("bytes")?.as_str()?.to_string()))
             });
-            return Some(Call::FrameHash {
-                frames: frames.collect::<Option<_>>()?,
-                software: match c.get("adapter") {
-                    None => false,
-                    Some(a) => a.as_str()? == "software",
-                },
+            let frames = frames.collect::<Option<_>>()?;
+            let software = match c.get("adapter") {
+                None => false,
+                Some(a) => a.as_str()? == "software",
+            };
+            return Some(match name {
+                "frame_hash" => Call::FrameHash { frames, software },
+                _ => Call::FramePlanes { frames, software },
             });
         }
         "pixel_hash" => {
@@ -1684,6 +1687,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        job_tools: export::tools::parse(input.get("job_tools"))?,
         notes,
         installed,
         plugin_entries,
@@ -3339,6 +3343,9 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #518: this binary's copy as a native test encode tool.
+        #[cfg(feature = "test-encode-tools")]
+        "test-encode-tool" => std::process::exit(export::test_tools::run(&args[1..])),
         // #162: this binary's copy as the Lottie export's reference reader.
         "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}

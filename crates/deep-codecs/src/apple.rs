@@ -180,6 +180,8 @@ extern "C" {
 
 #[link(name = "VideoToolbox", kind = "framework")]
 extern "C" {
+    fn VTRegisterSupplementalVideoDecoderIfAvailable(codec: u32);
+    fn VTIsHardwareDecodeSupported(codec: u32) -> u8;
     static kVTCompressionPropertyKey_AllowFrameReordering: CFTypeRef;
     static kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder: CFTypeRef;
     static kVTCompressionPropertyKey_MaxKeyFrameInterval: CFTypeRef;
@@ -274,6 +276,15 @@ extern "C" {
         size: *mut u32,
         data: *mut c_void,
     ) -> OSStatus;
+}
+
+/// #518: whether VideoToolbox decodes AV1 on this machine, its supplemental decoder registered.
+pub fn decodes_av1() -> bool {
+    // SAFETY: both take a codec type by value and keep nothing.
+    unsafe {
+        VTRegisterSupplementalVideoDecoderIfAvailable(fourcc(b"av01"));
+        VTIsHardwareDecodeSupported(fourcc(b"av01")) != 0
+    }
 }
 
 const fn fourcc(s: &[u8; 4]) -> u32 {

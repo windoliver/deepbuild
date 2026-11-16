@@ -801,6 +801,13 @@ pub enum Call {
         frames: Vec<([u32; 2], String)>,
         software: bool,
     },
+    /// #518: the export's GPU conversion pass on given BGRA8 frames.
+    FramePlanes {
+        frames: Vec<([u32; 2], String)>,
+        software: bool,
+    },
+    /// #518: the encode job kind's qualification run on one tool, by name@version.
+    EncodeQualify(String),
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
     /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
@@ -1123,6 +1130,8 @@ pub struct Scenario {
     pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #518: the encode tools the hub holds from installed plug-ins, in registration order.
+    pub job_tools: Vec<crate::export::tools::Tool>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
     pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
@@ -2014,6 +2023,8 @@ impl<'a> Hub<'a> {
             Call::ExportRun(job) => self.export_run(job),
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::FramePlanes { frames, software } => self.frame_planes(frames, *software),
+            Call::EncodeQualify(tool) => self.encode_qualify(tool),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
             Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
