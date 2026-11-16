@@ -1,0 +1,46 @@
+
+ RUN  v5.0.5 ~/doneright-2118
+
+ ❯ packages/hub/test/hook-replies.test.ts (3 tests | 1 failed) 19425ms
+   × keeps the settled reply's wait line and rewrite beside a standing rule's allow and an extension's context 209ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/hook-replies.test.ts [ packages/hub/test/hook-replies.test.ts ]
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/vitest-setup.ts:57:3
+     55|   // such as #29's twins' pending command, on a lease table the file h…
+     56|   let held: Proc[] = [];
+     57|   afterAll(() => {
+       |   ^
+     58|     held = tree('SIGSTOP');
+     59|     if (held.length) console.warn(`vitest-setup: stopping ${held.lengt…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/hook-replies.test.ts > keeps the settled reply's wait line and rewrite beside a standing rule's allow and an extension's context
+TypeError: Cannot read properties of undefined (reading 'additionalContext')
+ ❯ warnings packages/hub/src/hook-replies.ts:35:98
+     33|   const stdout = String((JSON.parse(ruled) as Obj).stdout ?? '');
+     34|   const said = stdout ? (JSON.parse(stdout) as { hookSpecificOutput?: …
+     35|   return stdout ? [(JSON.parse(stdout) as { hookSpecificOutput: { addi…
+       |                                                                                                  ^
+     36| };
+     37| /**
+ ❯ contextParts packages/hub/src/hook-replies.ts:64:7
+ ❯ allowReply packages/hub/src/hook-replies.ts:60:143
+ ❯ packages/hub/test/hook-replies.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  10:59:43
+   Duration  22.03s (tests 94%, transform 5%, import 1%)
+
+reverted-b exit 1

@@ -23,7 +23,7 @@ use crate::interval::Iv;
 use crate::registry::Sealed;
 
 pub(super) mod migrate;
-pub use migrate::{at_load, store_migrations};
+pub use migrate::{at_load, loaded, store_migrations};
 
 /// A pack kind as its pack declares it, with its kit's result once the pack check ran it.
 #[derive(Clone, Debug, PartialEq)]
@@ -717,6 +717,67 @@ pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, alone: Packs) -> Result<(), 
     Ok(())
 }
 
+/// `field.effect` on each parameter a pack's census maps (#1493), on the recipe its alias maps
+/// the name to, at its defaults: an input no value changes the frame for refuses the pack,
+/// naming the recipe and the input, so a mapped parameter can't mean one that only parses.
+/// `alone` holds the pack and the versions it requires.
+pub(super) fn alias_effect(pack: &Pack, sealed: &Sealed, alone: &Packs) -> Result<(), Vec<Issue>> {
+    let mut mapped: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    for row in pack.census.iter().filter(|r| r.state == "mapped") {
+        let target = row
+            .of
+            .as_deref()
+            .and_then(|of| pack.aliases.get(of))
+            .and_then(|a| a["target"].as_str());
+        if let Some(target) = target {
+            mapped
+                .entry(target)
+                .or_default()
+                .insert(row.target.as_deref().unwrap_or(&row.word));
+        }
+    }
+    let mut issues = Vec::new();
+    for recipe in pack.recipes.values() {
+        let target = format!("{}@{}", recipe.id, recipe.major);
+        let Some(fields) = mapped.get(target.as_str()) else {
+            continue;
+        };
+        let mut recipe = recipe.clone();
+        recipe
+            .inputs
+            .retain(|name, _| fields.contains(name.as_str()));
+        let check = |params: &Map<String, Value>| {
+            let doc = json!({
+                "format": 1, "id": "kit", "profile": "board", "title": format!("{target}'s kit"),
+                "description": "One instance of a recipe a pack's word maps to, as field.effect checks it.",
+                "size": [320, 200], "packs": [pack.id.text()],
+                "layers": {"main": {"writer": "kit", "title": "Kit", "order": "a0"}},
+                "items": {"kit": {"id": "kit", "kind": target, "name": "Kit", "layer": "main", "order": "a0", "params": params}},
+            });
+            let checked = super::check_packed(&doc, sealed, alone);
+            let clean = !checked.issues.iter().any(|i| i.severity == "error");
+            let derived: Vec<&Value> = checked
+                .lowered
+                .get("items")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|m| m.iter())
+                .filter(|(k, _)| k.as_str() != "kit")
+                .map(|(_, v)| v)
+                .collect();
+            (clean, serde_json::to_vec(&derived).unwrap_or_default())
+        };
+        if let Err(issue) = field_effect(&target, vec![Map::new()], &recipe, &check) {
+            issues.push(*issue);
+        }
+    }
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(issues)
+    }
+}
+
 /// A kind's passing kit: its result, its largest counts over the extremes and its meshes.
 type KitResult = (Value, Value, BTreeSet<String>);
 
@@ -1052,7 +1113,13 @@ fn kit_one(
     } else {
         json!({"rule": "migration", "verdict": "PASS", "corpus": corpus})
     };
-    let unjudged = field_effect(kind, recipe, &check)?;
+    let bases = std::iter::once(Map::new())
+        .chain(kind.examples.iter().map(|(_, p)| p.clone()))
+        .collect();
+    let unjudged = field_effect(name, bases, recipe, &|p| {
+        let run = check("kit", p);
+        (run.errors.is_empty(), run.frame)
+    })?;
     if let Some(r) = &kind.response {
         let mut ablated = packs.clone();
         let mut cut = pack.clone();
@@ -1085,18 +1152,22 @@ fn kit_one(
     Ok((kit, json!({"items": items, "triangles": triangles}), meshes))
 }
 
-/// The values the kit tries for a field whose value is `now`: its hard range's ends (or one more
-/// than `now` without one), the other truth value, its other options, each number of a vector
+/// The values the kit tries for a field whose value is `now`: its hard range's ends, and one more
+/// than `now` when the range has no top (#1493: an aspect that acts only above its default), the
+/// other truth value, its other options, each number of a vector
 /// or range one more, the text with one more character, or the records less their last row. An
 /// ID, a record, or empty records yield none: the kit can't make another that is valid.
 fn others(input: &Input, now: &Value) -> Vec<Value> {
     let n = now.as_f64();
     match input.ty.as_str() {
         "number" | "integer" => {
-            let ends: Vec<f64> = match (input.min, input.max) {
-                (None, None) => n.map(|v| v + 1.0).into_iter().collect(),
-                (lo, hi) => lo.into_iter().chain(hi).collect(),
-            };
+            let above = n.map(|v| v + 1.0).filter(|_| input.max.is_none());
+            let ends: Vec<f64> = input
+                .min
+                .into_iter()
+                .chain(input.max)
+                .chain(above)
+                .collect();
             ends.into_iter()
                 .filter(|v| Some(*v) != n)
                 .map(|v| {
@@ -1132,18 +1203,23 @@ fn others(input: &Input, now: &Value) -> Vec<Value> {
     }
 }
 
+/// Whether a kind's params check clean, and the frame they evaluate to (#1399).
+type Evaluate<'a> = dyn Fn(&Map<String, Value>) -> (bool, Vec<u8>) + 'a;
+
 /// `field.effect` (#1399): each field changed from its value at defaults, or in an example, must
 /// change the evaluated frame somewhere; a field that leaves it unchanged at every value tried
 /// is inert and fails the kit, naming it. The fields no value could be tried for are returned.
+/// `check` answers whether a kind's params check clean, and the frame they evaluate to.
 fn field_effect(
-    kind: &PackKind,
+    kind: &str,
+    bases: Vec<Map<String, Value>>,
     recipe: &Recipe,
-    check: &dyn Fn(&str, &Map<String, Value>) -> Run,
+    check: &Evaluate<'_>,
 ) -> Result<Vec<String>, Box<Issue>> {
-    let bases: Vec<(Map<String, Value>, Vec<u8>)> = std::iter::once(Map::new())
-        .chain(kind.examples.iter().map(|(_, p)| p.clone()))
+    let bases: Vec<(Map<String, Value>, Vec<u8>)> = bases
+        .into_iter()
         .map(|p| {
-            let frame = check("kit", &p).frame;
+            let frame = check(&p).1;
             (p, frame)
         })
         .collect();
@@ -1155,13 +1231,13 @@ fn field_effect(
             others(input, now).into_iter().any(|value| {
                 let mut p = base.clone();
                 p.insert(field.clone(), value.clone());
-                let run = check("kit", &p);
+                let (clean, moved) = check(&p);
                 // A value the kind refuses shows nothing about the field's effect.
-                if !run.errors.is_empty() {
+                if !clean {
                     return false;
                 }
                 tried.push(value);
-                run.frame != *frame
+                moved != *frame
             })
         });
         if moved {
@@ -1172,7 +1248,7 @@ fn field_effect(
             continue;
         }
         return Err(kit_fail(
-            &kind.name,
+            kind,
             "field.effect",
             "out_of_range",
             json!({"field": field, "tried": tried}),

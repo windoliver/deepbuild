@@ -8,7 +8,7 @@
 // dead holder's is taken. `node shards.mjs <root> <k>` prepares shard k, as claimShards runs it, one child per shard.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,12 +29,16 @@ const freeBytes = () => {
 /** Whether a shard may take its next group: the disk still holds a shard's growth above the floor. */
 export const roomy = () => freeBytes() - SHARD_BYTES >= FLOOR;
 const startOf = (pid) => spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
-/** Copy-on-write, on APFS one clone per file: a folder of the worktree's into the shard, replacing it. */
+const MAC = process.platform === 'darwin';
+// Copy-on-write: macOS's cp -c clones on APFS, one clone per file; GNU cp's --reflink=auto clones where the file system
+// can (btrfs, XFS) and copies where it can't (ext4), so the clone works on Linux (#2574).
+const COW = MAC ? '-c' : '--reflink=auto';
+/** A folder of the worktree's into the shard, replacing it, copy-on-write where the disk can. */
 const clone = (from, to) => {
   rmSync(to, { recursive: true, force: true });
   if (!existsSync(from)) return;
-  const result = spawnSync('cp', ['-c', '-R', '-p', from, to], { encoding: 'utf8' });
-  if (result.status !== 0) throw Error(`cp -c ${from} failed: ${result.stderr.trim()}`);
+  const result = spawnSync('cp', [COW, '-R', '-p', from, to], { encoding: 'utf8' });
+  if (result.status !== 0) throw Error(`cp ${COW} ${from} failed: ${result.stderr.trim()}`);
 };
 
 /**
@@ -85,7 +89,14 @@ function prepare(root, k) {
   if (!made) {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
-    for (const name of readdirSync(root).filter((name) => name !== '.git')) clone(join(root, name), join(dir, name));
+    // On macOS the worktree's files are cloned first, so the reset reads them once and target/ starts warm. Elsewhere,
+    // where the disk can't clone (ext4), that is a full copy of target/'s many GB, and from a main checkout of every
+    // worktree under .claude/, so git writes the tree alone and the shard builds its own target/, once, through sccache.
+    // A folder that is or holds another worktree of the repository's, as .claude/worktrees/ holds them all, stays
+    // behind on macOS too: the shard runs this tree only.
+    const own = MAC ? realpathSync(root) : null;
+    const others = MAC ? git(root, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9)).filter((path) => path.startsWith(`${own}/`)) : [];
+    if (MAC) for (const name of readdirSync(root).filter((name) => name !== '.git' && !others.some((path) => path === `${own}/${name}` || path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);

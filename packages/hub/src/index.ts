@@ -51,3 +51,5 @@ export const kindsCommand = async (args: Args): Promise<number> => (await import
 export { activePlant } from './plant.js';
 export { contractAdapter, extendPreview, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';
+/** The config eval script keeps its finished report through the hub, the sole evidence writer (#2495). */
+export const storeEvalReport = async (report: string): Promise<string> => (await import('./eval-report.js')).storeEvalReport(report);

@@ -1,0 +1,90 @@
+{
+  "id": "math.camera",
+  "version": "1.0",
+  "title": "ThreeDScene.set_camera_orientation",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "set_camera_orientation(phi, theta, gamma, zoom) as a perspective camera@1 on the sphere about the origin: phi from +z, theta from +x, both radians, which become degrees. 3D units are math@1 units, as meters.",
+  "inputs": {
+    "phi": {
+      "type": "number",
+      "default": 0,
+      "about": "the polar angle from +z, radians"
+    },
+    "theta": {
+      "type": "number",
+      "default": -1.5707963267948966,
+      "about": "the azimuth from +x, radians"
+    },
+    "gamma": {
+      "type": "number",
+      "default": 0,
+      "about": "the roll about the view, radians"
+    },
+    "zoom": {
+      "type": "number",
+      "default": 1,
+      "about": "the zoom",
+      "min": 0
+    },
+    "focal_distance": {
+      "type": "number",
+      "default": 20,
+      "about": "the distance to the origin",
+      "min": 0
+    },
+    "fov": {
+      "type": "number",
+      "default": 30,
+      "about": "the vertical field of view, degrees",
+      "min": 1,
+      "max": 179
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2",
+    "r": "focal_distance / zoom",
+    "eye": [
+      "r * sin(phi) * cos(theta)",
+      "r * sin(phi) * sin(theta)",
+      "r * cos(phi)"
+    ]
+  },
+  "steps": {
+    "cam": {
+      "op": "item",
+      "kind": "camera@1",
+      "params": {
+        "projection": "perspective",
+        "position": "eye",
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "up": [
+          0,
+          0,
+          1
+        ],
+        "roll": "deg(gamma)",
+        "fov": "fov"
+      }
+    }
+  },
+  "refuses": {
+    "frame_center": "Leave it out: the camera looks at the origin; move what you show instead.",
+    "exponential_projection": "Leave it out: the camera projects in perspective.",
+    "use_vectorized": "Leave it out: every math@1 shape is a path the renderer strokes and fills on its own.",
+    "sheen_factor": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "sheen_direction": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "background_stroke_width": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "background_stroke_color": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "joint_type": "Leave it out: paths join by the look's line style.",
+    "cap_style": "Leave it out: paths cap by the look's line style.",
+    "shade_in_3d": "Leave it out: 2D shapes draw flat; for a lit shape use math.surface."
+  }
+}

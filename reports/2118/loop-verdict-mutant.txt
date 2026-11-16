@@ -1,0 +1,35 @@
+mutant tsc exit 0
+
+ RUN  v5.0.5 ~/doneright-2118
+
+ ❯ packages/hub/test/codex-loop-verdict.test.ts (1 test | 1 failed) 16363ms
+   × a check held for a Codex loop holds no stop, runs once the loop pauses, and its FAIL comes with the session's next prompt 16246ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/codex-loop-verdict.test.ts > a check held for a Codex loop holds no stop, runs once the loop pauses, and its FAIL comes with the session's next prompt
+AssertionError: no verdict of the held check at this stop: exit 0, stdout "{\"decision\":\"block\",\"reason\":\"sent back 1/3: the t… · .deepbuild/checks/slow.test.mjs:3 · 1 test · next: agent\\nDeepBuild sent this claim back: .deepbuild/checks/slow.sh FAIL.\",\"systemMessage\":\"sent back 1/3: the t… · .deepbuild/checks/slow.test.mjs:3 · 1 test · next: agent\"}", stderr "": expected 'block' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"block"
+
+ ❯ packages/hub/test/codex-loop-verdict.test.ts:45:97
+     43|   const stop = await codexHook(h, t, 'Stop', {}, 900_000);
+     44|   // Held for the check, the stop would carry its FAIL: a check that w…
+     45|   expect(stop.reply?.decision, `no verdict of the held check at this s…
+       |                                                                                                 ^
+     46|   const held = await waitFor(async () => (await allEvents(hub)).find((…
+     47|   const claim = String(held.data.claim);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  11:52:10
+   Duration  16.51s (tests 100%)
+
+mutant exit 1

@@ -1,0 +1,29 @@
+# crates/deep-logic/tests/library_trap.rs before the fix, at 6da0649df plus the test: cargo test -p deep-logic --test library_trap
+running 1 test
+a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame --- FAILED
+failures:
+---- a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame stdout ----
+thread 'a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame' (45345) panicked at crates/deep-logic/tests/library_trap.rs:46:5:
+assertion `left == right` failed: the opened save's trap: {"item":"turns","step":1,"t":11760000,"kind":"fuel","function":2,"offset":124,"inputs":[],"source":null}
+  left: Object {"name": Null, "function": Null}
+ right: Object {"name": String("turns@1"), "function": String("next_turn")}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+failures:
+    a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+error: test failed, to rerun pass `-p deep-logic --test library_trap`
+
+# with saves.rs fixed and live.rs not yet:
+running 1 test
+a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame --- FAILED
+failures:
+---- a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame stdout ----
+thread 'a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame' (66040) panicked at crates/deep-logic/tests/library_trap.rs:53:5:
+assertion `left == right` failed: the live frame's trap: {"item":"turns","step":0,"t":0,"kind":"fuel","function":2,"offset":124,"inputs":[],"source":null}
+  left: Object {"name": Null, "function": Null}
+ right: Object {"name": String("turns@1"), "function": String("next_turn")}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+failures:
+    a_trap_in_library_code_names_its_library_from_a_bake_an_opened_save_and_a_live_frame
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+error: test failed, to rerun pass `-p deep-logic --test library_trap`

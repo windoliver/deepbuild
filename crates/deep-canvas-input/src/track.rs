@@ -49,6 +49,21 @@ pub struct Entry {
 }
 
 impl Entry {
+    /// The value a read at `t` takes from this entry: its own, but for a tour's linear key
+    /// (#903), whose value moves along its polyline from the entry's flick to the segment's end.
+    pub(crate) fn value_at(&self, t: i64) -> Value {
+        let ends = match (self.writer, self.samples.as_deref()) {
+            (Writer::Tour, Some([a, b])) => Some((a, b)),
+            _ => None,
+        };
+        let moved = ends.and_then(|(a, b)| {
+            let (from, to) = (a.value.as_f64()?, b.value.as_f64()?);
+            let share = (t.clamp(a.t, b.t) - a.t) as f64 / (b.t - a.t) as f64;
+            Some(json!(from + (to - from) * share))
+        });
+        moved.unwrap_or_else(|| self.value.clone())
+    }
+
     pub fn to_json(&self) -> Value {
         let mut o = Map::new();
         o.insert("t".into(), json!(self.t));

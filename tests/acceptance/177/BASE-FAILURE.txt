@@ -1,0 +1,35 @@
+#177's suite at the base, 0e5572731 ("Merge pull request #2529 …"), on this Mac (Mac17,10), November 15, 2026.
+
+Not run: the machine was heavily loaded and this job builds no Rust (its brief). What each file meets first at the base,
+read from the base's code:
+
+  $ cargo build --locked --bin deep-gpu --features test-meter      # builds at the base (test-meter exists)
+  $ cargo build --locked --release -p deep-app --bin deep-app --features hdr-fixture
+  error: the package 'deep-app' does not contain this feature: hdr-fixture
+
+  ac1-paper-white.test.ts
+    × AC1 … the lamp reads 4 …: view3d answers {"code": "bad_input", "…targets are final, linear, ids, pre_tone, dirt,
+      scene, backdrop, depth, reflection, foam and coc"} for the target "surface" ("was answered, not refused").
+      Were the targets taken, no frame reports `hdr` and the agx curve clamps to 1 (output.wgsl: `if x >= white
+      { return 1.0; }`, then `clamp(…, 0, 1)`), so the lamp reads 1, not 4.
+    × AC1 planted clips_at_one / clips_at_headroom / moves_toe / status_over_paper_white: `deep-gpu run --planted <name>`
+      exits 2 with {"ok": false, "code": "bad_input"}: Planted::parse doesn't know the names ("exited 0").
+  ac2-headroom-change.test.ts
+    × both: the same "surface" refusal; and `--planted reads_headroom_once` exits 2. There is no stub display to post a
+      change, and no headroom to follow.
+  ac3-sdr-outputs.test.ts
+    × both: the blessing is decided (golden and decide exist), then the live view3d is refused for the target "surface";
+      the planted run exits 2.
+  ac4-card.test.ts
+    × all three: view3d refuses the target "window_linear"; the base's window has no card in view3d (frames.rs has
+      one), and plants exit 2.
+  ac4-layers.live.test.ts, ac5-envelope.live.test.ts, ac6-budgets.live.test.ts
+    × every test: INCONCLUSIVE without DEEP_177_LIVE=1. With it: the hdr-fixture build fails (above); ac5's envelope test
+      reaches the envelope only on a reference Mac with an XDR display, where the base ignores `hdr` and `screen`, plays
+      headless, and its reply has no `hdr` ("the envelope's hdr report is an object").
+  taste.test.ts
+    × INCONCLUSIVE: the check run's screenshots are not in docs/evidence/177/.
+
+The type-check passes:
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/177/tsconfig.json
+  (no output, exit 0)

@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { isRecord as isObj, validate } from '@deepbuild/contracts';
+import { isRecord as isObj, validate } from '@deepbuild/contracts/runtime';
 import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
 import type { Plant } from './wire.js';

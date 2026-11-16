@@ -232,6 +232,8 @@ impl Default for Startup {
 pub struct Choice {
     pub adapter: Identity,
     pub raw: wgpu::Adapter,
+    /// The instance the adapter came from, which a window's surface is made on (#177).
+    pub instance: wgpu::Instance,
     /// The table's features the adapter reports.
     pub reported: Vec<&'static str>,
     /// Those withheld at device creation by `--withhold` or a quirk row.
@@ -362,6 +364,7 @@ pub fn pick(startup: &Startup) -> Result<Choice, Refusal> {
             let choice = Choice {
                 adapter,
                 raw,
+                instance: instance.clone(),
                 reported,
                 withheld,
                 quirks: startup.quirks.digest.clone(),
