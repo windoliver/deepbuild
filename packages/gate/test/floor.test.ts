@@ -1,10 +1,11 @@
 // The floor's cite of a run: a heavy command deep-hook rewrote into its `deep lease` form (#1015) is the run the agent
 // typed, so a claim citing it isn't sent back as citing a run never made (#669's AC2, found by #70's Linux run).
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import fc from 'fast-check';
 import { afterAll, describe, expect, it } from 'vitest';
-import { floor, lockDefinition, type DefinitionParts, type SessionRun } from '../src/index.js';
+import { floor, lockDefinition, validityGate, type DefinitionParts, type SessionRun } from '../src/index.js';
 
 const checkout = mkdtempSync(join(tmpdir(), 'gate-floor-'));
 afterAll(() => rmSync(checkout, { recursive: true, force: true }));
@@ -31,5 +32,58 @@ describe('a claim with a fenced code block', () => {
   it('reads no cite out of the fence, and still finds an inline cite of a run never made after it', () => {
     const message = 'The fix:\n\n```js\nreturn totalCents - Math.round((totalCents * coupon.percent) / 100);\n```\n\n`npm test` passes; `npm run lint` is clean.';
     expect(runFindings(message, ran('deep lease -- npm test'))).toEqual(['npm run lint']);
+  });
+});
+
+// #1888: the floor reads a Makefile rule through the gate's one script reader, whichever of the rule's targets is cited.
+describe('a cited make target on a rule with several targets (property)', () => {
+  const name = fc.stringMatching(/^[a-z][a-z0-9_.-]{0,7}$/);
+  const masks = (target: string, text: string, file = 'Makefile'): string[] => {
+    const dir = mkdtempSync(join(tmpdir(), 'gate-floor-make-'));
+    try {
+      writeFileSync(join(dir, file), text);
+      const command = `${file === 'Makefile' ? 'make' : 'just'} ${target}`;
+      return validityGate({ claim: { claim: 'claim:01K74G0A1B2C3D4E5F6G7H8J9K', message: `\`${command}\` exited 0.` }, checkout: dir, deliverables: [], session: { read: [], ran: ran(command) } })
+        .filter((f) => f.kind === 'masked_exit').map((f) => f.mask ?? '');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  };
+  it('reads the recipe mask for every target the rule names, and none for a rule that does not name it', () => {
+    fc.assert(fc.property(fc.uniqueArray(name, { minLength: 3, maxLength: 5 }), fc.nat(), fc.constantFrom(' ', '  ', '\t'), fc.constantFrom('', ' '), (names, pick, gap, beforeColon) => {
+      const [other, ...targets] = names as [string, ...string[]];
+      const cited = targets[pick % targets.length]!;
+      // A prerequisite of the cited name is not its rule; the masked rule is the one that names it.
+      const makefile = `${other}: ${cited}\n\ttrue\n\n${targets.join(gap)}${beforeColon}:\n\teslint . || true\n`;
+      expect(masks(cited, makefile)).toEqual(['|| true']);
+      expect(masks(other, makefile)).toEqual([]);
+    }), { numRuns: 60 });
+  });
+  it('reads the recipe of a target that an earlier rule names without one, as make merges the two', () => {
+    expect(masks('lint', 'all lint: node_modules\n\nlint:\n\teslint . || true\n')).toEqual(['|| true']);
+    expect(masks('all', 'all lint: node_modules\n\nlint:\n\teslint . || true\n')).toEqual([]);
+  });
+  it('reads a justfile recipe by its name, never by a parameter of another recipe', () => {
+    const justfile = 'check lint:\n  eslint {{lint}} || true\n\nlint:\n  eslint .\n';
+    expect(masks('lint', justfile, 'justfile')).toEqual([]);
+    expect(masks('check', justfile, 'justfile')).toEqual(['|| true']);
+  });
+});
+
+// #1860: a cite resolves first to the run typed as the cite, and the masked-exit rule reads the cite's own text too, so a
+// cite that masks its exit status goes back whichever run it matched.
+describe('a cited run whose cite masks its exit status', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gate-floor-cite-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'cart', private: true, scripts: { test: 'vitest run' } }));
+  const masked = (cite: string, runs: SessionRun[]) => validityGate({ claim: { claim: 'claim:01K74G0A1B2C3D4E5F6G7H8J9K', message: `Done: \`${cite}\` passes.` }, checkout: dir, deliverables: [], session: { read: [], ran: runs } })
+    .filter((f) => f.kind === 'masked_exit').map((f) => ({ ref: f.ref, why: f.why }));
+  const why = 'the run `pnpm test || true` it cites proves nothing: exit status masked by `|| true`';
+  it('resolves `pnpm test || true` to the run typed as it, not the earlier `pnpm test`, and names the mask', () => {
+    expect(masked('pnpm test || true', ran('pnpm test', 'pnpm test || true'))).toEqual([{ ref: 'pnpm test || true', why }]);
+  });
+  it('reads the mask in the cite when the only run it matched, `pnpm test`, masks nothing', () => {
+    expect(masked('pnpm test || true', ran('pnpm test'))).toEqual([{ ref: 'pnpm test', why }]);
+  });
+  it('finds no mask in a cite of `pnpm test`, the run made', () => {
+    expect(floor({ claim: { claim: 'claim:01K74G0A1B2C3D4E5F6G7H8J9K', message: 'Done: `pnpm test` passes.' }, checkout: dir, definition, locked: lockDefinition(definition), session: { read: [], ran: ran('pnpm test') } })).toEqual({ ok: true });
   });
 });

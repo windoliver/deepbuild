@@ -1,0 +1,30 @@
+I drafted one integrated check file and a README. Nothing has been run (only file tools were available), so I haven't confirmed that the check fails on base. This is not BLOCKED, but the open points below need settling.
+
+**Files** (all under `tests/acceptance/2495/closure/`):
+- `report-handle.test.ts` (about 150 lines)
+- `README.md` (run commands, criterion-to-check mapping, limitations)
+
+**What the checks do:**
+- **Criterion 1 (store holds the bytes, printed handle resolves):**
+  - The test starts a real hub in a throwaway `HOME` and runs `node scripts/config-eval.mjs run` against it.
+  - The agent is #1108's stand-in `claude`, reused through its helpers unchanged.
+  - The printed `ev:<sha256>` must be in the evidence store and hash to its bytes.
+  - It must hold the run's frozen plan and the same runs as the file under `~/.deepbuild/evals/`, and that file must still exist.
+  - On base the run prints no `ev:` handle and the store holds nothing, so it fails at a named assertion.
+- **Criterion 2 (widening on adopt vs. refused):**
+  - It uses the public record API (`learn.applied`, then `learn.widened` from `rule:localfirst`, session to repo), not `learned.ts`.
+  - The printed handle's report reads INCONCLUSIVE because both sides are alike. Its widening is refused with `INCONCLUSIVE` in the reason.
+  - For the adopt case, I take the stored report, lower only the change side's `tokens`, and store it under its own handle. `compareReplay` reads it as adopt, and its widening is `applied`.
+- **Criterion 3 (#112 and #1108 pass unchanged):** no new test. The README gives the command to run both suites, and #112's `live.test.ts` is excluded.
+
+**Limitations and ambiguities:**
+- **Tag IDs are computed at run time, not written as literals.** I couldn't compute a SHA-256 here. If the trace lane scans source text for a literal `#2495.xxxxxxxx`, the implementing job needs to confirm the lane sees these IDs. Switching to literals would need the blind redraft.
+- **"Through the hub" names no method, role or handle format.**
+  - I assumed the script finds a hub at `HOME/.deepbuild` and prints `ev:<64 hex>`.
+  - An implementation that needs a different hub start, such as autostart or a flag, would fail this check. That is a fact to settle with the issue author, not something I assumed away.
+- **The adopt case is derived.** #1108's stand-in reports equal tokens on both sides, so a real run can only read INCONCLUSIVE. The adopt arm proves the stored shape is enough to adopt. It does not prove that a real adopting run prints a handle.
+- **Imports and typing:**
+  - It imports `world` and `cleanup` from the 1108 helpers, and `startSession`, `learn` and related functions from the 112 helpers, without modifying them. Those helpers import packages by relative path; my file uses `@deepbuild/*`.
+  - There is no `tsconfig.json`, so no type check is offered.
+- **Not supplied:** I did not supply a planted twin. The merge base is the wrong program for both checks, since this is a fix.
+- **#112 criterion scope:** I read it as #112's automated suite without the by-hand `live.test.ts`, and the README says so.

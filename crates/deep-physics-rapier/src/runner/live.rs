@@ -75,6 +75,9 @@ impl Run {
             no_volume: self.no_volume,
             declared_masses_only: self.declared_masses_only,
             twin: self.twin,
+            test: self.test,
+            kit_planted: self.kit_planted,
+            leave_ccd_off: self.leave_ccd_off,
             views: std::cell::RefCell::default(),
         }
     }

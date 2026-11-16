@@ -1,0 +1,14 @@
+ac7-bots-refused.test.ts at base 0e5572731 (worktree at 96e678581, no implementation), macOS arm64. Not run: read from
+the code, as the first suite's BASE-FAILURE.txt does; a cold debug build of deep-replica on this shared machine costs far
+more than the answer.
+
+Both tests fail at the same place, after their replicas start: `openHub`'s first assertion, "the playtest plug-in is a
+first-party package at packages/checks/playtest" (`ls packages/checks/playtest`: No such file or directory). Were it
+there, the host has no `replica` option and no `deep.canvas.play`, and deep-drive answers every `play` call with no
+replica launched `{"ok": false, "error": {"code": "refused", "message": "no replica runs here: launch one first"}}`, so
+clause 1's `runsOf` fails "the play answers ok" and clause 2's replies fail "error doesn't name jump" and its contrast
+fails "the play answers ok".
+
+Off macOS both fail `INCONCLUSIVE:` first; neither passes.
+
+The file type-checks at the base: `npx tsc -p tests/acceptance/184-redraft-ac7-2/tsconfig.json`.

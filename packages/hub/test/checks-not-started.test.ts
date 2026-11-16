@@ -1,4 +1,4 @@
-// A claim whose checkout can't be made still gets a verdict (invariant 2): INCONCLUSIVE, naming why its checks did not start.
+// A claim whose checkout can't be made is BLOCKED (#2074), naming why its checks did not start and you as owner.
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
@@ -20,7 +20,7 @@ const verdicts = (all: readonly Ev[]): Ev[] => {
   return all.filter((e) => e.kind === 'verdict.made' && claims.has(String(e.data.claim)));
 };
 
-it('a claim whose checkout fails is INCONCLUSIVE, naming the failure', async () => {
+it('a claim whose checkout fails is BLOCKED, naming the failure and you as owner', async () => {
   const w = makeWorld({ drafts: [DRAFT], files: { [CHECK]: '#!/bin/sh\nnode --test tests/unit.test.js\n', '.gitignore': 'node_modules\n' } });
   await trust(w, []);
   const hub = await startHub(w);
@@ -46,5 +46,7 @@ it('a claim whose checkout fails is INCONCLUSIVE, naming the failure', async () 
     events = await settle(hub, (all) => verdicts(all).length > 0, 60_000);
   } finally { chmodSync(sealed, 0o755); }
   expect(events.some((e) => e.kind === 'claim.made'), 'the stop made its claim').toBe(true);
-  expect(verdicts(events).map((e) => [e.data.outcome, e.data.reasons])).toEqual([['INCONCLUSIVE', ['its checks did not start: can\'t copy node_modules into the checkout']]]);
+  expect(verdicts(events).map((e) => e.data.outcome)).toEqual(['BLOCKED']);
+  expect(JSON.stringify(verdicts(events)[0]?.data.reasons)).toContain("can't copy node_modules into the checkout");
+  expect(JSON.stringify(verdicts(events)[0]?.data.reasons)).toMatch(/owner[: ]+you/);
 }, 600_000);

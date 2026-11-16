@@ -99,6 +99,8 @@ struct Gpu<'a> {
     /// The pixmaps in the atlas, and how many the renderer has uploaded.
     uploaded: &'a mut Vec<Uploaded>,
     uploads: &'a mut u64,
+    /// #468: the fills and glyph runs encoded into Vello GPU's scenes.
+    fills: &'a mut u64,
     /// #1485 AC5's wrong program: each paint uploads, and the drawing frees them all after.
     per_draw: Option<Vec<vello_cpu::ImageId>>,
     /// #385 AC1's wrong program: every solid fill two codes redder.
@@ -184,12 +186,14 @@ impl Canvas for Gpu<'_> {
         self.scene.set_stroke(stroke);
     }
     fn fill_path(&mut self, path: &BezPath) {
+        *self.fills += 1;
         self.scene.fill_path(path);
     }
     fn stroke_path(&mut self, path: &BezPath) {
         self.scene.stroke_path(path);
     }
     fn fill_rect(&mut self, rect: &Rect) {
+        *self.fills += 1;
         self.scene.fill_rect(rect);
     }
     fn push_clip_rect(&mut self, rect: &Rect) {
@@ -217,21 +221,22 @@ impl Canvas for Gpu<'_> {
 }
 
 impl Glyphs for Gpu<'_> {
-    fn glyph(
+    fn fill_run(
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
         (size, skew): (f32, f32),
         coords: &[i16],
-        glyph: vello_cpu::Glyph,
+        glyphs: &[vello_cpu::Glyph],
     ) {
+        *self.fills += 1;
         let run = self.scene.glyph_run(self.resources, font);
         let _ = run
             .font_size(size)
             .hint(false)
             .glyph_transform(deep_text::atlas::slant(skew))
             .normalized_coords(coords)
-            .fill_glyphs(std::iter::once(glyph));
+            .fill_glyphs(glyphs.iter().copied());
     }
 
     fn glyph_stroke(
@@ -244,6 +249,7 @@ impl Glyphs for Gpu<'_> {
         width: f64,
     ) {
         self.set_stroke(deep_marks_vello::stroke(width));
+        *self.fills += 1;
         let run = self.scene.glyph_run(self.resources, font);
         let _ = run
             .font_size(size)
@@ -304,6 +310,7 @@ pub struct Vello2d {
     /// Pixmaps the last frame didn't paint, freed from the atlas once the next drawing has rendered.
     freeing: Vec<vello_cpu::ImageId>,
     uploads: u64,
+    fills: u64,
 }
 
 impl Vello2d {
@@ -326,6 +333,7 @@ impl Vello2d {
             uploaded: Vec::new(),
             freeing: Vec::new(),
             uploads: 0,
+            fills: 0,
         }
     }
 
@@ -349,6 +357,12 @@ impl Vello2d {
     /// The pixmaps the renderer has uploaded to Vello GPU's atlas so far.
     pub fn uploads(&self) -> u64 {
         self.uploads
+    }
+
+    /// #468: the fills and glyph runs its drawings have encoded so far (a glyph run counts once,
+    /// however many glyphs it holds).
+    pub fn fills(&self) -> u64 {
+        self.fills
     }
 
     /// The format it draws into.
@@ -393,6 +407,7 @@ impl Vello2d {
             encoder,
             uploaded: &mut self.uploaded,
             uploads: &mut self.uploads,
+            fills: &mut self.fills,
             per_draw: (options.plant == Plant::UploadsPerFrame).then(Vec::new),
             shifts_fill: options.shifts_fill,
         };

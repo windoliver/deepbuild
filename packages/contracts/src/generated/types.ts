@@ -4086,6 +4086,10 @@ export interface AskMootV2 {
   } | {
     because: "network_reached";
     host: string;
+  } | {
+    because: "signed_in";
+    agent: string;
+    account: string | null;
   };
   evidence?: Array<string>;
 }
@@ -4365,6 +4369,7 @@ export interface BuildRolledBack {
     restored: string;
     why: string;
   };
+  evidence?: Array<string>;
 }
 
 /** call.overrun@1 */
@@ -6330,6 +6335,42 @@ export interface HostChanged {
       sha256: string | null;
     }>;
     ask: string | null;
+    run: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** host.undone@1 */
+export interface HostUndone {
+  v: 1;
+  id: string;
+  kind: "host.undone";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    host: string;
+    grant: "you" | "root";
+    undone: Array<{
+      id: string;
+      change: string;
+      undo: string;
+    }>;
+    left: Array<{
+      id: string;
+      change: string;
+      undo: string;
+    }>;
+    partial: boolean;
+    stopped: {
+      change: string;
+      target: string | null;
+      backup: string | null;
+      why: string;
+    } | null;
     run: string | null;
   };
   evidence?: Array<string>;
@@ -9366,6 +9407,48 @@ export interface StartApproval {
   evidence?: Array<string>;
 }
 
+/** start.approval@2 */
+export interface StartApprovalV2 {
+  v: 2;
+  id: string;
+  kind: "start.approval";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    repo: string;
+    issues: Array<number>;
+    rule: {
+      words: string;
+      labels: Array<string>;
+      milestone: string | null;
+      epic: number | null;
+      roles: Array<"OWNER" | "MEMBER" | "COLLABORATOR">;
+    };
+    agents: Array<string>;
+    homes: { [key: string]: string };
+    modes: { [key: string]: string };
+    at_once: number;
+    plan_share: number;
+    until: number | null;
+    hosts: Array<string>;
+    sandbox: { [key: string]: {
+      sandboxed: boolean;
+      walls: {
+        writes: boolean;
+        credentials: boolean;
+        network: boolean;
+      };
+    } };
+  };
+  evidence?: Array<string>;
+}
+
 /** start.refused@1 */
 export interface StartRefused {
   v: 1;
@@ -11088,6 +11171,35 @@ export interface WorkAttempt {
   evidence?: Array<string>;
 }
 
+/** work.attempt@2 */
+export interface WorkAttemptV2 {
+  v: 2;
+  id: string;
+  kind: "work.attempt";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    step: "started" | "ended";
+    issue: number;
+    attempt: number;
+    run: string;
+    agent: string;
+    model: string | null;
+    worktree: string | null;
+    branch: string | null;
+    reason: string | null;
+    cause: "none" | "PASS" | "landed with the budget window open" | "landed with your call open" | "gave up its slot" | "replaced by you" | "sent back past its rounds" | "stalled" | "context full" | "plan window or spend cap" | "crashed or interrupted";
+    verdict: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** work.broke@1 */
 export interface WorkBroke {
   v: 1;
@@ -11157,6 +11269,57 @@ export interface WorkItemV2 {
     automated?: boolean;
   }>;
   updated: string;
+}
+
+/** work.left@1 */
+export interface WorkLeft {
+  v: 1;
+  id: string;
+  kind: "work.left";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    issue: number;
+    why: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** work.notice@1 */
+export interface WorkNotice {
+  v: 1;
+  id: string;
+  kind: "work.notice";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    from: number;
+    to: number;
+    landed: Array<number>;
+    left: Array<{
+      issue: number;
+      word: string;
+    }>;
+    spent: {
+      attempts: number;
+      sessions: number;
+      usd: number | null;
+      tokens: number;
+    };
+  };
+  evidence?: Array<string>;
 }
 
 /** work.read@1 */

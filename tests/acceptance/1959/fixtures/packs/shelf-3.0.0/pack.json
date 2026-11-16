@@ -1,0 +1,108 @@
+{
+  "name": "shelf",
+  "version": "3.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1959 acceptance suite, by an outside owner: shelf.bookcase@3, which keeps the @1-to-@2 step and adds @2-to-@3, renaming width to span and dividers to partitions.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@3": "shelf.bookcase@3.json"
+  },
+  "kinds": {
+    "shelf.bookcase@3": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@3",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {
+        "1": {
+          "rename": {
+            "levels": "shelves"
+          },
+          "set": {
+            "depth": "old.width * 0.25"
+          },
+          "drop": []
+        },
+        "2": {
+          "rename": {
+            "width": "span",
+            "dividers": "partitions"
+          },
+          "set": {},
+          "drop": []
+        }
+      },
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 10
+        }
+      }
+    }
+  },
+  "corpus": {
+    "1": [
+      "ab1eb855492b213994beb21156a297839c091147511e3ecce54bf7e740d2b6f0",
+      "88f944314aa99a8f41fcc141b618c5b7d39f45d225a7dcc951991b2a3ab7fd24",
+      "6a98fad4202114c04f99ef206781095c17e6c872430bc3376621d341b6858c1f",
+      "b27f0da4f78dde6ee48db92f43bbba7cb78e46c6f1faa0c704976b27f8536c53"
+    ],
+    "2": [
+      "f5e4ad72af6931355ad159a69e1179f942e2682fb943c630e058e1c896c95dbc"
+    ],
+    "3": [
+      "f1e390abaec1d2c30298b27436ece66f004772bd04a6f0a736c04c214f546420"
+    ]
+  },
+  "assets": [
+    {
+      "path": "corpus/shelf-out.json",
+      "sha256": "ab1eb855492b213994beb21156a297839c091147511e3ecce54bf7e740d2b6f0",
+      "size": 3415,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/shelf-0.json",
+      "sha256": "88f944314aa99a8f41fcc141b618c5b7d39f45d225a7dcc951991b2a3ab7fd24",
+      "size": 3065,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/shelf-2.json",
+      "sha256": "6a98fad4202114c04f99ef206781095c17e6c872430bc3376621d341b6858c1f",
+      "size": 3779,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/shelf-3.json",
+      "sha256": "b27f0da4f78dde6ee48db92f43bbba7cb78e46c6f1faa0c704976b27f8536c53",
+      "size": 4103,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/case-2.json",
+      "sha256": "f5e4ad72af6931355ad159a69e1179f942e2682fb943c630e058e1c896c95dbc",
+      "size": 3399,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/case-3.json",
+      "sha256": "f1e390abaec1d2c30298b27436ece66f004772bd04a6f0a736c04c214f546420",
+      "size": 3399,
+      "license": "MIT"
+    }
+  ]
+}

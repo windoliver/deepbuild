@@ -12,6 +12,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, normalize } from 'node:path';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { maskIn } from './mask.js';
+import { targetBody } from './own.js';
 
 export interface DefinitionParts {
   task_ref: string;
@@ -85,26 +86,21 @@ const isFile = (path: string | null): boolean => {
 };
 /** The package script, Makefile or justfile target a command runs, read from the checkout: what it really runs. */
 function scriptOf(checkout: string, command: string): string | null {
-  const words = command.trim().split(/\s+/);
-  const [tool, sub, name] = words;
-  if (tool && ['npm', 'pnpm', 'yarn', 'bun'].includes(tool) && sub) {
+  const [tool, sub, name] = command.trim().split(/\s+/);
+  if (!tool || !sub) return null;
+  const read = (file: string, target: string): string | null => {
+    // A package script that isn't a string runs nothing the floor can read.
+    try { const body = targetBody(file, readFileSync(join(checkout, file), 'utf8'), target); return typeof body === 'string' ? body : null; } catch { return null; }
+  };
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(tool)) {
     const target = sub === 'run' || sub === 'run-script' ? name : sub;
-    try {
-      const scripts = (JSON.parse(readFileSync(join(checkout, 'package.json'), 'utf8')) as { scripts?: Record<string, string> }).scripts ?? {};
-      return target && typeof scripts[target] === 'string' ? scripts[target]! : null;
-    } catch { return null; }
+    return target ? read('package.json', target) : null;
   }
-  if ((tool === 'make' || tool === 'just') && sub) {
-    const file = ['Makefile', 'makefile', 'justfile', 'Justfile'].map((f) => join(checkout, f)).find(isFile);
-    if (!file) return null;
-    const lines = readFileSync(file, 'utf8').split('\n');
-    const at = lines.findIndex((l) => new RegExp(`^${sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`).test(l));
-    if (at < 0) return null;
-    const body: string[] = [];
-    for (const l of lines.slice(at + 1)) { if (!/^\s/.test(l) || !l.trim()) break; body.push(l.trim()); }
-    return body.join('\n') || null;
-  }
-  return null;
+  if (tool !== 'make' && tool !== 'just') return null;
+  const file = ['Makefile', 'makefile', 'justfile', 'Justfile'].find((f) => isFile(join(checkout, f)));
+  // The recipe lines of the rules the reader found, without the lines that name their targets.
+  const rules = file ? read(file, sub) : null;
+  return rules === null ? null : rules.split('\n').filter((l) => l !== l.trimStart()).map((l) => l.trim()).join('\n') || null;
 }
 /** The mask a cited run's command, or the script it runs, hides its exit status with. */
 function maskOf(checkout: string, command: string): string | null {
@@ -135,10 +131,12 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
   const cites = [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
   const runs = session.ran.map((r) => ({ ...r, command: typed(r.command) }));
   for (const cite of new Set(cites)) {
-    const run = runs.find((r) => cite === r.command || cite.startsWith(`${r.command} `));
+    // The run typed as the cite first (#1860), else the first the cite extends with its arguments.
+    const run = runs.find((r) => cite === r.command) ?? runs.find((r) => cite.startsWith(`${r.command} `));
     if (run) {
-      const mask = plant === 'run-happened-only' ? null : maskOf(checkout, run.command);
-      if (mask !== null) found.push({ kind: 'masked_exit', ref: run.command, mask, why: `the run \`${run.command}\` it cites proves nothing: exit status masked by \`${mask}\`` });
+      // The cite's own text masks too, whichever run it matched: `pnpm test || true` proves nothing beside `pnpm test`.
+      const mask = plant === 'run-happened-only' ? null : maskIn(cite) ?? maskOf(checkout, run.command);
+      if (mask !== null) found.push({ kind: 'masked_exit', ref: run.command, mask, why: `the run \`${cite}\` it cites proves nothing: exit status masked by \`${mask}\`` });
       continue;
     }
     if (LINK.test(cite)) {

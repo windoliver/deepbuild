@@ -1,0 +1,1 @@
+PASS report mapping: all 3 criteria have qualifying check results; 10/10 head tests passed, 3 required base wait assertions failed, 7 base guards passed, 0 skips.

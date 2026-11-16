@@ -1,0 +1,216 @@
+{
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "title": "A bookcase saved at shelf.bookcase@1",
+    "description": "One shelf.bookcase@1 item with width 1.6 and levels 4, dividers left out, as acme/shelf@1.0.0 saved it: a corpus document of the #1960 acceptance suite's shelf pack.",
+    "size": [
+      320,
+      360
+    ],
+    "transport": {
+      "span": "10s"
+    },
+    "packs": [
+      "acme/shelf@1.0.0"
+    ],
+    "items": {
+      "case1": {
+        "id": "case1",
+        "kind": "shelf.bookcase@1",
+        "name": "Bookcase",
+        "order": "a0",
+        "params": {
+          "width": 1.6,
+          "levels": 4
+        }
+      }
+    }
+  },
+  "values": {
+    "case1.sides.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "case1.sides.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          158,
+          0,
+          0
+        ]
+      }
+    },
+    "case1.boards.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "case1.boards.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          40,
+          0
+        ]
+      }
+    },
+    "case1.boards.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          80,
+          0
+        ]
+      }
+    },
+    "case1.boards.3": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          120,
+          0
+        ]
+      }
+    },
+    "case1.walls.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          79,
+          0,
+          0
+        ]
+      }
+    },
+    "case1.plan": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          170,
+          0
+        ]
+      }
+    }
+  }
+}

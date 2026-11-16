@@ -1,0 +1,91 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17, detached, with nothing changed but new test folders (this one
+and the other blind jobs' *-redraft-2073 and 2073 folders). November 13, 2026, PST. Node 24.22.0, macOS, 18 cores, on
+a Mac shared with other sessions (1-minute load 63 when the kept run started, 114 when it ended). Workspaces built.
+#19's helper runs `cargo build --locked -q -p deep-hook` before each setup: target/debug/deep-hook was there, and its
+time changed to 15:21 while run 1 was going (this job's helper or another job's; the checkout is shared), not after.
+
+Commands, from the checkout's root (written <repo> below):
+
+  node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/19-redraft-2073 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/19-redraft-2073/tsconfig.json
+
+Two runs of the file:
+
+- Run 1, 15:20, 40 s: this job's first draft, the fixture trusted and its check still #19's `exit 1`. Same results as
+  run 2. Then this job's own fix: `exit 1` is uncounted as a claim's checks run (below), so the check became
+  `node checks/unit.mjs`.
+- Run 2, 15:33, 27 s (28 s by the clock, the throttle's grant included): the kept run, below. After it only comment
+  lines of watchonly.test.ts were reworded; no statement changed, and the type check was run again.
+
+Per test, run 2:
+
+  FAIL  AC6 #19.3cfcabc5 straight after deep setup, a session that claims done and fails the drafted check stops
+        unheld and unblocked, its next calls go through, and its pkill -f vite is denied with the hub up and down
+        (redraft 2073)                                                                                    14.5 s
+        At AC6's own check, "the hub held the Stop of session <id> (hold_until_ms ...)". Setup ran, the hub answered,
+        the trust record outlived setup, the claim was recorded and deep_run of `node checks/unit.mjs` came back
+        failed. The hub then acknowledged the Stop with a hold.
+  PASS  AC6 #19.3cfcabc5 (wrong program) a hub that gates a repo's drafted checks before you approve them
+        (gates-before-approval) fails this test, naming the stop (redraft 2073)                           12.2 s
+        The plant's hub held the stop, and the check failed naming the session.
+
+None ended BLOCKED or INCONCLUSIVE. Each test's folder under /tmp/dh19s-* was gone after the run, and no process a
+test started was left.
+
+Why the first test fails on the base. The hold has nothing to do with trust or with #2073. The scenario's prompt,
+"Make the header green, then claim it done.", opens a task, and the base holds the stops of a session whose prompt
+opened one, for the core's reply (packages/hub/src/core.ts promptDraft, server.ts holdFor; #82 by the code's own
+note). This job was told the original's first test failed on this base and machine at the same assertion, and its
+wrong-program test passed; it did not run the original. On this base the hub without the plant fails the stop check
+as the plant does, so the second test's pass doesn't tell the two apart here.
+
+Type check: clean (exit 0, no output); with a planted type error in the folder it exits 2, naming the line.
+
+Scratch readings on this base, each taken once and not kept.
+
+1. The scenario's Stop by fixture: a scratch test in this folder, #19's helpers, the first draft's `exit 1` check, the
+   hub's record read with events.read. "ack" is the hub's acknowledgement of the Stop; "entry" is DeepBuild's
+   foreground Stop entry.
+
+   fixture    prompt                 turn's hook-seen tool call   ack                     entry
+   trusted    opens a task (#19's)   none (#19's scenario)        hold_until_ms +60 s     0.2 s, exit 0, no decision
+   untrusted  opens a task (#19's)   none (the original's)        hold_until_ms +60 s     0.2 s, exit 0, no decision
+   trusted    "Is the header green?" none                         hold_until_ms null      0.2 s, exit 0, no decision
+   trusted    opens a task           an Edit, with PostToolUse    hold_until_ms +60 s     0.2 s, exit 0, no decision, a "says done" line
+   untrusted  opens a task           an Edit, with PostToolUse    hold_until_ms +60 s     0.2 s, exit 0, no decision, a "says done" line
+
+   In the first three the stop was recorded did_work false, claim false; in the last two did_work true, claim true.
+   In all five deep_run came back failed, run as you in the worktree (argv /bin/sh -c "exit 1"), and no verdict or
+   send-back was in the record when the Stop entry answered.
+
+2. The fixture's check as a claim's checks run it: runCommandCheck of packages/checks-command, on a supervisor of its
+   own, HOME a scratch folder, in a folder holding the fixture's files.
+
+   command                      outcome     named
+   exit 1                       uncounted   mask "exit 1"; no process started
+   exit 0                       uncounted   mask "exit 0"; no process started
+   false                        uncounted   "evidence altered reads" (reads: no trailer); exit 1
+   node checks/unit.mjs         failed      "the command exited 1"; read set checks/unit.mjs
+   node -e "process.exit(1)"    failed      "the command exited 1"; read set empty
+   node --test unit.test.mjs    failed      the failing assertion; 1 test run
+
+Not run: any implementation of #2073; none exists here.
+
+==== Run 2 (the checkout written <repo>; the reporter's second copy of the message, its "→" line, left out)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/19-redraft-2073
+
+ × watchonly.test.ts > AC6 #19.3cfcabc5 Right after install, no stop is held and no verdict blocks until the user approves a repo's checks, while the fast safety rules apply from the start > AC6 #19.3cfcabc5 straight after deep setup, a session that claims done and fails the drafted check stops unheld and unblocked, its next calls go through, and its pkill -f vite is denied with the hub up and down (redraft 2073) 14465ms
+ ✓ watchonly.test.ts > AC6 #19.3cfcabc5 Right after install, no stop is held and no verdict blocks until the user approves a repo's checks, while the fast safety rules apply from the start > AC6 #19.3cfcabc5 (wrong program) a hub that gates a repo's drafted checks before you approve them (gates-before-approval) fails this test, naming the stop (redraft 2073) 12150ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  watchonly.test.ts > AC6 #19.3cfcabc5 Right after install, no stop is held and no verdict blocks until the user approves a repo's checks, while the fast safety rules apply from the start > AC6 #19.3cfcabc5 straight after deep setup, a session that claims done and fails the drafted check stops unheld and unblocked, its next calls go through, and its pkill -f vite is denied with the hub up and down (redraft 2073)
+AssertionError: AC6 right after install the hub held the Stop of session 3dc0e0fa-9655-4145-b6e2-e23ba5368f57 (hold_until_ms 1794612878816) in a repo whose checks you haven't approved: the hooks start watch-only, so no stop is held until you approve something
+ ❯ stopGoesThrough watchonly.test.ts:97:12
+ ❯ watchonly.test.ts:122:5
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  15:33:24
+   Duration  26.96s (tests 100%)

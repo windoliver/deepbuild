@@ -15,6 +15,13 @@
 // undoable. Only you run it, with `deep host run <ask>` in your own terminal: your sudo password goes from your terminal
 // to sudo on the host and nowhere else; the script is copied into a folder only root can write, its hash checked
 // there, and that copy run. The hub reads its output, exit and what it wrote from that folder as the run's evidence.
+//
+// Remove it (#1946). A run as you declares the changes it makes, each with its undo, and the hub records them with a
+// fingerprint of each file once the run ends. `deep host remove <host>` undoes every change not yet undone, newest
+// first, with the grant that made it: yours over SSH at once, root's as one root plan you run with `deep host run`. An
+// undo runs only while each file it wrote still has its fingerprint: one changed since is copied to a backup and the
+// undo stops there, recorded as host.undone with what it undid and what's left. A root plan may ask for a sudo rule that
+// allows its one copy by its sha256 digest, so sudo refuses it once a byte changes; the rule is a host change as root.
 import { spawn, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -102,12 +109,16 @@ case "$f" in
 esac`;
 /** Where a root plan's copy runs from on the host: folders root alone can write. */
 const PLANS = '/var/lib/deepbuild/plans';
+/** Each file named in its arguments with its SHA-256, or `-` when it isn't a file: `<sha256>\t<path>` lines. */
+const PRINTS = String.raw`for p; do if [ -f "$p" ]; then printf '%s\t%s\n' "$(sha256sum < "$p" | cut -d' ' -f1)" "$p"; else printf -- '-\t%s\n' "$p"; fi; done`;
 /**
  * The root side of `deep host run`, run by `sudo sh -c` with the script's bytes on its stdin: copied into a folder only
  * root can write, its hash checked there against the one your yes locked, and only then that copy run, from /. Its
- * stdout and stderr, exit and the SHA-256 of each file the plan names are kept beside it, for the hub to read.
+ * stdout and stderr, exit and the SHA-256 of each file the plan names are kept beside it, for the hub to read. A plan
+ * that asks for a sudo rule gets one once its script exits 0, allowing that copy to the user who ran sudo by its sha256
+ * digest (`how` digest), checked by visudo before it's moved in; `rule` is `-` for none.
  */
-const ROOT_RUN = String.raw`umask 022; want=$1; d=${PLANS}/$2; shift 2
+const ROOT_RUN = String.raw`umask 022; want=$1; d=${PLANS}/$2; rule=$3; how=$4; shift 4
 install -d -m 0755 -o root -g root /var/lib/deepbuild ${PLANS} && mkdir -m 0755 "$d" || exit 96
 cat > "$d/script" && chmod 0700 "$d/script" || exit 96
 found=$(sha256sum < "$d/script" | cut -d' ' -f1)
@@ -115,8 +126,30 @@ if [ "$found" != "$want" ]; then rm -rf "$d"; printf 'deep: refused before anyth
 echo "$found" > "$d/sha"
 (cd / && sh "$d/script" 2> "$d/err"; echo $? > "$d/exit") | tee "$d/out"
 cat "$d/err" >&2
-for p; do if [ -f "$p" ]; then printf '%s\t%s\n' "$(sha256sum < "$p" | cut -d' ' -f1)" "$p"; else printf -- '-\t%s\n' "$p"; fi; done > "$d/prints"
+if [ "$rule" != - ] && [ "$(cat "$d/exit")" = 0 ]; then
+  if [ "$how" = digest ]; then cmd="sha256:$want $d/script"; else cmd="$d/script"; fi
+  printf '%s ALL=(root) NOPASSWD: %s\n' "$SUDO_USER" "$cmd" > "$d/rule" && chmod 0440 "$d/rule" && visudo -cf "$d/rule" >/dev/null && mv "$d/rule" "$rule" \
+    || { rm -f "$d/rule"; echo "deep: the sudo rule $rule wasn't written: visudo refused it, or SUDO_USER is unset" >&2; }
+fi
+${PRINTS} > "$d/prints"
 exit "$(cat "$d/exit")"`;
+/**
+ * Remove it's undos, as you or as root: `deep_check` stops before an undo when a file it wrote no longer has its
+ * fingerprint, keeping a copy of it under `$b`; `deep_undo` runs one undo and stops at the first that fails. Each prints
+ * `deep-undo` lines the hub records: `undone <i>`, or `stopped <i> <target> <backup> <why>`.
+ */
+const UNDO = String.raw`deep_check() {
+  [ -f "$2" ] || return 0
+  [ "$(sha256sum < "$2" | cut -d' ' -f1)" = "$3" ] && return 0
+  k="$b/$(printf %s "$2" | tr / _)"
+  mkdir -p "$b" && chmod 700 "$b" && cp -p -- "$2" "$k" || k=-
+  printf 'deep-undo\tstopped\t%s\t%s\t%s\t%s\n' "$1" "$2" "$k" "it changed since it was written: its SHA-256 isn't the one recorded, so it was kept and its undo didn't run"
+  exit 0
+}
+deep_undo() {
+  if e=$(sh -c "$2" 2>&1 </dev/null); then printf 'deep-undo\tundone\t%s\n' "$1"
+  else printf 'deep-undo\tstopped\t%s\t-\t-\tits undo failed: %s\n' "$1" "$(printf %s "$e" | tr '\t\n' '  ' | tail -c 300)"; exit 0; fi
+}`;
 /** What a root plan's run left in its folder, read as you: whose the folder is, the copy's hash, its exit, output and prints. */
 const RAN = String.raw`d=${PLANS}/$1
 [ -d "$d" ] || { echo absent; exit 0; }
@@ -126,13 +159,23 @@ sed 's/^/print\t/' "$d/prints" 2>/dev/null; true`;
 
 /** A fact as read over SSH: its value and when it was read, on this machine's clock. */
 export interface Reading { value: unknown; as_of: number }
-export interface RemoteSpec { host: string; token: string; argv: string[]; cwd?: string; env: Record<string, string>; adopt?: boolean; output: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void } }
+/** A change a run as you declares it makes on its host (#1946): what it does, what it touches, and its undo as you. */
+export interface Declared { does: string; changes: string[]; undo: string | null }
+export interface RemoteSpec { host: string; run: string; token: string; argv: string[]; cwd?: string; env: Record<string, string>; adopt?: boolean; changes?: Declared[]; output: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void } }
 export interface RemoteEnd { code: number | null; signal?: string; failed?: string }
 interface Ran { code: number | null; stdout: string; stderr: string }
 /** A step of a root plan as the agent gives it: a package step names the package file on the host. */
 interface RootStep { does: string; changes: string[]; undo: string | null; package?: string | null }
-/** A root plan the hub keeps by its ask: where its script is on the host, the hash your yes locks, and your answer. */
-interface RootPlan { host: string; script: string; sha256: string; steps: RootStep[]; approved: boolean; linger?: string }
+type Fingerprint = { target: string; sha256: string | null }[];
+/** A recorded host change not undone yet: its event, what it did, its undo and grant, and what it wrote. */
+interface Pending { id: string; change: string; changes: string[]; undo: string; grant: 'you' | 'root'; fingerprint: Fingerprint }
+/**
+ * A root plan the hub keeps by its ask: where its script is on the host, the hash your yes locks, and your answer; the
+ * sudo rule it writes, if it asked for one; and, for Remove it's plan, the changes it undoes in its script's order.
+ */
+interface RootPlan { host: string; script: string; sha256: string; steps: RootStep[]; approved: boolean; linger?: string; rule?: string; remove?: Pending[] }
+/** Where a host's undos are recorded: what each undid and what's left, and the step it stopped at with why. */
+interface Undid { undone: Pending[]; left: Pending[]; stopped: { change: string; target: string | null; backup: string | null; why: string } | null }
 interface HostsOptions {
   root: string; now: () => number; plant: Plant | undefined;
   /** Raises an authority ask from `source` (a host's changes as you, or a root plan): its handle. */
@@ -278,6 +321,71 @@ export class Hosts {
     return { host, changes: rows.map((r) => ({ ts: r.ts, ...(JSON.parse(r.data) as Obj) })) };
   }
 
+  // ---- Remove it (#1946).
+  /** The host's recorded changes with an undo that no host.undone lists as undone, newest first. */
+  private async pending(host: string): Promise<Pending[]> {
+    const rows = (await this.o.raw(`SELECT id, kind, data FROM events WHERE kind IN ('host.changed', 'host.undone') AND writer = 'core' AND json_extract(data, '$.host') = ? ORDER BY log_pos`, [host])) as { id: string; kind: string; data: string }[];
+    const done = new Set(rows.filter((r) => r.kind === 'host.undone').flatMap((r) => (JSON.parse(r.data) as { undone: { id: string }[] }).undone.map((u) => u.id)));
+    return rows.filter((r) => r.kind === 'host.changed' && !done.has(r.id)).map((r) => {
+      const d = JSON.parse(r.data) as { change: string; changes: string[]; undo: string | null; grant: 'you' | 'root'; fingerprint: Fingerprint };
+      return { id: r.id, change: d.change, changes: d.changes, undo: d.undo ?? '', grant: d.grant, fingerprint: d.fingerprint };
+    }).filter((c) => c.undo).reverse();
+  }
+  /** Undos as a script: each guarded by its files' fingerprints, unless the planted wrong program writes over an edit. */
+  private undoScript(steps: Pending[], backups: string): string {
+    const guard = this.o.plant !== 'remove-overwrites-edit';
+    return [UNDO, `b=${backups}`, ...steps.flatMap((s, i) => [
+      ...(guard ? s.fingerprint.filter((f) => f.sha256).map((f) => `deep_check ${i} ${q(f.target)} ${f.sha256!}`) : []),
+      `deep_undo ${i} ${q(s.undo)}`,
+    ])].join('\n');
+  }
+  /** What an undo script printed, against its steps: what it undid, what's left from the step it stopped at, and why. */
+  private undid(steps: Pending[], out: string, ended: string): Undid {
+    const lines = out.split('\n').filter((l) => l.startsWith('deep-undo\t')).map((l) => l.split('\t'));
+    const undone = lines.filter((l) => l[1] === 'undone').map((l) => steps[Number(l[2])]!).filter(Boolean);
+    const stop = lines.find((l) => l[1] === 'stopped');
+    const at = stop ? Number(stop[2]) : undone.length;
+    const left = steps.slice(at);
+    if (!left.length) return { undone, left, stopped: null };
+    const why = stop ? stop.slice(5).join('\t') : ended;
+    return { undone, left, stopped: { change: left[0]!.change, target: stop && stop[3] !== '-' ? stop[3]! : null, backup: stop && stop[4] !== '-' ? stop[4]! : null, why } };
+  }
+  private async recordUndone(host: string, grant: 'you' | 'root', u: Undid, run: string | null): Promise<void> {
+    const item = (p: Pending) => ({ id: p.id, change: p.change, undo: p.undo });
+    await this.o.append('host.undone', { host, grant, undone: u.undone.map(item), left: u.left.map(item), partial: u.left.length > 0, stopped: u.stopped, run }, {});
+  }
+  /** Writes a script of the hub's own as you on the host, under ~/.deepbuild/plans, for a root plan to read: its path. */
+  private async writeScript(host: string, text: string): Promise<{ path?: string; why: string }> {
+    const id = sha(text).slice(0, 16);
+    const r = await this.exec(host, [], `umask 077; mkdir -p "$HOME/.deepbuild/plans" && f="$HOME/.deepbuild/plans/${id}.sh" && cat > "$f" <<'DEEP_${id}'\n${text}DEEP_${id}\nprintf '%s' "$f"`);
+    return r.code === 0 && r.stdout.startsWith('/') ? { path: r.stdout, why: '' } : { why: r.stderr.trim().slice(-300) };
+  }
+  /**
+   * host.remove, `deep host remove <host>`: every change the record holds for the host not yet undone, newest first, each
+   * with the grant that made it. Yours are undone over SSH now and recorded; root's come as one root plan to run with
+   * `deep host run`, recorded once it ran. A stop keeps the rest for later, root's plan with it.
+   */
+  async remove(name: unknown): Promise<Obj> {
+    const host = this.named(name);
+    const pending = await this.pending(host);
+    const allRoot = this.o.plant === 'remove-undoes-all-as-root';
+    const mine = allRoot ? [] : pending.filter((p) => p.grant === 'you');
+    const roots = allRoot ? pending : pending.filter((p) => p.grant === 'root');
+    let you: Undid | undefined;
+    if (mine.length) {
+      const r = await this.exec(host, [], this.undoScript(mine, `"$HOME/.deepbuild/backups/${ulid(this.o.now())}"`));
+      you = this.undid(mine, r.stdout, `the link to ${host} ended before the undo did (ssh exit ${String(r.code)}: ${r.stderr.trim().slice(-200)}); what's left is read again on the next Remove it`);
+      await this.recordUndone(host, 'you', you, null);
+    }
+    if (you?.stopped || !roots.length) return { host, you: you ?? null, root: null };
+    const wrote = await this.writeScript(host, `#!/bin/sh\n# DeepBuild's Remove it on ${host}: the undos of ${roots.length} change${roots.length === 1 ? '' : 's'} made as root, newest first.\n${this.undoScript(roots, `/var/lib/deepbuild/backups/${ulid(this.o.now())}`)}\n`);
+    if (!wrote.path) throw new Refused(refusal('unavailable', '/params/host', `BLOCKED: Remove it's root plan couldn't be written on ${host}: ${wrote.why}`, host, true));
+    const { ask } = await this.proposeRoot({
+      host, script: wrote.path, steps: roots.map((p) => ({ does: `Undo, as root: ${p.change} (${p.undo})`, changes: p.changes, undo: null, package: null })),
+    }, { question: `Run this root plan on ${host} as root? It undoes ${roots.length} change${roots.length === 1 ? '' : 's'} made there as root (Remove it), each only while what it wrote is as it was.`, remove: roots }) as { ask: string };
+    return { host, you: you ?? null, root: { ask, changes: roots.map((p) => p.change) } };
+  }
+
   // ---- Root plans (#1945).
   private get plansFile(): string { return join(this.o.root, 'root-plans.json'); }
   private plans(): Record<string, RootPlan> { try { return JSON.parse(readFileSync(this.plansFile, 'utf8')) as Record<string, RootPlan>; } catch { return {}; } }
@@ -288,12 +396,13 @@ export class Hosts {
    * its SHA-256, raised as one authority ask defaulting to no, each step with its undo. A step that installs a package
    * file is followed by one saying what its install scripts do can't be undone, unless the package has none.
    */
-  async proposeRoot(args: Obj, linger?: { user: string; question: string }): Promise<Obj> {
+  async proposeRoot(args: Obj, own?: { question: string; linger?: string; remove?: Pending[] }): Promise<Obj> {
     const host = this.named(args.host);
     const script = args.script;
     if (typeof script !== 'string' || !isAbsolute(script)) throw new Refused(refusal('type', '/params/arguments/script', `Give the script's absolute path on ${host}, where you wrote it.`, script));
     const given = Array.isArray(args.steps) ? (args.steps as RootStep[]) : [];
     if (!given.length) throw new Refused(refusal('required', '/params/arguments/steps', 'List what the plan does, step by step, each with its undo or null when it has none.', args.steps));
+    if (args.sudo_rule !== undefined && args.sudo_rule !== null && typeof args.sudo_rule !== 'boolean') throw new Refused(refusal('type', '/params/arguments/sudo_rule', 'Give sudo_rule as true to allow this one script by a sudo rule naming its sha256 digest, or null.', args.sudo_rule));
     const read = await this.read(host, [script], READ_SCRIPT);
     if (read.code !== 0) throw new Refused(refusal(read.code === 4 ? 'not_found' : 'unavailable', '/params/arguments/script', `BLOCKED: the script couldn't be read on ${host}: ${read.stderr.trim().slice(-400)}`, script, read.code !== 4));
     const bytes = Buffer.from(read.stdout, 'base64');
@@ -305,9 +414,12 @@ export class Hosts {
       const scripts = await this.installScripts(host, step.package);
       if (scripts) steps.push(scripts);
     }
+    // The sudo rule is a host change of its own, last, so Remove it takes it out first: sudoers.d skips a name with a dot.
+    const rule = args.sudo_rule === true ? `/etc/sudoers.d/deepbuild-${locked.slice(0, 16)}` : undefined;
+    if (rule) steps.push({ does: `Allow this one script on ${host} by a sudo rule naming its sha256 digest ${locked.slice(0, 12)}: your user runs its root-only copy with sudo -n and no password, and sudo refuses the file once a byte of it changes`, changes: [rule], undo: `rm -f ${rule}` });
     // The script itself is evidence, so the ask shows the exact bytes your yes locks.
     await this.o.put(bytes, 'root-plan.script', `${host}:${script}`);
-    const question = linger?.question ?? `Run this root plan on ${host} as root? ${steps.length} step${steps.length === 1 ? '' : 's'}, from the script ${script} (sha256 ${locked.slice(0, 12)}); only you run it, with deep host run in your own terminal.`;
+    const question = own?.question ?? `Run this root plan on ${host} as root? ${steps.length} step${steps.length === 1 ? '' : 's'}, from the script ${script} (sha256 ${locked.slice(0, 12)}); only you run it, with deep host run in your own terminal.`;
     const ask = await this.o.raise('host.root_plan', {
       kind: 'authority', question,
       options: [{ id: 'approve', label: 'Run it as root', decision: 'allow' }, { id: 'decline', label: "Don't run it", decision: 'deny' }],
@@ -315,7 +427,7 @@ export class Hosts {
       key: sha(`host.root_plan:${host}:${script}:${locked}`), pinned_to: { kind: 'evidence', ref: locked },
     }, { steps: steps.map((s) => ({ does: s.does, changes: s.changes, undo: s.undo, public: false, cost: 0 })), diff: locked });
     const plans = this.plans();
-    plans[ask] = { host, script, sha256: locked, steps, approved: plans[ask]?.approved ?? false, ...(linger ? { linger: linger.user } : {}) };
+    plans[ask] = { host, script, sha256: locked, steps, approved: plans[ask]?.approved ?? false, ...(own?.linger ? { linger: own.linger } : {}), ...(rule ? { rule } : {}), ...(own?.remove ? { remove: own.remove } : {}) };
     this.keep(plans);
     return { ask, host, script, sha256: locked, steps: steps.length, next: `The person reads the plan and, if they say yes, runs it themselves with deep host run ${ask} in their own terminal; nothing runs as root until they do.` };
   }
@@ -337,7 +449,8 @@ export class Hosts {
     if (!p) throw new Refused(refusal('not_found', '/params/ask', `${String(ask)} isn't a root plan this hub holds.`, ask));
     if (!p.approved) throw new Refused(refusal('denied', '/params/ask', `You haven't said yes to ${String(ask)}: read its plan and answer it first (deep inbox answer ${String(ask)} approve).`, ask));
     const paths = [...new Set(p.steps.flatMap((s) => s.changes).filter((c) => c.startsWith('/') && !/\s/.test(c)))];
-    return { ask, host: p.host, script: p.script, sha256: p.sha256, run: `run:${ulid(this.o.now())}`, paths };
+    // The planted wrong program's rule names only the copy's path, so sudo runs whatever that file holds.
+    return { ask, host: p.host, script: p.script, sha256: p.sha256, run: `run:${ulid(this.o.now())}`, paths, rule: p.rule ?? '-', how: this.o.plant === 'sudo-rule-names-path' ? 'path' : 'digest' };
   }
   /**
    * host.ran: what `deep host run` left on the host, read as you from the folder only root can write: the run with its
@@ -369,6 +482,11 @@ export class Hosts {
       run, outcome: exit === 0 ? 'passed' : exit === null ? 'stopped' : 'failed', tests_run: 0, passed: 0, runs: 1, evidence, check: 'root plan',
       assertion: null, expected: null, actual: null, step: null, points_to: null, findings: exit === 0 ? [] : [`the script exited ${exit ?? 'without a status'}`], environment: `host:${host}`, exit,
     }, { subject: run, v: 3 });
+    // Remove it's plan undoes changes rather than making them: what it undid and what's left, from what it printed.
+    if (p.remove) {
+      await this.recordUndone(host, 'root', this.undid(p.remove, Buffer.from(one('out')!, 'base64').toString('utf8'), `the root plan exited ${exit ?? 'without a status'} before its undos ended`), run);
+      return { ran: true, run, exit, evidence };
+    }
     const prints = new Map(lines.filter((l) => l[0] === 'print').map((l) => [l[2]!, l[1] === '-' ? null : l[1]!]));
     for (const s of p.steps) {
       await this.o.append('host.changed', {
@@ -409,13 +527,12 @@ export class Hosts {
     }
     // The host's policy needs root for it: a root plan of the hub's own, its script written as you, that the run waits on.
     const text = `#!/bin/sh\n# DeepBuild's root plan for ${host}: lingering for ${user}, so runs there outlive the last session and start at boot.\nexec loginctl enable-linger ${q(user)}\n`;
-    const end = `DEEP_${sha(text).slice(0, 16)}`;
-    const wrote = await this.exec(host, [], `umask 077; mkdir -p "$HOME/.deepbuild/plans" && f="$HOME/.deepbuild/plans/linger-${sha(text).slice(0, 16)}.sh" && cat > "$f" <<'${end}'\n${text}${end}\nprintf '%s' "$f"`);
-    if (wrote.code !== 0 || !wrote.stdout.startsWith('/')) return `lingering is off for ${user} on ${host}, and its root plan's script couldn't be written there: ${wrote.stderr.trim().slice(-300)}`;
+    const wrote = await this.writeScript(host, text);
+    if (!wrote.path) return `lingering is off for ${user} on ${host}, and its root plan's script couldn't be written there: ${wrote.why}`;
     const { ask } = await this.proposeRoot({
-      host, script: wrote.stdout,
+      host, script: wrote.path,
       steps: [{ does: `Turn lingering on for ${user} on ${host} (loginctl enable-linger ${user}), so your runs there outlive your last session and start at boot`, changes: [file], undo: `loginctl disable-linger ${user}`, package: null }],
-    }, { user, question: `Run this root plan on ${host} as root? It turns lingering on for ${user}, which ${host}'s policy needs root for (${more.trim().slice(0, 200) || 'loginctl enable-linger was refused'}); the first run there waits for it.` }) as { ask: string };
+    }, { linger: user, question: `Run this root plan on ${host} as root? It turns lingering on for ${user}, which ${host}'s policy needs root for (${more.trim().slice(0, 200) || 'loginctl enable-linger was refused'}); the first run there waits for it.` }) as { ask: string };
     const yes = await new Promise<boolean>((done) => this.waiting.set(ask, done));
     this.waiting.delete(ask);
     if (!yes) return `lingering is off for ${user} on ${host}: you said no to ${ask}, its root plan`;
@@ -439,12 +556,26 @@ export class Hosts {
         if (started) return { code: null, failed: started };
       }
       const end = await this.follow(spec);
+      // The changes it declared, each with its undo as you and what it wrote, before its end is recorded (#1946).
+      if (spec.changes?.length) await this.recordDeclared(spec.host, spec.run, spec.changes);
       // Its stderr whole, then its folder goes: the token's lock is spent once its end is read.
       const err = await this.read(spec.host, [spec.token], `${RUNS}; cat "$d/err" && rm -rf "$d"`);
       if (err.code === 0 && err.stdout) spec.output.stderr(Buffer.from(err.stdout));
       return end;
     })();
     return { ended, stop: () => void this.exec(spec.host, [unit], 'systemctl --user stop "$1"') };
+  }
+  /** A run's declared changes as host.changed as you, each file it names fingerprinted as the host has it now. */
+  private async recordDeclared(host: string, run: string, declared: Declared[]): Promise<void> {
+    const paths = [...new Set(declared.flatMap((d) => d.changes).filter((c) => isAbsolute(c)))];
+    const r = paths.length ? await this.read(host, paths, PRINTS) : { stdout: '' };
+    const prints = new Map(r.stdout.split('\n').map((l) => l.split('\t')).filter((l) => l.length === 2).map(([h, p]) => [p!, h === '-' ? null : h!]));
+    for (const d of declared) {
+      await this.o.append('host.changed', {
+        host, change: d.does, changes: d.changes, undo: d.undo, grant: 'you',
+        fingerprint: d.changes.filter((c) => prints.has(c)).map((target) => ({ target, sha256: prints.get(target) ?? null })), ask: null, run,
+      }, {});
+    }
   }
   /** Sends the start once; when the link drops before its reply, reads it back by its token: undefined once it started. */
   private async start(spec: RemoteSpec, unit: string): Promise<string | undefined> {
@@ -542,6 +673,24 @@ export async function hostCommand(args: string[]): Promise<number> {
     for (const c of changes) await say(`  ${new Date(c.ts).toISOString()}  ${c.grant === 'root' ? `as root (${c.ask})` : 'as you'}  ${c.change}\n      undo: ${c.undo ?? "can't undo"}`);
     return 0;
   }
+  if (args[0] === 'remove' && args.length === 2) {
+    const reply = await hub('host.remove', { host: args[1] });
+    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    const { you, root } = reply.result as { you: Undid | null; root: { ask: string; changes: string[] } | null };
+    if (!you && !root) await say(`${args[1]}: nothing to undo; every change recorded there with an undo is undone`);
+    if (you) {
+      await say(`${args[1]}: undid ${you.undone.length} change${you.undone.length === 1 ? '' : 's'} as you`);
+      for (const u of you.undone) await say(`  undone: ${u.change}`);
+      if (you.stopped) {
+        const s = you.stopped;
+        await say(`  partial: stopped at ${s.change}${s.target ? `: ${s.target} ${s.backup ? `was kept, with a backup at ${s.backup}` : 'was kept'}` : ''}; ${s.why}`);
+        for (const l of you.left) await say(`  left: ${l.change}`);
+        if (root) await say(`  left for root, after these: ${root.changes.join('; ')}`);
+      }
+    }
+    if (root) await say(`${args[1]}: ${root.changes.length} change${root.changes.length === 1 ? '' : 's'} made as root come as one root plan, ${root.ask}: read it, answer it (deep inbox answer ${root.ask} approve), then run deep host run ${root.ask} in your own terminal`);
+    return you?.stopped ? 3 : 0;
+  }
   if (args[0] === 'list' && args.length === 1) {
     const reply = await hub('host.list', {});
     if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
@@ -555,12 +704,12 @@ export async function hostCommand(args: string[]): Promise<number> {
     return 0;
   }
   if (args[0] !== 'run' || args.length !== 2) {
-    await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host list\n       deep host facts <host> [--refresh]', process.stderr);
+    await say('Usage: deep host run <ask>\n       deep host changes <host>\n       deep host remove <host>\n       deep host list\n       deep host facts <host> [--refresh]', process.stderr);
     return 2;
   }
   const reply = await hub('host.plan', { ask: args[1] });
   if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
-  const p = reply.result as { ask: string; host: string; script: string; sha256: string; run: string; paths: string[] };
+  const p = reply.result as { ask: string; host: string; script: string; sha256: string; run: string; paths: string[]; rule: string; how: string };
   const ssh = (extra: string[], command: string, stdio: StdioOptions) => spawn('ssh', ['-F', join(homedir(), '.ssh', 'config'), ...extra, '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '--', p.host, command], { stdio });
   // The planted wrong program runs the script where the agent wrote it, with no copy and no check.
   const planted = activePlant() === 'root-plan-runs-agent-path';
@@ -578,7 +727,7 @@ export async function hostCommand(args: string[]): Promise<number> {
   }
   await say(`deep: running ${p.ask} on ${p.host} as root. Type your sudo password only at sudo's own prompt.`);
   const remote = planted ? `sudo sh ${q(p.script)}`
-    : `cat -- ${q(p.script)} | sudo -p ${q(`[sudo] password for %p on ${p.host}: `)} sh -c ${q(ROOT_RUN)} sh ${[p.sha256, p.run.slice(4), ...p.paths].map(q).join(' ')}`;
+    : `cat -- ${q(p.script)} | sudo -p ${q(`[sudo] password for %p on ${p.host}: `)} sh -c ${q(ROOT_RUN)} sh ${[p.sha256, p.run.slice(4), p.rule, p.how, ...p.paths].map(q).join(' ')}`;
   const code = await new Promise<number>((done) => ssh(['-tt'], remote, 'inherit').on('close', (c) => done(c ?? 1)));
   const ran = await hub('host.ran', { ask: p.ask, run: p.run });
   if (!ran.result) await say(ran.error?.remediation ?? 'no reply', process.stderr);

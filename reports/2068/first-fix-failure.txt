@@ -1,0 +1,65 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+stdout | tests/acceptance/2068/forge-wait.test.ts > #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait
+ISSUE2068_TIMING {"mode":"five-seconds","baseline":"1c4d1f0e2aaad8c6a6573848823566d04ff73d17","date":"2026-11-14T09:39:45.535Z","node":"v24.22.2","platform":"darwin","arch":"arm64","configured_b_after_a_ms":100,"b_sent_ms":106.75908400000117,"a_record":{"absent_ms":1081.2285840000004,"present_ms":1092.690125000001,"log_pos":16},"b_record":{"absent_ms":513.6668750000008,"present_ms":529.5464170000014,"log_pos":13},"b_minus_first_forge_answer_ms":-4978.333917,"forge":[{"path":"/repos/fixture-2068/widgets/issues/7","page":1,"requested_ms":498.7826670000013,"answered_ms":5507.880334000001,"disconnected":true}]}
+
+stdout | tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+ISSUE2068_TIMING {"mode":"never","baseline":"1c4d1f0e2aaad8c6a6573848823566d04ff73d17","date":"2026-11-14T09:40:01.860Z","node":"v24.22.2","platform":"darwin","arch":"arm64","configured_b_after_a_ms":100,"b_sent_ms":113.75966699999844,"a_record":{"absent_ms":1034.481832999998,"present_ms":1044.5697919999948,"log_pos":16},"b_record":{"absent_ms":802.5284580000007,"present_ms":813.3317499999976,"log_pos":13},"b_minus_first_forge_answer_ms":null,"forge":[{"path":"/repos/fixture-2068/widgets/issues/7","page":1,"requested_ms":785.6180830000012,"answered_ms":null,"disconnected":null}],"acknowledged_hold_ms":2016,"prompt_at_deadline":true,"task_at_deadline":true,"b_at_deadline":true}
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts (4 tests | 3 failed) 77132ms
+   × #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait 18234ms
+   × #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning 16528ms
+   × #2068 AC3: instant forge twin preserves issue criteria and every fixture author's membership role 28680ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC1: B records before the first 5 s forge answer, not after A's whole forge wait
+Error: INCONCLUSIVE AC1: no forge read in flight at B arrival; not proof of the wait
+ ❯ tests/acceptance/2068/forge-wait.test.ts:33:54
+     31|     timing('five-seconds', f, sentA, sentB, w);
+     32|     const first = f.requests.find((r) => r.answered !== undefined);
+     33|     if (!first || first.requested >= sentB.at) throw Error('INCONCLUSI…
+       |                                                      ^
+     34|     const recorded = w.events.find((e) => e.id === sentB.id);
+     35|     expect(recorded, 'AC1 forge wait: B PostToolUse must reach the rec…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC2: never forge wait ends within the prompt's acknowledged hold, with a words task and row warning
+AssertionError: AC2 forge wait: A's session row must say the issue could not be read, not silently fall back; visible row: {"why":"at work","note":"This session's Claude Code home (<fixture-home>/h/.claude) loads mods DeepBuild couldn't read (no claude on PATH to list and read the plugins with), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.","detailWhy":"last seen 2s ago"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2068/forge-wait.test.ts:94:165
+     92|         const unread = /couldn['’]?t|cannot|can['’]?t|unable|fail|unre…
+     93|         expect.soft(row, 'AC2 forge wait: A has a visible session row'…
+     94|         expect.soft(namesSource && unread, `AC2 forge wait: A's sessio…
+       |                                                                                                                                                                     ^
+     95|       }
+     96|     } finally { await w?.stop(); await f.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2068/forge-wait.test.ts > #2068 AC3: instant forge twin preserves issue criteria and every fixture author's membership role
+AssertionError: AC3 instant source: fixture-owner-2068's criteria reach the task definition: expected undefined to be defined
+ ❯ tests/acceptance/2068/forge-wait.test.ts:114:90
+    112|       const lock = w.events.find((e) => e.kind === 'definition.locked'…
+    113|       expect(task, `AC3 instant source: issue ${n} opens A's task`).to…
+    114|       expect(lock, `AC3 instant source: ${handle}'s criteria reach the…
+       |                                                                                          ^
+    115|       expect(lock?.data.task_ref, 'AC3 definition belongs to the opene…
+    116|       expect(lock?.data.requirements?.map((r: { text: string }) => r.t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  01:39:25
+   Duration  79.20s (tests 99%)
+

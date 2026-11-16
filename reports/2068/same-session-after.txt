@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ✓ packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent 2285ms
+ ✓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write 3849ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  11:57:07
+   Duration  6.49s (tests 99%, transform 1%)
+

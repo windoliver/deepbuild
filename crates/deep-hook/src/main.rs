@@ -216,9 +216,12 @@ struct Rules {
     standing: Vec<String>,
 }
 
+/// Why rules.json can't be read when it is missing though setup finished (#1856): setup wrote it, so it was removed.
+const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
+
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
-/// is missing, and why not when it can't be read or isn't that shape. Other members, such as each entry's planted
-/// call and twin, are the hub's.
+/// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
+/// Other members, such as each entry's planted call and twin, are the hub's.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {
@@ -226,7 +229,12 @@ fn rules() -> Result<Rules, String> {
     }
     let text = match fs::read_to_string(home().join("rules.json")) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Rules::default()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return match home().join("setup-finished.json").exists() {
+                true => Err(REMOVED.to_string()),
+                false => Ok(Rules::default()),
+            };
+        }
         Err(error) => return Err(format!("can't be read: {error}")),
     };
     let rules = parse(&text).map_err(|_| "isn't JSON".to_string())?;
@@ -750,6 +758,18 @@ fn shaped(value: &Value, fields: &[&str]) -> bool {
         && integer(member(value, "v")) == Some(1.0)
 }
 
+/// How long a hub has to put a removed rules.json back and say hello (#1856): it writes the file synced first.
+const PUT_BACK: Duration = Duration::from_millis(250);
+
+/// Whether the hub on this machine says hello by `deadline`; nothing is sent to it.
+fn hub_said_hello(deadline: Instant) -> bool {
+    let Ok(stream) = UnixStream::connect(address()) else {
+        return false;
+    };
+    let mut reader = BufReader::new(remote::Stream::Unix(stream));
+    matches!(read_line(&mut reader, Some(deadline)), Got::Line(_))
+}
+
 /// One exchange with the hub: its hello, the request `id`, its acknowledgement and its reply. Returns the line
 /// sent, the outcome, and the last line the hub wrote (only a planted build prints it).
 fn exchange(
@@ -1054,12 +1074,28 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
     let id = ulid(now / 1_000_000);
-    let rules = if ruling {
+    let mut rules = if ruling {
         rules()
     } else {
         Ok(Rules::default())
     };
-    // Guards that can't be read may hold a call: with the hub away it is denied, never let through unguarded.
+    // A running hub puts a removed rules.json back before it says hello (#1856): the call is matched against that
+    // one, and the hub's time to acknowledge it runs from then, the watchdog's with it. No hub there costs no wait.
+    let mut asked = start;
+    if rules.as_ref().is_err_and(|why| why == REMOVED) {
+        WATCH_MS.store((PUT_BACK + WATCHDOG).as_millis() as u64, Ordering::SeqCst);
+        if hub_said_hello(start + PUT_BACK) {
+            rules = self::rules();
+        }
+        asked = Instant::now();
+        WATCH_MS.store(
+            (start.elapsed() + WATCHDOG).as_millis() as u64,
+            Ordering::SeqCst,
+        );
+    }
+    // Guards that can't be read may hold a call: it is denied, never let through unguarded. The hub decides only from
+    // the entries deep-hook matched, so the denial is deep-hook's own, with the hub away and with it answering (#2204).
+    let unread = rules.as_ref().err().cloned();
     match &rules {
         Err(why) => {
             let _ = DENIAL.set(format!(
@@ -1223,7 +1259,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         )
     };
     let _ = PENDING.set((line(&[]), id.clone()));
-    let (sent, outcome, last) = exchange(start, &id, line);
+    let (sent, outcome, last) = exchange(asked, &id, line);
     // From here the hub's answer says whether the call is late, should the watchdog decide it first.
     REACHED.store(
         matches!(outcome, Outcome::Down { late: true }),
@@ -1240,6 +1276,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
                 remote::send_later(&home(), &joined.hub);
             }
             decide();
+            if let Some(why) = unread {
+                eprintln!("DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook matched this call against no guard. Retry it; if this comes again, fix that file.");
+                return ExitCode::from(2);
+            }
             print!("{stdout}");
             eprint!("{stderr}");
             return ExitCode::from(exit);

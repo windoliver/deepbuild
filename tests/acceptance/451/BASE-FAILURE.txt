@@ -1,0 +1,52 @@
+Base of tests/acceptance/451 at d8c46f0d5 ("Merge pull request #2601 from windoliver/worktree-swirling-sniffing-sundae"),
+main with no implementation of #451.
+
+NOT RUN. The machine was shared and heavily loaded, and this job was told not to build cargo binaries or run the suite,
+so no binary was built and no test ran. Where each test fails was reasoned from the base's code, not observed. The
+type-check was run, on a copy of tests/acceptance/451 and tests/acceptance/449 (whose helpers it imports) outside the
+repo with the root tsconfig.json and TypeScript 5.9.3, vitest 5.0.5 and @types/node 24.19.2 (the root package.json's
+pins) installed beside it: `tsc -p tests/acceptance/451/tsconfig.json` exits 0.
+
+What the base lacks (read from its code):
+- crates/deep-canvas-effects/src/particles/spec.rs reads `motion.along` as `{curve, speed}` with `speed` a number:
+  `speed: [min, max]` is refused at check, `out_of_range` at items/<id>/params/motion/along/speed, so the `particles`
+  call answers {"outcome": "refused"} for every 2D fixture. There is no `curves`, `dimensions`, `space` or
+  `emit.anchor`; no curve named `<graph>#<edge>` or `<field>#streams`; no particle field `curve`; no 2D place.
+- The check (crates/deep-canvas-effects/src/particles/rule.rs) has no rule on a world-space emitter's anchor.
+- crates/deep-gpu-layer/src/film.rs's `film2d` reads no `particles` field: its frame rows hold `frame`, `gpu_ms`,
+  `cpu_ms`, `fills`, and `pixel_hash` and `final` when asked, never `particles`.
+- crates/deep-gpu-layer/src/main.rs's `Planted::parse` knows no `particles_follow_arrows`.
+- What the base does have, and these tests use as references: `deep-canvas-render geometry` answers a pinned graph's
+  routes (#399), and #449's `particles` call, `view3d` `particles` field and evaluated-data hash.
+
+Where each test fails, expected:
+
+ac1-graph-edge.test.ts (AC1 #451.5e48c360)
+- "20 packets on edge a→b …": `deep-canvas-render geometry` answers both routes (the base's #399 surface), and the
+  fixture's guards on them hold (expected; not observed); then at `the packets before the relayout: the check passes,
+  got "refused"` (motion.along.speed refused).
+- "seeking equals playing …": at `the graph before the relayout, evaluated: the check passes, got "refused"`, before
+  any film2d call (needs macOS; elsewhere INCONCLUSIVE first).
+
+ac2-world-anchor.test.ts (AC2 #451.6846b36f)
+- "a world-space emitter whose anchor a logic array or a live drag moves is refused …": the logic document either is
+  refused as a call by the scene's evaluation (the instancer reading a logic array, the logic item with no stored
+  program), failing at `the logic-moved anchor: the particles call answers … rather than refusing the call`, or is
+  `checked` with no refusal, failing at `the anchor that is moved by the logic array brain.pos` (sparks … is not
+  refused at check); the drag document is `checked` and fails at the same judge for `puck`.
+- "a channel-driven anchor emits at the same bucket times …": the check passes and both displays draw the base's
+  closed form (the emitter ignores `emit.anchor`, so every spark sits at its own item's origin); fails at `the sparks
+  at 3 s sit at many places along ship's path` (one place), before the display and bucket judges (needs macOS;
+  elsewhere INCONCLUSIVE first).
+
+ac3-streams.test.ts (AC3 #451.9c598890)
+- "particles with along.curves field#streams …": the reference RK4 guard holds (test code); then at `flow: the check
+  passes, got "refused"` (motion.along.speed refused), before the planted run (whose name the base doesn't know).
+- "seeking equals playing by hash …": at `the streams film, evaluated: the check passes, got "refused"` (needs macOS;
+  elsewhere INCONCLUSIVE first).
+
+ac4-taste.test.ts (AC4 #451.98808b85)
+- at the first film2d reply: either a refusal of the document (`graph-edge-packets was drawn, not refused`) or frames
+  without the `particles` field (`graph-edge-packets: frame 60: particles (README: film2d's particles field) is an
+  object`), before any picture is written or TASTE.json read (needs macOS; elsewhere INCONCLUSIVE first). After the
+  implementation it stays INCONCLUSIVE until the owner's call is recorded in TASTE.json.
