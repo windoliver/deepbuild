@@ -8,7 +8,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::backend::{Backend, BodyState, Input, JointState, Query, State, Targets};
+use crate::backend::{Backend, BodyState, Input, JointState, Query, State, Targets, VehicleState};
 use crate::check::check;
 use crate::doc::World;
 use crate::occurrence::{self, Row, KINDS};
@@ -18,6 +18,7 @@ use crate::track;
 mod fixtures;
 pub mod scan;
 mod sensors;
+mod vehicles;
 
 pub use fixtures::{all, test_capped};
 
@@ -96,6 +97,43 @@ pub enum Measure {
         enter: f64,
         exit: f64,
     },
+    /// #251: each wheel of vehicle `body`'s compression after step `step`, m: the one farthest
+    /// from the answer.
+    Sag { body: &'static str, step: usize },
+    /// #251: how far `body` travels from step `step` until it stops, m.
+    Stop { body: &'static str, step: usize },
+    /// #251: `body`'s speed after step `step`, m/s.
+    Speed { body: &'static str, step: usize },
+    /// #251: the radius of the circle `point` on `body` traces from step `step`, over one turn.
+    Circle {
+        body: &'static str,
+        point: [f64; 3],
+        step: usize,
+    },
+    /// #251: the time of each wheel of `body`'s first `kind` row with `ground`, s: the one
+    /// farthest from the answer.
+    Wheels {
+        kind: &'static str,
+        body: &'static str,
+        ground: &'static str,
+    },
+    /// #2306: `body`'s contact impulse over each step after `from` to `to`, over the step's
+    /// length, N: the one farthest from the answer.
+    Load {
+        body: &'static str,
+        from: usize,
+        to: usize,
+    },
+    /// #2306: `joint`'s coordinate after each step from `from` on: the one farthest from the
+    /// answer.
+    Angle { joint: &'static str, from: usize },
+    /// #2306: how far `body` is after step `step` from its place on `ground`, along the ground (x
+    /// and z), m.
+    Carried {
+        body: &'static str,
+        ground: &'static str,
+        step: usize,
+    },
 }
 
 /// One fixture of the behavior part.
@@ -126,13 +164,15 @@ impl Fixture {
 }
 
 /// A planted kit (criteria 4 and 6): one that runs a fixture its caps exclude, or one that admits
-/// a candidate whatever it claims.
+/// a candidate whatever it claims; #251's, whose report counts a fixture its caps exclude as
+/// passed without running it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Planted {
     #[default]
     None,
     RunsExcluded,
     AdmitsUnfixtured,
+    CountsExcludedPassed,
 }
 
 /// The kit's report on one backend.
@@ -142,12 +182,14 @@ pub struct Report {
     /// The claims a candidate was refused for, which no fixture tests; none when admitted.
     pub refused: Vec<String>,
     pub results: Vec<Value>,
+    /// #251: the fixtures its caps exclude that the report counts as passed, which refuse it.
+    pub miscounted: Vec<String>,
 }
 
 impl Report {
     /// `pass` when no result fails, `fail` otherwise, `refused` for a refused candidate.
     pub fn verdict(&self) -> &'static str {
-        if !self.refused.is_empty() {
+        if !self.refused.is_empty() || !self.miscounted.is_empty() {
             "refused"
         } else if self.results.iter().any(|r| r["result"] == "fail") {
             "fail"
@@ -165,6 +207,11 @@ impl Report {
                 "what": format!("{} is a candidate whose caps() claim {}, which no fixture of the behavior part tests, so it is refused before any fixture runs",
                                 self.backend, self.refused.join(", "))});
         }
+        if !self.miscounted.is_empty() {
+            let named = self.miscounted.join(", ");
+            out["refused"] = json!({"fixtures": self.miscounted,
+                "what": format!("the report on {} counts {named} as passed, which its caps() exclude, so it is refused: a fixture its caps exclude is never passed", self.backend)});
+        }
         out
     }
 }
@@ -175,6 +222,8 @@ struct Trace {
     states: Vec<State>,
     joints: Vec<Vec<JointState>>,
     rows: Vec<Row>,
+    /// #251: each vehicle body's own state after each step.
+    vehicles: Vec<Vec<VehicleState>>,
 }
 
 fn body_of<'a>(s: &'a State, id: &str) -> Option<&'a BodyState> {
@@ -197,6 +246,7 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
         states: vec![start.clone()],
         joints: vec![b.joints()],
         rows: Vec::new(),
+        vehicles: vec![b.vehicles()],
     };
     for k in 1..=f.steps {
         let inputs: Vec<Input> = by_step
@@ -224,6 +274,7 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
             .extend(occurrence::sorted(k as u32, b.occurrences(), &rank));
         t.states.push(b.read());
         t.joints.push(b.joints());
+        t.vehicles.push(b.vehicles());
     }
     Ok(t)
 }
@@ -449,6 +500,72 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             }
             r
         }
+        Measure::Sag { body, step } => {
+            let rest = w.bodies.get(*body).and_then(|b| b.vehicle.as_ref());
+            let rest = rest
+                .and_then(|v| v.wheels.values().next())
+                .map_or(0.0, |x| x.rest);
+            let (v, extra) = vehicles::sag_of(&t.vehicles, body, *step, rest, f.answer);
+            reading(v, extra)
+        }
+        Measure::Stop { body, step } => reading(
+            vehicles::stop_of(&t.states, body, *step),
+            json!({"body": body}),
+        ),
+        Measure::Speed { body, step } => reading(
+            vehicles::speed_of(&t.states, body, *step),
+            json!({"body": body}),
+        ),
+        Measure::Circle { body, point, step } => reading(
+            vehicles::circle_of(&t.states, body, *point, *step),
+            json!({"body": body}),
+        ),
+        Measure::Wheels { kind, body, ground } => {
+            let (v, extra) =
+                vehicles::wheels_of(&t.rows, &t.vehicles, (kind, body, ground), t.rate, f.answer);
+            reading(v, extra)
+        }
+        Measure::Load { body, from, to } => {
+            let steps = t.states.iter().enumerate().take(to + 1).skip(from + 1);
+            let loads =
+                steps.filter_map(|(k, s)| Some((k, body_of(s, body)?.contact_impulse * t.rate)));
+            let worst = loads.reduce(|a, b| {
+                if (b.1 - f.answer).abs() > (a.1 - f.answer).abs() {
+                    b
+                } else {
+                    a
+                }
+            });
+            reading(
+                worst.map(|w| w.1),
+                json!({"body": body, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Angle { joint, from } => {
+            let at = t.joints.iter().enumerate().skip(*from);
+            let angles =
+                at.filter_map(|(k, js)| Some((k, js.iter().find(|j| j.id == *joint)?.coordinate?)));
+            let worst = angles.reduce(|a, b| {
+                if (b.1 - f.answer).abs() > (a.1 - f.answer).abs() {
+                    b
+                } else {
+                    a
+                }
+            });
+            reading(
+                worst.map(|w| w.1),
+                json!({"joint": joint, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Carried { body, ground, step } => {
+            let (p, q) = (path(t, body), path(t, ground));
+            let off = p.get(*step).zip(q.get(*step)).zip(p.first().zip(q.first()));
+            let off = off.map(|((a, b), (a0, b0))| {
+                let off = |i: usize| a[i] - a0[i] - b[i] + b0[i];
+                dist([off(0), 0.0, off(2)], [0.0; 3])
+            });
+            reading(off, json!({"body": body, "ground": ground}))
+        }
     }
 }
 
@@ -493,12 +610,37 @@ fn named_measure(m: &Measure) -> String {
         Measure::Cell { mover, sensor, .. } => {
             format!("step of {mover}'s sensor_enter on {sensor}")
         }
+        Measure::Sag { body, step } => {
+            format!("compression of {body}'s springs after step {step}, m")
+        }
+        Measure::Stop { body, step } => {
+            format!("distance {body} travels from step {step} until it stops, m")
+        }
+        Measure::Speed { body, step } => format!("speed of {body} after step {step}, m/s"),
+        Measure::Circle { body, .. } => {
+            format!("radius of the circle {body}'s rear axle traces over one turn, m")
+        }
+        Measure::Wheels { kind, body, ground } => {
+            format!("time of each of {body}'s wheels' first {kind} with {ground}, s")
+        }
+        Measure::Load { body, from, to } => {
+            format!("contact impulse of {body} per step's length over steps {from} to {to}, N")
+        }
+        Measure::Angle { joint, from } => {
+            format!("coordinate of joint {joint} from step {from} on, deg")
+        }
+        Measure::Carried { body, ground, step } => {
+            format!("distance along the ground of {body} from its place on {ground} after step {step}, m")
+        }
     }
 }
 
 /// Whether a measure in steps is read in seconds (a time) rather than in steps (a count).
 fn in_seconds(m: &Measure) -> bool {
-    matches!(m, Measure::When { .. } | Measure::Wall { .. })
+    matches!(
+        m,
+        Measure::When { .. } | Measure::Wall { .. } | Measure::Wheels { .. }
+    )
 }
 
 fn within(f: &Fixture, m: f64, rate: f64) -> bool {
@@ -532,6 +674,11 @@ fn one(
         .copied()
         .filter(|c| !claims.contains(c))
         .collect();
+    if !missing.is_empty() && planted == Planted::CountsExcludedPassed {
+        row["result"] = json!("pass");
+        row["what"] = json!(format!("{name} passes {}", f.name));
+        return row;
+    }
     if !missing.is_empty() && planted != Planted::RunsExcluded {
         row["result"] = json!("excluded_by_caps");
         row["what"] = json!(format!(
@@ -573,7 +720,7 @@ fn one(
             .clone()
             .filter(|w| !w.is_empty())
             .map_or_else(String::new, |w| format!("; {w}"));
-        let named = ["joint", "hit"]
+        let named = ["joint", "hit", "wheel"]
             .iter()
             .filter_map(|k| r.extra.get(*k)?.as_str().map(|v| format!("; {k} {v}")))
             .collect::<String>();
@@ -611,16 +758,26 @@ pub fn run(new: &dyn Fn() -> Box<dyn Backend>, fixtures: &[Fixture], planted: Pl
                 backend: name,
                 refused,
                 results: Vec::new(),
+                miscounted: Vec::new(),
             };
         }
     }
-    let results = fixtures
+    let results: Vec<Value> = fixtures
         .iter()
         .map(|f| one(new, f, &name, claims, planted))
+        .collect();
+    // #251: a fixture its caps exclude reads excluded_by_caps, never a pass; a report that counts
+    // one as passed is refused, naming it.
+    let miscounted = fixtures
+        .iter()
+        .zip(&results)
+        .filter(|(f, r)| r["result"] == "pass" && f.caps.iter().any(|c| !claims.contains(c)))
+        .map(|(f, _)| f.name.clone())
         .collect();
     Report {
         backend: name,
         refused: Vec::new(),
         results,
+        miscounted,
     }
 }

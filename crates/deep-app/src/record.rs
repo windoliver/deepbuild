@@ -26,6 +26,9 @@ use crate::states::{closes, handle, Table};
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
+/// The hub methods this reader calls, which the app's hello check lists (`hub::NEEDS`); no other module names them.
+pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
+
 /// The events one refetch asks for at a time.
 const PAGE: usize = 1000;
 /// The newest events a view keeps.

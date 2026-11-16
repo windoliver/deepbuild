@@ -1,0 +1,29 @@
+Captured check output; paths redacted.
+
+✖ the unit lane runs each reference-Mac budget file alone, after the parallel block (517.996209ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 605.481041
+
+✖ failing tests:
+
+test at tests/preflight.test.mjs:187:1
+✖ the unit lane runs each reference-Mac budget file alone, after the parallel block (517.996209ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/1017/budgets.test.ts runs in the parallel block
+      at TestContext.<anonymous> (file://<temporary>/deep-1624-proposal-oqcydc1e/tests/preflight.test.mjs:205:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

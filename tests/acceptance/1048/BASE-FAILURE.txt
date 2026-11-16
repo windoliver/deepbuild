@@ -1,0 +1,51 @@
+The suite at the base commit 52aa05fd3 ("Merge pull request #2729 …"), before any implementation, on macOS, with
+`deep-drive` (debug, env-plants), `deep-logic`, #533's assembler and `deep-show` (full) built:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/1048 --testTimeout=600000 --no-file-parallelism --reporter=verbose
+
+Test Files  7 failed (7)
+     Tests  14 failed (14)        (165 s; ac01 and ac02 run again after their named playtests gained a goal: 5 failed, 56 s)
+
+The first failure of each file:
+
+ac01-rules-legal.test.ts > the clean crawler: 50 samples a run, each from a state the run reached, and it passes
+  AssertionError: rules.legal passes on the clean crawler: missing, testsRun 0; failures: [extension host] no loaded
+  extension registered the check kind rules.legal: expected 'missing' to be 'passed'
+  (the wall and descend twins: expected 'missing' to be 'failed'; noturn: a failure starts play.missing: expected
+  undefined to be defined)
+
+ac02-soak.test.ts > passes on the clean crawler; the leak twin fails playtest.soak naming memory and window 18
+  AssertionError: the soak fails on the leak twin: passed, testsRun 1; failures: (none): expected 'passed' to be 'failed'
+  (the base reads no soak: the clean crawler passes, and so does the leak twin)
+
+ac03-model.test.ts > the pit: the model run ends stuck, the requirement fails on it, and its track replays without the
+model to the same stuck step
+  AssertionError: the result lists its runs (runs: [{test, seed, track, outcome, counted}]): {"outcome":"failed",
+  "testsRun":1,"failures":[{"test":"bot 0 run 0",…,"message":"playtest.stuck: bot 0 run 0 (seed 3891719527487659):
+  crawler.turn last moved at step 0, to [0], and was found stuck at step 20; …"}…
+  (the base plays a {model} bot as no bot; the junk test fails on the same stuck at step 20, which idle steps ended:
+  "no stuck failure for the model's run: … expected [ { test: 'bot 0 run 0', … } ] to deeply equal []"; deep: no
+  runs; refused: "the model's run is refused: a failure on bot 0 run 0 starts refused:" undefined)
+
+ac04-layers.test.ts > the explorer reaches the exit in 20 of 20 runs, down the gate and up the teleporter, never back
+through it
+  AssertionError: the playtest passes: failed, testsRun 0; failures: [play] play.missing: grid.cells: map.cells is 512
+  i32, not 256 i32: expected 'failed' to be 'passed'
+  (the planted explorer: Error: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=explorer-ignores-links:
+  {"ready":false,"error":"no planted replica explorer-ignores-links"})
+
+ac05-armor.test.ts > armor 0 traps: logic.edges fails naming armor, 0, the function and offset, its track reproduces
+the trap; the clamped twin passes
+  AssertionError: logic.edges fails on the duel: missing, testsRun 0; failures: [extension host] no loaded extension
+  registered the check kind logic.edges: expected 'missing' to be 'failed'
+
+ac06-text.test.ts > an empty name's trap fails logic.edges, naming the control and the value; 256 bytes into the
+64-byte region are refused at check and never reach a step
+  AssertionError: logic.edges fails on the tag: missing, testsRun 0; failures: [extension host] no loaded extension
+  registered the check kind logic.edges: expected 'missing' to be 'failed'
+
+ac07-registry.test.ts > every control@1 entry declares its edge values and passes the kit's edges part; a planted kind
+with none fails it, named
+  AssertionError: control@1's kit lists the part edges: replay, read_region, keyboard, input: expected [ 'replay',
+  'read_region', …(2) ] to include 'edges'

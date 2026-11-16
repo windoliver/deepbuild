@@ -1,0 +1,41 @@
+Reproduced check false positive before correction: an automatic named file excluded from the serial block passed.
+
+✖ preflight rejects a serial command that excludes the automatic budget file it names (3154.874709ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4964.15325
+
+✖ failing tests:
+
+test at tests/preflight-exclusion.test.mjs:11:1
+✖ preflight rejects a serial command that excludes the automatic budget file it names (3154.874709ms)
+  AssertionError [ERR_ASSERTION]: ✔ the unit lane runs each reference-Mac budget file alone, after the parallel block (8.185916ms)
+  ℹ tests 1
+  ℹ suites 0
+  ℹ pass 1
+  ℹ fail 0
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 1314.005459
+
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file://<checkout>/tests/preflight-exclusion.test.mjs:22:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

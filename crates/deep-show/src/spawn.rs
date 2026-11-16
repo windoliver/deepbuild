@@ -232,6 +232,9 @@ impl Remap {
 /// #204's planted spawns: a synth voice started at the next block, and a stolen voice's filters kept.
 pub(crate) const LATE_VOICE: &str = "spawn_synth_starts_next_block";
 pub(crate) const STEAL_KEEPS_FILTERS: &str = "steal_keeps_filter_state";
+/// #155's planted round robin: a take picked by hash alone, never checked against the level's
+/// previous take.
+pub(crate) const ROUND_ROBIN_HASH_ONLY: &str = "round_robin_by_hash_alone";
 
 /// One planned voice: its spawn, occurrence and index among the spawn's voices, the spawn-local
 /// index of the voice that stole it, its strip and its line in the reply.
@@ -305,6 +308,21 @@ impl Hub<'_> {
                     .ok_or_else(|| bad(format!("spawn {sid}: {k} is a number or an expression"))),
             };
             let (gain, pan, pitch) = (num("gain")?, num("pan")?, num("pitch")?);
+            // #155: the level an occurrence picks, and its voice's length in flicks: a time, or an
+            // expression over the occurrence's fields (such as `end - t`, a stroke's length).
+            let variant = num("variant")?;
+            let voice_span = match sp.get("span") {
+                None => None,
+                Some(v @ Value::String(text)) => match doc::time(d, Some(v)) {
+                    Some(f) => Some(Num::Fixed(f as f64)),
+                    None => Some(Num::Expr(Expr::compile(text, &Nothing, 64).map_err(
+                        |r| bad(format!("spawn {sid}: span `{text}`: {}", r.why)),
+                    )?)),
+                },
+                Some(v) => Some(Num::Fixed(v.as_f64().ok_or_else(|| {
+                    bad(format!("spawn {sid}: span is a time or an expression"))
+                })?)),
+            };
             // A field a row lacks reads as NaN; the planted twin reads an undeclared one as 0.
             let missing = if planted("undeclared_field_reads_zero") {
                 0.0
@@ -350,24 +368,35 @@ impl Hub<'_> {
                         .iter()
                         .all(|k| on.get(*k).is_none_or(|v| r.get(*k) == Some(v)))
             };
-            // Templates and their weights.
-            let entries: Vec<(&Value, f64)> = match sp.get("play") {
+            // Templates, their weights and (#155) the level each is a take of, 1 by default, and
+            // the job and output a generator's take plays (resolved before the plan).
+            let entries: Vec<(&Value, f64, usize)> = match sp.get("play") {
                 Some(Value::Array(a)) => a
                     .iter()
                     .map(|e| {
                         Some((
                             e.get("template")?,
                             e.get("weight").map_or(Some(1.0), Value::as_f64)?,
+                            e.get("level")
+                                .map_or(Some(1), Value::as_u64)
+                                .filter(|l| *l >= 1)? as usize,
                         ))
                     })
                     .collect::<Option<_>>()
                     .ok_or_else(|| bad(format!("spawn {sid}: play")))?,
-                Some(t) => vec![(t, 1.0)],
+                Some(t) => vec![(t, 1.0, 1)],
                 None => return Err(bad(format!("spawn {sid}: play"))),
+            };
+            let played: Vec<Option<(Value, Value)>> = match sp.get("play") {
+                Some(Value::Array(a)) => a
+                    .iter()
+                    .map(|e| Some((e.get("job")?.clone(), e.get("output")?.clone())))
+                    .collect(),
+                _ => vec![None],
             };
             let mut templates = Vec::new();
             let plants = crate::mixdown::synth::Plants::now();
-            for (t, _) in &entries {
+            for (t, ..) in &entries {
                 let time = |k: &str| {
                     doc::time(d, t.get(k))
                         .ok_or_else(|| bad(format!("spawn {sid}: a template's {k}")))
@@ -421,12 +450,25 @@ impl Hub<'_> {
             let pick = match sp.get("pick").and_then(Value::as_str).unwrap_or("weighted") {
                 "weighted" => Pick::Weighted,
                 "no_repeat" => Pick::NoRepeat,
-                p => {
-                    return Err(bad(format!(
-                        "spawn {sid}: pick {p} (by_variant lands with foley@1)"
-                    )))
-                }
+                "by_variant" => Pick::ByVariant,
+                p => return Err(bad(format!("spawn {sid}: pick {p}"))),
             };
+            let round_robin = match sp.get("round_robin").and_then(Value::as_str) {
+                None | Some("hash") => !planted(ROUND_ROBIN_HASH_ONLY),
+                Some("none") => false,
+                Some(r) => return Err(bad(format!("spawn {sid}: round_robin {r}"))),
+            };
+            // Each level's takes, in list order.
+            let mut levels: Vec<Vec<usize>> = Vec::new();
+            for (k, (.., level)) in entries.iter().enumerate() {
+                if levels.len() < *level {
+                    levels.resize(*level, Vec::new());
+                }
+                levels[level - 1].push(k);
+            }
+            if let Some(l) = levels.iter().position(Vec::is_empty) {
+                return Err(bad(format!("spawn {sid}: level {} has no take", l + 1)));
+            }
             let steal = match sp.get("steal").and_then(Value::as_str).unwrap_or("oldest") {
                 "oldest" => Steal::Oldest,
                 "furthest" => Steal::Furthest,
@@ -544,12 +586,27 @@ impl Hub<'_> {
                 let gain = gain
                     .as_ref()
                     .map_or(1.0, |g| 10f64.powf(g.at(r, missing) / 20.0));
+                let level = variant.as_ref().map_or(1, |v| {
+                    let l = v.at(r, missing).round();
+                    if l.is_finite() {
+                        l.max(1.0) as usize
+                    } else {
+                        1
+                    }
+                });
+                let span = voice_span
+                    .as_ref()
+                    .map(|s| s.at(r, missing))
+                    .filter(|s| s.is_finite())
+                    .map(|s| s.round() as i64);
                 occs.push(Occ {
                     t,
                     start,
                     pair: (id("a"), id("b")),
                     gain,
                     distance,
+                    level,
+                    span,
                 });
             }
             let plan = Plan {
@@ -564,6 +621,8 @@ impl Hub<'_> {
                 },
                 max_voices,
                 steal,
+                levels,
+                round_robin,
             };
             let rate_of = |t: &Template| match rate_of_remap {
                 Some(Some((p, q))) if follow => {
@@ -579,7 +638,7 @@ impl Hub<'_> {
             for (n, v) in voices.iter().enumerate() {
                 let t = &templates[v.template];
                 let row = &rows[index[v.occurrence]];
-                let span = v.stop.map_or(length(t), |s| s - v.start);
+                let span = v.stop.map_or(v.length, |s| s - v.start);
                 let emitter = heard(row).map(|source| Emit {
                     id: format!("{sid}.{n}"),
                     distance: distance.unwrap_or(Distance {
@@ -632,6 +691,7 @@ impl Hub<'_> {
                     r#in: t.r#in,
                     out: t.out,
                     rate,
+                    ramp: None,
                     gain: Gain::Db(gain.as_ref().map_or(0.0, |g| g.at(row, missing))),
                     pan: pan.as_ref().map_or(0.0, |p| p.at(row, missing)),
                     fade_in: None,
@@ -651,6 +711,15 @@ impl Hub<'_> {
                 let report = json!({"spawn": sid, "occurrence": index[v.occurrence],
                     "pair": [row.get("a").cloned().unwrap_or(Value::Null), row.get("b").cloned().unwrap_or(Value::Null)],
                     "template": v.template, "start": v.start, "end": v.start + span, "rate": [rate.0, rate.1]});
+                let mut report = report;
+                if let Some(Some((job, output))) = played.get(v.template) {
+                    report["job"] = job.clone();
+                    report["output"] = output.clone();
+                }
+                if pick == Pick::ByVariant {
+                    report["level"] = json!(v.level);
+                    report["take"] = json!(v.take + 1);
+                }
                 all.push(Planned {
                     spawn: sid.clone(),
                     occurrence: index[v.occurrence],

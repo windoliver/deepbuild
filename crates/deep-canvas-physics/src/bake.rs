@@ -172,3 +172,62 @@ pub fn outputs(
     }
     json!({"frame_rate": frame_rate, "frames": times.len(), "hash": sha256_hex(&bytes), "series": series})
 }
+
+/// #251: each wheel output's samples at the document's frames into `outputs`' series, and their
+/// bytes into its hash. `wheels[id][s]` is output `id`'s reading after step s: a pose's seven
+/// numbers (position, then rotation `[x, y, z, w]`) or a contact count's one. Frame j at t = j ×
+/// `frame` flicks, step s = ⌊t ÷ `step`⌋ and α = (t − s × `step`) ÷ `step`: a pose lerps its
+/// position and nlerps its rotation, the shorter way round, toward step s + 1 by α, written `{pos,
+/// rot}`; a contact count holds step s's.
+pub fn wheel_series(
+    outputs: &mut Value,
+    wheels: &BTreeMap<String, Vec<Vec<f64>>>,
+    frame: i64,
+    step: i64,
+) {
+    if wheels.is_empty() {
+        return;
+    }
+    let mut bytes = outputs["hash"]
+        .as_str()
+        .unwrap_or_default()
+        .as_bytes()
+        .to_vec();
+    for (id, at) in wheels {
+        let span = (at.len() as i64 - 1).saturating_mul(step);
+        let mut values = Vec::new();
+        for t in (0..)
+            .map(|j: i64| j.saturating_mul(frame))
+            .take_while(|t| *t <= span)
+        {
+            let (s, rem) = ((t / step) as usize, t % step);
+            let a = &at[s];
+            let v: Vec<f64> = if a.len() != 7 || rem == 0 {
+                a.clone()
+            } else {
+                let b = &at[s + 1];
+                let alpha = rem as f64 / step as f64;
+                let sign = if (3..7).map(|i| a[i] * b[i]).sum::<f64>() < 0.0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                let mut v: Vec<f64> = (0..7)
+                    .map(|i| a[i] + alpha * (if i < 3 { b[i] } else { sign * b[i] } - a[i]))
+                    .collect();
+                let n = deep_canvas::ops::sqrt((3..7).map(|i| v[i] * v[i]).sum());
+                (3..7).for_each(|i| v[i] /= n);
+                v
+            };
+            for x in &v {
+                bytes.extend_from_slice(&x.to_bits().to_le_bytes());
+            }
+            values.push(match v.as_slice() {
+                [c] => json!(c),
+                _ => json!({"pos": &v[..3], "rot": &v[3..]}),
+            });
+        }
+        outputs["series"][id] = Value::Array(values);
+    }
+    outputs["hash"] = json!(sha256_hex(&bytes));
+}

@@ -63,6 +63,9 @@ lane stops with `BLOCKED: … run npm ci and npm run build --workspaces`.
 - **The open issues come from a fake `gh` first on `PATH`, as in #605.** It answers
   `gh issue list … --json <fields>` from a fixture list. It honours `--limit`/`-L` and returns 30 without
   one. It also answers `gh auth status` and `gh --version`, and fails anything else. Every call is logged.
+  It also brings its own list of names that aren't event kinds (#2063, a redraft): it replaces the copy's
+  `scripts/not-event-kinds.txt` with an empty one, because the checkout's list names real issues that this
+  tracker doesn't hold, and the drift lane beside the links lane would fail each entry as stale.
 - **The fixture is 40 open issues, #9640 down to #9601, newest first.** Each clean body links one real
   heading by its full blob URL, as issues do:
   `https://github.com/windoliver/deepbuild/blob/main/docs/<file>.md#<slug>`. Every fourth also links

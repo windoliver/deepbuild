@@ -1,0 +1,102 @@
+Base commit: 3557b3489 ("Merge pull request #2626 from windoliver/worktree-github-issue-968-e176a1")
+Machine: macOS on Apple silicon (Mac17,10, Apple M5 Max, 18 cores), the shared Mac this job ran on; one-minute load
+         280 to 570 throughout, so no timing could be judged here.
+Build: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+       CARGO_PROFILE_DEV_DEBUG=0, the pinned 1.99.1 toolchain, through scripts/lease: exit 0 after 3,548 s (59 min) under
+       that load. deep-gpu was not built here (another build of about that length); its files' lines below are read
+       from the code, not observed. npm ci once (node_modules was missing).
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1636
+         ac1-same-hash ac2-pipe-model ac3-frames ac4-no-overlap ac6-leaves --no-file-parallelism --testTimeout=600000
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1636/tsconfig.json passes (exit 0, no output).
+
+OBSERVED (one run of the final files that build deep-show only): Test Files 5 failed (5), Tests 10 failed (10), 148 s.
+Every test fails at an assertion in its own file; none at a load error. The base presents every fixture document with
+only the tree items skipped: each `tree@1` item gets the notice
+  {"code":"unknown_kind","severity":"notice","ids":["tree"],"path":"items/tree/kind","actual":"tree@1",
+   "what":"kind `tree@1` is not registered in this build; the item is skipped","close":[{"name":"tube@1"}]}
+and nothing else is raised (the envelope, the materials map, the scenario's `threads` and `claims` are accepted).
+
+ac1-same-hash.test.ts
+  AC1 #1636.d6af27c1 with 1, 4 and 8 threads the fixture builds the same vertex hash ...
+    AssertionError: the fixture tree on macOS arm64 with 1 threads is presented: an item is skipped: {"code":
+    "unknown_kind", ... "actual":"tree@1" ...}: expected [ Array(1) ] to deeply equal []
+  AC1 #1636.d6af27c1 macOS arm64 and Linux x86_64 build the same vertex hash ...
+    AssertionError: the fixture tree on macOS arm64 with 4 threads is presented: an item is skipped: ... unknown_kind
+    ... tree@1 ...: expected [ Array(1) ] to deeply equal []
+    (the Mac half fails before Docker is touched; Docker 29.5.2 answers here and the pinned rust:1.99.1-bookworm image
+    is present, but the build image deepbuild-acceptance-1636-linux:1.99.1 is not, so on a Mac half that passes this
+    test would read BLOCKED with the one-time `docker build` of the README; not reached here)
+
+ac2-pipe-model.test.ts
+  AC2 #1636.92e93acb at every fork of the 4-level fixture ...
+    AssertionError: the two fixture trees is presented: an item is skipped: ... "ids":["e2"] ... tree@1 ...; an item is
+    skipped: ... "ids":["e3"] ...: expected [ …(2) ] to deeply equal []
+  AC2 #1636.92e93acb the planted tree_child_keeps_parent_radius fails, naming each fork
+    AssertionError: deep-show run accepted the scenario (its planted program is tree_child_keeps_parent_radius):
+    {"ok":false,"code":"bad_input"}: expected false to be true
+    (the base doesn't know the planted name)
+
+ac3-frames.test.ts
+  AC3 #1636.1bc36a69 along each branch of the fixture the frame turns ... by no more than roll 30° + 0.5° ...
+    AssertionError: the fixture tree is presented: an item is skipped: ... unknown_kind ... tree@1 ...
+  AC3 #1636.1bc36a69 the planted tree_curvature_frames flips at an inflection ...
+    AssertionError: the fixture tree is presented: an item is skipped: ... unknown_kind ... tree@1 ...
+    (it builds the shipped fixture first, for its inflections; the plant's own run would fail as AC2's does, on
+    bad_input)
+
+ac4-no-overlap.test.ts
+  AC4 #1636.da99f8e9 over seeds 1 to 20 the geometry audit ... finds no two branches overlapping ...
+    AssertionError: 20 trees is presented: an item is skipped: ... "ids":["tree-s01"] ... (20 such notices) ...:
+    expected [ …(20) ] to deeply equal []
+  AC4 #1636.da99f8e9 the trap: two trees whose trunks rise from one point ...
+    AssertionError: 2 trees is presented: an item is skipped: ... "ids":["a"] ...; ... "ids":["b"] ...: expected
+    [ …(2) ] to deeply equal []
+
+ac6-leaves.test.ts
+  AC6 #1636.0863f261 leaves {per_twig: 6} places exactly 6 cards on each twig ...
+    AssertionError: the fixture tree is presented: an item is skipped: ... unknown_kind ... tree@1 ...
+  AC6 #1636.0863f261 the card count is part of the vertex bound computed before the build
+    AssertionError: the trees with 6 and 3 cards a twig is presented: an item is skipped: ... "ids":["six"] ...;
+    ... "ids":["three"] ...: expected [ …(2) ] to deeply equal []
+
+READ, NOT OBSERVED (these files also build deep-gpu, which wasn't built here; what each test meets first at the base,
+from the code and from the deep-show run above):
+
+ac5-wind.test.ts
+  AC5 #1636.03118491 wind reads 0 at the trunk base and 1 at the farthest tip ...
+    fails at "the fixture tree is presented: an item is skipped: ... unknown_kind ... tree@1" (deep-show, as above).
+  AC5 #1636.03118491 under sway {weight: wind, amount: 0.3 m} ...
+    fails at the same assertion: it reads the tree's rings from deep-show before it draws anything.
+
+ac7-levels.test.ts
+  Both tests first build the fixture in deep-show and fail at "the fixture tree is presented: ... unknown_kind ...".
+  Past that, the base's `simplify` (crates/deep-gpu-layer/src/simplify.rs) requires `asset` and answers
+  {"code":"bad_input","reason":"asset is a path"} to a call naming `doc` and `item`, which fails "simplify answered,
+  not refused".
+
+ac8-budget.test.ts
+  AC8 #1636.2d5eb798 10,000 instances of 8 seeded variants draw in one instanced draw per (variant, material)
+    fails at the forest's view3d: either a refusal of the document ("view3d is answered, not refused") or, with the
+    tree prototypes skipped as at deep-show, a frame with no `draws` field ("the frame's draws ... is an array, got
+    undefined"); view3d's `counts` at the base report `encoded`, `indirect_draws` and the other counters, no `draws`.
+  AC8 #1636.2d5eb798 a 4-level tree of about 20,000 triangles builds in under 20 ms ...
+    fails at its first assertion, "benchmarks/budgets.json has the task canvas-tree: expected undefined to be
+    defined" (the base's budgets.json has no such task; read with git show 3557b3489:benchmarks/budgets.json).
+
+ac9-taste.test.ts
+  AC9 #1636.3cc39a14 the run writes 8 seeded variants and 10 s of the fixture tree under sway ...
+    fails either at view3d refusing a document with an unknown kind, or, if the base draws the ground with the trees
+    skipped, at "INCONCLUSIVE: no taste call is recorded" (no TASTE.json); either way an assertion, never a pass. Not
+    run here, so docs/evidence/1636/ was never written.
+
+Also run, then deleted (not kept): a scratch vitest file in this folder that ran the judges in helpers.ts on synthetic
+trees built in test code: a fork whose children follow the pipe model passes pipeFailures at exponents 2 and 3, and
+children at their parent's radius fail it naming `fork f0` (200% apart); rotation-minimizing rings along a 3D S curve
+turn under 1e-13° between rings, the same curve's curvature frames turn by 180.0° at ring 6, where inflections() finds
+the reversal, and an arc bent one way has none; three siblings leaving at 40° overlap nowhere outside 1.5 parent radii
+of their fork, the same at 0° overlap (112 mm, named `t#b1 and t#b2` etc.), and two trees at one place name `a#b0 and
+b#b0`; a plane cut at a trunk's middle reads its radius within 3%; farthestTip, vertexHash and cardFailures behave on
+their sets. It proves the judges can fail, not the criteria.
+
+Studied-name check: scripts/public-text.mjs's own rule (its salted list) over every file of this folder and the commit
+message: 0 findings.
