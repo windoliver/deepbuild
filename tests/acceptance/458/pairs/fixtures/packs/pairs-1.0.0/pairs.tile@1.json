@@ -1,0 +1,56 @@
+{
+  "id": "pairs.tile",
+  "version": "1.0",
+  "title": "Tile",
+  "license": "MIT",
+  "author": "the #458 acceptance suite, pairs group",
+  "description": "A stroked rim 40 units square and a bar 48 by 8 units to its right. The two don't touch.",
+  "inputs": {
+    "bar": {
+      "type": "number",
+      "default": 48,
+      "min": 8,
+      "max": 96,
+      "about": "the bar's length"
+    }
+  },
+  "steps": {
+    "rim": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [0, 0, 40, 40],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          },
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        }
+      },
+      "at": {
+        "pos": [0, 0, 0]
+      }
+    },
+    "bar": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [0, 0, "bar", 8],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [56, 16, 0]
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["rim", "bar"]
+  }
+}

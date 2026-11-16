@@ -1,0 +1,40 @@
+{
+  "name": "pairs",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A 2D test pack of the #458 acceptance suite's pairs group: the recipe pairs.badge@1, and the kind pairs.tile@1 backed by a recipe of its own. Needs no 3D canvas module.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "pairs.badge@1": "pairs.badge@1.json",
+    "pairs.tile@1": "pairs.tile@1.json"
+  },
+  "kinds": {
+    "pairs.tile@1": {
+      "minor": 0,
+      "recipe": "pairs.tile@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {},
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 2
+        }
+      }
+    }
+  },
+  "assets": []
+}

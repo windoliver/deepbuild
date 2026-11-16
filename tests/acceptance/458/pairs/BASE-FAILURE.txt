@@ -1,0 +1,184 @@
+Base failure of the #458 acceptance tests, pairs group (criteria 7, 9 and 11)
+
+Base: 06e231702 ("Merge pull request #2735 …"), macOS arm64 with a Metal GPU and Google Chrome, Node 24.22.0, cargo 1.99.1.
+The checkout's path is written <checkout>; the uncommitted copy of this folder used for run 2 is <copy>.
+
+How each test fails at the base
+-------------------------------
+
+  pairs.test.ts      AC7   the honest pairs pass; the scenario's planted "expansion_drops_stroke" answers bad_input
+  generated.test.ts  AC9   documents: the honest steps pass; --planted gpu_layer_multiply_as_screen answers bad_input
+                           programs:  the honest steps pass; --planted rewrite_rotl_as_rotr answers bad_input
+  instances.test.ts  AC11  view3d refuses the target velocity: bad_input, "targets are final, linear, ids, …"
+
+Every first failure is an assertion on a binary's answer to a plant or a target the base lacks; none is an error in the
+test's own code.
+
+What was run
+------------
+
+1. NOT MADE: the committed files through their own `cargo build`. The four blind jobs share one target folder from four
+   checkouts, so each job's `cargo build` rebuilds every workspace crate for its own path and waits for the others';
+   under a load average above 100 the queue did not reach this suite's builds in reasonable time. One run of
+   instances.test.ts was started, waited about ten minutes for cargo's lock without building, and was stopped. The
+   type-check (`npx tsc -p tests/acceptance/458/pairs/tsconfig.json`) was made and passes.
+
+2. MADE: the same test files, unchanged, against the base's binaries built once. In an uncommitted copy of this folder
+   only helpers.ts's `build` differs: it runs no cargo and copies the binaries the shared target folder held, each
+   built at the base commit: `deep-show` (default features, which are `full`) and `deep-gpu` by the build this job's
+   brief says was under way there, taken as it stated and not checked further, and `deep-sandbox` by this checkout's
+   own `cargo build --locked --bin deep-sandbox`. One run per file; the output is below.
+
+3. MADE, to show the rest of each test is right as far as the base allows: the same copy with each planted step stood
+   in for in test code (never committed, and no stand-in for a right program's planted name):
+   - pairs.test.ts with the planted run's side a replaced by the hand-written expansion less one pip's stroke: the
+     whole test passes at the base (1 passed, 114 s): the three drawn pairs are equal bit for bit with the golden store
+     left empty, the stand-in fails recipe-expansion on the top-left pixel of that pip's stroke with every differing
+     pixel on its stroke, seek-play's hashes agree at the 5 times and differ between them, and gpui-gpu-layer passes
+     #385's oracle.
+   - generated.test.ts, documents, with the planted run's GPU side of the figure that multiplies replaced by Vello
+     CPU's drawing of the same figure in screen: the whole test passes at the base (155 s): a patch split in two leaves
+     the same items, all 24 renderings are identical on Vello CPU and the GPU layer, the stand-in fails only seed 45802
+     with its first pixel inside the group's rect, and the 2 films, as generated and transformed, read the same
+     evaluated data in the app and in headless Chrome's web player at the 3 times.
+   - generated.test.ts, programs, with the planted run handed the rotating program with i64.rotr in i64.rotl's place:
+     the whole test passes at the base (19 s): the 6 programs pass the subset's check, the rewrite on wasmtime gives
+     what each program as written gives, the stand-in fails only seed 45804, and the web runner in headless Chrome
+     gives wasmtime's results.
+   - instances.test.ts with the velocity target left out: the ID, normal and depth targets of the 25 instances and the
+     25 items are identical at all 10 sampled times at the base (pick IDs 1 to 25 on both sides), and the test then
+     fails at --planted instanced_skips_velocity with bad_input. The velocity target itself can't be read at the base.
+
+Run 2's output
+--------------
+
+$ npx vitest run --root tests/acceptance/458/<copy> pairs.test.ts --no-file-parallelism --testTimeout=600000
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/<copy>
+
+ ❯ pairs.test.ts (1 test | 1 failed) 21927ms
+   ❯ AC7 #458.89f8a711 pairs that must draw the same, with no golden (1)
+     × AC7 #458.89f8a711 the five pairs draw the same, bit for bit on one backend and within the tolerance class across two; a planted expansion that drops one item's stroke fails its pair, naming the pair and the first pixel 18854ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  pairs.test.ts > AC7 #458.89f8a711 pairs that must draw the same, with no golden > AC7 #458.89f8a711 the five pairs draw the same, bit for bit on one backend and within the tolerance class across two; a planted expansion that drops one item's stroke fails its pair, naming the pair and the first pixel
+AssertionError: deep-show run, the pairs drawn by Vello CPU (planted expansion_drops_stroke): the scenario is answered ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scenarioReplies helpers.ts:134:79
+    132|   expect(s.lines.length, `${what}: one answer line; exit ${String(s.st…
+    133|   const out = obj(s.lines[0], `${what}: the answer`);
+    134|   expect(out['ok'], `${what}: the scenario is answered ok; got ${show(…
+       |                                                                               ^
+    135|   expect(s.status, `${what}: exits 0 (${s.signal ?? 'no signal'}); std…
+    136|   const replies = arr(out['replies'], `${what}: replies`).map((r, i) =…
+ ❯ runShow helpers.ts:143:10
+ ❯ drawn pairs.test.ts:39:19
+ ❯ pairs.test.ts:69:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:06:54
+   Duration  25.08s (tests 97%, import 2%, transform 1%, worker 1%)
+
+
+$ npx vitest run --root tests/acceptance/458/<copy> generated.test.ts --no-file-parallelism --testTimeout=600000
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/<copy>
+
+ ❯ generated.test.ts (2 tests | 2 failed) 45353ms
+   ❯ AC9 #458.4ebd041e generated documents and programs across each pair of implementations (2)
+     × AC9 #458.4ebd041e generated documents, as generated and transformed, draw the same on Vello CPU and the GPU layer and evaluate the same in the app and the web player; a planted GPU-layer blend fails, naming its seed and the first pixel 33818ms
+     × AC9 #458.4ebd041e generated programs give the same result from the sandbox's rewrite and the original, and on wasmtime and in the browser's engine; a planted rewrite that changes one result fails, naming the program's seed 10174ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  generated.test.ts > AC9 #458.4ebd041e generated documents and programs across each pair of implementations > AC9 #458.4ebd041e generated documents, as generated and transformed, draw the same on Vello CPU and the GPU layer and evaluate the same in the app and the web player; a planted GPU-layer blend fails, naming its seed and the first pixel
+AssertionError: deep-gpu run --planted gpu_layer_multiply_as_screen, the generated figures by Vello CPU and by the GPU layer: the scenario is answered ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ scenarioReplies helpers.ts:134:79
+    132|   expect(s.lines.length, `${what}: one answer line; exit ${String(s.st…
+    133|   const out = obj(s.lines[0], `${what}: the answer`);
+    134|   expect(out['ok'], `${what}: the scenario is answered ok; got ${show(…
+       |                                                                               ^
+    135|   expect(s.status, `${what}: exits 0 (${s.signal ?? 'no signal'}); std…
+    136|   const replies = arr(out['replies'], `${what}: replies`).map((r, i) =…
+ ❯ runGpu helpers.ts:147:10
+ ❯ drawLayers generated.test.ts:94:19
+ ❯ generated.test.ts:223:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  generated.test.ts > AC9 #458.4ebd041e generated documents and programs across each pair of implementations > AC9 #458.4ebd041e generated programs give the same result from the sandbox's rewrite and the original, and on wasmtime and in the browser's engine; a planted rewrite that changes one result fails, naming the program's seed
+AssertionError: deep-sandbox --planted rewrite_rotl_as_rotr, the generated programs: answered {"ok":false,"code":"bad_input"} (exit 2)
+ ❯ runSandbox helpers.ts:154:89
+    152|   const s = start(bin, planted ? ['--planted', planted] : [], calls);
+    153|   const first = s.lines[0];
+    154|   if (isObject(first) && first['ok'] === false && first['code'] === 'b…
+       |                                                                                         ^
+    155|   expect(s.status, `${tag}: exits 0 (${s.signal ?? 'no signal'}); stdo…
+    156|   expect(s.lines.length, `${tag}: one answer per call`).toBe(calls.len…
+ ❯ onWasmtime generated.test.ts:181:19
+ ❯ generated.test.ts:263:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:08:12
+   Duration  47.95s (tests 99%)
+
+
+$ npx vitest run --root tests/acceptance/458/<copy> instances.test.ts --no-file-parallelism --testTimeout=600000
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/<copy>
+
+ ❯ instances.test.ts (1 test | 1 failed) 5677ms
+   ❯ AC11 #458.0b2667d3 25 instances and the same 25 as separate items, target by target (1)
+     × AC11 #458.0b2667d3 equal ID, normal, depth and velocity targets, bit for bit, at 10 sampled times; a planted instanced path that leaves the instances out of the velocity pass keeps the final frame's hash and fails, naming the target and the first pixel 5238ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  instances.test.ts > AC11 #458.0b2667d3 25 instances and the same 25 as separate items, target by target > AC11 #458.0b2667d3 equal ID, normal, depth and velocity targets, bit for bit, at 10 sampled times; a planted instanced path that leaves the instances out of the velocity pass keeps the final frame's hash and fails, naming the target and the first pixel
+AssertionError: the fleet as instances: view3d draws it with the targets final, ids, normal, depth, velocity; it answered {"code":"bad_input","reason":"targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear and checks"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ samples instances.test.ts:44:151
+     42|   const replies = runGpu(bin('deep-gpu'), out, [call('instances'), cal…
+     43|   const samples = (reply: JsonObject, as: string): Sample[] => {
+     44|     expect(reply['code'], `the fleet as ${as}: view3d draws it with th…
+       |                                                                                                                                                       ^
+     45|     const frames = arr(reply['frames'], `the fleet as ${as}: frames`).…
+     46|     return FLEET.sampled.map((n) => {
+ ❯ draw instances.test.ts:58:23
+ ❯ instances.test.ts:79:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:09:14
+   Duration  14.88s (tests 99%)
+
