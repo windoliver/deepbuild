@@ -42,6 +42,8 @@ mod input;
 mod jobs;
 mod kept;
 mod kinds;
+mod kinds_word;
+mod math_twins;
 mod kit;
 mod lengths;
 mod logic;
@@ -1337,7 +1339,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let pack_planted = input
         .get("planted")
         .and_then(Value::as_str)
-        .filter(|p| familiar::PLANTED.contains(p))
+        .filter(|p| familiar::PLANTED.contains(p) || math_twins::PLANTED.contains(p))
         .map(str::to_string);
     let planted = match input.get("planted").map(Value::as_str) {
         None => None,

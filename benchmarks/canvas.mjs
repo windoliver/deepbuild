@@ -1101,13 +1101,14 @@ const EFFICIENCY = {
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-surface': { rebuild_128_ms: (r) => r.rebuild_128_ms },
+  'canvas-math': { math_over_hand: (r) => r.math_over_hand, frame_expansions: (r) => r.frame_expansions },
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
   // #548: each reading by its own name (benchmarks/logic-budgets.mjs).
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'frame_expansions']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1652,6 +1653,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
+workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 
 const task = process.argv[2];

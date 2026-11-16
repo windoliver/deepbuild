@@ -1032,7 +1032,7 @@ impl Hub<'_> {
         match op {
             "list" => self.kinds_list(text("registry"), cursor),
             "word" => match text("word") {
-                Some(w) => self.kinds_word(w),
+                Some(w) => crate::kinds_word::answer(&self.packs.all().collect::<Vec<_>>(), w),
                 None => refused(
                     "required",
                     "/word",
@@ -1261,22 +1261,6 @@ impl Hub<'_> {
             })
             .collect();
         Value::Array(packs)
-    }
-
-    /// A word from a familiar-names pack installed here: the kind it maps to and the conversion
-    /// the pack states, or `no_match`; never a mapping by spelling.
-    fn kinds_word(&self, word: &str) -> Value {
-        for p in self.packs.all() {
-            if let Some(alias) = p.aliases.get(word) {
-                let mut out = json!({"word": word, "target": alias["target"],
-                                     "conversion": alias["conversion"], "pack": p.id.text()});
-                if let Some(old) = alias.get("renamed_from") {
-                    out["renamed_from"] = old.clone();
-                }
-                return out;
-            }
-        }
-        json!({"word": word, "code": "no_match"})
     }
 
     /// Hits for every word of `query`, best first: the gallery's examples, the guides, then the

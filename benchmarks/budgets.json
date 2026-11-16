@@ -1712,6 +1712,24 @@
       "criteria": [
         "#463.7c8d3f4b"
       ]
+    },
+    {
+      "id": "canvas-math",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "math"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "math_over_hand": 1.05,
+        "frame_expansions": 0
+      },
+      "initialReason": "Issue #233 first measurement (#233.f4f81b7b): the merge base has no math@1 pack. A release deep-gpu draws criterion 11's math@1 document (math.axes on x [-3, 3] and y [0, 9] over 8 x 5 units, x squared plotted on them, and a square a channel moves) and the same document's expansion written by hand, each under frame_budget at 1920 x 1080 for 5 s at 60 fps in look clean, in alternating order, one warm-up and five runs; a release deep-show evaluates the math document at 0.55 s and counts the nodes that ran for an instance itself. canvas.mjs judge holds the math document's median GPU p95 to 1.05 x the hand-written one's (math_over_hand) and the instance nodes to 0 (frame_expansions, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#233.f4f81b7b"
+      ]
     }
   ]
 }
