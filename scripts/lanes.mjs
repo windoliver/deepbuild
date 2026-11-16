@@ -816,6 +816,9 @@ timed.push('tests/acceptance/2516/timing.test.ts');
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+// #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
+alone.push('tests/acceptance/2031/');
+timed.push('tests/acceptance/2031/ac8-budget.test.ts');
 
 /**
  * #1830: since #1555 judgeLimit reads INCONCLUSIVE when a call gives no loads, so these files' timing criteria read
