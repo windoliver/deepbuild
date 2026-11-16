@@ -14,6 +14,6 @@ source, load, thermal state and free disk.
     BLOCKED: release-pack found no zig on the Mac to link deep-hook for linux-x64. Main's run on the same Mac is due
     in round 22x.
 - Part 7, the judge: BLOCKED, on battery at its start; not run.
-- Part 8: SCREENSHOT-CHECK.md. All four pictures MATCH their logs.
+- Part 8: two independent checks. SCREENSHOT-CHECK.md (an agent on the Spark) and SCREENSHOT-CHECK-mac.md (an agent on the Mac, which also covers 22v's two pictures). Both find every picture MATCHes its log.
 
 Still open, for round 22x on AC: 1349 at main side by side, 319 budgets, and the judge.
