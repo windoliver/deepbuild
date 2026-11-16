@@ -68,6 +68,11 @@ pub struct Counts {
     pub counts_read_back: u32,
     /// Each indirect draw this frame: its instancer, its view and its batch (#484).
     pub indirect: Vec<(String, String, String)>,
+    /// #1636: each draw of a mesh the color pass issues this frame, as its layer's `draw_names`
+    /// name its first record: the item it draws for (an instancer, for its elements), the item
+    /// whose mesh it draws, its material's ID ("" for none), and the instances it draws (an
+    /// indirect draw: the records its cull reads).
+    pub draws: Vec<(String, String, String, u32)>,
     pub meshes_built: u32,
     /// The lights the light policy left out of this frame's view, by ID (#421).
     pub lights_left_out: Vec<String>,

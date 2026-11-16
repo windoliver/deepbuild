@@ -663,7 +663,7 @@ pub(super) fn cut(segments: &[Segment], s0: f64, s1: f64) -> Vec<Segment> {
 }
 
 /// A builder's or building kind's mesh after its stack, or why it can't be built.
-pub(crate) fn mesh_of(
+pub fn mesh_of(
     doc: &Value,
     id: &str,
     item: &Value,
@@ -794,4 +794,60 @@ pub(super) fn edge_line(
         trail: None,
         points: Vec::new(),
     })
+}
+
+/// A drawing look's key: its `dir` around the page, and its `elevation` toward the viewer.
+pub(super) fn drawn_light(look: &Look3) -> Option<Sun> {
+    let l = look.drawn.as_ref()?.light.as_ref()?;
+    let (dir, up) = (
+        deep_canvas::ops::rad(l.dir),
+        deep_canvas::ops::rad(l.elevation),
+    );
+    let (c, s) = (deep_canvas::ops::cos(up), deep_canvas::ops::sin(up));
+    Some(Sun {
+        id: "look.light".into(),
+        toward: [
+            c * deep_canvas::ops::cos(dir),
+            c * deep_canvas::ops::sin(dir),
+            s,
+        ],
+        illuminance: std::f64::consts::PI,
+        shadow: l.cast.is_some(),
+        cascades: Cascades::default(),
+    })
+}
+
+/// The u a drawn look's sizes span on a surface, a metre.
+pub(super) const U_PER_METER: f64 = 300.0;
+
+/// `points` split finely enough to carry a line profile, with its width multiplier at each.
+pub(super) fn profiled_points(
+    points: &[Vec3],
+    p: &deep_canvas_drawn::spec::Profile,
+) -> (Vec<Vec3>, Vec<f64>) {
+    const PIECES: usize = 16;
+    let mut fine = Vec::new();
+    for pair in points.windows(2) {
+        for k in 0..PIECES {
+            let t = k as f64 / PIECES as f64;
+            fine.push([0, 1, 2].map(|i| pair[0][i] + (pair[1][i] - pair[0][i]) * t));
+        }
+    }
+    fine.extend(points.last());
+    let mut s = vec![0.0];
+    for pair in fine.windows(2) {
+        let d = [0, 1, 2].map(|i| pair[1][i] - pair[0][i]);
+        s.push(s[s.len() - 1] + deep_canvas::ops::hypot(deep_canvas::ops::hypot(d[0], d[1]), d[2]));
+    }
+    let total = s.last().copied().unwrap_or(0.0).max(1e-9);
+    // A profile's flick is in u, and this line's arc length in metres.
+    let metres = deep_canvas_drawn::spec::Profile {
+        flick: p.flick / U_PER_METER,
+        ..p.clone()
+    };
+    let widths = s
+        .iter()
+        .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
+        .collect();
+    (fine, widths)
 }

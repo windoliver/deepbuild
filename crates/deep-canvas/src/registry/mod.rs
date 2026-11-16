@@ -156,6 +156,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("display", "scene3d"),
     ("hull", "scene3d"),
     ("surface", "scene3d"),
+    // #1636: trees from a seed.
+    ("tree", "scene3d"),
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),

@@ -12,8 +12,8 @@ use super::{data, join, Body, Reader, Refusal};
 pub const INPUTS_LATER: &str = "#2371";
 
 /// The input kinds this backend interface runs, each with its fields and their defaults; #191
-/// runs `deactivate`, which the behavior kit's sensor fixture needs.
-const KINDS: [(&str, &[(&str, Field)]); 6] = [
+/// runs `deactivate`, which the behavior kit's sensor fixture needs; #251 a vehicle body's.
+const KINDS: [(&str, &[(&str, Field)]); 10] = [
     (
         "grab",
         &[
@@ -44,17 +44,21 @@ const KINDS: [(&str, &[(&str, Field)]); 6] = [
     ),
     ("release", &[("keeps_velocity", Field::Bool(true))]),
     ("deactivate", &[]),
+    ("drive", &[("force", Field::Num(0.0, f64::MIN))]),
+    ("steer", &[("angle", Field::Num(0.0, f64::MIN))]),
+    ("brake", &[("force", Field::Num(0.0, 0.0))]),
+    ("place", &[("pose", Field::Pose)]),
 ];
 
+/// #251: the kinds only a vehicle body takes.
+pub const VEHICLE_INPUTS: [&str; 4] = ["drive", "steer", "brake", "place"];
+
 /// The kinds and fields the design gives that wait on `INPUTS_LATER` or the issue named.
-const LATER: [(&str, &str); 10] = [
+const LATER: [(&str, &str); 7] = [
     ("set", INPUTS_LATER),
     ("activate", INPUTS_LATER),
     ("blast", INPUTS_LATER),
     ("jump", "#182"),
-    ("drive", "#251"),
-    ("steer", "#251"),
-    ("brake", "#251"),
     ("poke.address", INPUTS_LATER),
     ("poke.radius", INPUTS_LATER),
     ("poke.falloff", INPUTS_LATER),
@@ -71,6 +75,8 @@ enum Field {
     /// Where a launch places its body first (#540): a position `[x, y, z]`, a pose `{pos, rot}`,
     /// or `pose`, the pose its `from.pos` and `from.rot` data fields give; none by default.
     From,
+    /// #251: where a place puts its body, a pose `{pos, rot}`.
+    Pose,
 }
 
 /// The issue that brings a launch from a body's anchor.
@@ -182,17 +188,10 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
                 }))
             }
             Value::Array(_) => three(v),
-            Value::Object(o) => {
-                o.keys().all(|k| k == "pos" || k == "rot")
-                    && o.get("pos").is_none_or(three)
-                    && o.get("rot").is_none_or(|r| {
-                        r.as_array().is_some_and(|a| {
-                            (3..=4).contains(&a.len()) && a.iter().all(|x| x.as_f64().is_some())
-                        })
-                    })
-            }
+            Value::Object(_) => pose(v),
             _ => false,
         },
+        Field::Pose => pose(v),
     };
     if ok {
         Ok(v.clone())
@@ -203,9 +202,23 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
             Field::Bool(_) => "true or false".into(),
             Field::Plane => "view, ground or {normal: vec3}".into(),
             Field::From => "a position [x, y, z], a pose {pos, rot} or pose".into(),
+            Field::Pose => "a pose {pos, rot}".into(),
         };
         Err(bad(path.into(), v, format!("{path} must be {want}")))
     }
+}
+
+/// Whether `v` is a pose `{pos, rot}`: three numbers and a quaternion or degrees, either absent.
+fn pose(v: &Value) -> bool {
+    v.as_object().is_some_and(|o| {
+        o.keys().all(|k| k == "pos" || k == "rot")
+            && o.get("pos").is_none_or(three)
+            && o.get("rot").is_none_or(|r| {
+                r.as_array().is_some_and(|a| {
+                    (3..=4).contains(&a.len()) && a.iter().all(|x| x.as_f64().is_some())
+                })
+            })
+    })
 }
 
 /// Whether `v` is three finite numbers.
@@ -234,14 +247,14 @@ fn own(kind: &str) -> Map<String, Value> {
     fields
         .iter()
         .filter(|(n, _)| !matches!(*n, "point" | "impulse" | "push") || kind == "grab")
-        .filter(|(n, _)| *n != "from")
+        .filter(|(n, _)| *n != "from" && *n != "pose")
         .map(|(n, f)| {
             let v = match f {
                 Field::Num(d, _) => json!(d),
                 Field::Vec3(d) => json!(d),
                 Field::Bool(b) => json!(b),
                 Field::Plane => json!("view"),
-                Field::From => Value::Null,
+                Field::From | Field::Pose => Value::Null,
             };
             ((*n).to_string(), v)
         })
@@ -373,6 +386,10 @@ impl Reader {
                 .enumerate()
             {
                 match t.as_str().filter(|n| bodies.contains_key(*n)) {
+                    Some(n) if VEHICLE_INPUTS.contains(&kind) && bodies[n].vehicle.is_none() => {
+                        let what = format!("{kind} moves a vehicle body, and {n} isn't one");
+                        self.refuse("out_of_range", format!("{p}/targets/{i}"), t, what);
+                    }
                     Some(n) => targets.push(n.to_string()),
                     None => self.refuse(
                         "ref_unresolved",

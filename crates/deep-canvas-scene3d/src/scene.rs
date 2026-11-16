@@ -432,6 +432,9 @@ pub struct Layer3 {
     pub puffs: Vec<Puff>,
     /// #537: each batch of an instancer fed by logic, laid out by slot, with its slot count.
     pub fed: std::collections::BTreeMap<u32, u32>,
+    /// #1636: what its solids draw, by item and shape: the item whose mesh it is (an element's
+    /// prototype) and its material's ID ("" for none), as a draw's report names them.
+    pub draw_names: BTreeMap<(String, Shape), (String, String)>,
 }
 
 /// A soft cloud sprite at t (#422; Puff `puff@1`): where it is in world m, its size, and how the
@@ -1336,59 +1339,6 @@ fn rotation_of(m: &Affine3) -> [Vec3; 3] {
 mod rest;
 pub use rest::*;
 
-/// A drawing look's key: its `dir` around the page, and its `elevation` toward the viewer.
-fn drawn_light(look: &Look3) -> Option<Sun> {
-    let l = look.drawn.as_ref()?.light.as_ref()?;
-    let (dir, up) = (
-        deep_canvas::ops::rad(l.dir),
-        deep_canvas::ops::rad(l.elevation),
-    );
-    let (c, s) = (deep_canvas::ops::cos(up), deep_canvas::ops::sin(up));
-    Some(Sun {
-        id: "look.light".into(),
-        toward: [
-            c * deep_canvas::ops::cos(dir),
-            c * deep_canvas::ops::sin(dir),
-            s,
-        ],
-        illuminance: std::f64::consts::PI,
-        shadow: l.cast.is_some(),
-        cascades: Cascades::default(),
-    })
-}
-
-/// The u a drawn look's sizes span on a surface, a metre.
-const U_PER_METER: f64 = 300.0;
-
-/// `points` split finely enough to carry a line profile, with its width multiplier at each.
-fn profiled_points(points: &[Vec3], p: &deep_canvas_drawn::spec::Profile) -> (Vec<Vec3>, Vec<f64>) {
-    const PIECES: usize = 16;
-    let mut fine = Vec::new();
-    for pair in points.windows(2) {
-        for k in 0..PIECES {
-            let t = k as f64 / PIECES as f64;
-            fine.push([0, 1, 2].map(|i| pair[0][i] + (pair[1][i] - pair[0][i]) * t));
-        }
-    }
-    fine.extend(points.last());
-    let mut s = vec![0.0];
-    for pair in fine.windows(2) {
-        let d = [0, 1, 2].map(|i| pair[1][i] - pair[0][i]);
-        s.push(s[s.len() - 1] + deep_canvas::ops::hypot(deep_canvas::ops::hypot(d[0], d[1]), d[2]));
-    }
-    let total = s.last().copied().unwrap_or(0.0).max(1e-9);
-    // A profile's flick is in u, and this line's arc length in metres.
-    let metres = deep_canvas_drawn::spec::Profile {
-        flick: p.flick / U_PER_METER,
-        ..p.clone()
-    };
-    let widths = s
-        .iter()
-        .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
-        .collect();
-    (fine, widths)
-}
-
 /// A solid's color: its paint's role, or the look's `muted` when it names none.
 /// A linear RGB value: three (or four, alpha last) finite numbers at least 0.
 fn linear3(v: &Value) -> Option<[f64; 3]> {
@@ -1701,19 +1651,6 @@ pub fn evaluate_with(
     evaluate_any(doc, t, look, labels, Some(assets), Outlines::default())
 }
 
-/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443), and whose module
-/// deforms and kinds run and draw through its module fills (#226).
-pub fn evaluate_sourced(
-    doc: &Value,
-    t: i64,
-    look: &Look3,
-    labels: &mut Labels,
-    assets: Assets<'_>,
-    outlines: Outlines<'_>,
-) -> Result<Scene, Refused> {
-    evaluate_any(doc, t, look, labels, Some(assets), outlines)
-}
-
 mod scattered;
 pub use scattered::*;
 
@@ -1854,6 +1791,8 @@ pub(crate) fn evaluate_compiled(
         }
     }
     let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
+    // #1636: the material ID of each solid an item's `materials` split off, by item and shape.
+    let mut part_materials: BTreeMap<(String, Shape), String> = BTreeMap::new();
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
     let mut flare: Option<Arc<crate::flare::Flare>> = None;
@@ -2137,68 +2076,106 @@ pub(crate) fn evaluate_compiled(
                         seed: map.get("seed").and_then(Value::as_u64).unwrap_or(0),
                     });
                     let key = h.finish().0;
-                    let mut material = light::material(item, |m| items.get(m), look, id)?;
-                    // #224: a surface is two-sided unless it says not.
-                    if k == "surface@1" && params.get("two_sided") != Some(&Value::Bool(false)) {
-                        if let Some(m) = material.as_mut() {
-                            m.double_sided = true;
-                        }
-                    }
-                    let maps = light::maps(item, |m| items.get(m))?;
-                    let mut hash = u64::from_le_bytes([
+                    let unswayed = u64::from_le_bytes([
                         key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
                     ]);
-                    if sway.is_some() {
-                        hash = swaying_shape(hash, id);
-                    }
-                    let surface = surface(&items, look, id, item)?;
-                    if surface.alpha <= 0.0 {
+                    let swayed = |h: u64| match sway {
+                        Some(_) => swaying_shape(h, id),
+                        None => h,
+                    };
+                    let hash = swayed(unswayed);
+                    // Its solid as `holder` names its material (the item, or the item naming one
+                    // part's material, #1636), over `mesh` drawn as `hash`; none when it covers
+                    // nothing.
+                    let solid_of = |holder: &Value,
+                                    mesh: crate::geom::Mesh,
+                                    hash: u64|
+                     -> Result<Option<Solid>, Refused> {
+                        let mut material = light::material(holder, |m| items.get(m), look, id)?;
+                        // #224: a surface is two-sided unless it says not.
+                        if k == "surface@1" && params.get("two_sided") != Some(&Value::Bool(false))
+                        {
+                            if let Some(m) = material.as_mut() {
+                                m.double_sided = true;
+                            }
+                        }
+                        let maps = light::maps(holder, |m| items.get(m))?;
+                        let surface = surface(&items, look, id, holder)?;
+                        if surface.alpha <= 0.0 {
+                            return Ok(None);
+                        }
+                        Ok(Some(Solid {
+                            maps,
+                            id: id.clone(),
+                            shape: Shape::Built(hash),
+                            model,
+                            color: match (surface.color, &material) {
+                                (Some(c), _) => c,
+                                // A material's default base color (#421), unless paint gives one.
+                                (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
+                                    [m.base[0], m.base[1], m.base[2]].map(encode8)
+                                }
+                                (None, _) => paint_or_muted(look, params, &path)?,
+                            },
+                            stroke: inked(
+                                stroke(look, params, Shape::Built(hash), &path)?,
+                                &material,
+                                Shape::Built(hash),
+                                &path,
+                            )?,
+                            lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
+                            mesh: Some(Arc::new(mesh)),
+                            mask: None,
+                            cast_only: false,
+                            receiver_sets: 0,
+                            caster_sets: 0,
+                            inset: 0.0,
+                            cast_shadow: casts(holder, &material),
+                            receive_shadow: shadows(item, "receive_shadow"),
+                            material,
+                            sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
+                            alpha: surface.alpha,
+                            emission: surface.emission,
+                            op: solid_op(&items, map, program, t, id, holder)?,
+                            cut: false,
+                            per_pixel: false,
+                            adjust: None,
+                            batch: 0,
+                            row: 0,
+                            sway,
+                        }))
+                    };
+                    let before = layer.solids.len();
+                    // Object: `materials` (#1636): a solid per material, each over the mesh's
+                    // vertices with its parts' triangles; the whole mesh stays for its lines.
+                    let whole = match item.get("materials").filter(|m| !m.is_null()) {
+                        None => {
+                            layer.solids.extend(solid_of(item, mesh, hash)?);
+                            None
+                        }
+                        Some(named) => {
+                            for (holder, part, h) in
+                                by_material(&items, id, item, named, &mesh, unswayed)?
+                            {
+                                let Some(s) = solid_of(&holder, part, swayed(h))? else {
+                                    continue;
+                                };
+                                let mid = holder.get("material").and_then(Value::as_str);
+                                part_materials
+                                    .insert((id.clone(), s.shape), mid.unwrap_or("").to_string());
+                                layer.solids.push(s);
+                            }
+                            Some(Arc::new(mesh))
+                        }
+                    };
+                    if layer.solids.len() == before {
                         continue;
                     }
-                    layer.solids.push(Solid {
-                        maps,
-                        id: id.clone(),
-                        shape: Shape::Built(hash),
-                        model,
-                        color: match (surface.color, &material) {
-                            (Some(c), _) => c,
-                            // A material's default base color (#421), unless paint gives one.
-                            (None, Some(m)) if params.pointer("/paint/fill").is_none() => {
-                                [m.base[0], m.base[1], m.base[2]].map(encode8)
-                            }
-                            (None, _) => paint_or_muted(look, params, &path)?,
-                        },
-                        stroke: inked(
-                            stroke(look, params, Shape::Built(hash), &path)?,
-                            &material,
-                            Shape::Built(hash),
-                            &path,
-                        )?,
-                        lod: lod_of(item, &path, mesh.bounds(), Some((&mesh, hash)), map)?,
-                        mesh: Some(Arc::new(mesh)),
-                        mask: None,
-                        cast_only: false,
-                        receiver_sets: 0,
-                        caster_sets: 0,
-                        inset: 0.0,
-                        cast_shadow: casts(item, &material),
-                        receive_shadow: shadows(item, "receive_shadow"),
-                        material,
-                        sort_bias: num(item.get("sort_bias")).unwrap_or(0.0),
-                        alpha: surface.alpha,
-                        emission: surface.emission,
-                        op: solid_op(&items, map, program, t, id, item)?,
-                        cut: false,
-                        per_pixel: false,
-                        adjust: None,
-                        batch: 0,
-                        row: 0,
-                        sway,
-                    });
                     // #224: a surface's grid lines, along its mesh's edges.
                     if k == "surface@1" {
                         let solid = layer.solids.last().expect("just pushed");
-                        let built = solid.mesh.clone().expect("a built mesh");
+                        let built = whole.clone().or_else(|| solid.mesh.clone());
+                        let built = built.expect("a built mesh");
                         if let Some(l) =
                             crate::surface::grid_line(id, &built, params, look, solid.model)?
                         {
@@ -2206,8 +2183,8 @@ pub(crate) fn evaluate_compiled(
                         }
                     }
                     // #2017: a plate with levels draws as its tiles, each at the level its error
-                    // projected at the view chooses.
-                    if k == "plate@1" && uniform(&model) {
+                    // projected at the view chooses; one split by material draws whole.
+                    if k == "plate@1" && uniform(&model) && whole.is_none() {
                         let plate = layer.solids.last().expect("just pushed");
                         let built = plate.mesh.as_ref().expect("a built mesh");
                         if let Some(tiles) = crate::terrain::tiles(params, built, hash) {
@@ -2460,6 +2437,15 @@ pub(crate) fn evaluate_compiled(
         }
     }
     let mut batches: Vec<(&str, Shape, Option<Material>)> = Vec::new();
+    // #1636: a solid's material ID: the one its item's `materials` split it off in, else its
+    // item's `material`.
+    let material_of = |owner: &str, shape: Shape| {
+        let own = items.get(owner).and_then(|i| i.get("material"));
+        let split = part_materials.get(&(owner.to_string(), shape));
+        split
+            .cloned()
+            .unwrap_or_else(|| own.and_then(Value::as_str).unwrap_or("").into())
+    };
     // Each element: its prototype's solids moved from the prototype's world to the instancer's
     // world × the element's own transform, addressed `<instancer>#<id>` (Instance `instance@1`).
     for (l, id) in &instancers {
@@ -2490,6 +2476,8 @@ pub(crate) fn evaluate_compiled(
             .iter()
             .map(|p| crate::cut::inverse(&world(&items, p)))
             .collect();
+        // #1636: the shapes this instancer's draws are named for already.
+        let mut named: std::collections::BTreeSet<Shape> = std::collections::BTreeSet::new();
         if crate::slots::fed(params) {
             let sink = (&mut batches, &mut layers[*l], &mut bounds);
             crate::slots::place(map, id, params, t, (&at, &of, &from, assets), &protos, sink)?;
@@ -2514,6 +2502,7 @@ pub(crate) fn evaluate_compiled(
             let place = matmul(&matmul(&at, &e.at), &from[e.proto]);
             for (k, s) in solids.iter().enumerate() {
                 let mut s = s.clone();
+                let proto_shape = s.shape;
                 let own = if solids.len() == 1 {
                     format!("{id}#{}", e.id)
                 } else {
@@ -2556,11 +2545,25 @@ pub(crate) fn evaluate_compiled(
                 s.model = matmul(&place, &s.model);
                 s.op = None;
                 bounds.extend(s.points());
+                // #1636: an element draws its prototype's mesh in its prototype's material.
+                if named.insert(s.shape) {
+                    let p = &of[e.proto];
+                    let names = (p.clone(), material_of(p, proto_shape));
+                    layers[*l].draw_names.insert((id.clone(), s.shape), names);
+                }
                 layers[*l].solids.push(s);
             }
         }
     }
     layers.retain(|l| !l.items().is_empty());
+    // #1636: every other solid draws its own item's mesh.
+    for l in &mut layers {
+        for s in &l.solids {
+            let owner = s.id.split('#').next().unwrap_or(&s.id);
+            let names = l.draw_names.entry((owner.to_string(), s.shape));
+            names.or_insert_with(|| (owner.to_string(), material_of(owner, s.shape)));
+        }
+    }
     let mut max_fragments: u64 = 8_388_608;
     // Each solid's adjust past opacity, by its item (an element's, its instancer's), and how it
     // resolves (#424).

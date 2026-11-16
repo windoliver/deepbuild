@@ -1,5 +1,18 @@
 use super::*;
 
+/// [`evaluate_with`] whose extrudes read their outlines through `outlines` (#443), and whose module
+/// deforms and kinds run and draw through its module fills (#226).
+pub fn evaluate_sourced(
+    doc: &Value,
+    t: i64,
+    look: &Look3,
+    labels: &mut Labels,
+    assets: Assets<'_>,
+    outlines: Outlines<'_>,
+) -> Result<Scene, Refused> {
+    evaluate_any(doc, t, look, labels, Some(assets), outlines)
+}
+
 /// [`evaluate_sourced`] with or without an asset store (#226: the scheduler's lights read a
 /// module's deforms and kinds too).
 pub fn evaluate_any(
@@ -538,6 +551,93 @@ pub(crate) fn corners_of(s: &Solid) -> Vec<Vec3> {
             apply(&s.model, p)
         })
         .collect()
+}
+
+/// Object: `materials` (#1636): an item's mesh split by material, each part `named` drawn in its
+/// material and the rest in the item's `material`: per material the item naming it, its
+/// triangles over all the mesh's vertices (so each vertex keeps its place, as a level's do), and
+/// a hash keyed off `hash` by those triangles, so equal meshes split alike share their shapes.
+pub(super) fn by_material(
+    items: &Items<'_>,
+    id: &str,
+    item: &Value,
+    named: &Value,
+    mesh: &crate::geom::Mesh,
+    hash: u64,
+) -> Result<Vec<(Value, crate::geom::Mesh, u64)>, Refused> {
+    let Some(named) = named.as_object() else {
+        return refused("out_of_range", format!("items/{id}/materials"));
+    };
+    // Each triangle's material: the first part naming it, else the item's own.
+    let own = item.get("material").and_then(Value::as_str);
+    let mut of: Vec<Option<Option<&str>>> = vec![None; mesh.triangles()];
+    for (part, m) in named {
+        let unresolved = || Refused {
+            code: "ref_unresolved",
+            path: format!("items/{id}/materials/{part}"),
+        };
+        let tris = (mesh.parts.get(part))
+            .or_else(|| mesh.closed.get(part).map(|c| &c.0))
+            .ok_or_else(unresolved)?;
+        let material = |m: &&str| {
+            let kind = items.get(m).and_then(|i| i.get("kind"));
+            kind.and_then(Value::as_str) == Some("material@1")
+        };
+        let m = m.as_str().filter(material).ok_or_else(unresolved)?;
+        for &t in tris {
+            if let Some(slot) = of.get_mut(t as usize).filter(|s| s.is_none()) {
+                *slot = Some(Some(m));
+            }
+        }
+    }
+    let mut groups: BTreeMap<Option<&str>, Vec<u32>> = BTreeMap::new();
+    for (t, m) in of.iter().enumerate() {
+        groups.entry(m.unwrap_or(own)).or_default().push(t as u32);
+    }
+    let holder = |m: Option<&str>| {
+        let mut h = item.clone();
+        if let Some(m) = m.filter(|m| Some(*m) != own) {
+            h["material"] = Value::from(m);
+        }
+        h
+    };
+    if groups.len() == 1 {
+        let m = groups.into_keys().next().flatten();
+        return Ok(vec![(holder(m), mesh.clone(), hash)]);
+    }
+    Ok(groups
+        .into_iter()
+        .map(|(m, tris)| {
+            let indices: Vec<u32> = (tris.iter())
+                .flat_map(|&t| {
+                    mesh.indices[3 * t as usize..3 * t as usize + 3]
+                        .iter()
+                        .copied()
+                })
+                .collect();
+            let mut h = deep_canvas::schedule::Hasher::new("scene3d.material_part");
+            h.text(&hash.to_string());
+            let bytes: Vec<u8> = tris.iter().flat_map(|t| t.to_le_bytes()).collect();
+            h.bytes(&bytes);
+            let key = h.finish().0;
+            let part = crate::geom::Mesh {
+                positions: mesh.positions.clone(),
+                normals: mesh.normals.clone(),
+                indices,
+                uv0: mesh.uv0.clone(),
+                uv1: mesh.uv1.clone(),
+                tangents: mesh.tangents.clone(),
+                attributes: mesh.attributes.clone(),
+                sway: mesh.sway.clone(),
+                terrain: mesh.terrain.clone(),
+                ..Default::default()
+            };
+            let hash = u64::from_le_bytes([
+                key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7],
+            ]);
+            (holder(m), part, hash)
+        })
+        .collect())
 }
 
 /// Whether the node a `mesh.asset@1` names has a primitive that names one of the file's materials
