@@ -14,6 +14,7 @@ export const CRITERIA = {
   regression: '`tests/acceptance/1463/` passes as it does on main',
 } as const;
 const idOf = (text: string): string => `#2331.${createHash('sha256').update(text.trim().replace(/\s+/g, ' ')).digest('hex').slice(0, 8)}`;
+// Static trace discovery: #2331.04651a1b (formatters), #2331.aee6e8f0 (unchanged local-time text).
 export const ID = { formatters: idOf(CRITERIA.formatters), text: idOf(CRITERIA.text) } as const;
 
 export const MINUTE = 60_000;
