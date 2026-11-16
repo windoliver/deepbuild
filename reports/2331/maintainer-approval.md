@@ -1,30 +1,33 @@
-# Human-signature gate for #2331's protected proposals
+# Signed approvals the #2331 stack is owed
 
-The owner approved the helper correction and later directed adoption in response to the exact two-file proposal.
-Those instructions authorize the work but are not a fabricated security-key signature. The repository's actual
-`readApprovals` returned no valid approvals for this change. The local SSH agent lists no identities.
+`node scripts/proof.mjs guard`, run on this branch as stacked (`b1efbb3c9`, 2026-11-16), refuses the edits in
+[guard-stacked.txt](guard-stacked.txt). Four commits need an annotated tag under `deep/approved/`, signed by a key
+on `.deepbuild/approvers` with its touch. An agent can't make one, and none was made. No approval tag for any of them
+exists locally or on origin.
 
-A maintainer listed in `.deepbuild/approvers` must sign annotated tags under `deep/approved/` using the listed key's
-normal touch/biometric path. Use the maintainer's existing secure-key setup; do not generate a new approver, substitute
-a plain key, loosen the verifier or forge an authenticator flag. Each proposal is isolated to the files below.
+| PR | Commit | What the guard refuses |
+|---|---|---|
+| #2643 | `188fd91cdafb` | `tests/acceptance/1463/helpers.ts`: 2 lines changed |
+| #2712 | `b1ba07ee96ca` | `tests/acceptance/1463/list.test.ts` (4 tests) and `tests/acceptance/992/agree.test.ts` (1 test) changed |
+| #2712 | `7e738af1b6a6` | the two `.proposed` copies, deleted after the swap |
+| #2689 | `40cf1d64579b` | `scripts/lanes.mjs`: the proof lanes' own code |
 
-| Commit | `Approves:` lines |
-|---|---|
-| `188fd91cdafb1b7d7aee3a3a9bef71c7dfb00d12` | `tests/acceptance/1463/helpers.ts` |
-| `b1ba07ee96ca2f46cf082f0dc24d4f16878dce1c` | `tests/acceptance/1463/list.test.ts`; `tests/acceptance/992/agree.test.ts` |
-| `a67f7dbaa46a60b7c009d877122c23e0c9cb97af` | `tests/acceptance/2331/kit.ts`; `tests/acceptance/2331/tsconfig.json`; `tests/acceptance/2331/twins.json`; `tests/acceptance/2331/twins/locale-clock/packages/hub/src/list.ts`; `tests/acceptance/2331/twins/utc-clock/packages/hub/src/list.ts` |
-| `40cf1d64579b0e09d9df98a6e3833beb7d37ccd5` | `scripts/lanes.mjs` |
-| `0fdd1716e97cc9bc2d11756f1e6f3768b523ae6d` | `tests/acceptance/2331-regression/tsconfig.json`; `tests/acceptance/2331-regression/twins.json`; `tests/acceptance/2331-regression/twins/utc-clock/packages/hub/src/list.ts` |
-
-Example shape, after reviewing a proposal and using the maintainer's already configured signing identity:
+Each commit touches only the files its tag names.
 
 ```sh
-git -c gpg.format=ssh tag -s deep/approved/188fd91cd-helper \
-  188fd91cdafb1b7d7aee3a3a9bef71c7dfb00d12 \
-  -m 'Approves: tests/acceptance/1463/helpers.ts'
+git tag -s deep/approved/188fd91cdafb-sk 188fd91cdafb1b7d7aee3a3a9bef71c7dfb00d12 -m "Approve 188fd91cdafb for #2333" -m "Approves: tests/acceptance/1463/helpers.ts"
+git tag -s deep/approved/b1ba07ee96ca-sk b1ba07ee96ca2f46cf082f0dc24d4f16878dce1c -m "Approve b1ba07ee96ca for #2668" -m "Approves: tests/acceptance/1463/list.test.ts" -m "Approves: tests/acceptance/992/agree.test.ts"
+git tag -s deep/approved/7e738af1b6a6-sk 7e738af1b6a6f52f1b05a665b911001e40ef8329 -m "Approve 7e738af1b6a6 for #2668" -m "Approves: tests/acceptance/2668/proposed/tests/acceptance/1463/list.test.ts.proposed" -m "Approves: tests/acceptance/2668/proposed/tests/acceptance/992/agree.test.ts.proposed"
+git tag -s deep/approved/40cf1d64579b-sk 40cf1d64579b0e09d9df98a6e3833beb7d37ccd5 -m "Approve 40cf1d64579b for #2331" -m "Approves: scripts/lanes.mjs"
+git push origin deep/approved/188fd91cdafb-sk deep/approved/b1ba07ee96ca-sk deep/approved/7e738af1b6a6-sk deep/approved/40cf1d64579b-sk
 ```
 
-For multiple files, put one `Approves: <path>` line per file in the tag message. Publish only the exact approval tags
-created after that review, then run the real proof guard. No tag was created by this agent, and the guard is not
-reported passing. The complete combined regression/timing/trace checks are separate gates; a signature does not make
-an unrun or inconclusive check pass.
+Two commits an earlier version of this page listed need none in this landing order:
+
+- `a67f7dbaa46a` (`tests/acceptance/2331/kit.ts`, 1 line added) is refused only while the stack is judged as one
+  change, where the guard keeps every tag. Once #2643 and #2712 are on main, #2331 is the one issue the change names,
+  and no test tagged `#2331.` read `kit.ts` before that commit. This is read from `scripts/proof-guard.mjs`, not from
+  a guard run in that state.
+- `0fdd1716e97c` (the regression twin and its `tsconfig.json`) is not refused at all.
+
+A signature approves an edit. It makes no unrun or inconclusive check pass.

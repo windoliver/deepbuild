@@ -12,14 +12,21 @@
       "output": "INCONCLUSIVE no grant: no test grant came within 60 min",
       "exit": 3,
       "testsRun": 0
+    },
+    {
+      "kind": "fixed-path bay, #1463 under a timed grant",
+      "date": "2026-11-16",
+      "state": "INCONCLUSIVE",
+      "output": "tests/acceptance/1463: 34 passed, 1 INCONCLUSIVE: thermal state not nominal (NSProcessInfo.thermalState 1)",
+      "testsRun": 65,
+      "results": "integrated-results.json"
     }
   ],
   "notProven": [
-    "complete integrated #1463 result",
-    "valid reference-Mac timing",
-    "integrated affected result",
-    "new regression-wrapper run",
-    "registered-twin trace run"
+    "valid reference-Mac timing for #1463.0c303476, which the criterion 3 wrapper counts",
+    "the criterion 3 wrapper passing: tests/acceptance/1463 is main's only once #2643 and #2712 are on main",
+    "the before and trace lanes: the stack names three issues, so they can't read one",
+    "an affected run over the regression kit; --list selects its files with no WIDE line"
   ],
   "note": "No pending, missing or unrun check is PASS. Prior individual results remain recorded separately."
 }
