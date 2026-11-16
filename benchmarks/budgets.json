@@ -1061,6 +1061,23 @@
       ]
     },
     {
+      "id": "canvas-water-flow",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-flow"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "flow_sheet_gpu_ms": 0.4
+      },
+      "initialReason": "Issue #968 first measurement: the merge base has no flow on water and no such task. A release deep-gpu draws a 30 m x 20 m sheet of water of 256 x 256 cells with flow along a straight curve down its middle (speed 1.5, cycle 2, a 3 m/s breeze's waves and the default ripples), seen straight down so it fills a third of a 1080p frame, against the same sheet with plain water, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time is what the flow adds. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#968.3dca895d"
+      ]
+    },
+    {
       "id": "canvas-ground",
       "command": [
         "node",

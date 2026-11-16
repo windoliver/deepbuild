@@ -872,6 +872,8 @@ pub struct Scene {
     pub read_reflection: bool,
     /// #268: whether the view reads back the water's foam share (view3d's `foam`).
     pub read_foam: bool,
+    /// #968: whether a frame reads the water's shaded normal (view3d's `normal` target).
+    pub read_normal: bool,
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
@@ -4253,6 +4255,7 @@ pub(crate) fn evaluate_compiled(
         water: None,
         read_reflection: false,
         read_foam: false,
+        read_normal: false,
         probes,
         tints: crate::tints::tints(map, look, t)?,
         volumes,
@@ -4295,6 +4298,11 @@ pub(crate) fn evaluate_compiled(
                 w.level,
                 crate::shore::Planted::None,
             )?);
+        }
+        // #968: the flow sampled over the plates.
+        if let Some(flow) = &mut w.flow {
+            let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
+            flow.grid = Some(crate::flow::grid(map, &w.material, flow, &plates)?);
         }
         if scene.mirror.is_none() {
             scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);

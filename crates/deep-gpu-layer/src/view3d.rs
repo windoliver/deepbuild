@@ -304,13 +304,14 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 | "depth"
                 | "reflection"
                 | "foam"
+                | "normal"
                 | "coc"
                 | "surface"
                 | "window_linear"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, coc, surface and window_linear",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface and window_linear",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -1133,6 +1134,7 @@ fn run_view(
         "depth",
         "reflection",
         "foam",
+        "normal",
         "coc",
     ]
     .iter()
@@ -1465,6 +1467,8 @@ fn run_view(
             scene.read_reflection = args.targets.contains("reflection");
             // #268: the water's foam share, read back as the `foam` target.
             scene.read_foam = args.targets.contains("foam");
+            // #968: the water's shaded normal, read back as the `normal` target.
+            scene.read_normal = args.targets.contains("normal");
             let shore = (args.shore)
                 .then(|| {
                     let w = scene.water.as_ref()?;
@@ -2457,6 +2461,9 @@ fn run_view(
                 }
                 if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
                     frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
+                }
+                if let (Some(n), true) = (&drawn.normal, args.targets.contains("normal")) {
+                    frame.insert("normal".into(), json!(write_named(out, n, "f32")?));
                 }
                 // #468: each pixel's signed circle of confusion, f32.
                 if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
