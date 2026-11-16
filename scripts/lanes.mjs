@@ -259,6 +259,11 @@ timed.push('tests/acceptance/1486/grid.test.ts');
 // 1485-redraft-ac2/, draws them at full size and runs in its place.
 alone.push('tests/acceptance/1485-redraft-ac2/');
 byHand.push('tests/acceptance/1485/cap.test.ts');
+// #1493's word, recipe and document files each build deep-show and install test packs. Its first-draft census.test.ts
+// is kept by hand, on the owner's ruling (1493/DISPUTE.md): its AC1 lists the reference's names by a rule no program
+// can meet, and the blind redraft 1493-redraft-ac1/ runs in its place; the same file's AC2, AC4 and AC5 run with it.
+alone.push(...['word', 'recipe', 'document'].map((f) => `tests/acceptance/1493/${f}.test.ts`), 'tests/acceptance/1493-redraft-ac1/');
+byHand.push('tests/acceptance/1493/census.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 // #1816's live file runs the spine judge for #44 for hours and reopens #44 on GitHub if it doesn't read PASS.

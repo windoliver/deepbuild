@@ -67,6 +67,8 @@ export function readPack(from: string, shipped = false): PackVersion {
     }
   }
   if (object(m.recipes)) for (const [key, value] of Object.entries(m.recipes)) if (typeof value === 'string') m.recipes[key] = JSON.parse(local(from, value).toString('utf8')) as unknown;
+  // #1493: a familiar-names pack's census, read in place of its file's name, as the canvas core reads it.
+  if (typeof m.census === 'string') m.census = JSON.parse(local(from, m.census).toString('utf8')) as unknown;
   return { id: m.id, version: m.version, ref: `${m.id}@${m.version}`, digest: hash(canonicalize(m as JsonValue)), manifest: m, assets };
 }
 

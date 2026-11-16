@@ -33,6 +33,18 @@
         "additionalProperties": false
       }
     },
+    "census": {
+      "description": "A familiar-names pack's census (#1493), its file's name in the folder or the census read in its place: each public name of its reference, and each parameter of a name it maps, mapped, refused with a reason or open.",
+      "type": ["string", "object"],
+      "properties": {
+        "reference": { "type": "object" },
+        "scope": { "type": "string" },
+        "names": { "type": "array", "items": { "$ref": "#/$defs/census_row" } },
+        "params": { "type": "array", "items": { "$ref": "#/$defs/census_row" } },
+        "totals": { "type": "object" }
+      },
+      "required": ["names"]
+    },
     "assets": { "type": "array", "description": "Files the pack's programs and entries read (#238)." },
     "providers": { "type": "object", "description": "Programs the sandbox module admits and runs (#238)." },
     "layouts": { "type": "object", "description": "Layouts whose validators are sandbox programs (#238)." },
@@ -101,6 +113,18 @@
   "required": ["id", "name", "version", "license", "description"],
   "additionalProperties": false,
   "$defs": {
+    "census_row": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "param": { "type": "string" },
+        "state": { "type": "string", "description": "mapped, refused or open." },
+        "target": { "type": "string" },
+        "reason": { "type": "string", "description": "A refused row's: imperative, renderer, superseded or no_counterpart." }
+      },
+      "required": ["name", "state"],
+      "additionalProperties": false
+    },
     "kind": {
       "type": "object",
       "properties": {
