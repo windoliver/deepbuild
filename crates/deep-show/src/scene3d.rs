@@ -25,7 +25,20 @@ pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
         .get("camera")
         .and_then(Value::as_str)
         .and_then(|id| doc.get("items")?.get(id));
-    if let Some(ev) = camera.and_then(|c| c.pointer("/params/exposure")?.as_f64()) {
+    // #468: `from_lens` exposes from the lens's aperture, shutter and ISO at the frame rate.
+    let rate = doc
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .filter(|(p, q)| *p > 0 && *q > 0)
+        .map_or(60.0, |(p, q)| f64::from(p) / f64::from(q));
+    let ev = camera
+        .and_then(|c| c.get("params")?.as_object())
+        .and_then(|p| {
+            deep_canvas_scene3d::lens::read(p, "", false)
+                .ok()?
+                .ev100(rate)
+        });
+    if let Some(ev) = ev {
         look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
     }
     look
@@ -93,46 +106,18 @@ impl Gpu3 {
         })
     }
 
-    /// `doc` at `t`, drawn at `size` px over the look's ground: straight RGBA, rows top-down,
-    /// with the scene it drew.
-    pub fn draw(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        palette: &Palette,
-        size: [u16; 2],
-    ) -> Result<(Vec<u8>, Scene), Unfit> {
-        let mut doc = doc.clone();
-        if let Some(d) = doc.as_object_mut() {
-            d.insert("size".into(), json!(size));
-        }
-        // #524: each skin's item at this frame's time.
-        deep_canvas_physics::skin::write(&mut doc, t);
-        let look = look_of(&doc, palette);
-        let fills = Fills {
-            outlines: &self.outlines,
-            module: &self.fills,
-            planted: self.planted.as_deref(),
-            memo: None,
-        };
-        let scene =
-            evaluate_any(&doc, t, &look, &mut self.labels, None, fills).map_err(|r| Unfit {
-                code: r.code,
-                path: r.path,
-            })?;
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, &scene, &look, None)
-            .ok_or(Unfit {
-                code: "unsupported_platform",
-                path: String::new(),
-            })?;
+    /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
+    pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
+        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
-        Ok((bytes, scene))
+        Some(bytes)
     }
 
     /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the
-    /// evaluated scene a diagnostic mode reads and draws, and the look it draws in.
+    /// evaluated scene a draw reads, and the look it draws in; its maps' texels are the host's
+    /// (#1729, `Hub::evaluate3d`).
     pub fn evaluate(
         &mut self,
         doc: &Value,
@@ -171,10 +156,7 @@ impl Gpu3 {
         look: &Look3,
         depth: bool,
     ) -> Option<(Vec<u8>, Targets)> {
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
-        for p in bytes.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-        }
+        let bytes = self.draw(scene, look)?;
         Some((bytes, self.targets(scene.size, depth)?))
     }
 

@@ -1,0 +1,197 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Mixed-version bookcases",
+  "description": "Twelve shelf.bookcase instances in two writers' layers: a1 to a6 saved at @1 by writer A, b1 to b6 saved at @2 by writer B, with acme/shelf@3.0.0 named; each writer's tag hangs from the other writer's first bookcase. A fixture of the #1959 acceptance suite.",
+  "size": [
+    320,
+    360
+  ],
+  "packs": [
+    "acme/shelf@3.0.0"
+  ],
+  "layers": {
+    "writer-a": {
+      "writer": "agent:thread-alpha",
+      "title": "Writer A",
+      "order": "a1"
+    },
+    "writer-b": {
+      "writer": "agent:thread-beta",
+      "title": "Writer B",
+      "order": "a2"
+    }
+  },
+  "items": {
+    "a1": {
+      "id": "a1",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A1",
+      "order": "a1",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a2": {
+      "id": "a2",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A2",
+      "order": "a2",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a3": {
+      "id": "a3",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A3",
+      "order": "a3",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a4": {
+      "id": "a4",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A4",
+      "order": "a4",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a5": {
+      "id": "a5",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A5",
+      "order": "a5",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a6": {
+      "id": "a6",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A6",
+      "order": "a6",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "b1": {
+      "id": "b1",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B1",
+      "order": "b1",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b2": {
+      "id": "b2",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B2",
+      "order": "b2",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b3": {
+      "id": "b3",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B3",
+      "order": "b3",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b4": {
+      "id": "b4",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B4",
+      "order": "b4",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b5": {
+      "id": "b5",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B5",
+      "order": "b5",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b6": {
+      "id": "b6",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B6",
+      "order": "b6",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "tag-a": {
+      "id": "tag-a",
+      "kind": "rect@1",
+      "name": "Tag on B1",
+      "order": "c1",
+      "layer": "writer-a",
+      "parent": "b1",
+      "params": {
+        "box": [
+          0,
+          0,
+          40,
+          12
+        ]
+      }
+    },
+    "tag-b": {
+      "id": "tag-b",
+      "kind": "rect@1",
+      "name": "Tag on A1",
+      "order": "c2",
+      "layer": "writer-b",
+      "parent": "a1",
+      "params": {
+        "box": [
+          0,
+          0,
+          40,
+          12
+        ]
+      }
+    }
+  }
+}

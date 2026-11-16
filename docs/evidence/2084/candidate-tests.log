@@ -1,0 +1,58 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=verbose tests/acceptance/2084/held.test.ts tests/acceptance/2084/closure/closure.test.ts tests/acceptance/2084/closure/held-reply.test.ts packages/hub/test/hook-replies.test.ts packages/hub/test/waits-hub.test.ts packages/hub/test/rules-hot-path.test.ts packages/hub/test/extensions.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+deep hub: the core stopped: Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first
+    at deepHook (file://<checkout>/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<checkout>/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<checkout>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<checkout>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<checkout>/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<checkout>/packages/hub/dist/core.js:570:9)
+ × packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold 513ms
+   → the hub exited before it was ready
+deep hub: the core stopped: Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first
+    at deepHook (file://<checkout>/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<checkout>/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<checkout>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<checkout>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<checkout>/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<checkout>/packages/hub/dist/core.js:570:9)
+ × packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning 376ms
+   → the hub exited before it was ready
+ ✓ tests/acceptance/2084/closure/held-reply.test.ts > AC2 #2084.ef9a3ee6 a heavy command's call held for the core keeps its rewrite and the sibling notice > AC2 #2084.ef9a3ee6 with two sessions that both changed README.md, the second session's first `cargo test --workspace` after its prompt is rewritten into its `deep lease` form, carries the sibling notice in the same reply, and holds a cpu.slot 20585ms
+ ✓ tests/acceptance/2084/closure/held-reply.test.ts > AC2 #2084.ef9a3ee6 a heavy command's call held for the core keeps its rewrite and the sibling notice > AC2 #2084.ef9a3ee6 (scope) a Codex session's `cargo test --workspace`, held for the core after a Claude Code sibling's change, is denied once with its `deep lease` form 1176ms
+ ✓ packages/hub/test/waits-hub.test.ts > long waits through the hub > starts where the last hub left off: a call still running and the time a command took are read from the record 1405ms
+ ✓ packages/hub/test/waits-hub.test.ts > long waits through the hub > names the ticker at the start, shows one line while a call overruns, tells the agent at its next hook, and attaches a deadline only past approvals 3787ms
+ ✓ tests/acceptance/2084/closure/closure.test.ts > AC1 #2084.2c4c3709 the two #1015 files pass, unchanged > AC1 #2084.2c4c3709 `tests/acceptance/1015/claude.test.ts` and `tests/acceptance/1015/focused.test.ts`, unchanged from the base, run and pass every test 29267ms
+ ✓ tests/acceptance/2084/closure/closure.test.ts > AC3 #2084.76e6811e the two failing cases are listed with #2084 while they fail, and gone once they pass > AC3 #2084.76e6811e each of the two #1015 cases that fails is listed in scripts/known-failures.json with #2084, and no entry of #2084 stands for a case that passes 1ms
+ ✓ tests/acceptance/2084/held.test.ts > #2084 a heavy command whose call is held for the core keeps its settled reply > #2084 Claude Code: the second session's first `cargo test --workspace` after its prompt is rewritten into its `deep lease` form, holds a cpu.slot, and its reply carries the sibling notice 3021ms
+ ✓ tests/acceptance/2084/held.test.ts > #2084 a heavy command whose call is held for the core keeps its settled reply > #2084 Codex (its adapter can't rewrite): the held first `cargo test --workspace` after the prompt is denied once, the deny giving its `deep lease` form 1639ms
+ ✓ packages/hub/test/rules-hot-path.test.ts > a Read inside a nested rule file's scope carries the rule, and the hub's main thread reads no folder for it 884ms
+stderr | packages/hub/test/hook-replies.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  80934 (node)
+
+ ✓ packages/hub/test/hook-replies.test.ts > keeps the lease rewrite, deadline, scoped rule and wait line beside the core notice and message 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning
+Error: the hub exited before it was ready
+ ❯ ChildProcess.<anonymous> packages/hub/test/hub.ts:75:37
+     73|     await new Promise((resolve, reject) => {
+     74|       hub.stdout.once('data', resolve);
+     75|       hub.once('exit', () => reject(Error('the hub exited before it wa…
+       |                                     ^
+     76|       timer = setTimeout(() => reject(Error("the hub wasn't ready with…
+     77|     }).finally(() => clearTimeout(timer));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed | 6 passed (7)
+      Tests  2 failed | 10 passed (12)
+   Start at  16:13:10
+   Duration  66.28s (tests 98%, transform 2%)
+

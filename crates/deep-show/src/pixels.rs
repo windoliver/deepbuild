@@ -23,7 +23,7 @@ pub(crate) enum Drawn {
 }
 
 /// The times a check input's `at_times` names, in flicks, else the start.
-fn times(input: &Value) -> Vec<i64> {
+pub(crate) fn times(input: &Value) -> Vec<i64> {
     let named: Vec<i64> = input["at_times"]
         .as_array()
         .into_iter()
@@ -125,9 +125,6 @@ impl Hub<'_> {
         let (_, fingerprint) = crate::kit::goldens::environment(self, "gpu");
         let size =
             crate::snapshot::px([0, 1].map(|i| document["size"][i].as_f64().unwrap_or(1.0)));
-        let evidence = self.scenario.evidence.clone();
-        let read = move |sha: &str| crate::evidence::read(&evidence, sha);
-        let palette = self.look.light.clone();
         let short = self.planted(Planted::ReductionLeavesOutLastRows);
         let Some(gpu) = self.gpu3() else {
             return Drawn::Blocked(json!({"code": "gpu_unavailable",
@@ -145,13 +142,17 @@ impl Hub<'_> {
         for &t in at {
             // #493: a shot writes the camera's pose the frame is drawn through.
             let doc = crate::film::posed(document, t).unwrap_or_else(|| document.clone());
-            let (scene, look) = match gpu.evaluate(&doc, t, &palette, size, &read) {
+            // #1729: its assets and maps from the evidence store, as render-back reads them.
+            let (scene, look) = match self.evaluate3d(&doc, t, size) {
                 Ok(s) => s,
                 Err(u) => {
                     return Drawn::Blocked(
                         json!({"code": "not_presented", "reason": u.code, "path": u.path, "t": t}),
                     )
                 }
+            };
+            let Some(gpu) = self.gpu3() else {
+                return Drawn::Blocked(json!({"code": "gpu_unavailable", "t": t}));
             };
             // #2513: the frame's light stays on the GPU, reduced there when the check reads it.
             let drawn = gpu
@@ -170,7 +171,7 @@ impl Hub<'_> {
                 rgba,
                 ids: ids_of(&targets.ids),
                 picks: targets.picks,
-                roles: palette.clone(),
+                roles: self.look.light.clone(),
                 reduce: Some(reduce),
             });
         }

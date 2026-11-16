@@ -385,6 +385,156 @@ fn fake_hub(
     })
 }
 
+/// A hub's acknowledgement of request `id` with no hold, and the empty reply.
+fn empty_reply(id: &str) -> String {
+    format!(
+        "{{\"v\":1,\"ack\":\"{id}\",\"hold_until_ms\":null}}\n{{\"v\":1,\"exit\":0,\"stdout\":\"\",\"stderr\":\"\"}}\n"
+    )
+}
+
+#[test]
+fn a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too() {
+    let newer = RULES.replacen(
+        r#""entries":{"#,
+        r#""entries":{"newer":{"match":"effect:not-a-class","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":false},"#,
+        1,
+    );
+    for (case, text, why) in [
+        ("cut to 40 bytes", &RULES[..40], "isn't JSON"),
+        ("an entry with a match it doesn't know", &newer, "newer"),
+    ] {
+        for answering in [true, false] {
+            // A try the hub was late for (the call is spooled marked late) is the hub away: it is made again.
+            let mut tries = 0;
+            let (out, spooled) = loop {
+                let home = short_home("unread");
+                std::fs::write(home.join(".deepbuild/rules.json"), text).unwrap();
+                let hub = answering
+                    .then(|| fake_hub(&home, empty_reply, std::time::Duration::from_millis(50)));
+                let mut child = hook(&home, "PreToolUse");
+                feed(&mut child, PKILL);
+                let out = child.wait_with_output().unwrap();
+                let spooled = std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl"))
+                    .unwrap_or_default();
+                if let Some(hub) = hub {
+                    hub.join().unwrap();
+                }
+                std::fs::remove_dir_all(&home).unwrap();
+                tries += 1;
+                if !answering || !spooled.contains("\"late\":true") {
+                    break (out, spooled);
+                }
+                assert!(
+                    tries < 20,
+                    "INCONCLUSIVE: the hub was late for 20 tries; rerun alone"
+                );
+            };
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let hub = if answering { "answering" } else { "away" };
+            assert_eq!(
+                out.status.code(),
+                Some(2),
+                "rules.json {case}, the hub {hub}: `pkill -f node` is denied: {stderr}"
+            );
+            assert!(
+                stderr.contains("rules.json") && stderr.contains(why),
+                "rules.json {case}, the hub {hub}: the denial names the file and {why:?}: {stderr}"
+            );
+            // The call reaches the hub when it answers, and the spool when it doesn't, as before.
+            assert_eq!(
+                spooled.contains("pkill -f node"),
+                !answering,
+                "rules.json {case}, the hub {hub}: the spool: {spooled:?}"
+            );
+        }
+    }
+}
+
+/// A hub's hello, written to whoever connects.
+const HELLO: &[u8] = b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n";
+
+#[test]
+fn a_rules_json_removed_after_setup_is_denied_with_the_hub_away_and_read_again_once_a_hub_says_hello(
+) {
+    // Before setup a missing rules.json is no entries: the call runs.
+    let home = short_home("gone");
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    let (code, _, _) = pre_tool_use(&home, "pkill -f node");
+    assert_eq!(code, Some(0), "before setup, no rules.json: the call runs");
+
+    // After setup, with no hub, it is denied naming the file.
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "after setup, rules.json removed, no hub: `pkill -f node` is denied: {stderr}"
+    );
+    assert!(
+        stderr.contains("rules.json"),
+        "the denial names the file: {stderr}"
+    );
+
+    // A hub that puts the file back before its hello, as the running hub does: the call is matched against it. The
+    // hub then goes away, so the entry's own denial shows what deep-hook matched.
+    use std::io::Write;
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let rules = home.join(".deepbuild/rules.json");
+    let hub = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        std::fs::write(rules, RULES).unwrap();
+        let _ = stream.write_all(HELLO);
+    });
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, PKILL);
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "rules.json put back by the hub: `pkill -f node` is denied: {stderr}"
+    );
+    assert!(
+        stderr.contains("no-kill-by-name") && !stderr.contains("rules.json"),
+        "the denial is the entry's, read from the file the hub put back: {stderr}"
+    );
+}
+
+#[test]
+fn a_hub_that_never_says_hello_holds_a_call_for_a_removed_rules_json_no_longer_than_the_design_allows(
+) {
+    // After setup, rules.json removed, and a hub that takes connections and says nothing: deep-hook waits 250 ms for
+    // the hello, then the hub's 20 ms, and denies the call naming the file. A loaded machine can be slow to start the
+    // hook, so the fastest of five tries is the one read: a longer wait is in every one of them.
+    let home = short_home("mute");
+    std::fs::remove_file(home.join(".deepbuild/rules.json")).unwrap();
+    std::fs::write(home.join(".deepbuild/setup-finished.json"), "{}\n").unwrap();
+    let listener =
+        std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    let mut fastest = std::time::Duration::MAX;
+    for _ in 0..5 {
+        let (code, took, _) = pre_tool_use(&home, "pkill -f node");
+        assert_eq!(code, Some(2), "the call is denied");
+        fastest = fastest.min(took);
+    }
+    drop(listener);
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        fastest >= std::time::Duration::from_millis(250),
+        "deep-hook gave the hub its 250 ms to say hello: {fastest:?}"
+    );
+    assert!(
+        fastest < std::time::Duration::from_millis(400),
+        "the wait for a hub's hello stays at 250 ms, with the 20 ms to acknowledge after it: {fastest:?}"
+    );
+}
+
 /// Runs deep-hook's PreToolUse for `command` against `home`, and returns its exit code, how long it took, and the spool.
 fn pre_tool_use(
     home: &std::path::Path,
@@ -1038,6 +1188,61 @@ fn runners_fetched_and_written_programs_meet_the_floor_with_the_hub_away() {
         let (code, said) = decide(command);
         if code != Some(0) || said.contains("\"ask\"") {
             wrong.push(format!("`{command}` must run: exit {code:?}, {said}"));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&home);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_call_naming_links_that_loop_is_ruled_by_what_matches_with_the_hub_away() {
+    // #2174: the shipped entries and no hub. A path through a link that names itself, or two that name each other,
+    // is read as written, where the reader once recursed until the watchdog denied the call or the stack ran out.
+    use std::os::unix::fs::symlink;
+    let home = fresh_home(format!("/tmp/dh2174-{}", std::process::id()).into());
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        include_str!("../default-rules.json"),
+    )
+    .unwrap();
+    let work = home.join("w");
+    std::fs::create_dir_all(&work).unwrap();
+    symlink("self", work.join("self")).unwrap();
+    symlink("b", work.join("a")).unwrap();
+    symlink("a", work.join("b")).unwrap();
+    let decide = |tool: &str, input: &str| {
+        let payload = format!(
+            r#"{{"session_id":"s2174","hook_event_name":"PreToolUse","cwd":{},"tool_name":"{tool}","tool_input":{input}}}"#,
+            json_string(&work.to_string_lossy()),
+        );
+        let start = std::time::Instant::now();
+        let mut child = hook(&home, "PreToolUse");
+        feed(&mut child, payload.as_bytes());
+        let stderr = stderr_of(&mut child);
+        let status = child.wait().unwrap();
+        (status, start.elapsed(), stderr)
+    };
+    let mut wrong = Vec::new();
+    for link in ["self", "a"] {
+        let path = json_string(&work.join(link).to_string_lossy());
+        for (tool, input, code) in [
+            ("Bash", format!(r#"{{"command":"ls {link}"}}"#), 0),
+            ("Read", format!(r#"{{"file_path":{path}}}"#), 0),
+            // The link is read, and so is the rest of its line.
+            (
+                "Bash",
+                format!(r#"{{"command":"ls {link}; pkill -f node"}}"#),
+                2,
+            ),
+        ] {
+            let (status, took, stderr) = decide(tool, &input);
+            eprintln!("{tool} {input}: {status} after {took:?}");
+            // Exit code 2 is also the watchdog's, for a call still unread after its 500 ms.
+            if status.code() != Some(code) || stderr.contains("couldn't read this call") {
+                wrong.push(format!(
+                    "{tool} {input}: {status} after {took:?}, where exit code {code} is its ruling: {stderr}"
+                ));
+            }
         }
     }
     let _ = std::fs::remove_dir_all(&home);

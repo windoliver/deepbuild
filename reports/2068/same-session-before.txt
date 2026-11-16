@@ -1,0 +1,37 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ × packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent 2622ms
+   → a later hook must not overtake its own issue prompt and change its task/turn: expected [ '01M7DT11B1Y3P7CEFCKDMG7ADK', …(1) ] to deeply equal [ '01M7DT119REZFVPQWF9TH8VG25', …(1) ]
+ ✓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write 3781ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent
+AssertionError: a later hook must not overtake its own issue prompt and change its task/turn: expected [ '01M7DT11B1Y3P7CEFCKDMG7ADK', …(1) ] to deeply equal [ '01M7DT119REZFVPQWF9TH8VG25', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "01M7DT119REZFVPQWF9TH8VG25",
+    "01M7DT11B1Y3P7CEFCKDMG7ADK",
++   "01M7DT119REZFVPQWF9TH8VG25",
+  ]
+
+ ❯ packages/hub/test/prompt-items.test.ts:26:99
+     24|     await until(() => w!.events.some((e) => e.id === asked.id) && w!.e…
+     25|     const order = w.events.filter((e) => e.id === asked.id || e.id ===…
+     26|     expect(order, 'a later hook must not overtake its own issue prompt…
+       |                                                                                                   ^
+     27|     expect(taskFor(w, session), 'the prompt still opens its fallback t…
+     28|   } finally { await w?.stop(); await f.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  11:54:50
+   Duration  6.68s (tests 99%, transform 1%)
+

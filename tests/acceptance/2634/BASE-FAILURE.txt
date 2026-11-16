@@ -1,0 +1,52 @@
+# Base run of tests/acceptance/2634 at 1e3b798c5 (no fix), 2026-11-15, Linux, procps-ng 4.0.4
+# Command: systemd-run --user --quiet --wait --pipe --collect -p AppArmorProfile=claude-desktop -p MemoryMax=24G -p MemorySwapMax=2G -E PATH=... -E HOME=... --working-directory=<worktree> npx vitest run tests/acceptance/2634/
+# Exit status 1. ANSI colour codes stripped; nothing else cut (vitest printed no process-table dump here).
+
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ tests/acceptance/2634/ps.test.ts (2 tests | 2 failed) 946ms
+   ❯ #2634 AC1. A large process table is read, not refused (1)
+     × returns the process naming the needle, and throws nothing, while ps -A -ww prints over 1 MiB 723ms
+   ❯ #2634 AC2. What the helper throws or prints stays small (1)
+     × a failing ps that prints 4 MiB gives an error naming ps and its status, serialized under 64 KiB 140ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2634/ps.test.ts > #2634 AC1. A large process table is read, not refused > returns the process naming the needle, and throws nothing, while ps -A -ww prints over 1 MiB
+AssertionError: expected [Function] to not throw an error but 'Error: spawnSync ps ENOBUFS' was thrown
+
+- Expected:
+undefined
+
++ Received:
+"Error: spawnSync ps ENOBUFS"
+
+ ❯ tests/acceptance/2634/ps.test.ts:53:60
+     51|
+     52|     let found: ReturnType<typeof processesNaming> = [];
+     53|     expect(() => { found = processesNaming(needle); }).not.toThrow();
+       |                                                            ^
+     54|     const mine = found.filter((p) => p.pid === target.pid);
+     55|     expect(mine, 'the needle process is returned').toHaveLength(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2634/ps.test.ts > #2634 AC2. What the helper throws or prints stays small > a failing ps that prints 4 MiB gives an error naming ps and its status, serialized under 64 KiB
+AssertionError: util.inspect of the error: expected 2143462 to be less than 65536
+ ❯ tests/acceptance/2634/ps.test.ts:111:71
+    109|       return value;
+    110|     });
+    111|     expect(Buffer.byteLength(inspected), 'util.inspect of the error').…
+       |                                                                       ^
+    112|     expect(Buffer.byteLength(ownInspected), 'util.inspect of message a…
+    113|     expect(Buffer.byteLength(json), 'JSON.stringify of message and own…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  13:07:02
+   Duration  1.13s (tests 92%, transform 5%, import 2%, setup 1%)
+

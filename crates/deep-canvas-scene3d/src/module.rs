@@ -21,8 +21,15 @@ pub const OUTPUT_PASS: &str = "scene3d.output";
 pub const MIRROR_PASS: &str = "scene3d.mirror";
 /// #465: the flare, added into the linear image before tone mapping.
 pub const FLARE_PASS: &str = "scene3d.flare";
+/// #468: depth of field over the linear image, after the geometry and before bloom.
+pub const DOF_PASS: &str = "scene3d.dof";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
+/// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
+/// the shadows place, beside the other passes that draw the scene from another eye first.
+pub const INSET_VIEW_PASS: &str = "scene3d.inset_view";
+/// #506: the unlit projected insets, after tone mapping, the grade and the upscale.
+pub const INSET_UNLIT_PASS: &str = "scene3d.inset_unlit";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
 /// only (the core's shadow pass, in the frame's shadows place).
 pub const SHADOW_PASS: &str = "scene3d.shadow";
@@ -340,6 +347,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
         }
+        if spec.kind == "mesh.sequence@1" {
+            r.kind(crate::spec::entry(&spec, "mesh", "sequence"), &[], "");
+        }
         // The local and area lights and the material (#421).
         for (kind, family, name) in [
             ("light.point@1", "light", "point"),
@@ -439,6 +449,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(MIRROR_PASS, "geometry");
     r.pass(WATER_PASS, "geometry");
+    r.pass(DOF_PASS, "effects");
+    r.pass(INSET_VIEW_PASS, "shadows");
+    r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
@@ -474,6 +487,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     }));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
     r.fixture("rest-no-support", unsupported(), None)
+        .planted()
         .sidecar(json!({
             "codes": ["no_support"],
             "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},

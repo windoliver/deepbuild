@@ -105,6 +105,102 @@ fn contact(p: vec3<f32>, n: vec3<f32>) -> f32 {
     return 1.0;
 }
 
+// Project a ray point: pixel position, ray depth and the visible surface's depth. Missing depth
+// is zero, including offscreen points. The march and its crossing refinement use the same test.
+fn ray_depth(s: vec3<f32>) -> vec4<f32> {
+    let c = ao.clip * vec4<f32>(s, 1.0);
+    if c.w <= 1e-6 {
+        return vec4<f32>(0.0);
+    }
+    let ndc = c.xy / c.w;
+    let at = vec2<f32>((ndc.x * 0.5 + 0.5) * ao.size.x, (0.5 - ndc.y * 0.5) * ao.size.y);
+    if at.x < 0.0 || at.y < 0.0 || at.x >= ao.size.x || at.y >= ao.size.y {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(at, c.z / c.w, textureLoad(depth_t, vec2<i32>(at), 0));
+}
+
+// One direction contributes once, if a surface intersects it before the radius. March the whole
+// segment, refine depth crossings, then verify the local plane's hit against the depth buffer.
+// This keeps thin occluders thin, and catches their near-edge-on faces without a view-dependent
+// depth thickness. A depth discontinuity alone is not an intersection.
+fn blocked(p: vec3<f32>, n: vec3<f32>, dir: vec3<f32>, radius: f32) -> bool {
+    let stride = radius / 16.0;
+    let bias = radius * 0.005;
+    let start = p + n * bias;
+    for (var step = 1u; step <= 16u; step++) {
+        var hi = f32(step) * stride;
+        var lo = hi - stride;
+        var sample = ray_depth(start + dir * hi);
+        if sample.w <= 0.0 || sample.w <= sample.z {
+            continue;
+        }
+        // A stride can pass over a face seen edge-on. Find its first depth crossing before
+        // using a normal; the endpoint may already project onto a different face.
+        for (var j = 0u; j < 5u; j++) {
+            let mid = (lo + hi) * 0.5;
+            let probe = ray_depth(start + dir * mid);
+            if probe.w > 0.0 && probe.w > probe.z {
+                hi = mid;
+                sample = probe;
+            } else {
+                lo = mid;
+            }
+        }
+        let q_px = vec2<i32>(sample.xy);
+        let q = world_at(q_px, sample.w);
+        if dot(q - p, n) <= bias {
+            continue;
+        }
+        let nq = normalize(textureLoad(normal_t, q_px, 0).xyz);
+        let slope = dot(dir, nq);
+        if abs(slope) <= 1e-5 {
+            continue;
+        }
+        let t = dot(q - start, nq) / slope;
+        // A surface first seen after a pixel boundary can intersect an earlier part of the
+        // ray. Accept either side: a visible exit face also proves the direction was blocked.
+        if t <= 0.0 || t > radius {
+            continue;
+        }
+        let hit = start + dir * t;
+        let hc = ao.clip * vec4<f32>(hit, 1.0);
+        if hc.w <= 1e-6 {
+            continue;
+        }
+        let hn = hc.xy / hc.w;
+        let ha = vec2<f32>((hn.x * 0.5 + 0.5) * ao.size.x, (0.5 - hn.y * 0.5) * ao.size.y);
+        if ha.x < 0.0 || ha.y < 0.0 || ha.x >= ao.size.x || ha.y >= ao.size.y {
+            continue;
+        }
+        let hp = vec2<i32>(ha);
+        let hd = textureLoad(depth_t, hp, 0);
+        if hd > 0.0 && abs(dot(world_at(hp, hd) - hit, nq)) <= bias {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn visibility(p: vec3<f32>, n: vec3<f32>, px: vec2<i32>) -> f32 {
+    // R2 offset by this pixel's Hilbert index, never by frame number or history.
+    let jitter = fract(vec2<f32>(0.5) + f32(hilbert(vec2<u32>(px))) * vec2<f32>(0.7548776662, 0.5698402910));
+    let tbn = basis(n);
+    let count = ao.opts.x;
+    var occluded = 0.0;
+    for (var i = 0u; i < count; i++) {
+        let a = fract(jitter.x + f32(i) * 0.7548776662);
+        let b = fract(jitter.y + f32(i) * 0.5698402910);
+        let phi = 6.2831853 * a;
+        // Cosine-weighted directions: the average is irradiance visibility, not solid angle.
+        let cos_t = sqrt(1.0 - b);
+        let sin_t = sqrt(1.0 - cos_t * cos_t);
+        let dir = tbn * vec3<f32>(sin_t * cos(phi), sin_t * sin(phi), cos_t);
+        occluded += select(0.0, 1.0, blocked(p, n, dir, ao.size.z));
+    }
+    return clamp(1.0 - ao.size.w * occluded / f32(count), 0.0, 1.0);
+}
+
 @fragment
 fn ao_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let px = vec2<i32>(pos.xy);
@@ -119,52 +215,13 @@ fn ao_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     if ao.size.w <= 0.0 {
         return vec4<f32>(1.0, touch, 1.0, 1.0);
     }
-    let radius = ao.size.z;
-    let bias = 0.02 * radius;
-    // The R2 sequence offset by the pixel's Hilbert index: a fixed pattern, never a frame's.
-    let jitter = fract(vec2<f32>(0.5) + f32(hilbert(vec2<u32>(px))) * vec2<f32>(0.7548776662, 0.5698402910));
-    let tbn = basis(n);
-    let count = ao.opts.x;
-    var occluded = 0.0;
-    for (var i = 0u; i < count; i++) {
-        let a = fract(jitter.x + f32(i) * 0.7548776662);
-        let b = fract(jitter.y + f32(i) * 0.5698402910);
-        let phi = 6.2831853 * a;
-        // Cosine-weighted, kept off the tangent plane.
-        let cos_t = max(sqrt(1.0 - b), 0.15);
-        let sin_t = sqrt(1.0 - cos_t * cos_t);
-        let k = (f32(i) + 0.5) / f32(count);
-        let len = radius * mix(0.15, 1.0, k * k);
-        let s = p + n * bias + tbn * vec3<f32>(sin_t * cos(phi), sin_t * sin(phi), cos_t) * len;
-        let c = ao.clip * vec4<f32>(s, 1.0);
-        if c.w <= 1e-6 {
-            continue;
-        }
-        let ndc = c.xy / c.w;
-        let at = vec2<f32>((ndc.x * 0.5 + 0.5) * ao.size.x, (0.5 - ndc.y * 0.5) * ao.size.y);
-        if at.x < 0.0 || at.y < 0.0 || at.x >= ao.size.x || at.y >= ao.size.y {
-            continue;
-        }
-        let q_px = vec2<i32>(at);
-        let dq = textureLoad(depth_t, q_px, 0);
-        if dq <= 0.0 || dq <= c.z / c.w {
-            continue;
-        }
-        // A surface in front of the sample occludes only when it rises above this one's tangent
-        // plane, so a flat surface never darkens itself.
-        let q = world_at(q_px, dq);
-        if dot(q - p, n) <= bias {
-            continue;
-        }
-        let dist = length(q - p);
-        occluded += clamp((2.0 * radius - dist) / radius, 0.0, 1.0);
-    }
-    let v = clamp(1.0 - ao.size.w * occluded / f32(count), 0.0, 1.0);
+    let v = visibility(p, n, px);
     return vec4<f32>(v, touch, v, 1.0);
 }
 
-// One edge-aware 5 × 5 blur: neighbours on the same surface (near its tangent plane, with a
-// similar normal) only.
+// One edge-aware 5 × 5 binomial blur: neighbours on the same surface (near its tangent plane,
+// with a similar normal) only. Weight nearby pixels more, so a one-sided kernel at a wall does
+// not move the contact's reading out along the floor, especially at half resolution.
 @fragment
 fn blur_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let px = vec2<i32>(pos.xy);
@@ -193,8 +250,10 @@ fn blur_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             if abs(dot(q - p, n)) > tol || dot(nq, n) < 0.9 {
                 continue;
             }
-            sum += textureLoad(raw_t, q_px, 0).r;
-            weight += 1.0;
+            let taps = array<f32, 5>(1.0, 4.0, 6.0, 4.0, 1.0);
+            let w = taps[u32(x + 2)] * taps[u32(y + 2)];
+            sum += textureLoad(raw_t, q_px, 0).r * w;
+            weight += w;
         }
     }
     let v = select(1.0, sum / weight, weight > 0.0);

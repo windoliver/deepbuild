@@ -1,0 +1,52 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/products-keep-orphan-2122.test.ts packages/hub/test/products-restart-reclaim-2122.test.ts` runs unleased
+
+ RUN  v5.0.5 <CHECKOUT>
+
+xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/products-keep-orphan-2122.test.ts > keep replaces a same-key orphan after index loss and serves an independent copy-on-write product
+AssertionError: promise rejected "Error: ENOTEMPTY: directory not empty, re… { …(5) }" instead of resolving
+ ❯ packages/hub/test/products-keep-orphan-2122.test.ts:55:112
+     53|     products = await open();
+     54|     expect(await products.holds(repo, name, key)).toBe(false);
+     55|     await expect(products.keep(repo, name, path, key, src), 'keep must…
+       |                                                                                                                ^
+     56|     expect(existsSync(join(kept, 'orphan-only'))).toBe(false);
+     57|     expect(indexAt(root).entries).toEqual([expect.objectContaining({ r…
+
+Caused by: Error: ENOTEMPTY: directory not empty, rename '<TEST_HOME>/store/products/.building/repo47943d8c-warm-020f4815' -> '<TEST_HOME>/store/products/repo47943d8c/warm@c95704a7b2fd4d56148d3c96'
+ ❯ Products.keep packages/hub/src/products.ts:383:7
+ ❯ packages/hub/test/products-keep-orphan-2122.test.ts:55:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { errno: -66, code: 'ENOTEMPTY', syscall: 'rename', path: '<TEST_HOME>/store/products/.building/repo47943d8c-warm-020f4815', dest: '<TEST_HOME>/store/products/repo47943d8c/warm@c95704a7b2fd4d56148d3c96' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/hub/test/products-restart-reclaim-2122.test.ts > after a hub restart an active PreToolUse protects its old product while low-disk reclaim removes an idle worktree product
+AssertionError: PreToolUse after restart must keep the active product; the idle twin was reclaimed: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/products-restart-reclaim-2122.test.ts:108:145
+    106|       expect(indexAt(root).placed.some(p => p.top === idle)).toBe(fals…
+    107|       expect(readFileSync(join(idle, 'lock'), 'utf8')).toBe('one\n');
+    108|       expect(existsSync(join(s.work, 'target/artifact')), 'PreToolUse …
+       |                                                                                                                                                 ^
+    109|       expect(readFileSync(join(s.work, 'target/artifact'), 'utf8')).to…
+    110|       expect(indexAt(root).placed.some(p => p.top === s.work)).toBe(tr…
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/products-restart-reclaim-2122.test.ts:19:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  22:45:16
+   Duration  13.49s (tests 92%, transform 8%, import 1%)

@@ -13,6 +13,7 @@
 mod feed;
 mod fidelity;
 mod frames;
+mod gltf;
 mod guards;
 mod lottie;
 mod page;
@@ -65,6 +66,8 @@ pub enum Guard {
     PageKeysByPicture,
     /// #169: the page draws its targets only as boxes on each still.
     PageTargetsOnImage,
+    /// #468: the glTF export drops a camera's lens shift without a warning.
+    GltfDropsShift,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -123,6 +126,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
+        "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -613,6 +617,10 @@ impl Hub<'_> {
         // #169: the playable page, the export module's own writer outside export.target@1.
         if job.codec == "page" {
             return self.export_page(job, &doc);
+        }
+        // #468: a still as one glTF file, outside export.target@1 (Export: glTF).
+        if job.codec == "gltf" {
+            return self.export_gltf(job, &doc);
         }
         let target = job.target().to_string();
         // The target, as this build sealed it.

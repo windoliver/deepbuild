@@ -208,6 +208,9 @@ fn of_scene3d(kind: &str) -> Option<Spec> {
     if kind == "mesh.asset@1" {
         return Some(mesh_asset());
     }
+    if kind == "mesh.sequence@1" {
+        return Some(mesh_sequence());
+    }
     let mut spec = base_scene3d(kind)?;
     spec.params.extend(extras(kind));
     if crate::builders::KINDS.contains(&kind) {
@@ -392,6 +395,44 @@ fn mesh_asset() -> Spec {
         ],
         reads: None,
         fixture: json!({"it": item("mesh.asset@1", json!({"sha256": a, "node": 0, "paint": {"fill": {"role": "accent"}}}))}),
+    }
+}
+
+/// `mesh.sequence@1 {frames: [sha256 (glTF)], frame_rate, start, interpolate}`: frame
+/// ⌊(t − start) × frame_rate⌋ of its per-frame meshes from the asset store (#419's form; #1729
+/// registers it, so a check keeps it).
+fn mesh_sequence() -> Spec {
+    let a = "a".repeat(64);
+    let b = "b".repeat(64);
+    Spec {
+        kind: "mesh.sequence@1",
+        module: "scene3d",
+        params: vec![
+            p(
+                "frames",
+                "[sha256]",
+                "",
+                Value::Null,
+                G,
+                json!([a]),
+                json!([b]),
+            ),
+            p("frame_rate", "f32", "", json!(24), G, json!(24), json!(30)),
+            p("start", "s | text", "", json!(0), G, json!(0), json!(1)),
+            p(
+                "interpolate",
+                "none | linear",
+                "",
+                json!("none"),
+                G,
+                json!("none"),
+                json!("linear"),
+            ),
+            shade(),
+            paint(),
+        ],
+        reads: None,
+        fixture: json!({"it": item("mesh.sequence@1", json!({"frames": [a], "paint": {"fill": {"role": "accent"}}}))}),
     }
 }
 
@@ -859,8 +900,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 .takes("{strength: 0..1, blur: px, plane: named part}"),
             // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
             // `water::parse` also takes a wind's fields bare, in place of `{wind: {..}}`.
-            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold}, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
-                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam, wake: {item, span} | none, shore}"),
+            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold, speed}, flow: {along, speed, cycle} | none, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
+                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, shore}"),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
@@ -1151,12 +1192,23 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
-        // #465: an Effect item; scene3d draws `kind: flare` (Effect: flare).
+        // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
+        // (Effect: dof).
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p(
+                    "dof",
+                    "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
+                    "",
+                    Value::Null,
+                    S,
+                    json!({"focus": 2}),
+                    json!({"focus": 4}),
+                )
+                .takes("{focus: ID | m, coc?: physical, max_coc?: px, taps?: 64 | 96 | 128, rotate?: pixel_hash, far_over_near?: refuse, projection?: perspective | orthographic, ortho_coc?: f32, band?: {center: ID | px, width: px, feather?: px, angle?: deg, amount: px}}"),
                 p(
                     "flare",
                     "{from: lights | {emissive: EV100}, ghosts: u8 <= 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic}, halo: ratio, starburst: {blades: u8}, intensity, tint: role}",
@@ -1986,7 +2038,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 26] = [
+pub const SCENE3D: [&str; 27] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -2013,6 +2065,7 @@ pub const SCENE3D: [&str; 26] = [
     "surface@1",
     "curve@1",
     "mesh.asset@1",
+    "mesh.sequence@1",
 ];
 
 /// scene3d's kinds' schemas.

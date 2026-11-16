@@ -294,7 +294,12 @@ pub fn fixture_issues(hub: &mut Hub<'_>, f: &Entry) -> Vec<Value> {
             .and_then(|r| r["issues"].as_array().cloned())
             .unwrap_or_default();
     }
-    let doc = stamped(&f.document);
+    issues_of(hub, f, &stamped(&f.document))
+}
+
+/// What `doc` raises read as fixture `f`: against its record and assets, with its sidecar's
+/// checks; a fix applied to it is checked again by the same checks (#1941).
+fn issues_of(hub: &mut Hub<'_>, f: &Entry, doc: &Value) -> Vec<Value> {
     let readings = f
         .record
         .as_ref()
@@ -310,7 +315,7 @@ pub fn fixture_issues(hub: &mut Hub<'_>, f: &Entry) -> Vec<Value> {
         .find(|x| x.document == f.document)
         .map(|x| x.assets.clone())
         .unwrap_or_default();
-    raised_with(hub, &doc, readings.as_ref(), &f.checks(), &assets)
+    raised_with(hub, doc, readings.as_ref(), &f.checks(), &assets)
 }
 
 /// Compares the codes raised with those named: the case passes only on exactly them; under the
@@ -440,7 +445,7 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
             // The ops applied as the item's writer, in this build, then the second check.
             let mut fixed = doc.clone();
             let second = match apply_as(hub, &mut fixed, &writer, &patch) {
-                Ok(()) => codes(&raised(hub, &fixed)),
+                Ok(()) => codes(&issues_of(hub, f, &fixed)),
                 Err(issue) => codes(&[issue]),
             };
             let others: Vec<String> = f

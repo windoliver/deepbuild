@@ -25,7 +25,7 @@ export const ownLane = ['tests/acceptance/684/lean.test.ts'];
  * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
  * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/', 'tests/dither-fill.test.ts', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/268/', 'tests/acceptance/268-redraft-ac4/', 'tests/acceptance/481/', 'tests/acceptance/486/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/1417/', 'tests/acceptance/1417-redraft-ac1/', 'tests/acceptance/1417-redraft-ac3/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
+export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/1632/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/1646/', 'tests/dither-fill.test.ts', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/268/', 'tests/acceptance/268-redraft-ac4/', 'tests/acceptance/968/', 'tests/acceptance/481/', 'tests/acceptance/486/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/1417/', 'tests/acceptance/1417-redraft-ac1/', 'tests/acceptance/1417-redraft-ac3/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
   'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/423/', 'tests/acceptance/424/', 'tests/acceptance/430/', 'tests/group-compositor.test.ts', 'tests/acceptance/446/', 'tests/acceptance/419/', 'tests/acceptance/428/', 'tests/acceptance/1297/', 'tests/acceptance/422/', 'tests/acceptance/426/', 'tests/acceptance/425/', 'tests/acceptance/427/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/scene3d-contact.test.ts', 'tests/scene3d-culled-casters.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/1640/', 'tests/acceptance/443/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/1162/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/1413/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/redraft-ac12/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/37/', 'packages/checks-journey/test/unrun.test.ts', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
   'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/431/', 'tests/acceptance/432/', 'tests/acceptance/483/', 'tests/acceptance/484/', 'tests/acceptance/252/',
@@ -228,11 +228,21 @@ byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 // #1550's files build a GPUI text probe and deep-drive, and start replicas.
 alone.push('tests/acceptance/1550/');
+// #533's files build deep-logic, a wat assembler and four deep-show feature sets, and run the logic kit.
+alone.push('tests/acceptance/533/');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
+alone.push('tests/acceptance/177/');
+alone.push('tests/acceptance/177-redraft-ac3/');
+// AC3 runs as its blind redraft, on the owner's ruling ("Yes, swap it", Nov 15): the first draft's golden and snapshot
+// can't pass the base's blank guard, so it is kept by hand (177-redraft-ac3/DISPUTE.md).
+byHand.push('tests/acceptance/177/ac3-sdr-outputs.test.ts');
+byHand.push('tests/acceptance/177/ac4-layers.live.test.ts', 'tests/acceptance/177/ac5-envelope.live.test.ts', 'tests/acceptance/177/ac6-budgets.live.test.ts');
+timed.push('tests/acceptance/177/ac6-budgets.live.test.ts');
 // #1436's files build deep-replica and drive the GPU; its live window files (reduced motion's frames, the budgets) open the
 // app's window on this Mac's screen, and its budgets are a timed file.
 alone.push('tests/acceptance/1436/');
@@ -296,6 +306,9 @@ timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
+// #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
+// CPU and wall times.
+alone.push('tests/acceptance/190/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
@@ -346,6 +359,9 @@ timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall
 // #1945's files each start a hub on this Mac's Lima VMs and make a throwaway user there, cut every SSH connection of
 // that user for a minute, and run root plans with its sudo password: one file at a time.
 alone.push('tests/acceptance/1945/');
+// #1946's files each start a hub on this Mac's Lima VMs, make a throwaway user there and set up then remove its user
+// services, a package and sudo rules: one file at a time.
+alone.push('tests/acceptance/1946/');
 // #1943's files restart user services on this Mac's Lima VMs and judge check runs against deadlines there: one file at
 // a time.
 alone.push('tests/acceptance/1943/');
@@ -410,6 +426,9 @@ timed.push('tests/acceptance/1939/ac2-budget.test.ts');
 // deep-show for release there).
 alone.push('tests/acceptance/2513/');
 timed.push('tests/acceptance/2513/ac2-budget.test.ts');
+// #456's files each build deep-show and draw on the GPU; shots.test.ts writes docs/evidence/456/ and waits on your
+// taste call in tests/acceptance/456/TASTE.json.
+alone.push('tests/acceptance/456/');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
@@ -456,6 +475,8 @@ alone.push('tests/acceptance/1965/', 'tests/acceptance/1965-oracle/');
 alone.push('tests/acceptance/1963/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
+// #2205's file starts a real hub for each test and reads the verdict of the claim its session's stop makes.
+alone.push('tests/acceptance/2205/');
 // #504's files each build deep-show or deep-motion with cargo, and criterion 2's hub test starts a hub and agents.
 alone.push('tests/acceptance/504/');
 // #504's blind redrafts of criteria 1, 2 and 8 each build deep-show or deep-motion with cargo; criterion 2's starts a
@@ -501,6 +522,10 @@ alone.push('tests/acceptance/407/', 'tests/acceptance/407-oracle/');
 alone.push('tests/acceptance/2014/', 'tests/acceptance/2014-oracle/');
 // #1956's files each build deep-show (r1) and install the shelf pack's versions in order.
 alone.push('tests/acceptance/1956/');
+// #1959's files each build deep-show (r1); the mixed-version scene's test restarts a hub on the same state folder.
+alone.push('tests/acceptance/1959/');
+// #1960's files each build deep-show (r1); the lifecycle test restarts a hub twice on the same state folder.
+alone.push('tests/acceptance/1960/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
@@ -522,10 +547,14 @@ timed.push('tests/acceptance/1700/budgets.test.ts');
 alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
 alone.push('tests/acceptance/1163/');
+// #1164's files build deep-show, deep-sandbox and a Rust program for wasm32, and play a game through the hub.
+alone.push('tests/acceptance/1164/');
 // #1862's suite starts a hub of its own with a fake reviewer, as #1537's does.
 alone.push('tests/acceptance/1862/');
 // #1401's files each build deep-show and render 3D revisions back on the GPU, AC3 in ten processes.
 alone.push('tests/acceptance/1401/');
+// #1729's files each build deep-show and deep-gpu and draw 3D revisions on the GPU.
+alone.push('tests/acceptance/1729/');
 // #1958's files each build deep-show, and its budgets build the merge base and time saves.
 alone.push('tests/acceptance/1958/');
 timed.push('tests/acceptance/1958/budgets.test.ts');
@@ -565,6 +594,8 @@ timed.push('tests/acceptance/538/ac8-budgets.test.ts', 'tests/acceptance/538-red
 byHand.push('tests/acceptance/538/ac8-budgets.test.ts');
 // #540's files each build deep-show (most also #544's assembler), run logic programs, draw 3D and bake a world.
 alone.push('tests/acceptance/540/', 'tests/acceptance/540-oracle/');
+// #542's files each build deep-show, deep-input or deep-logic and #544's assembler, run logic programs and draw the app's window.
+alone.push('tests/acceptance/542/');
 // #1920's files build deep-show seven times, in the full and core sets, and read each build's published plan.
 alone.push('tests/acceptance/1920/');
 // #1863's files each start a real hub and a session through deep-hook; the speed file times five 5 s and 6 s waits a
@@ -599,6 +630,10 @@ alone.push('tests/acceptance/1606-redraft-ac5-ac9/');
 // #2324's files each build deep-show (with the planted engine build and sandbox.alt), deep-sandbox and deep-logic, run
 // them in Docker on linux/amd64 and drive headless Chrome, as #238's and #531's do.
 alone.push('tests/acceptance/2324/');
+// #2085's files each build deep-show full, as #387's and #855's do.
+alone.push('tests/acceptance/2085/');
+// #2362's files build deep-show (debug and release, full) and run the kit, and its AC3 file runs two of #154's.
+alone.push('tests/acceptance/2362/');
 // #509's files each build deep-show and speak their fixtures with macOS say; most start a hub and deepbuild/speech's
 // model host on its fixed port 8720 (recording.test.ts also deepbuild/bakes' on 8719); budgets.test.ts times them.
 alone.push('tests/acceptance/509/', 'tests/acceptance/509-oracle/');
@@ -611,10 +646,20 @@ timed.push('tests/acceptance/2197/budget.test.ts');
 alone.push('tests/acceptance/2144/');
 // #1332's files each start their own hubs, a played forge and played agents, and run a work run to its landings.
 alone.push('tests/acceptance/1332/');
+// #2120's files each start their own hubs: #1523's and #84's worlds with played sessions, #1330's with a gated played
+// agent (one hub stopped and started again) and #996's with a kept run across a killed hub.
+alone.push('tests/acceptance/2120/');
 // #1347's files each start their own hubs, an unreachable or played forge and played agents, and run a workspace's tasks.
 alone.push('tests/acceptance/1347/');
+// #1335's files each start their own hubs, a played forge and played agents, and run a standing run over its rule.
+alone.push('tests/acceptance/1335/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
 alone.push('tests/acceptance/1342/');
+// #1345's files each start their own hubs, a played forge and played agents, run a standing run to its calls, and draw
+// the app headless with deep-drive over a copy of the record.
+alone.push('tests/acceptance/1345/');
+// #1349's files each build the app's runtime folder once, run real setups and hubs on a fixture machine, and drive the replica.
+alone.push('tests/acceptance/1349/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
 alone.push('tests/acceptance/525/');
 // Its device gap test plays the labs out loud on this Mac's default output in real time, 10 minutes for the first.
@@ -633,6 +678,8 @@ alone.push('tests/acceptance/204-gaps/');
 byHand.push('tests/acceptance/204/export.test.ts');
 // #450's files each build deep-gpu and draw trails and ribbons on the Metal GPU.
 alone.push('tests/acceptance/450/');
+// #451's suite builds deep-gpu and deep-canvas-render and draws on the GPU.
+alone.push('tests/acceptance/451/');
 // #239's files each build deep-show or deep-gpu and draw, export or time both fixture films on the GPU, and its
 // look-type regression builds deep-show; seek-play,
 // budget and off-reference read this machine's fingerprint, budget its load too. exports (289 s) and checks (151 s)
@@ -668,8 +715,29 @@ byHand.push(...['ac3-boil', 'ac6-captions', 'ac7-blur'].map((f) => `tests/accept
 alone.push('tests/acceptance/222/', 'tests/acceptance/222-oracle/', 'tests/acceptance/222-redraft-ac7/');
 timed.push('tests/acceptance/222-redraft-ac7/budgets.test.ts');
 byHand.push('tests/acceptance/222/budgets.test.ts');
+// #223's files each build deep-canvas-render or deep-show and draw warps through them; ac7 times a warp in release.
+alone.push('tests/acceptance/223/', 'tests/acceptance/223-oracle/');
+timed.push('tests/acceptance/223/ac7-budgets.test.ts');
+// #225's files each build deep-show (full, without data, the planted motion, and for linux/amd64 in Docker) and read
+// vector fields through it; ac6 times 1,000 streams' integration in release.
+alone.push('tests/acceptance/225/', 'tests/acceptance/225-oracle/');
+timed.push('tests/acceptance/225/ac6-budgets.test.ts');
+// #225's first-draft Oracle port for criterion 7 holds a twin that lands on a full turn, so it passes every program and
+// its failsNaming can't pass (tests/acceptance/225-oracle-redraft-ac7/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/225-oracle-redraft-ac7/');
+byHand.push('tests/acceptance/225-oracle/ac7-flow-field.test.ts');
+// #225's first-draft criterion 5 builds its second machine in a rust image with no C++ compiler or libclang, which the
+// full build needs (tests/acceptance/225-redraft-ac5/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/225-redraft-ac5/');
+byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
+// #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
+// deep-show in release and deep-gpu for the frame budget. AC9 and AC10 are proved by their blind redraft, on the
+// owner's ruling; the first draft's two files can't pass on any program and are kept by hand (142/DISPUTE.md).
+alone.push('tests/acceptance/142/', 'tests/acceptance/142-redraft-ac9/', 'tests/acceptance/142-redraft-ac10/');
+byHand.push(...['ac9-timing', 'ac10-pack'].map((f) => `tests/acceptance/142/${f}.test.ts`));
+timed.push('tests/acceptance/142/ac6-budgets.test.ts');
 // #548's files build deep-logic, deep-show, a Rust program for wasm32 and the merge base's deep-logic, drive live views
 // frame by frame, draw the app's window and time the logic module's budgets on the reference Mac.
 alone.push('tests/acceptance/548/');
@@ -680,6 +748,10 @@ alone.push('tests/acceptance/224/', 'tests/acceptance/224-oracle/');
 timed.push('tests/acceptance/224/ac02-rebuild-budget.test.ts');
 // #1940's file builds deep-show twice: without the effects module, and with the planted loop module.
 alone.push('tests/acceptance/1940/');
+// #1968's files build deep-show; the oracle lane builds deep-show; ac2-budgets judges the code film's budgets on the
+// reference Mac.
+alone.push('tests/acceptance/1968/', 'tests/acceptance/1968-oracle/');
+timed.push('tests/acceptance/1968/ac2-budgets.test.ts');
 // #2497's file runs deep-marks-render's lib tests, then builds them with raster.rs's VELLO_CPU planted and restores it
 // after, so nothing else may build deep-marks-render in the checkout while it runs.
 alone.push('tests/acceptance/2497/');
@@ -693,6 +765,44 @@ timed.push('tests/acceptance/823-redraft-2073/run.test.ts');
 slow.push('tests/acceptance/326-redraft-2073/click.test.ts', 'tests/acceptance/27-redraft-2073/waits.test.ts');
 byHand.push('tests/acceptance/26/contradiction.test.ts', 'tests/acceptance/822/hub.test.ts', 'tests/acceptance/19/setup/watchonly.test.ts', 'tests/acceptance/326/setup/click.test.ts', 'tests/acceptance/326/setup/first-command.test.ts',
   'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/stop.test.ts', 'tests/acceptance/27/waits.test.ts', 'tests/acceptance/1942/survives.test.ts');
+// #468's files each build deep-gpu (AC7 deep-show too) and draw on the Metal GPU; ac5-budgets judges the lens and
+// focus task's budgets on the reference Mac.
+// AC3 runs as its blind redraft, on the owner's ruling: the first draft reads view3d's `overlays` as an object keyed
+// by ID, where #506's suite already reads it as an array, so it is kept by hand (468-redraft-ac3/DISPUTE.md).
+alone.push('tests/acceptance/468/', 'tests/acceptance/468-redraft-ac3/');
+byHand.push('tests/acceptance/468/ac3-leader.test.ts');
+timed.push('tests/acceptance/468/ac5-budgets.test.ts');
+// #506's files each build deep-gpu (and deep-show) and draw insets, view overlays and cards on the Metal GPU.
+// Criterion 5's close button runs as its blind redraft; the first draft's file, whose close-button test paints a
+// role deep-show's look lacks, is kept by hand, its orbit and fly-through tests with it (506-redraft-ac5/DISPUTE.md).
+alone.push('tests/acceptance/506/', 'tests/acceptance/506-redraft-ac5/');
+byHand.push('tests/acceptance/506/ac5-lamp-card.test.ts');
+// #213's files build deep-show twice and deep-logic and run long bakes; ac8-budgets times release builds.
+alone.push('tests/acceptance/213/', 'tests/acceptance/213-oracle/');
+timed.push('tests/acceptance/213/ac8-budgets.test.ts');
+// #213's criterion 3 went to a blind redraft once #548's logic replay began stopping at a trap
+// (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
+alone.push('tests/acceptance/213-redraft-ac3/');
+byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
+// #463's files each build deep-gpu and draw the shared scene in art@1's twelve looks on the Metal GPU; ac2-budgets
+// runs the release canvas bench's art modes, hours of frames.
+alone.push('tests/acceptance/463/');
+timed.push('tests/acceptance/463/ac2-budgets.test.ts');
+// #233's files each build deep-show and read math@1's expansions through deep-canvas-render or deep-motion; ac11
+// times the math document against its expansion written by hand under the frame budget.
+alone.push('tests/acceptance/233/', 'tests/acceptance/233-oracle/');
+timed.push('tests/acceptance/233/ac11-budgets.test.ts');
+// #184's files start replicas and hosts and play mazes for minutes; budgets.test.ts times release replicas.
+alone.push('tests/acceptance/184/');
+timed.push('tests/acceptance/184/budgets.test.ts');
+// #184's criterion 7 went to a blind redraft (tests/acceptance/184-redraft-ac7/DISPUTE.md). On the owner's ruling that the
+// replica's refusal before a play's first step is "before any run", its third draft runs; the first two by hand.
+alone.push('tests/acceptance/184-redraft-ac7-2/');
+byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/184-redraft-ac7/ac7-bots-refused.test.ts');
+
+// #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
+alone.push('tests/acceptance/2516/');
+timed.push('tests/acceptance/2516/timing.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

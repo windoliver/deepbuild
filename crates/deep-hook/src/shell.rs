@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
 use crate::inline::{holds, interpreter, Program, INTERPRETERS};
@@ -267,28 +268,103 @@ pub fn real(path: &Path) -> PathBuf {
     walk(PathBuf::new(), path)
 }
 
+/// How many links the system follows in one path before it gives up (MAXSYMLINKS).
+const LINKS: usize = if cfg!(target_os = "macos") { 32 } else { 40 };
+/// The error it gives up with (ELOOP).
+const ELOOP: i32 = if cfg!(target_os = "macos") { 62 } else { 40 };
+
+/// The links one walk found to loop, each by the folder the walk reached it in and by the link's own file, so a name
+/// that names one again, however it's spelled, stays as written without reading the link again (#2566). `true` marks a
+/// link [`LINKS`] ran out on: one the system never follows, as one back to itself through a folder that isn't there.
+#[derive(Default)]
+struct Looped(HashMap<(PathBuf, u64, u64), bool>);
+
+impl Looped {
+    /// Whether the link at `at`, whose own file is `meta`, was found to loop, and whether the count ran out on it.
+    fn get(&self, at: &Path, meta: &fs::Metadata) -> Option<bool> {
+        if self.0.is_empty() || !meta.file_type().is_symlink() {
+            return None;
+        }
+        let key = (at.parent()?.to_path_buf(), meta.dev(), meta.ino());
+        self.0.get(&key).copied()
+    }
+
+    /// Whether the name at `at` is a link found to loop, read with one look at its own file.
+    fn holds(&self, at: &Path) -> bool {
+        !self.0.is_empty()
+            && fs::symlink_metadata(at).is_ok_and(|meta| self.get(at, &meta).is_some())
+    }
+
+    fn insert(&mut self, at: &Path, meta: &fs::Metadata, counted: bool) {
+        let folder = at.parent().map(Path::to_path_buf).unwrap_or_default();
+        self.0.insert((folder, meta.dev(), meta.ino()), counted);
+    }
+}
+
 /// `path` under `done`, a name at a time: each name resolved while the path is there, and the names past that as
 /// written.
 fn walk(mut done: PathBuf, path: &Path) -> PathBuf {
+    let mut looped = Looped::default();
     for part in path.components() {
-        match part {
-            Component::RootDir => done.push("/"),
-            Component::CurDir | Component::Prefix(_) => {}
-            Component::ParentDir => {
+        done = step(done, part, &mut 0, &mut looped);
+    }
+    done
+}
+
+/// `done` with `part` after it, as [`walk`] reads it. A name the system finds to loop stays as written. `links` counts
+/// the links to files that aren't there followed for one written name: past [`LINKS`] of them, as a link that comes
+/// back to itself through a folder that isn't there makes it, that name stays as written too. Either way `looped`
+/// keeps the link, and a name that reaches it again stays as written at once.
+fn step(mut done: PathBuf, part: Component, links: &mut usize, looped: &mut Looped) -> PathBuf {
+    match part {
+        Component::RootDir => done.push("/"),
+        Component::CurDir | Component::Prefix(_) => {}
+        Component::ParentDir => {
+            // A link found to loop resolves to nothing: only its name goes.
+            if !looped.holds(&done) {
                 done = fs::canonicalize(&done).unwrap_or(done);
-                done.pop();
             }
-            Component::Normal(name) => {
-                done.push(name);
-                if fs::symlink_metadata(&done).is_err() {
-                    continue;
+            done.pop();
+        }
+        Component::Normal(name) => {
+            done.push(name);
+            let Ok(meta) = fs::symlink_metadata(&done) else {
+                return done;
+            };
+            if let Some(counted) = looped.get(&done, &meta) {
+                // The count runs out on it again, wherever it's reached from.
+                if counted {
+                    *links = LINKS + 1;
                 }
-                if let Ok(resolved) = fs::canonicalize(&done) {
-                    done = resolved;
-                } else if let Ok(target) = fs::read_link(&done) {
-                    // A link to a file that doesn't exist yet: the write makes its target.
-                    let parent = done.parent().map(Path::to_path_buf).unwrap_or_default();
-                    done = walk(PathBuf::new(), &parent.join(target));
+                return done;
+            }
+            match fs::canonicalize(&done) {
+                Ok(resolved) => done = resolved,
+                // The system followed as many links as it follows: they name each other.
+                Err(error) if error.raw_os_error() == Some(ELOOP) => {
+                    looped.insert(&done, &meta, false);
+                }
+                Err(_) => {
+                    if let Ok(target) = fs::read_link(&done) {
+                        // A link to a file that doesn't exist yet: the write makes its target.
+                        let first = *links == 0;
+                        *links += 1;
+                        let parent = done.parent().map(Path::to_path_buf).unwrap_or_default();
+                        let mut read = PathBuf::new();
+                        for part in parent.join(target).components() {
+                            if *links > LINKS {
+                                break;
+                            }
+                            read = step(read, part, links, looped);
+                        }
+                        if *links <= LINKS {
+                            done = read;
+                        } else if first {
+                            // Only from a written name is the count its own: from a link's target it may be the
+                            // links before it that ran it out.
+                            looped.insert(&done, &meta, true);
+                        }
+                    }
                 }
             }
         }
@@ -2551,6 +2627,101 @@ mod tests {
                 "{}",
                 relative.display()
             );
+        }
+        fs::remove_dir_all(&at).unwrap();
+    }
+
+    #[test]
+    fn a_path_through_links_that_loop_is_read_as_written() {
+        use std::os::unix::fs::symlink;
+        // A stack that runs out ends its process on a signal: the reads run in a child of this binary, so they fail
+        // this test and no other.
+        if std::env::var_os("DEEP_HOOK_LOOPING_LINKS").is_none() {
+            let child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "--nocapture"])
+                .arg("shell::tests::a_path_through_links_that_loop_is_read_as_written")
+                .env("DEEP_HOOK_LOOPING_LINKS", "1")
+                .output()
+                .unwrap();
+            let said = String::from_utf8_lossy(&child.stdout).to_string()
+                + &String::from_utf8_lossy(&child.stderr);
+            assert!(child.status.success(), "{}: {said}", child.status);
+            assert!(said.contains("1 passed"), "the reads ran: {said}");
+            return;
+        }
+        let at = std::env::temp_dir().join(format!("dh-loop-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&at);
+        fs::create_dir_all(&at).unwrap();
+        symlink("self", at.join("self")).unwrap();
+        symlink("b", at.join("a")).unwrap();
+        symlink("a", at.join("b")).unwrap();
+        symlink(at.join("far"), at.join("near")).unwrap();
+        symlink(at.join("near"), at.join("far")).unwrap();
+        for (link, to) in [("x", "y"), ("y", "z"), ("z", "x")] {
+            symlink(to, at.join(link)).unwrap();
+        }
+        // A Mac holds a link's target to 1,024 bytes.
+        symlink("long/".repeat(200), at.join("long")).unwrap();
+        // The system never follows this one: the folder its target passes isn't there.
+        symlink("none/../back", at.join("back")).unwrap();
+        // Links whose targets pass through those loops, and the same link file in two folders: in `p` it ends in a
+        // loop, in `q` at a file that isn't there yet (#2566).
+        symlink("back/../link-1", at.join("via-back")).unwrap();
+        symlink("none/../self/../link-1", at.join("via-self")).unwrap();
+        fs::create_dir_all(at.join("p")).unwrap();
+        fs::create_dir_all(at.join("q")).unwrap();
+        symlink("none/../t", at.join("p/s")).unwrap();
+        symlink("none/../t", at.join("p/t")).unwrap();
+        fs::hard_link(at.join("p/s"), at.join("q/s")).unwrap();
+        assert!(fs::symlink_metadata(at.join("q/s"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        symlink("../gone", at.join("q/t")).unwrap();
+        // As many links as the system follows, the last to a file that isn't there yet.
+        symlink("gone", at.join("link-1")).unwrap();
+        let past = format!("link-{}", LINKS + 1);
+        for n in 2..=LINKS + 1 {
+            symlink(format!("link-{}", n - 1), at.join(format!("link-{n}"))).unwrap();
+        }
+        let root = fs::canonicalize(&at).unwrap();
+        // LINKS is the system's own count: it follows that many to the missing file, and gives up on one more.
+        let system = |link: &str| fs::canonicalize(at.join(link)).unwrap_err().kind();
+        assert_eq!(
+            system(&format!("link-{LINKS}")),
+            std::io::ErrorKind::NotFound
+        );
+        assert_ne!(system(&past), std::io::ErrorKind::NotFound);
+        let looped = fs::canonicalize(at.join("self")).unwrap_err();
+        assert_eq!(looped.raw_os_error(), Some(ELOOP));
+        for (written, read) in [
+            ("self", "self"),
+            ("self/under", "self/under"),
+            ("a", "a"),
+            ("b", "b"),
+            ("a/../new", "new"),
+            ("near", "near"),
+            ("x", "x"),
+            // A name after links that loop is still resolved.
+            ("x/../link-1", "gone"),
+            ("self/../a/../link-1/..", ""),
+            ("long", "long"),
+            ("back", "back"),
+            ("back/../link-1", "gone"),
+            // A link found to loop, named again, stays as written at once, and a name after it still resolves.
+            ("back/../back/../back/../link-1", "gone"),
+            ("self/../self/../link-1", "gone"),
+            // Reached again through another link's target, it still ends that link's count, and a loop the
+            // system reports still doesn't.
+            ("back/../via-back", "via-back"),
+            ("self/../via-self", "gone"),
+            // The same link file in another folder is another link.
+            ("p/s/../../q/s", "gone"),
+            (&format!("link-{LINKS}"), "gone"),
+            // One link more than the system follows: a write through it fails, and it is no path to "gone".
+            (&past, &past),
+        ] {
+            assert_eq!(real(&at.join(written)), root.join(read), "{written}");
         }
         fs::remove_dir_all(&at).unwrap();
     }

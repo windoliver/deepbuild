@@ -1,0 +1,38 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ↓ packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent
+ ↓ packages/hub/test/prompt-items.test.ts > does not read the forge again for a spooled copy of a prompt whose live read is still pending
+ ↓ packages/hub/test/prompt-items.test.ts > records a prompt whose spooled copy starts replay before its live read joins intake
+ × packages/hub/test/prompt-items.test.ts > processes a fresh hook normally after the spool it triggers, including queued words 5829ms
+   → a live hook following replay still harvests queued words: expected undefined to be 'person' // Object.is equality
+ ↓ packages/hub/test/prompt-items.test.ts > keeps issue criteria when an authenticated app note is carried by the prompt
+ ↓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/prompt-items.test.ts > processes a fresh hook normally after the spool it triggers, including queued words
+AssertionError: a live hook following replay still harvests queued words: expected undefined to be 'person' // Object.is equality
+
+- Expected:
+"person"
+
++ Received:
+undefined
+
+ ❯ packages/hub/test/prompt-items.test.ts:93:152
+     91|     expect(w.events.some((e) => e.id === sent.id), 'the fresh hook is …
+     92|     await until(() => w!.events.some((e) => e.kind === 'user.ask' && e…
+     93|     expect(w.events.find((e) => e.kind === 'user.ask' && e.data.text =…
+       |                                                                                                                                                        ^
+     94|   } finally { await w?.stop(); await f.close(); }
+     95| }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  12:38:25
+   Duration  6.07s (tests 99%, transform 1%)
+

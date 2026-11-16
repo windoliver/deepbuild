@@ -1,0 +1,10 @@
+{
+ "fixture": "art.halftone_pop.3d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "bce880308b6d820fda3d528c7df25d610af3be208092b23fc2ffd3b09f1b2246"
+}

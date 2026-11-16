@@ -76,6 +76,27 @@ pub enum Planted {
     /// #2513: render.exposure's reduction leaves out the frame's last rows, as a dispatch that
     /// rounds them down to whole 32-row groups would.
     ReductionLeavesOutLastRows,
+    /// #1941: the ask for an issue the loop already fixed is raised again, as a new ask, by
+    /// every verdict that finds it back.
+    RegressionAsksEveryVerdict,
+    /// #1941: a requirement's first row on a claim is given again for any later revision.
+    LoopChecksCachedByDoc,
+    /// #1941: a stale patch is a conflict even when no ID it touches changed since its base.
+    StaleFixNeverRebases,
+    /// #456: a render.review requirement passes when its model agrees and finds nothing.
+    ReviewPassesOnYes,
+    /// #456: the review's context also holds its session's name, messages and patch reasons.
+    ReviewSeesSession,
+    /// #456: an observation with no number, or one the ID view doesn't list, is kept.
+    KeepsBadObservation,
+    /// #456: the ID view's colors are salted by a value each process draws afresh.
+    IdViewVariesByRun,
+    /// #456: the taste ask is keyed by the reading's words, not the revision's hash.
+    AskKeyedByWords,
+    /// #456: a revision whose taste ask you answered is asked again.
+    AsksAgainAfterAnswer,
+    /// #456: the reading keeps every finding the model returns.
+    KeepsAllFindings,
     /// #387: content keys leave out the view's locale.
     KeyWithoutLocale,
     /// #387: content keys leave out the view's reduced motion.
@@ -162,6 +183,8 @@ pub enum Planted {
     ProbeFromDepth,
     /// #1401: a probe that meets nothing answers the item drawn nearest its pixel.
     ProbeNearestItem,
+    /// #1729: a 3D frame skips a `mesh.asset@1` whose file isn't in the store, with no issue.
+    SkipsMissingMeshAsset,
     /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
     VerdictKeyedByDoc,
     /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
@@ -198,6 +221,16 @@ pub enum Planted {
     ExpandsInHashOrder,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
+    /// #1959: the loader takes one saved major for the whole document.
+    MigrationOneMajor,
+    /// #1959: the migrator at load reads a param set to 0 as left out.
+    MigrationZeroAsLeftOut,
+    /// #1960: the migrator at load renames params only, and carries no path that names one.
+    MigrationRenamesParamsOnly,
+    /// #1960: the migrator at load carries channel targets, and no other path that names a param.
+    MigrationRewritesChannelTargetsOnly,
+    /// #1960: a writer's patch stores its items' migrated params under the major they were saved at.
+    StoreMigratedParamsUnderSavedMajor,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -363,6 +396,8 @@ pub enum Planted {
     TargetWritesBakedChannel,
     /// #501: media fills export.target@1's `png` with a reader that is its own writer.
     TargetReaderIsWriter,
+    /// #2085: effects sealed with an operator check that trusts a compute write's index.
+    TrustsWriteIndex,
     /// #501: the mixer's Linux build adds one 16-bit step to every sample.
     MixerLinuxOneStep,
     /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
@@ -692,6 +727,11 @@ pub enum Call {
     },
     ByWriter(String),
     Revisions(String),
+    /// #1164: a document's input track with its hash and fork; `load` replaces it first.
+    Track {
+        doc: String,
+        load: Option<Vec<Value>>,
+    },
     /// The sealed set as the build holds it (#305).
     Registry,
     /// #420: an item's built mesh, or its count from its params.
@@ -723,9 +763,22 @@ pub enum Call {
     /// #490: `fn`, one expression of the closed function list.
     Fn(Box<Map<String, Value>>),
     /// #490: `path`, an item's drawn path.
+    /// #225: a vector field's integrated streams, each its points from its start.
+    Streams {
+        doc: String,
+        item: String,
+    },
+    /// #225: a vector field's streams, arrows and flow windows at its frame.
+    VectorField {
+        doc: String,
+        item: String,
+        t: Option<EvalTime>,
+    },
     Path {
         doc: String,
         item: String,
+        /// #223: the frame it is drawn at; an item under a warp draws at its frame.
+        t: Option<EvalTime>,
     },
     /// #412: deep_kinds, its fields as the call gave them.
     Kinds(Value),
@@ -971,6 +1024,8 @@ pub enum Call {
         actual: PathBuf,
         tolerance: Value,
     },
+    /// An interface trial's calls: a recorded input track, a trial and a replica's replay (#191).
+    Trial(Box<crate::kit::trial::TrialCall>),
     /// The trusted ring's calls (#401).
     Ring(Box<crate::ring::RingCall>),
     /// Terminals, streams and the session page's terminal tab (#402).
@@ -1058,6 +1113,8 @@ pub struct Scenario {
     pub module_planted: Option<String>,
     /// A first-party pack's planted twin by name, applied as the store reads the pack (#433).
     pub pack_planted: Option<String>,
+    /// #1164: the logic module's restore and check twins, one name or a list applied together.
+    pub logic_planted: Option<deep_logic::Planted>,
     pub calls: Vec<Call>,
     /// Each call's arrival on the clock, in flicks (0 without one).
     pub at: Vec<i64>,
@@ -1112,6 +1169,8 @@ pub struct Scenario {
     pub threads: Option<usize>,
     /// Work that isn't a frame, running from before the first call to after the last (#857).
     pub background: Vec<Job>,
+    /// #456: the stub model render.review asks, `{name, replies}`, each call the next reply.
+    pub review_model: Option<Value>,
 }
 
 /// A background job (#857): a playtest batch's replicas of a document's session, or a bake of
@@ -1153,6 +1212,8 @@ pub struct Hub<'a> {
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
     pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
+    /// #506: each inset's picture its 3D frames drew last, by key.
+    pub(crate) inset_pictures: BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
@@ -1173,7 +1234,7 @@ pub struct Hub<'a> {
     /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
     pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
-    pub pending3d: Option<Result<Raster, ()>>,
+    pub pending3d: Option<Result<Raster, Unfit>>,
     /// #1939: that snapshot's light readings, for the document's kept subject.
     pub pending_light: Option<Value>,
     /// Each panel's interaction scope (#383).
@@ -1190,6 +1251,8 @@ pub struct Hub<'a> {
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
     /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
     pub audit_asks: BTreeMap<String, Option<bool>>,
+    /// #456: render.review's model calls and the findings its readings kept.
+    pub review: crate::review::State,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1328,6 +1391,11 @@ impl<'a> Hub<'a> {
             rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
             kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
             migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
+            migrate_one_major: scenario.planted == Some(Planted::MigrationOneMajor),
+            migrate_zero_as_absent: scenario.planted == Some(Planted::MigrationZeroAsLeftOut),
+            migrate_params_only: scenario.planted == Some(Planted::MigrationRenamesParamsOnly),
+            migrate_channels_only: scenario.planted
+                == Some(Planted::MigrationRewritesChannelTargetsOnly),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
             // #222: the planted cue-list expander.
@@ -1352,6 +1420,7 @@ impl<'a> Hub<'a> {
             session_state: BTreeMap::new(),
             tracks: BTreeMap::new(),
             forms: BTreeMap::new(),
+            inset_pictures: BTreeMap::new(),
             renderer: Renderer::new().turning_about_corner(
                 scenario.module_planted.as_deref() == Some("turns_about_corner"),
             ),
@@ -1376,6 +1445,7 @@ impl<'a> Hub<'a> {
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
+            review: Default::default(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
@@ -1409,8 +1479,9 @@ impl<'a> Hub<'a> {
             shapings: HashMap::new(),
         };
         deep_text::cache::record();
-        // The store's packs, each checked once here and never on a document's open.
-        for (id, dir) in &scenario.packs {
+        // The store's packs, each checked once here and never on a document's open: a pack the
+        // others require first, so its kit finds what it builds on (#142).
+        for (id, dir) in required_first(&scenario.packs) {
             hub.install_pack(id, dir, None);
         }
         hub
@@ -1565,18 +1636,14 @@ impl<'a> Hub<'a> {
         doc: &Value,
         t: i64,
         size: Option<[u16; 2]>,
-    ) -> Result<Raster, ()> {
+    ) -> Result<Raster, Unfit> {
         let size = size.unwrap_or_else(|| {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
-        let palette = self.look.light.clone();
-        // #493: a shot writes the camera's pose the 3D frame is drawn through.
-        let posed = crate::film::posed(doc, t);
-        let doc = posed.as_ref().unwrap_or(doc);
-        let gpu = self.gpu3().ok_or(())?;
-        gpu.draw(doc, t, &palette, size)
+        // #493: a shot writes the camera's pose the 3D frame is drawn through; #1729: its assets
+        // and maps from the evidence store; #506: its insets' pictures drawn in (over3d.rs).
+        self.painted3d(doc, t, size)
             .map(|(rgba, scene)| (rgba, size, scene.boxes()))
-            .map_err(|_| ())
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -1666,6 +1733,37 @@ impl<'a> Hub<'a> {
                 deep_marks_vello::tables::tables(map, Some(&self.scenario.evidence))
             }
             _ => Ok(()),
+        }
+    }
+
+    /// Each `logic@1` item's program, inlined from the evidence store by its hash as
+    /// `params.wasm` (base64), which the logic module's steps run (#533). A program the store
+    /// doesn't hold stays out, and the logic module's step names it `asset_missing`.
+    pub(crate) fn inline_programs(&self, form: &mut Value) {
+        let root = &self.scenario.evidence;
+        let Some(items) = form.get_mut("items").and_then(Value::as_object_mut) else {
+            return;
+        };
+        for item in items
+            .values_mut()
+            .filter(|i| i["kind"] == deep_logic::module::INTERFACE)
+        {
+            let sha = item
+                .pointer("/params/program")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let Some(bytes) = (sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+                .then(|| std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok())
+                .flatten()
+            else {
+                continue;
+            };
+            if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                params.insert(
+                    "wasm".into(),
+                    Value::String(deep_canvas::base64::encode(&bytes)),
+                );
+            }
         }
     }
 
@@ -1888,7 +1986,31 @@ impl<'a> Hub<'a> {
             Call::UninstallPack { id, version } => self.uninstall_pack(id, version),
             Call::Registries => self.registries_reply(),
             Call::Fn(c) => crate::function::reply(c),
-            Call::Path { doc, item } => match self.current(doc) {
+            Call::Streams { doc, item } => {
+                let reply = self.vector_field(doc, item, &EvalTime::Flicks(0));
+                match reply["outcome"].as_str() {
+                    Some("answered") => json!({
+                        "item": item,
+                        "streams": reply["streams"].as_array().into_iter().flatten()
+                            .map(|s| json!({"id": s["id"], "points": s["points"]}))
+                            .collect::<Vec<_>>(),
+                    }),
+                    _ => reply,
+                }
+            }
+            Call::VectorField { doc, item, t } => {
+                let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                self.vector_field(doc, item, &t)
+            }
+            Call::Path { doc, item, t } => match self.current(doc) {
+                // #142: a derived item answers as the frame draws it, as a warped one does.
+                Some(row)
+                    if crate::warps::under_warp(&row.doc, item)
+                        || row.doc.pointer(&format!("/items/{item}")).is_none() =>
+                {
+                    let t = t.clone().unwrap_or(EvalTime::Flicks(0));
+                    self.warped_path(doc, item, &t)
+                }
                 Some(row) => crate::function::path_reply(&row.doc, item),
                 None => json!({"outcome": "refused", "code": "no_revision"}),
             },
@@ -1953,6 +2075,7 @@ impl<'a> Hub<'a> {
                 source,
                 columns,
             } => self.batch(doc, source, columns),
+            Call::Track { doc, load } => self.track_call(doc, load.as_deref()),
             Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),
             Call::Revisions(doc) => {
                 let rows: Vec<Value> = self
@@ -2076,6 +2199,7 @@ impl<'a> Hub<'a> {
                 actual,
                 tolerance,
             } => self.compare_images(expected, actual, tolerance),
+            Call::Trial(t) => self.trial_call(t),
             Call::Ring(r) => self.ring_call(r),
             Call::Capture(c) => self.capture_call(c),
             Call::Media(m) => self.media_call(m),
@@ -2431,12 +2555,17 @@ impl<'a> Hub<'a> {
             // #466: an operator transition's pass, checked before any frame draws it.
             issues.extend(crate::film_operator::check(form));
             issues.extend(deep_canvas_input::point::check(form));
+            // #542: text and scroll controls' fields.
+            issues.extend(deep_canvas_input::text::check(form));
+            issues.extend(deep_canvas_input::scroll::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {
                 issues.extend(crate::spawn::undeclared_issues(form));
             }
             issues.extend(self.inline_baked(form));
+            // #533: then each logic item's program inlined for the logic module's steps.
+            self.inline_programs(form);
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
@@ -2716,6 +2845,28 @@ impl<'a> Hub<'a> {
                             .get(&show.doc)
                             .map_or(&[][..], Vec::as_slice),
                     );
+                    // #1729: a frame that can't be drawn as its document says (an asset that
+                    // isn't in the store) is answered at what it names, never presented.
+                    if let Some(Err(u)) = &drawn3d {
+                        if u.code != "unsupported_platform" {
+                            let issue = json!({"code": u.code, "severity": "error",
+                                "ids": u.path.split('/').nth(1).into_iter().collect::<Vec<_>>(),
+                                "path": u.path, "what": "the 3D frame can't be drawn"});
+                            match reply.get_mut("issues").and_then(Value::as_array_mut) {
+                                Some(list) => list.push(issue),
+                                None => {
+                                    reply.insert("issues".into(), json!([issue]));
+                                }
+                            }
+                            reply.insert("outcome".into(), json!("not_presented"));
+                            reply.insert("reason".into(), json!(u.code));
+                            reply.insert("snapshots".into(), json!([]));
+                            if show.check {
+                                reply.insert("result".into(), json!(self.verdict(show, false)));
+                            }
+                            return Value::Object(reply);
+                        }
+                    }
                     let pixels = match drawn3d {
                         Some(drawn3d) => drawn3d.ok().map(|(mut rgba, size, boxes)| {
                             // The 2D items over the 3D frame, with no ground of their own.
@@ -2977,4 +3128,44 @@ fn walk_in_hash_order(inputs: serde_json::Map<String, Value>) -> serde_json::Map
         }
     }
     inputs
+}
+
+/// The store's packs with each one a pack requires (`requires.packs`, by its name) before it, in
+/// the order offered otherwise (#142).
+fn required_first(packs: &[(String, PathBuf)]) -> Vec<&(String, PathBuf)> {
+    let read = |dir: &PathBuf| -> (String, Vec<String>) {
+        let manifest: Value = std::fs::read(dir.join("pack.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or(Value::Null);
+        let name = manifest["name"].as_str().unwrap_or("").to_string();
+        let needs = manifest["requires"]["packs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|t| t.rsplit_once('@'))
+            .map(|(n, _)| n.rsplit_once('/').map_or(n, |(_, n)| n).to_string())
+            .collect();
+        (name, needs)
+    };
+    let read: Vec<(String, Vec<String>)> = packs.iter().map(|(_, dir)| read(dir)).collect();
+    let mut out: Vec<usize> = Vec::new();
+    fn visit(i: usize, read: &[(String, Vec<String>)], out: &mut Vec<usize>, depth: usize) {
+        if out.contains(&i) || depth > read.len() {
+            return;
+        }
+        for need in &read[i].1 {
+            if let Some(j) = read.iter().position(|(n, _)| n == need) {
+                visit(j, read, out, depth + 1);
+            }
+        }
+        if !out.contains(&i) {
+            out.push(i);
+        }
+    }
+    for i in 0..packs.len() {
+        visit(i, &read, &mut out, 0);
+    }
+    out.into_iter().map(|i| &packs[i]).collect()
 }

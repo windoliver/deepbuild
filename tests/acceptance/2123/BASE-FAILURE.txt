@@ -1,0 +1,31 @@
+Base c13f1b03 (export of b9131dbd9857aefc4dcc39dd0d534d007b1ef671, origin/main), the suite unchanged, all six files in one run:
+node scripts/throttle.mjs test --wait 30 -- node node_modules/vitest/vitest.mjs run tests/acceptance/2123 --no-file-parallelism
+Trimmed to each test's name, its assertion failure and where it failed, and the summary.
+
+
+FAIL  tests/acceptance/2123/channel-stalled.test.ts > #2123.8ad68fab A channel send that answers nothing backs off as a stalled send > #2123.8ad68fab a Channels whose call answers null, one live ask routed to it: in two seconds of ticks deliver is called once, channel.delivered with outcome stalled is on the record, and deliver is called again only at its back-off
+AssertionError: deliver calls in two seconds of ticks, by when each was made (ms); the record: []: expected [ 250, 500, 750, 1000, 1250, …(3) ] to have a length of 1 but got 8
+ ❯ tests/acceptance/2123/channel-stalled.test.ts:63:173
+
+FAIL  tests/acceptance/2123/dispute-restart.test.ts > #2123.750aef7f A dispute is settled as standing only after the redrafts its rule needs have run > #2123.750aef7f a dispute whose first redraft passed on the work, the hub stopped before the second was submitted: when the hub starts, a second redraft job is submitted and the dispute has no outcome yet
+AssertionError: the dispute has no outcome yet: after the restart the dispute reads {"test":"tests/acceptance/9001/widget.test.mjs › #9001.c225d071 the widget is blue","outcome":"stands","jobs":["run:01M7E8FBAT0EY1MJJG41ZTJFDJ"],"commit":null,"refused":[]}; the hub stopped while submitting run:01M7E8FCANXDH4GE6YD8JRN1VJ; acceptance jobs ["run:01M7E8EZV2FFY2CQN6BB1N7VTJ","run:01M7E8FBAT0EY1MJJG41ZTJFDJ","run:01M7E8FCANXDH4GE6YD8JRN1VJ"]: expected 'stands' to be null
+ ❯ tests/acceptance/2123/dispute-restart.test.ts:153:78
+
+FAIL  tests/acceptance/2123/fetch-again.test.ts > #2123.4627e131 A fetch under a standing rule that throws can be tried again > #2123.4627e131 under a standing rule, a chair whose file read throws the first time and answers the second: fetched twice, the second fetch is fetched
+AssertionError: the second fetch of pine-chair, after the first said {"status":"refused","reason":"pine-chair from ext.shelf.library: /files/pine-chair.gltf: answered 404, not the requested range or 1131 bytes"}; it said {"status":"refused","reason":"pine-chair from ext.shelf.library: /files/pine-chair.gltf: answered 404, not the requested range or 1131 bytes"}; the library saw GET /api/assets/pine-chair, GET /files/pine-chair.gltf: expected 'refused' to be 'fetched' // Object.is equality
+ ❯ tests/acceptance/2123/fetch-again.test.ts:41:192
+
+FAIL  tests/acceptance/2123/review-threads.test.ts > #2123.68e68bf4 Every review thread of a pull request is read, past the first hundred > #2123.68e68bf4 PR 31 has 100 resolved threads on its first page and one unresolved thread on its second: the stop's claim gets an open item for that thread
+AssertionError: the unresolved review thread PRRT_kwDOAcme31u101, the 101st of PR 31, is one open item of task:item7; the task's open items are none: expected +0 to be 1 // Object.is equality
+ ❯ tests/acceptance/2123/review-threads.test.ts:81:254
+
+FAIL  tests/acceptance/2123/thumbnail.test.ts > #2123.f6e57c22 A thumbnail that can't be fetched is null on its row, and the search still answers > #2123.f6e57c22 a library whose search answers two rows and whose thumbnail read throws: deep_kinds answers both rows, each with thumbnail null
+AssertionError: the search still answers: deep_kinds {"op":"assets","query":"armchair","size_m":[0.4,1.2],"limit":50} said {"code":"unavailable","retryable":true,"remediation":"deep_kinds failed in the hub: ext.shelf.library's call names no method and path on 127.0.0.1:49208; nothing was recorded.","path":"","actual":"deep_kinds","evidence":[]}; the library saw GET /api/search?q=armchair: expected true to be false // Object.is equality
+ ❯ tests/acceptance/2123/thumbnail.test.ts:32:66
+
+FAIL  tests/acceptance/2123/wiki-build.test.ts > #2123.6e6ae79d A wiki build run while a reading job waits hands none of that reading's later sessions to a second job > #2123.6e6ae79d two sessions with 16 worth-reading messages each, the plan reserve held: wiki.build called twice, then the window clears, and job.list shows two read jobs
+AssertionError: the read jobs job.list shows, one for each session's 16 messages: [{"job":"run:01M7E8FER3MA43CFSJJ2DQJYAZ","state":"finished"},{"job":"run:01M7E8FRQ38K12BKDFR05V6P6Q","state":"finished"},{"job":"run:01M7E8FT736A672S8P13JZV85Q","state":"finished"}]: expected [ 'finished', 'finished', 'finished' ] to have a length of 2 but got 3
+ ❯ tests/acceptance/2123/wiki-build.test.ts:86:121
+ Test Files  6 failed (6)
+      Tests  6 failed (6)
+   Duration  123.64s (tests 100%)
