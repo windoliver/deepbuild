@@ -442,6 +442,7 @@ pub fn decode_video(
     let codec = match &fourcc_ {
         b"avc1" | b"avc3" => fourcc(b"avc1"),
         b"hvc1" | b"hev1" => fourcc(b"hvc1"),
+        b"av01" if decodes_av1() => fourcc(b"av01"),
         b"mp4v" => fourcc(b"mp4v"),
         b"ap4h" => fourcc(b"ap4h"),
         other => return Err(format!("no decoder for {}", String::from_utf8_lossy(other))),
@@ -544,6 +545,7 @@ impl LiveDecoder {
         let codec = match &fourcc_ {
             b"avc1" | b"avc3" => fourcc(b"avc1"),
             b"hvc1" | b"hev1" => fourcc(b"hvc1"),
+            b"av01" if decodes_av1() => fourcc(b"av01"),
             other => return Err(format!("no decoder for {}", String::from_utf8_lossy(other))),
         };
         unsafe {
