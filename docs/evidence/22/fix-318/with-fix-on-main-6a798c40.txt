@@ -1,0 +1,23 @@
+# tests/acceptance/318 with the fix, at d112dbf351f7d4de584f2b69cdc05a174dbcd854; 2026-11-16T05:06:48Z; load 122.58 117.64 79.98
+
+ RUN  v5.0.5 ~/deepbuild-fix2701
+
+ ❯ tests/acceptance/318/sources.test.ts (2 tests | 1 failed) 7930ms
+   × #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing 5669ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/318/sources.test.ts > #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/318/sources.test.ts:8:1
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 6 passed (7)
+      Tests  1 failed | 26 passed (27)
+   Start at  21:06:50
+   Duration  8.67s (tests 91%, import 5%, transform 3%, setup 1%)
+

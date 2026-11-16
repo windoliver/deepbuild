@@ -1,0 +1,31 @@
+deep-hook build exit 0
+=== main sources.json (4b21eaa0d62a); 2026-11-16T05:17:39Z; load 167.90 143.10 111.35
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/asleep.test.ts > a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept
+RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7HCMEE1YYWQ6YSTTGRR341Y)
+ FAIL  packages/hub/test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7HCJHVX5JM7A64AT75R4YNB)
+ FAIL  tests/acceptance/318/plants.test.ts > #318.af2a2599 fails on a table that files the paid generation as a choice with an approving default, naming the row
+ FAIL  tests/acceptance/318/sources.test.ts > #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing
++       "code": "unlisted_field",
+ Test Files  4 failed | 17 passed (21)
+      Tests  4 failed | 117 passed | 2 skipped (123)
+=== fix sources.json (b33992a70f7b); 2026-11-16T05:18:37Z; load 163.23 146.11 114.22
+exit 1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/asleep.test.ts > a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept
+ FAIL  packages/hub/test/background.test.ts > a background job that fails is named in hub.health with its error, and cleared once it runs clean again
+Error: timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended
+     54|     if (Date.now() > end) throw Error(`timed out after ${ms} ms waitin…
+ FAIL  tests/acceptance/319/deadlines.test.ts > #319.ba0ff138 anything irreversible defaults to no, and a default never makes a claim pass
+Error: Test timed out in 5000ms.
+ FAIL  tests/acceptance/318/flow.test.ts > #318.a4005788 an answer after the pinned commit moved shows the diff, is recorded on the old commit, and an untouched provisional choice is not asked again
+Error: Test timed out in 5000ms.
+ FAIL  tests/acceptance/318/sources.test.ts > #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing
+Error: Test timed out in 5000ms.
+ FAIL  tests/acceptance/318/sources.test.ts > #318.e4675a8d dropping the asks table and replaying the log rebuilds each ask with its fallback, owner, key and pinned_to, and past its deadline it goes to its fallback
+Error: Test timed out in 5000ms.
+ Test Files  5 failed | 16 passed (21)
+      Tests  6 failed | 115 passed | 2 skipped (123)
+end 2026-11-16T05:19:34Z
