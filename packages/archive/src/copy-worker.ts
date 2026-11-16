@@ -47,7 +47,7 @@ parentPort!.on('message', async ({ path, size, stamp, before, stable, held, sess
     if (!grew) { offset = 0; hash = createHash('sha256'); }
     let copied = offset, used = 0, flushAt = PART;
     let ended = true, cwdFound = false;
-    const flush = async (final: boolean): Promise<boolean> => {
+    const flush = async (final: boolean | 'growing'): Promise<boolean> => {
       const complete = final ? used : buffer.lastIndexOf(10, used - 1) + 1;
       if (!complete) return false;
       const pending = buffer.subarray(0, complete);
@@ -101,7 +101,7 @@ parentPort!.on('message', async ({ path, size, stamp, before, stable, held, sess
       used += bytesRead; offset += bytesRead;
     }
     if (!stable && used) used = buffer.lastIndexOf(10, used - 1) + 1;
-    while (used) await flush(true);
+    while (used && await flush(stable ? true : 'growing')) { /* retain an unfinished multi-line match */ }
     if (sourceStamp(await file.stat({ bigint: true })) !== stamp) throw Error('the transcript changed while it was copied');
     const result: CopyResult = { grew, size: copied, sha256: hash.digest('hex'), ended };
     port.postMessage({ result });

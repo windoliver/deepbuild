@@ -92,26 +92,36 @@ export function scrub(text: Buffer, values: readonly string[], patterns = true):
  * field masks can extend beyond that window, so an unfinished one keeps its opening line until more text arrives.
  * `end` is a byte offset in the UTF-8 input. Zero asks the caller for more complete lines, never an unsafe cut.
  */
-export function scrubPrefix(text: Buffer, values: readonly string[], target: number, final: boolean): { end: number; bytes: Buffer; matches: { at: number; match: string; field: boolean }[] } {
+export function scrubPrefix(text: Buffer, values: readonly string[], target: number, final: boolean | 'growing'): { end: number; bytes: Buffer; matches: { at: number; match: string; field: boolean }[] } {
   const lookahead = Math.max(MULTILINE_WINDOW, ...values.map((v) => Buffer.byteLength(v) * 3));
-  const ceiling = final ? text.length : Math.max(0, text.length - lookahead);
+  const scanned = masksOf(text, values, true);
+  const ceiling = final === 'growing' ? growingEnd(text, values, scanned) : final ? text.length : Math.max(0, text.length - lookahead);
+  if (!ceiling) return { end: 0, bytes: Buffer.alloc(0), matches: [] };
   let end = text.lastIndexOf(10, Math.min(target, ceiling) - 1) + 1;
   // A single long line is indivisible. It is eligible only when its complete line and lookahead are present.
   if (!end) {
     const newline = text.indexOf(10);
     if (newline >= 0 && newline < ceiling) end = newline + 1;
-    else if (final) end = text.length;
+    else if (final === true) end = text.length;
     else return { end: 0, bytes: Buffer.alloc(0), matches: [] };
   }
-  const { latin, masks, fields, matches } = masksOf(text, values, true);
+  const { latin, masks, fields, matches } = scanned;
   const found = matched(text, fields, matches);
   const ranges = merge([...masks, ...fields, ...matches]);
-  for (const [from, to] of ranges) if (from < end && to >= end && end < text.length) {
+  // Prefer moving backwards so ordinary parts stay bounded, but re-check earlier masks after every move.
+  // When a mask reaches from the first line there is no safe earlier cut: advance past it and any masks that
+  // cross that new boundary. Keeping the direction avoids cycling between two masks on one shared line.
+  let forward = false;
+  for (;;) {
+    const crossing = end < text.length ? ranges.find(([from, to]) => from < end && to >= end) : undefined;
+    if (!crossing) break;
+    const [from, to] = crossing;
     const before = text.lastIndexOf(10, from - 1) + 1;
-    if (before) { end = before; break; }
+    if (!forward && before) { end = before; continue; }
+    forward = true;
     const after = text.indexOf(10, to);
     if (after >= 0 && after < ceiling) end = after + 1;
-    else if (final) end = text.length;
+    else if (final === true) end = text.length;
     else return { end: 0, bytes: Buffer.alloc(0), matches: [] };
   }
   let out = '', at = 0;
@@ -123,6 +133,40 @@ export function scrubPrefix(text: Buffer, values: readonly string[], target: num
     const at = match.byteOffset - text.byteOffset;
     return at + match.length <= end ? [{ at, match: match.toString('utf8'), field }] : [];
   }) };
+}
+
+/** The complete prefix of a live tail that cannot still be the opening of a multi-line scrub match. */
+function growingEnd(bytes: Buffer, values: readonly string[], scanned: ReturnType<typeof masksOf>): number {
+  let end = bytes.lastIndexOf(10) + 1;
+  const lineOf = (at: number) => at ? bytes.lastIndexOf(10, at - 1) + 1 : 0;
+  // Only raw held values can span literal newlines (their URL/base64 forms cannot). Keep a matching partial suffix
+  // from its opening line; it is compared and scrubbed again with the rest at the next pass.
+  for (const value of values) {
+    const b = Buffer.from(value);
+    const newline = b.indexOf(10);
+    if (newline < 0) continue;
+    const first = b.subarray(0, newline + 1);
+    for (let at = bytes.indexOf(first); at >= 0; at = bytes.indexOf(first, at + 1)) {
+      const tail = bytes.subarray(at);
+      if (tail.length < b.length && tail.equals(b.subarray(0, tail.length))) end = Math.min(end, lineOf(at));
+    }
+  }
+  const { latin, hits } = scanned;
+  for (const [at, candidates] of hits) {
+    const start = lineOf(at);
+    if (start >= end || bytes.length - start >= MULTILINE_WINDOW) continue;
+    const nl = latin.indexOf('\n', at);
+    if (nl >= 0) {
+      // Agent JSONL entries close every string on their own physical line. Escaped newlines are part of that line
+      // and already scrubbed, not the start of a literal multi-line block continuing in the next message.
+      try { JSON.parse(latin.slice(start, nl)); continue; } catch { /* a plain/multi-line source */ }
+    }
+    const window = latin.slice(start, start + MULTILINE_WINDOW);
+    for (const rule of candidates) if (rule.multiline && ![...window.matchAll(rule.regex)].some((m) => m.index! <= at - start && m.index! + m[0].length > at - start)) {
+      end = Math.min(end, start); break;
+    }
+  }
+  return end;
 }
 
 /** Each pattern rule's match in `text`, in order and once, as printed, and whether a field rule's mask covers part of it too. */
@@ -146,7 +190,7 @@ function matched(text: Buffer, fields: Range[], matches: Range[]): [match: Buffe
 }
 
 /** The text as latin1, and the ranges its scrub masks: by held value, by field name and by pattern. */
-function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { latin: string; masks: Range[]; fields: Range[]; matches: Range[] } {
+function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { latin: string; masks: Range[]; fields: Range[]; matches: Range[]; hits: [number, Rule[]][] } {
   const latin = text.toString('latin1');
   const { bits, byValue, short } = tablesFor(values);
   const masks: Range[] = [];
@@ -164,7 +208,7 @@ function masksOf(text: Buffer, values: readonly string[], patterns: boolean): { 
   for (const form of short) for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) masks.push([at, at + form.length]);
 
   // Fields and patterns are found in the text as printed, so no mask can hide what another rule would find.
-  return { latin, masks, fields: patterns ? fieldRanges(latin, fields, MASK) : [], matches: patterns ? patternRanges(latin, hits) : [] };
+  return { latin, masks, fields: patterns ? fieldRanges(latin, fields, MASK) : [], matches: patterns ? patternRanges(latin, hits) : [], hits };
 }
 
 /** Raw, and base64 after 0, 1 or 2 leading bytes in both alphabets: only the characters the value alone decides. */

@@ -1,0 +1,52 @@
+I found two actionable findings, both in the scrub cut logic. I only read code; no tests or commands were run, so neither trigger has been executed.
+
+### 1. A cut moved back to a line start can land inside an earlier mask, leaking part of a key and repeating text
+
+**Where:** `packages/evidence/src/scrub.ts:109-121`
+
+When a range crosses the cut, the code sets `end` to the start of that range's line and stops checking (`break`). It never re-checks earlier ranges against the new, smaller `end`. If an earlier multi-line range `[a,b]` began on a previous line and ends on that same line (`a < end < b`), the output loop at :118-121 does two wrong things:
+- It writes that range's whole mask, through `b`.
+- `latin.slice(b, end)` is then empty, so the part has no closing newline, but `end` (and so the worker's `rawEnd`) stays at the line start.
+
+The next part starts again at that line and scrubs it without the BEGIN keyword in view. As a result:
+- The rest of the first key's body on that line is archived unmasked.
+- The masked tail is stored twice, once as a mask and once as raw text.
+- The line join is lost, which shifts the line numbers that `learned.ts:551-553` uses for message IDs.
+- The first key's match is also dropped from `matches` (:124) because it ends past `end`, so no rotate ask is raised for it.
+
+**Synthetic trigger (`final=true`):**
+```
+L1 = "-----BEGIN RSA PRIVATE KEY-----\n"
+L2 = "A".repeat(64) + "-----END RSA PRIVATE KEY----- x -----BEGIN RSA PRIVATE KEY-----\n"
+L3 = "B".repeat(64) + "\n"
+L4 = "-----END RSA PRIVATE KEY-----\n"
+scrubPrefix(Buffer.from(L1+L2+L3+L4), [], (L1+L2+L3).length, true)
+```
+- **Expected:** `end === L1.length`, `bytes === "[REDACTED]"` with no newline.
+- **Then:** scrubbing the next window (from L2 onward) returns `"AAAA…-----END RSA PRIVATE KEY----- x [REDACTED]\n"` with the 64 `A`s unmasked.
+
+**Through `copy-worker.ts`:** put about 261 KB of short filler lines before L1 so that `PART` (256 KiB) falls inside a run of short `B` lines between L2 and L4.
+
+**Fix:** after moving `end` back, re-check all ranges against the new `end` until nothing crosses it.
+
+### 2. Non-stable copies scrub their last complete lines with no lookahead, so an unfinished multi-line key is stored raw
+
+**Where:** `packages/archive/src/copy-worker.ts:103-104`, called from `packages/archive/src/index.ts:228`
+
+When `stable` is false, the tail is trimmed to the last newline, but the worker then calls `flush(true)`. With `final=true`, `scrubPrefix` sets `ceiling = text.length` (`scrub.ts:97`), which skips the 64 KiB `MULTILINE_WINDOW` lookahead. That lookahead is the only thing that holds back a key whose END line hasn't been written yet.
+
+`stable` is `previous === mark`, so it is false on every first pass for a session. The private-key regex needs `…KEY-----` at the end, so nothing matches yet. The BEGIN and body lines go out unmasked as a part labelled `complete`. The next pass sees `grew=true` and starts after them, so the stored generation keeps the raw body.
+
+**Synthetic trigger:** a first-seen transcript (no `before`) whose bytes end with:
+```
+"-----BEGIN OPENSSH PRIVATE KEY-----\n" + "A".repeat(70) + "\n" + "B".repeat(70) + "\n"
+```
+Then append `"-----END OPENSSH PRIVATE KEY-----\n"` and copy again. The archived `transcript-copy` parts contain the `A`/`B` lines verbatim.
+
+**Fix:** in the non-stable path, hold the last lookahead's worth of complete lines with `flush(false)` instead of `flush(true)`, and use `final=true` only when `stable` is true.
+
+### Checked with no actionable finding
+- `copy.ts` worker and port error paths, including a failing `keep`.
+- Invalid UTF-8 handling in the worker (`rawEnd` newline mapping and the `complete` label), plus the manifest's `incomplete` label derived at `index.ts:329`.
+- The `matches` offsets and per-line slicing reused by `keysIn`.
+- The `digest.ts` continuation, `continuation.ts`, and `streamTranscript` in `learned.ts`.
