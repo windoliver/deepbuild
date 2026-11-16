@@ -37,6 +37,8 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
+  // #2331's independent regression wrapper runs the unchanged #1463 suite, including its native app and timing case.
+  'tests/acceptance/2331-regression/suite-1463.test.ts',
   'tests/acceptance/1002/first-screen-redraft/',
   'tests/acceptance/994/first-screen-redraft/',
   'tests/acceptance/167/', 'tests/acceptance/1328/',
@@ -59,6 +61,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
  * (docs/parallel-proof.md, section 7a). A file leaves the list once its run is back under two minutes.
  */
 export const slow = [
+  'tests/acceptance/2331-regression/suite-1463.test.ts',
   'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
   'packages/hub/test/reopened-items.test.ts', 'tests/acceptance/1633/reopened.test.ts',
   'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
@@ -158,6 +161,7 @@ export const byHand = ['tests/acceptance/46/live.test.ts', 'tests/acceptance/685
  * the request passes through.
  */
 export const timed = [
+  'tests/acceptance/2331-regression/suite-1463.test.ts',
   'tests/acceptance/1018/budgets.test.ts', 'tests/acceptance/1018/redraft-ac6/budgets.test.ts', 'tests/acceptance/46/budgets.test.ts',
   'tests/acceptance/103/budgets.test.ts', 'tests/acceptance/104/budgets.test.ts',
   'tests/acceptance/105/budgets.test.ts', 'tests/acceptance/105/live.test.ts',
