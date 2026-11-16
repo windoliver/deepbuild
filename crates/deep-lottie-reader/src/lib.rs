@@ -55,9 +55,9 @@ fn down(big: &[u8], w: u32, h: u32, f: u32) -> Vec<u8> {
                 }
             }
             let o = (y * w + x) * 4;
-            if acc[3] > 0 {
-                for c in 0..3 {
-                    out[o + c] = ((acc[c] + acc[3] / 2) / acc[3]) as u8;
+            for c in 0..3 {
+                if let Some(v) = (acc[c] + acc[3] / 2).checked_div(acc[3]) {
+                    out[o + c] = v as u8;
                 }
             }
             out[o + 3] = ((acc[3] + n / 2) / n) as u8;

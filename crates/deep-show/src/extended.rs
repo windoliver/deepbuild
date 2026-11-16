@@ -250,6 +250,7 @@ impl Hub<'_> {
                 items.remove(id);
             }
         };
+        #[allow(clippy::type_complexity)]
         let fixes: [(&str, &dyn Fn(&mut Value, &str)); 2] = [("hide", &hide), ("remove", &remove)];
         for (how, apply) in fixes {
             let fixed = |k: usize| {

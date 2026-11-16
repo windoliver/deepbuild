@@ -17,7 +17,7 @@ use crate::refused;
 /// The one conversion from the raster's premultiplied render to straight alpha (#506): each
 /// pixel's color over its alpha, a transparent one black.
 pub fn straight(rgba: &mut [u8]) {
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         let a = u32::from(p[3]);
         if a == 0 {
             p[..3].fill(0);
@@ -118,6 +118,7 @@ impl Pictures {
     /// #506: each overlay frame `doc` shows at t, drawn: its overlay, the whole px its picture's
     /// top left sits at (the frame's corner at its anchor's place), and the picture,
     /// premultiplied.
+    #[allow(clippy::type_complexity)]
     pub fn frames(
         &self,
         doc: &Value,

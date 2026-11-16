@@ -112,12 +112,10 @@ fn planted(r: &mut Registrar, name: &str, code: &str, bytes: Option<Vec<u8>>) {
 /// A scene of `items` through the camera `cam`, its modules required.
 fn staged(title: &str, items: Value) -> Value {
     let mut items = items;
-    let mut k = 0;
-    for (id, item) in items.as_object_mut().into_iter().flatten() {
+    for (k, (id, item)) in items.as_object_mut().into_iter().flatten().enumerate() {
         item["id"] = json!(id);
         item["name"] = json!(id);
         item["order"] = json!(format!("a{k}"));
-        k += 1;
     }
     json!({
         "format": 1, "profile": "figure", "title": title, "description": title, "size": [320, 240],

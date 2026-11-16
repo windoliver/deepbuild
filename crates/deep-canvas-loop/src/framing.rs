@@ -70,7 +70,7 @@ fn points(scene: &Scene, keep: &[String]) -> Result<Vec<(String, Vec<Vec3>)>, Va
                 Err(blocked(
                     "not_drawn",
                     KIND,
-                    &[id.clone()],
+                    std::slice::from_ref(id),
                     &format!("items/{id}"),
                 ))
             } else {

@@ -210,7 +210,9 @@ impl Store {
                 let n = (t.size[0] * t.size[1]) as usize;
                 words.extend(
                     t.data[..n * 4]
-                        .chunks_exact(4)
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
                         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
                 );
             }
@@ -412,9 +414,9 @@ mod tests {
             [0.1, 0.2, 1.0, 4.0],
         ];
         let inv = inverse_columns(m).unwrap();
-        for r in 0..4 {
+        for (r, row) in m.iter().enumerate() {
             for c in 0..4 {
-                let v: f64 = (0..4).map(|k| m[r][k] * f64::from(inv[c * 4 + k])).sum();
+                let v: f64 = (0..4).map(|k| row[k] * f64::from(inv[c * 4 + k])).sum();
                 let want = if r == c { 1.0 } else { 0.0 };
                 assert!((v - want).abs() < 1e-5, "{r} {c} {v}");
             }

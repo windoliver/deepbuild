@@ -765,6 +765,7 @@ impl<'a> Hub<'a> {
 
     /// One requirement's row: its check input's kind run on every deliverable, with the machines
     /// its result holds on and the determinism class of what it read (#411).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn judge(
         &self,
         r: &Requirement,

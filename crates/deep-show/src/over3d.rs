@@ -176,6 +176,7 @@ impl Hub<'_> {
 
     /// The view of `doc` at `t`, a 3D document, as [`Hub::frame3d`] draws it; `None` without a
     /// GPU.
+    #[allow(clippy::type_complexity)]
     pub(crate) fn view3d(
         &mut self,
         doc: &Value,

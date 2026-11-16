@@ -46,7 +46,9 @@ fn linear(rgba: &[u8]) -> Vec<f32> {
     let lut: Vec<f32> = (0..256)
         .map(|c| deep_canvas::color::srgb_decode(f64::from(c) / 255.0) as f32)
         .collect();
-    rgba.chunks_exact(4)
+    rgba.as_chunks::<4>()
+        .0
+        .iter()
         .flat_map(|p| {
             [
                 lut[p[0] as usize],
@@ -276,8 +278,10 @@ impl Hub<'_> {
                 };
                 let mut drew = false;
                 for (i, (a, b)) in rgba
-                    .chunks_exact(4)
-                    .zip(without.chunks_exact(4))
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(without.as_chunks::<4>().0)
                     .enumerate()
                 {
                     if a != b {
