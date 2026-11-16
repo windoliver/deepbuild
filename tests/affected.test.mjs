@@ -107,6 +107,22 @@ test('a Rust change reaches its crate and the crates depending on it, their [[te
   assert.deepEqual(select(root, ['packages/a/src/leaf.ts'], { files, workspace }).crates, ['r2']);
 });
 
+test('the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does', (t) => {
+  const { root, files } = repo(t, {
+    'vitest.config.ts': "import { globs } from './scripts/globs.mjs';\nexport default { test: { include: globs, setupFiles: ['./tests/boot', './tests/gone.ts'] } };\n",
+    'scripts/globs.mjs': '// Read by defineConfig callers.\nexport const globs = [];\n',
+    'tests/boot.ts': "import './boot-helper.ts';\n",
+    'tests/boot-helper.ts': 'export {};\n',
+    'tests/acceptance/1/vitest.config.ts': "export default { test: { globalSetup: '../../hold.ts' } };\n",
+    'tests/hold.ts': 'export default () => {};\n',
+  });
+  // Named by the root config through extension resolution, imported by that setup file, a config module the config
+  // imports, and named by a nested config. A selector holding the repo's own setup path by name fails here.
+  for (const path of ['tests/boot.ts', 'tests/boot-helper.ts', 'scripts/globs.mjs', 'tests/hold.ts']) assert.deepEqual(select(root, [path], { files, workspace: [] }).every, [path], path);
+  // The change deletes tests/gone.ts, which the config still lists: the change's paths hold it, the worktree doesn't.
+  assert.deepEqual(select(root, ['tests/gone.ts'], { files: [...files, 'tests/gone.ts'], workspace: [] }).every, ['tests/gone.ts']);
+});
+
 test('each test runs with its own runner, alone or in parallel as lanes.mjs says, and never one it leaves to a person', (t) => {
   const { root } = repo(t, {
     'tests/acceptance/348/a.test.ts': vitest(''),
